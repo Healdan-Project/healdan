@@ -1,0 +1,16 @@
+# Reverse-proxy overlay for Nginx Proxy Manager or any containerized proxy: no host port, the app joins the
+# proxy's Docker network as "logicaldoc". Use with COMPOSE_FILE=compose.yaml:compose.proxy.yaml in .env and
+# PROXY_NETWORK set to the proxy's network. See docker/README.md.
+services:
+  app:
+    ports: !reset []
+    networks:
+      default:
+      proxy:
+        aliases:
+          - logicaldoc
+
+networks:
+  proxy:
+    name: ${PROXY_NETWORK:-npm_default}
+    external: true
