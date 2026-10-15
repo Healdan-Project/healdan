@@ -1,0 +1,8 @@
+# Commands LogicalDOC may run (com.logicaldoc.util.exec.Exec): a command line is allowed when it starts with
+# one of these lines. These are the tools the image installs. Seeded into /opt/logicaldoc/conf on first start;
+# edit the copy there to allow more.
+convert
+gs
+pdftoppm
+pdftotext
+pdftohtml

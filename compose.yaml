@@ -1,0 +1,54 @@
+# LogicalDOC Community: production baseline (home lab behind your own reverse proxy).
+# Overlays: compose.dev.yaml (development), compose.proxy.yaml (Nginx Proxy Manager). See docker/README.md.
+name: logicaldoc
+
+services:
+  db:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-logicaldoc}
+      MARIADB_USER: ${DB_USER:-logicaldoc}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+      TZ: ${TZ:-UTC}
+    # LogicalDOC's MariaDB scripts declare utf8/utf8_bin per table; this is the default for anything else.
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    volumes:
+      - db-data:/var/lib/mysql
+
+  app:
+    build:
+      context: .
+    image: logicaldoc-community:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-logicaldoc}
+      DB_USER: ${DB_USER:-logicaldoc}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+      LOGICALDOC_PUBLIC_URL: ${LOGICALDOC_PUBLIC_URL:-}
+      CATALINA_OPTS: ${CATALINA_OPTS:--Xmx2g}
+      DB_WAIT_SECONDS: ${DB_WAIT_SECONDS:-60}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${LOGICALDOC_BIND:-127.0.0.1}:${LOGICALDOC_PORT:-8080}:8080"
+    volumes:
+      - logicaldoc-conf:/opt/logicaldoc/conf
+      - logicaldoc-repository:/opt/logicaldoc/repository
+    stop_grace_period: 60s
+
+volumes:
+  db-data:
+  logicaldoc-conf:
+  logicaldoc-repository:

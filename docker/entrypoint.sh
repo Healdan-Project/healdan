@@ -36,9 +36,9 @@ if [ ! -f "$CONF/context.properties" ]; then
   log "no $CONF/context.properties yet, starting from the image defaults"
   as_app cp "$LDOC_HOME/defaults/context.properties" "$CONF/context.properties"
 fi
-if [ ! -f "$CONF/log.xml" ]; then
-  as_app cp "$LDOC_HOME/defaults/log.xml" "$CONF/log.xml"
-fi
+for file in log.xml allowed-commands.txt; do
+  [ -f "$CONF/$file" ] || as_app cp "$LDOC_HOME/defaults/$file" "$CONF/$file"
+done
 as_app mkdir -p "$REPO"/docs "$REPO"/index "$REPO"/users "$REPO"/plugins "$REPO"/impex/in "$REPO"/impex/out \
   "$REPO"/logs "$REPO"/db
 

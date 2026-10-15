@@ -52,6 +52,8 @@ COPY docker/server.xml "$CATALINA_HOME/conf/server.xml"
 COPY docker/rewrite.config "$CATALINA_HOME/conf/Catalina/localhost/rewrite.config"
 COPY --chmod=0755 docker/setenv.sh "$CATALINA_HOME/bin/setenv.sh"
 COPY --chmod=0755 --chown=1000:1000 docker/entrypoint.sh docker/restart.sh /opt/logicaldoc/bin/
+# LogicalDOC only runs external commands listed in a classpath allowed-commands.txt; seeded into conf/.
+COPY docker/allowed-commands.txt /opt/logicaldoc/defaults/allowed-commands.txt
 
 # context.properties and log.xml must leave WEB-INF/classes: Tomcat's webapp class loader looks there before
 # common.loader, where the live, writable copies in /opt/logicaldoc/conf are found.
