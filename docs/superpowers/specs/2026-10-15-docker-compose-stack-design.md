@@ -2,7 +2,7 @@
 
 - **Issue:** [coffeemuse/logicaldoc-community#4](https://github.com/coffeemuse/logicaldoc-community/issues/4)
 - **Date:** 2026-10-15
-- **Status:** approved in discussion, awaiting spec review
+- **Status:** approved; refined while planning (see plan `docs/superpowers/plans/2026-10-15-docker-compose-stack.md`)
 
 ## 1. Intent
 
@@ -79,9 +79,15 @@ docker/
   maven-settings.xml               extra Maven repos (same block as CI)
   server.xml                       Tomcat config: RemoteIpValve, RewriteValve
   rewrite.config                   blocks /setup (installed to conf/Catalina/localhost/)
-  entrypoint.sh                    config seeding, env keys, DB init, privilege drop, exec Tomcat
+  entrypoint.sh                    ownership, default config files, DockerInit, privilege drop, exec Tomcat
   restart.sh                       target of Admin → Restart
-  dbinit/DockerDbInit.java         wait for DB, detect schema, run upstream DBInit
+  setenv.sh                        Tomcat JVM options
+  tools/src/DbInitPlan.java        pure: which DbInit scripts to run (plugin.xml → ordered resources, created tables)
+  tools/src/ConfigPlan.java        pure: seed-once and env-owned keys, env validation
+  tools/src/DockerInit.java        main: apply config via ContextProperties, wait for DB, create + verify schema
+  tools/test/*.java                unit and round-trip tests (no JUnit), run by tools/build.sh
+  tools/build.sh                   compile, test and package the tool in the image's `tools` stage
+  tests/lib.sh, tests/test-*.sh    init-tool, image and overlay integration tests
   smoke-test.sh                    end-to-end acceptance test
   README.md                        deploy, proxy (NPM first), dev, backup, upgrade
 logicaldoc-webservice/src/main/resources/plugin.xml   fix sqlFile name (own commit)
@@ -94,7 +100,7 @@ logicaldoc-webservice/src/main/resources/plugin.xml   fix sqlFile name (own comm
 1. Copy `docker/maven-settings.xml` to `/root/.m2/settings.xml`.
 2. Copy the source and run `mvn -B -ntp -DskipTests install`, the same command CI runs. The run uses a BuildKit cache mount on `/root/.m2/repository`, so dependency downloads persist across builds.
 3. Unpack `logicaldoc-webapp/target/logicaldoc-webapp-*.war` to `/build/ROOT`.
-4. Compile `docker/dbinit/DockerDbInit.java` with `javac -cp '/build/ROOT/WEB-INF/lib/*'` into `/build/docker-dbinit.jar`.
+4. Stage `tools` (from `build`): run `docker/tools/build.sh`. It compiles the tool against `/build/ROOT/WEB-INF/lib/*`, runs its tests (a failing test fails the image build), and packages `/build/docker-init.jar`.
 
 ### Stage `runtime` (`tomcat:11.0-jre21-temurin`, Ubuntu-based, multi-arch)
 
@@ -104,7 +110,7 @@ logicaldoc-webservice/src/main/resources/plugin.xml   fix sqlFile name (own comm
   - Move `WEB-INF/classes/context.properties` and `WEB-INF/classes/log.xml` to `/opt/logicaldoc/defaults/`.
   - They must be **removed** from `WEB-INF/classes`, because Tomcat's webapp class loader searches `WEB-INF/classes` before its parent.
 - **Classpath:** add `/opt/logicaldoc/conf` to `common.loader` in `catalina.properties`, so the live `context.properties` and `log.xml` are found there and rewritten in place. This matches upstream's installer layout.
-- **Scripts and tools:** install `entrypoint.sh` and `restart.sh` under `/opt/logicaldoc/bin`, and `docker-dbinit.jar` under `/opt/logicaldoc/lib`.
+- **Scripts and tools:** install `entrypoint.sh` and `restart.sh` under `/opt/logicaldoc/bin`, `docker-init.jar` under `/opt/logicaldoc/lib`, and `setenv.sh` in Tomcat's `bin/`.
 - **User:** create `logicaldoc` (uid/gid 1000). It owns `/opt/logicaldoc` and the Tomcat dirs the webapp writes to (`webapps/ROOT`, `work`, `temp`, `logs`).
 - **Volumes:** `/opt/logicaldoc/conf` and `/opt/logicaldoc/repository`.
 - **Ports and health:** `EXPOSE 8080`. `HEALTHCHECK` runs `curl -fsS http://localhost:8080/login.jsp`.
@@ -121,7 +127,7 @@ The container starts as root. Only the entrypoint's preparation steps (the owner
   repository/    VOLUME  docs/ index/ users/ plugins/ impex/in impex/out logs/
   defaults/              pristine context.properties, log.xml from the WAR
   bin/                   entrypoint.sh, restart.sh, pid (written by the app)
-  lib/                   docker-dbinit.jar
+  lib/                   docker-init.jar
 ```
 
 ## 5. Configuration
@@ -134,10 +140,11 @@ The container starts as root. Only the entrypoint's preparation steps (the owner
 | `DB_PORT` | `jdbc.url` | `3306` | |
 | `DB_NAME` | `jdbc.url` | `logicaldoc` | |
 | `DB_USER` | `jdbc.username` | `logicaldoc` | |
-| `DB_PASSWORD` | `jdbc.password` | — | **Required.** The entrypoint exits with an error if it's unset. |
+| `DB_PASSWORD` | `jdbc.password` | — | **Required.** The entrypoint exits with an error if it's unset. It must not contain `${` or start with `_b64_`, because LogicalDOC's `getString()` expands or decodes those. |
 | `LOGICALDOC_PUBLIC_URL` | `server.url` | unset | When unset, the key isn't touched. |
 | `CATALINA_OPTS` | (JVM) | `-Xmx2g` | Set in compose and `.env.example`. |
 | `TZ` | (container) | `UTC` | |
+| `DB_WAIT_SECONDS` | (init only) | `60` | How long DockerInit waits for the database. |
 
 Compose-only variables:
 
@@ -147,6 +154,7 @@ Compose-only variables:
 | `LOGICALDOC_PORT` | `8080` | host port |
 | `PROXY_NETWORK` | `npm_default` | external network for `compose.proxy.yaml` |
 | `JDWP_BIND` | `127.0.0.1` | debugger bind address (dev overlay) |
+| `DEV_DB_PORT` | `3306` | host port for MariaDB (dev overlay) |
 | `COMPOSE_FILE` | unset | lets users select overlays once in `.env` |
 
 `jdbc.url` is `jdbc:mariadb://${DB_HOST}:${DB_PORT}/${DB_NAME}`.
@@ -154,7 +162,7 @@ Compose-only variables:
 ### Who owns which keys
 
 - **Env-owned keys** are re-applied on **every** boot, so `.env` is the source of truth for them: `jdbc.url`, `jdbc.username`, `jdbc.password`, and `server.url` when `LOGICALDOC_PUBLIC_URL` is set.
-- **Seed-once keys** are written only when `conf/context.properties` is first created. After that they belong to the app and its Settings UI:
+- **Seed-once keys** are written only while `LDOCHOME` is absent from `conf/context.properties`. The shipped defaults lack it and the seed adds it. So a first boot that crashes before seeding still gets seeded on the next boot. After that the keys belong to the app and its Settings UI:
 
   | Key | Value |
   |---|---|
@@ -174,7 +182,7 @@ Compose-only variables:
   | `initialized` | `true` |
   | `id` | a newly generated UUID |
 
-Properties are edited with a small shell function. It replaces the line for the key, or appends it if absent, and escapes values for the `java.util.Properties` format: backslashes, plus leading spaces, `#` and `!`. Values are written literally (no `${env.…}` references). That keeps every reader of the key, raw or expanded, consistent.
+Properties are edited by DockerInit with LogicalDOC's own `ContextProperties(File)`, using `setProperty` and `write()`. Escaping and encoding (the shipped file is Latin-1 with CRLF line endings) then match exactly what the app writes. Values are written literally (no `${env.…}` references), which keeps every reader of the key, raw (`getProperty`) or expanded (`getString`), consistent.
 
 ## 6. First boot and every boot (`entrypoint.sh`)
 
@@ -182,13 +190,14 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 
 1. **Preconditions.** Fail fast with a clear message if `DB_PASSWORD` is empty.
 2. **Ownership** (as root). If `conf/` or `repository/` isn't owned by uid 1000, `chown -R` it. This makes bind mounts to NAS paths work without manual setup.
-3. **Seed config.**
-   - If `conf/context.properties` is missing, copy it from `defaults/` and apply the seed-once keys.
+3. **Default files.**
+   - If `conf/context.properties` is missing, copy it from `defaults/`.
    - If `conf/log.xml` is missing, copy it from `defaults/`.
    - Create the `repository/` subdirectories.
-4. **Apply the env-owned keys.**
-5. **Run `DockerDbInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-dbinit.jar' DockerDbInit`. It reads connection settings from the environment and behaves as follows:
-   - **Wait for the DB.** It retries a connection with `select 1` every 2 s, for up to `DB_WAIT_SECONDS` (default 60). If the DB is still unreachable, it exits 1.
+4. **Run `DockerInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-init.jar' DockerInit`. It reads everything from the environment and behaves as follows:
+   - **Validate** the env vars (§5). Errors exit 1 with `[docker-init] ERROR: …`.
+   - **Apply config.** It applies the seed-once keys if `LDOCHOME` is absent, then the env-owned keys, then writes once.
+   - **Wait for the DB.** It retries a connection with `select 1` every 2 s, for up to `DB_WAIT_SECONDS` (default 60). If the DB is still unreachable, it exits 1 ("not reachable"). An authentication error (SQLSTATE class 28) exits 1 at once ("database authentication failed").
    - **Detect the schema.** It probes `select 1 from ld_user where 1=0`.
      - If the probe succeeds, the schema already exists. It prints "schema present, skipping" and exits 0.
      - If the probe fails, it goes on to create the schema.
@@ -198,8 +207,8 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
      - For each one it prefers the `<sqlFile>.mariadb` resource if it exists. If neither the variant nor the base file exists, it exits 1 with an error naming the plugin and file. This catches problems like the webservice filename bug instead of silently skipping them.
      - It prints the ordered plan, then runs it with upstream's `com.logicaldoc.util.dbinit.DBInit` (`setDriver`/`setUrl`/`setUsername`/`setPassword`, then `execute()`). That's the same engine, encoding and continue-on-error behaviour as the setup wizard.
    - **Verify.** For every script it ran, it extracts each `create table <name>` (case-insensitive regex) and checks with `select 1 from <name> where 1=0` that the table exists. Scripts that only insert rows, like dropbox's, have nothing to check. If any table is missing, it exits 1 with: "schema initialization incomplete; remove the DB volume and retry".
-   - **Config-loss warning.** If the schema already existed but this boot just seeded a new `context.properties`, the entrypoint prints a loud warning: the encryption key and node id are new, so restore `conf/` from backup. It doesn't block startup.
-6. **Start Tomcat.** `exec setpriv --reuid=1000 --regid=1000 --init-groups "$@"`, which by default runs `catalina.sh run`. The JVM becomes PID 1 under `logicaldoc` and gets signals directly.
+   - **Config-loss warning.** If the schema already existed but this run just seeded `context.properties`, DockerInit prints a loud warning: the encryption key and node id are new, so restore `conf/` from backup. It doesn't block startup.
+5. **Start Tomcat.** `exec setpriv --reuid=1000 --regid=1000 --init-groups "$@"`, which by default runs `catalina.sh run`. The JVM becomes PID 1 under `logicaldoc` and gets signals directly.
 
 **JVM flags.** `CATALINA_OPTS` defaults to `-Xmx2g`. The image's `$CATALINA_HOME/bin/setenv.sh` adds `-Dfile.encoding=UTF-8`. `--add-opens` flags start empty. A flag is added only when a startup or smoke-test failure proves it's needed, and each one gets a comment naming the failure. Candidates are the surefire set in `logicaldoc-parent/pom.xml`.
 
@@ -220,7 +229,7 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
   - Healthcheck: `healthcheck.sh --connect --innodb_initialized`.
   - Volume `db-data:/var/lib/mysql`. No published port. `restart: unless-stopped`.
 - **`app`**
-  - `build: .` (with `args` for the OCI revision and version), `image: logicaldoc-community:local`.
+  - `build: .`, `image: logicaldoc-community:local`. The OCI `VERSION`/`REVISION` build args default to `local`/`unknown`; the future CI image build passes real values.
   - An explicit `environment:` block that passes the §5 variables through, using `${VAR:-default}` interpolation from `.env`.
   - `depends_on: db: condition: service_healthy`.
   - `ports: ["${LOGICALDOC_BIND:-127.0.0.1}:${LOGICALDOC_PORT:-8080}:8080"]`.
@@ -233,7 +242,7 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 
 - `app.ports` is replaced (with `!reset`) by `0.0.0.0:${LOGICALDOC_PORT:-8080}:8080`, so the UI is reachable from the LAN, plus `${JDWP_BIND:-127.0.0.1}:5005:5005`.
 - `app.command: ["catalina.sh", "jpda", "run"]` with `JPDA_ADDRESS=*:5005`. This is Tomcat's own debug launcher, so only the Tomcat JVM, and not the DB-init JVM, opens the debug port.
-- `db.ports` gets `127.0.0.1:3306:3306`.
+- `db.ports` gets `127.0.0.1:${DEV_DB_PORT:-3306}:3306`.
 - Usage: `docker compose -f compose.yaml -f compose.dev.yaml up --build`, or `COMPOSE_FILE=compose.yaml:compose.dev.yaml` in `.env`. Reset with `docker compose down -v`.
 
 ### `compose.proxy.yaml` (Nginx Proxy Manager and other containerized proxies)
@@ -275,7 +284,8 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 | Situation | Behaviour |
 |---|---|
 | `DB_PASSWORD` unset | Entrypoint exits 1 before touching anything |
-| DB unreachable after `DB_WAIT_SECONDS` | `DockerDbInit` exits 1; the container restarts under compose |
+| DB unreachable after `DB_WAIT_SECONDS` | `DockerInit` exits 1; the container restarts under compose |
+| Wrong DB credentials | `DockerInit` exits 1 at once ("database authentication failed") |
 | A declared SQL resource is missing | Exits 1, naming the plugin and file |
 | Schema incomplete after init | Exits 1 with instructions to drop the DB volume |
 | `conf` lost but DB intact | Loud warning; startup continues |
@@ -294,6 +304,13 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 6. Check that `GET /setup` returns 403.
 7. `docker compose down` (keeping volumes) then `up -d`. Wait for healthy, check both documents are still listed, and check the app logs contain "schema present, skipping".
 8. Report PASS/FAIL per step and exit non-zero on any failure.
+
+Supporting integration tests, which also pin the Review Focus cases in the plan:
+
+- `docker build --target tools .`: unit and `ContextProperties` round-trip tests for the init tool.
+- `docker/tests/test-init.sh`: DockerInit against a throwaway MariaDB. It covers validation, a late DB, schema creation, re-runs, config loss and credential errors.
+- `docker/tests/test-image.sh`: the image with plain `docker run`. It covers the entrypoint guard, ownership repair, uid, `/setup`, restart, settings persistence and config loss.
+- `docker/tests/test-overlays.sh`: the rendered config and a live stack for the dev and proxy overlays.
 
 Manual checks, done once with the built-in browser on localhost:
 
