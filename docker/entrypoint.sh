@@ -24,7 +24,14 @@ if [ "$(id -u)" = 0 ]; then
     mkdir -p "$dir"
     if [ "$(stat -c %u "$dir")" != "$APP_UID" ] || [ -n "$(find "$dir" -maxdepth 1 ! -user "$APP_UID" -print -quit)" ]; then
       log "changing ownership of $dir to uid $APP_UID"
-      chown -R "$APP_UID:$APP_GID" "$dir"
+      if ! chown -R "$APP_UID:$APP_GID" "$dir" 2>/dev/null; then
+        # NFS with root_squash and some CIFS mounts refuse chown even to root; writable is good enough.
+        if as_app test -w "$dir"; then
+          log "WARNING: could not change ownership of $dir; uid $APP_UID can write to it, so continuing"
+        else
+          die "could not change ownership of $dir and uid $APP_UID cannot write to it; on the NAS or host, give it to uid $APP_UID (gid $APP_GID) or make it writable for that user"
+        fi
+      fi
     fi
   done
 else
@@ -38,6 +45,12 @@ if [ ! -f "$CONF/context.properties" ]; then
 fi
 for file in log.xml allowed-commands.txt; do
   [ -f "$CONF/$file" ] || as_app cp "$LDOC_HOME/defaults/$file" "$CONF/$file"
+done
+# The commands the image relies on are re-added on every start (a conf volume may predate them); local additions stay.
+allowed=$CONF/allowed-commands.txt
+[ -s "$allowed" ] && [ -n "$(tail -c1 "$allowed")" ] && echo | as_app tee -a "$allowed" >/dev/null
+grep -vE '^[[:space:]]*(#|$)' "$LDOC_HOME/defaults/allowed-commands.txt" | while read -r cmd; do
+  grep -qxF "$cmd" "$allowed" || echo "$cmd" | as_app tee -a "$allowed" >/dev/null
 done
 as_app mkdir -p "$REPO"/docs "$REPO"/index "$REPO"/users "$REPO"/plugins "$REPO"/impex/in "$REPO"/impex/out \
   "$REPO"/logs "$REPO"/db

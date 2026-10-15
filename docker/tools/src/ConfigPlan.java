@@ -48,6 +48,17 @@ public final class ConfigPlan {
         return keys;
     }
 
+    /** The environment variable(s) an env-owned key is built from, for error messages. */
+    public static String source(String key) {
+        return switch (key) {
+        case "jdbc.url" -> "DB_HOST, DB_PORT or DB_NAME";
+        case "jdbc.username" -> "DB_USER";
+        case "jdbc.password" -> "DB_PASSWORD";
+        case "server.url" -> "LOGICALDOC_PUBLIC_URL";
+        default -> key;
+        };
+    }
+
     /** How long to wait for the database before giving up. */
     public static int dbWaitSeconds(Map<String, String> env) {
         String raw = value(env, "DB_WAIT_SECONDS", "60");

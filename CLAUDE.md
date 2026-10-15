@@ -32,8 +32,9 @@ mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one
 ## Docker
 
 - `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. `docker/README.md` is the user guide; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
-- The container never runs the setup wizard. `docker/tools/src/DockerInit.java` seeds `context.properties` and creates the schema by running the `DbInit` scripts from every `plugin.xml`. A plugin that adds a `DbInit` extension is picked up automatically.
-- LogicalDOC only runs external programs listed in a classpath `allowed-commands.txt`. The image seeds `docker/allowed-commands.txt` into the conf volume; a new external tool needs a line there.
+- The container never runs the setup wizard. `docker/tools/src/DockerInit.java` seeds `context.properties` and, on a fresh database, creates the schema by running the `DbInit` scripts from every `plugin.xml`, so a plugin's `DbInit` extension is picked up for new installs. Existing databases are never migrated: a plugin or upstream change that adds SQL needs it applied by hand there.
+- On every start, keys in the image's default `context.properties` that the conf volume lacks are added (values are never overwritten).
+- LogicalDOC only runs external programs listed in a classpath `allowed-commands.txt`. The lines in `docker/allowed-commands.txt` are re-added to the conf volume's copy on every start; a new external tool needs a line there.
 - Tests:
   - `docker build --target tools .` for the init tool's unit tests
   - `docker/tests/test-*.sh`

@@ -41,8 +41,12 @@ What the container does at startup:
 - **The setup wizard** (`/setup`) is disabled and returns HTTP 403, because the database is configured from `.env`.
 
 The image includes ImageMagick, Poppler and Ghostscript for thumbnails and previews. LogicalDOC only runs
-external programs listed in `conf/allowed-commands.txt`. The container seeds that file with those tools, and you
-can edit it in the conf volume.
+external programs listed in `conf/allowed-commands.txt`. The container keeps the image's entries (`convert` and the
+Poppler tools) in that file on every start; add your own lines there. Ghostscript is deliberately not listed,
+because ImageMagick calls it directly.
+
+On every start the container also adds any setting that's in the image's default `context.properties` but
+missing from yours, such as one introduced by an upstream update. It never changes a value you already have.
 
 ## Known limitations
 
@@ -85,14 +89,22 @@ admin UI, and it survives restarts, container recreation and image rebuilds.
 - **Passwords containing a single quote** need double quotes instead, with every `$` written as `$$`.
 - **`DB_PASSWORD` must not start with a space or tab, contain `${`, or start with `_b64_`.** LogicalDOC's
   configuration file can't keep leading whitespace, and it expands or decodes the other two when it reads the
-  file. The container refuses these at startup with a message saying which rule was broken.
+  file.
+- **Use only Latin-1 characters and no line breaks** in `DB_PASSWORD`, `DB_USER`, `DB_NAME`, `DB_HOST` and
+  `LOGICALDOC_PUBLIC_URL`. LogicalDOC stores its configuration as Latin-1, so a `€` or a non-Latin domain name
+  can't be kept. The container checks what it wrote and refuses such values at startup, naming the variable.
 - **MariaDB only uses `DB_PASSWORD` when it first creates its data volume.** To change it later:
-  1. Change it in the database:
+  1. Open a database session and enter the current password when asked:
      ```bash
-     docker compose exec db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" -e "ALTER USER CURRENT_USER() IDENTIFIED BY \"new-password\""'
+     docker compose exec db mariadb -u logicaldoc -p
      ```
-  2. Put the new value in `.env`.
-  3. Run `docker compose up -d`.
+     (use your `DB_USER` if you changed it).
+  2. At the `MariaDB` prompt, run:
+     ```sql
+     SET PASSWORD = PASSWORD('new-password');
+     ```
+     Inside the quotes, write a `'` as `''` and a `\` as `\\`. Nothing else needs escaping: no shell is involved.
+  3. Put the new password in `.env`, then run `docker compose up -d`.
 
 ## Behind Nginx Proxy Manager
 
@@ -240,8 +252,9 @@ git pull
 docker compose up -d --build
 ```
 
-Volumes are kept. **The container never migrates the database schema.** If an upstream merge changes the
-schema (look for changes under `*/src/main/resources/sql/`), apply that SQL by hand. Back up first.
+Volumes are kept, and settings new in the image's defaults are added to your `context.properties` on start.
+**The container never migrates the database schema.** If an upstream merge changes the schema (look for changes
+under `*/src/main/resources/sql/`), apply that SQL by hand. Back up first.
 
 ## Host folders instead of volumes
 
@@ -266,10 +279,11 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 | Message | Meaning |
 |---|---|
 | `DB_PASSWORD is not set` | set it in `.env` |
-| `DB_PASSWORD must not …` | the password breaks one of the rules under "Passwords and special characters" |
+| `DB_PASSWORD must not …` / `… cannot be stored in context.properties` | the value breaks one of the rules under "Passwords and special characters" |
 | `database authentication failed` | `.env` doesn't match the password MariaDB was created with (see "Passwords") |
 | `database not reachable … after 60s` | MariaDB didn't come up. Check `docker compose logs db`, or raise `DB_WAIT_SECONDS` on slow disks |
-| `schema initialization incomplete` | the first-boot schema creation failed part-way. Run `docker compose down`, delete the `logicaldoc_db-data` volume, and start again |
+| `schema initialization incomplete` or `… its initialization did not finish` | the first-boot schema creation failed or was interrupted. Run `docker compose down`, delete the `logicaldoc_db-data` volume, and start again |
+| `could not change ownership of … uid 1000 cannot write to it` | a bind-mounted share (e.g. NFS with root_squash) refuses `chown`. On the NAS, give the folder to uid/gid 1000 or make it writable for them |
 | `context.properties was just created, but the database already has a schema` | the `conf` volume was lost. Restore it from backup |
 | `Command … is not allowed. Add it to allowed-commands.txt` (in `repository/logs/dms.log`) | add the program to `conf/allowed-commands.txt` in the conf volume. It's re-read on every call, so no restart is needed |
 

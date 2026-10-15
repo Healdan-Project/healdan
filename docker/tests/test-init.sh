@@ -31,6 +31,9 @@ init() {
       exec java -cp "/build/ROOT/WEB-INF/lib/*:/build/docker-init.jar" DockerInit'
 }
 
+# db_sql <statement>: runs SQL in the test database as the app user and prints the result.
+db_sql() { docker exec "$DB" sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "$1"' _ "$1"; }
+
 start_db() {
   docker run -d --name "$DB" --network "$NET" -e MARIADB_DATABASE=logicaldoc -e MARIADB_USER=logicaldoc \
     -e MARIADB_PASSWORD="$PW" -e MARIADB_RANDOM_ROOT_PASSWORD=1 mariadb:11.4 >/dev/null
@@ -56,8 +59,8 @@ check "core uses the mariadb variant" grep -q 'plan: 1 logicaldoc-core -> sql/lo
 check "webservice uses the mariadb variant" grep -q 'plan: 20 logicaldoc-webservice -> sql/logicaldoc-webservice.sql.mariadb' <<<"$out"
 check "dropbox uses the generic script" grep -q 'plan: 1500 logicaldoc-dropbox -> sql/logicaldoc-dropbox.sql$' <<<"$out"
 check "schema created" grep -q 'schema created' <<<"$out"
-check "ld_webservicecall exists" docker exec "$DB" sh -c \
-  'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
+check "ld_webservicecall exists" db_sql "select 1 from ld_webservicecall where 1=0"
+check "completion recorded" test "$(db_sql 'select count(*) from docker_init')" = 1
 [ "$FAILED" = 0 ] || { echo "$out"; }
 
 echo "== 3. second run is a no-op"
@@ -84,5 +87,12 @@ echo "== 6. unreachable database times out"
 out=$(init -e DB_HOST=ldtest-nowhere -e DB_WAIT_SECONDS=4 2>&1) && rc=0 || rc=$?
 check "exits 1" test "$rc" = 1
 check "says not reachable" grep -q 'not reachable' <<<"$out"
+
+echo "== 7. a first start that did not finish is not mistaken for a complete schema"
+db_sql "drop table if exists docker_init"
+out=$(init 2>&1) && rc=0 || rc=$?
+check "exits 1" test "$rc" = 1
+check "says the earlier initialization did not finish" grep -q 'initialization did not finish' <<<"$out"
+check "does not start on the half-built schema" lacks 'schema present, skipping' "$out"
 
 finish

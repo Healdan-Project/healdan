@@ -1,4 +1,5 @@
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -11,6 +12,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
+import java.util.TreeSet;
 import java.util.UUID;
 
 import org.xml.sax.SAXException;
@@ -26,9 +29,15 @@ public final class DockerInit {
 
     static final File CONFIG = new File(ConfigPlan.HOME + "/conf/context.properties");
 
+    /** The image's pristine context.properties, the source of keys an older conf file lacks. */
+    static final File DEFAULTS = new File(ConfigPlan.HOME + "/defaults/context.properties");
+
     private static final String DRIVER = "org.mariadb.jdbc.Driver";
 
     private static final String DBMS = "mariadb";
+
+    /** Created only after the schema is verified, so a first start that failed part-way is recognisable. */
+    private static final String MARKER = "docker_init";
 
     /** SQLSTATE MariaDB reports for a table that does not exist. */
     private static final String NO_SUCH_TABLE = "42S02";
@@ -51,25 +60,35 @@ public final class DockerInit {
     static void run(Map<String, String> env) throws Exception {
         Map<String, String> envKeys = ConfigPlan.envKeys(env);
         int waitSeconds = ConfigPlan.dbWaitSeconds(env);
-        boolean seeded = applyConfig(CONFIG, envKeys);
+        boolean seeded = applyConfig(CONFIG, DEFAULTS, envKeys);
 
         Db db = new Db(envKeys.get("jdbc.url"), envKeys.get("jdbc.username"), envKeys.get("jdbc.password"));
         db.await(waitSeconds);
-        if (db.missingTables(List.of("ld_user")).isEmpty()) {
+        List<String> missing = db.missingTables(List.of("ld_user", MARKER));
+        if (missing.isEmpty()) {
             log("schema present, skipping database initialization");
             if (seeded)
                 warnConfigLoss();
-            return;
+        } else if (missing.size() == 2) {
+            createSchema(db);
+        } else {
+            throw new InitException("the database holds part of a LogicalDOC schema, but its initialization did not"
+                    + " finish (an earlier first start failed or was interrupted); remove the database volume and"
+                    + " start again");
         }
-        createSchema(db);
     }
 
     /**
-     * Seeds the container's paths and DB settings the first time (recognised by a missing LDOCHOME, which the
-     * shipped defaults lack), then applies the env-owned keys. Returns true when this call seeded the file.
+     * Adds keys the file lacks from the image defaults (upstream adds settings over time, and LogicalDOC fails to
+     * start on an unresolvable one), seeds the container's paths and DB settings the first time (recognised by a
+     * missing LDOCHOME, which the shipped defaults lack), then applies the env-owned keys. Returns true when this
+     * call seeded the file.
      */
-    static boolean applyConfig(File file, Map<String, String> envKeys) throws IOException {
+    static boolean applyConfig(File file, File defaults, Map<String, String> envKeys) throws IOException {
         ContextProperties config = new ContextProperties(file);
+        TreeSet<String> added = addMissingDefaults(config, defaults);
+        if (!added.isEmpty())
+            log("added settings missing from " + file + ": " + String.join(", ", added));
         String home = config.getProperty("LDOCHOME");
         boolean seed = home == null || home.isBlank();
         if (seed) {
@@ -78,7 +97,38 @@ public final class DockerInit {
         }
         envKeys.forEach(config::setProperty);
         config.write();
+        verifyStored(file, envKeys);
         return seed;
+    }
+
+    /** Copies into config every key of the defaults file that config lacks; existing values are kept. */
+    private static TreeSet<String> addMissingDefaults(ContextProperties config, File defaults) throws IOException {
+        TreeSet<String> added = new TreeSet<>();
+        if (!defaults.isFile())
+            return added;
+        Properties pristine = new Properties();
+        try (FileInputStream in = new FileInputStream(defaults)) {
+            pristine.load(in);
+        }
+        for (String key : pristine.stringPropertyNames())
+            if (!config.containsKey(key)) {
+                config.setProperty(key, pristine.getProperty(key));
+                added.add(key);
+            }
+        return added;
+    }
+
+    /**
+     * LogicalDOC writes context.properties one byte per character, so values outside Latin-1 come back changed.
+     * Refuse them here rather than let Tomcat fail later with a corrupted password or URL.
+     */
+    private static void verifyStored(File file, Map<String, String> envKeys) throws IOException {
+        ContextProperties stored = new ContextProperties(file);
+        for (Map.Entry<String, String> key : envKeys.entrySet())
+            if (!key.getValue().equals(stored.getProperty(key.getKey()))
+                    || !key.getValue().equals(stored.getString(key.getKey())))
+                throw new IllegalArgumentException(ConfigPlan.source(key.getKey())
+                        + " cannot be stored in context.properties as given: use only Latin-1 characters and no line breaks");
     }
 
     private static void createSchema(Db db) throws Exception {
@@ -119,6 +169,7 @@ public final class DockerInit {
         if (!missing.isEmpty())
             throw new InitException("schema initialization incomplete, missing tables " + missing
                     + "; remove the database volume and start again");
+        db.recordCompletion();
         log("schema created (" + tables.size() + " tables)");
     }
 
@@ -171,6 +222,13 @@ public final class DockerInit {
                     log("waiting for database at " + url + " (" + e.getMessage() + ")");
                 }
                 Thread.sleep(2000);
+            }
+        }
+
+        void recordCompletion() throws SQLException {
+            try (Connection c = connect(); Statement s = c.createStatement()) {
+                s.execute("create table " + MARKER + " (completed timestamp not null)");
+                s.execute("insert into " + MARKER + " values (current_timestamp)");
             }
         }
 

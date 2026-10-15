@@ -15,10 +15,11 @@ public class ConfigFileTest {
     private static final String AWKWARD = "sm0ke,p=a\\ss $x #1 é:! ";
 
     public static void main(String[] args) throws Exception {
+        File defaults = new File(args[0]);
         File conf = new File(Files.createTempDirectory("configfile").toFile(), "context.properties");
-        Files.copy(new File(args[0]).toPath(), conf.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        Files.copy(defaults.toPath(), conf.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-        boolean seeded = DockerInit.applyConfig(conf,
+        boolean seeded = DockerInit.applyConfig(conf, defaults,
                 ConfigPlan.envKeys(Map.of("DB_PASSWORD", AWKWARD, "LOGICALDOC_PUBLIC_URL", "https://docs.example.org")));
         Check.isTrue(seeded, "first call seeds the shipped defaults");
 
@@ -39,14 +40,36 @@ public class ConfigFileTest {
         Check.eq("https://docs.example.org/", reread.getProperty("server.url"), "server.url applied");
         Check.eq("true", reread.getProperty("webservice.enabled"), "unmanaged key preserved");
 
-        // A later boot applies env keys only: a seed-once key the admin changed must survive.
+        // A later boot applies env keys only: a seed-once key the admin changed must survive. A key the conf
+        // file lacks (as after an upstream sync adds one to the defaults) is filled in from the defaults.
         reread.setProperty("conf.importdir", "/srv/custom-in/");
+        reread.setProperty("webservice.enabled", "false");
+        reread.remove("cookies.samesite");
         reread.write();
-        boolean seededAgain = DockerInit.applyConfig(conf, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+        boolean seededAgain = DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
         ContextProperties later = new ContextProperties(conf);
         Check.isTrue(!seededAgain, "second call does not seed");
         Check.eq("/srv/custom-in/", later.getProperty("conf.importdir"), "admin-changed seed key preserved");
+        Check.eq("false", later.getProperty("webservice.enabled"), "admin-changed default key preserved");
+        Check.eq("lax", later.getProperty("cookies.samesite"), "key missing from conf restored from the defaults");
         Check.eq("rotated", later.getProperty("jdbc.password"), "env key re-applied");
+
+        // context.properties is written byte-per-char (Latin-1): anything it cannot hold must be refused, not
+        // silently corrupted into a value that only fails later when Tomcat logs in.
+        Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa€ss")), "non-Latin-1 password");
+        Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa\rss")), "line break in password");
+        Check.throwsWith("LOGICALDOC_PUBLIC_URL",
+                () -> apply(conf, Map.of("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL", "https://bücher.例え.jp")),
+                "non-Latin-1 public URL");
         Check.done("ConfigFileTest");
+    }
+
+    private static void apply(File conf, Map<String, String> env) {
+        try {
+            DockerInit.applyConfig(conf, new File(conf.getParentFile(), "absent-defaults.properties"),
+                    ConfigPlan.envKeys(env));
+        } catch (java.io.IOException e) {
+            throw new java.io.UncheckedIOException(e);
+        }
     }
 }

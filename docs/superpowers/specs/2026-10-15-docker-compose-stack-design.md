@@ -110,7 +110,11 @@ logicaldoc-webservice/src/main/resources/plugin.xml   fix sqlFile name (own comm
   - Move `WEB-INF/classes/context.properties` and `WEB-INF/classes/log.xml` to `/opt/logicaldoc/defaults/`.
   - They must be **removed** from `WEB-INF/classes`, because Tomcat's webapp class loader searches `WEB-INF/classes` before its parent.
 - **Classpath:** add `/opt/logicaldoc/conf` to `common.loader` in `catalina.properties`, so the live `context.properties` and `log.xml` are found there and rewritten in place. This matches upstream's installer layout.
-- **Scripts and tools:** install `entrypoint.sh` and `restart.sh` under `/opt/logicaldoc/bin`, `docker-init.jar` under `/opt/logicaldoc/lib`, and `setenv.sh` in Tomcat's `bin/`.
+- **Scripts and tools:**
+  - `entrypoint.sh` goes to `/usr/local/bin/logicaldoc-entrypoint.sh`, root-owned, because root runs it and uid 1000 must not be able to change it.
+  - `restart.sh` goes under `/opt/logicaldoc/bin` and `docker-init.jar` under `/opt/logicaldoc/lib`.
+  - `setenv.sh` goes in Tomcat's `bin/`.
+  - `allowed-commands.txt` (`convert`, `pdftoppm`, `pdftotext`, `pdftohtml`) goes into `defaults/`. LogicalDOC's `Exec` refuses any command not listed in the classpath `/allowed-commands.txt`.
 - **User:** create `logicaldoc` (uid/gid 1000). It owns `/opt/logicaldoc` and the Tomcat dirs the webapp writes to (`webapps/ROOT`, `work`, `temp`, `logs`).
 - **Volumes:** `/opt/logicaldoc/conf` and `/opt/logicaldoc/repository`.
 - **Ports and health:** `EXPOSE 8080`. `HEALTHCHECK` runs `curl -fsS http://localhost:8080/login.jsp`.
@@ -125,8 +129,8 @@ The container starts as root. Only the entrypoint's preparation steps (the owner
 /opt/logicaldoc/                 = LDOCHOME
   conf/          VOLUME  context.properties (+ .yyyyMMdd backups), log.xml
   repository/    VOLUME  docs/ index/ users/ plugins/ impex/in impex/out logs/
-  defaults/              pristine context.properties, log.xml from the WAR
-  bin/                   entrypoint.sh, restart.sh, pid (written by the app)
+  defaults/              pristine context.properties, log.xml from the WAR; allowed-commands.txt
+  bin/                   restart.sh, pid (written by the app)
   lib/                   docker-init.jar
 ```
 
@@ -191,22 +195,28 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 1. **Preconditions.** Fail fast with a clear message if `DB_PASSWORD` is empty.
 2. **Ownership** (as root). If `conf/` or `repository/` isn't owned by uid 1000, `chown -R` it. This makes bind mounts to NAS paths work without manual setup.
 3. **Default files.**
-   - If `conf/context.properties` is missing, copy it from `defaults/`.
-   - If `conf/log.xml` is missing, copy it from `defaults/`.
+   - If `conf/context.properties`, `conf/log.xml` or `conf/allowed-commands.txt` is missing, copy it from `defaults/`.
+   - Re-add any line of the default `allowed-commands.txt` that the conf copy lacks. Local additions stay.
+   - If `chown` is refused (NFS with root_squash, some CIFS mounts), continue with a warning when uid 1000 can write the directory. Otherwise exit with instructions to give the share to uid/gid 1000.
    - Create the `repository/` subdirectories.
 4. **Run `DockerInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-init.jar' DockerInit`. It reads everything from the environment and behaves as follows:
    - **Validate** the env vars (§5). Errors exit 1 with `[docker-init] ERROR: …`.
-   - **Apply config.** It applies the seed-once keys if `LDOCHOME` is absent, then the env-owned keys, then writes once.
+   - **Apply config.**
+     - It adds every key of `defaults/context.properties` that the conf file lacks, so settings upstream adds over time reach existing installs. It never overwrites a value.
+     - It applies the seed-once keys if `LDOCHOME` is absent, then the env-owned keys, and writes once.
+     - It then re-reads the file. LogicalDOC writes it one byte per character, so an env-owned value outside Latin-1, or one containing a line break, comes back changed. That exits 1, naming the variable.
    - **Wait for the DB.** It retries a connection with `select 1` every 2 s, for up to `DB_WAIT_SECONDS` (default 60). If the DB is still unreachable, it exits 1 ("not reachable"). An authentication error (SQLSTATE class 28) exits 1 at once ("database authentication failed").
-   - **Detect the schema.** It probes `select 1 from ld_user where 1=0`.
-     - If the probe succeeds, the schema already exists. It prints "schema present, skipping" and exits 0.
-     - If the probe fails, it goes on to create the schema.
+   - **Detect the schema.** It probes for `ld_user` and for the completion marker table `docker_init`.
+     - If both exist, it prints "schema present, skipping" and exits 0.
+     - If neither exists, it goes on to create the schema.
+     - If only one exists, an earlier first start failed or was interrupted. It exits 1 ("… its initialization did not finish …; remove the database volume").
+     - Without the marker, the restart policy would hide a failed init on the next boot.
    - **Create the schema.**
      - It enumerates `ClassLoader.getResources("plugin.xml")` and parses each file with the JDK's DOM parser.
      - It collects `<extension plugin-id="logicaldoc-core" point-id="DbInit">` entries and sorts them by `position`.
      - For each one it prefers the `<sqlFile>.mariadb` resource if it exists. If neither the variant nor the base file exists, it exits 1 with an error naming the plugin and file. This catches problems like the webservice filename bug instead of silently skipping them.
      - It prints the ordered plan, then runs it with upstream's `com.logicaldoc.util.dbinit.DBInit` (`setDriver`/`setUrl`/`setUsername`/`setPassword`, then `execute()`). That's the same engine, encoding and continue-on-error behaviour as the setup wizard.
-   - **Verify.** For every script it ran, it extracts each `create table <name>` (case-insensitive regex) and checks with `select 1 from <name> where 1=0` that the table exists. Scripts that only insert rows, like dropbox's, have nothing to check. If any table is missing, it exits 1 with: "schema initialization incomplete; remove the DB volume and retry".
+   - **Verify, then mark complete.** Only after the check below passes does it create `docker_init` and insert a timestamp. For every script it ran, it extracts each `create table <name>` (case-insensitive regex) and checks with `select 1 from <name> where 1=0` that the table exists. Scripts that only insert rows, like dropbox's, have nothing to check. If any table is missing, it exits 1 with: "schema initialization incomplete; remove the DB volume and retry".
    - **Config-loss warning.** If the schema already existed but this run just seeded `context.properties`, DockerInit prints a loud warning: the encryption key and node id are new, so restore `conf/` from backup. It doesn't block startup.
 5. **Start Tomcat.** `exec setpriv --reuid=1000 --regid=1000 --init-groups "$@"`, which by default runs `catalina.sh run`. The JVM becomes PID 1 under `logicaldoc` and gets signals directly.
 

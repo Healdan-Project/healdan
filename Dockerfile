@@ -51,7 +51,9 @@ COPY --from=tools --chown=1000:1000 /build/docker-init.jar /opt/logicaldoc/lib/d
 COPY docker/server.xml "$CATALINA_HOME/conf/server.xml"
 COPY docker/rewrite.config "$CATALINA_HOME/conf/Catalina/localhost/rewrite.config"
 COPY --chmod=0755 docker/setenv.sh "$CATALINA_HOME/bin/setenv.sh"
-COPY --chmod=0755 --chown=1000:1000 docker/entrypoint.sh docker/restart.sh /opt/logicaldoc/bin/
+# Root runs the entrypoint, so it lives root-owned outside anything uid 1000 can write.
+COPY --chmod=0755 docker/entrypoint.sh /usr/local/bin/logicaldoc-entrypoint.sh
+COPY --chmod=0755 --chown=1000:1000 docker/restart.sh /opt/logicaldoc/bin/restart.sh
 # LogicalDOC only runs external commands listed in a classpath allowed-commands.txt; seeded into conf/.
 COPY docker/allowed-commands.txt /opt/logicaldoc/defaults/allowed-commands.txt
 
@@ -68,5 +70,5 @@ VOLUME ["/opt/logicaldoc/conf", "/opt/logicaldoc/repository"]
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
   CMD curl -fsS -o /dev/null http://localhost:8080/login.jsp || exit 1
-ENTRYPOINT ["/opt/logicaldoc/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/logicaldoc-entrypoint.sh"]
 CMD ["catalina.sh", "run"]
