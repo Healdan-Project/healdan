@@ -1,0 +1,29 @@
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
+  <!-- Same repositories as .github/workflows/build-logicaldoc.yml; some dependencies are not on Maven Central. -->
+  <profiles>
+    <profile>
+      <id>with-extra-repos</id>
+      <repositories>
+        <repository>
+          <id>central</id>
+          <url>https://repo1.maven.org/maven2</url>
+        </repository>
+        <!-- LogicalDOC repository (hosts the *-jakarta Jackrabbit artifacts, etc.) -->
+        <repository>
+          <id>logicaldoc</id>
+          <url>https://logicaldoc.sourceforge.net/maven/</url>
+        </repository>
+        <!-- Terracotta repository (org.terracotta.internal:statistics, etc.) -->
+        <repository>
+          <id>terracotta</id>
+          <url>https://repo.terracotta.org/maven2</url>
+        </repository>
+      </repositories>
+    </profile>
+  </profiles>
+  <activeProfiles>
+    <activeProfile>with-extra-repos</activeProfile>
+  </activeProfiles>
+</settings>

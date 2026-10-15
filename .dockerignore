@@ -1,0 +1,15 @@
+# Keep the build context to sources. docker/ is needed, but the build stage copies it separately.
+.git
+.github
+.claude
+.superpowers
+docs
+**/target
+**/gwt-unitCache
+**/.settings
+**/.project
+**/.classpath
+**/*.bak
+.env
+.env.*
+compose*.yaml
