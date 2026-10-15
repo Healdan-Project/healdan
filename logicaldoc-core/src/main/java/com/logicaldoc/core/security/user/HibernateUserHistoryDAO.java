@@ -1,6 +1,6 @@
 package com.logicaldoc.core.security.user;
 
-import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,73 +21,71 @@ import jakarta.transaction.Transactional;
 @Transactional
 public class HibernateUserHistoryDAO extends HibernateHistoryDAO<UserHistory> implements UserHistoryDAO {
 
-	private HibernateUserHistoryDAO() {
-		super(UserHistory.class);
-		super.log = LoggerFactory.getLogger(HibernateUserHistoryDAO.class);
-	}
+    private HibernateUserHistoryDAO() {
+        super(UserHistory.class);
+        super.log = LoggerFactory.getLogger(HibernateUserHistoryDAO.class);
+    }
 
-	@Override
-	public List<UserHistory> findByUserId(long userId) {
-		return findByUserIdAndEvent(userId, null);
-	}
+    @Override
+    public List<UserHistory> findByUserId(long userId) throws PersistenceException {
+        return findByUserIdAndEvent(userId, null, null);
+    }
 
-	@Override
-	public List<UserHistory> findByUserIdAndEvent(long userId, String event) {
-		try {
-			if (StringUtils.isEmpty(event))
-				return findByWhere(ENTITY + ".userId =" + userId, ENTITY + ".date desc", null);
-			else {
-				Map<String, Object> params = new HashMap<>();
-				params.put("userId", userId);
-				params.put("event", event);
+    @Override
+    public List<UserHistory> findByUserIdAndEvent(long userId, String event, Date oldestDate)
+            throws PersistenceException {
+        StringBuilder query = new StringBuilder("_entity.userId = :userId");
 
-				return findByWhere(ENTITY + ".userId = :userId and " + ENTITY + ".event = :event", params,
-						ENTITY + ".date desc", null);
-			}
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-			return new ArrayList<>();
-		}
-	}
+        Map<String, Object> params = new HashMap<>();
+        params.put("userId", userId);
 
-	@Override
-	public UserHistory createUserHistory(User user, UserEvent eventType, String comment, String sessionId, Client client) {
-		UserHistory history = new UserHistory();
-		history.setComment(comment);
-		history.setEvent(eventType);
+        if (StringUtils.isNotEmpty(event)) {
+            params.put("event", event);
+            query.append(" and _entity.event = :event ");
+        }
 
-		Session session = SessionManager.get().get(sessionId);
-		if (session != null)
-			history.setSession(session);
-		else
-			history.setSessionId(sessionId);
+        if (oldestDate != null) {
+            params.put("oldestDate", oldestDate);
+            query.append(" and _entity.date >= :oldestDate");
+        }
 
-		if (user != null)
-			history.setUser(user);
+        return findByWhere(query.toString(), params, "order by _entity.date asc", null);
+    }
 
-		if (client != null) {
-			history.setIp(client.getAddress());
-			if (client.getDevice() != null)
-				history.setDevice(client.getDevice().toString());
-			if (client.getGeolocation() != null)
-				history.setGeolocation(client.getGeolocation().toString());
-		}
+    @Override
+    public UserHistory createUserHistory(
+            User user,
+            UserEvent eventType,
+            String comment,
+            String sessionId,
+            Client client) throws PersistenceException {
+        UserHistory history = new UserHistory();
+        history.setComment(comment);
+        history.setEvent(eventType);
 
-		try {
-			store(history);
-			return history;
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-			return null;
-		}
-	}
+        Session session = SessionManager.get().get(sessionId);
+        if (session != null)
+            history.setSession(session);
+        else
+            history.setSessionId(sessionId);
 
-	@Override
-	public void cleanOldHistories(int ttl) {
-		try {
-			log.info("cleanOldHistories rows updated: {}", cleanOldRecords(ttl, "ld_user_history"));
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-		}
-	}
+        if (user != null)
+            history.setUser(user);
+
+        if (client != null) {
+            history.setIp(client.getAddress());
+            if (client.getDevice() != null)
+                history.setDevice(client.getDevice().toString());
+            if (client.getGeolocation() != null)
+                history.setGeolocation(client.getGeolocation().toString());
+        }
+
+        store(history);
+        return history;
+    }
+
+    @Override
+    public void cleanOldHistories(int ttl) throws PersistenceException {
+        log.info("cleanOldHistories rows updated: {}", cleanOldRecords(ttl, "ld_user_history"));
+    }
 }

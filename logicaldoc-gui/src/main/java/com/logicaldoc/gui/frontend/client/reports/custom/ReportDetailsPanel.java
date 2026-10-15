@@ -96,20 +96,8 @@ public class ReportDetailsPanel extends VLayout {
 		}
 
 		/*
-		 * Prepare the security properties tab
+		 * Prepare the security tab
 		 */
-		if (securityPanel != null) {
-			securityPanel.destroy();
-			if (Boolean.TRUE.equals(securityTabPanel.contains(securityPanel)))
-				securityTabPanel.removeMember(securityPanel);
-		}
-
-		if (propertiesPanel != null) {
-			propertiesPanel.destroy();
-			if (Boolean.TRUE.equals(propertiesTabPanel.contains(propertiesPanel)))
-				propertiesTabPanel.removeMember(propertiesPanel);
-		}
-
 		if (securityPanel != null) {
 			securityPanel.destroy();
 			if (Boolean.TRUE.equals(securityTabPanel.contains(securityPanel)))
@@ -152,9 +140,6 @@ public class ReportDetailsPanel extends VLayout {
 		boolean valid = propertiesPanel.validate();
 		if (!valid)
 			tabSet.selectTab(0);
-		valid = valid && securityPanel.validate();
-		if (!valid)
-			tabSet.selectTab(1);
 		return valid;
 	}
 

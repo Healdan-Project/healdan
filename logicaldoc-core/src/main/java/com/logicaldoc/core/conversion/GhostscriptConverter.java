@@ -6,7 +6,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import com.logicaldoc.core.document.Document;
+import org.apache.commons.lang.StringUtils;
+
+import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.util.exec.Exec;
 import com.logicaldoc.util.io.FileUtil;
 
@@ -18,37 +20,44 @@ import com.logicaldoc.util.io.FileUtil;
  */
 public class GhostscriptConverter extends AbstractFormatConverter {
 
+	private static final String FIRST_PAGE_1 = "-dFirstPage=1";
+	private static final String LAST_PAGE_1 = "-dLastPage=1";
+
 	@Override
-	public void internalConvert(String sid, Document document, File src, File dest) throws IOException {
+	public void internalConvert(String sid, AbstractDocument document, File src, File dest) throws IOException {
 		String ext = FileUtil.getExtension(dest.getName()).toLowerCase();
 
 		try {
 			String arguments = getParameter("arguments");
 			List<String> commandLine = new ArrayList<>();
 			commandLine.add(getParameter("path"));
-			if (arguments != null)
+			if (StringUtils.isNotBlank(arguments))
 				commandLine.addAll(Arrays.asList(arguments.split(" ")));
 
 			commandLine.add("-dNOPAUSE");
 			commandLine.add("-dBATCH");
-			
+
 			List<String> pages = null;
 			String device = "jpeg";
-			if ("tif".equals(ext) || "tiff".equals(ext))
+			if ("tif".equals(ext) || "tiff".equals(ext)) {
 				device = "tiff24nc";
-			else if ("png".equals(ext)) {
+				commandLine.add("-sCompression=lzw");
+			} else if ("png".equals(ext)) {
 				device = "png16m";
-				pages = List.of("-dFirstPage=1", "-dLastPage=1");
+				pages = List.of(FIRST_PAGE_1, LAST_PAGE_1);
 			} else if ("ps".equals(ext)) {
 				device = "ps2write";
-				pages = List.of("-dFirstPage=1", "-dLastPage=1");
-			} else if ("txt".equals(ext))
+				pages = List.of(FIRST_PAGE_1, LAST_PAGE_1);
+			} else if ("txt".equals(ext)) {
 				device = "txtwrite";
+			} else {
+				pages = List.of(FIRST_PAGE_1, LAST_PAGE_1);
+			}
 
-			commandLine.add("-sDEVICE=" + device);
+			commandLine.add("-sDEVICE=%s".formatted(device));
 			if (pages != null)
 				commandLine.addAll(pages);
-			commandLine.addAll(List.of("-sOutputFile=" + dest.getPath(), src.getPath()));
+			commandLine.addAll(List.of("-sOutputFile=%s".formatted(dest.getAbsolutePath()), src.getAbsolutePath()));
 
 			new Exec().exec(commandLine, null, null, getTimeout());
 

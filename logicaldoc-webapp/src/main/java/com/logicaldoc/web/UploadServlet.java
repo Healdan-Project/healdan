@@ -22,6 +22,7 @@ import com.logicaldoc.core.security.SessionListener;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.spring.LDDeferredSecurityContext;
+import com.logicaldoc.util.SystemUtil;
 import com.logicaldoc.util.io.FileUtil;
 import com.logicaldoc.util.spring.Context;
 
@@ -40,287 +41,311 @@ import jakarta.servlet.http.HttpSession;
  */
 public class UploadServlet extends HttpServlet implements SessionListener {
 
-	public static final String UPLOADS = "uploads";
+    public static final String UPLOADS = "uploads";
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private static final Logger log = LoggerFactory.getLogger(UploadServlet.class);
+    private static final Logger log = LoggerFactory.getLogger(UploadServlet.class);
 
-	/**
-	 * Sets the size threshold (in bytes) beyond which files are written
-	 * directly to disk.
-	 */
-	private static int maxMemSize = 1 * 1024 * 1024;
+    /**
+     * Sets the size threshold (in bytes) beyond which files are written
+     * directly to disk.
+     */
+    private static int maxMemSize = 1 * 1024 * 1024;
 
-	/**
-	 * Constructor of the object.
-	 */
-	public UploadServlet() {
-		super();
-		SessionManager.get().addListener(this);
-	}
+    /**
+     * Constructor of the object.
+     */
+    public UploadServlet() {
+        super();
+        SessionManager.get().addListener(this);
+    }
 
-	@Override
-	protected void doGet(HttpServletRequest request, HttpServletResponse response)
-			throws ServletException, IOException {
+    @Override
+    protected void doGet(HttpServletRequest request, HttpServletResponse response)
+            throws ServletException, IOException {
 
-		try {
-			response.setContentType("text/html");
-			PrintWriter out = response.getWriter();
-			out.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">");
-			out.println("<HTML>");
-			out.println("  <HEAD><TITLE>Upload Document Resource Servlet</TITLE></HEAD>");
-			out.println("  <BODY>");
-			out.print(" This servlet doesn't support GET method. Use POST instead. ");
-			out.println("  </BODY>");
-			out.println("</HTML>");
-			out.flush();
-			out.close();
-		} catch (Exception t) {
-			// Nothing to do
-		}
-	}
+        try {
+            response.setContentType("text/html");
+            PrintWriter out = response.getWriter();
+            out.println("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.01 Transitional//EN\">");
+            out.println("<HTML>");
+            out.println("  <HEAD><TITLE>Upload Document Resource Servlet</TITLE></HEAD>");
+            out.println("  <BODY>");
+            out.print(" This servlet doesn't support GET method. Use POST instead. ");
+            out.println("  </BODY>");
+            out.println("</HTML>");
+            out.flush();
+            out.close();
+        } catch (Exception t) {
+            // Nothing to do
+        }
+    }
 
-	/**
-	 * Retrieves the root of the upload folder
-	 * 
-	 * @param sid The current session ID
-	 * 
-	 * @return the upload folder
-	 */
-	protected static File getUploadDir(String sid) {
-		File dir = new File(System.getProperty("java.io.tmpdir") + "/upload/" + sid);
-		dir.mkdirs();
-		dir.mkdir();
-		return dir;
-	}
+    /**
+     * Retrieves the root of the upload folder
+     * 
+     * @param sid The current session ID
+     * 
+     * @return the upload folder
+     */
+    protected static File getUploadDir(String sid) {
+        File dir = new File(FileUtil.tempDir(), "upload");
+        dir = new File(dir, sid);
+        dir.mkdirs();
+        dir.mkdir();
+        return dir;
+    }
 
-	/**
-	 * Retrieves the root of the upload folder
-	 * 
-	 * @param httpSession The current session
-	 * 
-	 * @return the upload folder
-	 */
-	private static File getUploadDir(HttpSession httpSession) {
-		File dir = new File(System.getProperty("java.io.tmpdir") + "/upload/" + httpSession.getId());
-		dir.mkdirs();
-		dir.mkdir();
-		return dir;
-	}
+    /**
+     * Retrieves the root of the upload folder
+     * 
+     * @param httpSession The current session
+     * 
+     * @return the upload folder
+     */
+    private static File getUploadDir(HttpSession httpSession) {
+        File dir = new File(FileUtil.tempDir(), "upload");
+        dir = new File(dir, "http-%s".formatted(httpSession.getId()));
+        dir.mkdirs();
+        dir.mkdir();
+        return dir;
+    }
 
-	/**
-	 * Retrieves the root of the upload folder
-	 * 
-	 * @param request The current request
-	 * 
-	 * @return the upload folder
-	 */
-	private static File getUploadDir(HttpServletRequest request) {
-		String sid = getSid(request);
-		if (StringUtils.isNotEmpty(sid) && SessionManager.get().get(sid) != null
-				&& SessionManager.get().get(sid).isOpen()) {
-			return getUploadDir(sid);
-		} else {
-			return getUploadDir(request.getSession(true));
-		}
-	}
+    /**
+     * Retrieves the root of the upload folder
+     * 
+     * @param request The current request
+     * 
+     * @return the upload folder
+     */
+    private static File getUploadDir(HttpServletRequest request) {
+        String sid = getSid(request);
+        if (StringUtils.isNotEmpty(sid) && SessionManager.get().get(sid) != null
+                && SessionManager.get().get(sid).isOpen()) {
+            return getUploadDir(sid);
+        } else if (request.getSession(false) != null) {
+            return getUploadDir(request.getSession(false));
+        } else {
+            /*
+             * We cannot admit uploads without a session because otherwise we
+             * could be exposed to anonymous disk-fill and/or staging
+             */
+            throw new RuntimeException("no session");
+        }
+    }
 
-	/**
-	 * Retrieves the map containing the files uploaded in the current session
-	 * 
-	 * @param sid The current session ID
-	 * 
-	 * @return the files map where the key is the original file name and the
-	 *         value is the real file
-	 */
-	public static Map<String, File> getUploads(String sid) {
-		Session session = SessionManager.get().get(sid);
+    /**
+     * Retrieves the map containing the files uploaded in the current session
+     * 
+     * @param sid The current session ID
+     * 
+     * @return the files map where the key is the original file name and the
+     *         value is the real file
+     */
+    public static Map<String, File> getUploads(String sid) {
+        Session session = SessionManager.get().get(sid);
 
-		if (session != null && session.isOpen()) {
-			@SuppressWarnings("unchecked")
-			Map<String, File> uploadedFiles = (Map<String, File>) session.getDictionary().get(UPLOADS);
-			if (uploadedFiles == null) {
-				uploadedFiles = new HashMap<>();
-				session.getDictionary().put(UPLOADS, uploadedFiles);
-			}
-			return uploadedFiles;
-		} else
-			return new HashMap<>();
-	}
+        if (session != null && session.isOpen()) {
+            @SuppressWarnings("unchecked")
+            Map<String, File> uploadedFiles = (Map<String, File>) session.getDictionary().get(UPLOADS);
+            if (uploadedFiles == null) {
+                uploadedFiles = new HashMap<>();
+                session.getDictionary().put(UPLOADS, uploadedFiles);
+            }
+            return uploadedFiles;
+        } else
+            return new HashMap<>();
+    }
 
-	/**
-	 * Retrieves the map containing the files uploaded in the current session
-	 * 
-	 * @param httpSession The current session
-	 * 
-	 * @return the files map where the key is the original file name and the
-	 *         value is the real file
-	 */
-	private static Map<String, File> getUploads(HttpSession httpSession) {
-		@SuppressWarnings("unchecked")
-		Map<String, File> uploads = (Map<String, File>) httpSession.getAttribute(UPLOADS);
-		if (uploads == null) {
-			uploads = new HashMap<>();
-			httpSession.setAttribute(UPLOADS, uploads);
-		}
-		return uploads;
-	}
+    /**
+     * Retrieves the map containing the files uploaded in the current session
+     * 
+     * @param httpSession The current session
+     * 
+     * @return the files map where the key is the original file name and the
+     *         value is the real file
+     */
+    private static Map<String, File> getUploads(HttpSession httpSession) {
+        @SuppressWarnings("unchecked")
+        Map<String, File> uploads = (Map<String, File>) httpSession.getAttribute(UPLOADS);
+        if (uploads == null) {
+            uploads = new HashMap<>();
+            httpSession.setAttribute(UPLOADS, uploads);
+        }
+        return uploads;
+    }
 
-	/**
-	 * Retrieves the map containing the files uploaded in the current request
-	 * 
-	 * @param request The current request
-	 * 
-	 * @return the files map where the key is the original file name and the
-	 *         value is the real file
-	 */
-	public static Map<String, File> getUploads(HttpServletRequest request) {
-		String sid = getSid(request);
-		if (StringUtils.isNotEmpty(sid) && SessionManager.get().get(sid) != null
-				&& SessionManager.get().get(sid).isOpen())
-			return getUploads(sid);
-		else
-			return getUploads(request.getSession(true));
-	}
+    /**
+     * Retrieves the map containing the files uploaded in the current request
+     * 
+     * @param request The current request
+     * 
+     * @return the files map where the key is the original file name and the
+     *         value is the real file
+     */
+    public static Map<String, File> getUploads(HttpServletRequest request) {
+        String sid = getSid(request);
+        if (StringUtils.isNotEmpty(sid) && SessionManager.get().get(sid) != null
+                && SessionManager.get().get(sid).isOpen())
+            return getUploads(sid);
+        else
+            return getUploads(request.getSession(true));
+    }
 
-	/**
-	 * Removes all the uploaded files from session and file system.
-	 * 
-	 * @param sid The current session ID
-	 */
-	public static void cleanUploads(String sid) {
-		FileUtil.delete(getUploadDir(sid));
-		Map<String, File> receivedFiles = getUploads(sid);
-		receivedFiles.clear();
-	}
+    /**
+     * Removes all the uploaded files from session and file system.
+     * 
+     * @param sid The current session ID
+     */
+    public static void cleanUploads(String sid) {
+        if (StringUtils.isBlank(sid)) {
+            log.warn("Empty SID, cannot identify the upload folder to clear");
+            return;
+        }
 
-	/**
-	 * Removes all the uploaded files from session and file system.
-	 * 
-	 * @param httpSession The current session
-	 */
-	public static void cleanUploads(HttpSession httpSession) {
-		FileUtil.delete(getUploadDir(httpSession));
-		getUploads(httpSession).clear();
-	}
+        File uploadDir = getUploadDir(sid);
+        if (log.isDebugEnabled())
+            log.debug("Clean temporary upload folder {} - {}", uploadDir.getAbsolutePath(),
+                    SystemUtil.printStackTrace());
+        FileUtil.delete(uploadDir);
+        Map<String, File> receivedFiles = getUploads(sid);
+        receivedFiles.clear();
+    }
 
-	protected static String getSid(HttpServletRequest request) {
-		String sid = SessionManager.get().getSessionId(request);
-		HttpSession session = SessionManager.get().getServletSession(sid);
+    /**
+     * Removes all the uploaded files from session and file system.
+     * 
+     * @param httpSession The current session
+     */
+    public static void cleanUploads(HttpSession httpSession) {
+        File uploadDir = getUploadDir(httpSession);
+        if (log.isDebugEnabled())
+            log.debug("Clean temporary upload folder {} - {}", uploadDir.getAbsolutePath(),
+                    SystemUtil.printStackTrace());
+        FileUtil.delete(uploadDir);
+        getUploads(httpSession).clear();
+    }
 
-		if (session == null) {
-			// No SID already associated to the current session, so do it
-			request.getSession(true);
-			if (sid != null)
-				LDDeferredSecurityContext.bindServletSession(sid, request);
-		}
+    protected static String getSid(HttpServletRequest request) {
+        String sid = SessionManager.get().getSessionId(request);
+        HttpSession session = SessionManager.get().getServletSession(sid);
 
-		return sid;
-	}
+        if (session == null) {
+            // No SID already associated to the current session, so do it
+            request.getSession(true);
+            if (sid != null)
+                LDDeferredSecurityContext.bindServletSession(sid, request);
+        }
 
-	protected void checkIfAllowedForUpload(String tenant, String fileName) throws ServletException {
-		String extension = FileUtil.getExtension(fileName).toLowerCase();
-		String disallow = Context.get().getProperties().getString(tenant + ".upload.disallow");
-		if (disallow != null && !disallow.isEmpty()) {
-			disallow = disallow.toLowerCase().replace(" ", "");
-			List<String> disallowedExtensions = Arrays.asList(disallow.toLowerCase().split(","));
-			if (disallowedExtensions.contains(extension))
-				throw new ServletException("Disallowed extension: " + extension);
-		}
-	}
+        return sid;
+    }
 
-	@Override
-	protected void doPost(HttpServletRequest request, HttpServletResponse response) {
+    protected void checkIfAllowedForUpload(String tenant, String fileName) throws ServletException {
+        String extension = FileUtil.getExtension(fileName).toLowerCase();
+        String disallow = Context.get().getConfig().getString(tenant + ".upload.disallow");
+        if (disallow != null && !disallow.isEmpty()) {
+            disallow = disallow.toLowerCase().replace(" ", "");
+            List<String> disallowedExtensions = Arrays.asList(disallow.toLowerCase().split(","));
+            if (disallowedExtensions.contains(extension))
+                throw new ServletException("Disallowed extension: %s".formatted(extension));
+        }
+    }
 
-		try {
-			File uploadDir = getUploadDir(request);
-			String sid = getSid(request);
-			String tenant = StringUtils.isNotEmpty(sid) && SessionManager.get().get(sid) != null
-					? SessionManager.get().get(sid).getTenantName()
-					: Tenant.DEFAULT_NAME;
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response) {
 
-			// Check that we have a file upload request
-			boolean isMultipart = ServletFileUpload.isMultipartContent(request);
-			response.setContentType("text/html");
-			java.io.PrintWriter out = response.getWriter();
+        try {
+            File uploadDir = getUploadDir(request);
+            String sid = getSid(request);
+            String tenant = StringUtils.isNotEmpty(sid) && SessionManager.get().get(sid) != null
+                    ? SessionManager.get().get(sid).getTenantName()
+                    : Tenant.DEFAULT_NAME;
 
-			if (!isMultipart) {
-				out.println("<html>");
-				out.println("<head>");
-				out.println("<title>Upload</title>");
-				out.println("</head>");
-				out.println("<body>");
-				out.println("<p>No file uploaded</p>");
-				out.println("</body>");
-				out.println("</html>");
-				return;
-			}
+            // Check that we have a file upload request
+            boolean isMultipart = ServletFileUpload.isMultipartContent(request);
+            response.setContentType("text/html");
+            java.io.PrintWriter out = response.getWriter();
 
-			DiskFileItemFactory factory = new DiskFileItemFactory();
+            if (!isMultipart) {
+                out.println("<html>");
+                out.println("<head>");
+                out.println("<title>Upload</title>");
+                out.println("</head>");
+                out.println("<body>");
+                out.println("<p>No file uploaded</p>");
+                out.println("</body>");
+                out.println("</html>");
+                return;
+            }
 
-			// maximum size that will be stored in memory (in bytes)
-			factory.setSizeThreshold(maxMemSize);
+            DiskFileItemFactory factory = new DiskFileItemFactory();
 
-			// Location to save data that is larger than maxMemSize.
-			factory.setRepository(uploadDir);
+            // maximum size that will be stored in memory (in bytes)
+            factory.setSizeThreshold(maxMemSize);
 
-			// Create a new file upload handler
-			ServletFileUpload upload = new ServletFileUpload(factory);
+            // Location to save data that is larger than maxMemSize.
+            factory.setRepository(uploadDir);
 
-			// maximum file size to be uploaded (in bytes)
-			upload.setFileSizeMax(Context.get().getProperties().getLong(tenant + ".upload.maxsize", 10L) * 1024 * 1024);
+            // Create a new file upload handler
+            ServletFileUpload upload = new ServletFileUpload(factory);
 
-			Map<String, File> uploadedFiles = getUploads(request);
+            // maximum file size to be uploaded (in bytes)
+            upload.setFileSizeMax(Context.get().getConfig().getLong(tenant + ".upload.maxsize", 10L) * 1024 * 1024);
 
-			// Parse the request to get uploaded file items.
-			List<FileItem> fileItems = upload.parseRequest(request);
+            Map<String, File> uploadedFiles = getUploads(request);
 
-			out.println("<html>");
-			out.println("<head>");
-			out.println("<title>Upload</title>");
-			out.println("</head>");
-			out.println("<body>");
+            // Parse the request to get uploaded file items.
+            List<FileItem> fileItems = upload.parseRequest(request);
 
-			for (FileItem fi : fileItems) {
-				if (!fi.isFormField()) {
-					String fileName = fi.getName();
+            out.println("<html>");
+            out.println("<head>");
+            out.println("<title>Upload</title>");
+            out.println("</head>");
+            out.println("<body>");
 
-					checkIfAllowedForUpload(tenant, fileName);
+            for (FileItem fi : fileItems) {
+                if (!fi.isFormField()) {
+                    String fileName = fi.getName();
 
-					File file = new File(uploadDir.getAbsolutePath() + "/" + UUID.randomUUID().toString() + "."
-							+ FileUtil.getExtension(fileName));
-					fi.write(file);
-					if (uploadedFiles != null)
-						uploadedFiles.put(fileName, file);
-					out.println("Uploaded Filename: " + fileName + "<br>");
-				}
-			}
+                    checkIfAllowedForUpload(tenant, fileName);
 
-			out.println("</body>");
-			out.println("</html>");
-		} catch (Exception e) {
-			log.error(e.getMessage(), e);
-			try {
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
-			} catch (IOException ioe) {
-				// Nothing to do
-			}
-		}
+                    File file = new File(uploadDir.getAbsolutePath() + "/" + UUID.randomUUID().toString() + "."
+                            + FileUtil.getExtension(fileName));
+                    fi.write(file);
+                    if (uploadedFiles != null)
+                        uploadedFiles.put(fileName, file);
+                    out.println("Uploaded Filename: %s<br>".formatted(fileName));
+                }
+            }
 
-	}
+            out.println("</body>");
+            out.println("</html>");
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            try {
+                response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, e.getMessage());
+            } catch (IOException ioe) {
+                // Nothing to do
+            }
+        }
 
-	@Override
-	public void onSessionCreated(Session session) {
-		// Nothing to do
-	}
+    }
 
-	@Override
-	public void onSessionClosed(Object sid) {
-		try {
-			FileUtils.forceDelete(getUploadDir(sid.toString()));
-		} catch (Exception e) {
-			log.warn("Unable to clean the upload folder for session {}", sid);
-		}
-	}
+    @Override
+    public void onSessionCreated(Session session) {
+        // Nothing to do
+    }
+
+    @Override
+    public void onSessionClosed(Object sid) {
+        File uploadDir = getUploadDir(sid.toString());
+        try {
+            if (log.isDebugEnabled())
+                log.debug("Delete temprary upload folder {} on session {} closed", uploadDir.getAbsolutePath(), sid);
+            FileUtils.forceDelete(uploadDir);
+        } catch (Exception e) {
+            log.warn("Unable to clean the upload folder {} for SID {}", uploadDir.getAbsolutePath(), sid);
+        }
+    }
 }

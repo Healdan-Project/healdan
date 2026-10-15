@@ -9,14 +9,14 @@ import com.logicaldoc.gui.common.client.controllers.DocumentController;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
 import com.logicaldoc.gui.common.client.util.LD;
-import com.logicaldoc.gui.frontend.client.services.BarcodeService;
-import com.logicaldoc.gui.frontend.client.services.ZonalOCRService;
+import com.logicaldoc.gui.common.client.util.WindowUtils;
+import com.logicaldoc.gui.frontend.client.metadata.filler.AutofillService;
+import com.logicaldoc.gui.frontend.client.metadata.filler.FillerSelector;
 import com.smartgwt.client.types.TitleOrientation;
 import com.smartgwt.client.widgets.form.DynamicForm;
 import com.smartgwt.client.widgets.form.ValuesManager;
 import com.smartgwt.client.widgets.form.fields.ButtonItem;
 import com.smartgwt.client.widgets.form.fields.SelectItem;
-import com.smartgwt.client.widgets.form.fields.StaticTextItem;
 import com.smartgwt.client.widgets.form.fields.events.ChangedHandler;
 
 /**
@@ -26,130 +26,130 @@ import com.smartgwt.client.widgets.form.fields.events.ChangedHandler;
  * @since 8.4.2
  */
 public class DocumentCapturePanel extends DocumentDetailTab {
-	private static final String BARCODETEMPLATE = "barcodetemplate";
+    private static final String PROCESS = "process";
 
-	private static final String OCRTEMPLATE = "ocrtemplate";
+    private static final String FILLER = "filler";
 
-	private DynamicForm form = new DynamicForm();
+    private DynamicForm form = new DynamicForm();
 
-	private ValuesManager vm = new ValuesManager();
+    private ValuesManager vm = new ValuesManager();
 
-	private boolean processButton = true;
+    private boolean processButton = true;
 
-	public DocumentCapturePanel(GUIDocument document, ChangedHandler changedHandler, boolean processButton) {
-		super(document, changedHandler);
-		setWidth100();
-		setHeight100();
-		setMembersMargin(20);
-		this.processButton = processButton;
-		refresh(document.getTemplateId());
-	}
+    public DocumentCapturePanel(GUIDocument document, ChangedHandler changedHandler, boolean processButton) {
+        super(document, changedHandler);
+        setWidth100();
+        setHeight100();
+        setMembersMargin(20);
+        this.processButton = processButton;
+        refresh();
+    }
 
-	public void refresh(Long documentTemplateId) {
-		vm.clearValues();
-		vm.clearErrors(false);
+    public void refresh() {
+        vm.clearValues();
+        vm.clearErrors(false);
 
-		if (form != null)
-			form.destroy();
+        if (form != null)
+            form.destroy();
 
-		if (Boolean.TRUE.equals(contains(form)))
-			removeChild(form);
+        if (Boolean.TRUE.equals(contains(form)))
+            removeChild(form);
 
-		form = new DynamicForm();
-		form.setValuesManager(vm);
-		form.setTitleOrientation(TitleOrientation.TOP);
-		form.setWrapItemTitles(false);
+        form = new DynamicForm();
+        form.setValuesManager(vm);
+        form.setTitleOrientation(TitleOrientation.TOP);
+        form.setWrapItemTitles(false);
+        form.setNumCols(4);
 
-		ButtonItem processOcr = new ButtonItem(I18N.message("process"));
-		processOcr.setAutoFit(true);
-		processOcr.setEndRow(true);
-		processOcr.setDisabled(!updateEnabled || document.getOcrTemplateId() == null);
-		processOcr.setColSpan(1);
-		processOcr.addClickHandler(event -> {
-			LD.contactingServer();
-			ZonalOCRService.Instance.get().process(document.getId(), new DefaultAsyncCallback<>() {
+        ButtonItem fill = new ButtonItem("fill", I18N.message(PROCESS));
+        fill.setAutoFit(true);
+        fill.setEndRow(false);
+        fill.setDisabled(document.getFillerId() == null);
+        ButtonItem explainFill = new ButtonItem("explain", I18N.message("explain"));
+        explainFill.setAutoFit(true);
+        explainFill.setDisabled(document.getFillerId() == null);
 
-				@Override
-				public void handleSuccess(GUIDocument result) {
-					DocumentController.get().modified(result);
-				}
-			});
-		});
+        ChangedHandler disableFillHandler = changed -> fill.setDisabled(true);
 
-		SelectItem ocrTemplate = ItemFactory.newOCRTemplateSelector(true, documentTemplateId,
-				document.getOcrTemplateId());
-		ocrTemplate.setWrapTitle(false);
-		ocrTemplate.setDisabled(!Feature.enabled(Feature.ZONAL_OCR) || documentTemplateId == null);
-		ocrTemplate.addChangedHandler(changedHandler);
-		ocrTemplate.addChangedHandler(event -> processOcr.setDisabled(true));
+        FillerSelector filler = new FillerSelector(true, document.getFillerId());
+        filler.setWrapTitle(false);
+        filler.setDisabled(!updateEnabled || !Feature.enabled(Feature.AUTOFILL));
+        filler.addChangedHandler(changedHandler);
+        filler.addChangedHandler(disableFillHandler);
+        filler.addChangedHandler(changed -> {
+            fill.setDisabled(changed.getValue() == null);
+            explainFill.setDisabled(changed.getValue() == null);
+        });
 
-		ButtonItem processBarcode = new ButtonItem(I18N.message("process"));
-		processBarcode.setAutoFit(true);
-		processBarcode.setEndRow(true);
-		processBarcode.setDisabled(!updateEnabled || document.getBarcodeTemplateId() == null);
-		processBarcode.setColSpan(1);
-		processBarcode.addClickHandler(event -> {
-			LD.contactingServer();
-			BarcodeService.Instance.get().process(document.getId(), new DefaultAsyncCallback<>() {
+        SelectItem fillMode = ItemFactory.newFillModeSelector();
+        fillMode.setWrapTitle(false);
+        fillMode.setDisabled(!updateEnabled || !Feature.enabled(Feature.AUTOFILL));
+        fillMode.setValue(document.getFillMode());
+        fillMode.addChangedHandler(changedHandler);
 
-				@Override
-				public void handleSuccess(GUIDocument result) {
-					DocumentController.get().modified(result);
-				}
-			});
-		});
+        fill.addClickHandler(event -> {
+            LD.contactingServer();
+            AutofillService.Instance.get().fill(document, filler.getSelectedRecord().getAttributeAsLong("id"), false,
+                    new DefaultAsyncCallback<>() {
 
-		SelectItem barcodeTemplate = ItemFactory.newBarcodeTemplateSelector(true, documentTemplateId,
-				document.getBarcodeTemplateId());
-		barcodeTemplate.setWrapTitle(false);
-		barcodeTemplate.setDisabled(!Feature.enabled(Feature.BARCODES));
-		barcodeTemplate.addChangedHandler(changedHandler);
-		barcodeTemplate.addChangedHandler(event -> processOcr.setDisabled(true));
+                        @Override
+                        public void handleSuccess(GUIDocument result) {
+                            document = result;
+                            DocumentController.get().modified(result);
+                        }
+                    });
+        });
 
-		StaticTextItem ocrProcessed = ItemFactory.newStaticTextItem("zonalocrprocessed", "processedbyzonalocr",
-				document.isOcrd() ? I18N.message("yes") : I18N.message("no"));
-		ocrProcessed.setWrapTitle(false);
+        explainFill.addClickHandler(event -> {
+            LD.contactingServer();
+            AutofillService.Instance.get().fill(document, filler.getSelectedRecord().getAttributeAsLong("id"), true,
+                    new DefaultAsyncCallback<>() {
 
-		StaticTextItem barcodeProcessed = ItemFactory.newStaticTextItem("barcodeprocessed", "processedbybarcode",
-				document.isBarcoded() ? I18N.message("yes") : I18N.message("no"));
-		barcodeProcessed.setWrapTitle(false);
+                        @Override
+                        public void handleSuccess(GUIDocument result) {
+                            document = result;
+                            DocumentController.get().modified(result);
 
-		if (processButton)
-			form.setItems(ocrTemplate, ocrProcessed, processOcr, barcodeTemplate, barcodeProcessed, processBarcode);
-		else
-			form.setItems(ocrTemplate, barcodeTemplate);
+                            String prefs = "top=" + (Integer.parseInt(WindowUtils.top()) + 50) + ", left=50"
+                                    + ", width=" + (com.google.gwt.user.client.Window.getClientWidth() - 100)
+                                    + ", height=" + (WindowUtils.getHeight() - 100)
+                                    + ", toolbar=no, scrollbars=yes, resizable=yes";
+                            WindowUtils.openHTML(result.getSummary(), "explication", prefs);
+                        }
+                    });
+        });
 
-		addMember(form);
-	}
+        if (processButton)
+            form.setItems(filler, fillMode, fill, explainFill);
+        else
+            form.setItems(filler, fillMode);
 
-	@SuppressWarnings("unchecked")
-	@Override
-	public boolean validate() {
-		Map<String, Object> values = vm.getValues();
-		vm.validate();
-		if (Boolean.FALSE.equals(vm.hasErrors())) {
-			if (values.get(OCRTEMPLATE) == null || values.get(OCRTEMPLATE).toString().isEmpty())
-				document.setOcrTemplateId(null);
-			else {
-				document.setOcrTemplateId(Long.parseLong(values.get(OCRTEMPLATE).toString()));
-			}
+        addMember(form);
+    }
 
-			if (values.get(BARCODETEMPLATE) == null || values.get(BARCODETEMPLATE).toString().isEmpty())
-				document.setBarcodeTemplateId(null);
-			else {
-				document.setBarcodeTemplateId(Long.parseLong(values.get(BARCODETEMPLATE).toString()));
-			}
-		}
-		return !vm.hasErrors();
-	}
+    @SuppressWarnings("unchecked")
+    @Override
+    public boolean validate() {
+        Map<String, Object> values = vm.getValues();
+        vm.validate();
+        if (Boolean.FALSE.equals(vm.hasErrors())) {
+            if (values.get(FILLER) == null || values.get(FILLER).toString().isEmpty())
+                document.setFillerId(null);
+            else {
+                document.setFillerId(Long.parseLong(values.get(FILLER).toString()));
+            }
+            document.setFillMode(Integer.parseInt(values.get("fillmode").toString()));
+        }
+        return !vm.hasErrors();
+    }
 
-	@Override
-	public boolean equals(Object other) {
-		return super.equals(other);
-	}
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

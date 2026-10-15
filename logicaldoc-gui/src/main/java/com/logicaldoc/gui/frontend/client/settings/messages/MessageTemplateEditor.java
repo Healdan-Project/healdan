@@ -21,83 +21,117 @@ import com.smartgwt.client.widgets.toolbar.ToolStripButton;
  */
 public class MessageTemplateEditor extends Window {
 
-	private static final String SUBJECT = "subject";
+    private static final String BUTTONS = "buttons";
 
-	private ListGrid grid;
+    private static final String WHATSAPP = "whatsapp";
 
-	private ListGridRecord rec;
+    private static final String FOOTER = "footer";
 
-	private DynamicForm form = new DynamicForm();
+    private static final String SUBJECT = "subject";
 
-	public MessageTemplateEditor(ListGrid grid, ListGridRecord rec) {
-		this.rec = rec;
-		this.grid = grid;
+    private ListGrid grid;
 
-		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		setTitle(I18N.message("messagetemplate") + " - " + rec.getAttributeAsString("name"));
-		setCanDragResize(true);
-		setIsModal(true);
-		setShowModalMask(true);
-		setMargin(3);
-		setWidth(670);
-		setHeight(600);
-		centerInPage();
+    private ListGridRecord rec;
 
-		ToolStripButton save = new ToolStripButton();
-		save.setTitle(I18N.message("save"));
-		save.addClickHandler(event -> onSave());
+    private DynamicForm form = new DynamicForm();
 
-		ToolStripButton close = new ToolStripButton();
-		close.setTitle(I18N.message("close"));
-		close.addClickHandler(event -> destroy());
+    public MessageTemplateEditor(ListGrid grid, ListGridRecord rec) {
+        this.rec = rec;
+        this.grid = grid;
 
-		ToolStrip toolStrip = new ToolStrip();
-		toolStrip.setHeight(20);
-		toolStrip.setWidth100();
-		toolStrip.addSpacer(2);
-		toolStrip.addButton(save);
-		toolStrip.addSeparator();
-		toolStrip.addButton(close);
+        setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
+        setTitle(I18N.message("messagetemplate") + " - " + rec.getAttributeAsString("name"));
+        setCanDragResize(true);
+        setIsModal(true);
+        setShowModalMask(true);
+        setMargin(3);
+        setWidth(670);
+        setHeight(600);
+        centerInPage();
 
-		addItem(toolStrip);
+        ToolStripButton save = new ToolStripButton();
+        save.setTitle(I18N.message("save"));
+        save.addClickHandler(event -> onSave());
 
-		TextAreaItem subject = ItemFactory.newTextAreaItemForAutomation(SUBJECT, rec.getAttributeAsString(SUBJECT),
-				null, false);
-		subject.setRequired(true);
-		subject.setWidth("*");
-		subject.setHeight(30);
+        ToolStripButton close = new ToolStripButton();
+        close.setTitle(I18N.message("close"));
+        close.addClickHandler(event -> destroy());
 
-		RichTextItem body = ItemFactory.newRichTextItemForAutomation("body", "body", rec.getAttributeAsString("body"),
-				null);
-		body.setRequired(true);
-		body.setWidth("*");
-		body.setHeight("*");
+        ToolStrip toolStrip = new ToolStrip();
+        toolStrip.setHeight(20);
+        toolStrip.setWidth100();
+        toolStrip.addSpacer(2);
+        toolStrip.addButton(save);
+        toolStrip.addSeparator();
+        toolStrip.addButton(close);
 
-		form.setWidth100();
-		form.setHeight100();
-		form.setTitleOrientation(TitleOrientation.TOP);
-		form.setNumCols(1);
-		form.setItems(subject, body);
+        addItem(toolStrip);
 
-		addItem(form);
-	}
+        TextAreaItem subject = ItemFactory.newTextAreaItemForAutomation(SUBJECT, rec.getAttributeAsString(SUBJECT),
+                null, false);
+        subject.setRequired(true);
+        subject.setWidth("*");
+        subject.setHeight(30);
 
-	private void onSave() {
-		if (form.validate()) {
-			rec.setAttribute(SUBJECT, form.getValueAsString(SUBJECT));
-			rec.setAttribute("body", form.getValueAsString("body"));
-			grid.refreshRow(grid.getRowNum(rec));
-			destroy();
-		}
-	}
+        RichTextItem bodyRichText = ItemFactory.newRichTextItemForAutomation("body", "body",
+                rec.getAttributeAsString("body"), null);
+        bodyRichText.setShowTitle(true);
+        bodyRichText.setRequired(true);
+        bodyRichText.setWidth("*");
+        bodyRichText.setHeight("*");
 
-	@Override
-	public boolean equals(Object other) {
-		return super.equals(other);
-	}
+        TextAreaItem bodyTextArea = ItemFactory.newTextAreaItemForAutomation("body", rec.getAttributeAsString("body"),
+                null, false);
+        bodyTextArea.setShowTitle(true);
+        bodyTextArea.setRequired(true);
+        bodyTextArea.setWidth("*");
+        bodyTextArea.setHeight("*");
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+        TextAreaItem footer = ItemFactory.newTextAreaItemForAutomation(FOOTER, rec.getAttributeAsString(FOOTER),
+                null, false);
+        footer.setRequired(false);
+        footer.setWidth("*");
+        footer.setHeight(30);
+        footer.setVisible(rec.getAttributeAsString("type").equalsIgnoreCase(WHATSAPP));
+
+        TextAreaItem buttons = ItemFactory.newTextAreaItemForAutomation(BUTTONS, rec.getAttributeAsString(BUTTONS),
+                null, false);
+        buttons.setRequired(false);
+        buttons.setWidth("*");
+        buttons.setHeight(100);
+        buttons.setVisible(rec.getAttributeAsString("type").equalsIgnoreCase(WHATSAPP));
+
+        form.setWidth100();
+        form.setHeight100();
+        form.setTitleOrientation(TitleOrientation.TOP);
+        form.setNumCols(1);
+
+        if (rec.getAttributeAsString("type").equalsIgnoreCase(WHATSAPP))
+            form.setItems(subject, bodyTextArea, footer, buttons);
+        else
+            form.setItems(subject, bodyRichText, footer, buttons);
+
+        addItem(form);
+    }
+
+    private void onSave() {
+        if (form.validate()) {
+            rec.setAttribute(SUBJECT, form.getValueAsString(SUBJECT));
+            rec.setAttribute("body", form.getValueAsString("body"));
+            rec.setAttribute(FOOTER, form.getValueAsString(FOOTER));
+            rec.setAttribute(BUTTONS, form.getValueAsString(BUTTONS));
+            grid.refreshRow(grid.getRowNum(rec));
+            destroy();
+        }
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

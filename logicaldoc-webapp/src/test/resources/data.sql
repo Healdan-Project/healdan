@@ -36,8 +36,8 @@ insert into ld_template_ext(ld_templateid, ld_mandatory, ld_type, ld_position, l
 select -1, ld_mandatory, ld_type, ld_position, ld_name, ld_label, ld_editor, ld_setid, ld_hidden, ld_multiple, ld_readonly from ld_attributeset_ext where ld_setid=-1;
 
 insert into ld_user
-           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_quota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_evalform,ld_legals,ld_sessionsquota)
-values     (2,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'boss','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','Meschieri','Marco','','','','','it','m.meschieri@logicalobjects.it','',0,null,0,0,-1,0,1,1,0,0,0,-1);
+           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_storagequota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_legals,ld_sessionsquota)
+values     (2,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'boss','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','Meschieri','Marco','','','','','it','m.meschieri@logicalobjects.it','',0,null,0,0,-1,0,1,1,0,0,-1);
 insert into ld_group
            (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_tenantid,ld_name,ld_type,ld_recordversion)
 values     (-2,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'_user_2',1,1);
@@ -47,8 +47,8 @@ insert into ld_menu_acl (ld_menuid, ld_groupid, ld_read, ld_write) values (5,-2,
 
 
 insert into ld_user
-           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_quota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_evalform,ld_legals,ld_sessionsquota)
-values     (3,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'sebastian','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','Sebastian','Stein','','','','','de','seb_stein@gmx.de','',0,null,0,0,0,0,1,1,0,0,0,-1);
+           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_storagequota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_legals,ld_sessionsquota)
+values     (3,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'sebastian','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','Sebastian','Stein','','','','','de','seb_stein@gmx.de','',0,null,0,0,0,0,1,1,0,0,-1);
 insert into ld_group
            (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_tenantid,ld_name,ld_type,ld_recordversion)
 values     (-3,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'_user_3',1,1);
@@ -56,8 +56,8 @@ insert into ld_usergroup
 values (-3,3);
 
 insert into ld_user
-           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_quota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_evalform,ld_legals,ld_sessionsquota)
-values     (4,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'author','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','Author','Author','','','','','de','author@acme.com','',0,null,0,0,-1,0,1,1,0,0,0,-1);
+           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_storagequota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_legals,ld_sessionsquota)
+values     (4,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'author','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','Author','Author','','','','','de','author@acme.com','',0,null,0,0,-1,0,1,1,0,0,-1);
 insert into ld_group
            (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_tenantid,ld_name,ld_type,ld_recordversion)
 values     (-4,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'_user_4',1,1);
@@ -65,8 +65,8 @@ insert into ld_usergroup
 values (-4,4);
 
 insert into ld_user
-           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_quota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_evalform,ld_legals,ld_sessionsquota)
-values     (5,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,0,'test','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','test','Test','','','','','de','test@acme.com','',0,null,0,0,-1,0,1,1,0,0,0,-1);
+           (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_enabled,ld_username,ld_password,ld_name,ld_firstname,ld_street,ld_postalcode,ld_city,ld_country,ld_language,ld_email,ld_telephone,ld_type,ld_passwordchanged,ld_passwordexpires,ld_source,ld_storagequota,ld_passwordexpired,ld_tenantid,ld_recordversion,ld_enforcewrktime,ld_legals,ld_sessionsquota)
+values     (5,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,0,'test','8C6976E5B5410415BDE908BD4DEE15DFB167A9C873FC4BB8A81F6F2AB448A918','test','Test','','','','','de','test@acme.com','',0,null,0,0,-1,0,1,1,0,0,-1);
 insert into ld_group
            (ld_id,ld_lastmodified, ld_creation,ld_deleted,ld_tenantid,ld_name,ld_type,ld_recordversion)
 values     (-5,'2008-10-22 00:00:00','2008-10-22 00:00:00',0,1,'_user_5',1,1);
@@ -171,32 +171,32 @@ insert into ld_folder_acl(ld_folderid, ld_groupid, ld_read, ld_write, ld_add, ld
 values (6,-3,1,1,1,0,0,1,1,0,0,0,0,0,1,0,0,1,0,1,1,0,0,0,1,1,1);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (1,5,'2008-10-22 00:00:00',0,0,'a','1.0','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'PDF',3,'en','pippo',1356,1,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (1,5,'2008-10-22 00:00:00',0,0,'a','1.0','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'PDF',3,'en','pippo',1356,1,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_docref,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (2,5,1,'2008-10-22 00:00:00',0,0,'b','1.0','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'PDF',3,'en','pippo',1356,0,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_docref,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (2,5,1,'2008-10-22 00:00:00',0,0,'b','1.0','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'PDF',3,'en','pippo',1356,0,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (3,5,'2008-10-22 00:00:00',0,0,'c','1.1','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'zip',3,'en','test.zip',1356,1,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (3,5,'2008-10-22 00:00:00',0,0,'c','1.1','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'zip',3,'en','test.zip',1356,1,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (4,5,'2008-10-22 00:00:00',0,0,'d','1.0','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'PDF',3,'en','pippo',1356,1,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (4,5,'2008-10-22 00:00:00',0,0,'d','1.0','2006-12-19 00:00:00','2006-12-19 00:00:00','myself',1,0,'PDF',3,'en','pippo',1356,1,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (5,5,'2022-10-21 00:00:00',0,0,'e','1.0','2022-10-21 00:00:00','2022-10-21 00:00:00','myself',1,0,'eml',3,'en','Joyce Jinks shared the Bruce Duo post.eml',19003,1,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (5,5,'2022-10-21 00:00:00',0,0,'e','1.0','2022-10-21 00:00:00','2022-10-21 00:00:00','myself',1,0,'eml',3,'en','Joyce Jinks shared the Bruce Duo post.eml',19003,1,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (6,5,'2022-10-22 00:00:00',0,0,'f','1.0','2022-10-22 00:00:00','2022-10-22 00:00:00','myself',1,0,'msg',3,'en','Hurry up! Only a few hours for the Prime Day VGA promos !!!.msg',159744,1,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (6,5,'2022-10-22 00:00:00',0,0,'f','1.0','2022-10-22 00:00:00','2022-10-22 00:00:00','myself',1,0,'msg',3,'en','Hurry up! Only a few hours for the Prime Day VGA promos !!!.msg',159744,1,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_document
-           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_fileversion,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (7,5,'2022-10-22 00:00:00',0,0,'g','1.0','1.0','2022-10-22 00:00:00','2022-10-22 00:00:00','myself',1,0,'eml',3,'en','New error indexing documents.eml',159682,1,0,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+           (ld_id,ld_folderid,ld_lastmodified,ld_deleted,ld_immutable,ld_customid,ld_version,ld_fileversion,ld_date,ld_creation,ld_publisher,ld_publisherid,ld_status,ld_type,ld_lockuserid,ld_language,ld_filename,ld_filesize,ld_indexed,ld_signed,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (7,5,'2022-10-22 00:00:00',0,0,'g','1.0','1.0','2022-10-22 00:00:00','2022-10-22 00:00:00','myself',1,0,'eml',3,'en','New error indexing documents.eml',159682,1,0,'',1,0,1,1,1,5,0,0,0,1,0);
 
 insert into ld_ticket
            (ld_id,ld_lastmodified, ld_deleted,ld_ticketid,ld_docid,ld_userid,ld_type,ld_creation,ld_expired,ld_count,ld_tenantid,ld_recordversion,ld_enabled,ld_views)
@@ -210,14 +210,14 @@ insert into ld_ticket
            (ld_id,ld_lastmodified, ld_deleted,ld_ticketid,ld_docid,ld_userid,ld_type,ld_creation,ld_expired,ld_count,ld_tenantid,ld_recordversion,ld_enabled,ld_views)
 values     (3,'2008-12-22 00:00:00',0,'3',1,3,0,'2011-01-01 00:00:00','2011-01-02 00:00:00',0,1,1,1,0);
 
-insert into ld_version(ld_id, ld_documentid, ld_version, ld_fileversion, ld_templateid, ld_username, ld_userid, ld_versiondate, ld_comment, ld_lastmodified, ld_deleted, ld_immutable, ld_creation, ld_publisherid, ld_indexed, ld_signed, ld_status, ld_filesize, ld_folderid,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (1,1,'testVer01','fileVer01',5,'testUser',1,'2006-12-19 00:00:00','testComment','2009-02-09 00:00:00',0,0,'2009-02-09 00:00:00',1,0,0,0,0,5,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+insert into ld_version(ld_id, ld_documentid, ld_version, ld_fileversion, ld_templateid, ld_username, ld_userid, ld_versiondate, ld_comment, ld_lastmodified, ld_deleted, ld_immutable, ld_creation, ld_publisherid, ld_indexed, ld_signed, ld_status, ld_filesize, ld_folderid,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (1,1,'testVer01','fileVer01',5,'testUser',1,'2006-12-19 00:00:00','testComment','2009-02-09 00:00:00',0,0,'2009-02-09 00:00:00',1,0,0,0,0,5,'',1,0,1,1,1,5,0,0,0,1,0);
 
-insert into ld_version(ld_id, ld_documentid, ld_version, ld_fileversion, ld_templateid, ld_username, ld_userid, ld_versiondate, ld_comment, ld_lastmodified, ld_deleted, ld_immutable, ld_creation, ld_publisherid, ld_indexed, ld_signed, ld_status, ld_filesize, ld_folderid,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (2,1,'testVer02','fileVer02',5,'testUser',1,'2006-12-20 00:00:00','testComment','2009-02-09 00:00:00',0,0,'2009-02-09 00:00:00',1,0,0,0,0,5,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+insert into ld_version(ld_id, ld_documentid, ld_version, ld_fileversion, ld_templateid, ld_username, ld_userid, ld_versiondate, ld_comment, ld_lastmodified, ld_deleted, ld_immutable, ld_creation, ld_publisherid, ld_indexed, ld_signed, ld_status, ld_filesize, ld_folderid,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (2,1,'testVer02','fileVer02',5,'testUser',1,'2006-12-20 00:00:00','testComment','2009-02-09 00:00:00',0,0,'2009-02-09 00:00:00',1,0,0,0,0,5,'',1,0,1,1,1,5,0,0,0,1,0);
 
-insert into ld_version(ld_id, ld_documentid, ld_version, ld_fileversion, ld_filename, ld_templateid, ld_username, ld_userid, ld_versiondate, ld_comment, ld_lastmodified, ld_deleted, ld_immutable, ld_creation, ld_publisherid, ld_indexed, ld_signed, ld_status, ld_filesize, ld_folderid,ld_creator,ld_creatorid,ld_exportstatus,ld_barcoded,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_ocrd,ld_previewpages,ld_docattrs)
-values     (3,7,'1.0','1.0','test.zip',5,'testUser',1,'2006-12-20 00:00:00','testComment','2009-02-09 00:00:00',0,0,'2009-02-09 00:00:00',1,0,0,0,0,5,'',1,0,0,1,1,1,5,0,0,0,0,1,0);
+insert into ld_version(ld_id, ld_documentid, ld_version, ld_fileversion, ld_filename, ld_templateid, ld_username, ld_userid, ld_versiondate, ld_comment, ld_lastmodified, ld_deleted, ld_immutable, ld_creation, ld_publisherid, ld_indexed, ld_signed, ld_status, ld_filesize, ld_folderid,ld_creator,ld_creatorid,ld_exportstatus,ld_published,ld_tenantid,ld_recordversion,ld_pages,ld_stamped,ld_nature,ld_links,ld_previewpages,ld_docattrs)
+values     (3,7,'1.0','1.0','test.zip',5,'testUser',1,'2006-12-20 00:00:00','testComment','2009-02-09 00:00:00',0,0,'2009-02-09 00:00:00',1,0,0,0,0,5,'',1,0,1,1,1,5,0,0,0,1,0);
 
 
 INSERT INTO ld_version_ext (ld_versionid, ld_mandatory, ld_type, ld_position, ld_stringvalue, ld_intvalue, ld_doublevalue, ld_datevalue, ld_name, ld_label, ld_editor, ld_setid, ld_hidden, ld_multiple, ld_parent, ld_stringvalues, ld_dependson, ld_readonly) 
@@ -345,7 +345,7 @@ insert into ld_note (ld_id, ld_lastmodified, ld_creation, ld_deleted, ld_docid, 
 values(4, '2011-04-18 00:00:00', '2011-04-18 00:00:00',1,1,'Admin',1,'2011-04-18 00:00:00','message for note 4',1,1,0,80,0.5,0.5,0.15,0.10,'1.0',1,80,0);
 
 insert into ld_messagetemplate (ld_id, ld_lastmodified, ld_creation, ld_deleted, ld_name, ld_type, ld_language, ld_subject, ld_body,ld_tenantid,ld_recordversion)
-values(500, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,0,'test','user','en', '$product','$product',1,1);
+values(500, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,0,'test','USER','en', '$product','$product',1,1);
 
 
 create table ld_workflowhistory (ld_id bigint not null, ld_lastmodified timestamp not null, ld_creation timestamp not null, ld_recordversion bigint not null, 
@@ -375,7 +375,7 @@ create table ld_webservicecall (ld_id bigint not null, ld_lastmodified timestamp
                                 ld_userid bigint, ld_date timestamp, ld_username varchar(255), ld_event varchar(255), 
                                 ld_comment varchar(4000), ld_path varchar(4000), ld_sessionid varchar(255),
                                 ld_userlogin varchar(255), ld_ip varchar(255), ld_geolocation varchar(255), 
-                                ld_device varchar(255), ld_protocol varchar(255), primary key (ld_id));
+                                ld_device varchar(255), ld_protocol varchar(255), ld_impersonator varchar(255), primary key (ld_id));
                                 
 INSERT INTO ld_webservicecall (ld_id,ld_lastmodified,ld_recordversion,ld_deleted,ld_tenantid,ld_userid,ld_date,ld_username,ld_event,ld_comment,ld_path,ld_sessionid,ld_userlogin,ld_ip,ld_geolocation,ld_device,ld_protocol,ld_creation) 
 VALUES (28591,'2024-04-10 16:51:54',0,0,1,1,'2024-04-10 16:51:49','Peter McKenna','event.webservice.call',null,'http://localhost:9080/services/Auth','8d7b32e8-fe82-45c4-b0e1-f69083e90133','admin','127.0.0.1',null,'Unknown on Unknown (UNKNOWN)','soap','2024-04-10 16:51:49');

@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
+import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.grid.EnabledListGridField;
 import com.logicaldoc.gui.common.client.grid.IdListGridField;
+import com.logicaldoc.gui.common.client.grid.IntegerListGridField;
 import com.logicaldoc.gui.common.client.grid.RefreshableListGrid;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.log.GuiLog;
@@ -38,6 +40,10 @@ import com.smartgwt.client.widgets.toolbar.ToolStripButton;
  * @since 9.2.2
  */
 public class EmbeddingSchemesPanel extends VLayout {
+
+	private static final String EMBEDDINGS = "embeddings";
+
+	private static final String MODEL = "model";
 
 	private static final String ENABLED = "eenabled";
 
@@ -78,7 +84,7 @@ public class EmbeddingSchemesPanel extends VLayout {
 		name.setMinWidth(110);
 		name.setAutoFit(AutoFitWidthApproach.BOTH);
 
-		ListGridField label = new ListGridField("label", I18N.message("label"));
+		ListGridField label = new ListGridField(LABEL, I18N.message(LABEL));
 		label.setMinWidth(110);
 		label.setCanFilter(true);
 		label.setCanSort(true);
@@ -90,15 +96,12 @@ public class EmbeddingSchemesPanel extends VLayout {
 		type.setAutoFitWidth(true);
 		label.setAutoFit(AutoFitWidthApproach.BOTH);
 
-		ListGridField model = new ListGridField("model", I18N.message("model"));
+		ListGridField model = new ListGridField(MODEL, I18N.message(MODEL));
 		model.setCanFilter(true);
 		model.setCanSort(true);
 		model.setAutoFit(AutoFitWidthApproach.BOTH);
 
-		ListGridField embeddings = new ListGridField("embeddings", I18N.message("embeddings"));
-		embeddings.setCanFilter(true);
-		embeddings.setCanSort(true);
-		embeddings.setAlign(Alignment.LEFT);
+		ListGridField embeddings = new IntegerListGridField(EMBEDDINGS, I18N.message(EMBEDDINGS));
 
 		list = new RefreshableListGrid();
 		list.setEmptyMessage(I18N.message("notitemstoshow"));
@@ -141,8 +144,9 @@ public class EmbeddingSchemesPanel extends VLayout {
 
 		ToolStripButton settings = new ToolStripButton();
 		settings.setTitle(I18N.message("settings"));
-		toolStrip.addButton(settings);
 		settings.addClickHandler(event -> new EmbeddingSettings().show());
+		if (Session.get().isDefaultTenant())
+			toolStrip.addButton(settings);
 
 		toolStrip.addFill();
 
@@ -151,16 +155,7 @@ public class EmbeddingSchemesPanel extends VLayout {
 			event.cancel();
 		});
 
-		list.addSelectionChangedHandler(event -> {
-			Record rec = list.getSelectedRecord();
-			if (rec != null)
-				AIService.Instance.get().getEmbeddingScheme(rec.getAttributeAsLong("id"), new DefaultAsyncCallback<>() {
-					@Override
-					protected void handleSuccess(GUIEmbeddingScheme result) {
-						showEmbeddingSchemeDetails(result);
-					}
-				});
-		});
+		list.addSelectionChangedHandler(event -> showSelectedScheme());
 
 		list.addDataArrivedHandler(event -> infoPanel
 				.setMessage(I18N.message("showembeddingsechemes", Integer.toString(list.getTotalRows()))));
@@ -169,6 +164,17 @@ public class EmbeddingSchemesPanel extends VLayout {
 		detailsContainer.addMember(details);
 
 		setMembers(toolStrip, listing, detailsContainer);
+	}
+
+	protected void showSelectedScheme() {
+		Record rec = list.getSelectedRecord();
+		if (rec != null)
+			AIService.Instance.get().getEmbeddingScheme(rec.getAttributeAsLong("id"), new DefaultAsyncCallback<>() {
+				@Override
+				protected void handleSuccess(GUIEmbeddingScheme result) {
+					showEmbeddingSchemeDetails(result);
+				}
+			});
 	}
 
 	private void showContextMenu() {
@@ -229,10 +235,10 @@ public class EmbeddingSchemesPanel extends VLayout {
 						AIService.Instance.get().removeEmbeddings(ids.get(0), null, new DefaultAsyncCallback<>() {
 							@Override
 							public void handleSuccess(Void result) {
-								LD.clearPrompt();
 								GuiLog.info(I18N.message("embeddingsremoved"), null);
-								list.getSelectedRecord().setAttribute("embeddings", 0);
+								list.getSelectedRecord().setAttribute(EMBEDDINGS, 0);
 								list.refreshRow(list.getRecordIndex(list.getSelectedRecord()));
+								showSelectedScheme();
 							}
 						});
 					}
@@ -243,16 +249,6 @@ public class EmbeddingSchemesPanel extends VLayout {
 	}
 
 	protected void showEmbeddingSchemeDetails(GUIEmbeddingScheme embeddingScheme) {
-		detailsContainer.removeMember(details);
-		if (embeddingScheme != null)
-			details = new EmbeddingSchemeDetailsPanel(this);
-		else
-			details = SELECT_EMBEDDINGSCHEME;
-		detailsContainer.addMember(details);
-		((EmbeddingSchemeDetailsPanel) details).setEmbeddingScheme(embeddingScheme);
-	}
-
-	protected void showEmbeddingSchemesDetails(GUIEmbeddingScheme embeddingScheme) {
 		detailsContainer.removeMember(details);
 		if (embeddingScheme != null)
 			details = new EmbeddingSchemeDetailsPanel(this);
@@ -286,11 +282,11 @@ public class EmbeddingSchemesPanel extends VLayout {
 				embeddingScheme.getLabel() != null ? embeddingScheme.getLabel() : embeddingScheme.getName());
 
 		rec.setAttribute("type", embeddingScheme.getType());
-		rec.setAttribute("eenabled", embeddingScheme.isEnabled());
-		rec.setAttribute("model", embeddingScheme.getModel());
+		rec.setAttribute(ENABLED, embeddingScheme.isEnabled());
+		rec.setAttribute(MODEL, embeddingScheme.getModel());
+		rec.setAttribute(EMBEDDINGS, embeddingScheme.getEmbeddings());
 
 		list.refreshRow(list.getRecordIndex(rec));
-
 	}
 
 	protected void onAddEmbeddingScheme() {

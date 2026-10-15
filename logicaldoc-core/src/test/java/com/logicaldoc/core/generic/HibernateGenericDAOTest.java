@@ -28,6 +28,7 @@ public class HibernateGenericDAOTest extends AbstractCoreTestCase {
 	private GenericDAO testSubject;
 
 	@Before
+	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
 		// Retrieve the instance under test from spring context. Make sure that
@@ -86,10 +87,9 @@ public class HibernateGenericDAOTest extends AbstractCoreTestCase {
 
 	@Test
 	public void testInitialize() throws PersistenceException {
-		Generic generic = testSubject.findById(1);
+		Generic generic = testSubject.findById(1L, true);
 		assertNotNull(generic);
 		assertEquals(Long.valueOf(0L), generic.getInteger1());
-		testSubject.initialize(generic);
 		assertEquals(1, generic.getAttributes().size());
 		assertEquals("val1", generic.getValue("att1"));
 	}

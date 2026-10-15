@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>com.logicaldoc</groupId>
 		<artifactId>logicaldoc</artifactId>
-		<version>9.2.2</version>
+		<version>9.3.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>logicaldoc-core</artifactId>
@@ -328,16 +328,7 @@
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-math3</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>com.sun.xml.bind</groupId>
-			<artifactId>jaxb-impl</artifactId>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>com.sun.xml.bind</groupId>
-			<artifactId>jaxb-core</artifactId>
-			<scope>test</scope>
-		</dependency>
+
 		<dependency>
 			<groupId>com.mpatric</groupId>
 			<artifactId>mp3agic</artifactId>
@@ -735,9 +726,6 @@
 					<reportSet>
 						<reports>
 							<report>dependencies</report>
-							<!-- <report>project-team</report>
-							<report>mailing-list</report> <report>cim</report> 
-								<report>issue-tracking</report> <report>license</report> <report>scm</report> -->
 						</reports>
 					</reportSet>
 				</reportSets>

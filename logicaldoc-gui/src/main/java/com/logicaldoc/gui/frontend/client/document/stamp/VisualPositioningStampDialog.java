@@ -88,13 +88,6 @@ public class VisualPositioningStampDialog extends Window {
 					firstSelectedDoc = documents.get(0);
 
 					DocumentService.Instance.get().getById(firstSelectedDoc.getId(), new DefaultAsyncCallback<>() {
-
-						@Override
-						public void onFailure(Throwable caught) {
-							super.onFailure(caught);
-							LD.clearPrompt();
-						}
-
 						@Override
 						public void handleSuccess(GUIDocument doc) {
 							firstSelectedDoc = doc;
@@ -133,10 +126,10 @@ public class VisualPositioningStampDialog extends Window {
 		stamp.setExprH("$PAGE_HEIGHT * " + ((double) cropper.getSelectionHeight() / (double) cropper.getImageHeight()));
 
 		if (("01" + CURRENTPAGE).equals(pageOption.getValue())) {
-			stamp.setPageOption(GUIStamp.PAGE_OPT_SEL);
+			stamp.setPage(GUIStamp.PAGE_SELECTION);
 			stamp.setPageSelection("" + page);
 		} else {
-			stamp.setPageOption(Integer.parseInt(pageOption.getValueAsString().substring(2)));
+			stamp.setPage(Integer.parseInt(pageOption.getValueAsString().substring(2)));
 			stamp.setPageSelection(pageSelection.getValueAsString());
 		}
 
@@ -144,12 +137,6 @@ public class VisualPositioningStampDialog extends Window {
 
 		StampService.Instance.get().applyStamp(documents.stream().map(d -> d.getId()).collect(Collectors.toList()),
 				stamp, new DefaultAsyncCallback<>() {
-
-					@Override
-					public void onFailure(Throwable caught) {
-						LD.clearPrompt();
-						super.onFailure(caught);
-					}
 
 					@Override
 					public void handleSuccess(Void result) {
@@ -226,10 +213,10 @@ public class VisualPositioningStampDialog extends Window {
 		pageOption = ItemFactory.newRadioGroup("pageOption", "stampin");
 		HashMap<String, String> pageOptions = new HashMap<>();
 		pageOptions.put("01" + CURRENTPAGE, I18N.message(CURRENTPAGE));
-		pageOptions.put("02" + GUIStamp.PAGE_OPT_ALL, I18N.message("allpages"));
-		pageOptions.put("03" + GUIStamp.PAGE_OPT_FIRST, I18N.message("firstpage"));
-		pageOptions.put("04" + GUIStamp.PAGE_OPT_LAST, I18N.message("lastpage"));
-		pageOptions.put("05" + GUIStamp.PAGE_OPT_SEL, I18N.message("selection"));
+		pageOptions.put("02" + GUIStamp.PAGE_ALL, I18N.message("allpages"));
+		pageOptions.put("03" + GUIStamp.PAGE_FIRST, I18N.message("firstpage"));
+		pageOptions.put("04" + GUIStamp.PAGE_LAST, I18N.message("lastpage"));
+		pageOptions.put("05" + GUIStamp.PAGE_SELECTION, I18N.message("selection"));
 		pageOption.setValueMap(pageOptions);
 		pageOption.setValue("01" + CURRENTPAGE);
 		pageOption.setWrap(false);

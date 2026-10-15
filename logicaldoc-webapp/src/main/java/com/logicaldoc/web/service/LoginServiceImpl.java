@@ -49,235 +49,236 @@ import jakarta.servlet.http.HttpServletRequest;
  */
 public class LoginServiceImpl extends RemoteServiceServlet implements LoginService {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private static final Logger log = LoggerFactory.getLogger(LoginServiceImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(LoginServiceImpl.class);
 
-	@Override
-	public GUIValue changePassword(long userId, String oldPassword, String newPassword) {
-		SecurityServiceImpl ser = new SecurityServiceImpl();
-		return ser.changePassword(userId, userId, oldPassword, newPassword, false);
-	}
+    @Override
+    public GUIValue changePassword(long userId, String oldPassword, String newPassword) {
+        SecurityServiceImpl ser = new SecurityServiceImpl();
+        return ser.changePassword(userId, userId, oldPassword, newPassword, false);
+    }
 
-	@Override
-	public GUIUser getUser(String username) {
-		try {
-			User user = pickUser(username);
+    @Override
+    public GUIUser getUser(String username) {
+        try {
+            User user = pickUser(username);
 
-			// Get just a few informations needed by the login
-			GUIUser usr = new GUIUser();
-			usr.setId(user.getId());
-			usr.setEnabled(user.isEnabled());
-			usr.setUsername(user.getUsername());
-			usr.setTenant(SecurityServiceImpl.getTenant(user.getTenantId()));
-			usr.setPasswordExpires(user.isPasswordExpires());
-			usr.setPasswordExpired(UserDAO.get().isPasswordExpired(username));
-			usr.setEmail(user.getEmail());
-			usr.setEmail2(user.getEmail2());
-			usr.setName(user.getName());
-			usr.setFirstName(user.getFirstName());
-			usr.setSecondFactor(user.getSecondFactor());
+            // Get just a few informations needed by the login
+            GUIUser usr = new GUIUser();
+            usr.setId(user.getId());
+            usr.setEnabled(user.isEnabled());
+            usr.setUsername(user.getUsername());
+            usr.setTenant(SecurityServiceImpl.getTenant(user.getTenantId()));
+            usr.setPasswordExpires(user.isPasswordExpires());
+            usr.setPasswordExpired(UserDAO.get().isPasswordExpired(username));
+            usr.setEmail(user.getEmail());
+            usr.setEmail2(user.getEmail2());
+            usr.setName(user.getName());
+            usr.setFirstName(user.getFirstName());
+            usr.setSecondFactor(user.getSecondFactor());
 
-			Tenant tenant = TenantDAO.get().findById(user.getTenantId());
+            Tenant tenant = TenantDAO.get().findById(user.getTenantId());
 
-			ContextProperties config = Context.get().getProperties();
-			usr.setPasswordMinLenght(config.getInt(tenant.getName() + ".password.size", 6));
+            ContextProperties config = Context.get().getConfig();
+            usr.setPasswordMinLenght(config.getTenantInt(tenant.getName(), "password.size", 6));
 
-			// Retrieve the reason for the last login failure
-			List<UserHistory> failures = UserHistoryDAO.get().findByUserIdAndEvent(user.getId(),
-					UserEvent.LOGIN_FAILED.toString());
-			if (failures != null && !failures.isEmpty())
-				usr.setLastLoginFailureReason(failures.get(0).getComment());
+            // Retrieve the reason for the last login failure
+            Calendar fiveMinutesAgo = Calendar.getInstance();
+            fiveMinutesAgo.add(Calendar.MINUTE, -5);
 
-			return usr;
-		} catch (Exception t) {
-			log.error(t.getMessage(), t);
-			return null;
-		}
-	}
+            List<UserHistory> failures = UserHistoryDAO.get().findByUserIdAndEvent(user.getId(),
+                    UserEvent.LOGIN_FAILED.toString(), fiveMinutesAgo.getTime());
+            if (failures != null && !failures.isEmpty())
+                usr.setLastLoginFailureReason(failures.getLast().getComment());
 
-	@Override
-	public void resetPassword(String username, String emailAddress, String productName) throws ServerException {
-		User user = pickUser(username);
-		if (!user.getEmail().trim().equals(emailAddress.trim()))
-			throw new ServerException(String.format("Email %s is wrong", emailAddress));
+            return usr;
+        } catch (Exception t) {
+            log.error(t.getMessage(), t);
+            return null;
+        }
+    }
 
-		try {
-			// Prepare a new password ticket
-			String ticketid = (UUID.randomUUID().toString());
-			Ticket ticket = new Ticket();
-			ticket.setTicketId(ticketid);
-			ticket.setDocId(0L);
-			ticket.setUserId(user.getId());
-			ticket.setTenantId(user.getTenantId());
-			ticket.setType(Ticket.PSW_RECOVERY);
-			Calendar cal = Calendar.getInstance();
-			cal.add(Calendar.MINUTE, +15);
-			ticket.setExpired(cal.getTime());
+    @Override
+    public void resetPassword(String username, String emailAddress, String productName) throws ServerException {
+        User user = pickUser(username);
+        if (!user.getEmail().trim().equals(emailAddress.trim()))
+            throw new ServerException(String.format("Email %s is wrong", emailAddress));
 
-			// Store the ticket
-			TicketDAO ticketDao = TicketDAO.get();
-			ticketDao.store(ticket);
+        try {
+            // Prepare a new password ticket
+            String ticketid = (UUID.randomUUID().toString());
+            Ticket ticket = new Ticket();
+            ticket.setTicketId(ticketid);
+            ticket.setDocId(0L);
+            ticket.setUser(user);
+            ticket.setTenantId(user.getTenantId());
+            ticket.setType(Ticket.PSW_RECOVERY);
+            Calendar cal = Calendar.getInstance();
+            cal.add(Calendar.MINUTE, +15);
+            ticket.setExpired(cal.getTime());
 
-			// Try to clean the DB from old tickets
-			ticketDao.deleteExpired();
+            // Store the ticket
+            TicketDAO ticketDao = TicketDAO.get();
+            ticketDao.store(ticket);
 
-			Locale locale = user.getLocale();
+            // Try to clean the DB from old tickets
+            ticketDao.deleteExpired();
 
-			EMail email = new EMail();
-			email.setHistoricyze(false);
-			email.setHtml(true);
-			email.setTenantId(user.getTenantId());
-			Recipient recipient = new Recipient();
-			recipient.setAddress(user.getEmail());
-			recipient.setRead(1);
-			email.addRecipient(recipient);
-			email.setFolder("outbox");
-			email.setLocale(locale);
-			email.setSentDate(new Date());
-			email.setUsername(user.getUsername());
+            Locale locale = user.getLocale();
 
-			HttpServletRequest request = this.getThreadLocalRequest();
-			String urlPrefix = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort()
-					+ request.getContextPath();
-			String address = urlPrefix + "/pswrecovery?ticketId=" + ticketid + "&userId=" + user.getId();
+            EMail email = new EMail();
+            email.setHistoricyze(false);
+            email.setHtml(true);
+            email.setTenantId(user.getTenantId());
+            Recipient recipient = new Recipient();
+            recipient.setAddress(user.getEmail());
+            recipient.setRead(1);
+            email.addRecipient(recipient);
+            email.setFolder("outbox");
+            email.setLocale(locale);
+            email.setSentDate(new Date());
+            email.setUsername(user.getUsername());
 
-			/*
-			 * Prepare the template
-			 */
-			Map<String, Object> dictionary = new HashMap<>();
-			dictionary.put("product", productName);
-			dictionary.put("url", address);
-			dictionary.put("user", user);
-			dictionary.put(Automation.LOCALE, locale);
+            HttpServletRequest request = this.getThreadLocalRequest();
+            String urlPrefix = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort()
+                    + request.getContextPath();
+            String address = urlPrefix + "/pswrecovery?ticketId=" + ticketid + "&userId=" + user.getId();
 
-			EMailSender sender = new EMailSender(user.getTenantId());
-			sender.send(email, "psw.rec2", dictionary);
-		} catch (Exception e) {
-			throw new ServerException(e.getMessage());
-		}
-	}
+            /*
+             * Prepare the template
+             */
+            Map<String, Object> dictionary = new HashMap<>();
+            dictionary.put("product", productName);
+            dictionary.put("url", address);
+            dictionary.put("user", user);
+            dictionary.put(Automation.LOCALE, locale);
 
-	private User pickUser(String username) throws ServerException {
-		UserDAO userDao = UserDAO.get();
-		User user;
-		try {
-			user = userDao.getUser(username);
-		} catch (PersistenceException e) {
-			throw new ServerException(String.format("Error in the data layer for user %s", username));
-		}
-		if (user == null)
-			throw new ServerException(String.format("User %s not found", username));
-		return user;
-	}
+            EMailSender sender = new EMailSender(user.getTenantId());
+            sender.send(email, "psw.rec2", dictionary);
+        } catch (Exception e) {
+            throw new ServerException(e.getMessage());
+        }
+    }
 
-	@Override
-	public boolean isSecretKeyRequired(String username, String deviceId) throws ServerException {
-		UserDAO userDao = UserDAO.get();
-		User user;
-		try {
-			user = pickUser(username);
-			userDao.initialize(user);
-		} catch (PersistenceException | ServerException e) {
-			log.warn(e.getMessage(), e);
-			return false;
-		}
+    private User pickUser(String username) throws ServerException {
+        User user;
+        try {
+            user = UserDAO.get().getUser(username, true);
+        } catch (PersistenceException e) {
+            throw new ServerException(String.format("Error in the data layer for user %s", username));
+        }
+        if (user == null)
+            throw new ServerException(String.format("User %s not found", username));
+        return user;
+    }
 
-		if (StringUtils.isEmpty(user.getSecondFactor()))
-			return false;
+    @Override
+    public boolean isSecretKeyRequired(String username, String deviceId) throws ServerException {
+        User user;
+        try {
+            user = pickUser(username);
+        } catch (ServerException e) {
+            log.warn(e.getMessage(), e);
+            return false;
+        }
 
-		String tenant = Tenant.SYSTEM_NAME;
-		try {
-			tenant = TenantDAO.get().getTenantName(user.getTenantId());
-		} catch (PersistenceException e) {
-			log.warn("Cannot retrieve tenant name of user {}", user.getUsername());
-		}
+        if (StringUtils.isEmpty(user.getSecondFactor()))
+            return false;
 
-		ContextProperties config = Context.get().getProperties();
-		if (!config.getBoolean(tenant + ".2fa.enabled", false)
-				|| !config.getBoolean(tenant + ".2fa." + user.getSecondFactor().toLowerCase() + ".enabled", false))
-			return false;
+        String tenant = Tenant.SYSTEM_NAME;
+        try {
+            tenant = TenantDAO.get().getTenantName(user.getTenantId());
+        } catch (PersistenceException e) {
+            log.warn("Cannot retrieve tenant name of user {}", user.getUsername());
+        }
 
-		if (config.getBoolean(tenant + ".2fa.allowtrusted", true)) {
-			HttpServletRequest request = getThreadLocalRequest();
-			request.setAttribute(Device.PARAM_DEVICE, deviceId);
-			try {
-				return !DeviceDAO.get().isTrustedDevice(user.getUsername(), request);
-			} catch (PersistenceException e) {
-				log.warn(e.getMessage(), e);
-				return false;
-			}
-		} else
-			return true;
-	}
+        ContextProperties config = Context.get().getConfig();
+        if (!config.getTenantBoolean(tenant, "2fa.enabled", false) || !config.getTenantBoolean(tenant,
+                "2fa.%s.enabled".formatted(user.getSecondFactor().toLowerCase()), false))
+            return false;
 
-	@Override
-	public String generatePassword(String username) {
-		User user;
-		try {
-			user = pickUser(username);
-		} catch (ServerException e) {
-			log.warn(e.getMessage(), e);
-			return "";
-		}
+        if (config.getTenantBoolean(tenant, "2fa.allowtrusted", true)) {
+            HttpServletRequest request = getThreadLocalRequest();
+            request.setAttribute(Device.PARAM_DEVICE, deviceId);
+            try {
+                return !DeviceDAO.get().isTrustedDevice(user.getUsername(), request);
+            } catch (PersistenceException e) {
+                log.warn(e.getMessage(), e);
+                return false;
+            }
+        } else
+            return true;
+    }
 
-		String tenant = Tenant.DEFAULT_NAME;
-		try {
-			tenant = TenantDAO.get().getTenantName(user.getTenantId());
-		} catch (PersistenceException e) {
-			log.warn("Cannot retrieve tenant name of user {}", user.getUsername());
-		}
+    @Override
+    public String generatePassword(String username) {
+        User user;
+        try {
+            user = pickUser(username);
+        } catch (ServerException e) {
+            log.warn(e.getMessage(), e);
+            return "";
+        }
 
-		// Generate an initial password(that must be changed)
-		ContextProperties config = Context.get().getProperties();
-		return PasswordGenerator.generate(config.getInt(tenant + ".password.size", 8),
-				config.getInt(tenant + ".password.uppercase", 2), config.getInt(tenant + ".password.lowercase", 2),
-				config.getInt(tenant + ".password.digit", 1), config.getInt(tenant + ".password.special", 1),
-				config.getInt(tenant + ".password.sequence", 4), config.getInt(tenant + ".password.occurrence", 3));
-	}
+        String tenant = Tenant.DEFAULT_NAME;
+        try {
+            tenant = TenantDAO.get().getTenantName(user.getTenantId());
+        } catch (PersistenceException e) {
+            log.warn("Cannot retrieve tenant name of user {}", user.getUsername());
+        }
 
-	@Override
-	public List<GUIParameter> getLegalsToConfirm(String username) throws ServerException {
-		try {
-			List<GUIParameter> legals = new ArrayList<>();
-			UserDAO userDao = UserDAO.get();
-			userDao.queryForResultSet(
-					"select ld_name, ld_title from ld_legal where not exists (select * from ld_legal_confirmation where ld_username = :username and ld_legal=ld_name) order by ld_sort",
-					Map.of("username", username), null, rows -> {
-						while (rows.next())
-							legals.add(new GUIParameter(rows.getString(1), rows.getString(2)));
-					});
-			return legals;
-		} catch (PersistenceException e) {
-			throw new ServerException(e.getMessage());
-		}
-	}
+        // Generate an initial password(that must be changed)
+        ContextProperties config = Context.get().getConfig();
+        return PasswordGenerator.generate(config.getTenantInt(tenant, "password.size", 8),
+                config.getTenantInt(tenant, "password.uppercase", 2),
+                config.getTenantInt(tenant, "password.lowercase", 2), config.getTenantInt(tenant, "password.digit", 1),
+                config.getTenantInt(tenant, "password.special", 1), config.getTenantInt(tenant, "password.sequence", 4),
+                config.getTenantInt(tenant, "password.occurrence", 3));
+    }
 
-	@Override
-	public void confirmLegal(String username, String legal) throws ServerException {
-		UserDAO userDao = UserDAO.get();
-		User user;
-		// Record the confirmation
-		try {
-			user = userDao.findByUsername(username);
-			userDao.jdbcUpdate(
-					"insert into ld_legal_confirmation(ld_username, ld_user, ld_legal, ld_date) values (:username, :user, :legal, CURRENT_TIMESTAMP)",
-					Map.of("username", user.getUsername(), "user", user.getFullName(), "legal", legal));
-			log.info("User {} confirmed legal {}", username, legal);
-		} catch (PersistenceException e) {
-			throw new ServerException(e.getMessage());
-		}
+    @Override
+    public List<GUIParameter> getLegalsToConfirm(String username) throws ServerException {
+        try {
+            List<GUIParameter> legals = new ArrayList<>();
+            UserDAO userDao = UserDAO.get();
+            userDao.queryForResultSet(
+                    "select ld_name, ld_title from ld_legal where not exists (select * from ld_legal_confirmation where ld_username = :username and ld_legal=ld_name) order by ld_sort",
+                    Map.of("username", username), null, rows -> {
+                        while (rows.next())
+                            legals.add(new GUIParameter(rows.getString(1), rows.getString(2)));
+                    });
+            return legals;
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage());
+        }
+    }
 
-		// Save also the user's event
-		try {
-			UserHistory event = new UserHistory();
-			event.setUser(user);
-			event.setEvent(UserEvent.LEGAL_CONFIRMED);
-			event.setComment(UserHistoryDAO.get().queryForString("select ld_title from ld_legal where ld_name = :legal",
-					Map.of("legal", legal)) + " - " + legal);
-			UserHistoryDAO.get().store(event);
-		} catch (Exception e) {
-			log.warn(e.getMessage(), e);
-		}
-	}
+    @Override
+    public void confirmLegal(String username, String legal) throws ServerException {
+        UserDAO userDao = UserDAO.get();
+        User user;
+        // Record the confirmation
+        try {
+            user = userDao.findByUsername(username);
+            userDao.jdbcUpdate(
+                    "insert into ld_legal_confirmation(ld_username, ld_user, ld_legal, ld_date) values (:username, :user, :legal, CURRENT_TIMESTAMP)",
+                    Map.of("username", user.getUsername(), "user", user.getFullName(), "legal", legal));
+            log.info("User {} confirmed legal {}", username, legal);
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage());
+        }
+
+        // Save also the user's event
+        try {
+            UserHistory event = new UserHistory();
+            event.setUser(user);
+            event.setEvent(UserEvent.LEGAL_CONFIRMED);
+            event.setComment("%s - %s".formatted(UserHistoryDAO.get().queryForString(
+                    "select ld_title from ld_legal where ld_name = :legal", Map.of("legal", legal)), legal));
+            UserHistoryDAO.get().store(event);
+        } catch (Exception e) {
+            log.warn(e.getMessage(), e);
+        }
+    }
 }

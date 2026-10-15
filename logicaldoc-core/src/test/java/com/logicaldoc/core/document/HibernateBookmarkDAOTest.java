@@ -31,6 +31,7 @@ public class HibernateBookmarkDAOTest extends AbstractCoreTestCase {
 	private BookmarkDAO testSubject;
 
 	@Before
+	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
 		
@@ -39,14 +40,12 @@ public class HibernateBookmarkDAOTest extends AbstractCoreTestCase {
 
 	@Test
 	public void testStore() throws PersistenceException {
-		Bookmark book1 = testSubject.findById(1);
-		testSubject.initialize(book1);
+		Bookmark book1 = testSubject.findById(1L, true);
 		book1.setDescription("pippo");
 		testSubject.store(book1);
 		assertNotNull(book1);
 
-		Bookmark book2 = testSubject.findById(2);
-		testSubject.initialize(book2);
+		Bookmark book2 = testSubject.findById(2L, true);
 		book2.setDescription("paperino");
 		testSubject.store(book2);
 		assertNotNull(book2);
@@ -86,10 +85,10 @@ public class HibernateBookmarkDAOTest extends AbstractCoreTestCase {
 		assertEquals(false, bookmark1.equals(bookmark3));
 		
 		bookmark3.setTitle("book1");
-		bookmark3.setType(Bookmark.TYPE_FOLDER);
+		bookmark3.setType(Bookmark.Type.FOLDER);
 		assertEquals(false, bookmark1.equals(bookmark3));
 		
-		bookmark3.setType(Bookmark.TYPE_DOCUMENT);
+		bookmark3.setType(Bookmark.Type.DOCUMENT);
 		bookmark3.setUserId(1);
 		assertEquals(bookmark1, bookmark3);
 		
@@ -126,8 +125,7 @@ public class HibernateBookmarkDAOTest extends AbstractCoreTestCase {
 		bookmark = testSubject.findByUserIdAndDocId(1, 2);
 		assertNotNull(bookmark);
 
-		Bookmark book1 = testSubject.findById(1);
-		testSubject.initialize(book1);
+		Bookmark book1 = testSubject.findById(1L, true);
 		book1.setTargetId(3);
 		testSubject.store(book1);
 
@@ -140,7 +138,7 @@ public class HibernateBookmarkDAOTest extends AbstractCoreTestCase {
 	@Test
 	public void testDelete() throws PersistenceException {
 		Bookmark bmark = new Bookmark();
-		bmark.setType(Bookmark.TYPE_DOCUMENT);
+		bmark.setType(Bookmark.Type.DOCUMENT);
 		bmark.setTitle("Photo-2022-07-13-21-18-28_1495.jpg");
 		bmark.setFileType("jpg");
 		bmark.setUserId(1);

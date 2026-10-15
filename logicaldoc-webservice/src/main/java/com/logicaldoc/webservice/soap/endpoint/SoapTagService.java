@@ -140,7 +140,7 @@ public class SoapTagService extends AbstractService implements TagService {
 		Session session = SessionManager.get().get(sid);
 		List<String> tags = new ArrayList<>();
 
-		ContextProperties config = Context.get().getProperties();
+		ContextProperties config = Context.get().getConfig();
 		String mode = config.getProperty(session.getTenantName() + ".tag.mode");
 		if ("preset".equals(mode)) {
 			GenericDAO gDao = GenericDAO.get();
@@ -183,7 +183,7 @@ public class SoapTagService extends AbstractService implements TagService {
 			} catch (Exception e) {
 				continue;
 			}
-			docDao.initialize(doc);
+			doc = docDao.initialize(doc);
 			wsDocs.add(WSUtil.toWSDocument(doc));
 		}
 
@@ -199,7 +199,7 @@ public class SoapTagService extends AbstractService implements TagService {
 		List<Folder> folders = folderDao.findByUserIdAndTag(user.getId(), tag, null);
 		List<WSFolder> wsFolders = new ArrayList<>();
 		for (Folder folder : folders) {
-			folderDao.initialize(folder);
+			folder = folderDao.initialize(folder);
 			wsFolders.add(WSFolder.fromFolder(folder));
 		}
 		return wsFolders;

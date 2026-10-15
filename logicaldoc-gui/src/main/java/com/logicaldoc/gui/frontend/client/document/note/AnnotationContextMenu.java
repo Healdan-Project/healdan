@@ -33,226 +33,263 @@ import com.smartgwt.client.widgets.menu.events.ClickHandler;
  * @since 8.6.1
  */
 public class AnnotationContextMenu extends Menu {
-	private static final String CONTENT = "content";
+    private static final String ROTATION = "rotation";
 
-	protected DrawItem drawItem;
+    private static final String CONTENT = "content";
 
-	protected GUIDocumentNote note;
+    protected DrawItem drawItem;
 
-	private MenuItem delete = new MenuItem(I18N.message("ddelete"));
-	
-	private MenuItem security = new MenuItem(I18N.message("security"));
+    protected GUIDocumentNote note;
 
-	private boolean editEnabled = true;
+    private MenuItem delete = new MenuItem(I18N.message("ddelete"));
 
-	public AnnotationContextMenu(DrawItem drawItem, GUIDocumentNote note) {
-		super();
-		this.drawItem = drawItem;
-		this.note = note;
-		setWidth(480);
-		setShowShadow(true);
+    private MenuItem security = new MenuItem(I18N.message("security"));
 
-		editEnabled = Session.get().isAdmin() || note.getUserId() == 0L
-				|| (Session.get().getConfigAsBoolean("gui.notes.allowedit")
-						&& Session.get().getUser().getId() == note.getUserId());
+    private boolean editEnabled = true;
 
-		MenuItem moveOrResize = new MenuItem(I18N.message("moveorresize"));
-		moveOrResize.setIconHeight(16);
-		moveOrResize.setIconWidth(16);
-		moveOrResize.addClickHandler(event -> {
-			if (Boolean.TRUE.equals(drawItem.getCanDrag()))
-				AbstractAnnotationsWindow.hideKnowbs(drawItem);
-			else
-				AbstractAnnotationsWindow.showKnowbs(drawItem);
-		});
+    public AnnotationContextMenu(DrawItem drawItem, GUIDocumentNote note) {
+        super();
+        this.drawItem = drawItem;
+        this.note = note;
+        setWidth(480);
+        setShowShadow(true);
 
-		moveOrResize.setCheckIfCondition((target, menu, item) -> drawItem.getCanDrag());
+        editEnabled = Session.get().isAdmin() || note.getUserId() == 0L
+                || (Session.get().getConfigAsBoolean("gui.notes.allowedit")
+                        && Session.get().getUser().getId() == note.getUserId());
 
-		MenuItem fillMenuItem = prepareFillMenuItem();
+        MenuItem moveOrResize = new MenuItem(I18N.message("moveorresize"));
+        moveOrResize.setIconHeight(16);
+        moveOrResize.setIconWidth(16);
+        moveOrResize.addClickHandler(event -> {
+            if (Boolean.TRUE.equals(drawItem.getCanDrag()))
+                AbstractAnnotationsWindow.hideKnowbs(drawItem);
+            else
+                AbstractAnnotationsWindow.showKnowbs(drawItem);
+        });
 
-		MenuItem lineMenuItem = prepareLineMenuItem();
+        moveOrResize.setCheckIfCondition((target, menu, item) -> drawItem.getCanDrag());
 
-		MenuItem contentMenuItem = prepareContentMenuItem();
+        MenuItem rotationMenuItem = prepareRotationMenuItem();
 
-		List<MenuItem> items = new ArrayList<>();
-		if (editEnabled)
-			items.add(moveOrResize);
-		if (drawItem instanceof DrawRect || drawItem instanceof DrawOval || drawItem instanceof DrawShape
-				|| drawItem instanceof DrawGroup) {
-			if (editEnabled)
-				items.add(new MenuItemSeparator());
-			items.add(fillMenuItem);
-		}
-		items.add(new MenuItemSeparator());
-		items.add(lineMenuItem);
-		items.add(new MenuItemSeparator());
-		items.add(contentMenuItem);
+        MenuItem fillMenuItem = prepareFillMenuItem();
 
-		appendAdditionalItems(items);
+        MenuItem lineMenuItem = prepareLineMenuItem();
 
-		if (editEnabled) {
-			items.add(new MenuItemSeparator());
-			items.add(security);
-			items.add(new MenuItemSeparator());
-			items.add(delete);
-		}
+        MenuItem contentMenuItem = prepareContentMenuItem();
 
-		setData(items.toArray(new MenuItem[0]));
-	}
+        List<MenuItem> items = new ArrayList<>();
+        if (editEnabled)
+            items.add(moveOrResize);
+        if (drawItem instanceof DrawRect || drawItem instanceof DrawOval || drawItem instanceof DrawShape
+                || drawItem instanceof DrawGroup) {
+            if (editEnabled)
+                items.add(new MenuItemSeparator());
+            items.add(rotationMenuItem);
+            items.add(new MenuItemSeparator());
+            items.add(fillMenuItem);
+        }
+        items.add(new MenuItemSeparator());
+        items.add(lineMenuItem);
+        items.add(new MenuItemSeparator());
+        items.add(contentMenuItem);
 
-	protected void appendAdditionalItems(List<MenuItem> items) {
-		// Nothing to do
-	}
+        appendAdditionalItems(items);
 
-	private MenuItem prepareFillMenuItem() {
-		ColorPickerItem fillColor = ItemFactory.newColorPickerItem("fillColor", I18N.message("color"), note.getColor(),
-				false, event -> {
-					note.setColor((String) event.getValue());
-					drawItem.setFillColor((String) event.getValue());
-				});
-		fillColor.setRequired(true);
-		fillColor.setDisabled(!editEnabled);
+        if (editEnabled) {
+            items.add(new MenuItemSeparator());
+            items.add(security);
+            items.add(new MenuItemSeparator());
+            items.add(delete);
+        }
 
-		SpinnerItem fillOpacity = ItemFactory.newSpinnerItem("fillOpacity", I18N.message("opacity"), note.getOpacity());
-		fillOpacity.setRequired(true);
-		fillOpacity.setMin(0);
-		fillOpacity.setMax(100);
-		fillOpacity.setDisabled(!editEnabled);
-		fillOpacity.addChangedHandler(event -> {
-			note.setOpacity(Integer.parseInt(event.getValue().toString()));
-			drawItem.setFillOpacity(note.getOpacity() / 100f);
-		});
+        setData(items.toArray(new MenuItem[0]));
+    }
 
-		final DynamicForm fillForm = new DynamicForm();
-		fillForm.setSnapTo("TR");
-		fillForm.setNumCols(4);
-		fillForm.setTitleOrientation(TitleOrientation.LEFT);
-		fillForm.setFields(fillColor, fillOpacity);
+    protected void appendAdditionalItems(List<MenuItem> items) {
+        // Nothing to do
+    }
 
-		final HStack fillEmbedded = new HStack(3);
-		fillEmbedded.setDefaultLayoutAlign(VerticalAlignment.CENTER);
-		fillEmbedded.setSnapTo("TR");
-		fillEmbedded.setHeight100();
-		fillEmbedded.setMembers(fillForm);
+    private MenuItem prepareRotationMenuItem() {
+        SpinnerItem rotation = ItemFactory.newSpinnerItem(ROTATION, (int) note.getRotation());
+        rotation.setRequired(true);
+        rotation.setMin(-360);
+        rotation.setMax(360);
+        rotation.setStep(1);
+        rotation.setDisabled(!editEnabled);
+        rotation.addChangedHandler(event -> {
+            double degrees = Double.parseDouble(event.getValue().toString());
+            note.setRotation(degrees);
+            drawItem.rotateTo(degrees);
+        });
 
-		final MenuItem fillMenuItem = new MenuItem(I18N.message("fill"));
-		fillMenuItem.setShowRollOver(false);
-		fillMenuItem.setEmbeddedComponentFields("key");
-		fillMenuItem.setEmbeddedComponent(fillEmbedded);
-		return fillMenuItem;
-	}
+        final DynamicForm rotationForm = new DynamicForm();
+        rotationForm.setSnapTo("TR");
+        rotationForm.setNumCols(4);
+        rotationForm.setTitleOrientation(TitleOrientation.LEFT);
+        rotationForm.setFields(rotation);
 
-	private MenuItem prepareContentMenuItem() {
-		final HStack stack = new HStack(3);
-		stack.setDefaultLayoutAlign(VerticalAlignment.CENTER);
-		stack.setSnapTo("TR");
-		stack.setHeight(100);
+        final HStack rotationEmbedded = new HStack(3);
+        rotationEmbedded.setDefaultLayoutAlign(VerticalAlignment.CENTER);
+        rotationEmbedded.setSnapTo("TR");
+        rotationEmbedded.setHeight100();
+        rotationEmbedded.setMembers(rotationForm);
 
-		DynamicForm form = new DynamicForm();
-		form.setSnapTo("TR");
-		form.setTitleOrientation(TitleOrientation.RIGHT);
+        final MenuItem rotationMenuItem = new MenuItem(I18N.message(ROTATION));
+        rotationMenuItem.setShowRollOver(false);
+        rotationMenuItem.setEmbeddedComponentFields("key");
+        rotationMenuItem.setEmbeddedComponent(rotationEmbedded);
+        return rotationMenuItem;
+    }
 
-		FormItem contentArea = ItemFactory.newTextAreaItemForNote(CONTENT, I18N.message(CONTENT), note.getMessage(),
-				event -> {
-					form.setValue(CONTENT, (String) event.getValue());
-					note.setMessage((String) event.getValue());
+    private MenuItem prepareFillMenuItem() {
+        ColorPickerItem fillColor = ItemFactory.newColorPickerItem("fillColor", I18N.message("color"), note.getColor(),
+                false, event -> {
+                    note.setColor((String) event.getValue());
+                    drawItem.setFillColor((String) event.getValue());
+                });
+        fillColor.setRequired(true);
+        fillColor.setDisabled(!editEnabled);
 
-					if (drawItem instanceof DrawLabel label)
-						label.setContents(Util.strip(note.getMessage()));
-					else
-						drawItem.setTitle(Util.strip(note.getMessage()));
+        SpinnerItem fillOpacity = ItemFactory.newSpinnerItem("fillOpacity", I18N.message("opacity"), note.getOpacity());
+        fillOpacity.setRequired(true);
+        fillOpacity.setMin(0);
+        fillOpacity.setMax(100);
+        fillOpacity.setDisabled(!editEnabled);
+        fillOpacity.addChangedHandler(event -> {
+            note.setOpacity(Integer.parseInt(event.getValue().toString()));
+            drawItem.setFillOpacity(note.getOpacity() / 100f);
+        });
 
-					drawItem.setPrompt(note.getMessage());
-				}, true);
-		contentArea.setRequired(false);
-		contentArea.setShowTitle(false);
-		contentArea.setWidth(350);
-		contentArea.setHeight(90);
-		contentArea.setEndRow(true);
-		contentArea.setBrowserSpellCheck(true);
-		contentArea.setValue(note.getMessage());
-		contentArea.setDisabled(!editEnabled);
+        final DynamicForm fillForm = new DynamicForm();
+        fillForm.setSnapTo("TR");
+        fillForm.setNumCols(4);
+        fillForm.setTitleOrientation(TitleOrientation.LEFT);
+        fillForm.setFields(fillColor, fillOpacity);
 
-		form.setFields(contentArea);
+        final HStack fillEmbedded = new HStack(3);
+        fillEmbedded.setDefaultLayoutAlign(VerticalAlignment.CENTER);
+        fillEmbedded.setSnapTo("TR");
+        fillEmbedded.setHeight100();
+        fillEmbedded.setMembers(fillForm);
 
-		stack.setMembers(form);
+        final MenuItem fillMenuItem = new MenuItem(I18N.message("fill"));
+        fillMenuItem.setShowRollOver(false);
+        fillMenuItem.setEmbeddedComponentFields("key");
+        fillMenuItem.setEmbeddedComponent(fillEmbedded);
+        return fillMenuItem;
+    }
 
-		final MenuItem menuItem = new MenuItem(I18N.message(CONTENT));
-		menuItem.setShowRollOver(false);
-		menuItem.setEmbeddedComponentFields("key");
-		menuItem.setEmbeddedComponent(stack);
-		return menuItem;
-	}
+    private MenuItem prepareContentMenuItem() {
+        final HStack stack = new HStack(3);
+        stack.setDefaultLayoutAlign(VerticalAlignment.CENTER);
+        stack.setSnapTo("TR");
+        stack.setHeight(100);
 
-	private MenuItem prepareLineMenuItem() {
-		ColorPickerItem lineColor = ItemFactory.newColorPickerItem("lineColor", I18N.message("color"),
-				note.getLineColor(), false, event -> {
-					note.setLineColor((String) event.getValue());
-					drawItem.setLineColor((String) event.getValue());
-				});
-		lineColor.setRequired(true);
-		lineColor.setDisabled(!editEnabled);
+        DynamicForm form = new DynamicForm();
+        form.setSnapTo("TR");
+        form.setTitleOrientation(TitleOrientation.RIGHT);
 
-		SpinnerItem opacity = ItemFactory.newSpinnerItem("lineOpacity", I18N.message("opacity"), note.getLineOpacity());
-		opacity.setRequired(true);
-		opacity.setMin(0);
-		opacity.setMax(100);
-		opacity.addChangedHandler(event -> {
-			note.setLineOpacity(Integer.parseInt(event.getValue().toString()));
-			drawItem.setLineOpacity(note.getLineOpacity() / 100f);
-		});
-		opacity.setVisible(!(drawItem instanceof DrawLabel));
-		opacity.setDisabled(!editEnabled);
+        FormItem contentArea = ItemFactory.newTextAreaItemForNote(CONTENT, I18N.message(CONTENT), note.getMessage(),
+                event -> {
+                    form.setValue(CONTENT, (String) event.getValue());
+                    note.setMessage((String) event.getValue());
 
-		SpinnerItem width = ItemFactory.newSpinnerItem("lineWidth", I18N.message("width"), note.getLineWidth());
-		width.setRequired(true);
-		width.setMin(1);
-		width.setMax(100);
-		width.setDisabled(!editEnabled);
-		width.addChangedHandler(event -> {
-			note.setLineWidth(Integer.parseInt(event.getValue().toString()));
+                    if (drawItem instanceof DrawLabel label)
+                        label.setContents(Util.strip(note.getMessage()));
+                    else
+                        drawItem.setTitle(Util.strip(note.getMessage()));
 
-			if (drawItem instanceof DrawLabel label)
-				label.setFontSize(note.getLineWidth());
-			else
-				drawItem.setLineWidth(note.getLineWidth());
-		});
+                    drawItem.setPrompt(note.getMessage());
+                }, true);
+        contentArea.setRequired(false);
+        contentArea.setShowTitle(false);
+        contentArea.setWidth(350);
+        contentArea.setHeight(90);
+        contentArea.setEndRow(true);
+        contentArea.setBrowserSpellCheck(true);
+        contentArea.setValue(note.getMessage());
+        contentArea.setDisabled(!editEnabled);
 
-		final DynamicForm lineForm = new DynamicForm();
-		lineForm.setSnapTo("TR");
-		lineForm.setNumCols(6);
-		lineForm.setTitleOrientation(TitleOrientation.LEFT);
-		lineForm.setFields(lineColor, width, opacity);
+        form.setFields(contentArea);
 
-		final HStack lineEmbedded = new HStack(3);
-		lineEmbedded.setDefaultLayoutAlign(VerticalAlignment.CENTER);
-		lineEmbedded.setSnapTo("TR");
-		lineEmbedded.setHeight100();
-		lineEmbedded.setMembers(lineForm);
+        stack.setMembers(form);
 
-		final MenuItem lineMenuItem = new MenuItem(I18N.message("line"));
-		lineMenuItem.setShowRollOver(false);
-		lineMenuItem.setEmbeddedComponentFields("key");
-		lineMenuItem.setEmbeddedComponent(lineEmbedded);
-		return lineMenuItem;
-	}
+        final MenuItem menuItem = new MenuItem(I18N.message(CONTENT));
+        menuItem.setShowRollOver(false);
+        menuItem.setEmbeddedComponentFields("key");
+        menuItem.setEmbeddedComponent(stack);
+        return menuItem;
+    }
 
-	public void addDeleteClickHandler(ClickHandler handler) {
-		delete.addClickHandler(handler);
-	}
-	
-	public void addSecurityClickHandler(ClickHandler handler) {
-		security.addClickHandler(handler);
-	}
-	
-	
-	@Override
-	public boolean equals(Object other) {
-		return super.equals(other);
-	}
+    private MenuItem prepareLineMenuItem() {
+        ColorPickerItem lineColor = ItemFactory.newColorPickerItem("lineColor", I18N.message("color"),
+                note.getLineColor(), false, event -> {
+                    note.setLineColor((String) event.getValue());
+                    drawItem.setLineColor((String) event.getValue());
+                });
+        lineColor.setRequired(true);
+        lineColor.setDisabled(!editEnabled);
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+        SpinnerItem opacity = ItemFactory.newSpinnerItem("lineOpacity", I18N.message("opacity"), note.getLineOpacity());
+        opacity.setRequired(true);
+        opacity.setMin(0);
+        opacity.setMax(100);
+        opacity.addChangedHandler(event -> {
+            note.setLineOpacity(Integer.parseInt(event.getValue().toString()));
+            drawItem.setLineOpacity(note.getLineOpacity() / 100f);
+        });
+        opacity.setVisible(!(drawItem instanceof DrawLabel));
+        opacity.setDisabled(!editEnabled);
+
+        SpinnerItem width = ItemFactory.newSpinnerItem("lineWidth", I18N.message("width"), note.getLineWidth());
+        width.setRequired(true);
+        width.setMin(1);
+        width.setMax(100);
+        width.setDisabled(!editEnabled);
+        width.addChangedHandler(event -> {
+            note.setLineWidth(Integer.parseInt(event.getValue().toString()));
+
+            if (drawItem instanceof DrawLabel label)
+                label.setFontSize(note.getLineWidth());
+            else
+                drawItem.setLineWidth(note.getLineWidth());
+        });
+
+        final DynamicForm lineForm = new DynamicForm();
+        lineForm.setSnapTo("TR");
+        lineForm.setNumCols(6);
+        lineForm.setTitleOrientation(TitleOrientation.LEFT);
+        lineForm.setFields(lineColor, width, opacity);
+
+        final HStack lineEmbedded = new HStack(3);
+        lineEmbedded.setDefaultLayoutAlign(VerticalAlignment.CENTER);
+        lineEmbedded.setSnapTo("TR");
+        lineEmbedded.setHeight100();
+        lineEmbedded.setMembers(lineForm);
+
+        final MenuItem lineMenuItem = new MenuItem(I18N.message("line"));
+        lineMenuItem.setShowRollOver(false);
+        lineMenuItem.setEmbeddedComponentFields("key");
+        lineMenuItem.setEmbeddedComponent(lineEmbedded);
+        return lineMenuItem;
+    }
+
+    public void addDeleteClickHandler(ClickHandler handler) {
+        delete.addClickHandler(handler);
+    }
+
+    public void addSecurityClickHandler(ClickHandler handler) {
+        security.addClickHandler(handler);
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

@@ -6,12 +6,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.history.HibernateHistoryDAO;
+import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.sql.SqlUtil;
 
 import jakarta.transaction.Transactional;
@@ -26,93 +28,83 @@ import jakarta.transaction.Transactional;
 @Transactional
 public class HibernateDocumentHistoryDAO extends HibernateHistoryDAO<DocumentHistory> implements DocumentHistoryDAO {
 
-	private static final String DATE_ASC = ".date asc";
+    private static final String ENTITY_DATE_ASC = "_entity.date asc";
 
-	private static final String AND = " and ";
+    private HibernateDocumentHistoryDAO() {
+        super(DocumentHistory.class);
+        super.log = LoggerFactory.getLogger(HibernateDocumentHistoryDAO.class);
+    }
 
-	private HibernateDocumentHistoryDAO() {
-		super(DocumentHistory.class);
-		super.log = LoggerFactory.getLogger(HibernateDocumentHistoryDAO.class);
-	}
+    @Override
+    public List<DocumentHistory> findByDocId(long docId) throws PersistenceException {
+        return findByDocIdAndEvent(docId, null);
+    }
 
-	@Override
-	public List<DocumentHistory> findByDocId(long docId) throws PersistenceException {
-		return findByDocIdAndEvent(docId, null);
-	}
+    @Override
+    public List<DocumentHistory> findByDocIdAndEvent(long docId, DocumentEvent event) throws PersistenceException {
+        StringBuilder query = new StringBuilder("_entity.docId = %d".formatted(docId));
 
-	@Override
-	public List<DocumentHistory> findByDocIdAndEvent(long docId, DocumentEvent event) throws PersistenceException {
-		StringBuilder query = new StringBuilder(ENTITY + ".docId = " + docId);
+        if (event != null && StringUtils.isNotEmpty(event.toString()))
+            query.append(" and _entity.event = '%s'".formatted(SqlUtil.doubleQuotes(event.toString())));
 
-		if (event != null && StringUtils.isNotEmpty(event.toString()))
-			query.append(AND + ENTITY + ".event='" + SqlUtil.doubleQuotes(event.toString()) + "'");
+        return findByWhere(query.toString(), "_entity.date desc", null);
+    }
 
-		return findByWhere(query.toString(), ENTITY + ".date desc", null);
-	}
+    @Override
+    public List<DocumentHistory> findByUserId(long userId) throws PersistenceException {
+        return findByUserIdAndEvent(userId, null, null);
+    }
 
-	@Override
-	public List<DocumentHistory> findByUserId(long userId) throws PersistenceException {
-		return findByUserIdAndEvent(userId, null, null);
-	}
+    @Override
+    public List<DocumentHistory> findByFolderId(long folderId) throws PersistenceException {
+        return findByWhere("_entity.folderId = %d".formatted(folderId), ENTITY_DATE_ASC, null);
+    }
 
-	@Override
-	public List<DocumentHistory> findByFolderId(long folderId) throws PersistenceException {
-		return findByWhere(ENTITY + ".folderId =" + folderId, ENTITY + DATE_ASC, null);
-	}
+    @Override
+    public List<DocumentHistory> findNotNotified(Integer max) throws PersistenceException {
+        return findByWhere("_entity.notified = false", ENTITY_DATE_ASC, max);
+    }
 
-	@Override
-	public List<DocumentHistory> findNotNotified(Integer max) throws PersistenceException {
-		return findByWhere(ENTITY + ".notified = false", ENTITY + DATE_ASC, max);
-	}
+    @Override
+    public void cleanOldHistories(int ttl) throws PersistenceException {
+        log.debug("cleanOldHistories rows updated: {}", cleanOldRecords(ttl, "ld_history"));
+    }
 
-	@Override
-	public void cleanOldHistories(int ttl) throws PersistenceException {
-		log.info("cleanOldHistories rows updated: {}", cleanOldRecords(ttl, "ld_history"));
-	}
+    @Override
+    public List<DocumentHistory> findByUserIdAndEvent(long userId, String event, String sessionId)
+            throws PersistenceException {
+        StringBuilder query = new StringBuilder("_entity.userId = %d".formatted(userId));
+        if (StringUtils.isNotEmpty(event))
+            query.append(" and _entity.event = '%s'".formatted(SqlUtil.doubleQuotes(event)));
+        if (StringUtils.isNotEmpty(sessionId))
+            query.append(" and _entity.sessionId = '%s'".formatted(sessionId));
 
-	@Override
-	public List<DocumentHistory> findByUserIdAndEvent(long userId, String event, String sessionId)
-			throws PersistenceException {
-		String query = ENTITY + ".userId =" + userId;
-		if (event != null && StringUtils.isNotEmpty(event))
-			query += AND + ENTITY + ".event = '" + SqlUtil.doubleQuotes(event) + "'";
-		if (sessionId != null && StringUtils.isNotEmpty(sessionId))
-			query += AND + ENTITY + ".sessionId = '" + sessionId + "'";
+        return findByWhere(query.toString(), ENTITY_DATE_ASC, null);
+    }
 
-		return findByWhere(query, ENTITY + DATE_ASC, null);
-	}
+    @Override
+    public void markHistoriesAsRead(String event, long userId) throws PersistenceException {
+        String statement = "update ld_history set ld_new = 0 where ld_new = 1 and ld_userid = %d and ld_event = '%s'"
+                .formatted(userId, SqlUtil.doubleQuotes(event));
+        jdbcUpdate(statement);
+    }
 
-	@Override
-	public void markHistoriesAsRead(String event, long userId) throws PersistenceException {
-		String statement = "update ld_history set ld_new = 0 where ld_new = 1 and ld_userid=" + userId + " and ld_event='"
-				+ SqlUtil.doubleQuotes(event) + "'";
-		jdbcUpdate(statement);
-	}
+    @Override
+    public List<DocumentHistory> findByPath(String pathExpression, Date oldestDate, Collection<String> events,
+            Integer max) throws PersistenceException {
+        StringBuilder query = new StringBuilder(
+                "(_entity.path like :pathExpression or _entity.pathOld like :pathExpression) ");
+        Map<String, Object> params = new HashMap<>();
+        params.put("pathExpression", pathExpression);
 
-	@Override
-	public List<DocumentHistory> findByPath(String pathExpression, Date oldestDate, Collection<String> events,
-			Integer max) throws PersistenceException {
-		StringBuilder query = new StringBuilder(
-				"(" + ENTITY + ".path like :pathExpression or " + ENTITY + ".pathOld like :pathExpression) ");
-		Map<String, Object> params = new HashMap<>();
-		params.put("pathExpression", pathExpression);
+        if (oldestDate != null) {
+            query.append(" and _entity.date >= :oldestDate ");
+            params.put("oldestDate", oldestDate);
+        }
 
-		if (oldestDate != null) {
-			query.append(AND + ENTITY + ".date >= :oldestDate ");
-			params.put("oldestDate", oldestDate);
-		}
+        if (CollectionUtils.isNotEmpty(events))
+            query.append(" and _entity.event in ('%s')".formatted(CollectionUtil.join(events, "','")));
 
-		if (events != null && !events.isEmpty()) {
-			StringBuilder eventsStr = new StringBuilder("(");
-			for (String event : events) {
-				if (eventsStr.length() > 1)
-					eventsStr.append(",");
-				eventsStr.append("'" + event + "'");
-			}
-			eventsStr.append(")");
-			query.append(AND + ENTITY + ".event in " + eventsStr);
-		}
-
-		return findByWhere(query.toString(), params, ORDER_BY + ENTITY + DATE_ASC, max);
-	}
+        return findByWhere(query.toString(), params, " order by _entity.date asc", max);
+    }
 }

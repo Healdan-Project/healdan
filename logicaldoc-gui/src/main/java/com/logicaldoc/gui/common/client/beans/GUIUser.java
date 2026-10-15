@@ -9,6 +9,7 @@ import java.util.stream.Collectors;
 
 import com.logicaldoc.gui.common.client.Constants;
 
+
 /**
  * User bean as used in the GUI
  * 
@@ -17,790 +18,856 @@ import com.logicaldoc.gui.common.client.Constants;
  */
 public class GUIUser implements Serializable {
 
-	public static final int TYPE_DEFAULT = 0;
+    public static final int TYPE_DEFAULT = 0;
 
-	public static final int TYPE_READONLY = 2;
+    public static final int TYPE_READONLY = 2;
 
-	public static final String ALL_TASKS = "tasks";
+    public static final String ALL_TASKS = "tasks";
 
-	public static final String EVENTS = "events";
+    public static final String EVENTS = "events";
 
-	public static final String UNREAD_MESSAGES = "unreadMessages";
+    public static final String UNREAD_MESSAGES = "unreadMessages";
 
-	public static final String ALL_MESSAGES = "messages";
+    public static final String ALL_MESSAGES = "messages";
 
-	public static final String LOCKED_DOCS = "lockedDocs";
+    public static final String LOCKED_DOCS = "lockedDocs";
 
-	public static final String CHECKED_OUT_DOCS = "checkedOutDocs";
+    public static final String CHECKED_OUT_DOCS = "checkedOutDocs";
 
-	public static final String ALL_SUBSCRIPTIONS = "subscriptions";
+    public static final String ALL_SUBSCRIPTIONS = "subscriptions";
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private String username = "";
+    private String username = "";
 
-	private long id = 0;
+    private long id = 0;
 
-	private String firstName = "";
+    private String firstName = "";
 
-	private String name = "";
+    private String name = "";
 
-	private String language = "en";
+    private String language = "en";
 
-	private boolean notifyCredentials = true;
+    private boolean notifyCredentials = true;
 
-	private int passwordMinLenght = 0;
+    private int passwordMinLenght = 0;
 
-	private boolean passwordExpires = false;
+    private boolean passwordExpires = false;
 
-	private boolean passwordExpired = false;
+    private boolean passwordExpired = false;
 
-	private String address = "";
+    private String address = "";
 
-	private String postalCode = "";
+    private String postalCode = "";
 
-	private String city = "";
+    private String city = "";
 
-	private String country = "";
+    private String country = "";
 
-	private String state = "";
+    private String state = "";
 
-	private String phone = "";
+    private String phone = "";
 
-	private String email = "";
+    private String email = "";
 
-	private String emailSignature = null;
+    private String emailSignature = null;
 
-	private String email2 = "";
+    private String email2 = "";
 
-	private String emailSignature2 = null;
+    private String emailSignature2 = null;
 
-	private String cell = "";
+    private String cell = "";
 
-	private String department;
+    private String whatsapp = "";
 
-	private String organizationalUnit;
+    private String department;
 
-	private String building;
+    private String organizationalUnit;
 
-	private String company;
+    private String building;
 
-	private boolean enabled = true;
+    private String company;
 
-	private boolean legals = false;
+    private boolean enabled = true;
 
-	private int checkedOutDocs = 0;
+    private boolean legals = false;
 
-	private int lockedDocs = 0;
+    private int checkedOutDocs = 0;
 
-	private int unreadMessages = 0;
+    private int lockedDocs = 0;
 
-	private int tasks = 0;
+    private int unreadMessages = 0;
 
-	private int messages = 0;
+    private int tasks = 0;
 
-	private int subscriptions = 0;
+    private int messages = 0;
 
-	private int upcomingEvents = 0;
+    private int subscriptions = 0;
 
-	private GUITenant tenant = null;
+    private int upcomingEvents = 0;
 
-	private long quota = -1;
+    private GUITenant tenant = null;
 
-	private long quotaCount = 0;
+    private long storage = 0L;
 
-	private long sessionsQuota = -1;
+    private Long storageQuota;
 
-	private long sessionsQuotaCount = 0;
+    private long sessions = 0L;
+    
+    private Long sessionsQuota;
+    
+    private long pages = 0L;
 
-	private Integer welcomeScreen = 1500;
+    private Long pagesQuota;
+    
+    private long documents = 0L;
 
-	private String ipWhitelist;
+    private Long documentsQuota;
+    
+    private Integer quotaThreshold = null;
+    
+    private Integer welcomeScreen = 1500;
 
-	private String ipBlacklist;
+    private String ipWhitelist;
 
-	private Long defaultWorkspace;
+    private String ipBlacklist;
 
-	private Date certExpire = null;
+    private Long defaultWorkspace;
 
-	private String certDN = null;
+    private Date certExpire = null;
 
-	private String secondFactor = null;
+    private String certDN = null;
 
-	private String key = null;
+    private String secondFactor = null;
 
-	private int type = 0;
+    private String key = null;
 
-	/**
-	 * Description of the grid that displays the list of documents, a JSON
-	 * format
-	 */
-	private String docsGrid;
+    private int type = 0;
 
-	/**
-	 * Description of the grid that shows the results of a search, a JSON format
-	 */
-	private String hitsGrid;
+    /**
+     * Description of the grid that displays the list of documents, a JSON
+     * format
+     */
+    private String docsGrid;
 
-	private String dateFormat;
+    /**
+     * Description of the grid that shows the results of a search, a JSON format
+     */
+    private String hitsGrid;
 
-	private String dateFormatShort;
+    private String dateFormat;
 
-	private String dateFormatLong;
+    private String dateFormatShort;
 
-	private String searchPref;
+    private String dateFormatLong;
 
-	private Date expire;
+    private String searchPref;
 
-	/**
-	 * If the system must forbid the login outside the working time
-	 */
-	private boolean enforceWorkingTime = false;
+    private Date expire;
 
-	private Integer maxInactivity;
+    /**
+     * If the system must forbid the login outside the working time
+     */
+    private boolean enforceWorkingTime = false;
 
-	private String timeZone;
+    private Integer maxInactivity;
 
-	/**
-	 * The reason why the last login failed
-	 */
-	private String lastLoginFailureReason;
+    private String timeZone;
 
-	private int source = 0;
+    /**
+     * The reason why the last login failed
+     */
+    private String lastLoginFailureReason;
 
-	private Date creation;
+    private int source = 0;
 
-	private Date lastLogin;
+    private Date creation;
 
-	private List<GUIGroup> groups = new ArrayList<>();
+    private Date lastLogin;
 
-	private List<GUIDashlet> dashlets = new ArrayList<>();
+    private List<String> impersonators = new ArrayList<>();
 
-	private List<GUIMenu> customActions = new ArrayList<>();
+    private List<GUIGroup> groups = new ArrayList<>();
 
-	private List<GUIWorkingTime> workingTimes = new ArrayList<>();
+    private List<GUIDashlet> dashlets = new ArrayList<>();
 
-	private List<Long> menus = new ArrayList<>();
+    private List<GUIMenu> customActions = new ArrayList<>();
 
-	private boolean evalFormEnabled = true;
+    private List<GUIWorkingTime> workingTimes = new ArrayList<>();
 
-	public GUIUser() {
-		tenant = new GUITenant();
-		tenant.setId(Constants.TENANT_DEFAULTID);
-		tenant.setName(Constants.TENANT_DEFAULTNAME);
-		tenant.setDisplayName(Constants.TENANT_DEFAULTDISPLAYNAME);
-	}
+    private List<Long> menus = new ArrayList<>();
 
-	public String getKey() {
-		return key;
-	}
+    public GUIUser() {
+        tenant = new GUITenant();
+        tenant.setId(Constants.TENANT_DEFAULTID);
+        tenant.setName(Constants.TENANT_DEFAULTNAME);
+        tenant.setDisplayName(Constants.TENANT_DEFAULTDISPLAYNAME);
+    }
 
-	public void setKey(String key) {
-		this.key = key;
-	}
+    public String getKey() {
+        return key;
+    }
 
-	public String getSecondFactor() {
-		return secondFactor;
-	}
+    public void setKey(String key) {
+        this.key = key;
+    }
 
-	public void setSecondFactor(String secondFactor) {
-		this.secondFactor = secondFactor;
-	}
+    public String getSecondFactor() {
+        return secondFactor;
+    }
 
-	public void setUsername(String username) {
-		this.username = username;
-	}
+    public void setSecondFactor(String secondFactor) {
+        this.secondFactor = secondFactor;
+    }
 
-	public String getUsername() {
-		return username;
-	}
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
-	public long getId() {
-		return id;
-	}
+    public String getUsername() {
+        return username;
+    }
 
-	public void setId(long id) {
-		this.id = id;
-	}
+    public long getId() {
+        return id;
+    }
 
-	public boolean isMemberOf(String group) {
-		for (GUIGroup g : groups) {
-			if (group.equals(g.getName()))
-				return true;
-		}
-		return false;
-	}
+    public void setId(long id) {
+        this.id = id;
+    }
 
-	public String getFullName() {
-		String fullName = getFirstName();
-		if (fullName != null && getName() != null)
-			fullName += " " + getName();
-		if (fullName == null && getName() != null)
-			fullName = getName();
-		if (fullName == null)
-			fullName = getUsername();
-		return fullName;
-	}
+    public boolean isMemberOf(String group) {
+        for (GUIGroup g : groups) {
+            if (group.equals(g.getName()))
+                return true;
+        }
+        return false;
+    }
 
-	public String getFirstName() {
-		return firstName;
-	}
+    public String getFullName() {
+        String fullName = getFirstName();
+        if (fullName != null && getName() != null)
+            fullName += " " + getName();
+        if (fullName == null && getName() != null)
+            fullName = getName();
+        if (fullName == null)
+            fullName = getUsername();
+        return fullName;
+    }
 
-	public void setFirstName(String firstName) {
-		this.firstName = firstName;
-	}
+    public String getFirstName() {
+        return firstName;
+    }
 
-	public String getName() {
-		return name;
-	}
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
 
-	public void setName(String name) {
-		this.name = name;
-	}
+    public String getName() {
+        return name;
+    }
 
-	public int getPasswordMinLenght() {
-		return passwordMinLenght;
-	}
+    public void setName(String name) {
+        this.name = name;
+    }
 
-	public void setPasswordMinLenght(int passwordMinLenght) {
-		this.passwordMinLenght = passwordMinLenght;
-	}
+    public int getPasswordMinLenght() {
+        return passwordMinLenght;
+    }
 
-	public String getLanguage() {
-		return language;
-	}
+    public void setPasswordMinLenght(int passwordMinLenght) {
+        this.passwordMinLenght = passwordMinLenght;
+    }
 
-	public void setLanguage(String language) {
-		this.language = language;
-	}
+    public String getLanguage() {
+        return language;
+    }
 
-	public boolean isPasswordExpires() {
-		return passwordExpires;
-	}
+    public void setLanguage(String language) {
+        this.language = language;
+    }
 
-	public void setPasswordExpires(boolean passwordExpires) {
-		this.passwordExpires = passwordExpires;
-	}
+    public boolean isPasswordExpires() {
+        return passwordExpires;
+    }
 
-	public String getAddress() {
-		return address;
-	}
+    public void setPasswordExpires(boolean passwordExpires) {
+        this.passwordExpires = passwordExpires;
+    }
 
-	public void setAddress(String address) {
-		this.address = address;
-	}
+    public String getAddress() {
+        return address;
+    }
 
-	public String getPostalCode() {
-		return postalCode;
-	}
+    public void setAddress(String address) {
+        this.address = address;
+    }
 
-	public void setPostalCode(String postalCode) {
-		this.postalCode = postalCode;
-	}
+    public String getPostalCode() {
+        return postalCode;
+    }
 
-	public String getCity() {
-		return city;
-	}
+    public void setPostalCode(String postalCode) {
+        this.postalCode = postalCode;
+    }
 
-	public void setCity(String city) {
-		this.city = city;
-	}
+    public String getCity() {
+        return city;
+    }
 
-	public String getCountry() {
-		return country;
-	}
+    public void setCity(String city) {
+        this.city = city;
+    }
 
-	public void setCountry(String country) {
-		this.country = country;
-	}
+    public String getCountry() {
+        return country;
+    }
 
-	public String getState() {
-		return state;
-	}
+    public void setCountry(String country) {
+        this.country = country;
+    }
 
-	public void setState(String state) {
-		this.state = state;
-	}
+    public String getState() {
+        return state;
+    }
 
-	public String getPhone() {
-		return phone;
-	}
+    public void setState(String state) {
+        this.state = state;
+    }
 
-	public void setPhone(String phone) {
-		this.phone = phone;
-	}
+    public String getPhone() {
+        return phone;
+    }
 
-	public String getEmail() {
-		return email;
-	}
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
 
-	public void setEmail(String email) {
-		this.email = email;
-	}
+    public String getEmail() {
+        return email;
+    }
 
-	public String getCell() {
-		return cell;
-	}
+    public void setEmail(String email) {
+        this.email = email;
+    }
 
-	public void setCell(String cell) {
-		this.cell = cell;
-	}
+    public String getCell() {
+        return cell;
+    }
 
-	public boolean isEnabled() {
-		return enabled;
-	}
+    public void setCell(String cell) {
+        this.cell = cell;
+    }
 
-	public void setEnabled(boolean enabled) {
-		this.enabled = enabled;
-	}
+    public String getWhatsapp() {
+        return whatsapp;
+    }
 
-	public int getCheckedOutDocs() {
-		return checkedOutDocs;
-	}
+    public void setWhatsapp(String whatsapp) {
+        this.whatsapp = whatsapp;
+    }
 
-	public void setCheckedOutDocs(int checkedOutDocs) {
-		if (this.checkedOutDocs != checkedOutDocs) {
-			this.checkedOutDocs = checkedOutDocs;
-		}
-	}
+    public boolean isEnabled() {
+        return enabled;
+    }
 
-	public int getLockedDocs() {
-		return lockedDocs;
-	}
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 
-	public void setLockedDocs(int lockedDocs) {
-		if (this.lockedDocs != lockedDocs) {
-			this.lockedDocs = lockedDocs;
-		}
-	}
+    public int getCheckedOutDocs() {
+        return checkedOutDocs;
+    }
 
-	public int getMessages() {
-		return messages;
-	}
+    public void setCheckedOutDocs(int checkedOutDocs) {
+        if (this.checkedOutDocs != checkedOutDocs) {
+            this.checkedOutDocs = checkedOutDocs;
+        }
+    }
 
-	public void setMessages(int messages) {
-		if (this.messages != messages) {
-			this.messages = messages;
-		}
-	}
+    public int getLockedDocs() {
+        return lockedDocs;
+    }
 
-	public int getUnreadMessages() {
-		return unreadMessages;
-	}
+    public void setLockedDocs(int lockedDocs) {
+        if (this.lockedDocs != lockedDocs) {
+            this.lockedDocs = lockedDocs;
+        }
+    }
 
-	public void setUnreadMessages(int unreadMessages) {
-		if (this.unreadMessages != unreadMessages) {
-			this.unreadMessages = unreadMessages;
-		}
-	}
+    public int getMessages() {
+        return messages;
+    }
 
-	public int getSubscriptions() {
-		return subscriptions;
-	}
+    public void setMessages(int messages) {
+        if (this.messages != messages) {
+            this.messages = messages;
+        }
+    }
 
-	public void setSubscriptions(int subscriptions) {
-		if (this.subscriptions != subscriptions) {
-			this.subscriptions = subscriptions;
-		}
-	}
+    public int getUnreadMessages() {
+        return unreadMessages;
+    }
 
-	public long getQuota() {
-		return quota;
-	}
+    public void setUnreadMessages(int unreadMessages) {
+        if (this.unreadMessages != unreadMessages) {
+            this.unreadMessages = unreadMessages;
+        }
+    }
 
-	public void setQuota(long quota) {
-		this.quota = quota;
-	}
+    public int getSubscriptions() {
+        return subscriptions;
+    }
 
-	public long getQuotaCount() {
-		return quotaCount;
-	}
+    public void setSubscriptions(int subscriptions) {
+        if (this.subscriptions != subscriptions) {
+            this.subscriptions = subscriptions;
+        }
+    }
 
-	public void setQuotaCount(long quotaCount) {
-		this.quotaCount = quotaCount;
-	}
+    public Long getStorageQuota() {
+        return storageQuota;
+    }
 
-	public Integer getWelcomeScreen() {
-		return welcomeScreen;
-	}
+    public void setStorageQuota(Long storageQuota) {
+        this.storageQuota = storageQuota;
+    }
 
-	public void setWelcomeScreen(Integer welcomeScreen) {
-		this.welcomeScreen = welcomeScreen;
-	}
+    public long getStorage() {
+        return storage;
+    }
 
-	public String getIpWhitelist() {
-		return ipWhitelist;
-	}
+    public void setStorage(long storage) {
+        this.storage = storage;
+    }
 
-	public void setIpWhitelist(String ipWhitelist) {
-		this.ipWhitelist = ipWhitelist;
-	}
+    public long getSessions() {
+        return sessions;
+    }
 
-	public String getIpBlacklist() {
-		return ipBlacklist;
-	}
+    public void setSessions(long sessions) {
+        this.sessions = sessions;
+    }
 
-	public void setIpBlacklist(String ipBlacklist) {
-		this.ipBlacklist = ipBlacklist;
-	}
+    public long getPages() {
+        return pages;
+    }
 
-	public boolean isNotifyCredentials() {
-		return notifyCredentials;
-	}
+    public void setPages(long pages) {
+        this.pages = pages;
+    }
 
-	public void setNotifyCredentials(boolean notifyCredentials) {
-		this.notifyCredentials = notifyCredentials;
-	}
+    public Long getPagesQuota() {
+        return pagesQuota;
+    }
 
-	public boolean isPasswordExpired() {
-		return passwordExpired;
-	}
+    public void setPagesQuota(Long pagesQuota) {
+        this.pagesQuota = pagesQuota;
+    }
 
-	public void setPasswordExpired(boolean passwordExpired) {
-		this.passwordExpired = passwordExpired;
-	}
+    public long getDocuments() {
+        return documents;
+    }
 
-	public int getUpcomingEvents() {
-		return upcomingEvents;
-	}
+    public void setDocuments(long documents) {
+        this.documents = documents;
+    }
 
-	public void setUpcomingEvents(int events) {
-		if (this.upcomingEvents != events) {
-			this.upcomingEvents = events;
-		}
-	}
+    public Long getDocumentsQuota() {
+        return documentsQuota;
+    }
 
-	@Override
-	public String toString() {
-		return (getFirstName() != null ? getFirstName() : "") + " " + (getName() != null ? getName() : "");
-	}
+    public void setDocumentsQuota(Long documentsQuota) {
+        this.documentsQuota = documentsQuota;
+    }
 
-	public String getEmailSignature() {
-		return emailSignature;
-	}
+    public Integer getWelcomeScreen() {
+        return welcomeScreen;
+    }
 
-	public String getEmailSignatureStr() {
-		if (getEmailSignature() != null)
-			return getEmailSignature();
-		else
-			return "";
-	}
+    public void setWelcomeScreen(Integer welcomeScreen) {
+        this.welcomeScreen = welcomeScreen;
+    }
 
-	public void setEmailSignature(String emailSignature) {
-		this.emailSignature = emailSignature;
-	}
+    public String getIpWhitelist() {
+        return ipWhitelist;
+    }
 
-	public Long getDefaultWorkspace() {
-		return defaultWorkspace;
-	}
+    public void setIpWhitelist(String ipWhitelist) {
+        this.ipWhitelist = ipWhitelist;
+    }
 
-	public void setDefaultWorkspace(Long defaultWorkspace) {
-		this.defaultWorkspace = defaultWorkspace;
-	}
+    public String getIpBlacklist() {
+        return ipBlacklist;
+    }
 
-	public String getEmailSignature2() {
-		return emailSignature2;
-	}
+    public void setIpBlacklist(String ipBlacklist) {
+        this.ipBlacklist = ipBlacklist;
+    }
 
-	public void setEmailSignature2(String emailSignature2) {
-		this.emailSignature2 = emailSignature2;
-	}
+    public boolean isNotifyCredentials() {
+        return notifyCredentials;
+    }
 
-	public String getEmail2() {
-		return email2;
-	}
+    public void setNotifyCredentials(boolean notifyCredentials) {
+        this.notifyCredentials = notifyCredentials;
+    }
 
-	public void setEmail2(String email2) {
-		this.email2 = email2;
-	}
+    public boolean isPasswordExpired() {
+        return passwordExpired;
+    }
 
-	public Date getCertExpire() {
-		return certExpire;
-	}
+    public void setPasswordExpired(boolean passwordExpired) {
+        this.passwordExpired = passwordExpired;
+    }
 
-	public void setCertExpire(Date certExpire) {
-		this.certExpire = certExpire;
-	}
+    public int getUpcomingEvents() {
+        return upcomingEvents;
+    }
 
-	public String getCertDN() {
-		return certDN;
-	}
+    public void setUpcomingEvents(int events) {
+        if (this.upcomingEvents != events) {
+            this.upcomingEvents = events;
+        }
+    }
 
-	public void setCertDN(String certDN) {
-		this.certDN = certDN;
-	}
+    @Override
+    public String toString() {
+        return (getFirstName() != null ? getFirstName() : "") + " " + (getName() != null ? getName() : "");
+    }
 
-	public int getType() {
-		return type;
-	}
+    public String getEmailSignature() {
+        return emailSignature;
+    }
 
-	public void setType(int type) {
-		this.type = type;
-	}
+    public String getEmailSignatureStr() {
+        if (getEmailSignature() != null)
+            return getEmailSignature();
+        else
+            return "";
+    }
 
-	public boolean isReadOnly() {
-		return type == TYPE_READONLY;
-	}
+    public void setEmailSignature(String emailSignature) {
+        this.emailSignature = emailSignature;
+    }
 
-	public GUITenant getTenant() {
-		return tenant;
-	}
+    public Long getDefaultWorkspace() {
+        return defaultWorkspace;
+    }
 
-	public void setTenant(GUITenant tenant) {
-		this.tenant = tenant;
-	}
+    public void setDefaultWorkspace(Long defaultWorkspace) {
+        this.defaultWorkspace = defaultWorkspace;
+    }
 
-	public String getDocsGrid() {
-		return docsGrid;
-	}
+    public String getEmailSignature2() {
+        return emailSignature2;
+    }
 
-	public void setDocsGrid(String docsGrid) {
-		this.docsGrid = docsGrid;
-	}
+    public void setEmailSignature2(String emailSignature2) {
+        this.emailSignature2 = emailSignature2;
+    }
 
-	public String getHitsGrid() {
-		return hitsGrid;
-	}
+    public String getEmail2() {
+        return email2;
+    }
 
-	public void setHitsGrid(String hitsGrid) {
-		this.hitsGrid = hitsGrid;
-	}
+    public void setEmail2(String email2) {
+        this.email2 = email2;
+    }
 
-	public String getDateFormat() {
-		return dateFormat;
-	}
+    public Date getCertExpire() {
+        return certExpire;
+    }
 
-	public void setDateFormat(String dateFormat) {
-		this.dateFormat = dateFormat;
-	}
+    public void setCertExpire(Date certExpire) {
+        this.certExpire = certExpire;
+    }
 
-	public String getDateFormatShort() {
-		return dateFormatShort;
-	}
+    public String getCertDN() {
+        return certDN;
+    }
 
-	public void setDateFormatShort(String dateFormatShort) {
-		this.dateFormatShort = dateFormatShort;
-	}
+    public void setCertDN(String certDN) {
+        this.certDN = certDN;
+    }
 
-	public String getDateFormatLong() {
-		return dateFormatLong;
-	}
+    public int getType() {
+        return type;
+    }
 
-	public void setDateFormatLong(String dateFormatLong) {
-		this.dateFormatLong = dateFormatLong;
-	}
+    public void setType(int type) {
+        this.type = type;
+    }
 
-	public String getSearchPref() {
-		return searchPref;
-	}
+    public boolean isReadOnly() {
+        return type == TYPE_READONLY;
+    }
 
-	public void setSearchPref(String searchPref) {
-		this.searchPref = searchPref;
-	}
+    public GUITenant getTenant() {
+        return tenant;
+    }
 
-	public List<String> orderedSearches() {
-		List<String> searches;
-		if (searchPref != null && !searchPref.isEmpty()) {
-			searches = Arrays.asList(searchPref.replace(" ", "").split(","));
-		} else
-			searches = Arrays.asList("fulltext", "parameters", "tags", "folders", "semantic");
-		return searches;
-	}
+    public void setTenant(GUITenant tenant) {
+        this.tenant = tenant;
+    }
 
-	public Date getExpire() {
-		return expire;
-	}
+    public String getDocsGrid() {
+        return docsGrid;
+    }
 
-	public void setExpire(Date expire) {
-		this.expire = expire;
-	}
+    public void setDocsGrid(String docsGrid) {
+        this.docsGrid = docsGrid;
+    }
 
-	public boolean isEnforceWorkingTime() {
-		return enforceWorkingTime;
-	}
+    public String getHitsGrid() {
+        return hitsGrid;
+    }
 
-	public void setEnforceWorkingTime(boolean enforceWorkingTime) {
-		this.enforceWorkingTime = enforceWorkingTime;
-	}
+    public void setHitsGrid(String hitsGrid) {
+        this.hitsGrid = hitsGrid;
+    }
 
-	public Integer getMaxInactivity() {
-		return maxInactivity;
-	}
+    public String getDateFormat() {
+        return dateFormat;
+    }
 
-	public void setMaxInactivity(Integer maxInactivity) {
-		this.maxInactivity = maxInactivity;
-	}
+    public void setDateFormat(String dateFormat) {
+        this.dateFormat = dateFormat;
+    }
 
-	public String getLastLoginFailureReason() {
-		return lastLoginFailureReason;
-	}
+    public String getDateFormatShort() {
+        return dateFormatShort;
+    }
 
-	public void setLastLoginFailureReason(String lastLoginFailureReason) {
-		this.lastLoginFailureReason = lastLoginFailureReason;
-	}
+    public void setDateFormatShort(String dateFormatShort) {
+        this.dateFormatShort = dateFormatShort;
+    }
 
-	public String getTimeZone() {
-		return timeZone;
-	}
+    public String getDateFormatLong() {
+        return dateFormatLong;
+    }
 
-	public void setTimeZone(String timeZone) {
-		this.timeZone = timeZone;
-	}
+    public void setDateFormatLong(String dateFormatLong) {
+        this.dateFormatLong = dateFormatLong;
+    }
 
-	public int getSource() {
-		return source;
-	}
+    public String getSearchPref() {
+        return searchPref;
+    }
 
-	public void setSource(int source) {
-		this.source = source;
-	}
+    public void setSearchPref(String searchPref) {
+        this.searchPref = searchPref;
+    }
 
-	public Date getCreation() {
-		return creation;
-	}
-
-	public void setCreation(Date creation) {
-		this.creation = creation;
-	}
-
-	public Date getLastLogin() {
-		return lastLogin;
-	}
-
-	public void setLastLogin(Date lastLogin) {
-		this.lastLogin = lastLogin;
-	}
-
-	public int getTasks() {
-		return tasks;
-	}
-
-	public void setTasks(int tasks) {
-		this.tasks = tasks;
-	}
-
-	public List<GUIGroup> getGroups() {
-		return groups;
-	}
-
-	public void setGroups(List<GUIGroup> groups) {
-		this.groups = groups;
-	}
-
-	public List<GUIDashlet> getDashlets() {
-		return dashlets;
-	}
-
-	public void setDashlets(List<GUIDashlet> dashlets) {
-		this.dashlets = dashlets;
-	}
-
-	public List<GUIWorkingTime> getWorkingTimes() {
-		return workingTimes;
-	}
-
-	public void setWorkingTimes(List<GUIWorkingTime> workingTimes) {
-		this.workingTimes = workingTimes;
-	}
-
-	public List<Long> getMenus() {
-		return menus;
-	}
-
-	public void setMenus(List<Long> menus) {
-		this.menus = menus;
-	}
-
-	public void addGroup(GUIGroup group) {
-		if (!isMemberOf(group.getName()))
-			groups.add(group);
-	}
-
-	public void removeGroup(String groupName) {
-		groups = groups.stream().filter(g -> !g.getName().equals(groupName)).collect(Collectors.toList());
-	}
-
-	public void addDashlet(GUIDashlet dashlet) {
-		dashlets.add(dashlet);
-	}
-
-	public void removeDashlet(long id) {
-		dashlets = dashlets.stream().filter(d -> d.getId() != id).collect(Collectors.toList());
-	}
-
-	public void updateCustomAction(GUIMenu action) {
-		customActions.set(customActions.indexOf(action), action);
-	}
-
-	public List<GUIMenu> getCustomActions() {
-		return customActions;
-	}
-
-	public void setCustomActions(List<GUIMenu> customActions) {
-		this.customActions = customActions;
-	}
-
-	public String getDepartment() {
-		return department;
-	}
-
-	public void setDepartment(String department) {
-		this.department = department;
-	}
-
-	public String getOrganizationalUnit() {
-		return organizationalUnit;
-	}
-
-	public void setOrganizationalUnit(String organizationalUnit) {
-		this.organizationalUnit = organizationalUnit;
-	}
-
-	public String getBuilding() {
-		return building;
-	}
-
-	public void setBuilding(String building) {
-		this.building = building;
-	}
-
-	public String getCompany() {
-		return company;
-	}
-
-	public void setCompany(String company) {
-		this.company = company;
-	}
-
-	public boolean isEvalFormEnabled() {
-		return evalFormEnabled;
-	}
-
-	public void setEvalFormEnabled(boolean evalFormEnabled) {
-		this.evalFormEnabled = evalFormEnabled;
-	}
-
-	public boolean isLegals() {
-		return legals;
-	}
-
-	public void setLegals(boolean legals) {
-		this.legals = legals;
-	}
-
-	public long getSessionsQuota() {
-		return sessionsQuota;
-	}
-
-	public void setSessionsQuota(long sessionsQuota) {
-		this.sessionsQuota = sessionsQuota;
-	}
-
-	public long getSessionsQuotaCount() {
-		return sessionsQuotaCount;
-	}
-
-	public void setSessionsQuotaCount(long count) {
-		this.sessionsQuotaCount = count;
-	}
+    public List<String> orderedSearches() {
+        List<String> all = Arrays.asList("fulltext", "parameters", "tags", "folders", "semantic");
+        List<String> searches;
+        if (searchPref != null && !searchPref.isEmpty()) {
+            searches = Arrays.asList(searchPref.replace(" ", "").split(","));
+            for (String std : all) {
+                if (!searches.contains(std))
+                    searches.add(std);
+            }
+        } else {
+            searches = all;
+        }
+        return searches;
+    }
+
+    public Date getExpire() {
+        return expire;
+    }
+
+    public void setExpire(Date expire) {
+        this.expire = expire;
+    }
+
+    public boolean isEnforceWorkingTime() {
+        return enforceWorkingTime;
+    }
+
+    public void setEnforceWorkingTime(boolean enforceWorkingTime) {
+        this.enforceWorkingTime = enforceWorkingTime;
+    }
+
+    public Integer getMaxInactivity() {
+        return maxInactivity;
+    }
+
+    public void setMaxInactivity(Integer maxInactivity) {
+        this.maxInactivity = maxInactivity;
+    }
+
+    public String getLastLoginFailureReason() {
+        return lastLoginFailureReason;
+    }
+
+    public void setLastLoginFailureReason(String lastLoginFailureReason) {
+        this.lastLoginFailureReason = lastLoginFailureReason;
+    }
+
+    public String getTimeZone() {
+        return timeZone;
+    }
+
+    public void setTimeZone(String timeZone) {
+        this.timeZone = timeZone;
+    }
+
+    public int getSource() {
+        return source;
+    }
+
+    public void setSource(int source) {
+        this.source = source;
+    }
+
+    public Date getCreation() {
+        return creation;
+    }
+
+    public void setCreation(Date creation) {
+        this.creation = creation;
+    }
+
+    public Date getLastLogin() {
+        return lastLogin;
+    }
+
+    public void setLastLogin(Date lastLogin) {
+        this.lastLogin = lastLogin;
+    }
+
+    public int getTasks() {
+        return tasks;
+    }
+
+    public void setTasks(int tasks) {
+        this.tasks = tasks;
+    }
+
+    public List<GUIGroup> getGroups() {
+        return groups;
+    }
+
+    public void setGroups(List<GUIGroup> groups) {
+        this.groups = groups;
+    }
+
+    public List<GUIDashlet> getDashlets() {
+        return dashlets;
+    }
+
+    public void setDashlets(List<GUIDashlet> dashlets) {
+        this.dashlets = dashlets;
+    }
+
+    public List<GUIWorkingTime> getWorkingTimes() {
+        return workingTimes;
+    }
+
+    public void setWorkingTimes(List<GUIWorkingTime> workingTimes) {
+        this.workingTimes = workingTimes;
+    }
+
+    public List<Long> getMenus() {
+        return menus;
+    }
+
+    public void setMenus(List<Long> menus) {
+        this.menus = menus;
+    }
+
+    public void addGroup(GUIGroup group) {
+        if (!isMemberOf(group.getName()))
+            groups.add(group);
+    }
+
+    public void removeGroup(String groupName) {
+        groups = groups.stream().filter(g -> !g.getName().equals(groupName)).collect(Collectors.toList());
+    }
+
+    public void addDashlet(GUIDashlet dashlet) {
+        dashlets.add(dashlet);
+    }
+
+    public void removeDashlet(long id) {
+        dashlets = dashlets.stream().filter(d -> d.getId() != id).collect(Collectors.toList());
+    }
+
+    public void updateCustomAction(GUIMenu action) {
+        customActions.set(customActions.indexOf(action), action);
+    }
+
+    public List<GUIMenu> getCustomActions() {
+        return customActions;
+    }
+
+    public void setCustomActions(List<GUIMenu> customActions) {
+        this.customActions = customActions;
+    }
+
+    public String getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(String department) {
+        this.department = department;
+    }
+
+    public String getOrganizationalUnit() {
+        return organizationalUnit;
+    }
+
+    public void setOrganizationalUnit(String organizationalUnit) {
+        this.organizationalUnit = organizationalUnit;
+    }
+
+    public String getBuilding() {
+        return building;
+    }
+
+    public void setBuilding(String building) {
+        this.building = building;
+    }
+
+    public String getCompany() {
+        return company;
+    }
+
+    public void setCompany(String company) {
+        this.company = company;
+    }
+
+    public boolean isLegals() {
+        return legals;
+    }
+
+    public void setLegals(boolean legals) {
+        this.legals = legals;
+    }
+
+    public Long getSessionsQuota() {
+        return sessionsQuota;
+    }
+
+    public void setSessionsQuota(Long sessionsQuota) {
+        this.sessionsQuota = sessionsQuota;
+    }
+
+    public List<String> getImpersonators() {
+        return impersonators;
+    }
+
+    public void setImpersonators(List<String> impersonators) {
+        this.impersonators = impersonators;
+    }
+
+    public Integer getQuotaThreshold() {
+        return quotaThreshold;
+    }
+
+    public void setQuotaThreshold(Integer quotaThreshold) {
+        this.quotaThreshold = quotaThreshold;
+    }
 }

@@ -43,10 +43,13 @@ import com.smartgwt.client.widgets.toolbar.ToolStripButton;
  */
 public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 
+	private static final String DOCID = "docId";
+	
 	private RefreshableListGrid embeddings;
 
-	public EmbeddingSchemeEmbeddings(GUIEmbeddingScheme scheme, ChangedHandler changedHandler) {
-		super(scheme, changedHandler);
+	public EmbeddingSchemeEmbeddings(EmbeddingSchemesPanel schemesPanel, GUIEmbeddingScheme scheme,
+			ChangedHandler changedHandler) {
+		super(schemesPanel, scheme, changedHandler);
 		setWidth100();
 		setHeight100();
 	}
@@ -73,11 +76,11 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 		// Prepare a panel containing a title and the documents number
 		final InfoPanel infoPanel = new InfoPanel("");
 
-		ListGridField docId = new ColoredListGridField("docid");
+		ListGridField docId = new ColoredListGridField(DOCID);
 		docId.setWidth(50);
 		docId.setHidden(true);
 
-		ListGridField size = new FileSizeListGridField("size", I18N.message("size"));
+		ListGridField fileSize = new FileSizeListGridField("size", I18N.message("size"));
 
 		ListGridField fileVersion = new FileVersionListGridField();
 		fileVersion.setAutoFitWidth(true);
@@ -85,7 +88,7 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 
 		ListGridField published = new DateListGridField("date", "publishedon");
 
-		ListGridField filename = new FileNameListGridField();
+		ListGridField fileName = new FileNameListGridField();
 
 		ListGridField icon = new TypeIconGridField();
 
@@ -99,7 +102,7 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 		embeddings.setShowFilterEditor(true);
 		embeddings.setFilterOnKeypress(true);
 		embeddings.setDataSource(new EmbeddingsDS(embeddingScheme.getId(), 100));
-		embeddings.setFields(docId, icon, filename, size, fileVersion, published);
+		embeddings.setFields(docId, icon, fileName, fileSize, fileVersion, published);
 
 		embeddings.addCellContextClickHandler(event -> {
 			showContextMenu();
@@ -119,14 +122,14 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 		final ListGridRecord[] selection = embeddings.getSelectedRecords();
 		List<Long> docIds = new ArrayList<>();
 		for (ListGridRecord rec : selection)
-			docIds.add(rec.getAttributeAsLong("docid"));
+			docIds.add(rec.getAttributeAsLong(DOCID));
 
 		DocumentService.Instance.get().getAllowedPermissions(docIds, new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(GUIAccessControlEntry enabledPermissions) {
 				Menu contextMenu = new Menu();
-				Long selectedEmbeddingDocId = selection[0].getAttributeAsLong("docid");
-				Long selectedEmbeddingFolderId = selection[0].getAttributeAsLong("folderid");
+				Long selectedEmbeddingDocId = selection[0].getAttributeAsLong(DOCID);
+				Long selectedEmbeddingFolderId = selection[0].getAttributeAsLong("folderId");
 
 				MenuItem preview = new MenuItem();
 				preview.setTitle(I18N.message("preview"));
@@ -142,12 +145,10 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 				MenuItem open = new MenuItem();
 				open.setTitle(I18N.message("openinfolder"));
 				open.setEnabled(enabledPermissions.isRead());
-				open.addClickHandler(event -> {
-					destroy();
-
-					if (com.logicaldoc.gui.common.client.Menu.enabled(com.logicaldoc.gui.common.client.Menu.DOCUMENTS))
-						DocumentsPanel.get().openInFolder(selectedEmbeddingFolderId, selectedEmbeddingDocId);
-				});
+				open.addClickHandler(
+						event -> DocumentsPanel.get().openInFolder(selectedEmbeddingFolderId, selectedEmbeddingDocId));
+				open.setEnabled(
+						com.logicaldoc.gui.common.client.Menu.enabled(com.logicaldoc.gui.common.client.Menu.DOCUMENTS));
 
 				MenuItem download = new MenuItem();
 				download.setTitle(I18N.message("download"));
@@ -165,6 +166,9 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 											public void handleSuccess(Void result) {
 												embeddings.removeSelectedData();
 												embeddings.deselectAllRecords();
+												embeddingScheme
+														.setEmbeddings(embeddingScheme.getEmbeddings() - docIds.size());
+												schemesPanel.updateRecord(embeddingScheme);
 											}
 										});
 							}
@@ -181,6 +185,30 @@ public class EmbeddingSchemeEmbeddings extends EmbeddingSchemeDetailsTab {
 	}
 
 	public boolean validate() {
+		return true;
+	}
+
+	@Override
+	public int hashCode() {
+		final int prime = 31;
+		int result = super.hashCode();
+		return prime * result + ((embeddings == null) ? 0 : embeddings.hashCode());
+	}
+
+	@Override
+	public boolean equals(Object obj) {
+		if (this == obj)
+			return true;
+		if (!super.equals(obj))
+			return false;
+		if (getClass() != obj.getClass())
+			return false;
+		EmbeddingSchemeEmbeddings other = (EmbeddingSchemeEmbeddings) obj;
+		if (embeddings == null) {
+			if (other.embeddings != null)
+				return false;
+		} else if (!embeddings.equals(other.embeddings))
+			return false;
 		return true;
 	}
 }

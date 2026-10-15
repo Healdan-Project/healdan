@@ -45,253 +45,257 @@ import jakarta.ws.rs.WebApplicationException;
 @Component
 public class AbstractService {
 
-	private static final String FOLDER = "folder ";
+    private static final String ADMIN = "admin";
 
-	private static final Logger log = LoggerFactory.getLogger(AbstractService.class);
+    private static final String FOLDER = "folder ";
 
-	private boolean validateSession = true;
+    private static final Logger log = LoggerFactory.getLogger(AbstractService.class);
 
-	@Resource(name = "currentMessage")
-	protected Message currentMessage;
+    private boolean validateSession = true;
 
-	public void setValidateSession(boolean validateSession) {
-		this.validateSession = validateSession;
-	}
+    @Resource(name = "currentMessage")
+    protected Message currentMessage;
 
-	/**
-	 * Interprets the given parameter as session ID or an API Key and gives the
-	 * real session id
-	 * 
-	 * @param sidOrApikey The SID or an API Key
-	 * 
-	 * @return the SID of the session
-	 */
-	protected String sessionId(String sidOrApikey) {
-		if (!sidOrApikey.startsWith("ld-")) {
-			return sidOrApikey;
-		} else {
-			// It is an API Key so go with Client ID (that also contains the API
-			// Key)
-			return SessionManager.get().getSessionId(getCurrentRequest());
-		}
-	}
+    public void setValidateSession(boolean validateSession) {
+        this.validateSession = validateSession;
+    }
 
-	/**
-	 * 
-	 * Utility method that validates the session and retrieve the associated
-	 * user
-	 * 
-	 * @param sid The session identifier
-	 * @return the user in session
-	 * 
-	 * @throws PersistenceException error at data layer
-	 * @throws WebserviceException in case the webservices are not enabled
-	 * @throws AuthenticationException the given session is invalid
-	 */
-	protected User validateSession(String sid)
-			throws WebserviceException, PersistenceException, AuthenticationException {
-		UserDAO userDao = UserDAO.get();
-		if (!validateSession) {
-			User user = new User();
-			user.setId(User.USERID_ADMIN);
-			user.setTenantId(Tenant.DEFAULT_ID);
-			user.setName("admin");
-			Set<Group> groups = new HashSet<>();
-			groups.add(GroupDAO.get().findById(1));
-			user.setGroups(groups);
-			return user;
-		}
+    /**
+     * Interprets the given parameter as session ID or an API Key and gives the
+     * real session id
+     * 
+     * @param sidOrApikey The SID or an API Key
+     * 
+     * @return the SID of the session
+     */
+    protected String sessionId(String sidOrApikey) {
+        if (!sidOrApikey.startsWith("ld-")) {
+            return sidOrApikey;
+        } else {
+            // It is an API Key so go with Client ID (that also contains the API
+            // Key)
+            return SessionManager.get().getSessionId(getCurrentRequest());
+        }
+    }
 
-		if (!isWebserviceEnabled())
-			throw new WebserviceException("WebServices are disabled");
+    /**
+     * 
+     * Utility method that validates the session and retrieve the associated
+     * user
+     * 
+     * @param sid The session identifier
+     * @return the user in session
+     * 
+     * @throws PersistenceException error at data layer
+     * @throws WebserviceException in case the webservices are not enabled
+     * @throws AuthenticationException the given session is invalid
+     */
+    protected User validateSession(String sid)
+            throws WebserviceException, PersistenceException, AuthenticationException {
+        UserDAO userDao = UserDAO.get();
+        if (!validateSession) {
+            User user = new User();
+            user.setId(User.USERID_ADMIN);
+            user.setTenantId(Tenant.DEFAULT_ID);
+            user.setName(ADMIN);
+            user.setUsername(ADMIN);
+            Set<Group> groups = new HashSet<>();
+            groups.add(GroupDAO.get().findById(Group.GROUPID_ADMIN));
+            user.setGroups(groups);
+            return user;
+        }
 
-		if (sid == null || !SessionManager.get().isOpen(sid)) {
-			throw new InvalidSessionException(sid);
-		} else {
-			SessionManager.get().renew(sid);
-		}
-		String username = SessionManager.get().get(sid).getUsername();
-		User user = userDao.findByUsername(username);
-		if (user == null)
-			throw new AccountNotFoundException(null, String.format("User %s not found", username));
-		else
-			userDao.initialize(user);
-		return user;
-	}
+        if (!isWebserviceEnabled())
+            throw new WebserviceException("WebServices are disabled");
 
-	/**
-	 * Checks if the current user belongs to a group
-	 * 
-	 * @throws PersistenceException error at data layer
-	 * 
-	 * @throws WebserviceException the user is not member of group
-	 * 
-	 */
-	protected void checkGroup(String sid, String group) throws WebserviceException, PersistenceException {
-		User user = validateSession(sid);
-		if (!user.isMemberOf(group)) {
-			String message = String.format("User %s doesn't belong to group %s", user.getUsername(), group);
-			log.error(message);
-			throw new WebserviceException(message);
-		}
-	}
+        if (sid == null || !SessionManager.get().isOpen(sid)) {
+            throw new InvalidSessionException(sid);
+        } else {
+            SessionManager.get().renew(sid);
+        }
+        String username = SessionManager.get().get(sid).getUsername();
+        User user = userDao.findByUsername(username, true);
+        if (user == null)
+            throw new AccountNotFoundException(null, String.format("User %s not found", username));
+        return user;
+    }
 
-	/**
-	 * Checks if the current user is an administrator (group admin).
-	 * 
-	 * @throws PersistenceException error at data layer
-	 * 
-	 * @throws WebserviceException the user is not member of admin
-	 */
-	protected void checkAdministrator(String sid) throws WebserviceException, PersistenceException {
-		checkGroup(sid, "admin");
-	}
+    /**
+     * Checks if the current user belongs to a group
+     * 
+     * @throws PersistenceException error at data layer
+     * 
+     * @throws WebserviceException the user is not member of group
+     * 
+     */
+    protected void checkGroup(String sid, String group) throws WebserviceException, PersistenceException {
+        User user = validateSession(sid);
+        if (!user.isMemberOf(group)) {
+            String message = String.format("User %s doesn't belong to group %s", user.getUsername(), group);
+            log.error(message);
+            throw new WebserviceException(message);
+        }
+    }
 
-	protected void checkMenu(String sid, long menuId)
-			throws WebserviceException, PersistenceException, PermissionException {
-		User user = validateSession(sid);
-		MenuDAO dao = MenuDAO.get();
-		if (!dao.isReadAllowed(menuId, user.getId())) {
-			String message = String.format("User %s cannot access menu %s", user.getUsername(), menuId);
-			log.error(message);
-			throw new PermissionException(user.getUsername(), "menu " + menuId, Permission.READ);
-		}
-	}
+    /**
+     * Checks if the current user is an administrator (group admin).
+     * 
+     * @throws PersistenceException error at data layer
+     * 
+     * @throws WebserviceException the user is not member of admin
+     */
+    protected void checkAdministrator(String sid) throws WebserviceException, PersistenceException {
+        checkGroup(sid, ADMIN);
+    }
 
-	protected void checkFolderPermission(Permission permission, User user, long folderId)
-			throws PersistenceException, PermissionException {
-		FolderDAO dao = FolderDAO.get();
-		if (!dao.isPermissionAllowed(permission, folderId, user.getId())) {
-			String message = String.format("User %s doesn't have permission %s on folder %s", user.getUsername(),
-					permission.name(), folderId);
-			log.error(message);
-			throw new PermissionException(user.getUsername(), FOLDER + folderId, permission);
-		}
-	}
+    protected void checkMenu(String sid, long menuId)
+            throws WebserviceException, PersistenceException, PermissionException {
+        User user = validateSession(sid);
+        MenuDAO dao = MenuDAO.get();
+        if (!dao.isReadAllowed(menuId, user.getId())) {
+            String message = String.format("User %s cannot access menu %d", user, menuId);
+            log.error(message);
+            throw new PermissionException(user.getUsername(), "menu %d".formatted(menuId), Permission.READ);
+        }
+    }
 
-	protected void checkDocumentPermission(Permission permission, User user, long docId)
-			throws PersistenceException, PermissionException {
-		DocumentDAO dao = DocumentDAO.get();
-		if (!dao.isPermissionAllowed(permission, docId, user.getId())) {
-			String message = String.format("User %s doesn't have permission %s on document %s", user.getUsername(),
-					permission.name(), docId);
-			log.error(message);
-			throw new PermissionException(user.getUsername(), "document " + docId, permission);
-		}
-	}
+    protected void checkFolderPermission(Permission permission, User user, long folderId)
+            throws PersistenceException, PermissionException {
+        if (!FolderDAO.get().isPermissionAllowed(permission, folderId, user.getId())) {
+            String message = String.format("User %s doesn't have permission %s on folder %d", user, permission.name(),
+                    folderId);
+            log.error(message);
+            throw new PermissionException(user.getUsername(), FOLDER + folderId, permission);
+        }
+    }
 
-	protected void checkMenu(User user, long menuId) throws PermissionException {
-		MenuDAO dao = MenuDAO.get();
-		if (!dao.isReadAllowed(menuId, user.getId())) {
-			String message = String.format("User %s doesn't have read permission on menu %s", user.getUsername(),
-					menuId);
-			log.error(message);
-			throw new PermissionException(user.getUsername(), "menu " + menuId, Permission.READ);
-		}
-	}
+    protected void checkDocumentPermission(Permission permission, User user, long docId)
+            throws PersistenceException, PermissionException {
+        if (!DocumentDAO.get().isPermissionAllowed(permission, docId, user.getId())) {
+            String message = String.format("User %s doesn't have permission %s on document %d", user, permission.name(),
+                    docId);
+            log.error(message);
+            throw new PermissionException(user.getUsername(), "document %d".formatted(docId), permission);
+        }
+    }
 
-	protected void checkPublished(User user, Document doc) throws WebserviceException {
-		if (!user.isMemberOf(Group.GROUP_ADMIN) && !user.isMemberOf("publisher") && !doc.isPublishing())
-			throw new WebserviceException("Document not published");
-	}
+    protected void checkDocumentPermission(Permission permission, long userId, long docId)
+            throws PersistenceException, PermissionException {
+        checkDocumentPermission(permission, UserDAO.get().findById(userId, true), docId);
+    }
 
-	protected void checkNotArchived(Document doc) throws WebserviceException {
-		if (doc.getStatus() == DocumentStatus.ARCHIVED)
-			throw new WebserviceException("Document is archived");
-	}
+    protected void checkMenu(User user, long menuId) throws PermissionException {
+        MenuDAO dao = MenuDAO.get();
+        if (!dao.isReadAllowed(menuId, user.getId())) {
+            String message = String.format("User %s doesn't have %s permission on menu %d", user,
+                    Permission.READ.name(), menuId);
+            log.error(message);
+            throw new PermissionException(user.getUsername(), "menu %d".formatted(menuId), Permission.READ);
+        }
+    }
 
-	protected boolean isWebserviceEnabled() {
-		return "true".equals(Context.get().getProperties().get("webservice.enabled"));
-	}
+    protected void checkPublished(User user, Document doc) throws WebserviceException {
+        if (!user.isMemberOf(Group.GROUP_ADMIN) && !user.isMemberOf("publisher") && !doc.isPublishing())
+            throw new WebserviceException("Document not published");
+    }
 
-	/**
-	 * Gets the current Session ID following this logic:
-	 * <ol>
-	 * <li>Request parameter sid</li>
-	 * <li>Request attribute sid</li>
-	 * <li>Session attribute sid</li>
-	 * <li>Request header sid</li>
-	 * <li>Request cookie ldoc-sid</li>
-	 * <li>SecurityContextHolder</li>
-	 * <li>Client ID</li>
-	 * </ol>
-	 * 
-	 * @return The current Session ID
-	 */
-	protected String getCurrentSessionId() {
-		HttpServletRequest request = getCurrentRequest();
+    protected void checkNotArchived(Document doc) throws WebserviceException {
+        if (doc.getStatus() == DocumentStatus.ARCHIVED)
+            throw new WebserviceException("Document is archived");
+    }
 
-		Session session = SessionManager.get().getSession(request);
+    protected boolean isWebserviceEnabled() {
+        return "true".equals(Context.get().getConfig().get("webservice.enabled"));
+    }
 
-		if (session != null)
-			return session.getSid();
-		return null;
-	}
+    /**
+     * Gets the current Session ID following this logic:
+     * <ol>
+     * <li>Request parameter sid</li>
+     * <li>Request attribute sid</li>
+     * <li>Session attribute sid</li>
+     * <li>Request header sid</li>
+     * <li>Request cookie ldoc-sid</li>
+     * <li>SecurityContextHolder</li>
+     * <li>Client ID</li>
+     * </ol>
+     * 
+     * @return The current Session ID
+     */
+    protected String getCurrentSessionId() {
+        HttpServletRequest request = getCurrentRequest();
 
-	protected HttpServletRequest getCurrentRequest() {
-		HttpServletRequest request = null;
-		if (currentMessage != null)
-			request = (HttpServletRequest) currentMessage.get(AbstractHTTPDestination.HTTP_REQUEST);
-		return request;
-	}
+        Session session = SessionManager.get().getSession(request);
 
-	/**
-	 * Same as getCurrentSessionId but throws an Exception in case of bad
-	 * session
-	 * 
-	 * @return The session ID (if valid)
-	 * 
-	 * @throws InvalidSessionException the session is not valid
-	 */
-	protected String validateSession() throws InvalidSessionException {
-		if (validateSession) {
-			String sid = getCurrentSessionId();
-			if (sid == null || !SessionManager.get().isOpen(sid)) {
-				throw new InvalidSessionException(sid);
-			} else {
-				SessionManager.get().renew(sid);
-			}
-			return sid;
-		} else
-			return null;
-	}
+        if (session != null)
+            return session.getSid();
+        return null;
+    }
 
-	/**
-	 * Same as validateSession but raises a WebApplicationException with HTTP
-	 * error code 401, useful for REST implementations
-	 * 
-	 * @return The session ID (if valid)
-	 * 
-	 * @throws WebApplicationException the session is not valid
-	 */
-	protected String validateSessionREST() throws WebApplicationException {
-		try {
-			return validateSession();
-		} catch (InvalidSessionException e) {
-			throw new WebApplicationException(e.getMessage(), 401);
-		}
-	}
+    protected HttpServletRequest getCurrentRequest() {
+        HttpServletRequest request = null;
+        if (currentMessage != null)
+            request = (HttpServletRequest) currentMessage.get(AbstractHTTPDestination.HTTP_REQUEST);
+        return request;
+    }
 
-	public static String convertDateToString(Date date) {
-		if (date == null)
-			return null;
-		else
-			return DateUtil.format(date);
-	}
+    /**
+     * Same as getCurrentSessionId but throws an Exception in case of bad
+     * session
+     * 
+     * @return The session ID (if valid)
+     * 
+     * @throws InvalidSessionException the session is not valid
+     */
+    protected String validateSession() throws InvalidSessionException {
+        if (validateSession) {
+            String sid = getCurrentSessionId();
+            if (sid == null || !SessionManager.get().isOpen(sid)) {
+                throw new InvalidSessionException(sid);
+            } else {
+                SessionManager.get().renew(sid);
+            }
+            return sid;
+        } else
+            return null;
+    }
 
-	public static Date convertStringToDate(String date) {
-		return WSUtil.convertStringToDate(date);
-	}
+    /**
+     * Same as validateSession but raises a WebApplicationException with HTTP
+     * error code 401, useful for REST implementations
+     * 
+     * @return The session ID (if valid)
+     * 
+     * @throws WebApplicationException the session is not valid
+     */
+    protected String validateSessionREST() throws WebApplicationException {
+        try {
+            return validateSession();
+        } catch (InvalidSessionException e) {
+            throw new WebApplicationException(e.getMessage(), 401);
+        }
+    }
 
-	public boolean isValidateSession() {
-		return validateSession;
-	}
+    public static String convertDateToString(Date date) {
+        if (date == null)
+            return null;
+        else
+            return DateUtil.format(date);
+    }
 
-	public Message getCurrentMessage() {
-		return currentMessage;
-	}
+    public static Date convertStringToDate(String date) {
+        return WSUtil.convertStringToDate(date);
+    }
 
-	public void setCurrentMessage(Message currentMessage) {
-		this.currentMessage = currentMessage;
-	}
+    public boolean isValidateSession() {
+        return validateSession;
+    }
+
+    public Message getCurrentMessage() {
+        return currentMessage;
+    }
+
+    public void setCurrentMessage(Message currentMessage) {
+        this.currentMessage = currentMessage;
+    }
 }

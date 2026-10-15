@@ -18,362 +18,395 @@ import jakarta.persistence.Embedded;
 @Embeddable
 public class FolderAccessControlEntry extends ExtendedAccessControlEntry {
 
-	private static final long serialVersionUID = 1L;
-
-	@Embedded
-	private ExtendedAccessControlEntry ace = new ExtendedAccessControlEntry();
-
-	@Column(name = "ld_add", nullable = false)
-	private int add = 0;
-
-	@Column(name = "ld_import", nullable = false)
-	private int iimport = 0;
-
-	@Column(name = "ld_export", nullable = false)
-	private int export = 0;
-
-	@Column(name = "ld_store", nullable = false)
-	private int store = 0;
-
-	public FolderAccessControlEntry() {
-	}
-
-	public FolderAccessControlEntry(FolderAccessControlEntry source) {
-		super(source);
-		ace = new ExtendedAccessControlEntry(source.getAce());
-		this.add = source.add;
-		this.iimport = source.iimport;
-		this.export = source.export;
-		this.store = source.store;
-	}
-
-	public FolderAccessControlEntry(long groupId) {
-		super(groupId);
-		setGroupId(groupId);
-	}
-
-	@Override
-	public ExtendedAccessControlEntry getAce() {
-		return ace;
-	}
-
-	public void setAce(ExtendedAccessControlEntry ace) {
-		this.ace = ace;
-	}
-
-	@Override
-	public Set<Permission> grantedPermissions() {
-		Set<Permission> granted = ace.grantedPermissions();
-		if (add == 1)
-			granted.add(Permission.ADD);
-		if (export == 1)
-			granted.add(Permission.EXPORT);
-		if (iimport == 1)
-			granted.add(Permission.IMPORT);
-		if (store == 1)
-			granted.add(Permission.STORE);
-		return granted;
-	}
-
-	@Override
-	public void grantPermissions(Set<Permission> permissions) {
-		super.grantPermissions(permissions);
-		ace.grantPermissions(permissions);
-		add = booleanToInt(permissions.contains(Permission.ADD));
-		export = booleanToInt(permissions.contains(Permission.EXPORT));
-		iimport = booleanToInt(permissions.contains(Permission.IMPORT));
-		store = booleanToInt(permissions.contains(Permission.STORE));
-	}
-
-	public int getAdd() {
-		return add;
-	}
-
-	public void setAdd(int add) {
-		this.add = add;
-	}
-
-	public int getImport() {
-		return iimport;
-	}
-
-	public void setImport(int iimport) {
-		this.iimport = iimport;
-	}
-
-	public int getExport() {
-		return export;
-	}
-
-	public void setExport(int export) {
-		this.export = export;
-	}
-
-	public int getStore() {
-		return store;
-	}
-
-	public void setStore(int store) {
-		this.store = store;
-	}
-
-	@Override
-	public int getPreview() {
-		return ace.getPreview();
-	}
-
-	@Override
-	public void setPreview(int preview) {
-		ace.setPreview(preview);
-	}
-
-	@Override
-	public int getDownload() {
-		return ace.getDownload();
-	}
-
-	@Override
-	public void setDownload(int download) {
-		ace.setDownload(download);
-	}
-
-	@Override
-	public int getSecurity() {
-		return ace.getSecurity();
-	}
-
-	@Override
-	public void setSecurity(int security) {
-		ace.setSecurity(security);
-	}
-
-	@Override
-	public int getDelete() {
-		return ace.getDelete();
-	}
-
-	@Override
-	public void setDelete(int delete) {
-		ace.setDelete(delete);
-	}
-
-	@Override
-	public int getRename() {
-		return ace.getRename();
-	}
-
-	@Override
-	public void setRename(int rename) {
-		ace.setRename(rename);
-	}
-
-	@Override
-	public int getImmutable() {
-		return ace.getImmutable();
-	}
-
-	@Override
-	public void setImmutable(int immutable) {
-		ace.setImmutable(immutable);
-	}
-
-	@Override
-	public int getSign() {
-		return ace.getSign();
-	}
-
-	@Override
-	public void setSign(int sign) {
-		ace.setSign(sign);
-	}
-
-	@Override
-	public int getArchive() {
-		return ace.getArchive();
-	}
-
-	@Override
-	public void setArchive(int archive) {
-		ace.setArchive(archive);
-	}
-
-	@Override
-	public int getWorkflow() {
-		return ace.getWorkflow();
-	}
-
-	@Override
-	public void setWorkflow(int workflow) {
-		ace.setWorkflow(workflow);
-	}
-
-	@Override
-	public int getCalendar() {
-		return ace.getCalendar();
-	}
-
-	@Override
-	public void setCalendar(int calendar) {
-		ace.setCalendar(calendar);
-	}
-
-	@Override
-	public int getSubscription() {
-		return ace.getSubscription();
-	}
-
-	@Override
-	public void setSubscription(int subscription) {
-		ace.setSubscription(subscription);
-	}
-
-	@Override
-	public int getPassword() {
-		return ace.getPassword();
-	}
-
-	@Override
-	public void setPassword(int password) {
-		ace.setPassword(password);
-	}
-
-	@Override
-	public int getPrint() {
-		return ace.getPrint();
-	}
-
-	@Override
-	public void setPrint(int print) {
-		ace.setPrint(print);
-	}
-
-	@Override
-	public int getMove() {
-		return ace.getMove();
-	}
-
-	@Override
-	public void setMove(int move) {
-		ace.setMove(move);
-	}
-
-	@Override
-	public int getEmail() {
-		return ace.getEmail();
-	}
-
-	@Override
-	public void setEmail(int email) {
-		ace.setEmail(email);
-	}
-
-	@Override
-	public int getAutomation() {
-		return ace.getAutomation();
-	}
-
-	@Override
-	public void setAutomation(int automation) {
-		ace.setAutomation(automation);
-	}
-
-	@Override
-	public int getReadingreq() {
-		return ace.getReadingreq();
-	}
-
-	@Override
-	public void setReadingreq(int readingreq) {
-		ace.setReadingreq(readingreq);
-	}
-
-	@Override
-	public int getCustomid() {
-		return ace.getCustomid();
-	}
-
-	@Override
-	public void setCustomid(int customid) {
-		ace.setCustomid(customid);
-	}
-
-	@Override
-	public int getRevision() {
-		return ace.getRevision();
-	}
-
-	@Override
-	public void setRevision(int revision) {
-		ace.setRevision(revision);
-	}
-
-	@Override
-	public long getGroupId() {
-		return ace.getGroupId();
-	}
-
-	@Override
-	public int getWrite() {
-		return ace.getWrite();
-	}
-
-	@Override
-	public void setGroupId(long groupId) {
-		ace.setGroupId(groupId);
-	}
-
-	@Override
-	public void setWrite(int write) {
-		ace.setWrite(write);
-	}
-
-	@Override
-	public int getRead() {
-		return ace.getRead();
-	}
-
-	@Override
-	public void setRead(int read) {
-		ace.setRead(read);
-	}
-
-	@Override
-	public String toString() {
-		return ace.toString();
-	}
-
-	@Override
-	public int hashCode() {
-		final int prime = 31;
-		int result = super.hashCode();
-		result = prime * result + ((ace == null) ? 0 : ace.hashCode());
-		result = prime * result + add;
-		result = prime * result + export;
-		result = prime * result + iimport;
-		result = prime * result + store;
-		return result;
-	}
-
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (!super.equals(obj))
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		FolderAccessControlEntry other = (FolderAccessControlEntry) obj;
-		if (ace == null) {
-			if (other.ace != null)
-				return false;
-		} else if (!ace.equals(other.ace))
-			return false;
-		if (add != other.add)
-			return false;
-		if (export != other.export)
-			return false;
-		if (iimport != other.iimport)
-			return false;
-		return store == other.store;
-	}
+    private static final long serialVersionUID = 1L;
+
+    @Embedded
+    private ExtendedAccessControlEntry ace = new ExtendedAccessControlEntry();
+
+    @Column(name = "ld_add", nullable = false)
+    private boolean add = false;
+
+    @Column(name = "ld_import", nullable = false)
+    private boolean iimport = false;
+
+    @Column(name = "ld_export", nullable = false)
+    private boolean export = false;
+
+    @Column(name = "ld_store", nullable = false)
+    private boolean store = false;
+
+    public FolderAccessControlEntry() {
+    }
+
+    public FolderAccessControlEntry(FolderAccessControlEntry source) {
+        setGroupId(source.getGroupId());
+        setRead(source.isRead());
+        setWrite(source.isWrite());
+
+        setArchive(source.isArchive());
+        setAutomation(source.isAutomation());
+        setCalendar(source.isCalendar());
+        setDelete(source.isDelete());
+        setDownload(source.isDownload());
+        setEmail(source.isEmail());
+        setImmutable(source.isImmutable());
+        setMove(source.isMove());
+        setMove(source.isMove());
+        setPassword(source.isPassword());
+        setPreview(source.isPreview());
+        setPrint(source.isPrint());
+        setPrint(source.isPrint());
+        setRename(source.isRename());
+        setSecurity(source.isSecurity());
+        setSign(source.isSign());
+        setSubscription(source.isSubscription());
+        setWorkflow(source.isWorkflow());
+        setReadingreq(source.isReadingreq());
+        setCustomid(source.isCustomid());
+        setRevision(source.isRevision());
+
+        setAdd(source.isAdd());
+        setImport(source.isImport());
+        setExport(source.isExport());
+        setStore(source.isStore());
+    }
+
+    public FolderAccessControlEntry(long groupId) {
+        super(groupId);
+        setGroupId(groupId);
+    }
+
+    @Override
+    public ExtendedAccessControlEntry getAce() {
+        return ace;
+    }
+
+    public void setAce(ExtendedAccessControlEntry ace) {
+        this.ace = ace;
+    }
+
+    @Override
+    public Set<Permission> grantedPermissions() {
+        Set<Permission> granted = ace.grantedPermissions();
+        if (add)
+            granted.add(Permission.ADD);
+        if (export)
+            granted.add(Permission.EXPORT);
+        if (iimport)
+            granted.add(Permission.IMPORT);
+        if (store)
+            granted.add(Permission.STORE);
+        return granted;
+    }
+
+    @Override
+    public void grantPermissions(Set<Permission> permissions) {
+        super.grantPermissions(permissions);
+        ace.grantPermissions(permissions);
+        add = permissions.contains(Permission.ADD);
+        export = permissions.contains(Permission.EXPORT);
+        iimport = permissions.contains(Permission.IMPORT);
+        store = permissions.contains(Permission.STORE);
+    }
+
+    @Override
+    public void setGroupId(long groupId) {
+        ace.setGroupId(groupId);
+    }
+
+    @Override
+    public long getGroupId() {
+        return ace.getGroupId();
+    }
+
+    @Override
+    public boolean isRead() {
+        return ace.isRead();
+    }
+
+    @Override
+    public void setRead(boolean read) {
+        ace.setRead(read);
+    }
+
+    @Override
+    public boolean isWrite() {
+        return ace.isWrite();
+    }
+
+    @Override
+    public void setWrite(boolean write) {
+        ace.setWrite(write);
+    }
+
+    @Override
+    public boolean isPreview() {
+        return ace.isPreview();
+    }
+
+    @Override
+    public void setPreview(boolean preview) {
+        ace.setPreview(preview);
+    }
+
+    @Override
+    public boolean isDownload() {
+        return ace.isDownload();
+    }
+
+    @Override
+    public void setDownload(boolean download) {
+        ace.setDownload(download);
+    }
+
+    @Override
+    public boolean isSecurity() {
+        return ace.isSecurity();
+    }
+
+    @Override
+    public void setSecurity(boolean security) {
+        ace.setSecurity(security);
+    }
+
+    @Override
+    public boolean isDelete() {
+        return ace.isDelete();
+    }
+
+    @Override
+    public void setDelete(boolean delete) {
+        ace.setDelete(delete);
+    }
+
+    @Override
+    public boolean isRename() {
+        return ace.isRename();
+    }
+
+    @Override
+    public void setRename(boolean rename) {
+        ace.setRename(rename);
+    }
+
+    @Override
+    public boolean isImmutable() {
+        return ace.isImmutable();
+    }
+
+    @Override
+    public void setImmutable(boolean immutable) {
+        ace.setImmutable(immutable);
+    }
+
+    @Override
+    public boolean isSign() {
+        return ace.isSign();
+    }
+
+    @Override
+    public void setSign(boolean sign) {
+        ace.setSign(sign);
+    }
+
+    @Override
+    public boolean isArchive() {
+        return ace.isArchive();
+    }
+
+    @Override
+    public void setArchive(boolean archive) {
+        ace.setArchive(archive);
+    }
+
+    @Override
+    public boolean isWorkflow() {
+        return ace.isWorkflow();
+    }
+
+    @Override
+    public void setWorkflow(boolean workflow) {
+        ace.setWorkflow(workflow);
+    }
+
+    @Override
+    public boolean isCalendar() {
+        return ace.isCalendar();
+    }
+
+    @Override
+    public void setCalendar(boolean calendar) {
+        ace.setCalendar(calendar);
+    }
+
+    @Override
+    public boolean isSubscription() {
+        return ace.isSubscription();
+    }
+
+    @Override
+    public void setSubscription(boolean subscription) {
+        ace.setSubscription(subscription);
+    }
+
+    @Override
+    public boolean isPassword() {
+        return ace.isPassword();
+    }
+
+    @Override
+    public void setPassword(boolean password) {
+        ace.setPassword(password);
+    }
+
+    @Override
+    public boolean isPrint() {
+        return ace.isPrint();
+    }
+
+    @Override
+    public void setPrint(boolean print) {
+        ace.setPrint(print);
+    }
+
+    @Override
+    public boolean isMove() {
+        return ace.isMove();
+    }
+
+    @Override
+    public void setMove(boolean move) {
+        ace.setMove(move);
+    }
+
+    @Override
+    public boolean isEmail() {
+        return ace.isEmail();
+    }
+
+    @Override
+    public void setEmail(boolean email) {
+        ace.setEmail(email);
+    }
+
+    @Override
+    public boolean isAutomation() {
+        return ace.isAutomation();
+    }
+
+    @Override
+    public void setAutomation(boolean automation) {
+        ace.setAutomation(automation);
+    }
+
+    @Override
+    public boolean isReadingreq() {
+        return ace.isReadingreq();
+    }
+
+    @Override
+    public void setReadingreq(boolean readingreq) {
+        ace.setReadingreq(readingreq);
+    }
+
+    @Override
+    public boolean isCustomid() {
+        return ace.isCustomid();
+    }
+
+    @Override
+    public void setCustomid(boolean customid) {
+        ace.setCustomid(customid);
+    }
+
+    @Override
+    public boolean isRevision() {
+        return ace.isRevision();
+    }
+
+    @Override
+    public void setRevision(boolean revision) {
+        ace.setRevision(revision);
+    }
+
+    public boolean isAdd() {
+        return add;
+    }
+
+    public void setAdd(boolean add) {
+        this.add = add;
+    }
+
+    public boolean isImport() {
+        return iimport;
+    }
+
+    public void setImport(boolean imprt) {
+        this.iimport = imprt;
+    }
+
+    public boolean isIimport() {
+        return isIimport();
+    }
+
+    public void setIimport(boolean iimport) {
+        setImport(iimport);
+    }
+
+    public boolean isExport() {
+        return export;
+    }
+
+    public void setExport(boolean export) {
+        this.export = export;
+    }
+
+    public boolean isStore() {
+        return store;
+    }
+
+    public void setStore(boolean store) {
+        this.store = store;
+    }
+
+    @Override
+    public String toString() {
+        return "FolderAccessControlEntry [ace=%s, add=%b, iimport=%b, export=%b, store=%b]".formatted(ace, add, iimport,
+                export, store);
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + ((ace == null) ? 0 : ace.hashCode());
+        result = prime * result + (add ? 1231 : 1237);
+        result = prime * result + (export ? 1231 : 1237);
+        result = prime * result + (iimport ? 1231 : 1237);
+        result = prime * result + (store ? 1231 : 1237);
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (!super.equals(obj))
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        FolderAccessControlEntry other = (FolderAccessControlEntry) obj;
+        if (ace == null) {
+            if (other.ace != null)
+                return false;
+        } else if (!ace.equals(other.ace))
+            return false;
+        if (add != other.add)
+            return false;
+        if (export != other.export)
+            return false;
+        if (iimport != other.iimport)
+            return false;
+        return store == other.store;
+    }
 }

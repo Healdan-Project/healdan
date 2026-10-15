@@ -374,7 +374,7 @@ public class FolderSecurityPanel extends FolderDetailTab {
 		Button inheritFromParent = new Button(I18N.message("inheritfromparent"));
 		inheritFromParent.setAutoFit(true);
 		buttons.addMember(inheritFromParent);
-		inheritFromParent.addClickHandler((ClickEvent event) -> FolderService.Instance.get()
+		inheritFromParent.addClickHandler(click -> FolderService.Instance.get()
 				.getFolder(folder.getParentId(), false, false, false, new DefaultAsyncCallback<>() {
 					@Override
 					public void handleSuccess(GUIFolder parent) {
@@ -412,7 +412,7 @@ public class FolderSecurityPanel extends FolderDetailTab {
 		final SelectItem user = ItemFactory.newUserSelector("user", "adduser", null, true, false);
 		userForm.setItems(user);
 
-		user.addChangedHandler((ChangedEvent userChangedEvent) -> {
+		user.addChangedHandler(changed -> {
 			ListGridRecord selectedRecord = user.getSelectedRecord();
 			if (selectedRecord == null)
 				return;
@@ -524,6 +524,8 @@ public class FolderSecurityPanel extends FolderDetailTab {
 					.equals(rec.getAttributeAsBoolean(GUIAccessControlEntry.PERMISSION_WRITE.toLowerCase())));
 			ace.setCustomid(Boolean.TRUE
 					.equals(rec.getAttributeAsBoolean(GUIAccessControlEntry.PERMISSION_CUSTOMID.toLowerCase())));
+			ace.setRevision(Boolean.TRUE
+					.equals(rec.getAttributeAsBoolean(GUIAccessControlEntry.PERMISSION_REVISION.toLowerCase())));
 			ace.setDelete(Boolean.TRUE
 					.equals(rec.getAttributeAsBoolean(GUIAccessControlEntry.PERMISSION_DELETE.toLowerCase())));
 			ace.setAdd(

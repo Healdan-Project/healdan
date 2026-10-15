@@ -11,6 +11,7 @@ import com.logicaldoc.gui.common.client.util.ItemFactory;
 import com.logicaldoc.gui.common.client.util.LD;
 import com.smartgwt.client.data.Record;
 import com.smartgwt.client.types.SelectionStyle;
+import com.smartgwt.client.widgets.form.fields.CheckboxItem;
 import com.smartgwt.client.widgets.form.fields.StaticTextItem;
 import com.smartgwt.client.widgets.grid.ListGridField;
 import com.smartgwt.client.widgets.grid.ListGridRecord;
@@ -28,161 +29,177 @@ import com.smartgwt.client.widgets.toolbar.ToolStripButton;
  */
 public class SessionsPanel extends VLayout {
 
-	private static final String STATUS_LABEL = "statusLabel";
+    private static final String STATUS_LABEL = "statusLabel";
 
-	private static final String STATUS = "status";
+    private static final String STATUS = "status";
 
-	private RefreshableListGrid sessionsGrid;
+    private RefreshableListGrid sessionsGrid;
 
-	private StaticTextItem activeSessions;
+    private StaticTextItem activeSessions;
 
-	public SessionsPanel() {
-		ToolStrip toolStrip = new ToolStrip();
-		toolStrip.setHeight(20);
-		toolStrip.setWidth100();
-		toolStrip.addSpacer(2);
-		ToolStripButton refresh = new ToolStripButton(I18N.message("refresh"));
-		refresh.addClickHandler(event -> sessionsGrid.refresh(new SessionsDS()));
+    public SessionsPanel() {
+        ToolStrip toolStrip = new ToolStrip();
+        toolStrip.setHeight(20);
+        toolStrip.setWidth100();
+        toolStrip.addSpacer(2);
 
-		activeSessions = ItemFactory.newStaticTextItem("activesessions", "");
+        CheckboxItem currentNode = ItemFactory.newCheckbox("currentnode");
+        currentNode.addChangedHandler(changed -> refresh(Boolean.TRUE.equals(changed.getValue())));
 
-		toolStrip.addButton(refresh);
-		toolStrip.addSeparator();
-		toolStrip.addFormItem(activeSessions);
-		toolStrip.addFill();
-		addMember(toolStrip);
-	}
+        ToolStripButton refresh = new ToolStripButton(I18N.message("refresh"));
+        refresh.addClickHandler(click -> refresh(Boolean.TRUE.equals(currentNode.getValueAsBoolean())));
 
-	@Override
-	public void onDraw() {
-		prepareSessionsGrid();
+        activeSessions = ItemFactory.newStaticTextItem("activesessions", "");
 
-		sessionsGrid.addCellContextClickHandler(event -> {
-			showContextMenu();
-			event.cancel();
-		});
+        toolStrip.addButton(refresh);
+        toolStrip.addFormItem(currentNode);
+        toolStrip.addSeparator();
+        toolStrip.addFormItem(activeSessions);
+        toolStrip.addFill();
+        addMember(toolStrip);
+    }
 
-		sessionsGrid.addDoubleClickHandler(event -> {
-			LD.askForValue(I18N.message("sid"), I18N.message("sid"),
-					sessionsGrid.getSelectedRecord().getAttributeAsString("sid"), value -> {
-						// Nothing to do
-					});
-			event.cancel();
-		});
+    private void refresh(boolean currentNode) {
+        if (currentNode)
+            sessionsGrid.refresh(new SessionsDS(Session.get().getInfo().getInstallationId()));
+        else
+            sessionsGrid.refresh(new SessionsDS());
+    }
 
-		sessionsGrid.addDataArrivedHandler(event -> {
-			// Search the records with status=0 that are the active sessions
-			Record[] records = sessionsGrid.getRecordList().findAll(STATUS, "0");
-			if (records == null || records.length < 1)
-				activeSessions.setValue("0");
-			else
-				activeSessions.setValue(Integer.toString(records.length));
-		});
+    @Override
+    public void onDraw() {
+        prepareSessionsGrid();
 
-		addMember(sessionsGrid);
-	}
+        sessionsGrid.addCellContextClickHandler(event -> {
+            showContextMenu();
+            event.cancel();
+        });
 
-	private void prepareSessionsGrid() {
-		ListGridField sid = new ListGridField("sid", I18N.message("sid"), 250);
+        sessionsGrid.addCellDoubleClickHandler(dblClick -> {
+            ListGridField field = sessionsGrid.getField(dblClick.getColNum());
+            LD.askForValue(field.getTitle(), field.getTitle(),
+                    dblClick.getRecord().getAttributeAsString(field.getName()), value -> {
+                        // Nothing to do
+                    });
+            dblClick.cancel();
+        });
 
-		ListGridField node = new ListGridField("node", I18N.message("node"), 250);
-		node.setHidden(true);
+        sessionsGrid.addDataArrivedHandler(event -> {
+            Record[] records = sessionsGrid.getRecordList().findAll(STATUS, "OPEN");
+            if (records == null || records.length < 1)
+                activeSessions.setValue(0);
+            else
+                activeSessions.setValue(Integer.toString(records.length));
+        });
 
-		ListGridField username = new ListGridField("username", I18N.message("username"), 80);
-		username.setCanFilter(true);
+        addMember(sessionsGrid);
+    }
 
-		ListGridField key = new ListGridField("key", I18N.message("key"), 80);
-		key.setCanFilter(true);
+    private void prepareSessionsGrid() {
+        ListGridField sid = new ListGridField("sid", I18N.message("sid"), 250);
 
-		ListGridField client = new ListGridField("client", I18N.message("client"), 200);
-		client.setCanFilter(true);
+        ListGridField node = new ListGridField("node", I18N.message("node"), 250);
+        node.setHidden(true);
 
-		ListGridField tenant = new ListGridField("tenant", I18N.message("tenant"), 80);
-		tenant.setCanFilter(true);
+        ListGridField username = new ListGridField("username", I18N.message("username"), 80);
+        username.setCanFilter(true);
 
-		ListGridField created = new DateListGridField("created", "createdon");
+        ListGridField impersonator = new ListGridField("impersonator", I18N.message("impersonator"), 80);
+        impersonator.setCanFilter(true);
+        impersonator.setHidden(true);
 
-		ListGridField renew = new DateListGridField("renew", "lastrenew");
+        ListGridField key = new ListGridField("key", I18N.message("key"), 80);
+        key.setCanFilter(true);
 
-		ListGridField finished = new DateListGridField("finished", "finishedon");
-		finished.setHidden(true);
+        ListGridField client = new ListGridField("client", I18N.message("client"), 200);
+        client.setCanFilter(true);
 
-		ListGridField duration = new ListGridField("duration", I18N.message("duration"), 100);
+        ListGridField tenant = new ListGridField("tenant", I18N.message("tenant"), 80);
+        tenant.setCanFilter(true);
 
-		ListGridField statusLabel = new ListGridField(STATUS_LABEL, I18N.message(STATUS), 80);
-		statusLabel.setCanFilter(false);
+        ListGridField created = new DateListGridField("created", "createdon");
 
-		sessionsGrid = new RefreshableListGrid() {
-			@Override
-			protected String getCellCSSText(ListGridRecord rec, int rowNum, int colNum) {
-				if (getFieldName(colNum).equals("sid")) {
-					if (Session.get().getSid() != null && Session.get().getSid().equals(rec.getAttribute("sid"))) {
-						return "font-weight: bold;";
-					} else {
-						return super.getCellCSSText(rec, rowNum, colNum);
-					}
-				} else if (getFieldName(colNum).equals(STATUS_LABEL)) {
-					if (!"0".equals(rec.getAttribute(STATUS))) {
-						return "color: red;";
-					} else {
-						return super.getCellCSSText(rec, rowNum, colNum);
-					}
-				} else {
-					return super.getCellCSSText(rec, rowNum, colNum);
-				}
-			}
-		};
-		sessionsGrid.setEmptyMessage(I18N.message("notitemstoshow"));
-		sessionsGrid.setShowRecordComponents(true);
-		sessionsGrid.setShowRecordComponentsByCell(true);
-		sessionsGrid.setCanFreezeFields(true);
-		sessionsGrid.setAutoFetchData(true);
-		sessionsGrid.setSelectionType(SelectionStyle.SINGLE);
-		sessionsGrid.setDataSource(new SessionsDS());
+        ListGridField renew = new DateListGridField("renew", "lastrenew");
 
-		sessionsGrid.setFields(sid, statusLabel, username, key, tenant, created, renew, finished, duration, node,
-				client);
-	}
+        ListGridField finished = new DateListGridField("finished", "finishedon");
+        finished.setHidden(true);
 
-	private void showContextMenu() {
-		Menu contextMenu = new Menu();
+        ListGridField duration = new ListGridField("duration", I18N.message("duration"), 100);
 
-		MenuItem killSession = new MenuItem();
-		killSession.setTitle(I18N.message("kill"));
-		killSession.addClickHandler(event -> LD.ask(I18N.message("question"), I18N.message("confirmkill"), yes -> {
-			if (Boolean.TRUE.equals(yes)) {
-				ListGridRecord rec = sessionsGrid.getSelectedRecord();
-				SecurityService.Instance.get().kill(rec.getAttributeAsString("sid"), new DefaultAsyncCallback<>() {
-					@Override
-					public void handleSuccess(Void result) {
-						sessionsGrid.getSelectedRecord().setAttribute(STATUS_LABEL, "Closed");
-						sessionsGrid.getSelectedRecord().setAttribute(STATUS, "1");
-						sessionsGrid.refreshRow(sessionsGrid.getRecordIndex(sessionsGrid.getSelectedRecord()));
-					}
-				});
-			}
-		}));
+        ListGridField statusLabel = new ListGridField(STATUS_LABEL, I18N.message(STATUS), 80);
+        statusLabel.setCanFilter(false);
 
-		if (!"0".equals(sessionsGrid.getSelectedRecord().getAttributeAsString(STATUS))
-				|| (Session.get().getSid() != null
-						&& Session.get().getSid().equals(sessionsGrid.getSelectedRecord().getAttributeAsString("sid"))))
-			killSession.setEnabled(false);
+        sessionsGrid = new RefreshableListGrid() {
+            @Override
+            protected String getCellCSSText(ListGridRecord rec, int rowNum, int colNum) {
+                if (getFieldName(colNum).equals("sid")) {
+                    if (Session.get().getSid() != null && Session.get().getSid().equals(rec.getAttribute("sid"))) {
+                        return "font-weight: bold;";
+                    } else {
+                        return super.getCellCSSText(rec, rowNum, colNum);
+                    }
+                } else if (getFieldName(colNum).equals(STATUS_LABEL)) {
+                    if (!"OPEN".equals(rec.getAttribute(STATUS))) {
+                        return "color: red;";
+                    } else {
+                        return super.getCellCSSText(rec, rowNum, colNum);
+                    }
+                } else {
+                    return super.getCellCSSText(rec, rowNum, colNum);
+                }
+            }
+        };
+        sessionsGrid.setEmptyMessage(I18N.message("notitemstoshow"));
+        sessionsGrid.setShowRecordComponents(true);
+        sessionsGrid.setShowRecordComponentsByCell(true);
+        sessionsGrid.setCanFreezeFields(true);
+        sessionsGrid.setAutoFetchData(true);
+        sessionsGrid.setSelectionType(SelectionStyle.SINGLE);
+        sessionsGrid.setDataSource(new SessionsDS());
 
-		if (!sessionsGrid.getSelectedRecord().getAttributeAsString("node")
-				.equals(Session.get().getInfo().getInstallationId()))
-			killSession.setEnabled(false);
+        sessionsGrid.setFields(sid, statusLabel, username, key, tenant, created, renew, finished, duration, node,
+                client, impersonator);
+    }
 
-		contextMenu.setItems(killSession);
-		contextMenu.showContextMenu();
-	}
-	
-	@Override
-	public boolean equals(Object other) {
-		return super.equals(other);
-	}
+    private void showContextMenu() {
+        Menu contextMenu = new Menu();
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+        MenuItem killSession = new MenuItem();
+        killSession.setTitle(I18N.message("kill"));
+        killSession.addClickHandler(event -> LD.ask(I18N.message("question"), I18N.message("confirmkill"), yes -> {
+            if (Boolean.TRUE.equals(yes)) {
+                ListGridRecord rec = sessionsGrid.getSelectedRecord();
+                SecurityService.Instance.get().kill(rec.getAttributeAsString("sid"), new DefaultAsyncCallback<>() {
+                    @Override
+                    public void handleSuccess(Void result) {
+                        sessionsGrid.getSelectedRecord().setAttribute(STATUS_LABEL, "Closed");
+                        sessionsGrid.getSelectedRecord().setAttribute(STATUS, "OPEN");
+                        sessionsGrid.refreshRow(sessionsGrid.getRecordIndex(sessionsGrid.getSelectedRecord()));
+                    }
+                });
+            }
+        }));
+
+        if (!"OPEN".equals(sessionsGrid.getSelectedRecord().getAttributeAsString(STATUS))
+                || (Session.get().getSid() != null
+                        && Session.get().getSid().equals(sessionsGrid.getSelectedRecord().getAttributeAsString("sid"))))
+            killSession.setEnabled(false);
+
+        if (!sessionsGrid.getSelectedRecord().getAttributeAsString("node")
+                .equals(Session.get().getInfo().getInstallationId()))
+            killSession.setEnabled(false);
+
+        contextMenu.setItems(killSession);
+        contextMenu.showContextMenu();
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

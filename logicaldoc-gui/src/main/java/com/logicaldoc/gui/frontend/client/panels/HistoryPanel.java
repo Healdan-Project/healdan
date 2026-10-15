@@ -60,6 +60,10 @@ public abstract class HistoryPanel extends VLayout {
 		geolocation.setAutoFitWidth(true);
 		geolocation.setHidden(true);
 
+		ListGridField impersonator = new ListGridField("impersonator", I18N.message("impersonator"));
+		impersonator.setAutoFitWidth(true);
+		impersonator.setHidden(true);
+		
 		ListGridField version = new VersionListGridField();
 		ListGridField fileVersion = new FileVersionListGridField();
 		ListGridField revision = new RevisionListGridField();
@@ -74,9 +78,9 @@ public abstract class HistoryPanel extends VLayout {
 		if (Menu.enabled(Menu.SESSIONS)) {
 			if (versionFields)
 				list.setFields(user, event, date, comment, version, fileVersion, revision, fileName, path, sid, ip, device,
-						geolocation);
+						geolocation, impersonator);
 			else
-				list.setFields(user, event, date, comment, fileName, path, sid, ip, device, geolocation);
+				list.setFields(user, event, date, comment, fileName, path, sid, ip, device, geolocation, impersonator);
 		} else {
 			if (versionFields)
 				list.setFields(user, event, date, comment, version, fileVersion, revision, fileName, path);
@@ -101,11 +105,11 @@ public abstract class HistoryPanel extends VLayout {
 
 		ToolStripButton export = new ToolStripButton(I18N.message("export"));
 		buttons.addButton(export);
-		export.addClickHandler(evnt -> GridUtil.exportCSV(list, true));
+		export.addClickHandler(click -> GridUtil.exportCSV(list, true));
 
 		ToolStripButton print = new ToolStripButton(I18N.message("print"));
 		buttons.addButton(print);
-		print.addClickHandler(evnt -> GridUtil.print(list));
+		print.addClickHandler(click -> GridUtil.print(list));
 
 		addMember(list);
 		addMember(buttons);

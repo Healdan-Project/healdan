@@ -26,8 +26,31 @@ public class DocumentAccessControlEntry extends ExtendedAccessControlEntry {
 	}
 
 	public DocumentAccessControlEntry(DocumentAccessControlEntry source) {
-		super(source);
-		ace = new ExtendedAccessControlEntry(source);
+		setGroupId(source.getGroupId());
+		setRead(source.isRead());
+		setWrite(source.isWrite());
+
+		setArchive(source.isArchive());
+		setAutomation(source.isAutomation());
+		setCalendar(source.isCalendar());
+		setDelete(source.isDelete());
+		setDownload(source.isDownload());
+		setEmail(source.isEmail());
+		setImmutable(source.isImmutable());
+		setMove(source.isMove());
+		setMove(source.isMove());
+		setPassword(source.isPassword());
+		setPreview(source.isPreview());
+		setPrint(source.isPrint());
+		setPrint(source.isPrint());
+		setRename(source.isRename());
+		setSecurity(source.isSecurity());
+		setSign(source.isSign());
+		setSubscription(source.isSubscription());
+		setWorkflow(source.isWorkflow());
+		setReadingreq(source.isReadingreq());
+		setCustomid(source.isCustomid());
+		setRevision(source.isRevision());
 	}
 
 	public DocumentAccessControlEntry(long groupId) {
@@ -41,38 +64,223 @@ public class DocumentAccessControlEntry extends ExtendedAccessControlEntry {
 	}
 
 	@Override
-	public long getGroupId() {
-		return ace.getGroupId();
-	}
-
-	@Override
-	public int getWrite() {
-		return ace.getWrite();
-	}
-
-	@Override
 	public void setGroupId(long groupId) {
 		ace.setGroupId(groupId);
 	}
 
 	@Override
-	public void setWrite(int write) {
-		ace.setWrite(write);
+	public long getGroupId() {
+		return ace.getGroupId();
 	}
 
 	@Override
-	public int getRead() {
-		return ace.getRead();
+	public boolean isRead() {
+		return ace.isRead();
 	}
 
 	@Override
-	public void setRead(int read) {
+	public void setRead(boolean read) {
 		ace.setRead(read);
 	}
 
 	@Override
-	public Set<Permission> grantedPermissions() {
-		return ace.grantedPermissions();
+	public boolean isWrite() {
+		return ace.isWrite();
+	}
+
+	@Override
+	public void setWrite(boolean write) {
+		ace.setWrite(write);
+	}
+
+	@Override
+	public boolean isPreview() {
+		return ace.isPreview();
+	}
+
+	@Override
+	public void setPreview(boolean preview) {
+		ace.setPreview(preview);
+	}
+
+	@Override
+	public boolean isDownload() {
+		return ace.isDownload();
+	}
+
+	@Override
+	public void setDownload(boolean download) {
+		ace.setDownload(download);
+	}
+
+	@Override
+	public boolean isSecurity() {
+		return ace.isSecurity();
+	}
+
+	@Override
+	public void setSecurity(boolean security) {
+		ace.setSecurity(security);
+	}
+
+	@Override
+	public boolean isDelete() {
+		return ace.isDelete();
+	}
+
+	@Override
+	public void setDelete(boolean delete) {
+		ace.setDelete(delete);
+	}
+
+	@Override
+	public boolean isRename() {
+		return ace.isRename();
+	}
+
+	@Override
+	public void setRename(boolean rename) {
+		ace.setRename(rename);
+	}
+
+	@Override
+	public boolean isImmutable() {
+		return ace.isImmutable();
+	}
+
+	@Override
+	public void setImmutable(boolean immutable) {
+		ace.setImmutable(immutable);
+	}
+
+	@Override
+	public boolean isSign() {
+		return ace.isSign();
+	}
+
+	@Override
+	public void setSign(boolean sign) {
+		ace.setSign(sign);
+	}
+
+	@Override
+	public boolean isArchive() {
+		return ace.isArchive();
+	}
+
+	@Override
+	public void setArchive(boolean archive) {
+		ace.setArchive(archive);
+	}
+
+	@Override
+	public boolean isWorkflow() {
+		return ace.isWorkflow();
+	}
+
+	@Override
+	public void setWorkflow(boolean workflow) {
+		ace.setWorkflow(workflow);
+	}
+
+	@Override
+	public boolean isCalendar() {
+		return ace.isCalendar();
+	}
+
+	@Override
+	public void setCalendar(boolean calendar) {
+		ace.setCalendar(calendar);
+	}
+
+	@Override
+	public boolean isSubscription() {
+		return ace.isSubscription();
+	}
+
+	@Override
+	public void setSubscription(boolean subscription) {
+		ace.setSubscription(subscription);
+	}
+
+	@Override
+	public boolean isPassword() {
+		return ace.isPassword();
+	}
+
+	@Override
+	public void setPassword(boolean password) {
+		ace.setPassword(password);
+	}
+
+	@Override
+	public boolean isPrint() {
+		return ace.isPrint();
+	}
+
+	@Override
+	public void setPrint(boolean print) {
+		ace.setPrint(print);
+	}
+
+	@Override
+	public boolean isMove() {
+		return ace.isMove();
+	}
+
+	@Override
+	public void setMove(boolean move) {
+		ace.setMove(move);
+	}
+
+	@Override
+	public boolean isEmail() {
+		return ace.isEmail();
+	}
+
+	@Override
+	public void setEmail(boolean email) {
+		ace.setEmail(email);
+	}
+
+	@Override
+	public boolean isAutomation() {
+		return ace.isAutomation();
+	}
+
+	@Override
+	public void setAutomation(boolean automation) {
+		ace.setAutomation(automation);
+	}
+
+	@Override
+	public boolean isReadingreq() {
+		return ace.isReadingreq();
+	}
+
+	@Override
+	public void setReadingreq(boolean readingreq) {
+		ace.setReadingreq(readingreq);
+	}
+
+	@Override
+	public boolean isCustomid() {
+		return ace.isCustomid();
+	}
+
+	@Override
+	public void setCustomid(boolean customid) {
+		ace.setCustomid(customid);
+	}
+
+	@Override
+	public boolean isRevision() {
+		return ace.isRevision();
+	}
+
+	@Override
+	public void setRevision(boolean revision) {
+		ace.setRevision(revision);
 	}
 
 	@Override
@@ -81,193 +289,8 @@ public class DocumentAccessControlEntry extends ExtendedAccessControlEntry {
 	}
 
 	@Override
-	public int getPreview() {
-		return ace.getPreview();
-	}
-
-	@Override
-	public void setPreview(int preview) {
-		ace.setPreview(preview);
-	}
-
-	@Override
-	public int getDownload() {
-		return ace.getDownload();
-	}
-
-	@Override
-	public void setDownload(int download) {
-		ace.setDownload(download);
-	}
-
-	@Override
-	public int getSecurity() {
-		return ace.getSecurity();
-	}
-
-	@Override
-	public void setSecurity(int security) {
-		ace.setSecurity(security);
-	}
-
-	@Override
-	public int getDelete() {
-		return ace.getDelete();
-	}
-
-	@Override
-	public void setDelete(int delete) {
-		ace.setDelete(delete);
-	}
-
-	@Override
-	public int getRename() {
-		return ace.getRename();
-	}
-
-	@Override
-	public void setRename(int rename) {
-		ace.setRename(rename);
-	}
-
-	@Override
-	public int getImmutable() {
-		return ace.getImmutable();
-	}
-
-	@Override
-	public void setImmutable(int immutable) {
-		ace.setImmutable(immutable);
-	}
-
-	@Override
-	public int getSign() {
-		return ace.getSign();
-	}
-
-	@Override
-	public void setSign(int sign) {
-		ace.setSign(sign);
-	}
-
-	@Override
-	public int getArchive() {
-		return ace.getArchive();
-	}
-
-	@Override
-	public void setArchive(int archive) {
-		ace.setArchive(archive);
-	}
-
-	@Override
-	public int getWorkflow() {
-		return ace.getWorkflow();
-	}
-
-	@Override
-	public void setWorkflow(int workflow) {
-		ace.setWorkflow(workflow);
-	}
-
-	@Override
-	public int getCalendar() {
-		return ace.getCalendar();
-	}
-
-	@Override
-	public void setCalendar(int calendar) {
-		ace.setCalendar(calendar);
-	}
-
-	@Override
-	public int getSubscription() {
-		return ace.getSubscription();
-	}
-
-	@Override
-	public void setSubscription(int subscription) {
-		ace.setSubscription(subscription);
-	}
-
-	@Override
-	public int getPassword() {
-		return ace.getPassword();
-	}
-
-	@Override
-	public void setPassword(int password) {
-		ace.setPassword(password);
-	}
-
-	@Override
-	public int getPrint() {
-		return ace.getPrint();
-	}
-
-	@Override
-	public void setPrint(int print) {
-		ace.setPrint(print);
-	}
-
-	@Override
-	public int getMove() {
-		return ace.getMove();
-	}
-
-	@Override
-	public void setMove(int move) {
-		ace.setMove(move);
-	}
-
-	@Override
-	public int getEmail() {
-		return ace.getEmail();
-	}
-
-	@Override
-	public void setEmail(int email) {
-		ace.setEmail(email);
-	}
-
-	@Override
-	public int getAutomation() {
-		return ace.getAutomation();
-	}
-
-	@Override
-	public void setAutomation(int automation) {
-		ace.setAutomation(automation);
-	}
-
-	@Override
-	public int getReadingreq() {
-		return ace.getReadingreq();
-	}
-
-	@Override
-	public void setReadingreq(int readingreq) {
-		ace.setReadingreq(readingreq);
-	}
-
-	@Override
-	public int getCustomid() {
-		return ace.getCustomid();
-	}
-
-	@Override
-	public void setCustomid(int customid) {
-		ace.setCustomid(customid);
-	}
-
-	@Override
-	public int getRevision() {
-		return ace.getRevision();
-	}
-
-	@Override
-	public void setRevision(int revision) {
-		ace.setRevision(revision);
+	public Set<Permission> grantedPermissions() {
+		return ace.grantedPermissions();
 	}
 
 	@Override

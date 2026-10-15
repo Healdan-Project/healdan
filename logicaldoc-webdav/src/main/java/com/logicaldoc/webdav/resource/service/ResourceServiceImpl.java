@@ -124,7 +124,7 @@ public class ResourceServiceImpl implements ResourceService {
 			resource.setRequestedPerson((Long) session.getObject("id"));
 		}
 
-		if (Context.get().getProperties().getBoolean("webdav.cache.enabled", false)) {
+		if (Context.get().getConfig().getBoolean("webdav.cache.enabled", false)) {
 			// update folder path
 			wdc.setFolderPath(folder);
 
@@ -181,8 +181,7 @@ public class ResourceServiceImpl implements ResourceService {
 			if (!hasAccess)
 				return resourceList;
 
-			User user = userDAO.findById(parentResource.getRequestedPerson());
-			userDAO.initialize(user);
+			User user = userDAO.findById(parentResource.getRequestedPerson(), true);
 
 			// Find children visible by the current user
 			Collection<Folder> folders = folderDAO.findChildren(folderID, parentResource.getRequestedPerson());
@@ -218,7 +217,7 @@ public class ResourceServiceImpl implements ResourceService {
 			resourceList.add(marshallDocument(document, parentResource.getSession()));
 		}
 
-		if (Context.get().getProperties().getBoolean("webdav.cache.enabled", false)) {
+		if (Context.get().getConfig().getBoolean("webdav.cache.enabled", false)) {
 			log.debug("getID: {}, folderName: {},  Size: {}", parentResource.getID(), parentResource.getName(),
 					folderSize);
 
@@ -267,7 +266,7 @@ public class ResourceServiceImpl implements ResourceService {
 
 			requestPath = requestPath.replace("/store", "");
 
-			if (requestPath.length() > 0 && requestPath.substring(0, 1).equals("/"))
+			if (!requestPath.isEmpty() && requestPath.substring(0, 1).equals("/"))
 				requestPath = requestPath.substring(1);
 
 			String path = "/" + requestPath;
@@ -320,8 +319,7 @@ public class ResourceServiceImpl implements ResourceService {
 
 		User user;
 		try {
-			user = userDAO.findById(userId);
-			userDAO.initialize(user);
+			user = userDAO.findById(userId, true);
 		} catch (PersistenceException e) {
 			throw new DavException(HttpServletResponse.SC_FORBIDDEN, e);
 		}
@@ -527,8 +525,6 @@ public class ResourceServiceImpl implements ResourceService {
 				return null;
 			Collection<Document> docs = documentDAO.findByFileNameAndParentFolderId(parentFolder.getId(), name, null,
 					parentFolder.getTenantId(), null);
-			User user = userDAO.findById(parentResource.getRequestedPerson());
-			userDAO.initialize(user);
 
 			if (!docs.isEmpty()) {
 				for (Document document : docs) {
@@ -570,15 +566,13 @@ public class ResourceServiceImpl implements ResourceService {
 
 		// verify the move permission on source folders
 		Resource parentFolder = getParentResource(source);
-		Document document = documentDAO.findById(Long.parseLong(source.getID()));
+		Document document = documentDAO.findById(Long.parseLong(source.getID()), true);
 		User user = userDAO.findById(source.getRequestedPerson());
 		if (!documentDAO.isMoveAllowed(Long.parseLong(source.getID()), source.getRequestedPerson()))
 			throw new DavException(HttpServletResponse.SC_FORBIDDEN,
 					"User does not have move permission on source resource");
 
 		assertDocumentIsNotImmutable(user, document);
-
-		documentDAO.initialize(document);
 
 		// Create the document history event
 		DocumentHistory transaction = new DocumentHistory();
@@ -592,8 +586,7 @@ public class ResourceServiceImpl implements ResourceService {
 
 			// we are doing a file rename
 			documentManager.rename(document.getId(), source.getName(), transaction);
-			document = documentDAO.findById(Long.parseLong(source.getID()));
-			documentDAO.initialize(document);
+			document = documentDAO.findById(Long.parseLong(source.getID()), true);
 		}
 
 		final long targetFolderId = Long.parseLong(destination.getID());
@@ -612,8 +605,7 @@ public class ResourceServiceImpl implements ResourceService {
 
 			if (StringUtils.isNotEmpty(newName) && !document.getFileName().equals(newName)) {
 				documentManager.rename(document.getId(), newName, new DocumentHistory(transaction));
-				document = documentDAO.findById(Long.parseLong(source.getID()));
-				documentDAO.initialize(document);
+				document = documentDAO.findById(Long.parseLong(source.getID()), true);
 			}
 		}
 
@@ -679,8 +671,7 @@ public class ResourceServiceImpl implements ResourceService {
 		// Add a folder history entry
 		folderDAO.store(currentFolder, transaction);
 
-		currentFolder = folderDAO.findById(currentFolder.getId());
-		folderDAO.initialize(currentFolder);
+		currentFolder = folderDAO.findById(currentFolder.getId(), true);
 
 		currentFolder.setParentId(destinationParentFolder);
 		folderDAO.store(currentFolder);
@@ -688,9 +679,8 @@ public class ResourceServiceImpl implements ResourceService {
 
 	private void moveFolder(Folder currentFolder, long destinationParentFolder, String newName,
 			FolderHistory transaction) throws PersistenceException {
-		Folder destParentFolder = folderDAO.findById(destinationParentFolder);
-		folderDAO.initialize(destParentFolder);
-		folderDAO.move(currentFolder, destParentFolder, transaction);
+		Folder destParentFolder = folderDAO.findById(destinationParentFolder, true);
+		currentFolder = folderDAO.move(currentFolder, destParentFolder, transaction);
 		if (StringUtils.isNoneEmpty(newName)) {
 			currentFolder.setName(newName);
 			FolderHistory ft = new FolderHistory(transaction);
@@ -701,12 +691,11 @@ public class ResourceServiceImpl implements ResourceService {
 	}
 
 	private Folder getFolder(Resource source) throws DavException, NumberFormatException, PersistenceException {
-		Folder currentFolder = folderDAO.findById(Long.parseLong(source.getID()));
+		Folder currentFolder = folderDAO.findById(Long.parseLong(source.getID()), true);
 
 		if (currentFolder.getType() == Folder.TYPE_WORKSPACE)
 			throw new DavException(HttpServletResponse.SC_FORBIDDEN, "Cannot move nor rename a workspace");
 
-		folderDAO.initialize(currentFolder);
 		return currentFolder;
 	}
 
@@ -893,8 +882,7 @@ public class ResourceServiceImpl implements ResourceService {
 
 		User user = null;
 		try {
-			user = userDAO.findById(resource.getRequestedPerson());
-			userDAO.initialize(user);
+			user = userDAO.findById(resource.getRequestedPerson(), true);
 		} catch (PersistenceException e1) {
 			throw new DavException(HttpServletResponse.SC_FORBIDDEN, e1);
 		}
@@ -938,9 +926,7 @@ public class ResourceServiceImpl implements ResourceService {
 	public List<Resource> getHistory(Resource resource) {
 		List<Resource> resourceHistory = new LinkedList<>();
 		try {
-			Document document = documentDAO.findById(Long.parseLong(resource.getID()));
-
-			documentDAO.initialize(document);
+			Document document = documentDAO.findById(Long.parseLong(resource.getID()), true);
 
 			Collection<Version> tmp = versionDAO.findByDocId(document.getId());
 			Version[] sortIt = tmp.toArray(new Version[0]);
@@ -988,13 +974,13 @@ public class ResourceServiceImpl implements ResourceService {
 
 			Bookmark bmark = new Bookmark();
 			if (resource.isFolder()) {
-				bmark.setType(Bookmark.TYPE_FOLDER);
+				bmark.setType(Bookmark.Type.FOLDER);
 				bmark.setTitle(resource.getName());
 				bmark.setFileType("folder");
 				bmark.setUserId(user.getId());
 				bmark.setTargetId(Long.parseLong(resource.getID()));
 			} else {
-				bmark.setType(Bookmark.TYPE_DOCUMENT);
+				bmark.setType(Bookmark.Type.DOCUMENT);
 				bmark.setTitle(resource.getName());
 				// get the file extension
 				String fileType = FilenameUtils.getExtension(resource.getName());

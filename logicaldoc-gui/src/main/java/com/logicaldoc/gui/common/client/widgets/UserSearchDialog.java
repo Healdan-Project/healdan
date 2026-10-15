@@ -9,7 +9,6 @@ import com.logicaldoc.gui.common.client.grid.UserListGridField;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.services.SecurityService;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
-import com.logicaldoc.gui.common.client.util.LD;
 import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.widgets.Window;
@@ -92,11 +91,6 @@ public class UserSearchDialog extends Window {
 
 	protected void search(String username, String groupId) {
 		SecurityService.Instance.get().searchUsers(username, groupId, new DefaultAsyncCallback<>() {
-			@Override
-			public void onFailure(Throwable caught) {
-				LD.clearPrompt();
-				super.onFailure(caught);
-			}
 
 			@Override
 			public void handleSuccess(List<GUIUser> result) {

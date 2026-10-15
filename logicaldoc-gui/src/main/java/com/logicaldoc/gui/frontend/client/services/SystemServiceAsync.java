@@ -35,19 +35,13 @@ public interface SystemServiceAsync {
 
 	void restart(AsyncCallback<Void> callback);
 
-	void search(Long userId, Date from, Date till, int maxResult, String historySid, List<String> event,
+	void search(Long userId, Long impersonatorId, Date from, Date till, int maxResult, String historySid, List<String> event,
 			Long rootFolderId, AsyncCallback<List<GUIHistory>> callback);
 
 	void searchApiCalls(Long userId, Date from, Date till, String callSid, String protocol, String uri, int maxResult,
 			AsyncCallback<List<GUIHistory>> callback);
 
 	void unscheduleJobs(List<GUIValue> jobs, AsyncCallback<Void> callback);
-
-	void initializePlugin(String plugin, AsyncCallback<Void> callback);
-
-	void installPlugin(AsyncCallback<Void> callback);
-
-	void uninstallPlugin(String plugin, AsyncCallback<Void> callback);
 
 	void saveLogger(String name, String level, boolean additivity, AsyncCallback<Void> callback);
 

@@ -1,5 +1,8 @@
 package com.logicaldoc.gui.frontend.client.ai.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.smartgwt.client.data.DataSource;
 import com.smartgwt.client.data.fields.DataSourceBooleanField;
 import com.smartgwt.client.data.fields.DataSourceDateTimeField;
@@ -14,10 +17,20 @@ import com.smartgwt.client.data.fields.DataSourceTextField;
 public class ModelsDS extends DataSource {
 
 	public ModelsDS() {
-		this(null);
+		this((List<String>) null);
 	}
 
 	public ModelsDS(String type) {
+		this(type != null ? createList(type) : null);
+	}
+
+	private static List<String> createList(String type) {
+		List<String> list = new ArrayList<>();
+		list.add(type);
+		return list;
+	}
+
+	public ModelsDS(List<String> types) {
 		setRecordXPath("/list/model");
 
 		DataSourceTextField id = new DataSourceTextField("id");
@@ -33,10 +46,24 @@ public class ModelsDS extends DataSource {
 		DataSourceBooleanField training = new DataSourceBooleanField("training");
 		DataSourceDateTimeField evaluated = new DataSourceDateTimeField("evaluated");
 		DataSourceBooleanField evaluation = new DataSourceBooleanField("evaluation");
+		DataSourceBooleanField trainable = new DataSourceBooleanField("trainable");
+		trainable.setHidden(true);
 
-		setFields(id, name, label, training, trained, description, typeField, evaluated, evaluation);
+		setFields(id, name, label, training, trained, description, typeField, evaluated, evaluation, trainable);
 		setClientOnly(true);
 
-		setDataURL("data/ai.xml?object=model" + (type != null ? "&type=" + type : ""));
+		String url = "data/ai.xml?object=model";
+
+		if (types != null && !types.isEmpty()) {
+			StringBuilder sb = new StringBuilder();
+			for (int i = 0; i < types.size(); i++) {
+				if (i > 0)
+					sb.append(",");
+				sb.append(types.get(i));
+			}
+			url += "&type=" + sb.toString();
+		}
+
+		setDataURL(url);
 	}
 }

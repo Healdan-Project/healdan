@@ -13,6 +13,7 @@ import com.logicaldoc.core.task.TaskManager;
 import com.logicaldoc.core.task.TaskTrigger;
 import com.logicaldoc.i18n.I18N;
 import com.logicaldoc.util.spring.Context;
+import com.logicaldoc.util.time.TimeDiff;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -25,64 +26,65 @@ import jakarta.servlet.http.HttpServletResponse;
  */
 public class TasksDataServlet extends AbstractDataServlet {
 
-	private static final long serialVersionUID = 1L;
+    private static final String SCHEDULING = "<scheduling>%s</scheduling>";
+    private static final long serialVersionUID = 1L;
 
-	@Override
-	protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
-			Locale locale) throws PersistenceException, IOException {
+    @Override
+    protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
+            Locale locale) throws PersistenceException, IOException {
 
-		TaskManager manager = Context.get(TaskManager.class);
+        TaskManager manager = Context.get(TaskManager.class);
 
-		PrintWriter writer = response.getWriter();
-		writer.write("<list>");
+        PrintWriter writer = response.getWriter();
+        writer.write("<list>");
 
-		for (Task task : manager.getTasks()) {
-			printTask(writer, locale, task);
-		}
-		writer.write("</list>");
-	}
+        for (Task task : manager.getTasks()) {
+            printTask(writer, locale, task);
+        }
+        writer.write("</list>");
+    }
 
-	private void printTask(PrintWriter writer, Locale locale, Task task) {
-		DateFormat df = getDateFormat();
-		writer.print("<task>");
-		writer.print("<name><![CDATA[" + task.getName() + "]]></name>");
-		writer.print("<label><![CDATA[" + I18N.message("task.name." + task.getName(), locale) + "]]></label>");
-		writer.print("<description><![CDATA[" + I18N.message("task.description." + task.getName(), locale)
-				+ "]]></description>");
-		if (task.getScheduling().isEnabled()) {
-			writer.print("<eenabled>true</eenabled>");
-			writer.print("<enabledIcon>bullet_green</enabledIcon>");
-		} else {
-			writer.print("<eenabled>false</eenabled>");
-			writer.print("<enabledIcon>bullet_red</enabledIcon>");
-		}
-		writer.print("<status>" + task.getStatus() + "</status>");
-		if (task.getScheduling().getMode().equals(TaskTrigger.MODE_CRON))
-			writer.print("<scheduling>" + task.getScheduling().getCronExpression() + "</scheduling>");
-		else if (task.getScheduling().getMode().equals(TaskTrigger.MODE_SIMPLE))
-			writer.print("<scheduling>" + I18N.message("each", locale) + " " + task.getScheduling().getIntervalSeconds()
-					+ " " + I18N.message("seconds", locale).toLowerCase() + "</scheduling>");
-		if (!task.isIndeterminate())
-			writer.print("<completion>" + task.getCompletionPercentage() + "</completion>");
-		writer.print("<progress>" + task.getProgress() + "</progress>");
-		writer.print("<size>" + task.getSize() + "</size>");
-		if (task.getStatus() == Task.STATUS_IDLE)
-			writer.print("<runningIcon>idle_task</runningIcon>");
-		else
-			writer.print("<runningIcon>running_task</runningIcon>");
+    private void printTask(PrintWriter writer, Locale locale, Task task) {
+        DateFormat df = getDateFormat();
+        writer.print("<task>");
+        writer.print(String.format("<name><![CDATA[%s]]></name>", task.getName()));
+        writer.print(String.format("<label><![CDATA[%s]]></label>",
+                I18N.message("task.name.%s".formatted(task.getName()), locale)));
 
-		final Date previousFireTime = task.getScheduling().getPreviousFireTime();
-		if (previousFireTime != null) {
-			final Date previousFireTime2 = task.getScheduling().getPreviousFireTime();
-			writer.print("<lastStart>" + df.format(previousFireTime2) + "</lastStart>");
-		}
+        writer.print(String.format("<description><![CDATA[%s]]></description>",
+                I18N.message("task.description.%s".formatted(task.getName()), locale)));
 
-		final Date nextFireTime = task.getScheduling().getNextFireTime();
-		if (nextFireTime != null) {
-			writer.print("<nextStart>" + df.format(task.getScheduling().getNextFireTime()) + "</nextStart>");
-		}
-		writer.print("<indeterminate>" + "" + task.isIndeterminate() + "</indeterminate>");
+        writer.print(String.format("<eenabled>%b</eenabled>", task.getScheduling().isEnabled()));
+        writer.print(String.format("<status>%d</status>", task.getStatus()));
+        writer.print(String.format(SCHEDULING, switch (task.getScheduling().getMode()) {
+            case TaskTrigger.MODE_CRON -> task.getScheduling().getCronExpression();
+            default -> String.format("%s %d %s", I18N.message("each", locale),
+                    task.getScheduling().getIntervalSeconds(), I18N.message("seconds", locale).toLowerCase());
+        }));
 
-		writer.print("</task>");
-	}
+        if (task.getScheduling().getMode().equals(TaskTrigger.MODE_CRON))
+            writer.print(String.format(SCHEDULING, task.getScheduling().getCronExpression()));
+        else if (task.getScheduling().getMode().equals(TaskTrigger.MODE_SIMPLE))
+            writer.print(String.format(SCHEDULING, "%s %s %s".formatted(I18N.message("each", locale),
+                    task.getScheduling().getIntervalSeconds(), I18N.message("seconds", locale).toLowerCase())));
+        if (!task.isIndeterminate())
+            writer.print(String.format("<completion>%d</completion>", task.getCompletionPercentage()));
+        writer.print(String.format("<progress>%d</progress>", task.getProgress()));
+        writer.print(String.format("<size>%d</size>", task.getSize()));
+        writer.print(String.format("<running>%b</running>", task.getStatus() != Task.STATUS_IDLE));
+
+        Date previousFireTime = task.getScheduling().getPreviousFireTime();
+        if (previousFireTime != null)
+            writer.print(String.format("<lastStart>%s</lastStart>", df.format(previousFireTime)));
+
+        Date nextFireTime = task.getScheduling().getNextFireTime();
+        if (nextFireTime != null)
+            writer.print(String.format("<nextStart>%s</nextStart>", df.format(task.getScheduling().getNextFireTime())));
+
+        writer.print(String.format("<indeterminate>%b</indeterminate>", task.isIndeterminate()));
+        writer.print(String.format("<duration>%s</duration>",
+                TimeDiff.printDuration(task.getScheduling().getLastDuration())));
+
+        writer.print("</task>");
+    }
 }

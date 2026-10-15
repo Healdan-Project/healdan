@@ -362,7 +362,6 @@ public class ContextMenu extends Menu {
 				new DefaultAsyncCallback<>() {
 					@Override
 					public void handleSuccess(Long count) {
-						LD.clearPrompt();
 						final String folderMessage = selectedIds.size() == 1 ? "confirmdeletefolder"
 								: "confirmdeletefolders";
 						final String documentMessage = selectedIds.size() == 1 ? "confirmdeletefolderarchdocs"
@@ -386,7 +385,6 @@ public class ContextMenu extends Menu {
 			@Override
 			public void onFailure(Throwable caught) {
 				LD.clearPrompt();
-
 				if (caught instanceof RequestTimeoutException)
 					SC.say("timeout");
 
@@ -395,8 +393,6 @@ public class ContextMenu extends Menu {
 
 			@Override
 			public void handleSuccess(Void result) {
-				LD.clearPrompt();
-
 				for (long id : selectedIds) {
 					TreeNode node = tree.getTree().find(
 							com.logicaldoc.gui.frontend.client.folder.browser.FolderTree.FOLDER_ID, Long.toString(id));
@@ -471,6 +467,7 @@ public class ContextMenu extends Menu {
 
 			@Override
 			public void execute(Map<String, Object> values) {
+			    LD.contactingServer();
 				FolderService.Instance.get().paste(
 						Clipboard.getInstance().stream().map(doc -> doc.getId()).collect(Collectors.toList()), folderId,
 						Clipboard.getInstance().getLastAction(), Boolean.TRUE.equals(values.get("copylinks")),
@@ -478,6 +475,7 @@ public class ContextMenu extends Menu {
 						new DefaultAsyncCallback<>() {
 							@Override
 							public void handleSuccess(Void result) {
+							    LD.clearPrompt();
 								DocumentsPanel.get().onFolderSelected(FolderController.get().getCurrentFolder());
 								Clipboard.getInstance().clear();
 							}

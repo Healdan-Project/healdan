@@ -14,7 +14,6 @@ import jakarta.servlet.http.HttpServletResponse;
  * 
  * @author Marco Meschieri - LogicalDOC
  * @since 8.8.2
- * 
  */
 public class HttpFirewall extends StrictHttpFirewall {
 
@@ -24,7 +23,7 @@ public class HttpFirewall extends StrictHttpFirewall {
 
 	@Override
 	public FirewalledRequest getFirewalledRequest(HttpServletRequest request) throws RequestRejectedException {
-		if (Context.get().getProperties().getBoolean("firewall.enabled", true))
+		if (Context.get().getConfig().getBoolean("firewall.enabled", true))
 			return super.getFirewalledRequest(request);
 		else
 			return new FirewalledRequest(request) {
@@ -38,7 +37,7 @@ public class HttpFirewall extends StrictHttpFirewall {
 
 	@Override
 	public HttpServletResponse getFirewalledResponse(HttpServletResponse response) {
-		if (Context.get().getProperties().getBoolean("firewall.enabled", true))
+		if (Context.get().getConfig().getBoolean("firewall.enabled", true))
 			return super.getFirewalledResponse(response);
 		else
 			return response;

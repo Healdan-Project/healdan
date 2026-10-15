@@ -75,7 +75,7 @@ public class Menu {
 
 	public static final long FORMS = 1550;
 
-	public static final long SECURITY = 9;
+	public static final long ACCESS_CONTROL = 9;
 
 	public static final long CLIENTS = 3;
 
@@ -125,10 +125,10 @@ public class Menu {
 
 	public static final long OCR = 104;
 
-	public static final long REPOSITORIES = 105;
+	public static final long STORES = 105;
 
 	public static final long AUDITING = 106;
-
+	
 	public static final long OFFICE = -1090;
 
 	public static final long CLUSTERING = -1110;
@@ -230,7 +230,21 @@ public class Menu {
 	public static final long ADMIN_ROBOTS = 3010;
 
 	public static final long ROBOTS = 3020;
+	
+	public static final long FILLERS = 3030;
 
+    public static final long WHATSAPP = -2150;
+    
+    public static final long ANTIVIRUS = 1895;
+    
+    public static final long SECURITY = 1896;
+    
+    public static final long USERS = 1897;
+    
+    public static final long GROUPS = 1898;
+
+    public static final long SUPPORT_TICKET = 3040;
+    
 	private static Set<Long> menus = new HashSet<>();
 
 	private Menu() {

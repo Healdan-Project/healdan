@@ -1,0 +1,195 @@
+package com.logicaldoc.gui.frontend.client.whatsapp;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
+import com.logicaldoc.gui.common.client.i18n.I18N;
+import com.logicaldoc.gui.common.client.log.GuiLog;
+import com.logicaldoc.gui.common.client.util.ItemFactory;
+import com.logicaldoc.gui.common.client.util.LD;
+import com.logicaldoc.gui.frontend.client.administration.AdminPanel;
+import com.smartgwt.client.types.TitleOrientation;
+import com.smartgwt.client.util.SC;
+import com.smartgwt.client.widgets.IButton;
+import com.smartgwt.client.widgets.form.DynamicForm;
+import com.smartgwt.client.widgets.form.ValuesManager;
+import com.smartgwt.client.widgets.form.fields.TextItem;
+import com.smartgwt.client.widgets.form.fields.ToggleItem;
+import com.smartgwt.client.widgets.layout.HLayout;
+
+/**
+ * The Whatsapp configuration.
+ * 
+ * @author Marco Meschieri - LogicalDOC
+ * @since 9.3
+ */
+public class WhatsappPanel extends AdminPanel {
+
+    private static final String SETTINGSSAVED = "settingssaved";
+
+    private static final String ACCESSTOKEN = "accesstoken";
+
+    public WhatsappPanel() {
+        super("auditing");
+
+        WhatsappService.Instance.get().loadSettings(new DefaultAsyncCallback<>() {
+            @Override
+            public void handleSuccess(List<String> settings) {
+                initGUI(settings);
+            }
+        });
+    }
+
+    private void initGUI(List<String> settings) {
+        TextItem accountId = ItemFactory.newTextItem("accountid", settings.get(0));
+
+        TextItem numberId = ItemFactory.newTextItem("numberid", settings.get(1));
+
+        TextItem accessToken = ItemFactory.newPasswordItem(ACCESSTOKEN, ACCESSTOKEN, settings.get(2));
+        accessToken.setWidth(400);
+
+        TextItem templatePrefix = ItemFactory.newSimpleTextItem("templateprefix", settings.get(3));
+
+        ToggleItem enabled = ItemFactory.newToggleItem("enabled", "true".equals(settings.get(4)));
+        enabled.setEndRow(true);
+
+        ValuesManager vm = new ValuesManager();
+
+        DynamicForm form = new DynamicForm();
+        form.setValuesManager(vm);
+        form.setTitleOrientation(TitleOrientation.LEFT);
+        form.setPadding(5);
+        form.setWidth(1);
+        form.setNumCols(1);
+        form.setTitleOrientation(TitleOrientation.TOP);
+        form.setWrapItemTitles(false);
+
+        form.setItems(enabled, accountId, numberId, accessToken, templatePrefix);
+
+        IButton save = new IButton(I18N.message("save"));
+        save.addClickHandler(click -> onSave(vm));
+
+        IButton activateNumber = new IButton(I18N.message("activatenumber"));
+        activateNumber.addClickHandler(click -> onActivate(vm));
+
+        IButton prepareTemplates = new IButton(I18N.message("preparemessagetemplates"));
+        prepareTemplates.setAutoFit(true);
+        prepareTemplates.addClickHandler(click -> onPrepareTemplates(vm));
+
+        IButton test = new IButton(I18N.message("testconnection"));
+        test.addClickHandler(click -> onTestConnection(vm));
+
+        HLayout buttons = new HLayout();
+        buttons.setMembersMargin(5);
+        buttons.setLayoutTopMargin(10);
+        buttons.setMembers(save, test, activateNumber, prepareTemplates);
+
+        body.setMembers(form, buttons);
+    }
+
+    private void onSave(ValuesManager vm) {
+        if (Boolean.TRUE.equals(vm.validate())) {
+            List<String> settings = collectFormValues(vm);
+            WhatsappService.Instance.get().saveSettings(settings, new DefaultAsyncCallback<Void>() {
+
+                @Override
+                protected void handleSuccess(Void result) {
+                    GuiLog.info(I18N.message(SETTINGSSAVED), null);
+                }
+            });
+        }
+    }
+
+    private void onTestConnection(ValuesManager vm) {
+        if (Boolean.TRUE.equals(vm.validate())) {
+            List<String> settings = collectFormValues(vm);
+
+            WhatsappService.Instance.get().saveSettings(settings, new DefaultAsyncCallback<Void>() {
+
+                @Override
+                protected void handleSuccess(Void result) {
+                    GuiLog.info(I18N.message(SETTINGSSAVED), null);
+                    LD.contactingServer();
+                    WhatsappService.Instance.get().testConnection(new DefaultAsyncCallback<>() {
+                        @Override
+                        public void handleSuccess(Boolean yes) {
+                            if (yes.booleanValue())
+                                SC.say(I18N.message("connectionestablished"));
+                            else
+                                SC.warn(I18N.message("connectionfailed"));
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    private void onActivate(ValuesManager vm) {
+        if (Boolean.TRUE.equals(vm.validate())) {
+            List<String> settings = collectFormValues(vm);
+            WhatsappService.Instance.get().saveSettings(settings, new DefaultAsyncCallback<Void>() {
+
+                @Override
+                protected void handleSuccess(Void result) {
+                    LD.askForStringMandatory("activatenumber", "whatsapppin", null, pin -> {
+                        LD.contactingServer();
+                        WhatsappService.Instance.get().activateNumber(pin, new DefaultAsyncCallback<>() {
+
+                            @Override
+                            protected void handleSuccess(Boolean activated) {
+                                LD.clearPrompt();
+                                if (Boolean.TRUE.equals(activated))
+                                    SC.say("numberactivated");
+                                else
+                                    SC.warn("numbernotactivated");
+                            }
+                        });
+                    });
+                }
+            });
+        }
+    }
+
+    private void onPrepareTemplates(ValuesManager vm) {
+        if (Boolean.TRUE.equals(vm.validate())) {
+            List<String> settings = collectFormValues(vm);
+
+            WhatsappService.Instance.get().saveSettings(settings, new DefaultAsyncCallback<Void>() {
+
+                @Override
+                protected void handleSuccess(Void result) {
+                    LD.contactingServer();
+                    WhatsappService.Instance.get().prepareTemplates(new DefaultAsyncCallback<List<TemplateResult>>() {
+
+                        @Override
+                        protected void handleSuccess(List<TemplateResult> result) {
+                            LD.clearPrompt();
+                            new TemplatesPreparationResults(result).show();
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    private List<String> collectFormValues(ValuesManager vm) {
+        List<String> settings = new ArrayList<>();
+        settings.add(vm.getValueAsString("accountid"));
+        settings.add(vm.getValueAsString("numberid"));
+        settings.add(vm.getValueAsString(ACCESSTOKEN));
+        settings.add(vm.getValueAsString("templateprefix"));
+        settings.add(vm.getValueAsString("enabled"));
+        return settings;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
+}

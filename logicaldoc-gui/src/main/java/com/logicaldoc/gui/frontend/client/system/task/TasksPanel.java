@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.gwt.user.client.Timer;
+import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.beans.GUITask;
@@ -17,6 +18,7 @@ import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.frontend.client.administration.AdminPanel;
 import com.logicaldoc.gui.frontend.client.services.SystemService;
 import com.smartgwt.client.types.Alignment;
+import com.smartgwt.client.types.AutoFitWidthApproach;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.widgets.Canvas;
 import com.smartgwt.client.widgets.Label;
@@ -37,6 +39,8 @@ import com.smartgwt.client.widgets.tab.Tab;
  * @since 6.0
  */
 public class TasksPanel extends AdminPanel {
+
+	private static final String DURATION = "duration";
 
 	private static final String COMPLETION = "completion";
 
@@ -180,6 +184,10 @@ public class TasksPanel extends AdminPanel {
 
 		ListGridField nextStart = new DateListGridField("nextStart", "nextstart");
 
+		ListGridField duration = new ListGridField(DURATION, I18N.message(DURATION));
+		duration.setAutoFitWidth(true);
+		duration.setAutoFitWidthApproach(AutoFitWidthApproach.BOTH);
+
 		ListGridField scheduling = new ListGridField(SCHEDULING, I18N.message(SCHEDULING), 130);
 		scheduling.setCanFilter(false);
 		scheduling.setAlign(Alignment.CENTER);
@@ -199,8 +207,8 @@ public class TasksPanel extends AdminPanel {
 
 		tasksGrid.setWidth100();
 		tasksGrid.setHeight100();
-		tasksGrid.setFields(enabled, running, label, description, lastStart, nextStart, scheduling, progressbar,
-				completion);
+		tasksGrid.setFields(enabled, running, label, description, lastStart, duration, nextStart, scheduling,
+				progressbar, completion);
 		tasksGrid.setSelectionType(SelectionStyle.SINGLE);
 		tasksGrid.setShowRecordComponents(true);
 		tasksGrid.setShowRecordComponentsByCell(true);
@@ -243,7 +251,7 @@ public class TasksPanel extends AdminPanel {
 							public void handleSuccess(GUITask task) {
 								rec.setAttribute(STATUS, task.getStatus());
 								rec.setAttribute(ENABLED, task.getScheduling().isEnabled());
-								rec.setAttribute(RUNNING,task.getStatus() != GUITask.STATUS_IDLE);
+								rec.setAttribute(RUNNING, task.getStatus() != GUITask.STATUS_IDLE);
 								tasksGrid.refreshRow(tasksGrid.getRecordIndex(rec));
 								showContextMenu();
 							}
@@ -317,9 +325,15 @@ public class TasksPanel extends AdminPanel {
 	}
 
 	private void loadTasks() {
-		SystemService.Instance.get().loadTasks(I18N.getLocale(), new DefaultAsyncCallback<>() {
+		SystemService.Instance.get().loadTasks(I18N.getLocale(), new AsyncCallback<List<GUITask>>() {
+
 			@Override
-			public void handleSuccess(List<GUITask> tasks) {
+			public void onFailure(Throwable caught) {
+				// empty
+			}
+
+			@Override
+			public void onSuccess(List<GUITask> tasks) {
 				for (GUITask guiTask : tasks) {
 					Progressbar p = progresses.get(guiTask.getName());
 					if (p == null)
@@ -331,7 +345,6 @@ public class TasksPanel extends AdminPanel {
 						p.setPercentDone(guiTask.getCompletionPercentage());
 					}
 					p.redraw();
-
 					updateRecord(guiTask);
 				}
 			}
@@ -344,12 +357,14 @@ public class TasksPanel extends AdminPanel {
 			if (rec.getAttribute("name").equals(guiTask.getName()) && guiTask.getStatus() != GUITask.STATUS_IDLE) {
 				rec.setAttribute(RUNNING, true);
 				rec.setAttribute(COMPLETION, guiTask.getCompletionPercentage());
+				rec.setAttribute(DURATION, guiTask.getScheduling().getLastDuration());
 				tasksGrid.refreshRow(tasksGrid.getRecordIndex(rec));
 				found = true;
 			} else if (rec.getAttribute("name").equals(guiTask.getName())
 					&& guiTask.getStatus() == GUITask.STATUS_IDLE) {
 				rec.setAttribute(RUNNING, false);
 				rec.setAttribute(COMPLETION, guiTask.getCompletionPercentage());
+				rec.setAttribute(DURATION, guiTask.getScheduling().getLastDuration());
 				tasksGrid.refreshRow(tasksGrid.getRecordIndex(rec));
 				found = true;
 			}

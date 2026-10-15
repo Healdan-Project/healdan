@@ -33,6 +33,7 @@ public class HibernateDocumentHistoryDAOTest extends AbstractCoreTestCase {
 	private DocumentHistoryDAO testSubject;
 
 	@Before
+	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
 
@@ -102,7 +103,7 @@ public class HibernateDocumentHistoryDAOTest extends AbstractCoreTestCase {
 		history.setFilename("pippo");
 		history.setVersion("2.0");
 
-		history.setPath("/" + "paperino");
+		history.setPath("/%s".formatted("paperino"));
 
 		history.setDate(new Date());
 		history.setUserId(1L);
@@ -175,7 +176,6 @@ public class HibernateDocumentHistoryDAOTest extends AbstractCoreTestCase {
 		assertEquals(4, histories.size());
 
 		DocumentHistory history = testSubject.findById(1);
-		testSubject.initialize(history);
 		history.setNotified(true);
 		testSubject.store(history);
 

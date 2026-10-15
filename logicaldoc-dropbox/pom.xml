@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>com.logicaldoc</groupId>
 		<artifactId>logicaldoc</artifactId>
-		<version>9.2.2</version>
+		<version>9.3.1</version>
 		<relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>logicaldoc-dropbox</artifactId>
@@ -41,14 +41,29 @@
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-context</artifactId>
-			<scope>compile</scope>
+			<scope>provided</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-tx</artifactId>
+			<scope>provided</scope>
+		</dependency>		
 		<dependency>
 			<groupId>com.logicaldoc</groupId>
 			<artifactId>logicaldoc-util</artifactId>
 			<version>${project.version}</version>
-			<scope>compile</scope>
+			<scope>provided</scope>
 		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-orm</artifactId>
+			<scope>provided</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.hibernate.orm</groupId>
+			<artifactId>hibernate-core</artifactId>
+			<scope>provided</scope>
+		</dependency>				
 		<dependency>
 			<groupId>com.logicaldoc</groupId>
 			<artifactId>logicaldoc-core</artifactId>
@@ -123,7 +138,7 @@
 		<dependency>
 			<groupId>com.dropbox.core</groupId>
 			<artifactId>dropbox-core-sdk</artifactId>
-			<version>3.0.4</version>
+			<version>8.0.2</version>
 		</dependency>
 		<dependency>
 			<groupId>org.hsqldb</groupId>
@@ -135,6 +150,17 @@
 			<artifactId>spring-context-support</artifactId>
 			<scope>test</scope>
 		</dependency>
+		
+		<dependency>
+			<groupId>org.infinispan</groupId>
+			<artifactId>infinispan-core</artifactId>
+			<scope>test</scope>
+		</dependency>		
+		<dependency>
+			<groupId>org.infinispan</groupId>
+			<artifactId>${infinispan.hibernate.artifact}</artifactId>
+			<scope>test</scope>
+		</dependency>		
 	</dependencies>
 	<build>
 		<plugins>

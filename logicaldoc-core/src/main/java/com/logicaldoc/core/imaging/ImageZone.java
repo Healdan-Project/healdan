@@ -1,5 +1,6 @@
 package com.logicaldoc.core.imaging;
 
+import java.awt.image.BufferedImage;
 import java.io.Serializable;
 
 import jakarta.persistence.Column;
@@ -14,79 +15,123 @@ import jakarta.persistence.MappedSuperclass;
 @MappedSuperclass
 public class ImageZone implements Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	/**
-	 * Upper-left corner of the zone (percentage of the width 0..1)
-	 */
-	@Column(name = "ld_left")
-	private Double left = 0.0;
+    /**
+     * Upper-left corner of the zone (may be a coordinate or a percentage of the
+     * width 0..1)
+     */
+    @Column(name = "ld_left")
+    protected double left = 0.0;
 
-	/**
-	 * Upper-left corner of the zone (percentage of the height 0..1)
-	 */
-	@Column(name = "ld_top")
-	private Double top = 0.0;
+    /**
+     * Upper-left corner of the zone (may be a coordinate or a percentage of the
+     * height 0..1)
+     */
+    @Column(name = "ld_top")
+    protected double top = 0.0;
 
-	/**
-	 * Width of the zone (percentage of the width 0..1)
-	 */
-	@Column(name = "ld_width")
-	private Double width = 0.15;
+    /**
+     * Width of the zone (may be a coordinate or a percentage of the width 0..1)
+     */
+    @Column(name = "ld_width")
+    protected double width = 0.15;
 
-	/**
-	 * Height of the zone (percentage of the height 0..1)
-	 */
-	@Column(name = "ld_height")
-	private Double height = 0.10;
+    /**
+     * Height of the zone (may be a coordinate or a percentage of the height
+     * 0..1)
+     */
+    @Column(name = "ld_height")
+    protected double height = 0.10;
 
-	public ImageZone() {
-		super();
-	}
+    protected transient BufferedImage image;
 
-	public ImageZone(ImageZone source) {
-		this.left = source.left;
-		this.top = source.top;
-		this.width = source.width;
-		this.height = source.height;
-	}
+    public ImageZone() {
+        super();
+    }
 
-	public Double getLeft() {
-		return left;
-	}
+    public ImageZone(double left, double top, double width, double height) {
+        super();
+        this.left = left;
+        this.top = top;
+        this.width = width;
+        this.height = height;
+    }
 
-	public void setLeft(Double left) {
-		this.left = left;
-	}
+    public ImageZone(ImageZone source) {
+        this.left = source.left;
+        this.top = source.top;
+        this.width = source.width;
+        this.height = source.height;
+        this.image = source.image;
+    }
 
-	public Double getTop() {
-		return top;
-	}
+    public BufferedImage getImage() {
+        return image;
+    }
 
-	public void setTop(Double top) {
-		this.top = top;
-	}
+    public void setImage(BufferedImage image) {
+        this.image = image;
+    }
 
-	public Double getWidth() {
-		return width;
-	}
+    public Point getCorner1() {
+        return new Point(left, top);
+    }
 
-	public void setWidth(Double width) {
-		this.width = width;
-	}
+    public Point getCorner2() {
+        return new Point(left + width, top + height);
+    }
 
-	public Double getHeight() {
-		return height;
-	}
+    public double getLeft() {
+        return left;
+    }
 
-	public void setHeight(Double height) {
-		this.height = height;
-	}
+    public void setLeft(double left) {
+        this.left = left;
+    }
 
-	public void setArea(double left, double top, double width, double height) {
-		this.left = left;
-		this.top = top;
-		this.width = width;
-		this.height = height;
-	}
+    public double getTop() {
+        return top;
+    }
+
+    public void setTop(double top) {
+        this.top = top;
+    }
+
+    public double getWidth() {
+        return width;
+    }
+
+    public void setWidth(double width) {
+        this.width = width;
+    }
+
+    public double getHeight() {
+        return height;
+    }
+
+    public void setHeight(double height) {
+        this.height = height;
+    }
+
+    public void setArea(double left, double top, double width, double height) {
+        this.left = left;
+        this.top = top;
+        this.width = width;
+        this.height = height;
+    }
+
+    public record Point(double x, double y) {
+        public double distance(Point other) {
+            double w = Math.abs(this.x() - other.x());
+            double h = Math.abs(this.y() - other.y());
+
+            return Math.sqrt(Math.pow(w, 2) + Math.pow(h, 2));
+        }
+    }
+
+    @Override
+    public String toString() {
+        return "ImageZone [left=%f, top=%f, width=%f, height=%f]".formatted(left, top, width, height);
+    }
 }
