@@ -1,0 +1,65 @@
+name: Upstream sync
+
+# Weekly check of upstream LogicalDOC Community master. When it has commits
+# that master lacks, merges them (a real merge, never squash/rebase) into an
+# upstream-sync/<date> branch and opens a PR, or updates the open one. On merge
+# conflicts it still opens a draft PR listing the conflicted files and fails
+# the run so the failure email flags it. Logic: .github/scripts/upstream-sync.sh
+#
+# Requires the repository secret UPSTREAM_SYNC_TOKEN: a fine-grained personal
+# access token limited to this repository, with these permissions:
+#   - Contents: Read and write       push the sync branch
+#   - Pull requests: Read and write  find, open, edit and draft the sync PR
+#   - Workflows: Read and write      push merges that touch .github/workflows
+#                                    (upstream has edited its workflow files)
+# The default GITHUB_TOKEN would not do: PRs and pushes made with it never
+# trigger other workflows, so "Build LogicalDOC (Maven)" would not run on the
+# sync PR, and it can never push changes to workflow files.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UPSTREAM_URL: https://github.com/logicaldoc/community.git
+      UPSTREAM_BRANCH: master
+      BASE_BRANCH: master
+
+    steps:
+      - name: Check for UPSTREAM_SYNC_TOKEN
+        env:
+          SYNC_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          if [ -z "$SYNC_TOKEN" ]; then
+            echo "::error title=Missing secret::Add a repository secret named UPSTREAM_SYNC_TOKEN (see the header of .github/workflows/upstream-sync.yml)."
+            exit 1
+          fi
+
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BASE_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+
+      - name: Merge upstream and open or update the sync PR
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+          # Pin gh to this repo: otherwise it may resolve to the fork parent.
+          GH_REPO: ${{ github.repository }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          bash .github/scripts/upstream-sync.sh
