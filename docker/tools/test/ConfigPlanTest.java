@@ -13,6 +13,7 @@ public class ConfigPlanTest {
         passwordIsRequired();
         passwordKeptVerbatim();
         passwordRejectsSyntaxLogicalDocInterprets();
+        passwordRejectsLeadingWhitespace();
         portMustBeNumeric();
         publicUrlOptionalAndNormalised();
         dbWaitSecondsValidated();
@@ -77,7 +78,7 @@ public class ConfigPlanTest {
     }
 
     private static void passwordKeptVerbatim() {
-        String awkward = " sm0ke,p=a\\ss $x #1 é:! ";
+        String awkward = "sm0ke,p=a\\ss $x #1 é:! ";
         Check.eq(awkward, ConfigPlan.envKeys(env("DB_PASSWORD", awkward)).get("jdbc.password"),
                 "password is neither trimmed nor altered");
     }
@@ -85,6 +86,12 @@ public class ConfigPlanTest {
     private static void passwordRejectsSyntaxLogicalDocInterprets() {
         Check.throwsWith("${", () -> ConfigPlan.envKeys(env("DB_PASSWORD", "a${b}c")), "placeholder syntax");
         Check.throwsWith("_b64_", () -> ConfigPlan.envKeys(env("DB_PASSWORD", "_b64_abc")), "base64 prefix");
+    }
+
+    private static void passwordRejectsLeadingWhitespace() {
+        // context.properties cannot keep leading whitespace in a value: ContextProperties.write() drops it.
+        Check.throwsWith("DB_PASSWORD", () -> ConfigPlan.envKeys(env("DB_PASSWORD", " pw")), "leading space");
+        Check.throwsWith("DB_PASSWORD", () -> ConfigPlan.envKeys(env("DB_PASSWORD", "\tpw")), "leading tab");
     }
 
     private static void portMustBeNumeric() {

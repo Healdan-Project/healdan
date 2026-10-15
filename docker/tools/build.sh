@@ -16,6 +16,7 @@ javac --release 21 -encoding UTF-8 -cp "$work/classes:$lib/*" -d "$work/test-cla
 run_test() { java -cp "$work/test-classes:$work/classes:$lib/*" "$@"; }
 run_test DbInitPlanTest
 run_test ConfigPlanTest
+run_test ConfigFileTest "$defaults"
 
 jar cf "$jar" -C "$work/classes" .
 echo "built $jar"

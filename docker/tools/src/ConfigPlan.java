@@ -72,6 +72,9 @@ public final class ConfigPlan {
             throw new IllegalArgumentException("DB_PASSWORD must not contain '${'");
         if (password.startsWith("_b64_"))
             throw new IllegalArgumentException("DB_PASSWORD must not start with '_b64_'");
+        // ContextProperties.write() does not escape leading whitespace, so it would be lost on the next read.
+        if (Character.isWhitespace(password.charAt(0)))
+            throw new IllegalArgumentException("DB_PASSWORD must not start with a space or tab");
         return password;
     }
 
