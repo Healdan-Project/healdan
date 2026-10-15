@@ -22,3 +22,49 @@ RUN mkdir -p /build/ROOT \
 FROM build AS tools
 COPY docker/tools /tools
 RUN bash /tools/build.sh /build/ROOT/WEB-INF/lib /build/ROOT/WEB-INF/classes/context.properties /build/docker-init.jar
+
+# ---- runtime: Tomcat 11 serving the exploded WAR at / ----
+FROM ${TOMCAT_IMAGE} AS runtime
+ARG VERSION=local
+ARG REVISION=unknown
+LABEL org.opencontainers.image.title="LogicalDOC Community (coffeemuse fork)" \
+      org.opencontainers.image.source="https://github.com/coffeemuse/logicaldoc-community" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.licenses="LGPL-3.0-only"
+
+# Thumbnails and previews: ImageMagick (images; uses Ghostscript for PS/PDF input), Poppler (PDF).
+# curl serves the healthcheck.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends imagemagick poppler-utils ghostscript curl \
+ && rm -rf /var/lib/apt/lists/*
+
+# Ubuntu base images ship an "ubuntu" user with uid 1000; replace it with ours.
+RUN (userdel -r ubuntu 2>/dev/null || true) \
+ && (groupdel ubuntu 2>/dev/null || true) \
+ && groupadd -g 1000 logicaldoc \
+ && useradd -u 1000 -g 1000 -d /opt/logicaldoc -M -s /usr/sbin/nologin logicaldoc
+
+RUN rm -rf "$CATALINA_HOME"/webapps/* "$CATALINA_HOME"/webapps.dist
+COPY --from=build --chown=1000:1000 /build/ROOT "$CATALINA_HOME/webapps/ROOT"
+COPY --from=tools --chown=1000:1000 /build/docker-init.jar /opt/logicaldoc/lib/docker-init.jar
+COPY docker/server.xml "$CATALINA_HOME/conf/server.xml"
+COPY docker/rewrite.config "$CATALINA_HOME/conf/Catalina/localhost/rewrite.config"
+COPY --chmod=0755 docker/setenv.sh "$CATALINA_HOME/bin/setenv.sh"
+COPY --chmod=0755 --chown=1000:1000 docker/entrypoint.sh docker/restart.sh /opt/logicaldoc/bin/
+
+# context.properties and log.xml must leave WEB-INF/classes: Tomcat's webapp class loader looks there before
+# common.loader, where the live, writable copies in /opt/logicaldoc/conf are found.
+RUN mkdir -p /opt/logicaldoc/defaults /opt/logicaldoc/conf /opt/logicaldoc/repository \
+ && mv "$CATALINA_HOME/webapps/ROOT/WEB-INF/classes/context.properties" \
+       "$CATALINA_HOME/webapps/ROOT/WEB-INF/classes/log.xml" /opt/logicaldoc/defaults/ \
+ && sed -i 's|^common.loader=.*|&,"/opt/logicaldoc/conf"|' "$CATALINA_HOME/conf/catalina.properties" \
+ && grep -q '"/opt/logicaldoc/conf"' "$CATALINA_HOME/conf/catalina.properties" \
+ && chown -R 1000:1000 /opt/logicaldoc "$CATALINA_HOME/logs" "$CATALINA_HOME/temp" "$CATALINA_HOME/work"
+
+VOLUME ["/opt/logicaldoc/conf", "/opt/logicaldoc/repository"]
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+  CMD curl -fsS -o /dev/null http://localhost:8080/login.jsp || exit 1
+ENTRYPOINT ["/opt/logicaldoc/bin/entrypoint.sh"]
+CMD ["catalina.sh", "run"]

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Tomcat configuration for the LogicalDOC container image (see docker/README.md). -->
+<Server port="-1" shutdown="SHUTDOWN">
+  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+
+  <Service name="Catalina">
+    <Connector port="8080" protocol="HTTP/1.1" connectionTimeout="20000" URIEncoding="UTF-8" />
+
+    <Engine name="Catalina" defaultHost="localhost">
+      <!-- Behind a reverse proxy: trust X-Forwarded-For/-Proto from private and loopback addresses only
+           (Tomcat's default internalProxies), so the app sees https and the real client address. -->
+      <Valve className="org.apache.catalina.valves.RemoteIpValve"
+             remoteIpHeader="X-Forwarded-For" protocolHeader="X-Forwarded-Proto" />
+
+      <Host name="localhost" appBase="webapps" unpackWARs="false" autoDeploy="false">
+        <!-- Rules: conf/Catalina/localhost/rewrite.config -->
+        <Valve className="org.apache.catalina.valves.rewrite.RewriteValve" />
+        <Valve className="org.apache.catalina.valves.ErrorReportValve" showReport="false" showServerInfo="false" />
+      </Host>
+    </Engine>
+  </Service>
+</Server>
