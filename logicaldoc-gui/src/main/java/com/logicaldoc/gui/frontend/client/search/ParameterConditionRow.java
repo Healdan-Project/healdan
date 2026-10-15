@@ -220,7 +220,7 @@ public class ParameterConditionRow extends HLayout {
 			return map;
 
 		if (criteriaField.equals("id") || criteriaField.equals("fileSize") || criteriaField.equals("pages")
-				|| criteriaField.equals("rating") || criteriaField.equals("published")
+				|| criteriaField.equals("rating") || criteriaField.equals("published") || criteriaField.equals("signed")
 				|| criteriaField.equals("indexed") || criteriaField.endsWith(TYPE + GUIAttribute.TYPE_INT)
 				|| criteriaField.endsWith(TYPE + GUIAttribute.TYPE_DOUBLE)) {
 			map.put(GREATERTHAN, I18N.message(GREATERTHAN).toLowerCase());
@@ -229,10 +229,7 @@ public class ParameterConditionRow extends HLayout {
 			map.put(NOTEQUAL, I18N.message(NOTEQUAL).toLowerCase());
 			map.put("null", I18N.message(ISNULL).toLowerCase());
 			map.put(NOTNULL, I18N.message(ISNOTNULL).toLowerCase());
-		} else if (criteriaField.equals("sourceDate") || criteriaField.equals("lastModified")
-				|| criteriaField.equals("date") || criteriaField.equals("creation")
-				|| criteriaField.equals("startPublishing") || criteriaField.equals("stopPublishing")
-				|| criteriaField.endsWith(TYPE + GUIAttribute.TYPE_DATE)) {
+		} else if (isDate(criteriaField)) {
 			map.put(GREATERTHAN, I18N.message(GREATERTHAN).toLowerCase());
 			map.put(LESSTHAN, I18N.message(LESSTHAN).toLowerCase());
 			map.put("null", I18N.message(ISNULL).toLowerCase());
@@ -272,67 +269,109 @@ public class ParameterConditionRow extends HLayout {
 	}
 
 	private FormItem valueItemFor(String criteriaField) {
-		if (criteriaField.equals("id") || criteriaField.equals("fileSize") || criteriaField.equals("pages")
-				|| criteriaField.equals("rating") || criteriaField.equals("template")
-				|| criteriaField.equals("published") || criteriaField.equals("indexed")
-				|| criteriaField.endsWith(TYPE + GUIAttribute.TYPE_INT)) {
-			return ItemFactory.newIntegerItem(VALUE_STR, "integer",
-					criterion != null ? criterion.getLongValue() : null);
+		if (isInteger(criteriaField)) {
+			return prepareItemForInteger();
 		} else if (criteriaField.endsWith(TYPE + GUIAttribute.TYPE_DOUBLE)) {
-			return ItemFactory.newFloatItem(VALUE_STR, "double", criterion != null ? criterion.getFloatValue() : null);
+			return prepareItemForDouble();
 		} else if (criteriaField.endsWith(TYPE + GUIAttribute.TYPE_BOOLEAN)) {
-			return ItemFactory.newToggleItem(VALUE_STR, "boolean",
-					criterion != null ? criterion.getLongValue() == 1L : true);
+			return prepareItemForBoolean();
 		} else if (criteriaField.endsWith(TYPE + GUIAttribute.TYPE_STRING_PRESET)) {
-			String attributeName = attributeName(criteriaField);
-			FormItem item = ItemFactory.newStringItemForAttribute(template.getAttribute(attributeName));
-			item.setName(VALUE_STR);
-			if (criterion != null)
-				item.setValue(criterion.getStringValue());
-			return item;
+			return prepareItemForStringPreset(criteriaField);
 		} else if (criteriaField.endsWith(TYPE + GUIAttribute.TYPE_USER)) {
-			String attributeName = attributeName(criteriaField);
-			GUIAttribute att = template.getAttribute(attributeName);
-			FormItem item = ItemFactory.newUserSelectorForAttribute(VALUE_STR, att.getLabel(),
-					!att.getOptions().isEmpty() ? att.getOptions().get(0) : null, null);
-			item.setName(VALUE_STR);
-			if (criterion != null)
-				item.setValue(criterion.getLongValue());
-			return item;
+			return prepareItemForUser(criteriaField);
 		} else if (criteriaField.endsWith(TYPE + GUIAttribute.TYPE_FOLDER)) {
-			String attributeName = attributeName(criteriaField);
-			GUIAttribute att = template.getAttribute(attributeName);
-			FolderSelector item = ItemFactory.newFolderSelectorForAttribute(VALUE_STR, att.getLabel(), null);
-			item.setName(VALUE_STR);
-			if (criterion != null)
-				item.setFolder(criterion.getLongValue(), criterion.getStringValue());
-			return item;
+			return prepareItemForFolder(criteriaField);
 		} else if (criteriaField.endsWith(TYPE + GUIAttribute.TYPE_DOCUMENT)) {
-			String attributeName = attributeName(criteriaField);
-			GUIAttribute att = template.getAttribute(attributeName);
-			DocumentSelector item = ItemFactory.newDocumentSelectorForAttribute(VALUE_STR, null, att.getLabel(), null);
-			item.setName(VALUE_STR);
-			if (criterion != null)
-				item.setDocument(criterion.getLongValue(), criterion.getStringValue());
-			return item;
-		} else if (criteriaField.equals("sourceDate") || criteriaField.equals("lastModified")
-				|| criteriaField.equals("date") || criteriaField.equals("creation")
-				|| criteriaField.equals("startPublishing") || criteriaField.equals("stopPublishing")
-				|| criteriaField.endsWith(TYPE + GUIAttribute.TYPE_DATE)) {
-			DateItem item = ItemFactory.newDateItem(VALUE_STR, "date");
-			if (criterion != null)
-				item.setValue(criterion.getDateValue());
-			return item;
+			return prepareItemForDocument(criteriaField);
+		} else if (isDate(criteriaField)) {
+			return prepareItemForDate();
 		} else if (criteriaField.equals("tags")) {
-			return ItemFactory.newTagsMultiplePickList(VALUE_STR, "tags", new TagsDS(null, false, null, null),
-					criterion != null ? criterion.getStringValue().split(",") : null);
+			return prepareItemForTags();
 		} else {
 			return ItemFactory.newTextItem(VALUE_STR, criterion != null ? criterion.getStringValue() : null);
 		}
 	}
 
+	private FormItem prepareItemForBoolean() {
+		return ItemFactory.newToggleItem(VALUE_STR, "boolean", criterion != null && criterion.getLongValue() == 1L);
+	}
+
+	private FormItem prepareItemForDouble() {
+		return ItemFactory.newFloatItem(VALUE_STR, "double", criterion != null ? criterion.getFloatValue() : null);
+	}
+
+	private FormItem prepareItemForInteger() {
+		return ItemFactory.newIntegerItem(VALUE_STR, "integer", criterion != null ? criterion.getLongValue() : null);
+	}
+
+	private FormItem prepareItemForTags() {
+		return ItemFactory.newTagsMultiplePickList(VALUE_STR, "tags", new TagsDS(null, false, null, null),
+				criterion != null ? criterion.getStringValue().split(",") : null);
+	}
+
+	private FormItem prepareItemForDate() {
+		DateItem item = ItemFactory.newDateItem(VALUE_STR, "date");
+		if (criterion != null)
+			item.setValue(criterion.getDateValue());
+		return item;
+	}
+
+	private FormItem prepareItemForDocument(String criteriaField) {
+		String attributeName = attributeName(criteriaField);
+		GUIAttribute att = template.getAttribute(attributeName);
+		DocumentSelector item = ItemFactory.newDocumentSelectorForAttribute(VALUE_STR, null, att.getLabel(), null);
+		item.setName(VALUE_STR);
+		if (criterion != null)
+			item.setDocument(criterion.getLongValue(), criterion.getStringValue());
+		return item;
+	}
+
+	private FormItem prepareItemForFolder(String criteriaField) {
+		String attributeName = attributeName(criteriaField);
+		GUIAttribute att = template.getAttribute(attributeName);
+		FolderSelector item = ItemFactory.newFolderSelectorForAttribute(VALUE_STR, att.getLabel(), null);
+		item.setName(VALUE_STR);
+		if (criterion != null)
+			item.setFolder(criterion.getLongValue(), criterion.getStringValue());
+		return item;
+	}
+
+	private FormItem prepareItemForUser(String criteriaField) {
+		String attributeName = attributeName(criteriaField);
+		GUIAttribute att = template.getAttribute(attributeName);
+		FormItem item = ItemFactory.newUserSelectorForAttribute(VALUE_STR, att.getLabel(),
+				!att.getOptions().isEmpty() ? att.getOptions().get(0) : null, null);
+		item.setName(VALUE_STR);
+		if (criterion != null)
+			item.setValue(criterion.getLongValue());
+		return item;
+	}
+
+	private FormItem prepareItemForStringPreset(String criteriaField) {
+		String attributeName = attributeName(criteriaField);
+		FormItem item = ItemFactory.newStringItemForAttribute(template.getAttribute(attributeName));
+		item.setName(VALUE_STR);
+		if (criterion != null)
+			item.setValue(criterion.getStringValue());
+		return item;
+	}
+
+	private boolean isInteger(String criteriaField) {
+		return criteriaField.equals("id") || criteriaField.equals("fileSize") || criteriaField.equals("pages")
+				|| criteriaField.equals("rating") || criteriaField.equals("template")
+				|| criteriaField.equals("published") || criteriaField.equals("indexed") || criteriaField.equals("signed")
+				|| criteriaField.endsWith(TYPE + GUIAttribute.TYPE_INT);
+	}
+
+	private boolean isDate(String criteriaField) {
+		return criteriaField.equals("sourceDate") || criteriaField.equals("lastModified")
+				|| criteriaField.equals("date") || criteriaField.equals("creation")
+				|| criteriaField.equals("startPublishing") || criteriaField.equals("stopPublishing")
+				|| criteriaField.endsWith(TYPE + GUIAttribute.TYPE_DATE);
+	}
+
 	private String attributeName(String criteriaField) {
-		if (criteriaField.indexOf(':') > 0)
+		if (criteriaField.contains(":"))
 			return criteriaField.substring(0, criteriaField.lastIndexOf(':') - 4).replace("_", "");
 		else
 			return criteriaField;
@@ -359,7 +398,7 @@ public class ParameterConditionRow extends HLayout {
 	public void setCriterion(GUICriterion criterion) {
 		this.criterion = criterion;
 		String field = criterion.getField();
-		if (field.indexOf(':') > 0)
+		if (field.contains(":"))
 			field = "_" + field.substring(0, field.indexOf("type")).trim() + "___"
 					+ field.substring(field.indexOf("type")).trim();
 		setAttribute(field);

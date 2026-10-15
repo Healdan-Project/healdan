@@ -30,7 +30,7 @@ public class SystemLoadMonitor {
 
 	private static final Logger log = LoggerFactory.getLogger(SystemLoadMonitor.class);
 
-	@Resource(name = "ContextProperties")
+	@Resource(name = "config")
 	protected ContextProperties config;
 
 	private CircularFifoQueue<Integer> samples = null;
@@ -58,7 +58,7 @@ public class SystemLoadMonitor {
 		if (samples == null || samples.maxSize() != wantedSamples) {
 			CircularFifoQueue<Integer> newSamples = new CircularFifoQueue<>(wantedSamples);
 
-			/// Init the samples with all zeros
+			// Init the samples with all zeros
 			for (int i = 0; i < wantedSamples; i++)
 				newSamples.add(0);
 

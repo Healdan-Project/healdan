@@ -2,9 +2,8 @@ package com.logicaldoc.gui.frontend.client.ai.model;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * A GUI bean representing an AI model
@@ -14,270 +13,386 @@ import java.util.stream.Stream;
  */
 public class GUIModel implements Serializable {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private long id = 0;
+    private static final List<String> NOT_TRAINABLE_TYPES = Arrays.asList("zeroshot", "language", "yolo",
+            "miniembedder");
 
-	private String name;
+    private long id = 0;
 
-	private String label;
+    private String name;
 
-	private String description;
+    private String label;
 
-	private String type = "neural";
+    private String description;
 
-	private String features;
+    private String type = "neural";
 
-	private String categories;
+    private String embedderType;
 
-	private String activation = "RELU";
+    private String categories;
 
-	private String weightInit = "XAVIER";
+    private String activation = "RELU";
 
-	private String loss = "NEGATIVELOGLIKELIHOOD";
+    private String weightInit = "XAVIER";
 
-	private List<GUINeuralNetworkLayer> layers = new ArrayList<>();
+    private String loss = "NEGATIVELOGLIKELIHOOD";
 
-	private int batch = 200;
+    private List<GUINeuralNetworkLayer> layers = new ArrayList<>();
 
-	private long seed = 123;
+    private int batch = 200;
 
-	private int cutoff = 1;
+    private long seed = 123;
 
-	private int ngramMin = 2;
+    private int cutoff = 1;
 
-	private int ngramMax = 4;
+    private int ngramMin = 2;
 
-	private String language = "en";
+    private int ngramMax = 4;
 
-	private int vectorSize = 300;
+    private String language = "en";
 
-	private int windowSize = 5;
+    private int vectorSize = 300;
 
-	/**
-	 * Words that do not appear this minimum number of times must be discarded
-	 */
-	private int minWordFrequency = 1;
+    private int windowSize = 5;
 
-	private GUITraining training = new GUITraining();
+    private int workers = 2;
 
-	private GUIEvaluation evaluation = new GUIEvaluation();
+    double alpha = 0.025D;
 
-	private GUIUpdater updater = new GUIUpdater();
+    double minAlpha = 0.0001D;
 
-	private GUIChunking chunking = new GUIChunking();
+    double threshold = 0.2D;
 
-	public GUIModel(long id, String name) {
-		super();
-		this.id = id;
-		this.name = name;
-	}
+    /**
+     * Words that do not appear this minimum number of times must be discarded
+     */
+    private int minWordFrequency = 1;
 
-	public GUIModel() {
-		super();
-	}
+    private int trainingImagesWidth = 1024;
 
-	public int getCutoff() {
-		return cutoff;
-	}
+    private int trainingImagesHeight = 1024;
 
-	public void setCutoff(int cutoff) {
-		this.cutoff = cutoff;
-	}
+    private GUITraining training = new GUITraining();
 
-	public int getNgramMin() {
-		return ngramMin;
-	}
+    private GUIEvaluation evaluation = new GUIEvaluation();
 
-	public void setNgramMin(int ngramMin) {
-		this.ngramMin = ngramMin;
-	}
+    private GUIUpdater updater = new GUIUpdater();
 
-	public int getNgramMax() {
-		return ngramMax;
-	}
+    private GUIChunking chunking = new GUIChunking();
 
-	public void setNgramMax(int ngramMax) {
-		this.ngramMax = ngramMax;
-	}
+    private List<GUIFeatureDescriptor> featureDescriptors = new ArrayList<>();
 
-	public String getLanguage() {
-		return language;
-	}
+    public GUIModel(long id, String name) {
+        super();
+        this.id = id;
+        this.name = name;
+    }
 
-	public void setLanguage(String language) {
-		this.language = language;
-	}
+    public GUIModel() {
+        super();
+    }
 
-	public long getId() {
-		return id;
-	}
+    public int getCutoff() {
+        return cutoff;
+    }
 
-	public String getName() {
-		return name;
-	}
-
-	public String getLabel() {
-		return label;
-	}
-
-	public String getDescription() {
-		return description;
-	}
-
-	public String getType() {
-		return type;
-	}
-
-	public void setId(long id) {
-		this.id = id;
-	}
-
-	public void setName(String name) {
-		this.name = name;
-	}
-
-	public void setLabel(String label) {
-		this.label = label;
-	}
-
-	public void setDescription(String description) {
-		this.description = description;
-	}
-
-	public void setType(String type) {
-		this.type = type;
-	}
-
-	public String getFeatures() {
-		return features;
-	}
-
-	public List<String> getFeaturesList() {
-		return Stream.of(features.split(",")).map(String::trim).collect(Collectors.toList());
-	}
-
-	public String getCategories() {
-		return categories;
-	}
-
-	public void setFeatures(String features) {
-		this.features = features;
-	}
-
-	public void setCategories(String categories) {
-		this.categories = categories;
-	}
-
-	public String getActivation() {
-		return activation;
-	}
-
-	public void setActivation(String activation) {
-		this.activation = activation;
-	}
-
-	public static long getSerialversionuid() {
-		return serialVersionUID;
-	}
-
-	public String getWeightInit() {
-		return weightInit;
-	}
-
-	public void setWeightInit(String weightInit) {
-		this.weightInit = weightInit;
-	}
-
-	public String getLoss() {
-		return loss;
-	}
-
-	public void setLoss(String loss) {
-		this.loss = loss;
-	}
-
-	public List<GUINeuralNetworkLayer> getLayers() {
-		return layers;
-	}
-
-	public void setLayers(List<GUINeuralNetworkLayer> layers) {
-		this.layers = layers;
-	}
-
-	public int getBatch() {
-		return batch;
-	}
-
-	public void setBatch(int batch) {
-		this.batch = batch;
-	}
-
-	public long getSeed() {
-		return seed;
-	}
-
-	public void setSeed(long seed) {
-		this.seed = seed;
-	}
-
-	public int getVectorSize() {
-		return vectorSize;
-	}
-
-	public void setVectorSize(int vectorSize) {
-		this.vectorSize = vectorSize;
-	}
-
-	public int getWindowSize() {
-		return windowSize;
-	}
-
-	public void setWindowSize(int windowSize) {
-		this.windowSize = windowSize;
-	}
-
-	public GUITraining getTraining() {
-		return training;
-	}
-
-	public void setTraining(GUITraining training) {
-		this.training = training;
-	}
-
-	public GUIEvaluation getEvaluation() {
-		return evaluation;
-	}
-
-	public void setEvaluation(GUIEvaluation evaluation) {
-		this.evaluation = evaluation;
-	}
-
-	public boolean isNeuralNetwork() {
-		return "neural".equals(type);
-	}
-
-	public GUIUpdater getUpdater() {
-		return updater;
-	}
-
-	public void setUpdater(GUIUpdater updater) {
-		this.updater = updater;
-	}
-
-	public GUIChunking getChunking() {
-		return chunking;
-	}
-
-	public void setChunking(GUIChunking chunking) {
-		this.chunking = chunking;
-	}
-
-	public int getMinWordFrequency() {
-		return minWordFrequency;
-	}
-
-	public void setMinWordFrequency(int minWordFrequency) {
-		this.minWordFrequency = minWordFrequency;
-	}
+    public void setCutoff(int cutoff) {
+        this.cutoff = cutoff;
+    }
+
+    public int getNgramMin() {
+        return ngramMin;
+    }
+
+    public void setNgramMin(int ngramMin) {
+        this.ngramMin = ngramMin;
+    }
+
+    public int getNgramMax() {
+        return ngramMax;
+    }
+
+    public void setNgramMax(int ngramMax) {
+        this.ngramMax = ngramMax;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public long getId() {
+        return id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+        getTraining().setTrainable(!NOT_TRAINABLE_TYPES.contains(type));
+    }
+
+    public List<GUIFeatureDescriptor> getFeatureDescriptors() {
+        return featureDescriptors;
+    }
+
+    public void setFeatureDescriptors(List<GUIFeatureDescriptor> featureDescriptors) {
+        this.featureDescriptors = featureDescriptors;
+    }
+
+    public String getEmbedderType() {
+        return embedderType;
+    }
+
+    public void setEmbedderType(String embedderType) {
+        this.embedderType = embedderType;
+    }
+
+    public String getFeatureNames() {
+        List<String> names = new ArrayList<>();
+        for (GUIFeatureDescriptor fd : featureDescriptors)
+            names.add(fd.getName());
+        return names.toString().replace("[", "").replace("]", "").replace(" ", "");
+    }
+
+    public void setFeatureNames(String names) {
+        String[] tokens = names.split(",");
+        featureDescriptors.clear();
+        for (String token : tokens)
+            featureDescriptors.add(new GUIFeatureDescriptor(token.trim()));
+    }
+
+    public String getCategories() {
+        return categories;
+    }
+
+    public String[] getCategoriesArray() {
+        if (categories == null || categories.isEmpty())
+            return new String[0];
+        String[] array = categories.split(",");
+        for (int i = 0; i < array.length; i++)
+            array[i] = array[i].trim();
+        return array;
+    }
+
+    public void setCategoriesArray(String[] cats) {
+        StringBuilder sb = new StringBuilder();
+
+        if (cats != null && cats.length > 0) {
+
+            for (int i = 0; i < cats.length; i++) {
+                if (i > 0)
+                    sb.append(",");
+                sb.append(cats[i].trim());
+            }
+        }
+
+        categories = sb.toString();
+    }
+
+    public void setCategories(String categories) {
+        this.categories = categories;
+    }
+
+    public String getActivation() {
+        return activation;
+    }
+
+    public void setActivation(String activation) {
+        this.activation = activation;
+    }
+
+    public static long getSerialversionuid() {
+        return serialVersionUID;
+    }
+
+    public String getWeightInit() {
+        return weightInit;
+    }
+
+    public void setWeightInit(String weightInit) {
+        this.weightInit = weightInit;
+    }
+
+    public String getLoss() {
+        return loss;
+    }
+
+    public void setLoss(String loss) {
+        this.loss = loss;
+    }
+
+    public List<GUINeuralNetworkLayer> getLayers() {
+        return layers;
+    }
+
+    public void setLayers(List<GUINeuralNetworkLayer> layers) {
+        this.layers = layers;
+    }
+
+    public int getBatch() {
+        return batch;
+    }
+
+    public void setBatch(int batch) {
+        this.batch = batch;
+    }
+
+    public long getSeed() {
+        return seed;
+    }
+
+    public void setSeed(long seed) {
+        this.seed = seed;
+    }
+
+    public int getVectorSize() {
+        return vectorSize;
+    }
+
+    public void setVectorSize(int vectorSize) {
+        this.vectorSize = vectorSize;
+    }
+
+    public int getWindowSize() {
+        return windowSize;
+    }
+
+    public void setWindowSize(int windowSize) {
+        this.windowSize = windowSize;
+    }
+
+    public GUITraining getTraining() {
+        return training;
+    }
+
+    public void setTraining(GUITraining training) {
+        this.training = training;
+    }
+
+    public GUIEvaluation getEvaluation() {
+        return evaluation;
+    }
+
+    public void setEvaluation(GUIEvaluation evaluation) {
+        this.evaluation = evaluation;
+    }
+
+    public boolean isNeuralNetwork() {
+        return "neural".equals(type);
+    }
+
+    public boolean isZeroShot() {
+        return "zeroshot".equals(type);
+    }
+
+    public boolean isTrainable() {
+        return getTraining() != null && getTraining().isTrainable();
+    }
+
+    public GUIUpdater getUpdater() {
+        return updater;
+    }
+
+    public void setUpdater(GUIUpdater updater) {
+        this.updater = updater;
+    }
+
+    public GUIChunking getChunking() {
+        return chunking;
+    }
+
+    public void setChunking(GUIChunking chunking) {
+        this.chunking = chunking;
+    }
+
+    public int getMinWordFrequency() {
+        return minWordFrequency;
+    }
+
+    public void setMinWordFrequency(int minWordFrequency) {
+        this.minWordFrequency = minWordFrequency;
+    }
+
+    public int getWorkers() {
+        return workers;
+    }
+
+    public void setWorkers(int workers) {
+        this.workers = workers;
+    }
+
+    public double getAlpha() {
+        return alpha;
+    }
+
+    public void setAlpha(double alpha) {
+        this.alpha = alpha;
+    }
+
+    public double getMinAlpha() {
+        return minAlpha;
+    }
+
+    public void setMinAlpha(double minAlpha) {
+        this.minAlpha = minAlpha;
+    }
+
+    public int getTrainingImagesWidth() {
+        return trainingImagesWidth;
+    }
+
+    public void setTrainingImagesWidth(int trainingImagesWidth) {
+        this.trainingImagesWidth = trainingImagesWidth;
+    }
+
+    public int getTrainingImagesHeight() {
+        return trainingImagesHeight;
+    }
+
+    public void setTrainingImagesHeight(int trainingImagesHeight) {
+        this.trainingImagesHeight = trainingImagesHeight;
+    }
+
+    public double getThreshold() {
+        return threshold;
+    }
+
+    public void setThreshold(double threshold) {
+        this.threshold = threshold;
+    }
 }

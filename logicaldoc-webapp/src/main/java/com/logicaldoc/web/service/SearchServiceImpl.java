@@ -1,16 +1,12 @@
 package com.logicaldoc.web.service;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collection;
-import java.util.Date;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +24,6 @@ import com.logicaldoc.core.searchengine.FulltextSearchOptions;
 import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchOptions;
-import com.logicaldoc.core.searchengine.folder.FolderCriterion;
-import com.logicaldoc.core.searchengine.folder.FolderSearchOptions;
 import com.logicaldoc.core.searchengine.saved.SearchDAO;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
@@ -37,7 +31,6 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIAttribute;
-import com.logicaldoc.gui.common.client.beans.GUICriterion;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIResult;
 import com.logicaldoc.gui.common.client.beans.GUISearchOptions;
@@ -53,400 +46,295 @@ import com.logicaldoc.util.io.FileUtil;
  */
 public class SearchServiceImpl extends AbstractRemoteService implements SearchService {
 
-	private static final long serialVersionUID = 1L;
+    private static final long serialVersionUID = 1L;
 
-	private static final Logger log = LoggerFactory.getLogger(SearchServiceImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(SearchServiceImpl.class);
 
-	@Override
-	public GUIResult search(GUISearchOptions options) throws ServerException {
-		Session session = validateSession();
-		options.setUserId(session.getUserId());
+    /**
+     * A map for the {@link GUISearchOptions} - {@link SearchOptions}
+     * converters, key is the search type
+     */
+    private static final Map<Integer, SearchOptionsConverter> converters = new HashMap<>();
 
-		GUIResult result = new GUIResult();
-		try {
-			List<Hit> hits = doSearch(options, session, result);
+    public static void registerConverter(Integer type, SearchOptionsConverter converter) {
+        converters.put(type, converter);
+    }
 
-			List<Long> bookmarks = BookmarkDAO.get().findBookmarkedDocs(session.getUserId());
+    static {
+        registerConverter(GUISearchOptions.TYPE_FULLTEXT, new FulltextOptionsConverter());
+        registerConverter(GUISearchOptions.TYPE_FOLDERS, new FolderOptionsConverter());
+        registerConverter(GUISearchOptions.TYPE_TAGS, new SearchOptionsConverter());
+    }
 
-			DocumentDAO docDao = DocumentDAO.get();
-			List<GUIDocument> guiResults = new ArrayList<>();
-			DocumentServiceImpl documentServiceImpl = new DocumentServiceImpl();
-			for (Hit hit : hits) {
-				GUIDocument guiHit = null;
-				if (hit.getType().startsWith("folder")) {
-					guiHit = documentServiceImpl.fromDocument(hit, null, null);
-					guiHit.setIcon(hit.getType());
-				} else {
-					Document doc = docDao.findById(hit.getId());
-					docDao.initialize(doc);
-					if (doc != null) {
-						/*
-						 * Apply the extended attributes. The template object in
-						 * search hits may have not been fully compiled so the
-						 * DocumentServiceImpl.fromDocument doesn't do the job
-						 */
-						guiHit = documentServiceImpl.fromDocument(doc, null, null);
-					} else {
-						log.debug("Unexisting document {}", hit.getId());
-						continue;
-					}
-				}
+    @Override
+    public GUIResult search(GUISearchOptions options) throws ServerException {
+        Session session = validateSession();
+        options.setUserId(session.getUserId());
 
-				prepareHit(hit, guiHit, bookmarks);
+        GUIResult result = new GUIResult();
+        try {
+            List<Hit> hits = doSearch(options, session, result);
 
-				guiResults.add(guiHit);
-			}
-			result.setHits(guiResults);
+            List<Long> bookmarks = BookmarkDAO.get().findBookmarkedDocs(session.getUserId());
 
-			return result;
-		} catch (Exception t) {
-			return throwServerException(session, log, t);
-		}
-	}
+            DocumentDAO docDao = DocumentDAO.get();
+            List<GUIDocument> guiResults = new ArrayList<>();
+            for (Hit hit : hits) {
+                GUIDocument guiHit = null;
+                if (hit.getType().startsWith("folder")) {
+                    guiHit = DocumentServiceImpl.fromDocument(hit, null, null);
+                    guiHit.setIcon(hit.getType());
+                } else {
+                    Document doc = docDao.findById(hit.getId(), true);
+                    if (doc != null) {
+                        /*
+                         * Apply the extended attributes. The template object in
+                         * search hits may have not been fully compiled so the
+                         * DocumentServiceImpl.fromDocument doesn't do the job
+                         */
+                        guiHit = DocumentServiceImpl.fromDocument(doc, null, null);
+                    } else {
+                        log.debug("Unexisting document {}", hit.getId());
+                        continue;
+                    }
+                }
 
-	private void prepareHit(Hit hit, GUIDocument guiHit, List<Long> bookmarks) {
-		guiHit.setScore(hit.getScore());
-		guiHit.setSummary(hit.getSummary());
-		guiHit.setBookmarked(bookmarks.contains(hit.getId()) || bookmarks.contains(hit.getDocRef()));
-		if ("folder".equals(hit.getType()))
-			guiHit.setIcon("folder_closed");
-		else if ("folderalias".equals(hit.getType()))
-			guiHit.setIcon("folder_alias_closed");
-		else if ("pdf".equals(hit.getDocRefType()))
-			guiHit.setIcon("pdf");
-		else
-			guiHit.setIcon(FileUtil.getBaseName(hit.getIcon()));
+                prepareHit(hit, guiHit, bookmarks);
 
-		/*
-		 * If any extended attribute was retrieved from the fulltext index,
-		 * apply them
-		 */
-		List<GUIAttribute> extList = new ArrayList<>();
-		for (String name : hit.getAttributeNames()) {
-			Attribute e = hit.getAttributes().get(name);
-			GUIAttribute ext = new GUIAttribute();
-			ext.setName(name);
-			ext.setHidden(e.isHidden());
-			ext.setReadonly(e.isReadonly());
-			ext.setMultiple(e.isMultiple());
-			ext.setSetId(e.getSetId());
-			ext.setDateValue(e.getDateValue());
-			ext.setStringValue(e.getStringValue());
-			ext.setIntValue(e.getIntValue());
-			ext.setDoubleValue(e.getDoubleValue());
-			ext.setBooleanValue(e.getBooleanValue());
-			ext.setType(e.getType());
-			ext.setParent(e.getParent());
-			ext.setStringValues(e.getStringValues());
-			if (e.getType() == Attribute.TYPE_USER)
-				ext.setUsername(ext.getStringValue());
-			extList.add(ext);
-		}
-		guiHit.setAttributes(extList);
-	}
+                guiResults.add(guiHit);
+            }
+            result.setHits(guiResults);
 
-	private List<Hit> doSearch(GUISearchOptions options, Session session, GUIResult result) {
-		SearchOptions searchOptions = prepareSearchOptions(options, session);
+            return result;
+        } catch (Exception t) {
+            return throwServerException(session, log, t);
+        }
+    }
 
-		// Retrieve the search machinery
-		Search search = Search.get(searchOptions);
+    private void prepareHit(Hit hit, GUIDocument guiHit, List<Long> bookmarks) {
+        guiHit.setScore(hit.getScore());
+        guiHit.setSummary(hit.getSummary());
+        guiHit.setBookmarked(bookmarks.contains(hit.getId()) || bookmarks.contains(hit.getDocRef()));
+        if ("folder".equals(hit.getType()))
+            guiHit.setIcon("folder_closed");
+        else if ("folderalias".equals(hit.getType()))
+            guiHit.setIcon("folder_alias_closed");
+        else if ("pdf".equals(hit.getDocRefType()))
+            guiHit.setIcon("pdf");
+        else
+            guiHit.setIcon(FileUtil.getBaseName(hit.getIcon()));
 
-		try {
-			log.info("Searching max {} hits", searchOptions.getMaxHits());
-			search.search();
-		} catch (Exception e) {
-			log.error(e.getMessage(), e);
-		}
+        /*
+         * If any extended attribute was retrieved from the fulltext index,
+         * apply them
+         */
+        List<GUIAttribute> extList = new ArrayList<>();
+        for (String name : hit.getAttributeNames()) {
+            Attribute e = hit.getAttributes().get(name);
+            GUIAttribute ext = new GUIAttribute();
+            ext.setName(name);
+            ext.setHidden(e.isHidden());
+            ext.setReadonly(e.isReadonly());
+            ext.setMultiple(e.isMultiple());
+            ext.setSetId(e.getSetId());
+            ext.setDateValue(e.getDateValue());
+            ext.setStringValue(e.getStringValue());
+            ext.setIntValue(e.getIntValue());
+            ext.setDoubleValue(e.getDoubleValue());
+            ext.setBooleanValue(e.getBooleanValue());
+            ext.setType(e.getType());
+            ext.setParent(e.getParent());
+            ext.setStringValues(e.getStringValues());
+            if (e.getType() == Attribute.TYPE_USER)
+                ext.setUsername(ext.getStringValue());
+            extList.add(ext);
+        }
+        guiHit.setAttributes(extList);
+    }
 
-		result.setEstimatedHits(search.getEstimatedHitsNumber());
+    private List<Hit> doSearch(GUISearchOptions options, Session session, GUIResult result) {
+        SearchOptions searchOptions = prepareSearchOptions(options, session);
 
-		List<Hit> hits = search.getHits();
+        // Retrieve the search machinery
+        Search search = Search.get(searchOptions);
 
-		result.setTime(search.getExecTime());
-		result.setHasMore(search.isMoreHitsPresent());
-		return hits;
-	}
+        try {
+            log.info("Searching max {} hits", searchOptions.getMaxHits());
+            search.search();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+        }
 
-	private SearchOptions prepareSearchOptions(GUISearchOptions options, Session session) {
-		SearchOptions searchOptions = toSearchOptions(options);
-		searchOptions.setTenantId(session.getTenantId());
-		searchOptions.setTransaction(new UserHistory(session));
+        result.setEstimatedHits(search.getEstimatedHitsNumber());
 
-		if (searchOptions instanceof FulltextSearchOptions fulltextOptions) {
-			Locale exprLoc = LocaleUtil.toLocale(options.getExpressionLanguage());
+        List<Hit> hits = search.getHits();
 
-			Language lang = LanguageManager.getInstance().getLanguage(exprLoc);
-			if (lang == null) {
-				// Try to find another supported language
-				exprLoc = LocaleUtil.toLocale(exprLoc.getLanguage());
+        result.setTime(search.getExecTime());
+        result.setHasMore(search.isMoreHitsPresent());
+        return hits;
+    }
 
-				if (exprLoc != null)
-					fulltextOptions.setExpressionLanguage(exprLoc.getLanguage());
-			}
-		}
-		return searchOptions;
-	}
+    private SearchOptions prepareSearchOptions(GUISearchOptions options, Session session) {
+        SearchOptions searchOptions = converters.get(options.getType()).toSearchOptions(options);
+        searchOptions.setTenantId(session.getTenantId());
+        searchOptions.setTransaction(new UserHistory(session));
 
-	@Override
-	public boolean save(GUISearchOptions options) throws ServerException {
-		Session session = validateSession();
+        if (searchOptions instanceof FulltextSearchOptions fulltextOptions) {
+            Locale exprLoc = LocaleUtil.toLocale(options.getExpressionLanguage());
 
-		try {
-			SearchOptions opt = toSearchOptions(options);
+            Language lang = LanguageManager.getInstance().getLanguage(exprLoc);
+            if (lang == null) {
+                // Try to find another supported language
+                exprLoc = LocaleUtil.toLocale(exprLoc.getLanguage());
 
-			com.logicaldoc.core.searchengine.saved.SavedSearch search = new com.logicaldoc.core.searchengine.saved.SavedSearch();
-			search.setName(options.getName());
-			search.setUserId(session.getUserId());
-			search.setTenantId(session.getTenantId());
-			search.setDescription(options.getDescription());
-			search.saveOptions(opt);
+                if (exprLoc != null)
+                    fulltextOptions.setExpressionLanguage(exprLoc.getLanguage());
+            }
+        }
+        return searchOptions;
+    }
 
-			SearchDAO.get().store(search);
+    @Override
+    public void save(GUISearchOptions options) throws ServerException {
+        Session session = validateSession();
 
-			log.debug("Saved search {}", opt.getName());
-			return true;
-		} catch (Exception t) {
-			return throwServerException(session, log, t);
-		}
-	}
+        try {
+            SearchOptions opt = converters.get(options.getType()).toSearchOptions(options);
 
-	@Override
-	public void delete(List<String> names) throws ServerException {
-		Session session = validateSession();
-		SearchDAO dao = SearchDAO.get();
+            com.logicaldoc.core.searchengine.saved.SavedSearch search = SearchDAO.get()
+                    .findByUserIdAndName(session.getUserId(), options.getName());
+            if (search == null)
+                search = new com.logicaldoc.core.searchengine.saved.SavedSearch();
 
-		try {
-			for (String name : names) {
-				com.logicaldoc.core.searchengine.saved.SavedSearch search = dao.findByUserIdAndName(session.getUserId(),
-						name);
-				if (search != null)
-					dao.delete(search.getId());
-			}
-		} catch (Exception t) {
-			throwServerException(session, log, t);
-		}
-	}
+            search.setName(options.getName());
+            search.setUserId(session.getUserId());
+            search.setTenantId(session.getTenantId());
+            search.setDescription(options.getDescription());
+            search.saveOptions(opt);
 
-	@Override
-	public GUISearchOptions load(String name) throws ServerException {
-		Session session = validateSession();
+            SearchDAO.get().store(search);
 
-		try {
-			com.logicaldoc.core.searchengine.saved.SavedSearch search = SearchDAO.get()
-					.findByUserIdAndName(session.getUserId(), name);
+            log.debug("Saved search {}", opt.getName());
+        } catch (Exception t) {
+            throwServerException(session, log, t);
+        }
+    }
 
-			GUISearchOptions guiOptions = toGUIOptions(search.readOptions());
-			if (guiOptions.getFolder() != null) {
-				Folder fld = FolderDAO.get().findById(guiOptions.getFolder());
-				if (fld != null)
-					guiOptions.setFolderName(fld.getName());
-			}
+    @Override
+    public void delete(List<String> names) throws ServerException {
+        Session session = validateSession();
+        SearchDAO dao = SearchDAO.get();
 
-			return guiOptions;
-		} catch (Exception t) {
-			return throwServerException(session, log, t);
-		}
-	}
+        try {
+            for (String name : names) {
+                com.logicaldoc.core.searchengine.saved.SavedSearch search = dao.findByUserIdAndName(session.getUserId(),
+                        name);
+                if (search != null)
+                    dao.delete(search.getId());
+            }
+        } catch (Exception t) {
+            throwServerException(session, log, t);
+        }
+    }
 
-	/**
-	 * Load all the search options associated to all the searches saved for the
-	 * current user
-	 * 
-	 * @param session the current session
-	 * 
-	 * @return the list of search options
-	 * 
-	 * @throws PersistenceException A problem at db level
-	 */
-	public static List<SearchOptions> getSearches(Session session) throws PersistenceException {
-		SearchDAO dao = SearchDAO.get();
+    @Override
+    public GUISearchOptions load(String name) throws ServerException {
+        Session session = validateSession();
 
-		Map<String, SearchOptions> map = new HashMap<>();
-		List<com.logicaldoc.core.searchengine.saved.SavedSearch> searches = dao.findByUserId(session.getUserId());
-		for (com.logicaldoc.core.searchengine.saved.SavedSearch search : searches) {
-			try {
-				map.put(search.getName(), search.readOptions());
-			} catch (Exception e) {
-				log.warn("Cannot read saved search {} of user {}", search.getName(), session.getUsername());
-				log.warn(e.getMessage(), e);
-			}
-		}
+        try {
+            com.logicaldoc.core.searchengine.saved.SavedSearch search = SearchDAO.get()
+                    .findByUserIdAndName(session.getUserId(), name);
 
-		return map.values().stream()
-				.sorted((SearchOptions s1, SearchOptions s2) -> s1.getName().compareTo(s2.getName())).toList();
-	}
+            SearchOptions options = search.readOptions();
+            GUISearchOptions guiOptions = converters.get(options.getType()).toGUISearchOptions(search.readOptions());
+            if (guiOptions.getFolder() != null) {
+                Folder fld = FolderDAO.get().findById(guiOptions.getFolder());
+                if (fld != null)
+                    guiOptions.setFolderName(fld.getName());
+            }
+            guiOptions.setName(name);
 
-	protected GUISearchOptions toGUIOptions(SearchOptions searchOptions) {
-		GUISearchOptions guiOptions = new GUISearchOptions();
-		guiOptions.setType(searchOptions.getType());
-		guiOptions.setDescription(searchOptions.getDescription());
-		guiOptions.setExpression(searchOptions.getExpression());
-		guiOptions.setMaxHits(searchOptions.getMaxHits());
-		guiOptions.setName(searchOptions.getName());
-		guiOptions.setUserId(searchOptions.getUserId());
-		guiOptions.setTopOperator(searchOptions.getTopOperator());
-		guiOptions.setFolder(searchOptions.getFolderId());
-		guiOptions.setSearchInSubPath(searchOptions.isSearchInSubPath());
-		guiOptions.setTemplate(searchOptions.getTemplate());
-		guiOptions.setCaseSensitive(searchOptions.isCaseSensitive());
-		guiOptions.setRetrieveAliases(searchOptions.isRetrieveAliases());
+            return guiOptions;
+        } catch (Exception t) {
+            return throwServerException(session, log, t);
+        }
+    }
 
-		if (searchOptions.getType() == SearchOptions.TYPE_FULLTEXT) {
-			guiOptions.setDateFrom(((FulltextSearchOptions) searchOptions).getDateFrom());
-			guiOptions.setDateTo(((FulltextSearchOptions) searchOptions).getDateTo());
-			guiOptions.setCreationFrom(((FulltextSearchOptions) searchOptions).getCreationFrom());
-			guiOptions.setCreationTo(((FulltextSearchOptions) searchOptions).getCreationTo());
-			guiOptions.setExpressionLanguage(((FulltextSearchOptions) searchOptions).getExpressionLanguage());
-			guiOptions.setFields(((FulltextSearchOptions) searchOptions).getFields().stream()
-					.filter(f -> !"title".equals(f)).collect(Collectors.toList()));
-			guiOptions.setFormat(((FulltextSearchOptions) searchOptions).getFormat());
-			guiOptions.setLanguage(((FulltextSearchOptions) searchOptions).getLanguage());
-			guiOptions.setSizeMax(((FulltextSearchOptions) searchOptions).getSizeMax());
-			guiOptions.setSizeMin(((FulltextSearchOptions) searchOptions).getSizeMin());
-		} else if (searchOptions.getType() == SearchOptions.TYPE_FOLDERS) {
-			List<GUICriterion> criteria = new ArrayList<>();
-			for (FolderCriterion criterion : ((FolderSearchOptions) searchOptions).getCriteria()) {
-				GUICriterion guiCriterion = new GUICriterion();
-				guiCriterion.setField(criterion.getField());
-				if (criterion.getType() == Attribute.TYPE_DATE)
-					guiCriterion.setDateValue(criterion.getDateValue());
-				else if (criterion.getType() == Attribute.TYPE_INT || criterion.getType() == FolderCriterion.TYPE_FOLDER
-						|| criterion.getType() == Attribute.TYPE_USER || criterion.getType() == Attribute.TYPE_BOOLEAN)
-					guiCriterion.setLongValue(criterion.getLongValue());
-				else if (criterion.getType() == Attribute.TYPE_DOUBLE)
-					guiCriterion.setDoubleValue(criterion.getDoubleValue());
-				else if (criterion.getType() == Attribute.TYPE_STRING
-						|| criterion.getType() == FolderCriterion.TYPE_LANGUAGE)
-					guiCriterion.setStringValue(criterion.getStringValue());
+    /**
+     * Load all the search options associated to all the searches saved for the
+     * current user
+     * 
+     * @param session the current session
+     * 
+     * @return the list of search options
+     * 
+     * @throws PersistenceException A problem at db level
+     */
+    public static List<SearchOptions> getSearches(Session session) throws PersistenceException {
+        SearchDAO dao = SearchDAO.get();
 
-				guiCriterion.setOperator(criterion.getOperator().toLowerCase());
+        Map<String, SearchOptions> map = new HashMap<>();
+        List<com.logicaldoc.core.searchengine.saved.SavedSearch> searches = dao.findByUserId(session.getUserId());
+        for (com.logicaldoc.core.searchengine.saved.SavedSearch search : searches) {
+            try {
+                map.put(search.getName(), search.readOptions());
+            } catch (Exception e) {
+                log.warn("Cannot read saved search {} of user {}", search.getName(), session.getUsername());
+                log.warn(e.getMessage(), e);
+            }
+        }
 
-				if (!"folder".equals(guiCriterion.getField()))
-					criteria.add(guiCriterion);
-			}
-			guiOptions.setCriteria(criteria);
-		}
+        return map.values().stream()
+                .sorted((SearchOptions s1, SearchOptions s2) -> s1.getName().compareTo(s2.getName())).toList();
+    }
 
-		guiOptions.setFilterIds(new ArrayList<>(searchOptions.getFilterIds()));
+    @Override
+    public void shareSearch(String name, List<Long> userIds, List<Long> groupIds) throws ServerException {
+        Session session = validateSession();
 
-		return guiOptions;
-	}
+        try {
+            com.logicaldoc.core.searchengine.saved.SavedSearch search = loadSavedSearch(name, session);
+            if (search == null)
+                return;
 
-	@Override
-	public void shareSearch(String name, List<Long> userIds, List<Long> groupIds) throws ServerException {
-		Session session = validateSession();
+            List<Long> allUsers = new ArrayList<>();
+            allUsers.addAll(userIds);
+            addUsersFromGroups(groupIds, allUsers);
 
-		try {
-			com.logicaldoc.core.searchengine.saved.SavedSearch search = loadSavedSearch(name, session);
-			if (search == null)
-				return;
+            for (Long userId : allUsers)
+                store(search, userId);
+        } catch (Exception t) {
+            throwServerException(session, log, t);
+        }
+    }
 
-			List<Long> allUsers = new ArrayList<>();
-			allUsers.addAll(userIds);
-			addUsersFromGroups(groupIds, allUsers);
+    private void store(com.logicaldoc.core.searchengine.saved.SavedSearch search, Long userId) {
+        try {
+            SearchDAO dao = SearchDAO.get();
+            com.logicaldoc.core.searchengine.saved.SavedSearch clone = new com.logicaldoc.core.searchengine.saved.SavedSearch(
+                    search);
+            clone.setUserId(userId);
+            dao.store(clone);
+        } catch (Exception t) {
+            log.warn("Cannot save search {} for user {}", search.getName(), userId, t);
+        }
+    }
 
-			for (Long userId : allUsers)
-				store(search, userId);
-		} catch (Exception t) {
-			throwServerException(session, log, t);
-		}
-	}
+    private void addUsersFromGroups(Collection<Long> groupIds, Collection<Long> users) throws PersistenceException {
+        UserDAO gDao = UserDAO.get();
+        for (Long gId : groupIds) {
+            Set<User> usrs = gDao.findByGroup(gId);
+            for (User user : usrs) {
+                if (!users.contains(user.getId()))
+                    users.add(user.getId());
+            }
+        }
+    }
 
-	private void store(com.logicaldoc.core.searchengine.saved.SavedSearch search, Long userId) {
-		try {
-			SearchDAO dao = SearchDAO.get();
-			com.logicaldoc.core.searchengine.saved.SavedSearch clone = new com.logicaldoc.core.searchengine.saved.SavedSearch(
-					search);
-			clone.setUserId(userId);
-			dao.store(clone);
-		} catch (Exception t) {
-			log.warn("Cannot save search {} for user {}", search.getName(), userId, t);
-		}
-	}
+    private com.logicaldoc.core.searchengine.saved.SavedSearch loadSavedSearch(String name, Session session)
+            throws PersistenceException {
+        SearchDAO dao = SearchDAO.get();
+        return dao.findByUserIdAndName(session.getUserId(), name);
+    }
 
-	private void addUsersFromGroups(Collection<Long> groupIds, Collection<Long> users) throws PersistenceException {
-		UserDAO gDao = UserDAO.get();
-		for (Long gId : groupIds) {
-			Set<User> usrs = gDao.findByGroup(gId);
-			for (User user : usrs) {
-				if (!users.contains(user.getId()))
-					users.add(user.getId());
-			}
-		}
-	}
-
-	private com.logicaldoc.core.searchengine.saved.SavedSearch loadSavedSearch(String name, Session session)
-			throws PersistenceException {
-		SearchDAO dao = SearchDAO.get();
-		return dao.findByUserIdAndName(session.getUserId(), name);
-	}
-
-	protected java.util.Date convertToJavaDate(Date source) {
-		if (source == null)
-			return source;
-
-		Calendar cal = Calendar.getInstance();
-		cal.setTime(source);
-		return cal.getTime();
-	}
-
-	protected SearchOptions toSearchOptions(GUISearchOptions guiOptions) {
-		SearchOptions searchOptions = Search.newOptions(guiOptions.getType());
-		searchOptions.setTopOperator(guiOptions.getTopOperator());
-		searchOptions.setDescription(guiOptions.getDescription());
-		searchOptions.setExpression(guiOptions.getExpression());
-		searchOptions.setMaxHits(guiOptions.getMaxHits());
-		searchOptions.setName(guiOptions.getName());
-		searchOptions.setUserId(guiOptions.getUserId());
-		searchOptions.setCaseSensitive(guiOptions.isCaseSensitive());
-		searchOptions.setRetrieveAliases(guiOptions.isRetrieveAliases());
-		searchOptions.setFolderId(guiOptions.getFolder());
-		searchOptions.setSearchInSubPath(guiOptions.isSearchInSubPath());
-		searchOptions.setTemplate(guiOptions.getTemplate());
-
-		if (guiOptions.getType() == SearchOptions.TYPE_FULLTEXT) {
-			((FulltextSearchOptions) searchOptions).setDateFrom(convertToJavaDate(guiOptions.getDateFrom()));
-			((FulltextSearchOptions) searchOptions).setDateTo(convertToJavaDate(guiOptions.getDateTo()));
-			((FulltextSearchOptions) searchOptions).setCreationFrom(convertToJavaDate(guiOptions.getCreationFrom()));
-			((FulltextSearchOptions) searchOptions).setCreationTo(convertToJavaDate(guiOptions.getCreationTo()));
-			((FulltextSearchOptions) searchOptions).setExpressionLanguage(guiOptions.getExpressionLanguage());
-			((FulltextSearchOptions) searchOptions).setFields(new HashSet<>(guiOptions.getFields()));
-			((FulltextSearchOptions) searchOptions).setFormat(guiOptions.getFormat());
-			((FulltextSearchOptions) searchOptions).setLanguage(guiOptions.getLanguage());
-			((FulltextSearchOptions) searchOptions).setSizeMax(guiOptions.getSizeMax());
-			((FulltextSearchOptions) searchOptions).setSizeMin(guiOptions.getSizeMin());
-		} else if (guiOptions.getType() == SearchOptions.TYPE_FOLDERS) {
-			List<FolderCriterion> criteria = new ArrayList<>();
-			for (GUICriterion guiCriterion : guiOptions.getCriteria()) {
-				FolderCriterion criterion = new FolderCriterion();
-				criterion.setField(guiCriterion.getField());
-				criterion.setComposition(guiOptions.getTopOperator());
-
-				String operator = null;
-				if ("icontains".equals(guiCriterion.getOperator()) || "inotcontains".equals(guiCriterion.getOperator()))
-					operator = guiCriterion.getOperator().substring(1);
-				else
-					operator = guiCriterion.getOperator();
-
-				criterion.setOperator(operator);
-
-				if (guiCriterion.getLongValue() != null) {
-					criterion.setLongValue(guiCriterion.getLongValue());
-				} else if (guiCriterion.getDateValue() != null) {
-					criterion.setDateValue(convertToJavaDate(guiCriterion.getDateValue()));
-				} else if (guiCriterion.getDoubleValue() != null) {
-					criterion.setDoubleValue(guiCriterion.getDoubleValue());
-				} else {
-					criterion.setValue(guiCriterion.getStringValue());
-				}
-
-				criteria.add(criterion);
-			}
-			((FolderSearchOptions) searchOptions).setCriteria(criteria);
-		}
-
-		searchOptions.setFilterIds(new HashSet<>(guiOptions.getFilterIds()));
-
-		return searchOptions;
-	}
 }

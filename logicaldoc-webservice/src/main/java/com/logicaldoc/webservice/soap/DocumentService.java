@@ -156,6 +156,7 @@ public interface DocumentService {
 	 * @param sid identifier of the session
 	 * @param docId The document id
 	 * @param folderId Identifier of the new document's folder
+	 * @return 
 	 * 
 	 * @throws PersistenceException Error in the database
 	 * @throws WebserviceException Error in the webservice
@@ -165,8 +166,9 @@ public interface DocumentService {
 	 * @throws UnexistingResourceException The specified document does not exist
 	 */
 	@WebMethod(action = "move")
+	@WebResult(name = "document")
 	@WSDoc(description = "moves an existing document with the given identifier")
-	public void move(@WSDoc(description = "identifier of the session", required = true)
+	public WSDocument move(@WSDoc(description = "identifier of the session", required = true)
 	@WebParam(name = "sid")
 	String sid, @WSDoc(description = "Document ID")
 	@WebParam(name = "docId")
@@ -357,6 +359,7 @@ public interface DocumentService {
 	 * @throws PersistenceException Error in the database
 	 * @throws WebserviceException Error in the webservice
 	 * @throws AuthenticationException Invalid session
+	 * @throws PermissionException The user cannot read
 	 */
 	@WebMethod(action = "getExtractedText")
 	@WebResult(name = "text")
@@ -365,7 +368,7 @@ public interface DocumentService {
 	@WebParam(name = "sid")
 	String sid, @WSDoc(description = "the document id")
 	@WebParam(name = "docId")
-	long docId) throws AuthenticationException, WebserviceException, PersistenceException;
+	long docId) throws AuthenticationException, WebserviceException, PersistenceException, PermissionException;
 
 	/**
 	 * Gets the content of a specific version of a document
@@ -656,6 +659,7 @@ public interface DocumentService {
 	 * @throws PersistenceException Error in the database
 	 * @throws WebserviceException Error in the webservice
 	 * @throws AuthenticationException Invalid session
+	 * @throws PermissionException User cannot write into the target folder
 	 */
 	@WebMethod(action = "restore")
 	@WSDoc(description = "restores a deleted document")
@@ -665,7 +669,7 @@ public interface DocumentService {
 	@WebParam(name = "docId")
 	long docId, @WSDoc(description = "id of the folder in which the document must be restored")
 	@WebParam(name = "folderId")
-	long folderId) throws AuthenticationException, WebserviceException, PersistenceException;
+	long folderId) throws AuthenticationException, WebserviceException, PersistenceException, PermissionException;
 
 	/**
 	 * Gets the version history of an existing document with the given
@@ -922,6 +926,7 @@ public interface DocumentService {
 	 * @throws PersistenceException Error at data layer
 	 * @throws WebserviceException Error in the webservice
 	 * @throws AuthenticationException Invalid session
+	 * @throws PermissionException  User without WRITE permissions on both documents
 	 */
 	@WebMethod(action = "deleteLink")
 	@WSDoc(description = "removes an existing link")
@@ -929,7 +934,7 @@ public interface DocumentService {
 	@WebParam(name = "sid")
 	String sid, @WSDoc(description = "identifier of the link")
 	@WebParam(name = "id")
-	long id) throws AuthenticationException, WebserviceException, PersistenceException;
+	long id) throws AuthenticationException, WebserviceException, PersistenceException, PermissionException;
 
 	/**
 	 * Re-indexes(or indexes from scratch) a document
@@ -942,6 +947,7 @@ public interface DocumentService {
 	 * @throws WebserviceException Error in the webservice
 	 * @throws AuthenticationException Invalid session
 	 * @throws ParsingException Error in adding the entry into fulltext index
+	 * @throws PermissionException User without read permission
 	 */
 	@WebMethod(action = "reindex")
 	@WSDoc(description = "re-indexes(or indexes from scratch) a document")
@@ -951,7 +957,7 @@ public interface DocumentService {
 	@WebParam(name = "docId")
 	long docId, @WSDoc(description = "the content to be used (if null the file is parsed)", required = false)
 	@WebParam(name = "content")
-	String content) throws AuthenticationException, WebserviceException, PersistenceException, ParsingException;
+	String content) throws AuthenticationException, WebserviceException, PersistenceException, ParsingException, PermissionException;
 
 	/**
 	 * Creates the PDF conversion of the given document. If the conversion was
@@ -1272,6 +1278,7 @@ public interface DocumentService {
 	 * @throws PersistenceException Error in the database
 	 * @throws WebserviceException Error in the webservice
 	 * @throws AuthenticationException Invalid session
+	 * @throws PermissionException The user does not have the DELETE permission
 	 */
 	@WebMethod(action = "deleteVersion")
 	@WebResult(name = "latest-version")
@@ -1282,7 +1289,7 @@ public interface DocumentService {
 	@WebParam(name = "docId")
 	long docId, @WSDoc(description = "the version to retrieve, eg: '1.0', '2.3'")
 	@WebParam(name = "version")
-	String version) throws AuthenticationException, WebserviceException, PersistenceException;
+	String version) throws AuthenticationException, WebserviceException, PersistenceException, PermissionException;
 
 	/**
 	 * Puts a new rating on the given document

@@ -62,7 +62,7 @@ public class EventCollector {
 	/**
 	 * Puts the history in the relative FIFO
 	 * 
-	 * @param history
+	 * @param history the upcoming event
 	 * @return true if it was not remembered already, false otherwise
 	 */
 	private boolean rememberHistory(History history) {
@@ -128,6 +128,6 @@ public class EventCollector {
 	}
 
 	public static boolean isEnabled() {
-		return RunLevel.current().aspectEnabled(Aspect.eventsGathering);
+		return RunLevel.current().aspectEnabled(Aspect.EVENTSGATHERING);
 	}
 }

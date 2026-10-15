@@ -5,7 +5,7 @@
 	<parent>
 		<groupId>com.logicaldoc</groupId>
 		<artifactId>logicaldoc</artifactId>
-		<version>9.2.2</version>
+		<version>9.3.1</version>
         <relativePath>../pom.xml</relativePath>
 	</parent>
 	<artifactId>logicaldoc-webservicedoc</artifactId>
@@ -51,7 +51,6 @@
 		<dependency>
 			<groupId>org.apache.cxf</groupId>
 			<artifactId>cxf-rt-rs-service-description</artifactId>
-<!--			<version>${cxf.rs-service-description.version}</version>-->
 		</dependency>
 		<dependency>
 			<groupId>org.apache.cxf</groupId>

@@ -45,12 +45,14 @@
         class="com.logicaldoc.core.security.spring.LDAuthenticationSuccessHandler" />
     <bean id="LDAuthenticationFailureHandler"
         class="com.logicaldoc.core.security.spring.LDAuthenticationFailureHandler" />
+
+    <bean id="queryStringFilter" class="com.logicaldoc.core.security.spring.QueryStringFilter" />
+	<bean id="AnonymousLoginFilter" class="com.logicaldoc.core.security.spring.AnonymousLoginFilter" />
+	<bean id="SessionFilter" class="com.logicaldoc.core.security.spring.SessionFilter" />
     
-    <bean id="AnonymousLoginFilter" class="com.logicaldoc.core.security.spring.AnonymousLoginFilter" />
-    <bean id="SessionFilter" class="com.logicaldoc.core.security.spring.SessionFilter" />
     <bean id="LDSecurityContextRepository"
         class="com.logicaldoc.core.security.spring.LDSecurityContextRepository" />
-    
+
     
     <security:authentication-manager id="authenticationManager">
         <security:authentication-provider ref='LDAuthenticationProvider' />
@@ -125,6 +127,7 @@
         <security:custom-filter ref="webserviceBasicAuthenticationFilter" before="BASIC_AUTH_FILTER" />
     </security:http>
  
+    <security:http pattern="/download-ticket" security="none" />
  
     <security:http use-expressions="true" create-session="never"
         disable-url-rewriting="true" auto-config="false"
@@ -149,6 +152,8 @@
         <security:intercept-url pattern="/mobile.jsp" access="isAuthenticated()" />
         <security:intercept-url pattern="/mobile/**" access="isAuthenticated()" />
         <security:intercept-url pattern="/download/**" access="isAuthenticated()" />
+        <security:intercept-url pattern="/wk-event" access="isAuthenticated()" />
+        <security:intercept-url pattern="/data/**" access="isAuthenticated()" />
         <security:intercept-url pattern="/**" access="permitAll()"/>
         
         <security:form-login login-page="/login.jsp"
@@ -157,10 +162,13 @@
             authentication-details-source-ref="LDAuthenticationDetailsSource"
             authentication-success-handler-ref="LDAuthenticationSuccessHandler"
             authentication-failure-handler-ref="LDAuthenticationFailureHandler" />
-        <!-- Exclude the default session management -->
-        <!-- security:session-management session-fixation-protection="none" / -->
-        <!-- Some session-related custom filters -->
-        <security:custom-filter ref="SessionFilter" before="PRE_AUTH_FILTER" />
-        <security:custom-filter ref="AnonymousLoginFilter" before="ANONYMOUS_FILTER" />
+            
+		<!-- Exclude the default session management -->
+		<!-- security:session-management session-fixation-protection="none" / -->
+
+		<!-- Some session-related custom filters -->
+		<security:custom-filter ref="queryStringFilter" after="REQUEST_CACHE_FILTER" />
+		<security:custom-filter ref="SessionFilter" before="PRE_AUTH_FILTER" />
+		<security:custom-filter ref="AnonymousLoginFilter" before="ANONYMOUS_FILTER" />
     </security:http>
 </beans>

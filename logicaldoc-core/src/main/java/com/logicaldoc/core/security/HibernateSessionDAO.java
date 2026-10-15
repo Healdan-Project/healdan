@@ -18,110 +18,114 @@ import jakarta.transaction.Transactional;
 @Transactional
 public class HibernateSessionDAO extends HibernatePersistentObjectDAO<Session> implements SessionDAO {
 
-	private static final String AND = " and ";
+    private static final String STATUS = "status";
 
-	protected HibernateSessionDAO() {
-		super(Session.class);
-	}
+    private static final String ONE_EQ_ONE = " 1 = 1 ";
 
-	@Override
-	public void deleteCurrentNodeSessions() {
-		try {
-			jdbcUpdate("update ld_session set ld_deleted=1 where ld_node = :node and ld_deleted=0",
-					Map.of("node", SystemInfo.get().getInstallationId()));
-		} catch (PersistenceException e) {
-			log.warn(e.getMessage(), e);
-		}
+    protected HibernateSessionDAO() {
+        super(Session.class);
+    }
 
-		try {
-			jdbcUpdate(
-					"update ld_session set ld_status=" + Session.STATUS_EXPIRED
-							+ " where ld_node = :node and ld_status = :status",
-					Map.of("node", SystemInfo.get().getInstallationId(), "status", Session.STATUS_OPEN));
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-		}
-	}
+    @Override
+    public void deleteCurrentNodeSessions() {
+        try {
+            jdbcUpdate("update ld_session set ld_deleted=1 where ld_node = :node and ld_deleted=0",
+                    Map.of("node", SystemInfo.get().getInstallationId()));
+        } catch (PersistenceException e) {
+            log.warn(e.getMessage(), e);
+        }
 
-	@Override
-	public int countSessions(Long tenantId, Integer status) {
-		StringBuilder query = new StringBuilder(" 1=1 ");
-		if (tenantId != null)
-			query.append(AND + ENTITY + ".tenantId = " + tenantId);
-		if (status != null) {
-			query.append(AND + ENTITY + ".status = " + status);
-			if (status.intValue() == Session.STATUS_OPEN)
-				query.append(AND + ENTITY + ".finished is null ");
-		}
+        try {
+            jdbcUpdate(
+                    "update ld_session set ld_status = %d where ld_node = :node and ld_status = :status"
+                            .formatted(SessionStatus.EXPIRED.ordinal()),
+                    Map.of("node", SystemInfo.get().getInstallationId(), STATUS, SessionStatus.OPEN.ordinal()));
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+        }
+    }
 
-		try {
-			List<Session> sessions = findByWhere(query.toString(), null, null);
-			return sessions.size();
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-			return 0;
-		}
-	}
+    @Override
+    public int countSessions(Long tenantId, SessionStatus status) {
+        Map<String, Object> params = new HashMap<>();
+        StringBuilder query = new StringBuilder(ONE_EQ_ONE);
+        if (tenantId != null) {
+            query.append(" and _entity.tenantId = :tenantId");
+            params.put("tenantId", tenantId);
+        }
+        if (status != null) {
+            params.put(STATUS, status);
+            query.append(" and _entity.status = :status");
+            if (SessionStatus.OPEN.equals(status))
+                query.append(" and _entity.finished is null ");
+        }
 
-	@Override
-	public int countSessions(String username, Integer status) {
-		StringBuilder query = new StringBuilder(" 1=1 ");
-		if (username != null)
-			query.append(AND + ENTITY + ".username = :username ");
-		if (status != null) {
-			query.append(AND + ENTITY + ".status = " + status);
-			if (status.intValue() == Session.STATUS_OPEN)
-				query.append(AND + ENTITY + ".finished is null ");
-		}
+        try {
+            List<Session> sessions = findByWhere(query.toString(), params, null, null);
+            return sessions.size();
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+            return 0;
+        }
+    }
 
-		try {	
-			List<Session> sessions = findByWhere(query.toString(),
-					username != null ? Map.of("username", StringUtils.defaultString(username)) : null, null, null);
-			return sessions.size();
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-			return 0;
-		}
-	}
+    @Override
+    public int countSessions(String username, SessionStatus status) {
+        Map<String, Object> params = new HashMap<>();
+        StringBuilder query = new StringBuilder(ONE_EQ_ONE);
+        if (username != null) {
+            query.append(" and _entity.username = :username ");
+            params.put("username", StringUtils.defaultString(username));
+        }
+        if (status != null) {
+            params.put(STATUS, status);
+            query.append(" and _entity.status = :status ");
+            if (SessionStatus.OPEN.equals(status))
+                query.append(" and _entity.finished is null ");
+        }
 
-	@Override
-	public Session findBySid(String sid) {
-		try {
-			Map<String, Object> params = new HashMap<>();
-			params.put("sid", sid);
-			List<Session> sessions = findByWhere(ENTITY + ".sid = :sid", params, null, null);
-			for (Session session : sessions) {
-				if (session.getDeleted() == 0)
-					return session;
-			}
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-		}
-		return null;
-	}
+        try {
+            List<Session> sessions = findByWhere(query.toString(), params, null, null);
+            return sessions.size();
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+            return 0;
+        }
+    }
 
-	@Override
-	public List<Session> findByNode(String node) {
-		try {
-			if (StringUtils.isEmpty(node))
-				return findByWhere(" 1=1 ", (Map<String, Object>) null, ENTITY + ".creation desc", null);
-			else {
-				Map<String, Object> params = new HashMap<>();
-				params.put("node", node);
-				return findByWhere(ENTITY + ".node = :node", params, ENTITY + ".creation desc", null);
-			}
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-			return new ArrayList<>();
-		}
-	}
+    @Override
+    public Session findBySid(String sid) {
+        try {
+            List<Session> sessions = findByWhere("_entity.sid = :sid", Map.of("sid", sid), null, null);
+            for (Session session : sessions) {
+                if (session.getDeleted() == 0)
+                    return session;
+            }
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+        }
+        return null;
+    }
 
-	@Override
-	public void cleanOldSessions(int ttl) {
-		try {
-			log.info("cleanOldSessions rows updated: {}", cleanOldRecords(ttl, "ld_session", "ld_creation"));
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-		}
-	}
+    @Override
+    public List<Session> findByNode(String node) {
+        try {
+            if (StringUtils.isEmpty(node))
+                return findByWhere(ONE_EQ_ONE, (Map<String, Object>) null, "_entity.creation desc", null);
+            else
+                return findByWhere("_entity.node = :node", Map.of("node", node), "_entity.creation desc", null);
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+
+    @Override
+    public void cleanOldSessions(int ttl) {
+        try {
+            log.info("cleanOldSessions rows updated: {}", cleanOldRecords(ttl, "ld_session", "ld_creation"));
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+        }
+    }
 }

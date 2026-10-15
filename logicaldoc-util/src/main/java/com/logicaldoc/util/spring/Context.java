@@ -71,9 +71,9 @@ public class Context implements ApplicationContextAware, ApplicationListener<App
 	/**
 	 * Gets the registry with all the configuration properties for this context
 	 * 
-	 * @return the instance of ContextProperties in the application context
+	 * @return the instance of {@link ContextProperties} in the application context
 	 */
-	public ContextProperties getProperties() {
+	public ContextProperties getConfig() {
 		return getBean(ContextProperties.class);
 	}
 
@@ -269,7 +269,6 @@ public class Context implements ApplicationContextAware, ApplicationListener<App
 			return;
 
 		for (SystemEventListener evt : evts) {
-
 			try {
 				evt.processEvent();
 			} catch (Exception t) {

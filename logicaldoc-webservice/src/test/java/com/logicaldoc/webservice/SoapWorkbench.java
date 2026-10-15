@@ -53,12 +53,12 @@ public class SoapWorkbench {
 		develProps.load(new FileInputStream(new File(System.getProperty("user.home") + "/logicaldoc-dev.properties")));
 
 		// Open a session
-		String sid = auth.loginApiKey(develProps.getProperty("apikey.Development"));
+		String sid = auth.loginApiKey(develProps.getProperty("apikey.Development")+">marco");
 		System.out.println("Server date: " + systemClient.getInfo().getDate());
 		System.out.println("Sid: " + sid);
 
 		try {
-			System.out.println(info.getInfo().getProductName() + "  " + info.getInfo().getDate());
+		//	System.out.println(info.getInfo().getProductName() + "  " + info.getInfo().getDate());
 
 //			systemStuff(sid);
 
@@ -70,7 +70,7 @@ public class SoapWorkbench {
 
 //		    securityStuff(sid);
 
-			documentStuff(sid);
+			 documentStuff(sid);
 
 			// This will search by filename using LIKE %filename%
 			// searchByFilename(sid, "simply");
@@ -159,7 +159,7 @@ public class SoapWorkbench {
 			// System.out.println("**************************************");
 			// }
 
-			massiveInsert(sid);
+			// massiveInsert(sid);
 		} finally {
 			auth.logout(sid);
 		}
@@ -576,11 +576,19 @@ public class SoapWorkbench {
 //			System.out.println(doc.getFileName() + "\t" + doc.getDate());
 //		}
 
-		WSDocument doc = documentClient.getDocument(sid, 723651853L);
+		WSDocument doc = documentClient.getDocument(sid, 36188012751L);
 		for (WSAttribute attr : doc.getAttributes()) {
 			System.out.println(attr.getName() + " s:" + attr.getStringValue() + " i:" + attr.getIntValue() + " d:"
 					+ attr.getDoubleValue());
 		}
+//		doc.getAttribute("InvoiceNo").setStringValue(doc.getAttribute("InvoiceNo").getStringValue()+"zz");
+//		documentClient.update(sid, doc);
+		
+//		doc = new WSDocument();
+//		doc.setFolderId(4L);
+//		doc.setFileName("pippo.xml");
+//		doc =  documentClient.create(sid, doc, new File("pom.xml"));
+//		System.out.println("Created document "+doc.getId());
 
 //
 //		doc.setId(0);

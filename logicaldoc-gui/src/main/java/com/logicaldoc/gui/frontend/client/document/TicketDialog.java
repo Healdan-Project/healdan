@@ -9,7 +9,6 @@ import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.Feature;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.i18n.I18N;
-import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
 import com.logicaldoc.gui.frontend.client.services.DocumentService;
 import com.smartgwt.client.data.AdvancedCriteria;
@@ -34,168 +33,178 @@ import com.smartgwt.client.widgets.layout.VLayout;
  */
 public class TicketDialog extends Window {
 
-	private static final String MAXVIEWS = "maxviews";
+    private static final String PASSWORD = "password";
 
-	private static final String ACTION = "action";
+    private static final String MAXVIEWS = "maxviews";
 
-	private static final String MAXDOWNLOADS = "maxdownloads";
+    private static final String ACTION = "action";
 
-	private static final String CONTENT = "content";
+    private static final String MAXDOWNLOADS = "maxdownloads";
 
-	private static final String DUEDATENUMBER = "duedatenumber";
+    private static final String CONTENT = "content";
 
-	private IButton save;
+    private static final String DUEDATENUMBER = "duedatenumber";
 
-	private DynamicForm form;
+    private IButton save;
 
-	private GUIDocument document;
+    private DynamicForm form;
 
-	public TicketDialog(GUIDocument document) {
-		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		setTitle(I18N.message("ticket"));
-		setCanDragResize(true);
-		setIsModal(true);
-		setShowModalMask(true);
-		centerInPage();
-		setAutoSize(true);
+    private GUIDocument document;
 
-		this.document = document;
+    public TicketDialog(GUIDocument document) {
+        setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
+        setTitle(I18N.message("ticket"));
+        setCanDragResize(true);
+        setIsModal(true);
+        setShowModalMask(true);
+        centerInPage();
+        setAutoSize(true);
 
-		save = new IButton(I18N.message("save"));
-		save.addClickHandler(event -> onSave());
+        this.document = document;
 
-		prepareForm();
+        save = new IButton(I18N.message("save"));
+        save.addClickHandler(event -> onSave());
 
-		VLayout layout = new VLayout();
-		layout.setMembersMargin(5);
+        prepareForm();
 
-		layout.addMember(form);
-		layout.addMember(save);
+        VLayout layout = new VLayout();
+        layout.setMembersMargin(5);
 
-		addItem(layout);
-	}
+        layout.addMember(form);
+        layout.addMember(save);
 
-	private void prepareForm() {
-		form = new DynamicForm();
-		form.setAlign(Alignment.LEFT);
-		form.setNumCols(4);
+        addItem(layout);
+    }
 
-		SelectItem docOrPdfConversion = ItemFactory.newAliasTypeSelector();
-		docOrPdfConversion.setTitle(I18N.message(CONTENT));
-		docOrPdfConversion.setName(CONTENT);
-		docOrPdfConversion.setValue("");
-		docOrPdfConversion.setEndRow(true);
-		docOrPdfConversion.setColSpan(4);
-		docOrPdfConversion.setWrapTitle(false);
+    private void prepareForm() {
+        form = new DynamicForm();
+        form.setAlign(Alignment.LEFT);
+        form.setNumCols(4);
 
-		DateItem date = ItemFactory.newDateItem("date", I18N.message("expireson"));
-		date.setEndRow(true);
-		date.setColSpan(4);
-		date.setWrapTitle(false);
+        SelectItem docOrPdfConversion = ItemFactory.newAliasTypeSelector();
+        docOrPdfConversion.setTitle(I18N.message(CONTENT));
+        docOrPdfConversion.setName(CONTENT);
+        docOrPdfConversion.setValue("");
+        docOrPdfConversion.setEndRow(true);
+        docOrPdfConversion.setColSpan(4);
+        docOrPdfConversion.setWrapTitle(false);
 
-		SpinnerItem maxDownloads = ItemFactory.newSpinnerItem(MAXDOWNLOADS, (Integer) null);
-		maxDownloads.setEndRow(true);
-		maxDownloads.setColSpan(4);
-		maxDownloads.setWrapTitle(false);
-		maxDownloads.setRequired(false);
-		maxDownloads.setMin(0);
+        DateItem date = ItemFactory.newDateItem("date", I18N.message("expireson"));
+        date.setEndRow(true);
+        date.setColSpan(4);
+        date.setWrapTitle(false);
 
-		SpinnerItem duedateTimeItem = ItemFactory.newSpinnerItem(DUEDATENUMBER, I18N.message("expiresin"), 24);
-		duedateTimeItem.setWrapTitle(false);
-		duedateTimeItem.setDefaultValue(24);
-		duedateTimeItem.setMin(0);
-		SelectItem duedateTime = ItemFactory.newDueTimeSelector("duedatetime", "");
-		LinkedHashMap<String, String> map = new LinkedHashMap<>();
-		map.put("hour", I18N.message("hours"));
-		map.put("day", I18N.message("ddays"));
-		duedateTime.setValueMap(map);
-		duedateTime.setValue("hour");
+        SpinnerItem maxDownloads = ItemFactory.newSpinnerItem(MAXDOWNLOADS, (Integer) null);
+        maxDownloads.setEndRow(true);
+        maxDownloads.setColSpan(4);
+        maxDownloads.setWrapTitle(false);
+        maxDownloads.setRequired(false);
+        maxDownloads.setMin(0);
 
-		SelectItem action = ItemFactory.newSelectItem(ACTION);
-		action.setEndRow(true);
-		action.setColSpan(4);
-		action.setWrapTitle(false);
-		LinkedHashMap<String, String> types = new LinkedHashMap<>();
-		types.put("0", I18N.message("download"));
-		types.put("2", I18N.message("view"));
-		action.setValueMap(types);
-		action.setValue("0");
-		action.setVisible(Feature.enabled(Feature.VIEW_TICKET));
+        SpinnerItem duedateTimeItem = ItemFactory.newSpinnerItem(DUEDATENUMBER, I18N.message("expiresin"), 24);
+        duedateTimeItem.setWrapTitle(false);
+        duedateTimeItem.setDefaultValue(24);
+        duedateTimeItem.setMin(0);
+        SelectItem duedateTime = ItemFactory.newDueTimeSelector("duedatetime", "");
+        LinkedHashMap<String, String> map = new LinkedHashMap<>();
+        map.put("hour", I18N.message("hours"));
+        map.put("day", I18N.message("ddays"));
+        duedateTime.setValueMap(map);
+        duedateTime.setValue("hour");
 
-		SpinnerItem maxViews = ItemFactory.newSpinnerItem(MAXVIEWS, (Integer) null);
-		maxViews.setEndRow(true);
-		maxViews.setColSpan(4);
-		maxViews.setWrapTitle(false);
-		maxViews.setRequired(false);
-		maxViews.setMin(0);
-		maxViews.setVisibleWhen(new AdvancedCriteria(ACTION, OperatorId.EQUALS, "2"));
+        SelectItem action = ItemFactory.newSelectItem(ACTION);
+        action.setEndRow(true);
+        action.setColSpan(4);
+        action.setWrapTitle(false);
+        LinkedHashMap<String, String> types = new LinkedHashMap<>();
+        types.put("0", I18N.message("download"));
+        types.put("2", I18N.message("view"));
+        action.setValueMap(types);
+        action.setValue("0");
+        action.setVisible(Feature.enabled(Feature.VIEW_TICKET));
 
-		PasswordItem password = ItemFactory.newPasswordItemPreventAutocomplete("password", "password", null, true);
-		password.setColSpan(4);
+        SpinnerItem maxViews = ItemFactory.newSpinnerItem(MAXVIEWS, (Integer) null);
+        maxViews.setEndRow(true);
+        maxViews.setColSpan(4);
+        maxViews.setWrapTitle(false);
+        maxViews.setRequired(false);
+        maxViews.setMin(0);
+        maxViews.setVisibleWhen(new AdvancedCriteria(ACTION, OperatorId.EQUALS, "2"));
 
-		form.setItems(action, docOrPdfConversion, duedateTimeItem, duedateTime, date, maxDownloads, maxViews, password);
-	}
+        PasswordItem password = ItemFactory.newPasswordItemPreventAutocomplete(PASSWORD, PASSWORD, null, true);
+        password.setColSpan(4);
 
-	public void onSave() {
-		if (!form.validate())
-			return;
+        form.setItems(action, docOrPdfConversion, duedateTimeItem, duedateTime, date, maxDownloads, maxViews, password);
+    }
 
-		String suffix = form.getValue(CONTENT).toString();
-		Date date = (Date) form.getValue("date");
+    public void onSave() {
+        if (!form.validate())
+            return;
 
-		Integer expireHours = null;
-		if (form.getValue(DUEDATENUMBER) != null)
-			expireHours = Integer.parseInt(form.getValueAsString(DUEDATENUMBER));
-		if (expireHours != null && "day".equals(form.getValueAsString("duedatetime")))
-			expireHours = expireHours * 24;
+        String suffix = form.getValue(CONTENT).toString();
+        Date date = (Date) form.getValue("date");
 
-		if (date == null && (expireHours == null || expireHours.intValue() < 1))
-			SC.warn(I18N.message("providexepinfo"));
+        Integer expireHours = getExpireHours();
+        if (date == null && (expireHours == null || expireHours.intValue() < 1))
+            SC.warn(I18N.message("providexepinfo"));
 
-		Integer maxDownloads = null;
-		String val = form.getValueAsString(MAXDOWNLOADS);
-		if (val != null && !val.trim().isEmpty())
-			maxDownloads = Integer.parseInt(val.trim());
+        Integer maxDownloads = getMaxDownloads();
 
-		Integer maxViews = null;
-		val = form.getValueAsString(MAXVIEWS);
-		if (val != null && !val.trim().isEmpty())
-			maxViews = Integer.parseInt(val.trim());
+        Integer maxViews = getMaxViews();
 
-		Object psw = form.getValue("password");
-		String password = psw != null && !psw.toString().isEmpty() ? psw.toString() : null;
+        Object psw = form.getValue(PASSWORD);
+        String password = psw != null && !psw.toString().isEmpty() ? psw.toString() : null;
 
-		DocumentService.Instance.get().createTicket(document.getId(), Integer.parseInt(form.getValueAsString(ACTION)),
-				suffix, expireHours, date, maxDownloads, maxViews, password, new DefaultAsyncCallback<>() {
+        DocumentService.Instance.get().createTicket(document.getId(), Integer.parseInt(form.getValueAsString(ACTION)),
+                suffix, expireHours, date, maxDownloads, maxViews, password, new DefaultAsyncCallback<>() {
 
-					@Override
-					public void onFailure(Throwable caught) {
-						GuiLog.info(caught.getMessage());
-						super.onFailure(caught);
-					}
+                    @Override
+                    public void handleSuccess(List<String> ret) {
+                        if (ret.get(0).contains("passwordweek")) {
+                            List<String> errors = new ArrayList<>();
+                            for (int i = 1; i < ret.size(); i++)
+                                errors.add(ret.get(i));
+                            form.setFieldErrors(PASSWORD, errors.toArray(new String[0]), true);
+                        } else {
+                            destroy();
+                            new TicketDisplay(ret.get(0), ret.get(1), ret.get(2)).show();
+                        }
+                    }
+                });
+    }
 
-					@Override
-					public void handleSuccess(List<String> ret) {
-						if (ret.get(0).contains("passwordweek")) {
-							List<String> errors = new ArrayList<>();
-							for (int i = 1; i<ret.size();i++ )
-							  errors.add(ret.get(i));
-							form.setFieldErrors("password", errors.toArray(new String[0]), true);
-						} else {
-							destroy();
-							new TicketDisplay(ret.get(0), ret.get(1), ret.get(2)).show();
-						}
-					}
-				});
-	}
+    private Integer getMaxViews() {
+        Integer maxViews = null;
+        String val = form.getValueAsString(MAXVIEWS);
+        if (val != null && !val.trim().isEmpty())
+            maxViews = Integer.parseInt(val.trim());
+        return maxViews;
+    }
 
-	@Override
-	public boolean equals(Object other) {
-		return super.equals(other);
-	}
+    private Integer getMaxDownloads() {
+        Integer maxDownloads = null;
+        String val = form.getValueAsString(MAXDOWNLOADS);
+        if (val != null && !val.trim().isEmpty())
+            maxDownloads = Integer.parseInt(val.trim());
+        return maxDownloads;
+    }
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+    private Integer getExpireHours() {
+        Integer expireHours = null;
+        if (form.getValue(DUEDATENUMBER) != null)
+            expireHours = Integer.parseInt(form.getValueAsString(DUEDATENUMBER));
+        if (expireHours != null && "day".equals(form.getValueAsString("duedatetime")))
+            expireHours = expireHours * 24;
+        return expireHours;
+    }
+
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

@@ -33,6 +33,7 @@ public class HibernateTemplateDAOTest extends AbstractCoreTestCase {
 	private TemplateDAO testSubject;
 
 	@Before
+	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
 
@@ -63,9 +64,8 @@ public class HibernateTemplateDAOTest extends AbstractCoreTestCase {
 	
 	@Test
 	public void testFindById() throws PersistenceException {
-		Template template = testSubject.findById(1);
+		Template template = testSubject.findById(1L, true);
 		assertNotNull(template);
-		testSubject.initialize(template);
 		assertEquals(1, template.getId());
 		assertEquals("test1", template.getName());
 		assertTrue(template.getAttributes().containsKey("attr1"));
@@ -74,9 +74,8 @@ public class HibernateTemplateDAOTest extends AbstractCoreTestCase {
 		template = testSubject.findById(99);
 		assertNull(template);
 
-		template = testSubject.findById(-1);
+		template = testSubject.findById(-1L, true);
 		assertNotNull(template);
-		testSubject.initialize(template);
 		assertEquals(-1, template.getId());
 		assertEquals("default", template.getName());
 		assertTrue(template.getAttributes().containsKey("object"));
@@ -84,17 +83,15 @@ public class HibernateTemplateDAOTest extends AbstractCoreTestCase {
 
 	@Test
 	public void testClone() throws PersistenceException {
-		Template template = testSubject.findById(1);
+		Template template = testSubject.findById(1L, true);
 		assertNotNull(template);
-		testSubject.initialize(template);
 		assertEquals(1, template.getId());
 		assertEquals("test1", template.getName());
 		assertTrue(template.getAttributes().containsKey("attr1"));
 		
 		Template clone = testSubject.clone(1, "test1-Clone");
 		assertNotNull(clone);
-		clone = testSubject.findById(clone.getId());
-		testSubject.initialize(clone);
+		clone = testSubject.findById(clone.getId(), true);
 		assertNotSame(1, clone.getId());
 		assertEquals("test1-Clone", clone.getName());
 		assertTrue(clone.getAttributes().containsKey("attr1"));
@@ -104,7 +101,7 @@ public class HibernateTemplateDAOTest extends AbstractCoreTestCase {
 	public void testFindByName() throws PersistenceException {
 		Template template = testSubject.findByName("test1", Tenant.DEFAULT_ID);
 		assertNotNull(template);
-		testSubject.initialize(template);
+		template = testSubject.initialize(template);
 		assertEquals(1, template.getId());
 		assertEquals("test1", template.getName());
 
@@ -125,9 +122,8 @@ public class HibernateTemplateDAOTest extends AbstractCoreTestCase {
 
 		testSubject.store(template);
 		assertNotNull(template);
-		template = testSubject.findById(template.getId());
+		template = testSubject.findById(template.getId(), true);
 		assertNotNull(template);
-		testSubject.initialize(template);
 		assertEquals("test3", template.getName());
 		assertTrue(template.getTemplateAttributes().containsKey("a1"));
 		assertTrue(template.getTemplateAttributes().containsKey("a2"));

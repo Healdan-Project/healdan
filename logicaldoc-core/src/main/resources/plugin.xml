@@ -88,7 +88,7 @@
 <!ELEMENT value (#PCDATA)>
 ]>
 
-<plugin id="logicaldoc-core" version="9.2.2" class="com.logicaldoc.core.CorePlugin">
+<plugin id="logicaldoc-core" version="9.3.1" class="com.logicaldoc.core.CorePlugin">
   <extension-point id="DbInit">
     <parameter-def id="sqlFile" />
     <parameter-def id="position" />
@@ -120,6 +120,10 @@
     <parameter-def id="class" />
     <parameter-def id="position" />
   </extension-point>
+  <extension-point id="TicketListener">
+    <parameter-def id="class" />
+    <parameter-def id="position" />
+  </extension-point>  
   <extension-point id="Authentication">
     <parameter-def id="authenticatorId" />
     <parameter-def id="position" />
@@ -418,6 +422,9 @@
   </extension>
   <extension plugin-id="logicaldoc-core" point-id="Feature" id="fwd97">
 	    <parameter id="name" value="Feature_97" />
+  </extension>
+  <extension plugin-id="logicaldoc-core" point-id="Feature" id="f110">
+	<parameter id="name" value="Feature_110" />
   </extension>  
   
   <extension plugin-id="logicaldoc-core" point-id="Task" id="taskStatsCollector">
@@ -470,6 +477,9 @@
     <extension plugin-id="logicaldoc-core" point-id="Aspect" id="aspSendingMessages">
     <parameter id="code" value="sendingMessages" />
   </extension> 
+  <extension plugin-id="logicaldoc-core" point-id="Aspect" id="aspAutofill">
+    <parameter id="code" value="autofill" />
+  </extension>
 
   <extension plugin-id="logicaldoc-core" point-id="FormatConverter" id="imageConv">
 		<parameter id="in" value="png,gif,jpg,jpeg,jfif,tif,tiff,bmp,psd,webp,heic"/>
@@ -521,6 +531,11 @@
 		<parameter id="out" value="jpg,png,tif,ps,txt"/>
 		<parameter id="class" value="com.logicaldoc.core.conversion.GhostscriptConverter"/>
   </extension>
+  <extension plugin-id="logicaldoc-core" point-id="FormatConverter" id="popplerConverter">
+		<parameter id="in" value="pdf"/>
+		<parameter id="out" value="jpg,png,tif,txt,html"/>
+		<parameter id="class" value="com.logicaldoc.core.conversion.PopplerConverter"/>
+  </extension>  
   <extension plugin-id="logicaldoc-core" point-id="FormatConverter" id="pstConv">
 		<parameter id="in" value="pst"/>
 		<parameter id="out" value="txt,pdf"/>

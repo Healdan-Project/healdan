@@ -25,7 +25,7 @@
 
     <context:annotation-config />
 
-    <tx:annotation-driven transaction-manager="TransactionManager" />
+    <tx:annotation-driven transaction-manager="transactionManager" />
 
 	<import resource="classpath*:context-security.xml" />
 
@@ -34,12 +34,12 @@
 	<!-- This post processor ensures placeholders substitutions -->
 	<bean id="placeholder" class="com.logicaldoc.util.spring.PropertiesPlaceHolder" />
 	
-	<bean id="ContextProperties" class="${registry}">
+	<bean id="config" class="${registry}">
 		<property name="maxBackups" value="10" />
 	</bean>
 	
 	<!-- Connection Pool implementations -->
-	<bean id="DbcpConfig" class="com.logicaldoc.core.util.DbcpConfiguration">
+	<bean id="dbcpConfig" class="com.logicaldoc.core.util.DbcpConfiguration">
 		<property name="driverClassName" value="${jdbc.driver}" />
 		<property name="url" value="${jdbc.url}" />
 		<property name="username" value="${jdbc.username}" />
@@ -55,7 +55,7 @@
 			value="${jdbc.dbcp.timeBetweenEvictionRuns}" />
 		<property name="numTestsPerEvictionRun" value="${jdbc.dbcp.testsPerEvictionRun}" />
 	</bean>
-	<bean id="HikariConfig" class="com.zaxxer.hikari.HikariConfig">
+	<bean id="hikariConfig" class="com.zaxxer.hikari.HikariConfig">
 		<property name="poolName" value="Connection Pool" />
 		<property name="connectionTestQuery" value="${jdbc.validationQuery}" />
 		<property name="driverClassName" value="${jdbc.driver}" />
@@ -71,16 +71,16 @@
 	</bean>
 
 	<!-- Data Source -->
-	<bean id="DataSource" class="com.logicaldoc.core.util.ConnectionPool" destroy-method="close" init-method="init">
+	<bean id="dataSource" class="com.logicaldoc.core.util.ConnectionPool" destroy-method="close" init-method="init">
 		<property name="implementation" value="${jdbc.cp}" />
-		<property name="hikariConfig" ref="HikariConfig" />
-		<property name="dbcpConfig" ref="DbcpConfig" />
+		<property name="hikariConfig" ref="hikariConfig" />
+		<property name="dbcpConfig" ref="dbcpConfig" />
 	</bean>
 
     <!-- Hibernate SessionFactory -->
-    <bean id="SessionFactory" class="com.logicaldoc.util.spring.LocalSessionFactory"
+    <bean id="sessionFactory" class="com.logicaldoc.util.spring.LocalSessionFactory"
 		abstract="false" lazy-init="default" autowire="default">
-		<property name="dataSource" ref="DataSource" />
+		<property name="dataSource" ref="dataSource" />
 		<property name="entityInterceptor">
 			<bean class="com.logicaldoc.core.LastModifiedInterceptor" />
 		</property>
@@ -93,22 +93,22 @@
                 <prop key="hibernate.cache.use_second_level_cache">true</prop>
                 <prop key="hibernate.cache.use_query_cache">true</prop>
                 <prop key="hibernate.cache.region.factory_class">org.infinispan.hibernate.cache.v62.InfinispanRegionFactory</prop>
-                <prop key="hibernate.cache.infinispan.cfg">#{ContextProperties.get('cluster.enabled') == 'true' ? 'infinispan-cluster.xml' : 'infinispan.xml'}</prop>
+                <prop key="hibernate.cache.infinispan.cfg">#{config.get('cluster.enabled') == 'true' ? 'infinispan-cluster.xml' : 'infinispan.xml'}</prop>
             </props>
 		</property>
 	</bean>
 	<!--Transaction management -->
-	<bean id="TransactionManager"
+	<bean id="transactionManager"
 		class="org.springframework.orm.hibernate5.HibernateTransactionManager" abstract="false"
 		lazy-init="default" autowire="default">
-		<property name="sessionFactory" ref="SessionFactory" />
+		<property name="sessionFactory" ref="sessionFactory" />
 	</bean>
 	<!--Transactional proxy -->
-	<bean id="ApplicationBaseTransactionProxy"
+	<bean id="applicationBaseTransactionProxy"
 		class="org.springframework.transaction.interceptor.TransactionProxyFactoryBean" lazy-init="true"
 		abstract="false" autowire="default">
 		<property name="transactionManager">
-			<ref bean="TransactionManager" />
+			<ref bean="transactionManager" />
 		</property>
 		<property name="transactionAttributes">
 			<props>
@@ -116,23 +116,9 @@
 			</props>
 		</property>
 	</bean>
-	<bean id="TempFolderCleanerJob"
-		class="org.springframework.scheduling.quartz.MethodInvokingJobDetailFactoryBean">
-		<property name="targetObject">
-			<bean class="com.logicaldoc.web.TempFolderCleaner" />
-		</property>
-		<property name="targetMethod" value="clean" />
-		<property name="concurrent" value="false" />
-	</bean>
-	<bean id="TempFolderCleaner"
-		class="org.springframework.scheduling.quartz.SimpleTriggerFactoryBean">
-		<property name="jobDetail" ref="TempFolderCleanerJob" />
-		<property name="startDelay" value="10000" />
-		<property name="repeatInterval" value="3600000" />
-	</bean>
 
 	<!-- Scheduler -->
-	<bean id="Scheduler" class="com.logicaldoc.core.task.DefaultSchedulerFactory"
+	<bean id="scheduler" class="com.logicaldoc.core.task.DefaultSchedulerFactory"
 		destroy-method="destroy">
 		<property name="waitForJobsToCompleteOnShutdown" value="true" />
 	</bean>

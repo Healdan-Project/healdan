@@ -19,7 +19,7 @@ import com.smartgwt.client.widgets.menu.MenuItem;
  */
 public class SystemUsageGrid extends ListGrid {
 
-	private static final String PROGRESS = "progress";
+	private static final String CONSUMPTION = "consumption";
 
 	public SystemUsageGrid() {
 		this(true, -1L);
@@ -59,7 +59,7 @@ public class SystemUsageGrid extends ListGrid {
 		use.setAutoFitWidthApproach(AutoFitWidthApproach.BOTH);
 		use.setCellFormatter((value, rec, rowNum, colNum) -> stylize(value + "%", rec));
 
-		ListGridField progress = new ListGridField(PROGRESS, I18N.message(PROGRESS));
+		ListGridField progress = new ListGridField(CONSUMPTION, I18N.message(CONSUMPTION));
 		progress.setWidth(200);
 
 		setFields(label, max, used, available, use, progress);
@@ -82,7 +82,7 @@ public class SystemUsageGrid extends ListGrid {
 		MenuItem history = new MenuItem();
 		history.setTitle(I18N.message("usagehistory"));
 		history.addClickHandler(
-				event -> new SystemUsageHistoryChart(getSelectedRecord().getAttributeAsString("measure"),
+				click -> new SystemUsageHistoryChart(getSelectedRecord().getAttributeAsString("measure"),
 						getSelectedRecord().getAttributeAsString("label"), tenantId).show());
 
 		Menu contextMenu = new Menu();
@@ -92,6 +92,9 @@ public class SystemUsageGrid extends ListGrid {
 	}
 
 	private String stylize(String value, ListGridRecord rec) {
+		if(value.startsWith("-"))
+			return "";
+		
 		if (rec.getAttributeAsInt("use") > 90) {
 			return "<span class='systemusage-low'>" + value + "</span>";
 		} else {
@@ -102,7 +105,7 @@ public class SystemUsageGrid extends ListGrid {
 	@Override
 	protected Canvas createRecordComponent(final ListGridRecord rec, Integer colNum) {
 		String fieldName = this.getFieldName(colNum);
-		if (fieldName.equals(PROGRESS)) {
+		if (fieldName.equals(CONSUMPTION)) {
 			Progressbar prgBar = new Progressbar();
 			prgBar.setLength(200);
 			prgBar.setBreadth(15);

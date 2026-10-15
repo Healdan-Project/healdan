@@ -85,8 +85,6 @@ public class UpdateStandardPropertiesPanel extends DocumentDetailTab {
 		List<FormItem> items = new ArrayList<>();
 
 		SelectItem language = ItemFactory.newLanguageSelector(LANGUAGE, true, false);
-		if (document.getLanguage() != null)
-			language = ItemFactory.newLanguageSelector(LANGUAGE, false, false);
 		language.setDisabled(!updateEnabled);
 		language.setValue(document.getLanguage());
 		items.add(language);
@@ -94,6 +92,11 @@ public class UpdateStandardPropertiesPanel extends DocumentDetailTab {
 		ColorItem color = ItemFactory.newColorPickerItem(document.getColor(), true, changedHandler);
 		color.setDisabled(!updateEnabled);
 		items.add(color);
+
+		TextItem customId = ItemFactory.newTextItem("customid", document.getCustomId());
+		customId.setDisabled(!updateEnabled || (document.getId() != 0L && !document.isCustomid()));
+		if (Feature.enabled(Feature.CUSTOMID))
+			items.add(customId);
 
 		if (Feature.enabled(Feature.TAGS)) {
 			String mode = Session.get().getConfig("tag.mode");
@@ -203,6 +206,7 @@ public class UpdateStandardPropertiesPanel extends DocumentDetailTab {
 		if (Boolean.FALSE.equals(vm.hasErrors())) {
 			document.setLanguage(vm.getValueAsString(LANGUAGE));
 			document.setColor(vm.getValueAsString("color"));
+			document.setCustomId(vm.getValueAsString("customid"));
 			document.setTags(Arrays.asList(tagItem.getValues()));
 		}
 		return !vm.hasErrors();

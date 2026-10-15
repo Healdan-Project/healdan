@@ -102,21 +102,19 @@ public class DocumentResourceUpload extends HttpServlet {
 
 			DocumentDAO docDao = DocumentDAO.get();
 
-			Document doc = docDao.findById(docId);
+			Document doc = docDao.findById(docId, true);
 			Folder folder = doc.getFolder();
 			if (fdao.isPermissionAllowed(Permission.SIGN, folder.getId(), user.getId())) {
 				ServletUtil.uploadDocumentResource(request, docId, suffix, fileVersion, docVersion);
 				if (suffix.startsWith("sign")) {
-					docDao.initialize(doc);
 					doc.setSigned(true);
 					docDao.store(doc);
 					VersionDAO vdao = VersionDAO.get();
 					Version version = null;
 					if (StringUtils.isNotEmpty(docVersion))
-						version = vdao.findByVersion(doc.getId(), docVersion);
+						version = vdao.findByVersion(doc.getId(), docVersion, true);
 					else
-						version = vdao.findByVersion(doc.getId(), doc.getVersion());
-					vdao.initialize(version);
+						version = vdao.findByVersion(doc.getId(), doc.getVersion(), true);
 					version.setSigned(true);
 					vdao.store(version);
 				}

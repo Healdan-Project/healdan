@@ -31,6 +31,8 @@ public final class Constants {
 
 	public static final String WORKSPACE_DEFAULTNAME = "Default";
 
+	public static final long TENANT_SYSTEMID = -1L;
+	
 	public static final long TENANT_DEFAULTID = 1L;
 
 	public static final String TENANT_DEFAULTNAME = "default";
@@ -105,6 +107,19 @@ public final class Constants {
 	// The document is un-indexable
 	public static final int INDEX_SKIP = 2;
 
+	/**
+	 * The document must be embedded
+	 */
+	public static final int EMBED_TO_EMBED = 0;
+
+	// The document is un-embeddable
+	public static final int EMBED_SKIP = 1;
+	
+	/**
+	 * The document has already been embedded
+	 */
+	public static final int EMBED_EMBEDDED = 2;
+	
 	public static final String LOCALE = "locale";
 
 	public static final String TENANT = "tenant";
@@ -147,6 +162,8 @@ public final class Constants {
 	public static final String TWOFA_YUBIKEY = "yubikey";
 
 	public static final String TWOFA_EMAIL_AUTHENTICATOR = "emailauthenticator";
+	
+	public static final String TWOFA_WHATSAPP_AUTHENTICATOR = "whatsappauthenticator";
 
 	public static final String TWOFA_DUO = "duo";
 

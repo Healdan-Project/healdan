@@ -24,6 +24,7 @@ import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.util.IconSelector;
+import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.io.FileUtil;
 import com.logicaldoc.util.spring.Context;
 
@@ -38,314 +39,324 @@ import jakarta.servlet.http.HttpServletResponse;
  */
 public class FoldersDataServlet extends AbstractDataServlet {
 
-	private static final long serialVersionUID = 1L;
+    private static final String NAME_ELEMENT = "<name><![CDATA[%s]]></name>";
 
-	private static final String PARENT = "parent";
+    private static final String PARENT_ELEMENT = "<parent>%s</parent>";
 
-	public static final String FOLDER_PAGE_SIZE = "ld-folder-page-size";
+    private static final String PARENT_ID_ELEMENT = "<parentId>%d</parentId>";
 
-	public static final String FOLDER_START_RECORD = "ld-folder-start-gridRecord";
+    private static final String FOLDER_ELEMENT_CLOSED = "</folder>";
 
-	private static final Logger log = LoggerFactory.getLogger(FoldersDataServlet.class);
+    private static final String FOLDER_ELEMENT = "<folder>";
 
-	@Override
-	protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
-			Locale locale) throws PersistenceException, IOException {
+    private static final long serialVersionUID = 1L;
 
-		if (request.getParameter(PARENT) != null
-				&& (request.getParameter(PARENT).startsWith("d-") || request.getParameter(PARENT).equals("null"))) {
-			// The user clicked on a file
-			PrintWriter writer = response.getWriter();
-			writer.write("<list></list>");
-			return;
-		}
+    private static final String PARENT = "parent";
 
-		boolean withroot = "true".equals(request.getParameter("withroot"));
-		boolean nopagination = "true".equals(request.getParameter("nopagination"));
-		long tenantId = session.getTenantId();
-		String tenantName = session.getTenantName();
+    public static final String FOLDER_PAGE_SIZE = "ld-folder-page-size";
 
-		String parent = getParent(request, tenantId);
+    public static final String FOLDER_START_RECORD = "ld-folder-start-gridRecord";
 
-		long parentFolderId = getParentFolderId(parent);
+    private static final Logger log = LoggerFactory.getLogger(FoldersDataServlet.class);
 
-		Folder parentFolder = getParentFolder(response, parent, parentFolderId);
-		boolean root = parentFolder.getParentId() == parentFolder.getId();
+    @Override
+    protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
+            Locale locale) throws PersistenceException, IOException {
 
-		UserDAO udao = UserDAO.get();
-		User user = udao.findById(session.getUserId());
-		udao.initialize(user);
+        if (request.getParameter(PARENT) != null
+                && (request.getParameter(PARENT).startsWith("d-") || request.getParameter(PARENT).equals("null"))) {
+            // The user clicked on a file
+            PrintWriter writer = response.getWriter();
+            writer.write("<list></list>");
+            return;
+        }
 
-		/*
-		 * Check if we have to paginate and what should be the start and end
-		 * gridRecord numbers
-		 */
-		Long[] indexes = getCurrentPageExtents(session, nopagination, parentFolderId, parentFolder);
-		Long startRecord = indexes[0];
-		Long endRecord = indexes[1];
+        boolean withroot = "true".equals(request.getParameter("withroot"));
+        boolean nopagination = "true".equals(request.getParameter("nopagination"));
+        long tenantId = session.getTenantId();
+        String tenantName = session.getTenantName();
 
-		PrintWriter writer = response.getWriter();
-		writer.write("<list>");
+        String parent = getParent(request, tenantId);
 
-		if (parentFolder != null) {
-			if ("/".equals(request.getParameter(PARENT)) && withroot) {
-				writer.print("<folder>");
-				writer.print("<id>" + parentFolder.getId() + "</id>");
-				writer.print("<folderId>" + parentFolder.getId() + "</folderId>");
-				writer.print("<parentId>" + parentFolder.getId() + "</parentId>");
-				writer.print("<parent>" + parent + "</parent>");
-				writer.print("<name><![CDATA[" + parentFolder.getName() + "]]></name>");
-				writer.print("<type>" + parentFolder.getType() + "</type>");
-				writer.print("<status>0</status>");
-				writer.print("<publishedStatus>yes</publishedStatus>");
-				writer.print("</folder>");
-			} else {
-				printFolders(writer, session, tenantId, tenantName, parent, parentFolder, user,
-						root ? null : startRecord, root ? null : endRecord);
-			}
-		}
+        long parentFolderId = getParentFolderId(parent);
 
-		if (request.getParameter("withdocs") != null) {
-			printFoldersWithDocs(writer, parent, parentFolder, user);
-		}
+        Folder parentFolder = getParentFolder(parent, parentFolderId);
+        boolean root = parentFolder.getParentId() == parentFolder.getId();
 
-		writer.write("</list>");
-	}
+        User user = UserDAO.get().findById(session.getUserId(), true);
 
-	private void printFolders(PrintWriter writer, Session session, long tenantId, String tenantName, String parent,
-			Folder parentFolder, User user, Long startRecord, Long endRecord) throws PersistenceException {
-		StringBuilder query = prepareQuery(session, tenantName, parentFolder, user);
-		FolderDAO folderDao = FolderDAO.get();
-		folderDao.queryForResultSet(query.toString(), Map.of("parentId", parentFolder.getId(), "tenantId", tenantId),
-				null, rows -> {
-					long i = 0;
-					while (rows.next()) {
-						if ((startRecord != null && i < startRecord) || (endRecord != null && i > endRecord)) {
-							i++;
-							continue;
-						}
+        /*
+         * Check if we have to paginate and what should be the start and end
+         * gridRecord numbers
+         */
+        Long[] indexes = getCurrentPageExtents(session, nopagination, parentFolderId, parentFolder);
+        Long startRecord = indexes[0];
+        Long endRecord = indexes[1];
 
-						writer.print("<folder>");
-						writer.print("<id>" + parent + "-" + rows.getLong(1) + "</id>");
-						writer.print("<folderId>" + rows.getLong(1) + "</folderId>");
-						writer.print("<parentId>" + rows.getLong(2) + "</parentId>");
-						writer.print("<parent>" + parent + "</parent>");
-						writer.print("<name><![CDATA[" + rows.getString(3) + "]]></name>");
-						writer.print("<type>" + rows.getInt(4) + "</type>");
-						printFoldRef(writer, rows);
-						printCustomIcon(writer, rows);
-						writer.print("<status>0</status>");
-						writer.print("<publishedStatus>yes</publishedStatus>");
-						printColor(writer, rows);
-						writer.print("<position>" + rows.getInt(7) + "</position>");
-						writer.print("</folder>");
+        PrintWriter writer = response.getWriter();
+        writer.write("<list>");
 
-						i++;
-					}
-				});
-	}
+        if ("/".equals(request.getParameter(PARENT)) && withroot) {
+            writer.print(FOLDER_ELEMENT);
+            writer.print("<id>%d</id>".formatted(parentFolder.getId()));
+            writer.print("<folderId>%d</folderId>".formatted(parentFolder.getId()));
+            writer.print(PARENT_ID_ELEMENT.formatted(parentFolder.getId()));
+            writer.print(PARENT_ELEMENT.formatted(parent));
+            writer.print(NAME_ELEMENT.formatted(parentFolder.getName()));
+            writer.print("<type>%d</type>".formatted(parentFolder.getType()));
+            writer.print("<status>0</status>");
+            writer.print("<publishedStatus>yes</publishedStatus>");
+            writer.print(FOLDER_ELEMENT_CLOSED);
+        } else {
+            printFolders(writer, session, tenantId, tenantName, parent, parentFolder, user, root ? null : startRecord,
+                    root ? null : endRecord);
+        }
 
-	private void printColor(PrintWriter writer, ResultSet rs) throws SQLException {
-		if (StringUtils.isNotEmpty(rs.getString(6)))
-			writer.print("<color><![CDATA[" + rs.getString(6) + "]]></color>");
-	}
+        if (request.getParameter("withdocs") != null) {
+            printFoldersWithDocs(writer, parent, parentFolder, user);
+        }
 
-	private void printCustomIcon(PrintWriter writer, ResultSet rs) throws SQLException {
-		writer.print(
-				"<customIcon>" + (rs.getInt(4) == Folder.TYPE_ALIAS ? "folder_alias" : "folder") + "</customIcon>");
-	}
+        writer.write("</list>");
+    }
 
-	private void printFoldRef(PrintWriter writer, ResultSet rs) throws SQLException {
-		if (rs.getObject(5) != null)
-			writer.print("<foldRef>" + rs.getLong(5) + "</foldRef>");
-	}
+    private void printFolders(PrintWriter writer, Session session, long tenantId, String tenantName, String parent,
+            Folder parentFolder, User user, Long startRecord, Long endRecord) throws PersistenceException {
+        StringBuilder query = prepareQuery(session, tenantName, parentFolder, user);
+        FolderDAO folderDao = FolderDAO.get();
+        folderDao.queryForResultSet(query.toString(), Map.of("parentId", parentFolder.getId(), "tenantId", tenantId),
+                null, rows -> {
+                    long i = 0;
+                    while (rows.next()) {
+                        if ((startRecord != null && i < startRecord) || (endRecord != null && i > endRecord)) {
+                            i++;
+                            continue;
+                        }
 
-	private void printFoldersWithDocs(PrintWriter writer, String parent, Folder parentFolder, User user)
-			throws PersistenceException {
-		StringBuilder query = new StringBuilder(
-				"select ld_id, ld_filename, ld_filesize, ld_published, ld_startpublishing, ld_stoppublishing, ld_status, ld_color from ld_document where ld_deleted=0 and ld_folderid=:parentId ");
-		if (!user.isMemberOf(Group.GROUP_ADMIN) && !user.isMemberOf("publisher")) {
-			query.append(" and ld_published=1");
-			query.append(" and (ld_startpublishing is null or CURRENT_TIMESTAMP > ld_startpublishing) ");
-			query.append(" and (ld_stoppublishing is null or CURRENT_TIMESTAMP < ld_stoppublishing) ");
-		}
-		query.append(" order by ld_filename");
+                        writer.print(FOLDER_ELEMENT);
+                        writer.print("<id>%s-%d</id>".formatted(parent, rows.getLong(1)));
+                        writer.print("<folderId>%d</folderId>".formatted(rows.getLong(1)));
+                        writer.print(PARENT_ID_ELEMENT.formatted(rows.getLong(2)));
+                        writer.print(PARENT_ELEMENT.formatted(parent));
+                        writer.print(NAME_ELEMENT.formatted(rows.getString(3)));
+                        writer.print("<type>%d</type>".formatted(rows.getInt(4)));
+                        printFoldRef(writer, rows);
+                        printCustomIcon(writer, rows);
+                        writer.print("<status>0</status>");
+                        writer.print("<publishedStatus>yes</publishedStatus>");
+                        printColor(writer, rows);
+                        writer.print("<position>%d</position>".formatted(rows.getInt(7)));
+                        writer.print(FOLDER_ELEMENT_CLOSED);
 
-		if (parentFolder != null) {
-			FolderDAO folderDao = FolderDAO.get();
-			Map<String, Object> params = new HashMap<>();
-			params.put("parentId", parentFolder.getId());
+                        i++;
+                    }
+                });
+    }
 
-			folderDao.queryForResultSet(query.toString(), params, null,
-					rows -> printFoldersWithDocs(writer, rows, parent, parentFolder.getId()));
-		}
-	}
+    private void printColor(PrintWriter writer, ResultSet rs) throws SQLException {
+        if (StringUtils.isNotEmpty(rs.getString(6)))
+            writer.print(String.format("<color><![CDATA[%s]]></color>", rs.getString(6)));
+    }
 
-	private void printFoldersWithDocs(PrintWriter writer, ResultSet rs, String parent, long parentId)
-			throws SQLException {
-		while (rs.next()) {
-			Date now = new Date();
-			boolean published = (rs.getInt(4) == 1) && (rs.getDate(5) == null || now.after(rs.getDate(5)))
-					&& (rs.getDate(6) == null || now.before(rs.getDate(6)));
-			writer.print("<folder>");
-			writer.print("<id>d-" + rs.getLong(1) + "</id>");
-			writer.print("<folderId>d-" + rs.getLong(1) + "</folderId>");
-			writer.print("<parentId>" + parentId + "</parentId>");
-			writer.print("<parent>" + parent + "</parent>");
-			writer.print("<name><![CDATA[" + rs.getString(2) + "]]></name>");
-			writer.print("<type>file</type>");
-			writer.print("<customIcon>"
-					+ FileUtil.getBaseName(IconSelector.selectIcon(FileUtil.getExtension(rs.getString(2))))
-					+ "</customIcon>");
-			writer.print("<size>" + rs.getInt(3) + "</size>");
-			writer.print("<status>" + rs.getInt(7) + "</status>");
-			writer.print("<publishedStatus>" + (published ? "yes" : "no") + "</publishedStatus>");
-			if (StringUtils.isNotEmpty(rs.getString(8)))
-				writer.print("<color><![CDATA[" + rs.getString(8) + "]]></color>");
-			writer.print("<position>0</position>");
-			writer.print("</folder>");
-		}
-	}
+    private void printCustomIcon(PrintWriter writer, ResultSet rs) throws SQLException {
+        writer.print(String.format("<customIcon>%s</customIcon>",
+                rs.getInt(4) == Folder.TYPE_ALIAS ? "folder_alias" : "folder"));
+    }
 
-	private StringBuilder prepareQuery(Session session, String tenantName, Folder parentFolder, User user)
-			throws PersistenceException {
-		StringBuilder query = new StringBuilder(
-				"select ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_color, ld_position from ld_folder where ld_deleted=0 and ld_hidden=0 and not ld_id=ld_parentid and ld_parentid = :parentId and ld_tenantid = :tenantId ");
-		if (!user.isMemberOf(Group.GROUP_ADMIN) && parentFolder != null) {
-			addReadConditions(query, session, parentFolder);
-		}
-		query.append(" order by ld_position asc, ");
-		if ("name".equals(Context.get().getProperties().getProperty(tenantName + ".gui.folder.sorting")))
-			query.append(" ld_name asc ");
-		else
-			query.append(" ld_creation desc ");
-		return query;
-	}
+    private void printFoldRef(PrintWriter writer, ResultSet rs) throws SQLException {
+        if (rs.getObject(5) != null)
+            writer.print(String.format("<foldRef>%d</foldRef>", rs.getLong(5)));
+    }
 
-	private void addReadConditions(StringBuilder query, Session session, Folder parentFolder)
-			throws PersistenceException {
-		FolderDAO folderDao = FolderDAO.get();
-		Collection<Long> accessibleIds = folderDao.findFolderIdByUserId(session.getUserId(), parentFolder.getId(),
-				false);
-		if (!accessibleIds.isEmpty()) {
-			List<Long> folderIds = new ArrayList<>(accessibleIds);
-			query.append(" and ( ");
+    private void printFoldersWithDocs(PrintWriter writer, String parent, Folder parentFolder, User user)
+            throws PersistenceException {
+        StringBuilder query = new StringBuilder("""
+                                                select ld_id, ld_filename, ld_filesize, ld_published, ld_startpublishing, ld_stoppublishing, ld_status, ld_color 
+                                                  from ld_document 
+                                                 where ld_deleted = 0 and ld_folderid = :parentId 
+                                                """);
+        if (!user.isMemberOf(Group.GROUP_ADMIN) && !user.isMemberOf("publisher")) {
+            query.append(" and ld_published=1");
+            query.append(" and (ld_startpublishing is null or CURRENT_TIMESTAMP > ld_startpublishing) ");
+            query.append(" and (ld_stoppublishing is null or CURRENT_TIMESTAMP < ld_stoppublishing) ");
+        }
+        query.append(" order by ld_filename");
 
-			/*
-			 * Oracle has a dramatic limitation: no more than 1000 elements in a
-			 * list, so we have to partition the list groups of at least 1000
-			 * elements.
-			 */
-			int length = folderIds.size();
-			int chunkSize = 1000;
-			int fullChunks = (int) Math.ceil((double) length / (double) chunkSize);
-			for (int chunk = 0; chunk < fullChunks; chunk++) {
-				if (chunk > 0)
-					query.append(" or ");
+        if (parentFolder != null) {
+            FolderDAO folderDao = FolderDAO.get();
+            Map<String, Object> params = new HashMap<>();
+            params.put("parentId", parentFolder.getId());
 
-				int chunkStart = chunk * chunkSize;
-				List<Long> sublist = folderIds.subList(chunkStart,
-						chunkStart + chunkSize < length ? chunkStart + chunkSize : length);
-				String idsStr = sublist.toString().replace('[', '(').replace(']', ')');
-				query.append(" ld_id in " + idsStr);
-			}
+            folderDao.queryForResultSet(query.toString(), params, null,
+                    rows -> printFoldersWithDocs(writer, rows, parent, parentFolder.getId()));
+        }
+    }
 
-			query.append(" ) ");
-		} else {
-			// no folders are accessible so we do not have to return any
-			// gridRecord
-			query.append(" and 1 = 2");
-		}
-	}
+    private void printFoldersWithDocs(PrintWriter writer, ResultSet rs, String parent, long parentId)
+            throws SQLException {
+        while (rs.next()) {
+            Date now = new Date();
+            boolean published = (rs.getInt(4) == 1) && (rs.getDate(5) == null || now.after(rs.getDate(5)))
+                    && (rs.getDate(6) == null || now.before(rs.getDate(6)));
+            writer.print(FOLDER_ELEMENT);
+            writer.print(String.format("<id>d-%d</id>", rs.getLong(1)));
+            writer.print(String.format("<folderId>d-%d</folderId>", rs.getLong(1)));
+            writer.print(String.format(PARENT_ID_ELEMENT, parentId));
+            writer.print(String.format(PARENT_ELEMENT, parent));
+            writer.print(String.format(NAME_ELEMENT, rs.getString(2)));
+            writer.print("<type>file</type>");
+            writer.print(String.format("<customIcon>%s</customIcon>",
+                    FileUtil.getBaseName(IconSelector.selectIcon(FileUtil.getExtension(rs.getString(2))))));
+            writer.print(String.format("<size>%d</size>", rs.getInt(3)));
+            writer.print(String.format("<status>%d</status>", rs.getInt(7)));
+            writer.print(String.format("<publishedStatus>%s</publishedStatus>", published ? "yes" : "no"));
+            if (StringUtils.isNotEmpty(rs.getString(8)))
+                writer.print(String.format("<color><![CDATA[%s]]></color>", rs.getString(8)));
+            writer.print("<position>0</position>");
+            writer.print(FOLDER_ELEMENT_CLOSED);
+        }
+    }
 
-	private Long[] getCurrentPageExtents(Session session, boolean nopagination, long parentFolderId,
-			Folder parentFolder) {
-		Long startRecord = null;
-		Long endRecord = null;
+    private StringBuilder prepareQuery(Session session, String tenantName, Folder parentFolder, User user)
+            throws PersistenceException {
+        StringBuilder query = new StringBuilder("""
+                                                select ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_color, ld_position 
+                                                  from ld_folder 
+                                                 where ld_deleted = 0 and ld_hidden = 0 
+                                                   and not ld_id = ld_parentid 
+                                                   and ld_parentid = :parentId 
+                                                   and ld_tenantid = :tenantId 
+                                                """);
+        if (!user.isMemberOf(Group.GROUP_ADMIN) && parentFolder != null)
+            addReadConditions(query, session, parentFolder);
 
-		if (!nopagination) {
-			// Check if the folder itself specifies a max number of records
-			// per page
-			if (parentFolder != null && StringUtils.isNotEmpty(parentFolder.getGrid()))
-				endRecord = getFolderPageSizeFromSpec(parentFolder.getGrid());
+        query.append(" order by ld_position asc, ");
+        if ("name".equals(Context.get().getConfig().getProperty("%s.gui.folder.sorting".formatted(tenantName))))
+            query.append(" ld_name asc ");
+        else
+            query.append(" ld_creation desc ");
+        return query;
+    }
 
-			// Go with the default page size
-			if (endRecord == null)
-				endRecord = Context.get().getProperties().getLong(session.getTenantName() + ".gui.folder.maxchildren",
-						2000L);
+    private void addReadConditions(StringBuilder query, Session session, Folder parentFolder)
+            throws PersistenceException {
+        FolderDAO folderDao = FolderDAO.get();
+        Collection<Long> accessibleIds = folderDao.findFolderIdByUserId(session.getUserId(), parentFolder.getId(),
+                false);
+        if (!accessibleIds.isEmpty()) {
+            List<Long> folderIds = new ArrayList<>(accessibleIds);
+            query.append(" and ( ");
 
-			Integer[] pagination = new Integer[] {
-					(Integer) session.getDictionary().get(FOLDER_START_RECORD + ":" + parentFolderId),
-					(Integer) session.getDictionary().get(FOLDER_PAGE_SIZE + ":" + parentFolderId) };
-			if (pagination[0] != null && pagination[1] != null) {
-				log.debug("Found pagination for folder {} -> max: {}  page: {}", parentFolder, pagination[0],
-						pagination[1]);
-				startRecord = (long) pagination[0];
-				endRecord = startRecord + pagination[1] - 1;
-			}
-		} else {
-			endRecord = Long.MAX_VALUE;
-		}
+            /*
+             * Oracle has a dramatic limitation: no more than 1000 elements in a
+             * list, so we have to partition the list groups of at least 1000
+             * elements.
+             */
+            int length = folderIds.size();
+            int chunkSize = 1000;
+            int fullChunks = (int) Math.ceil((double) length / (double) chunkSize);
+            for (int chunk = 0; chunk < fullChunks; chunk++) {
+                if (chunk > 0)
+                    query.append(" or ");
 
-		return new Long[] { startRecord, endRecord };
-	}
+                int chunkStart = chunk * chunkSize;
+                List<Long> sublist = folderIds.subList(chunkStart,
+                        chunkStart + chunkSize < length ? chunkStart + chunkSize : length);
+                query.append(" ld_id in (%s) ".formatted(CollectionUtil.join(sublist)));
+            }
 
-	private Folder getParentFolder(HttpServletResponse response, String parent, long parentFolderId)
-			throws PersistenceException {
-		FolderDAO fDao = FolderDAO.get();
-		Folder parentFolder = fDao.findFolder(parentFolderId);
-		if (parentFolder == null) {
-			String message = String.format("No folder found with ID=%d parent %s", parentFolderId, parent);
-			log.error(message);
-			try {
-				response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, message);
-			} catch (IOException e) {
-				// Nothing to do
-			}
-		}
-		return parentFolder;
-	}
+            query.append(" ) ");
+        } else {
+            // no folders are accessible so we do not have to return any
+            // gridRecord
+            query.append(" and 1 = 2");
+        }
+    }
 
-	private long getParentFolderId(String parent) {
-		long parentFolderId = 0;
-		if (parent.contains("-")) {
-			parentFolderId = Long.parseLong(parent.substring(parent.lastIndexOf('-') + 1));
-		} else
-			parentFolderId = Long.parseLong(parent);
-		return parentFolderId;
-	}
+    private Long[] getCurrentPageExtents(Session session, boolean nopagination, long parentFolderId,
+            Folder parentFolder) {
+        Long startRecord = null;
+        Long endRecord = null;
 
-	private String getParent(HttpServletRequest request, long tenantId) throws PersistenceException, IOException {
-		FolderDAO folderDao = FolderDAO.get();
-		String parent = "" + Folder.ROOTID;
+        if (!nopagination) {
+            // Check if the folder itself specifies a max number of records
+            // per page
+            if (parentFolder != null && StringUtils.isNotEmpty(parentFolder.getGrid()))
+                endRecord = getFolderPageSizeFromSpec(parentFolder.getGrid());
 
-		if (request.getParameter(PARENT) != null) {
-			parent = request.getParameter(PARENT);
-		} else if (request.getParameter("criteria") != null) {
-			String criteria = request.getParameter("criteria");
-			parent = criteria.substring(criteria.indexOf("value") + 8);
-			parent = parent.substring(0, parent.indexOf('"'));
-		}
-		if ("/".equals(parent)) {
-			Folder root = folderDao.findRoot(tenantId);
-			if (root == null)
-				throw new IOException("Unable to locate the root folder for tenant " + tenantId);
-			parent = "" + root.getId();
-		}
-		return parent;
-	}
+            // Go with the default page size
+            if (endRecord == null)
+                endRecord = Context.get().getConfig()
+                        .getLong("%s.gui.folder.maxchildren".formatted(session.getTenantName()), 2000L);
 
-	private static Long getFolderPageSizeFromSpec(String spec) {
-		if (spec != null && spec.startsWith("|")) {
-			try {
-				String txt = spec.substring(1, spec.indexOf('('));
-				String[] tokens = txt.split("\\|");
-				if (tokens.length == 2)
-					return Long.parseLong(tokens[0]);
-			} catch (Exception t) {
-				return null;
-			}
-		}
-		return null;
-	}
+            Integer[] pagination = new Integer[] {
+                    (Integer) session.getDictionary()
+                            .get("%s:%d".formatted(FoldersDataServlet.FOLDER_START_RECORD, parentFolderId)),
+                    (Integer) session.getDictionary()
+                            .get("%s:%d".formatted(FoldersDataServlet.FOLDER_PAGE_SIZE, parentFolderId)) };
+            if (pagination[0] != null && pagination[1] != null) {
+                log.debug("Found pagination for folder {} -> max: {}  page: {}", parentFolder, pagination[0],
+                        pagination[1]);
+                startRecord = (long) pagination[0];
+                endRecord = startRecord + pagination[1] - 1;
+            }
+        } else {
+            endRecord = Long.MAX_VALUE;
+        }
+
+        return new Long[] { startRecord, endRecord };
+    }
+
+    private Folder getParentFolder(String parent, long parentFolderId) throws PersistenceException {
+        FolderDAO fDao = FolderDAO.get();
+        Folder parentFolder = fDao.findFolder(parentFolderId);
+        if (parentFolder == null) {
+            throw new PersistenceException(
+                    String.format("No folder found with ID = %d parent %s", parentFolderId, parent));
+        } else {
+            return parentFolder;
+        }
+    }
+
+    private long getParentFolderId(String parent) {
+        long parentFolderId = 0;
+        if (parent.contains("-")) {
+            parentFolderId = Long.parseLong(parent.substring(parent.lastIndexOf('-') + 1));
+        } else
+            parentFolderId = Long.parseLong(parent);
+        return parentFolderId;
+    }
+
+    private String getParent(HttpServletRequest request, long tenantId) throws PersistenceException, IOException {
+        FolderDAO folderDao = FolderDAO.get();
+        String parent = Long.toString(Folder.ROOTID);
+
+        if (request.getParameter(PARENT) != null) {
+            parent = request.getParameter(PARENT);
+        } else if (request.getParameter("criteria") != null) {
+            String criteria = request.getParameter("criteria");
+            parent = criteria.substring(criteria.indexOf("value") + 8);
+            parent = parent.substring(0, parent.indexOf('"'));
+        }
+        if ("/".equals(parent)) {
+            Folder root = folderDao.findRoot(tenantId);
+            if (root == null)
+                throw new IOException("Unable to locate the root folder for tenant %d".formatted(tenantId));
+            parent = Long.toString(root.getId());
+        }
+        return parent;
+    }
+
+    private static Long getFolderPageSizeFromSpec(String spec) {
+        if (spec != null && spec.startsWith("|")) {
+            try {
+                String txt = spec.substring(1, spec.indexOf('('));
+                String[] tokens = txt.split("\\|");
+                if (tokens.length == 2)
+                    return Long.parseLong(tokens[0]);
+            } catch (Exception t) {
+                return null;
+            }
+        }
+        return null;
+    }
 }

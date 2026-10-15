@@ -11,6 +11,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.i18n.I18N;
+import com.logicaldoc.util.sql.SqlUtil;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -40,10 +41,9 @@ public class DashletsDataServlet extends AbstractDataServlet {
 		/*
 		 * Search for folders first.
 		 */
-		StringBuilder query = new StringBuilder("select A.id, A.name, A.title, A.type, A.query, A.content"
-				+ " from Dashlet A where A.deleted = 0 and A.tenantId = " + session.getTenantId()
-				+ " order by A.id asc");
-		records.addAll(BookmarkDAO.get().findByQuery(query.toString(), (Map<String, Object>) null, null));
+		String query = "select A.id, A.name, A.title, A.type, A.query, A.content from Dashlet A where A.deleted = 0 and A.tenantId = %d order by A.id asc"
+				.formatted(session.getTenantId());
+		records.addAll(BookmarkDAO.get().findByQuery(query, (Map<String, Object>) null, null));
 
 		/*
 		 * Iterate over records composing the response XML document
@@ -52,13 +52,13 @@ public class DashletsDataServlet extends AbstractDataServlet {
 			Object[] cols = (Object[]) gridRecord;
 
 			writer.print("<dashlet>");
-			writer.print("<id>" + cols[0] + "</id>");
-			writer.print("<name><![CDATA[" + (cols[1] == null ? "" : cols[1]) + "]]></name>");
-			writer.print("<title><![CDATA[" + (cols[2] == null ? "" : I18N.message(cols[2].toString(), locale))
-					+ "]]></title>");
-			writer.print("<type>" + (cols[3] == null ? "" : cols[3]) + "</type>");
-			writer.print("<query><![CDATA[" + (cols[4] == null ? "" : cols[4]) + "]]></query>");
-			writer.print("<content><![CDATA[" + (cols[5] == null ? "" : cols[5]) + "]]></content>");
+			writer.print(String.format("<id>%d</id>", SqlUtil.getColumnLongValue(cols[0])));
+			writer.print(String.format("<name><![CDATA[%s]]></name>", cols[1] == null ? "" : cols[1]));
+			writer.print(String.format("<title><![CDATA[%s]]></title>",
+					cols[2] == null ? "" : I18N.message(cols[2].toString(), locale)));
+			writer.print(String.format("<type>%s</type>", cols[3] == null ? "" : cols[3]));
+			writer.print(String.format("<query><![CDATA[%s]]></query>", cols[4] == null ? "" : cols[4]));
+			writer.print(String.format("<content><![CDATA[%s]]></content>", cols[5] == null ? "" : cols[5]));
 			writer.print("</dashlet>");
 		}
 

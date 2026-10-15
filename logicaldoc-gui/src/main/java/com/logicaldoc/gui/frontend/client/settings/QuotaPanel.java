@@ -1,13 +1,16 @@
 package com.logicaldoc.gui.frontend.client.settings;
 
+import com.logicaldoc.gui.common.client.Constants;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.beans.GUITenant;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.frontend.client.administration.AdminPanel;
 import com.logicaldoc.gui.frontend.client.services.TenantService;
+import com.logicaldoc.gui.frontend.client.system.usage.UsagePanel;
 import com.logicaldoc.gui.frontend.client.tenant.TenantQuotaPanel;
 import com.smartgwt.client.widgets.IButton;
+import com.smartgwt.client.widgets.tab.Tab;
 
 /**
  * Shows the quota details.
@@ -20,13 +23,31 @@ public class QuotaPanel extends AdminPanel {
 	private GUITenant tenant;
 
 	public QuotaPanel(long tenantId) {
-		super("quota");
+		super("tenant");
 
 		TenantService.Instance.get().load(tenantId, new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(GUITenant ten) {
 				tenant = ten;
 				initGUI();
+				if (tenant.isDefault()) {
+					TenantService.Instance.get().load(Constants.TENANT_SYSTEMID, new DefaultAsyncCallback<>() {
+						@Override
+						public void handleSuccess(GUITenant ten) {
+							Tab system = new Tab();
+							system.setTitle(I18N.message("system"));
+							system.setPane(new TenantQuotaPanel(ten, event -> {
+								// Nothing to do
+							}));
+							tabs.addTab(system);
+							
+							Tab usage = new Tab();
+							usage.setTitle(I18N.message("usage"));
+							usage.setPane(new UsagePanel());
+							tabs.addTab(usage);
+						}
+					});
+				}
 			}
 		});
 	}
@@ -37,8 +58,7 @@ public class QuotaPanel extends AdminPanel {
 		});
 
 		IButton save = new IButton(I18N.message("save"));
-		save.setMinWidth(80);
-		save.addClickHandler(event -> {
+		save.addClickHandler(click -> {
 			if (tenantQuota.validate())
 				TenantService.Instance.get().save(tenant, new DefaultAsyncCallback<>() {
 					@Override
@@ -49,10 +69,9 @@ public class QuotaPanel extends AdminPanel {
 				});
 		});
 
-		body.setMembers(tenantQuota);
-		addMember(save);
+		body.setMembers(tenantQuota, save);
 	}
-	
+
 	@Override
 	public boolean equals(Object other) {
 		return super.equals(other);

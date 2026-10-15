@@ -231,6 +231,12 @@ public class Feature {
 	
 	public static final int SEMANTIC_SEARCHES = 109;
 	
+	public static final int AUTOFILL = 110;
+	
+	public static final int WHATSAPP = 111;
+	
+	public static final int SUPPORT_TICKET = 112;
+	
 	private static Set<String> features = new HashSet<>();
 
 	private Feature() {

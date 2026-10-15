@@ -3,6 +3,7 @@ package com.logicaldoc.web.util;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CancellationException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,7 +48,7 @@ public class LongRunningOperationCompleteListener<T> implements ThreadCompleteLi
 	/**
 	 * Creates a new listener
 	 * 
-	 * @param usernames the usernames to alert
+	 * @param usernames the user names to alert
 	 */
 	public LongRunningOperationCompleteListener(Set<String> usernames) {
 		super();
@@ -56,7 +57,6 @@ public class LongRunningOperationCompleteListener<T> implements ThreadCompleteLi
 
 	@Override
 	public void completed(NotifyingThread<T> thread) {
-		SystemMessageDAO smdao = SystemMessageDAO.get();
 		UserDAO uDao = UserDAO.get();
 		Date now = new Date();
 
@@ -65,7 +65,7 @@ public class LongRunningOperationCompleteListener<T> implements ThreadCompleteLi
 			try {
 				user = uDao.findByUsername(username);
 				if (user == null)
-					throw new PersistenceException("Unexisting user " + username);
+					throw new PersistenceException("Unexisting user %s".formatted(username));
 			} catch (PersistenceException e) {
 				log.warn("Error retrieving user {}", username);
 				continue;
@@ -74,8 +74,8 @@ public class LongRunningOperationCompleteListener<T> implements ThreadCompleteLi
 			Recipient recipient = new Recipient();
 			recipient.setName(user.getUsername());
 			recipient.setAddress(user.getUsername());
-			recipient.setType(Recipient.TYPE_SYSTEM);
-			recipient.setMode("message");
+			recipient.setType(Recipient.Type.SYSTEM);
+			recipient.setMode(Recipient.Mode.MESSAGE);
 			Set<Recipient> recipients = new HashSet<>();
 			recipients.add(recipient);
 			SystemMessage sysmess = new SystemMessage();
@@ -87,9 +87,15 @@ public class LongRunningOperationCompleteListener<T> implements ThreadCompleteLi
 						new Object[] { thread.getName(), TimeDiff.printDuration(thread.getElapsedTime()) }));
 				sysmess.setPrio(0);
 			} else {
-				sysmess.setMessageText(I18N.message("longrunningoperationcompletedwitherror", user.getLocale(),
-						new Object[] { thread.getName(), TimeDiff.printDuration(thread.getElapsedTime()),
-								thread.getError().getMessage() }));
+				String errorMessage = thread.getError().getMessage();
+				if (thread.getError() instanceof InterruptedException
+						|| thread.getError() instanceof CancellationException
+						|| thread.getError().getCause() instanceof InterruptedException)
+					errorMessage = I18N.message("interrupted", user.getLocale());
+
+				sysmess.setMessageText(
+						I18N.message("longrunningoperationcompletedwitherror", user.getLocale(), new Object[] {
+								thread.getName(), TimeDiff.printDuration(thread.getElapsedTime()), errorMessage }));
 				sysmess.setPrio(2);
 				if (log.isErrorEnabled())
 					log.error("Thread {} ended in error after {}", thread.getName(),
@@ -100,11 +106,15 @@ public class LongRunningOperationCompleteListener<T> implements ThreadCompleteLi
 			sysmess.setConfirmation(0);
 			sysmess.setDateScope(1);
 
-			try {
-				smdao.store(sysmess);
-			} catch (PersistenceException e) {
-				log.error(e.getMessage(), e);
-			}
+			saveMessage(sysmess);
+		}
+	}
+
+	private void saveMessage(SystemMessage message) {
+		try {
+			SystemMessageDAO.get().store(message);
+		} catch (PersistenceException e) {
+			log.error(e.getMessage(), e);
 		}
 	}
 }

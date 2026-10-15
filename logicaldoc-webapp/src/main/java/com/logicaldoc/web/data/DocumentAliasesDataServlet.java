@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -16,7 +17,9 @@ import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.util.IconSelector;
+import com.logicaldoc.util.CollectionUtil;
 import com.logicaldoc.util.io.FileUtil;
+import com.logicaldoc.util.sql.SqlUtil;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -40,7 +43,7 @@ public class DocumentAliasesDataServlet extends AbstractDataServlet {
 		Collection<Long> accessibleFolderIds = folderDAO.findFolderIdByUserId(session.getUserId(), null, true);
 
 		StringBuilder query = new StringBuilder(
-				"select id, fileName, folder.id from Document where deleted = 0 and docRef = " + docId);
+				"select id, fileName, folder.id from Document where deleted = 0 and docRef = %d".formatted(docId));
 
 		User user = session.getUser();
 
@@ -52,20 +55,10 @@ public class DocumentAliasesDataServlet extends AbstractDataServlet {
 				 * if the sets contain two or more items: (x, 0) IN ((1,0),
 				 * (2,0), (3,0), ...):
 				 */
-				query.append(" and (folder.id,0) in ( ");
-				boolean firstItem = true;
-				for (Long folderId : accessibleFolderIds) {
-					if (!firstItem)
-						query.append(",");
-					query.append("(");
-					query.append(folderId);
-					query.append(",0)");
-					firstItem = false;
-				}
-				query.append(" )");
+				query.append(" and (folder.id,0) in (%s)".formatted(
+						accessibleFolderIds.stream().map("(%d,0)"::formatted).collect(Collectors.joining(","))));
 			} else {
-				query.append(" and folder.id in ");
-				query.append(accessibleFolderIds.toString().replace('[', '(').replace(']', ')'));
+				query.append(" and folder.id in (%s)".formatted(CollectionUtil.join(accessibleFolderIds)));
 			}
 		}
 
@@ -77,16 +70,16 @@ public class DocumentAliasesDataServlet extends AbstractDataServlet {
 		for (Object gridRecord : records) {
 			Object[] cols = (Object[]) gridRecord;
 			writer.print("<alias>");
-			writer.print("<id>" + cols[0] + "</id>");
-			writer.print("<filename><![CDATA[" + cols[1] + "]]></filename>");
-			writer.print("<folderId>" + cols[2] + "</folderId>");
-			writer.print(
-					"<icon>" + FileUtil.getBaseName(IconSelector.selectIcon(FileUtil.getExtension((String) cols[1])))
-							+ "</icon>");
-			writer.print(
-					"<path><![CDATA[" + folderDAO.computePathExtended((Long) cols[2]) + "/" + cols[1] + "]]></path>");
+			writer.print(String.format("<id>%d</id>", SqlUtil.getColumnLongValue(cols[0])));
+			writer.print(String.format("<filename><![CDATA[%s]]></filename>", cols[1]));
+			writer.print(String.format("<folderId>%d</folderId>", SqlUtil.getColumnLongValue(cols[2])));
+			writer.print(String.format("<icon>%s</icon>",
+					FileUtil.getBaseName(IconSelector.selectIcon(FileUtil.getExtension((String) cols[1])))));
+			writer.print(String.format("<path><![CDATA[%s/%s]]></path>", folderDAO.computePathExtended(SqlUtil.getColumnLongValue(cols[2])),
+					cols[1]));
 			writer.print("</alias>");
 		}
+
 		writer.write("</list>");
 	}
 }

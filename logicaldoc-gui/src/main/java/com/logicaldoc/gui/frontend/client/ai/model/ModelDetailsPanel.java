@@ -4,6 +4,7 @@ import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.widgets.EditingTabSet;
 import com.logicaldoc.gui.frontend.client.ai.AIService;
+import com.smartgwt.client.widgets.Canvas;
 import com.smartgwt.client.widgets.layout.HLayout;
 import com.smartgwt.client.widgets.layout.Layout;
 import com.smartgwt.client.widgets.layout.VLayout;
@@ -16,207 +17,211 @@ import com.smartgwt.client.widgets.tab.Tab;
  * @since 9.2
  */
 public class ModelDetailsPanel extends VLayout {
-	private static final String EVALUATION = "evaluation";
+    private static final String TRAINING = "training";
 
-	private GUIModel model;
+    private static final String EVALUATION = "evaluation";
 
-	private Layout propertiesTabPanel;
+    private GUIModel model;
 
-	private ModelProperties propertiesPanel;
+    private Layout propertiesTabPanel;
 
-	private Layout trainingTabPanel;
+    private ModelProperties propertiesPanel;
 
-	private ModelTraining trainingPanel;
+    private Layout trainingTabPanel;
 
-	private Layout evaluationTabPanel;
+    private ModelTraining trainingPanel;
 
-	private ModelEvaluation evaluationPanel;
+    private Layout evaluationTabPanel;
 
-	private Layout statsTabPanel;
+    private ModelEvaluation evaluationPanel;
 
-	private ModelStats statsPanel;
+    private Layout statsTabPanel;
 
-	private Layout historyTabPanel;
+    private ModelStats statsPanel;
 
-	private ModelHistoryPanel historyPanel;
+    private Layout historyTabPanel;
 
-	private EditingTabSet tabSet;
+    private ModelHistoryPanel historyPanel;
 
-	private ModelsPanel modelsPanel;
+    private EditingTabSet tabSet;
 
-	public ModelDetailsPanel(ModelsPanel modelsPanel) {
-		super();
+    private ModelsPanel modelsPanel;
 
-		this.modelsPanel = modelsPanel;
-		setHeight100();
-		setWidth100();
-		setMembersMargin(10);
+    public ModelDetailsPanel(ModelsPanel modelsPanel) {
+        super();
 
-		tabSet = new EditingTabSet(saveEvent -> onSave(), cancelEvent -> {
-			if (model.getId() != 0) {
-				AIService.Instance.get().getModel(model.getId(), new DefaultAsyncCallback<>() {
+        this.modelsPanel = modelsPanel;
+        setHeight100();
+        setWidth100();
+        setMembersMargin(10);
 
-					@Override
-					public void handleSuccess(GUIModel sampler) {
-						setModel(model);
-					}
+        tabSet = new EditingTabSet(save -> onSave(), cancel -> {
+            if (model.getId() != 0) {
+                AIService.Instance.get().getModel(model.getId(), new DefaultAsyncCallback<>() {
 
-				});
-			} else {
-				setModel(new GUIModel());
-			}
-			tabSet.hideSave();
-		});
+                    @Override
+                    public void handleSuccess(GUIModel model) {
+                        setModel(model);
+                    }
 
-		propertiesTabPanel = new HLayout();
-		propertiesTabPanel.setWidth100();
-		propertiesTabPanel.setHeight100();
-		Tab propertiesTab = new Tab(I18N.message("properties"));
-		propertiesTab.setPane(propertiesTabPanel);
-		tabSet.addTab(propertiesTab);
+                });
+            } else {
+                setModel(new GUIModel());
+            }
+            tabSet.hideSave();
+        });
 
-		trainingTabPanel = new HLayout();
-		trainingTabPanel.setWidth100();
-		trainingTabPanel.setHeight100();
-		Tab trainingTab = new Tab(I18N.message("training"));
-		trainingTab.setPane(trainingTabPanel);
-		tabSet.addTab(trainingTab);
+        propertiesTabPanel = new HLayout();
+        propertiesTabPanel.setWidth100();
+        propertiesTabPanel.setHeight100();
+        Tab propertiesTab = new Tab(I18N.message("properties"));
+        propertiesTab.setPane(propertiesTabPanel);
+        tabSet.addTab(propertiesTab);
 
-		evaluationTabPanel = new HLayout();
-		evaluationTabPanel.setWidth100();
-		evaluationTabPanel.setHeight100();
-		Tab evaluationTab = new Tab(I18N.message(EVALUATION));
-		evaluationTab.setID(EVALUATION);
-		evaluationTab.setPane(evaluationTabPanel);
-		tabSet.addTab(evaluationTab);
+        trainingTabPanel = new HLayout();
+        trainingTabPanel.setWidth100();
+        trainingTabPanel.setHeight100();
+        Tab trainingTab = new Tab(I18N.message(TRAINING));
+        trainingTab.setID(TRAINING);
+        trainingTab.setPane(trainingTabPanel);
+        tabSet.addTab(trainingTab);
 
-		historyTabPanel = new HLayout();
-		historyTabPanel.setWidth100();
-		historyTabPanel.setHeight100();
-		Tab historyTab = new Tab(I18N.message("history"));
-		historyTab.setPane(historyTabPanel);
-		tabSet.addTab(historyTab);
+        evaluationTabPanel = new HLayout();
+        evaluationTabPanel.setWidth100();
+        evaluationTabPanel.setHeight100();
+        Tab evaluationTab = new Tab(I18N.message(EVALUATION));
+        evaluationTab.setID(EVALUATION);
+        evaluationTab.setPane(evaluationTabPanel);
+        tabSet.addTab(evaluationTab);
 
-		statsTabPanel = new HLayout();
-		statsTabPanel.setWidth100();
-		statsTabPanel.setHeight100();
-		Tab statsTab = new Tab(I18N.message("stats"));
-		statsTab.setPane(statsTabPanel);
-		tabSet.addTab(statsTab);
+        historyTabPanel = new HLayout();
+        historyTabPanel.setWidth100();
+        historyTabPanel.setHeight100();
+        Tab historyTab = new Tab(I18N.message("history"));
+        historyTab.setPane(historyTabPanel);
+        tabSet.addTab(historyTab);
 
-		addMember(tabSet);
-	}
+        statsTabPanel = new HLayout();
+        statsTabPanel.setWidth100();
+        statsTabPanel.setHeight100();
+        Tab statsTab = new Tab(I18N.message("stats"));
+        statsTab.setPane(statsTabPanel);
+        tabSet.addTab(statsTab);
 
-	private void refresh() {
-		tabSet.hideSave();
+        addMember(tabSet);
+    }
 
-		/*
-		 * Prepare the standard properties tab
-		 */
-		if (propertiesPanel != null) {
-			propertiesPanel.destroy();
-			if (Boolean.TRUE.equals(propertiesTabPanel.contains(propertiesPanel)))
-				propertiesTabPanel.removeMember(propertiesPanel);
-		}
+    private void refresh() {
+        if (model.getId() == 0L)
+            tabSet.displaySave();
+        else
+            tabSet.hideSave();
 
-		if (trainingPanel != null) {
-			trainingPanel.destroy();
-			if (Boolean.TRUE.equals(trainingTabPanel.contains(trainingPanel)))
-				propertiesTabPanel.removeMember(trainingPanel);
-		}
+        /*
+         * Prepare the standard properties tab
+         */
+        destroyPanel(propertiesTabPanel, propertiesPanel);
+        destroyPanel(trainingTabPanel, trainingPanel);
+        destroyPanel(historyTabPanel, historyPanel);
+        destroyPanel(evaluationTabPanel, evaluationPanel);
+        destroyPanel(statsTabPanel, statsPanel);
 
-		if (historyPanel != null) {
-			historyPanel.destroy();
-			if (Boolean.TRUE.equals(historyTabPanel.contains(historyPanel)))
-				historyTabPanel.removeMember(historyPanel);
-		}
+        propertiesPanel = new ModelProperties(model, event -> onModified());
+        propertiesTabPanel.addMember(propertiesPanel);
 
-		if (evaluationPanel != null) {
-			evaluationPanel.destroy();
-			if (Boolean.TRUE.equals(evaluationTabPanel.contains(evaluationPanel)))
-				evaluationTabPanel.removeMember(evaluationPanel);
-		}
+        trainingPanel = new ModelTraining(model, event -> onModified());
+        trainingTabPanel.addMember(trainingPanel);
 
-		if (statsPanel != null) {
-			statsPanel.destroy();
-			if (Boolean.TRUE.equals(statsTabPanel.contains(statsPanel)))
-				statsTabPanel.removeMember(statsPanel);
-		}
+        evaluationPanel = new ModelEvaluation(model, event -> onModified());
+        evaluationTabPanel.addMember(evaluationPanel);
 
-		propertiesPanel = new ModelProperties(model, event -> onModified());
-		propertiesTabPanel.addMember(propertiesPanel);
+        statsPanel = new ModelStats(model);
+        statsTabPanel.addMember(statsPanel);
 
-		trainingPanel = new ModelTraining(model, event -> onModified());
-		trainingTabPanel.addMember(trainingPanel);
+        toggleEvaluationTab();
+        toggleTrainingTab();
 
-		evaluationPanel = new ModelEvaluation(model, event -> onModified());
-		evaluationTabPanel.addMember(evaluationPanel);
+        historyPanel = new ModelHistoryPanel(model.getId());
+        historyTabPanel.addMember(historyPanel);
+    }
 
-		statsPanel = new ModelStats(model);
-		statsTabPanel.addMember(statsPanel);
+    private void destroyPanel(Layout container, Canvas panel) {
+        if (panel == null)
+            return;
 
-		toggleEvaluationTab();
+        panel.destroy();
 
-		historyPanel = new ModelHistoryPanel(model.getId());
-		historyTabPanel.addMember(historyPanel);
-	}
+        if (Boolean.TRUE.equals(container.contains(panel)))
+            container.removeMember(panel);
+    }
 
-	protected void toggleEvaluationTab() {
-		if (model.isNeuralNetwork())
-			tabSet.showTab(EVALUATION);
-		else
-			tabSet.hideTab(EVALUATION);
-	}
+    protected void toggleEvaluationTab() {
+        if (model.isNeuralNetwork())
+            tabSet.showTab(EVALUATION);
+        else
+            tabSet.hideTab(EVALUATION);
+    }
 
-	public GUIModel getModel() {
-		return model;
-	}
+    protected void toggleTrainingTab() {
+        if (model.isTrainable())
+            tabSet.showTab(TRAINING);
+        else
+            tabSet.hideTab(TRAINING);
+    }
 
-	public void setModel(GUIModel model) {
-		this.model = model;
-		refresh();
-	}
+    public GUIModel getModel() {
+        return model;
+    }
 
-	public void onModified() {
-		toggleEvaluationTab();
-		tabSet.displaySave();
-	}
+    public void setModel(GUIModel model) {
+        this.model = model;
+        refresh();
+    }
 
-	private boolean validate() {
-		boolean valid = propertiesPanel.validate();
-		if (!valid) {
-			tabSet.selectTab(0);
-			return valid;
-		}
+    public void onModified() {
+        toggleEvaluationTab();
+        tabSet.displaySave();
+    }
 
-		valid = trainingPanel.validate();
-		if (!valid)
-			tabSet.selectTab(1);
-		return valid;
-	}
+    private boolean validate() {
+        boolean valid = propertiesPanel.validate();
+        if (!valid) {
+            tabSet.selectTab(0);
+            return valid;
+        }
 
-	public void onSave() {
-		if (validate()) {
-			AIService.Instance.get().saveModel(model, new DefaultAsyncCallback<>() {
-				@Override
-				public void handleSuccess(GUIModel model) {
-					tabSet.hideSave();
-					if (model != null) {
-						modelsPanel.updateRecord(model);
-						modelsPanel.showModelDetails(model);
-					}
-				}
-			});
-		}
-	}
+        if (model.getTraining().isTrainable()) {
+            valid = trainingPanel.validate();
+            if (!valid) {
+                tabSet.selectTab(1);
+                return false;
+            }
+        }
+        return true;
+    }
 
-	@Override
-	public boolean equals(Object other) {
-		return super.equals(other);
-	}
+    public void onSave() {
+        if (validate()) {
+            AIService.Instance.get().saveModel(model, new DefaultAsyncCallback<>() {
+                @Override
+                public void handleSuccess(GUIModel model) {
+                    tabSet.hideSave();
+                    if (model != null) {
+                        modelsPanel.updateRecord(model);
+                        modelsPanel.showModelDetails(model);
+                    }
+                }
+            });
+        }
+    }
 
-	@Override
-	public int hashCode() {
-		return super.hashCode();
-	}
+    @Override
+    public boolean equals(Object other) {
+        return super.equals(other);
+    }
+
+    @Override
+    public int hashCode() {
+        return super.hashCode();
+    }
 }

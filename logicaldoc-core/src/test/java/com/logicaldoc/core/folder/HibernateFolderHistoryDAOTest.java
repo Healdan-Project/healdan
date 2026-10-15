@@ -7,8 +7,9 @@ import static org.junit.Assert.assertNull;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
@@ -29,206 +30,199 @@ import com.logicaldoc.util.plugin.PluginException;
  */
 public class HibernateFolderHistoryDAOTest extends AbstractCoreTestCase {
 
-	// Instance under test
-	private FolderHistoryDAO dao;
+    // Instance under test
+    private FolderHistoryDAO dao;
 
-	@Before
-	public void setUp() throws IOException, SQLException, PluginException {
-		super.setUp();
+    @Before
+    @Override
+    public void setUp() throws IOException, SQLException, PluginException {
+        super.setUp();
 
-		// Retrieve the instance under test from spring context. Make sure that
-		// it is an HibernateFolderFolderHistoryDAO
-		dao = FolderHistoryDAO.get();
-	}
+        // Retrieve the instance under test from spring context. Make sure that
+        // it is an HibernateFolderFolderHistoryDAO
+        dao = FolderHistoryDAO.get();
+    }
 
-	@Test
-	public void testDelete() throws PersistenceException {
-		Collection<FolderHistory> histories = (Collection<FolderHistory>) dao.findByUserId(1);
-		assertNotNull(histories);
-		assertEquals(4, histories.size());
+    @Test
+    public void testDelete() throws PersistenceException {
+        Collection<FolderHistory> histories = (Collection<FolderHistory>) dao.findByUserId(1);
+        assertNotNull(histories);
+        assertEquals(4, histories.size());
 
-		for (FolderHistory history : histories) {
-			dao.delete(history.getId());
-		}
+        for (FolderHistory history : histories)
+            dao.delete(history.getId());
 
-		histories = (Collection<FolderHistory>) dao.findByUserId(4);
-		assertNotNull(histories);
-		assertEquals(0, histories.size());
-	}
+        histories = (Collection<FolderHistory>) dao.findByUserId(4);
+        assertNotNull(histories);
+        assertEquals(0, histories.size());
+    }
 
-	@SuppressWarnings("rawtypes")
-	@Test
-	public void testFindByUserId() throws PersistenceException {
-		Collection histories = dao.findByUserId(1);
-		assertNotNull(histories);
-		assertEquals(4, histories.size());
+    @SuppressWarnings("rawtypes")
+    @Test
+    public void testFindByUserId() throws PersistenceException {
+        Collection histories = dao.findByUserId(1);
+        assertNotNull(histories);
+        assertEquals(4, histories.size());
 
-		// Try with non-existing user
-		histories = dao.findByUserId(99);
-		assertNotNull(histories);
-		assertEquals(0, histories.size());
-	}
+        // Try with non-existing user
+        histories = dao.findByUserId(99);
+        assertNotNull(histories);
+        assertEquals(0, histories.size());
+    }
 
-	@SuppressWarnings("rawtypes")
-	@Test
-	public void testFindByFolderId() throws PersistenceException {
-		Collection histories = dao.findByFolderId(5);
-		assertNotNull(histories);
-		assertEquals(3, histories.size());
+    @SuppressWarnings("rawtypes")
+    @Test
+    public void testFindByFolderId() throws PersistenceException {
+        Collection histories = dao.findByFolderId(5);
+        assertNotNull(histories);
+        assertEquals(3, histories.size());
 
-		// Try with non-existing folderId
-		histories = dao.findByFolderId(99);
-		assertNotNull(histories);
-		assertEquals(0, histories.size());
-	}
+        // Try with non-existing folderId
+        histories = dao.findByFolderId(99);
+        assertNotNull(histories);
+        assertEquals(0, histories.size());
+    }
 
-	@Test
-	public void testFindByFolderIdAndEvent() throws PersistenceException {
-		List<FolderHistory> histories = dao.findByFolderIdAndEvent(5, "data test 03", null);
-		assertEquals(1, histories.size());
+    @Test
+    public void testFindByFolderIdAndEvent() throws PersistenceException {
+        List<FolderHistory> histories = dao.findByFolderIdAndEvent(5, "data test 03", null);
+        assertEquals(1, histories.size());
 
-		Date date = histories.get(0).getDate();
-		Calendar cal = Calendar.getInstance();
-		cal.setTime(date);
-		cal.add(Calendar.HOUR_OF_DAY, -48);
+        Instant instant = histories.get(0).getDate().toInstant();
+        
+        histories = dao.findByFolderIdAndEvent(5, "data test 03", Date.from(instant.minus(48L, ChronoUnit.HOURS)));
+        assertEquals(1, histories.size());
 
-		histories = dao.findByFolderIdAndEvent(5, "data test 03", cal.getTime());
-		assertEquals(1, histories.size());
+        histories = dao.findByFolderIdAndEvent(5, "data test 03", Date.from(instant.plus(1L, ChronoUnit.SECONDS)));
+        assertEquals(0, histories.size());
+    }
 
-		histories = dao.findByFolderIdAndEvent(5, "data test 03", new Date());
-		assertEquals(0, histories.size());
-	}
+    @Test
+    public void testCreateFolderHistory() throws PersistenceException {
+        int count = dao.findByFolderId(5L).size();
 
-	@SuppressWarnings("rawtypes")
-	@Test
-	public void testCreateFolderHistory() throws PersistenceException {
-		FolderHistory history = new FolderHistory();
-		history.setDocId(1L);
-		history.setFolderId(5L);
-		history.setFilename("pippo");
-		history.setVersion("2.0");
+        FolderHistory history = new FolderHistory();
+        history.setDocId(1L);
+        history.setFolderId(5L);
+        history.setFilename("pippo");
+        history.setVersion("2.0");
+        history.setPath("/%s".formatted("paperino"));
+        history.setDate(referenceInstant);
+        history.setUserId(1L);
+        history.setUsername("mario");
+        history.setEvent(FolderEvent.CREATED);
+        history.setComment("The folder has been created.");
 
-		history.setPath("/" + "paperino");
+        dao.store(history);
 
-		history.setDate(new Date());
-		history.setUserId(1L);
-		history.setUsername("mario");
-		history.setEvent(FolderEvent.CREATED);
-		history.setComment("The folder has been created.");
+        assertEquals(count + 1, dao.findByFolderId(5L).size());
+    }
 
-		dao.store(history);
+    @Test
+    public void testStore() throws PersistenceException {
+        FolderHistory history = new FolderHistory();
+        history.setDocId(1L);
+        history.setFolderId(5L);
+        history.setDate(DateBean.dateFromCompactString("20061220"));
+        history.setUsername("sebastian");
+        history.setUserId(3L);
+        history.setEvent(FolderEvent.CREATED);
 
-		Collection histories = dao.findByFolderId(5);
-		assertNotNull(histories);
-		assertEquals(3, histories.size());
-	}
+        dao.store(history);
+        assertNotNull(history);
 
-	@Test
-	public void testStore() throws PersistenceException {
-		FolderHistory history = new FolderHistory();
-		history.setDocId(1L);
-		history.setFolderId(5L);
-		history.setDate(DateBean.dateFromCompactString("20061220"));
-		history.setUsername("sebastian");
-		history.setUserId(3L);
-		history.setEvent(FolderEvent.CREATED);
+        FolderHistory folderFolderHistory = new FolderHistory();
+        folderFolderHistory.setFolderId(5L);
+        folderFolderHistory.setDate(DateBean.dateFromCompactString("20061220"));
+        folderFolderHistory.setUsername("sebastian");
+        folderFolderHistory.setUserId(3L);
+        folderFolderHistory.setEvent(FolderEvent.CREATED);
 
-		dao.store(history);
-		assertNotNull(history);
+        dao.store(folderFolderHistory);
+        assertNotNull(folderFolderHistory);
 
-		FolderHistory folderFolderHistory = new FolderHistory();
-		folderFolderHistory.setFolderId(5L);
-		folderFolderHistory.setDate(DateBean.dateFromCompactString("20061220"));
-		folderFolderHistory.setUsername("sebastian");
-		folderFolderHistory.setUserId(3L);
-		folderFolderHistory.setEvent(FolderEvent.CREATED);
+        // Test the stored history
+        Collection<FolderHistory> histories = (Collection<FolderHistory>) dao.findByUserId(3);
+        assertNotNull(histories);
+        assertFalse(histories.isEmpty());
 
-		dao.store(folderFolderHistory);
-		assertNotNull(folderFolderHistory);
+        FolderHistory hStored = null;
+        for (FolderHistory history2 : histories) {
+            if (history2.getId() == folderFolderHistory.getId()) {
+                hStored = history2;
+                break;
+            }
+        }
 
-		// Test the stored history
-		Collection<FolderHistory> histories = (Collection<FolderHistory>) dao.findByUserId(3);
-		assertNotNull(histories);
-		assertFalse(histories.isEmpty());
+        assertEquals(folderFolderHistory, hStored);
+        assertEquals(hStored.getFolderId(), Long.valueOf(5L));
+        assertEquals(hStored.getDate().getTime(), DateBean.dateFromCompactString("20061220").getTime());
+        assertEquals("sebastian", hStored.getUsername());
+        assertEquals(FolderEvent.CREATED, hStored.getEventEnum());
+    }
 
-		FolderHistory hStored = null;
-		for (FolderHistory history2 : histories) {
-			if (history2.getId() == folderFolderHistory.getId()) {
-				hStored = history2;
-				break;
-			}
-		}
+    @Test
+    public void testFindNotNotified() throws PersistenceException {
+        List<FolderHistory> histories = dao.findNotNotified(null);
+        assertNotNull(histories);
+        assertEquals(2, histories.size());
 
-		assertEquals(folderFolderHistory, hStored);
-		assertEquals(hStored.getFolderId(), Long.valueOf(5L));
-		assertEquals(hStored.getDate().getTime(), DateBean.dateFromCompactString("20061220").getTime());
-		assertEquals("sebastian", hStored.getUsername());
-		assertEquals(FolderEvent.CREATED, hStored.getEventEnum());
-	}
+        FolderHistory history = dao.findById(3);
+        history.setNotified(true);
+        dao.store(history);
 
-	@Test
-	public void testFindNotNotified() throws PersistenceException {
-		List<FolderHistory> histories = dao.findNotNotified(null);
-		assertNotNull(histories);
-		assertEquals(2, histories.size());
+        histories = dao.findNotNotified(null);
+        assertNotNull(histories);
+        assertEquals(1, histories.size());
+    }
 
-		FolderHistory history = dao.findById(3);
-		dao.initialize(history);
-		history.setNotified(true);
-		dao.store(history);
+    @Test
+    public void testCleanOldHistories() throws PersistenceException {
+        dao.cleanOldHistories(5);
 
-		histories = dao.findNotNotified(null);
-		assertNotNull(histories);
-		assertEquals(1, histories.size());
-	}
+        FolderHistory history = dao.findById(3);
+        assertNull(history);
+        List<FolderHistory> histories = dao.findAll();
+        assertEquals(2, histories.size());
+    }
 
-	@Test
-	public void testCleanOldHistories() throws PersistenceException {
-		dao.cleanOldHistories(5);
+    @Test
+    public void testFindByUserIdAndEvent() throws PersistenceException {
+        List<FolderHistory> histories = dao.findByUserIdAndEvent(1, "data test 03");
+        assertNotNull(histories);
+        assertEquals(1, histories.size());
 
-		FolderHistory history = dao.findById(3);
-		assertNull(history);
-		List<FolderHistory> histories = dao.findAll();
-		assertEquals(2, histories.size());
-	}
+        histories = dao.findByUserIdAndEvent(1, "data test 04");
+        assertNotNull(histories);
+        assertEquals(1, histories.size());
 
-	@Test
-	public void testFindByUserIdAndEvent() throws PersistenceException {
-		List<FolderHistory> histories = dao.findByUserIdAndEvent(1, "data test 03");
-		assertNotNull(histories);
-		assertEquals(1, histories.size());
+        histories = dao.findByUserIdAndEvent(2, "data test 04");
+        assertNotNull(histories);
+        assertEquals(0, histories.size());
 
-		histories = dao.findByUserIdAndEvent(1, "data test 04");
-		assertNotNull(histories);
-		assertEquals(1, histories.size());
+        // Try with unexisting user
+        histories = dao.findByUserIdAndEvent(99, "data test 04");
+        assertNotNull(histories);
+        assertEquals(0, histories.size());
+    }
 
-		histories = dao.findByUserIdAndEvent(2, "data test 04");
-		assertNotNull(histories);
-		assertEquals(0, histories.size());
+    @Test
+    public void testFindByPath() throws PersistenceException {
+        List<FolderHistory> histories = dao.findByPath("/Default/pippo%", null, null, null);
+        assertEquals(2, histories.size());
 
-		// Try with unexisting user
-		histories = dao.findByUserIdAndEvent(99, "data test 04");
-		assertNotNull(histories);
-		assertEquals(0, histories.size());
-	}
+        histories = dao.findByPath("/Default/pippo%", DateBean.dateFromCompactString("20061228"), null, null);
+        assertEquals(1, histories.size());
 
-	@Test
-	public void testFindByPath() throws PersistenceException {
-		List<FolderHistory> histories = dao.findByPath("/Default/pippo%", null, null, null);
-		assertEquals(2, histories.size());
+        histories = dao.findByPath("/Default/pippo%", DateBean.dateFromCompactString("20061228"),
+                Arrays.asList(new String[] { "data test 03", "data test 04" }), null);
+        assertEquals(1, histories.size());
 
-		histories = dao.findByPath("/Default/pippo%", DateBean.dateFromCompactString("20061228"), null, null);
-		assertEquals(1, histories.size());
+        histories = dao.findByPath("/Default/pippo%", DateBean.dateFromCompactString("20061228"),
+                Arrays.asList(new String[] { "data test 043" }), null);
+        assertEquals(0, histories.size());
 
-		histories = dao.findByPath("/Default/pippo%", DateBean.dateFromCompactString("20061228"),
-				Arrays.asList(new String[] { "data test 03", "data test 04" }), null);
-		assertEquals(1, histories.size());
-
-		histories = dao.findByPath("/Default/pippo%", DateBean.dateFromCompactString("20061228"),
-				Arrays.asList(new String[] { "data test 043" }), null);
-		assertEquals(0, histories.size());
-
-		histories = dao.findByPath("/xxxx", null, null, null);
-		assertEquals(0, histories.size());
-	}
+        histories = dao.findByPath("/xxxx", null, null, null);
+        assertEquals(0, histories.size());
+    }
 }

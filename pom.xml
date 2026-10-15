@@ -4,12 +4,12 @@
     <parent>
         <groupId>com.logicaldoc</groupId>
         <artifactId>logicaldoc-parent</artifactId>
-        <version>113</version>
+        <version>115</version>
         <relativePath>logicaldoc-parent/pom.xml</relativePath>
     </parent>
     <groupId>com.logicaldoc</groupId>
     <artifactId>logicaldoc</artifactId>
-    <version>9.2.2</version>
+    <version>9.3.1</version>
     <packaging>pom</packaging>
     <name>logicaldoc</name>
     <description>LogicalDOC is an open-source enterprise class Document Management System developed by LogicalDOC Srl, based on the Java Platform</description>
@@ -107,7 +107,18 @@
 	
     <build>
         <plugins>
-            <!-- Part of Maven - specified version explicitly for compatibility with the maven-project-info-reports-plugin 3.0.0-->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>attach-javadocs</id>
+						<goals>
+							<goal>jar</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-site-plugin</artifactId>

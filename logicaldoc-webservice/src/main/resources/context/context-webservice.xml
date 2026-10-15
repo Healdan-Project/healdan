@@ -37,7 +37,7 @@
     <bean id="GZIPOutInterceptor" class="com.logicaldoc.webservice.ThresholdGZIPOutInterceptor">
         <property name="threshold" value="${webservice.gzip}" />
     </bean>
-    <bean id="WebserviceInterceptor" class="${webservice.interceptor}" destroy-method="shutdown" />
+    <bean id="WebserviceInterceptor" class="${webservice.interceptor}" />
     <bean id="WebserviceFaultInterceptor" class="com.logicaldoc.webservice.WebserviceFaultInterceptor" />
     
     
@@ -186,11 +186,24 @@
     <!-- ############################## -->
     <!-- ###### JAX-RS (RESTful) ###### -->
     <!-- ############################## -->
-    
+
     <!-- to support Java-to-JSON and vice-versa conversion -->    
     <!-- JAXRS providers -->
-    <bean id="jsonProvider" class="com.fasterxml.jackson.jakarta.rs.json.JacksonJsonProvider" />
-<!--     <bean id="multipartProvider" class="org.apache.cxf.jaxrs.provider.MultipartProvider" /> -->
+    <bean id="cxfJsonProvider" class="org.apache.cxf.jaxrs.provider.json.JSONProvider">
+      <property name="dropRootElement" value="${webservice.json.droproot}" />
+      <property name="dropCollectionWrapperElement" value="${webservice.json.dropcollectionwrapper}" />
+      <property name="serializeAsArray" value="${webservice.json.serializeasarray}" />
+      <property name="supportUnwrapped" value="true" /> 
+      
+      <!-- THIS is what forces collections called "attributes" to always be an array -->
+	  <property name="arrayKeys">
+		<list>
+			<value>attributes</value>
+		</list>
+	  </property>		
+    </bean>
+    <bean id="jacksonJsonProvider" class="com.fasterxml.jackson.jakarta.rs.json.JacksonJsonProvider" />
+    
     
     <jaxrs:server id="commentservice" address="/mobile/comments">
         <jaxrs:inInterceptors>
@@ -203,7 +216,10 @@
             <bean class="com.logicaldoc.webservice.mobile.CommentService" />
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider" />
+		    <!-- Put JSONProvider FIRST so it wins for JAXB objects -->
+		    <ref bean="cxfJsonProvider"/>		    
+		    <!-- Put Jackson SECOND so it still handles primitives -->
+			<ref bean="jacksonJsonProvider"/>	
         </jaxrs:providers>
     </jaxrs:server>
     
@@ -221,7 +237,8 @@
             </bean>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider" />
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>	
         </jaxrs:providers>
     </jaxrs:server>
 
@@ -238,7 +255,8 @@
             </bean>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider" />
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>		              
         </jaxrs:providers>
     </jaxrs:server>
     
@@ -253,7 +271,8 @@
             <bean class="com.logicaldoc.webservice.rest.endpoint.RestFolderService" />
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider" />
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>
         </jaxrs:providers>
     </jaxrs:server>
     
@@ -268,7 +287,8 @@
             <bean class="com.logicaldoc.webservice.rest.endpoint.RestSearchService"/>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-       		<ref bean="jsonProvider"/>
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>	
     	</jaxrs:providers>
     </jaxrs:server>  
 
@@ -283,7 +303,8 @@
             <bean class="com.logicaldoc.webservice.rest.endpoint.RestTagService"/>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider"/>
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>	
       </jaxrs:providers>
     </jaxrs:server> 
     
@@ -298,7 +319,8 @@
             <bean class="com.logicaldoc.webservice.rest.endpoint.RestBookmarkService"/>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider"/>
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>	
       </jaxrs:providers>
     </jaxrs:server>
     
@@ -313,7 +335,8 @@
             <bean class="com.logicaldoc.webservice.rest.endpoint.RestSystemService"/>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider"/>
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>	
       </jaxrs:providers>
     </jaxrs:server>
     
@@ -328,7 +351,8 @@
             <bean class="com.logicaldoc.webservice.rest.endpoint.RestDocumentMetadataService"/>
         </jaxrs:serviceBeans>
         <jaxrs:providers>
-            <ref bean="jsonProvider"/>
+		    <ref bean="cxfJsonProvider"/>		    
+			<ref bean="jacksonJsonProvider"/>	
       </jaxrs:providers>
     </jaxrs:server>              
 </beans>

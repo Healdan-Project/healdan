@@ -43,7 +43,7 @@ public class SaveSearchDialog extends Window {
 		form.setWidth(350);
 		form.setMargin(5);
 
-		TextItem name = ItemFactory.newSimpleTextItemWithHyphen("name", null);
+		TextItem name = ItemFactory.newSimpleTextItemWithHyphen("name", Search.get().getOptions().getName());
 		name.setRequired(true);
 		name.setWidth(200);
 
@@ -61,8 +61,7 @@ public class SaveSearchDialog extends Window {
 	}
 
 	private void onSave() {
-		vm.validate();
-		if (Boolean.TRUE.equals(vm.hasErrors()))
+		if (Boolean.FALSE.equals(vm.validate()))
 			return;
 
 		GUISearchOptions options = Search.get().getOptions();
@@ -70,11 +69,9 @@ public class SaveSearchDialog extends Window {
 		options.setDescription(vm.getValueAsString(DESCRIPTION));
 		SearchService.Instance.get().save(options, new DefaultAsyncCallback<>() {
 			@Override
-			public void handleSuccess(Boolean b) {
-				if (Boolean.TRUE.equals(b)) {
-					SavedSearchesPanel.get().refresh();
-					destroy();
-				}
+			public void handleSuccess(Void b) {
+				destroy();
+				SavedSearchesPanel.get().refresh();
 			}
 		});
 	}

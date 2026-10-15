@@ -144,7 +144,7 @@ public class ParserFactory {
 		parsers.put("mdtext", markdown);
 		parsers.put("markdown", markdown);
 
-		// Acquire the 'Parse' extensions of the core plugin and add defined
+		// Acquire the 'Parser' extensions of the core plugin and add defined
 		// parsers
 		PluginRegistry registry = PluginRegistry.getInstance();
 		Collection<Extension> exts = registry.getExtensions("logicaldoc-core", "Parser");
@@ -155,11 +155,13 @@ public class ParserFactory {
 			try {
 				// Try to instantiate the parser
 				Object parser = Class.forName(className).getDeclaredConstructor().newInstance();
-				if (!(parser instanceof Parser))
+				if (parser instanceof Parser p) {
+					parsers.put(ext, p);
+					log.info("Added new parser {} for extension {}", className, ext);
+				} else {
 					throw new ClassNotFoundException(
-							String.format("The specified parser %s doesn't implement Parser interface", className));
-				parsers.put(ext, (Parser) parser);
-				log.info("Added new parser {} for extension {}", className, ext);
+							"The specified parser %s doesn't implement DocumentListener interface".formatted(className));
+				}
 			} catch (ClassNotFoundException | InstantiationException | IllegalAccessException | IllegalArgumentException
 					| InvocationTargetException | NoSuchMethodException e) {
 				log.error(e.getMessage());
@@ -255,7 +257,7 @@ public class ParserFactory {
 	 * @param aliases Array of extension aliases (eg. test, acme ...)
 	 */
 	public static void setAliases(String ext, String[] aliases) {
-		ContextProperties config = Context.get().getProperties();
+		ContextProperties config = Context.get().getConfig();
 		String pAlias = PARSER_ALIAS + ext.toLowerCase();
 		if (aliases == null || aliases.length == 0) {
 			config.setProperty(pAlias, "");
@@ -284,7 +286,7 @@ public class ParserFactory {
 		if (Context.get() == null)
 			return;
 
-		ContextProperties config = Context.get().getProperties();
+		ContextProperties config = Context.get().getConfig();
 		for (Object key : config.keySet()) {
 			if (key.toString().startsWith(PARSER_ALIAS)) {
 				String ext = key.toString().substring(PARSER_ALIAS.length());

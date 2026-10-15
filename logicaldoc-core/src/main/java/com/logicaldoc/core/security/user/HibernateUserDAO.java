@@ -1,8 +1,11 @@
 package com.logicaldoc.core.security.user;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -10,11 +13,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
+import java.util.stream.Stream;
 
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
+import org.hibernate.Hibernate;
+import org.java.plugin.registry.Extension;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
@@ -28,14 +35,17 @@ import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.authentication.PasswordAlreadyUsedException;
 import com.logicaldoc.core.security.authentication.PasswordWeakException;
+import com.logicaldoc.core.security.user.User.Type;
 import com.logicaldoc.i18n.I18N;
 import com.logicaldoc.util.StringUtil;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.html.HTMLSanitizer;
+import com.logicaldoc.util.plugin.PluginRegistry;
 import com.logicaldoc.util.security.PasswordCriteria;
 import com.logicaldoc.util.security.PasswordValidator;
 import com.logicaldoc.util.spring.Context;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import jakarta.transaction.Transactional;
 
@@ -49,862 +59,948 @@ import jakarta.transaction.Transactional;
 @Transactional
 public class HibernateUserDAO extends HibernatePersistentObjectDAO<User> implements UserDAO {
 
-	private static final String ADMIN = "admin";
-
-	private static final String LOWER = "lower(";
-
-	private static final String USERNAME = "username";
-
-	@Resource(name = "genericDAO")
-	private GenericDAO genericDAO;
-
-	@Resource(name = "userHistoryDAO")
-	private UserHistoryDAO userHistoryDAO;
-
-	@Resource(name = "passwordHistoryDAO")
-	private PasswordHistoryDAO passwordHistoryDAO;
-
-	@Resource(name = "userListenerManager")
-	private UserListenerManager userListenerManager;
-
-	@Resource(name = "ContextProperties")
-	private ContextProperties config;
-
-	private HibernateUserDAO() {
-		super(User.class);
-		super.log = LoggerFactory.getLogger(HibernateUserDAO.class);
-	}
-
-	public static boolean ignoreCaseLogin() {
-		return "true".equals(Context.get().getProperties().getProperty("login.ignorecase"));
-	}
-
-	@Override
-	public List<User> findByName(String name) throws PersistenceException {
-		Map<String, Object> params = new HashMap<>();
-		params.put("name", name.toLowerCase());
-
-		return findByWhere(LOWER + ENTITY + ".name) like :name", params, null, null);
-	}
-
-	@Override
-	public User findByUsername(String username) throws PersistenceException {
-		if (StringUtils.isEmpty(username))
-			return null;
-
-		User user = null;
-		Map<String, Object> params = new HashMap<>();
-		params.put(USERNAME, username);
-
-		List<User> coll = findByWhere(ENTITY + ".username = :username", params, null, null);
-		if (CollectionUtils.isNotEmpty(coll))
-			user = coll.iterator().next();
-		initialize(user);
-		return user;
-	}
-
-	@Override
-	public User findByUsernameIgnoreCase(String username) throws PersistenceException {
-		if (StringUtils.isEmpty(username))
-			return null;
-
-		User user = null;
-		Map<String, Object> params = new HashMap<>();
-		params.put(USERNAME, username.toLowerCase());
-
-		List<User> coll = findByWhere(LOWER + ENTITY + ".username) = :username", params, null, null);
-		if (CollectionUtils.isNotEmpty(coll))
-			user = coll.iterator().next();
-		initialize(user);
-		return user;
-	}
-
-	@Override
-	public List<User> findByLikeUsername(String username) throws PersistenceException {
-		Map<String, Object> params = new HashMap<>();
-		params.put(USERNAME, username);
-		return findByWhere(ENTITY + ".username like :username", params, null, null);
-	}
-
-	@Override
-	public List<User> findByUsernameAndName(String username, String name) throws PersistenceException {
-		Map<String, Object> params = new HashMap<>();
-		params.put(USERNAME, username);
-		params.put("name", name.toLowerCase());
-
-		return findByWhere(LOWER + ENTITY + ".name) like :name and " + ENTITY + ".username like :username", params,
-				null, null);
-	}
-
-	@Override
-	public void checkPasswordCompliance(User user) throws PasswordWeakException, PersistenceException {
-
-		// Skip the tests in case of new tenant creation
-		if (user.getId() == 0L && user.getTenantId() != Tenant.DEFAULT_ID && "Administrator".equals(user.getFirstName())
-				&& user.getUsername().startsWith(ADMIN) && ADMIN.equals(user.getDecodedPassword()))
-			return;
-
-		// Without decoded password we cannot perform any test
-		String password = user.getDecodedPassword();
-		if (StringUtils.isEmpty(password))
-			return;
-
-		TenantDAO tenantDAO = Context.get(TenantDAO.class);
-		String tenant = tenantDAO.getTenantName(user.getTenantId());
-
-		Map<String, String> messages = I18N.getMessages(user.getLocale() != null ? user.getLocale() : Locale.ENGLISH);
-		List<String> errorKeys = messages.keySet().stream().filter(key -> key.startsWith("passwderror.")).toList();
-		Properties props = new Properties();
-		for (String key : errorKeys)
-			props.put(key.substring(key.indexOf('.') + 1), messages.get(key));
+    private static final String USER_ID = "userId";
+
+    private static final String ADMIN = "admin";
+
+    private static final String USERNAME = "username";
+
+    private static final String POSITION = "position";
+
+    private static final String LISTENER_ERROR = "Error in listener {}";
+
+    @Resource(name = "genericDAO")
+    private GenericDAO genericDAO;
+
+    @Resource(name = "userHistoryDAO")
+    private UserHistoryDAO userHistoryDAO;
+
+    @Resource(name = "passwordHistoryDAO")
+    private PasswordHistoryDAO passwordHistoryDAO;
+
+    @Resource(name = "config")
+    private ContextProperties config;
+
+    private List<UserListener> listeners = new ArrayList<>();
+
+    private HibernateUserDAO() {
+        super(User.class);
+        super.log = LoggerFactory.getLogger(HibernateUserDAO.class);
+    }
+
+    public static boolean ignoreCaseLogin() {
+        return "true".equals(Context.get().getConfig().getProperty("login.ignorecase"));
+    }
+
+    @Override
+    public List<User> findByName(String name) throws PersistenceException {
+        return findByWhere("lower(_entity.name) like :name", Map.of("name", name.toLowerCase()), null, null);
+    }
+
+    @Override
+    public User findByUsername(String username) throws PersistenceException {
+        return findByUsername(username, false);
+    }
+
+    private User afterLoad(User user, boolean initialize) throws PersistenceException {
+        if (initialize)
+            user = initialize(user);
+
+        Map<String, Object> dictionary = new HashMap<>();
+        invokeListenersAfterLoad(user, dictionary);
+        return user;
+    }
+
+    @Override
+    public User findByUsername(String username, boolean initialize) throws PersistenceException {
+        if (StringUtils.isEmpty(username))
+            return null;
+
+        User user = findByWhere("_entity.username = :username", Map.of(USERNAME, username), null, null).stream()
+                .findFirst().orElse(null);
+        return afterLoad(user, initialize);
+    }
+
+    @Override
+    public User findByUsernameIgnoreCase(String username) throws PersistenceException {
+        return findByUsernameIgnoreCase(username, false);
+    }
+
+    @Override
+    public User findByUsernameIgnoreCase(String username, boolean initialize) throws PersistenceException {
+        if (StringUtils.isEmpty(username))
+            return null;
+
+        User user = findByWhere("lower(_entity.username) = :username", Map.of(USERNAME, username.toLowerCase()), null,
+                null).stream().findFirst().orElse(null);
+        return afterLoad(user, initialize);
+    }
+
+    @Override
+    public User findAdminUser(String tenantName) throws PersistenceException {
+        return findAdminUser(Tenant.DEFAULT_NAME, false);
+    }
+
+    @Override
+    public User findAdminUser(String tenantName, boolean initialize) throws PersistenceException {
+        User user = findByWhere("_entity.username = :username",
+                Map.of(USERNAME,
+                        Tenant.DEFAULT_NAME.equals(tenantName) ? ADMIN
+                                : "%s%s".formatted(ADMIN, StringUtils.capitalize(tenantName))),
+                null, null).stream().findFirst().orElse(null);
+        return afterLoad(user, initialize);
+    }
+
+    @Override
+    public User getUser(String username) throws PersistenceException {
+        return getUser(username, false);
+    }
+
+    @Override
+    public User getUser(String username, boolean initialize) throws PersistenceException {
+        if (HibernateUserDAO.ignoreCaseLogin())
+            return findByUsernameIgnoreCase(username, initialize);
+        else
+            return findByUsername(username, initialize);
+    }
+
+    @Override
+    public List<User> findByLikeUsername(String username) throws PersistenceException {
+        return findByWhere("_entity.username like :username", Map.of(USERNAME, username), null, null);
+    }
+
+    @Override
+    public List<User> findByUsernameAndName(String username, String name) throws PersistenceException {
+        return findByWhere("lower(_entity.name) like :name and _entity.username like :username",
+                Map.of(USERNAME, username, "name", name.toLowerCase()), null, null);
+    }
+
+    @Override
+    public void checkPasswordCompliance(User user) throws PasswordWeakException, PersistenceException {
+
+        // Skip the tests in case of new tenant creation
+        if (user.getId() == 0L && user.getTenantId() != Tenant.DEFAULT_ID && "Administrator".equals(user.getFirstName())
+                && user.getUsername().startsWith(ADMIN) && ADMIN.equals(user.getDecodedPassword()))
+            return;
+
+        // Without decoded password we cannot perform any test
+        String password = user.getDecodedPassword();
+        if (StringUtils.isEmpty(password))
+            return;
+
+        TenantDAO tenantDAO = Context.get(TenantDAO.class);
+        String tenant = tenantDAO.getTenantName(user.getTenantId());
+
+        Map<String, String> messages = I18N.getMessages(user.getLocale() != null ? user.getLocale() : Locale.ENGLISH);
+        List<String> errorKeys = messages.keySet().stream().filter(key -> key.startsWith("passwderror.")).toList();
+        Properties props = new Properties();
+        for (String key : errorKeys)
+            props.put(key.substring(key.indexOf('.') + 1), messages.get(key));
+
+        // length between X and 30 characters
+        // at least X upper-case character
+        // at least X lower-case characters
+        // at least X digit characters
+        // at least X digit characters
+        PasswordCriteria criteria = new PasswordCriteria(config.getTenantInt(tenant, "password.size", 8),
+                config.getTenantInt(tenant, "password.uppercase", 2),
+                config.getTenantInt(tenant, "password.lowercase", 2), config.getTenantInt(tenant, "password.digit", 1),
+                config.getTenantInt(tenant, "password.special", 1));
+
+        // at least X times a character can be used
+        criteria.setMaxOccurrences(config.getTenantInt(tenant, "password.occurrence", 3));
+
+        // define some illegal sequences that will fail when >= 4 chars
+        // long alphabetical is of the form 'abcd', numerical is '3456',
+        // qwer is 'asdf' the false parameter indicates that wrapped
+        // sequences are allowed; e.g. 'xyzab'
+        criteria.setMaxSequenceSize(config.getTenantInt(tenant, "password.sequence", 3));
+
+        PasswordValidator validator = new PasswordValidator(criteria, props);
+
+        List<String> errors = validator.validate(password);
+        if (!errors.isEmpty())
+            throw new PasswordWeakException(errors);
+    }
+
+    private void checkAlreadyUsedPassword(User user) throws PersistenceException, PasswordAlreadyUsedException {
+        int enforce = getPasswordEnforce(user);
+        if (enforce < 1)
+            return;
 
-		// length between X and 30 characters
-		// at least X upper-case character
-		// at least X lower-case characters
-		// at least X digit characters
-		// at least X digit characters
-		PasswordCriteria criteria = new PasswordCriteria(config.getInt(tenant + ".password.size", 8),
-				config.getInt(tenant + ".password.uppercase", 2), config.getInt(tenant + ".password.lowercase", 2),
-				config.getInt(tenant + ".password.digit", 1), config.getInt(tenant + ".password.special", 1));
-
-		// at least X times a character can be used
-		criteria.setMaxOccurrences(config.getInt(tenant + ".password.occurrence", 3));
-
-		// define some illegal sequences that will fail when >= 4 chars
-		// long alphabetical is of the form 'abcd', numerical is '3456',
-		// qwer is 'asdf' the false parameter indicates that wrapped
-		// sequences are allowed; e.g. 'xyzab'
-		criteria.setMaxSequenceSize(config.getInt(tenant + ".password.sequence", 3));
-
-		PasswordValidator validator = new PasswordValidator(criteria, props);
-
-		List<String> errors = validator.validate(password);
-		if (!errors.isEmpty())
-			throw new PasswordWeakException(errors);
-	}
-
-	private void checkAlreadyUsedPassword(User user) throws PersistenceException, PasswordAlreadyUsedException {
-		int enforce = getPasswordEnforce(user);
-		if (enforce < 1)
-			return;
-
-		PasswordHistory hist = passwordHistoryDAO.findByUserIdAndPassword(user.getId(), user.getPassword(), enforce);
-		if (hist != null)
-			throw new PasswordAlreadyUsedException(hist.getDate());
-	}
-
-	@Override
-	public void store(User user) throws PasswordAlreadyUsedException, PersistenceException {
-		store(user, null);
-	}
-
-	@Override
-	public void store(User user, UserHistory transaction) throws PasswordAlreadyUsedException, PersistenceException {
-		if (!checkStoringAspect())
-			return;
-
-		boolean newUser = user.getId() == 0;
-		boolean passwordChanged = false;
-		boolean enabledStatusChanged = false;
-
-		passwordChanged = processPasswordChanged(user);
-
-		validateUsernameUniquenes(user, newUser);
-
-		sanitize(user);
-
-		if (user.getType() == UserType.SYSTEM)
-			user.setType(UserType.DEFAULT);
-
-		enforceReadOnlyUserGroups(user);
-
-		Map<String, Object> dictionary = new HashMap<>();
-
-		invokeListenersBefore(user, transaction, dictionary);
-
-		if (newUser) {
-			user.setCreation(new Date());
-			user.setLastEnabled(user.getCreation());
-		} else {
-			boolean currentEnabled = queryForInt("select ld_enabled from ld_user where ld_id=" + user.getId()) == 1;
-			enabledStatusChanged = currentEnabled != user.isEnabled();
-
-			// Record the last enabled date in case the user is getting
-			// enabled
-			if (enabledStatusChanged && user.isEnabled())
-				user.setLastEnabled(new Date());
-
-			// In any case the last enabled must at least equal the creation
-			// date
-			if (user.getLastEnabled() == null)
-				user.setLastEnabled(user.getCreation());
-
-			user.setPasswordExpired(isPasswordExpired(user));
-		}
-
-		if (StringUtils.isEmpty(user.getPassword()) && user.getSource() == UserSource.DEFAULT)
-			throw new PersistenceException(String.format("Cannot set empty password to user %s", user.getUsername()));
-
-		saveOrUpdate(user);
-		if (newUser)
-			flush();
-
-		// Save the working times
-		saveWorkingTimes(user);
-
-		enforceUserGroupAssignment(user);
-
-		/*
-		 * Update the user-group assignments
-		 */
-		updateUserGroupAssignments(user);
-
-		// Save the password history to track the password change
-		recordPasswordChange(user, transaction, passwordChanged);
-
-		invokeListenersAfter(user, transaction, dictionary);
-
-		saveHistory(user, transaction, newUser);
-
-		// If the admin password may have been changed and the 'adminpasswd'
-		// also has to be updated
-		updateAdminPasswordSetting(user);
-
-		enforceReadOnlyUserPermissions(user);
-
-		saveEnabledOrDisabledHistory(user, transaction, enabledStatusChanged);
-	}
-
-	/**
-	 * Sanitizes the text properties of a user
-	 * 
-	 * @param user the user to sanitize
-	 */
-	private void sanitize(User user) {
-		user.setName(HTMLSanitizer.sanitizeSimpleText(user.getName()));
-		user.setFirstName(HTMLSanitizer.sanitizeSimpleText(user.getFirstName()));
-		user.setCity(HTMLSanitizer.sanitizeSimpleText(user.getCity()));
-		user.setBuilding(HTMLSanitizer.sanitizeSimpleText(user.getBuilding()));
-		user.setCompany(HTMLSanitizer.sanitizeSimpleText(user.getCompany()));
-		user.setCountry(HTMLSanitizer.sanitizeSimpleText(user.getCountry()));
-		user.setDepartment(HTMLSanitizer.sanitizeSimpleText(user.getDepartment()));
-		user.setPostalcode(HTMLSanitizer.sanitizeSimpleText(user.getPostalcode()));
-		user.setState(HTMLSanitizer.sanitizeSimpleText(user.getState()));
-		user.setStreet(HTMLSanitizer.sanitizeSimpleText(user.getStreet()));
-		user.setTelephone(HTMLSanitizer.sanitizeSimpleText(user.getTelephone()));
-		user.setTelephone2(HTMLSanitizer.sanitizeSimpleText(user.getTelephone2()));
-	}
-
-	private void validateUsernameUniquenes(User user, boolean newUser) throws PersistenceException {
-		if (newUser && findByUsernameIgnoreCase(user.getUsername()) != null)
-			throw new PersistenceException(String.format(
-					"Another user exists with the same username %s (perhaps with different case)", user.getUsername()));
-	}
-
-	private void saveWorkingTimes(User user) throws PersistenceException {
-		jdbcUpdate("delete from ld_workingtime where ld_userid=" + user.getId());
-		if (user.getWorkingTimes() != null)
-			for (WorkingTime wt : user.getWorkingTimes()) {
-				Map<String, Object> params = new HashMap<>();
-				params.put("userId", user.getId());
-				params.put("dayOfWeek", wt.getDayOfWeek());
-				params.put("hourStart", wt.getHourStart());
-				params.put("minuteStart", wt.getMinuteStart());
-				params.put("hourEnd", wt.getHourEnd());
-				params.put("minuteEnd", wt.getMinuteEnd());
-				params.put("label", wt.getLabel());
-				params.put("description", wt.getDescription());
-
-				jdbcUpdate(
-						"insert into ld_workingtime(ld_userid,ld_dayofweek,ld_hourstart,ld_minutestart,ld_hourend,ld_minuteend,ld_label,ld_description) values (:userId, :dayOfWeek, :hourStart, :minuteStart, :hourEnd, :minuteEnd, :label, :description)",
-						params);
-			}
-	}
-
-	/**
-	 * Enforces the assignment of the special user group(the group that also
-	 * represents the user itself)
-	 * 
-	 * @param user The current user
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private void enforceUserGroupAssignment(User user) throws PersistenceException {
-		GroupDAO groupDAO = Context.get(GroupDAO.class);
-		String userGroupName = user.getUserGroupName();
-		Group grp = groupDAO.findByName(userGroupName, user.getTenantId());
-		if (grp == null) {
-			grp = new Group();
-			grp.setName(userGroupName);
-			grp.setType(GroupType.USER);
-			grp.setTenantId(user.getTenantId());
-			groupDAO.store(grp);
-		}
-		if (!user.isMemberOf(grp.getName()))
-			user.addGroup(grp);
-	}
-
-	/**
-	 * Saves the password history to track the password change
-	 * 
-	 * @param user The current user
-	 * @param transaction The current session
-	 * @param passwordChanged A flag indicating
-	 * 
-	 * @throws PersistenceException
-	 */
-	private void recordPasswordChange(User user, UserHistory transaction, boolean passwordChanged)
-			throws PersistenceException {
-		if (passwordChanged) {
-			PasswordHistory pHist = new PasswordHistory();
-			pHist.setDate(transaction != null ? transaction.getDate() : new Date());
-			pHist.setUserId(user.getId());
-			pHist.setPassword(user.getPassword());
-			pHist.setTenantId(user.getTenantId());
-			passwordHistoryDAO.store(pHist);
-			passwordHistoryDAO.cleanOldHistories(user.getId(), getPasswordEnforce(user) * 2);
-		}
-	}
-
-	/**
-	 * Manipulates a read-only user in order to enforce the right group
-	 * assignments
-	 * 
-	 * @param user The current user
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private void enforceReadOnlyUserGroups(User user) throws PersistenceException {
-		if (user.isReadonly()) {
-			GroupDAO gDao = Context.get(GroupDAO.class);
-			Group guestGroup = gDao.findByName("guest", user.getTenantId());
-			Group userGroup = user.getUserGroup();
-			user.removeGroupMemberships(null);
-			user.addGroup(userGroup);
-			user.addGroup(guestGroup);
-		}
-	}
-
-	/**
-	 * Manipulates a read-only user in order to enforce the right guest
-	 * permissions
-	 * 
-	 * @param user The current user
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private void enforceReadOnlyUserPermissions(User user) throws PersistenceException {
-		if (user.isReadonly()) {
-			user = findById(user.getId());
-			initialize(user);
-			GroupDAO groupDAO = Context.get(GroupDAO.class);
-
-			// Safer to iterate on a clone of the list generated by Hibernate,
-			// otherwise a fake ConcurrentModificationException can occur.
-			for (Group group : new ArrayList<>(user.getGroups())) {
-				groupDAO.fixGuestPermissions(group);
-			}
-		}
-	}
-
-	/**
-	 * Updates the 'adminpasswd' setting if the user is the administrator
-	 * 
-	 * @param user the current user
-	 */
-	private void updateAdminPasswordSetting(User user) {
-		if (ADMIN.equals(user.getUsername()) && user.getTenantId() == Tenant.DEFAULT_ID) {
-			log.info("Updated adminpasswd");
-			config.setProperty("adminpasswd", user.getPassword());
-			try {
-				config.write();
-			} catch (IOException e) {
-				log.warn("Cannot write the new admin password in the configuration file", e);
-			}
-		}
-	}
-
-	/**
-	 * Prepares and saves the right history when a user gets stored
-	 * 
-	 * @param user The current user
-	 * @param transaction The current transaction
-	 * @param newUser A flag indicating if the user is newly created
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private void saveHistory(User user, UserHistory transaction, boolean newUser) throws PersistenceException {
-		if (newUser) {
-			saveDefaultDashlets(user);
-
-			/*
-			 * Save an history to gridRecord the user creation
-			 */
-			UserHistory createdHistory = new UserHistory();
-			if (transaction != null)
-				createdHistory = new UserHistory(transaction);
-			createdHistory.setEvent(UserEvent.CREATED);
-			createdHistory.setComment(user.getUsername());
-			saveUserHistory(user, createdHistory);
-		} else {
-			if (transaction == null) {
-				transaction = new UserHistory();
-				transaction.setEvent(UserEvent.UPDATED);
-				transaction.setComment(user.getUsername());
-			}
-			saveUserHistory(user, transaction);
-		}
-	}
-
-	/**
-	 * Update the user-group assignments
-	 * 
-	 * @param user the current user
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private void updateUserGroupAssignments(User user) throws PersistenceException {
-		Map<String, Object> params = new HashMap<>();
-		params.put("userId", user.getId());
-		jdbcUpdate("delete from ld_usergroup where ld_userid = :userId", params);
-		for (UserGroup ug : user.getUserGroups()) {
-			int exists = queryForInt("select count(*) from ld_group where ld_id=" + ug.getGroupId());
-			if (exists > 0) {
-				jdbcUpdate("insert into ld_usergroup(ld_userid, ld_groupid) values (" + user.getId() + ", "
-						+ ug.getGroupId() + ")");
-			} else
-				log.warn("It seems that the usergroup {} does not exist anymore", ug.getGroupId());
-		}
-	}
-
-	/**
-	 * Saves an history to gridRecord the changes in the enabled status of a
-	 * user
-	 * 
-	 * @param user The current user
-	 * @param transaction the current session
-	 * @param enabledStatusChanged A flag indicating if the status has been
-	 *        modified
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private void saveEnabledOrDisabledHistory(User user, UserHistory transaction, boolean enabledStatusChanged)
-			throws PersistenceException {
-		if (enabledStatusChanged
-				&& (transaction == null || (!transaction.getEvent().equals(UserEvent.DISABLED.toString())
-						&& !transaction.getEvent().equals(UserEvent.ENABLED.toString())))) {
-			UserHistory enabledOrDisabledHistory = new UserHistory();
-			if (transaction != null)
-				enabledOrDisabledHistory = new UserHistory(transaction);
-			else {
-				enabledOrDisabledHistory.setUser(user);
-			}
-			enabledOrDisabledHistory.setEvent(user.isEnabled() ? UserEvent.ENABLED : UserEvent.DISABLED);
-			enabledOrDisabledHistory.setComment(null);
-			saveUserHistory(user, enabledOrDisabledHistory);
-		}
-	}
-
-	private void invokeListenersAfter(User user, UserHistory transaction, Map<String, Object> dictionary)
-			throws AuthenticationException {
-		log.debug("Invoke listeners after store");
-		for (UserListener listener : userListenerManager.getListeners())
-			try {
-				listener.afterStore(user, transaction, dictionary);
-			} catch (AuthenticationException ae) {
-				throw ae;
-			} catch (PersistenceException e) {
-				log.warn("Error in listener {}", listener.getClass().getSimpleName(), e);
-			}
-	}
-
-	private void invokeListenersBefore(User user, UserHistory transaction, Map<String, Object> dictionary)
-			throws AuthenticationException {
-		log.debug("Invoke listeners before store");
-		for (UserListener listener : userListenerManager.getListeners())
-			try {
-				listener.beforeStore(user, transaction, dictionary);
-			} catch (AuthenticationException ae) {
-				throw ae;
-			} catch (PersistenceException e) {
-				log.warn("Error in listener {}", listener.getClass().getSimpleName(), e);
-			}
-	}
-
-	/**
-	 * Detects ad handles the password change. It verifies that the new password
-	 * has not been already used and complies with the quality rules.
-	 * 
-	 * @param user The current user
-	 * 
-	 * @return true id the password has been changed
-	 * 
-	 * @throws PersistenceException Error in the database
-	 */
-	private boolean processPasswordChanged(User user) throws PersistenceException {
-		// Do not implement password change logic in case of users imported from
-		// another system
-		if (user.getSource() != UserSource.DEFAULT)
-			return false;
-
-		boolean passwordChanged;
-		String currentPassword = queryForString("select ld_password from ld_user where ld_id=" + user.getId());
-		passwordChanged = currentPassword == null || !currentPassword.equals(user.getPassword());
-
-		if (passwordChanged) {
-			checkAlreadyUsedPassword(user);
-			checkPasswordCompliance(user);
-		}
-		return passwordChanged;
-	}
-
-	private void saveDefaultDashlets(User user) throws PersistenceException {
-		String type = "usersetting";
-		String dashletSubtype = "dashlet-";
-		String[] dashletSubtypes = new String[] { dashletSubtype + "checkout", dashletSubtype + "locked",
-				dashletSubtype + "notes" };
-		for (int i = 0; i < dashletSubtypes.length; i++) {
-			Generic dash = new Generic(type, dashletSubtypes[i], user.getId());
-			dash.setString1("0");
-			dash.setTenantId(user.getTenantId());
-			switch (i) {
-				case 0:
-					dash.setInteger1(1L);
-					dash.setInteger2(0L);
-					dash.setInteger3(0L);
-					break;
-				case 1:
-					dash.setInteger1(3L);
-					dash.setInteger2(0L);
-					dash.setInteger3(1L);
-					break;
-				case 3:
-					dash.setInteger1(6L);
-					dash.setInteger2(1L);
-					dash.setInteger3(0L);
-					break;
-				default:
-					// do nothing
-			}
-			genericDAO.store(dash);
-		}
-	}
-
-	private boolean isPasswordExpired(User user) throws PersistenceException {
-		// Never consider changed the password of a user imported from another
-		// system
-		if (user == null || user.getSource() != UserSource.DEFAULT)
-			return false;
-
-		if (user.isPasswordExpired()) {
-			log.warn("User {}'s password already marked as expired", user);
-			return true;
-		}
-
-		String tenantName = (Context.get(TenantDAO.class)).getTenantName(user.getTenantId());
-		int passwordTtl = config.getInt(tenantName + ".password.ttl", 90);
-		if (passwordTtl <= 0)
-			return false;
-
-		// Check if the password is already expired
-		if (user.isPasswordExpires()) {
-			Date lastChange = user.getPasswordChanged();
-			if (lastChange == null)
-				return false;
-			Calendar calendar = new GregorianCalendar();
-			calendar.setTime(lastChange);
-			calendar.set(Calendar.MILLISECOND, 0);
-			calendar.set(Calendar.SECOND, 0);
-			calendar.set(Calendar.MINUTE, 0);
-			calendar.set(Calendar.HOUR, 0);
-			lastChange = calendar.getTime();
-
-			calendar.setTime(new Date());
-			calendar.set(Calendar.MILLISECOND, 0);
-			calendar.set(Calendar.SECOND, 0);
-			calendar.set(Calendar.MINUTE, 0);
-			calendar.set(Calendar.HOUR, 0);
-
-			calendar.add(Calendar.DAY_OF_MONTH, -passwordTtl);
-			Date date = calendar.getTime();
-
-			boolean expired = lastChange.before(date);
-			if (expired)
-				log.warn("User {}'s password expired because last changed on {}", lastChange);
-			return expired;
-		} else
-			return false;
-	}
-
-	@Override
-	public boolean isPasswordExpired(String username) {
-		try {
-			User user = findByUsernameIgnoreCase(username);
-			return isPasswordExpired(user);
-		} catch (Exception e) {
-			log.error(e.getMessage(), e);
-			return true;
-		}
-	}
-
-	private boolean isInactive(User user) throws PersistenceException {
-		if (user == null)
-			return false;
-
-		if (!user.isEnabled())
-			return true;
-
-		String tenantName = (Context.get(TenantDAO.class)).getTenantName(user.getTenantId());
-		int maxInactiveDays = config.getInt(tenantName + ".security.user.maxinactivity", -1);
-		if (user.getMaxInactivity() != null)
-			maxInactiveDays = user.getMaxInactivity();
-		if (maxInactiveDays <= 0)
-			return false;
-
-		log.info("Checking if the user {} has interactions in the last {} days", user.getUsername(), maxInactiveDays);
-
-		StringBuilder sb = new StringBuilder(
-				"select max(ld_date) from ld_history where ld_deleted=0 and ld_userid=" + user.getId());
-		sb.append(
-				" UNION select max(ld_date) from ld_user_history where ld_deleted=0 and not ld_event in ('event.user.updated', 'event.user.disabled', 'event.user.timeout', 'event.user.login.failed', 'event.user.deleted', 'event.user.messagereceived') and ld_userid="
-						+ user.getId());
-		sb.append(" UNION select max(ld_date) from ld_folder_history where ld_deleted=0 and ld_userid=" + user.getId()
-				+ " order by 1 desc");
-
-		List<Date> interactions = queryForList(sb.toString(), Date.class);
-		Date lastInteraction = null;
-		if (!interactions.isEmpty())
-			lastInteraction = interactions.get(0);
-
-		// Perhaps the user never had interactions until now so we use his
-		// creation date as last interaction
-		if (lastInteraction == null)
-			lastInteraction = user.getCreation();
-
-		// In case the user has been enabled again after being disabled for
-		// inactivity we should consider the last enabled date as last
-		// interaction
-		if (user.getLastEnabled() != null && user.getLastEnabled().after(lastInteraction))
-			lastInteraction = user.getLastEnabled();
-
-		Calendar calendar = new GregorianCalendar();
-		calendar.setTime(lastInteraction);
-		calendar.set(Calendar.MILLISECOND, 0);
-		calendar.set(Calendar.SECOND, 0);
-		calendar.set(Calendar.MINUTE, 0);
-		calendar.set(Calendar.HOUR, 0);
-		lastInteraction = calendar.getTime();
-
-		calendar.setTime(new Date());
-		calendar.set(Calendar.MILLISECOND, 0);
-		calendar.set(Calendar.SECOND, 0);
-		calendar.set(Calendar.MINUTE, 0);
-		calendar.set(Calendar.HOUR, 0);
-
-		calendar.add(Calendar.DAY_OF_MONTH, -maxInactiveDays);
-		Date date = calendar.getTime();
-
-		return (lastInteraction.before(date));
-	}
-
-	@Override
-	public boolean isInactive(String username) throws PersistenceException {
-		return isInactive(findByUsernameIgnoreCase(username));
-	}
-
-	@Override
-	public int count(Long tenantId) throws PersistenceException {
-		String query = "select count(*) from ld_user where ld_type=" + UserType.DEFAULT.ordinal() + " and ld_deleted=0 "
-				+ (tenantId != null ? " and ld_tenantid=" + tenantId : "");
-		return queryForInt(query);
-	}
-
-	@Override
-	public int countGuests(Long tenantId) throws PersistenceException {
-		String query = "select count(*) from ld_user where ld_type=" + UserType.READONLY.ordinal()
-				+ " and ld_deleted=0 " + (tenantId != null ? " and ld_tenantid=" + tenantId : "");
-		return queryForInt(query);
-	}
-
-	@Override
-	public void delete(long userId, int code) throws PersistenceException {
-		delete(userId, null);
-	}
-
-	@Override
-	public void delete(long userId, UserHistory transaction) throws PersistenceException {
-		if (!checkStoringAspect())
-			return;
-
-		User user = findById(userId);
-		Group userGroup = user.getUserGroup();
-
-		user.setDeleted(PersistentObject.DELETED_CODE_DEFAULT);
-		user.setUsername(user.getUsername() + "." + user.getId());
-		saveOrUpdate(user);
-
-		// Delete the user's group
-		if (userGroup != null) {
-			GroupDAO groupDAO = Context.get(GroupDAO.class);
-			groupDAO.delete(userGroup.getId());
-		}
-
-		jdbcUpdate("delete from ld_usergroup where ld_userid=" + userId);
-
-		jdbcUpdate("delete from ld_apikey where ld_userid=" + userId);
-
-		saveUserHistory(user, transaction);
-	}
-
-	private void saveUserHistory(User user, UserHistory transaction) throws PersistenceException {
-		if (transaction == null)
-			return;
-
-		transaction.setUser(user);
-		transaction.setNotified(false);
-		userHistoryDAO.store(transaction);
-	}
-
-	private int getPasswordEnforce(User user) throws PersistenceException {
-		TenantDAO tenantDAO = Context.get(TenantDAO.class);
-		String tenant = tenantDAO.getTenantName(user.getTenantId());
-		return config.getInt(tenant + ".password.enforcehistory", 10);
-	}
-
-	public UserHistoryDAO getUserHistoryDAO() {
-		return userHistoryDAO;
-	}
-
-	public void setUserHistoryDAO(UserHistoryDAO userHistoryDAO) {
-		this.userHistoryDAO = userHistoryDAO;
-	}
-
-	public void setUserListenerManager(UserListenerManager userListenerManager) {
-		this.userListenerManager = userListenerManager;
-	}
-
-	public UserListenerManager getUserListenerManager() {
-		return userListenerManager;
-	}
-
-	@Override
-	public void initialize(User user) throws PersistenceException {
-		if (user == null || user.getId() == 0L)
-			return;
-
-		refresh(user);
-
-		List<Long> groupIds = new ArrayList<>();
-		try {
-			groupIds = queryForList("select distinct ld_groupid from ld_usergroup where ld_userid=" + user.getId(),
-					Long.class);
-			for (Long groupId : groupIds)
-				user.getUserGroups().add(new UserGroup(groupId));
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-		}
-
-		user.getGroups().clear();
-		user.getUserGroups().clear();
-		if (!groupIds.isEmpty()) {
-			GroupDAO gDao = Context.get(GroupDAO.class);
-			try {
-				List<Group> groups = gDao.findByWhere(
-						ENTITY + ".id in (" + StringUtil.arrayToString(groupIds.toArray(new Long[0]), ",") + ")", null,
-						null);
-				for (Group group : groups) {
-					user.getGroups().add(group);
-					user.getUserGroups().add(new UserGroup(group.getId()));
-				}
-			} catch (PersistenceException e) {
-				log.warn(e.getMessage(), e);
-			}
-		}
-
-		// Manually initialize the collegtion of working times
-		user.getWorkingTimes().clear();
-
-		queryForResultSet(
-				"select ld_dayofweek,ld_hourstart,ld_minutestart,ld_hourend,ld_minuteend,ld_label,ld_description from ld_workingtime where ld_userid="
-						+ user.getId(),
-				null, null, rows -> {
-					while (rows.next()) {
-						WorkingTime wt = new WorkingTime(rows.getInt(1), rows.getInt(2), rows.getInt(3));
-						wt.setHourEnd(rows.getInt(4));
-						wt.setMinuteEnd(rows.getInt(5));
-						wt.setLabel(rows.getString(6));
-						wt.setDescription(rows.getString(7));
-						user.getWorkingTimes().add(wt);
-					}
-				});
-	}
-
-	@Override
-	public Map<String, Generic> findUserSettings(long userId, String namePrefix) throws PersistenceException {
-		List<Generic> generics = genericDAO.findByTypeAndSubtype("usersetting", namePrefix + "%", userId, null);
-		Map<String, Generic> map = new HashMap<>();
-		for (Generic generic : generics) {
-			map.put(generic.getSubtype(), generic);
-		}
-		return map;
-	}
-
-	public void setGenericDAO(GenericDAO genericDAO) {
-		this.genericDAO = genericDAO;
-	}
-
-	@Override
-	public User findAdminUser(String tenantName) throws PersistenceException {
-		if ("default".equals(tenantName))
-			return findByUsername(ADMIN);
-		else
-			return findByUsername(ADMIN + StringUtils.capitalize(tenantName));
-	}
-
-	@Override
-	public Set<User> findByGroup(long groupId) throws PersistenceException {
-		List<Long> docIds = new ArrayList<>();
-		try {
-			docIds = queryForList("select ld_userid from ld_usergroup where ld_groupid=" + groupId, Long.class);
-		} catch (PersistenceException e) {
-			log.error(e.getMessage(), e);
-		}
-		Set<User> set = new HashSet<>();
-		if (!docIds.isEmpty()) {
-			String query = ENTITY + ".id in (" + StringUtil.arrayToString(docIds.toArray(new Long[0]), ",") + ")";
-			List<User> users = findByWhere(query, (Map<String, Object>) null, null, null);
-			for (User user : users) {
-				if (user.getDeleted() == 0 && !set.contains(user))
-					set.add(user);
-			}
-		}
-		return set;
-	}
-
-	@Override
-	public User findById(long id) throws PersistenceException {
-		User user = super.findById(id);
-		if (user != null)
-			initialize(user);
-		return user;
-	}
-
-	@Override
-	public User getUser(String username) throws PersistenceException {
-		User user = null;
-		if (HibernateUserDAO.ignoreCaseLogin())
-			user = findByUsernameIgnoreCase(username);
-		else
-			user = findByUsername(username);
-		initialize(user);
-		return user;
-	}
-
-	public void setPasswordHistoryDAO(PasswordHistoryDAO passwordHistoryDAO) {
-		this.passwordHistoryDAO = passwordHistoryDAO;
-	}
-
-	public void setConfig(ContextProperties config) {
-		this.config = config;
-	}
+        PasswordHistory hist = passwordHistoryDAO.findByUserIdAndPassword(user.getId(), user.getPassword(), enforce);
+        if (hist != null)
+            throw new PasswordAlreadyUsedException(hist.getDate());
+    }
+
+    @Override
+    public User findById(long id) throws PersistenceException {
+        User user = super.findById(id);
+        return afterLoad(user, false);
+    }
+
+    @Override
+    public void store(User user) throws PasswordAlreadyUsedException, PersistenceException {
+        store(user, null);
+    }
+
+    @Override
+    public void store(User user, UserHistory transaction) throws PasswordAlreadyUsedException, PersistenceException {
+        if (!checkStoringAspect())
+            return;
+
+        boolean newUser = user.getId() == 0;
+        boolean passwordChanged = false;
+        boolean enabledStatusChanged = false;
+
+        if (user.getUsername().contains(">"))
+            throw new PersistenceException("Cannot set username containing char >");
+
+        passwordChanged = processPasswordChanged(user);
+
+        validateUsernameUniquenes(user, newUser);
+
+        sanitize(user);
+
+        if (user.getType() == Type.SYSTEM)
+            user.setType(Type.DEFAULT);
+
+        enforceReadOnlyUserGroups(user);
+
+        Map<String, Object> dictionary = new HashMap<>();
+
+        invokeListenersBeforeSave(user, transaction, dictionary);
+
+        if (newUser) {
+            user.setCreation(new Date());
+            user.setLastEnabled(user.getCreation());
+        } else {
+            boolean currentEnabled = queryForInt(
+                    "select ld_enabled from ld_user where ld_id = %d".formatted(user.getId())) == 1;
+            enabledStatusChanged = currentEnabled != user.isEnabled();
+
+            // Record the last enabled date in case the user is getting
+            // enabled
+            if (enabledStatusChanged && user.isEnabled())
+                user.setLastEnabled(new Date());
+
+            // In any case the last enabled must at least equal the creation
+            // date
+            if (user.getLastEnabled() == null)
+                user.setLastEnabled(user.getCreation());
+
+            user.setPasswordExpired(isPasswordExpired(user));
+        }
+
+        if (StringUtils.isEmpty(user.getPassword()) && user.getSource() == UserSource.DEFAULT)
+            throw new PersistenceException(String.format("Cannot set empty password to user %s", user.getUsername()));
+
+        saveOrUpdate(user);
+        if (newUser)
+            flush();
+
+        // Save the working times
+        saveWorkingTimes(user);
+
+        enforceUserGroupAssignment(user);
+
+        /*
+         * Update the user-group assignments
+         */
+        updateUserGroupAssignments(user);
+
+        // Update the allowed impersonifiers
+        updateImpersonifiers(user);
+
+        // Save the password history to track the password change
+        recordPasswordChange(user, transaction, passwordChanged);
+
+        invokeListenersAfterSave(user, transaction, dictionary);
+
+        saveHistory(user, transaction, newUser);
+
+        // If the admin password may have been changed and the 'adminpasswd'
+        // also has to be updated
+        updateAdminPasswordSetting(user);
+
+        enforceReadOnlyUserPermissions(user);
+
+        saveEnabledOrDisabledHistory(user, transaction, enabledStatusChanged);
+    }
+
+    /**
+     * Sanitizes the text properties of a user
+     * 
+     * @param user the user to sanitize
+     */
+    private void sanitize(User user) {
+        user.setName(HTMLSanitizer.sanitizeSimpleText(user.getName()));
+        user.setFirstName(HTMLSanitizer.sanitizeSimpleText(user.getFirstName()));
+        user.setCity(HTMLSanitizer.sanitizeSimpleText(user.getCity()));
+        user.setBuilding(HTMLSanitizer.sanitizeSimpleText(user.getBuilding()));
+        user.setCompany(HTMLSanitizer.sanitizeSimpleText(user.getCompany()));
+        user.setCountry(HTMLSanitizer.sanitizeSimpleText(user.getCountry()));
+        user.setDepartment(HTMLSanitizer.sanitizeSimpleText(user.getDepartment()));
+        user.setPostalcode(HTMLSanitizer.sanitizeSimpleText(user.getPostalcode()));
+        user.setState(HTMLSanitizer.sanitizeSimpleText(user.getState()));
+        user.setStreet(HTMLSanitizer.sanitizeSimpleText(user.getStreet()));
+        user.setTelephone(HTMLSanitizer.sanitizeSimpleText(user.getTelephone()));
+        user.setTelephone2(HTMLSanitizer.sanitizeSimpleText(user.getTelephone2()));
+    }
+
+    private void validateUsernameUniquenes(User user, boolean newUser) throws PersistenceException {
+        if (newUser && findByUsernameIgnoreCase(user.getUsername()) != null)
+            throw new PersistenceException(String.format(
+                    "Another user exists with the same username %s (perhaps with different case)", user.getUsername()));
+    }
+
+    private void saveWorkingTimes(User user) throws PersistenceException {
+        jdbcUpdate("delete from ld_workingtime where ld_userid = %s".formatted(user.getId()));
+        if (user.getWorkingTimes() != null)
+            for (WorkingTime wt : user.getWorkingTimes()) {
+                Map<String, Object> params = new HashMap<>();
+                params.put(USER_ID, user.getId());
+                params.put("dayOfWeek", wt.getDayOfWeek());
+                params.put("hourStart", wt.getHourStart());
+                params.put("minuteStart", wt.getMinuteStart());
+                params.put("hourEnd", wt.getHourEnd());
+                params.put("minuteEnd", wt.getMinuteEnd());
+                params.put("label", wt.getLabel());
+                params.put("description", wt.getDescription());
+
+                jdbcUpdate(
+                        """
+                        insert into ld_workingtime (ld_userid,ld_dayofweek,ld_hourstart,ld_minutestart,ld_hourend,ld_minuteend,ld_label,ld_description)
+                                            values (:userId, :dayOfWeek, :hourStart, :minuteStart, :hourEnd, :minuteEnd, :label, :description)
+                        """,
+                        params);
+            }
+    }
+
+    /**
+     * Enforces the assignment of the special user group(the group that also
+     * represents the user itself)
+     * 
+     * @param user The current user
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void enforceUserGroupAssignment(User user) throws PersistenceException {
+        GroupDAO groupDAO = Context.get(GroupDAO.class);
+        String userGroupName = user.getUserGroupName();
+        Group grp = groupDAO.findByName(userGroupName, user.getTenantId());
+        if (grp == null) {
+            grp = new Group();
+            grp.setName(userGroupName);
+            grp.setType(Group.Type.USER);
+            grp.setTenantId(user.getTenantId());
+            groupDAO.store(grp);
+        }
+        if (!user.isMemberOf(grp.getName()))
+            user.addGroup(grp);
+    }
+
+    /**
+     * Saves the password history to track the password change
+     * 
+     * @param user The current user
+     * @param transaction The current session
+     * @param passwordChanged A flag indicating
+     * 
+     * @throws PersistenceException
+     */
+    private void recordPasswordChange(User user, UserHistory transaction, boolean passwordChanged)
+            throws PersistenceException {
+        if (passwordChanged) {
+            PasswordHistory pHist = new PasswordHistory();
+            pHist.setDate(transaction != null ? transaction.getDate() : new Date());
+            pHist.setUserId(user.getId());
+            pHist.setPassword(user.getPassword());
+            pHist.setTenantId(user.getTenantId());
+            passwordHistoryDAO.store(pHist);
+            passwordHistoryDAO.cleanOldHistories(user.getId(), getPasswordEnforce(user) * 2);
+        }
+    }
+
+    /**
+     * Manipulates a read-only user in order to enforce the right group
+     * assignments
+     * 
+     * @param user The current user
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void enforceReadOnlyUserGroups(User user) throws PersistenceException {
+        if (user.isReadonly()) {
+            GroupDAO gDao = Context.get(GroupDAO.class);
+            Group guestGroup = gDao.findByName("guest", user.getTenantId());
+            Group userGroup = user.getUserGroup();
+            user.removeGroupMemberships(null);
+            user.addGroup(userGroup);
+            user.addGroup(guestGroup);
+        }
+    }
+
+    /**
+     * Manipulates a read-only user in order to enforce the right guest
+     * permissions
+     * 
+     * @param user The current user
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void enforceReadOnlyUserPermissions(User user) throws PersistenceException {
+        if (user.isReadonly()) {
+            user = findById(user.getId());
+            initialize(user);
+            GroupDAO groupDAO = Context.get(GroupDAO.class);
+
+            // Safer to iterate on a clone of the list generated by Hibernate,
+            // otherwise a fake ConcurrentModificationException can occur.
+            for (Group group : new ArrayList<>(user.getGroups())) {
+                groupDAO.fixGuestPermissions(group);
+            }
+        }
+    }
+
+    /**
+     * Updates the 'adminpasswd' setting if the user is the administrator
+     * 
+     * @param user the current user
+     */
+    private void updateAdminPasswordSetting(User user) {
+        if (ADMIN.equals(user.getUsername()) && user.getTenantId() == Tenant.DEFAULT_ID) {
+            log.info("Updated adminpasswd");
+            config.setProperty("adminpasswd", user.getPassword());
+            try {
+                config.write();
+            } catch (IOException e) {
+                log.warn("Cannot write the new admin password in the configuration file", e);
+            }
+        }
+    }
+
+    /**
+     * Prepares and saves the right history when a user gets stored
+     * 
+     * @param user The current user
+     * @param transaction The current transaction
+     * @param newUser A flag indicating if the user is newly created
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void saveHistory(User user, UserHistory transaction, boolean newUser) throws PersistenceException {
+        if (newUser) {
+            saveDefaultDashlets(user);
+
+            /*
+             * Save an history to gridRecord the user creation
+             */
+            UserHistory createdHistory = new UserHistory();
+            if (transaction != null)
+                createdHistory = new UserHistory(transaction);
+            createdHistory.setEvent(UserEvent.CREATED);
+            createdHistory.setComment(user.getUsername());
+            saveUserHistory(user, createdHistory);
+        } else {
+            if (transaction == null) {
+                transaction = new UserHistory();
+                transaction.setEvent(UserEvent.UPDATED);
+                transaction.setComment(user.getUsername());
+            }
+            saveUserHistory(user, transaction);
+        }
+    }
+
+    /**
+     * Update the user-group assignments
+     * 
+     * @param user the current user
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void updateUserGroupAssignments(User user) throws PersistenceException {
+        jdbcUpdate("delete from ld_usergroup where ld_userid = :userId", Map.of(USER_ID, user.getId()));
+        for (UserGroup ug : user.getUserGroups()) {
+            long exists = queryForLong("select count(*) from ld_group where ld_id = %d".formatted(ug.getGroupId()));
+            if (exists > 0) {
+                jdbcUpdate("insert into ld_usergroup(ld_userid, ld_groupid) values (%d, %d)".formatted(user.getId(),
+                        +ug.getGroupId()));
+            } else
+                log.warn("It seems that the usergroup {} does not exist anymore", ug.getGroupId());
+        }
+    }
+
+    /**
+     * Update the allowed impersonifiers
+     * 
+     * @param user the current user
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void updateImpersonifiers(User user) throws PersistenceException {
+        jdbcUpdate("delete from ld_impersonator where ld_userid = :userId", Map.of(USER_ID, user.getId()));
+        for (String username : user.getImpersonators()) {
+            long exists = queryForLong("select count(*) from ld_user where ld_username = :username",
+                    Map.of(USERNAME, username));
+            if (exists > 0) {
+                jdbcUpdate("insert into ld_impersonator(ld_userid, ld_username) values (%d, '%s')"
+                        .formatted(user.getId(), username));
+            } else
+                log.warn("It seems that the username {} does not exist anymore", username);
+        }
+    }
+
+    /**
+     * Saves an history to gridRecord the changes in the enabled status of a
+     * user
+     * 
+     * @param user The current user
+     * @param transaction the current session
+     * @param enabledStatusChanged A flag indicating if the status has been
+     *        modified
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private void saveEnabledOrDisabledHistory(User user, UserHistory transaction, boolean enabledStatusChanged)
+            throws PersistenceException {
+        if (enabledStatusChanged
+                && (transaction == null || (!transaction.getEvent().equals(UserEvent.DISABLED.toString())
+                        && !transaction.getEvent().equals(UserEvent.ENABLED.toString())))) {
+            UserHistory enabledOrDisabledHistory = new UserHistory();
+            if (transaction != null)
+                enabledOrDisabledHistory = new UserHistory(transaction);
+            else {
+                enabledOrDisabledHistory.setUser(user);
+            }
+            enabledOrDisabledHistory.setEvent(user.isEnabled() ? UserEvent.ENABLED : UserEvent.DISABLED);
+            enabledOrDisabledHistory.setComment(null);
+            saveUserHistory(user, enabledOrDisabledHistory);
+        }
+    }
+
+    private void invokeListenersAfterSave(User user, UserHistory transaction, Map<String, Object> dictionary)
+            throws AuthenticationException {
+        log.debug("Invoke listeners after store");
+        for (UserListener listener : listeners)
+            try {
+                listener.afterSave(user, transaction, dictionary);
+            } catch (AuthenticationException ae) {
+                throw ae;
+            } catch (PersistenceException e) {
+                log.warn(LISTENER_ERROR, listener.getClass().getSimpleName(), e);
+            }
+    }
+
+    private void invokeListenersAfterLoad(User user, Map<String, Object> dictionary) throws AuthenticationException {
+        if (user == null)
+            return;
+
+        log.debug("Invoke listeners after load");
+        for (UserListener listener : listeners)
+            try {
+                listener.afterLoad(user, dictionary);
+            } catch (AuthenticationException ae) {
+                throw ae;
+            } catch (PersistenceException e) {
+                log.warn(LISTENER_ERROR, listener.getClass().getSimpleName(), e);
+            }
+    }
+
+    private void invokeListenersBeforeSave(User user, UserHistory transaction, Map<String, Object> dictionary)
+            throws AuthenticationException {
+        log.debug("Invoke listeners before store");
+        for (UserListener listener : listeners)
+            try {
+                listener.beforeSave(user, transaction, dictionary);
+            } catch (AuthenticationException ae) {
+                throw ae;
+            } catch (PersistenceException e) {
+                log.warn(LISTENER_ERROR, listener.getClass().getSimpleName(), e);
+            }
+    }
+
+    /**
+     * Detects ad handles the password change. It verifies that the new password
+     * has not been already used and complies with the quality rules.
+     * 
+     * @param user The current user
+     * 
+     * @return true id the password has been changed
+     * 
+     * @throws PersistenceException Error in the database
+     */
+    private boolean processPasswordChanged(User user) throws PersistenceException {
+        // Do not implement password change logic in case of users imported from
+        // another system
+        if (user.getSource() != UserSource.DEFAULT)
+            return false;
+
+        boolean passwordChanged;
+        String currentPassword = queryForString(
+                "select ld_password from ld_user where ld_id = %d".formatted(user.getId()));
+        passwordChanged = currentPassword == null || !currentPassword.equals(user.getPassword());
+
+        if (passwordChanged) {
+            checkAlreadyUsedPassword(user);
+            checkPasswordCompliance(user);
+        }
+        return passwordChanged;
+    }
+
+    private void saveDefaultDashlets(User user) throws PersistenceException {
+        String type = "usersetting";
+        String dashletSubtype = "dashlet-";
+        String[] dashletSubtypes = new String[] { "%scheckout".formatted(dashletSubtype),
+                "%slocked".formatted(dashletSubtype), "%snotes".formatted(dashletSubtype) };
+        for (int i = 0; i < dashletSubtypes.length; i++) {
+            Generic dash = new Generic(type, dashletSubtypes[i], user.getId());
+            dash.setString1("0");
+            dash.setTenantId(user.getTenantId());
+            switch (i) {
+                case 0:
+                    dash.setInteger1(1L);
+                    dash.setInteger2(0L);
+                    dash.setInteger3(0L);
+                    break;
+                case 1:
+                    dash.setInteger1(3L);
+                    dash.setInteger2(0L);
+                    dash.setInteger3(1L);
+                    break;
+                case 3:
+                    dash.setInteger1(6L);
+                    dash.setInteger2(1L);
+                    dash.setInteger3(0L);
+                    break;
+                default:
+                    // do nothing
+            }
+            genericDAO.store(dash);
+        }
+    }
+
+    private boolean isPasswordExpired(User user) throws PersistenceException {
+        // Never consider changed the password of a user imported from another
+        // system
+        if (user == null || user.getSource() != UserSource.DEFAULT)
+            return false;
+
+        if (user.isPasswordExpired()) {
+            log.warn("User {}'s password already marked as expired", user);
+            return true;
+        }
+
+        String tenantName = (Context.get(TenantDAO.class)).getTenantName(user.getTenantId());
+        int passwordTtl = config.getTenantInt(tenantName, "password.ttl", 90);
+        if (passwordTtl <= 0)
+            return false;
+
+        // Check if the password is already expired
+        if (user.isPasswordExpires()) {
+            Date lastChange = user.getPasswordChanged();
+            if (lastChange == null)
+                return false;
+            Calendar calendar = new GregorianCalendar();
+            calendar.setTime(lastChange);
+            calendar.set(Calendar.MILLISECOND, 0);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.HOUR, 0);
+            lastChange = calendar.getTime();
+
+            calendar.setTime(new Date());
+            calendar.set(Calendar.MILLISECOND, 0);
+            calendar.set(Calendar.SECOND, 0);
+            calendar.set(Calendar.MINUTE, 0);
+            calendar.set(Calendar.HOUR, 0);
+
+            calendar.add(Calendar.DAY_OF_MONTH, -passwordTtl);
+            Date date = calendar.getTime();
+
+            boolean expired = lastChange.before(date);
+            if (expired)
+                log.warn("User {}'s password expired because last changed on {}", user.getUsername(), lastChange);
+            return expired;
+        } else
+            return false;
+    }
+
+    @Override
+    public boolean isPasswordExpired(String username) {
+        try {
+            User user = findByUsernameIgnoreCase(username);
+            return isPasswordExpired(user);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            return true;
+        }
+    }
+
+    private boolean isInactive(User user) throws PersistenceException {
+        if (user == null)
+            return false;
+
+        if (!user.isEnabled())
+            return true;
+
+        int maxInactiveDays = config.getTenantInt(TenantDAO.get().getTenantName(user.getTenantId()),
+                "security.user.maxinactivity", -1);
+        if (user.getMaxInactivity() != null)
+            maxInactiveDays = user.getMaxInactivity();
+        if (maxInactiveDays <= 0)
+            return false;
+
+        log.info("Checking if the user {} had interactions in the last {} days", user.getUsername(), maxInactiveDays);
+
+        // Take the most recent session or in absence of sessions, take the
+        // last enabled date as last interaction
+        Date lastInteraction = Optional
+                .ofNullable(queryForObject("select max(ld_lastrenew) from ld_session where ld_username = :username",
+                        Map.of(USERNAME, user.getUsername()), Date.class))
+                .orElse(user.getLastEnabled());
+
+        Date mostRecentUserDate = Stream.of(user.getLastEnabled(), user.getCreation(), lastInteraction)
+                .filter(Objects::nonNull).max(Date::compareTo).orElse(new Date());
+
+        Calendar calendar = new GregorianCalendar();
+        calendar.setTime(lastInteraction);
+        calendar.set(Calendar.MILLISECOND, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.HOUR, 0);
+        calendar.getTime();
+
+        calendar.setTime(new Date());
+        calendar.set(Calendar.MILLISECOND, 0);
+        calendar.set(Calendar.SECOND, 0);
+        calendar.set(Calendar.MINUTE, 0);
+        calendar.set(Calendar.HOUR, 0);
+
+        calendar.add(Calendar.DAY_OF_MONTH, -maxInactiveDays);
+        Date date = calendar.getTime();
+
+        return (mostRecentUserDate.before(date));
+    }
+
+    @Override
+    public boolean isInactive(String username) throws PersistenceException {
+        return isInactive(findByUsernameIgnoreCase(username));
+    }
+
+    @Override
+    public long countRegularUsers(Long tenantId) throws PersistenceException {
+        return queryForLong("select count(*) from ld_user where ld_type = %d and ld_deleted=0 %s".formatted(
+                Type.DEFAULT.ordinal(), tenantId != null ? " and ld_tenantid = %d".formatted(tenantId) : ""));
+    }
+
+    @Override
+    public long countReadonlyUsers(Long tenantId) throws PersistenceException {
+        return queryForLong("select count(*) from ld_user where ld_type = %d and ld_deleted=0 %s".formatted(
+                Type.READONLY.ordinal(), tenantId != null ? " and ld_tenantid = %d".formatted(tenantId) : ""));
+    }
+
+    @Override
+    public void delete(long userId, int code) throws PersistenceException {
+        delete(userId, null);
+    }
+
+    @Override
+    public void delete(long userId, UserHistory transaction) throws PersistenceException {
+        if (!checkStoringAspect())
+            return;
+
+        User user = findById(userId);
+        Group userGroup = user.getUserGroup();
+
+        user.setDeleted(PersistentObject.DELETED_CODE_DEFAULT);
+        user.setUsername("%s.%d".formatted(user.getUsername(), user.getId()));
+        saveOrUpdate(user);
+
+        // Delete the user's group
+        if (userGroup != null)
+            GroupDAO.get().delete(userGroup.getId());
+
+        jdbcUpdate("delete from ld_usergroup where ld_userid = %d".formatted(userId));
+        jdbcUpdate("delete from ld_apikey where ld_userid = %d".formatted(userId));
+        jdbcUpdate("delete from ld_impersonator where ld_userid = %d".formatted(userId));
+
+        saveUserHistory(user, transaction);
+    }
+
+    private void saveUserHistory(User user, UserHistory transaction) throws PersistenceException {
+        if (transaction == null)
+            return;
+
+        transaction.setUser(user);
+        transaction.setNotified(false);
+        userHistoryDAO.store(transaction);
+    }
+
+    private int getPasswordEnforce(User user) throws PersistenceException {
+        return config.getInt("%s.password.enforcehistory".formatted(TenantDAO.get().getTenantName(user.getTenantId())),
+                10);
+    }
+
+    public UserHistoryDAO getUserHistoryDAO() {
+        return userHistoryDAO;
+    }
+
+    public void setUserHistoryDAO(UserHistoryDAO userHistoryDAO) {
+        this.userHistoryDAO = userHistoryDAO;
+    }
+
+    @Override
+    protected void initializeEntity(User user) throws PersistenceException {
+        Hibernate.initialize(user.getGroups());
+        Hibernate.initialize(user.getWorkingTimes());
+
+        List<Long> groupIds = new ArrayList<>();
+        try {
+            groupIds = queryForList(
+                    "select distinct ld_groupid from ld_usergroup where ld_userid = %d".formatted(user.getId()),
+                    Long.class);
+            for (Long groupId : groupIds)
+                user.getUserGroups().add(new UserGroup(groupId));
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+        }
+
+        user.getGroups().clear();
+        user.getUserGroups().clear();
+        if (!groupIds.isEmpty()) {
+            GroupDAO gDao = Context.get(GroupDAO.class);
+            try {
+                List<Group> groups = gDao.findByWhere(
+                        "_entity.id in (%s)".formatted(StringUtil.arrayToString(groupIds.toArray(new Long[0]), ",")),
+                        null, null);
+                for (Group group : groups) {
+                    user.getGroups().add(group);
+                    user.getUserGroups().add(new UserGroup(group.getId()));
+                }
+            } catch (PersistenceException e) {
+                log.warn(e.getMessage(), e);
+            }
+        }
+
+        // Initialize the impersonators
+        try {
+            user.getImpersonators().clear();
+            List<String> usernames = queryForList(
+                    "select distinct ld_username from ld_impersonator where ld_userid = %d".formatted(user.getId()),
+                    String.class);
+            for (String usr : usernames)
+                user.getImpersonators().add(usr);
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+        }
+
+        // Manually initialize the collection of working times
+        final Set<WorkingTime> workingTimes = user.getWorkingTimes();
+        workingTimes.clear();
+
+        queryForResultSet(
+                "select ld_dayofweek,ld_hourstart,ld_minutestart,ld_hourend,ld_minuteend,ld_label,ld_description from ld_workingtime where ld_userid = %d"
+                        .formatted(user.getId()),
+                null, null, rows -> {
+                    while (rows.next()) {
+                        WorkingTime wt = new WorkingTime(rows.getInt(1), rows.getInt(2), rows.getInt(3));
+                        wt.setHourEnd(rows.getInt(4));
+                        wt.setMinuteEnd(rows.getInt(5));
+                        wt.setLabel(rows.getString(6));
+                        wt.setDescription(rows.getString(7));
+                        workingTimes.add(wt);
+                    }
+                });
+    }
+
+    @Override
+    public Map<String, Generic> findUserSettings(long userId, String namePrefix) throws PersistenceException {
+        List<Generic> generics = genericDAO.findByTypeAndSubtype("usersetting", "%s%%".formatted(namePrefix), userId,
+                null);
+        Map<String, Generic> map = new HashMap<>();
+        for (Generic generic : generics) {
+            map.put(generic.getSubtype(), generic);
+        }
+        return map;
+    }
+
+    public void setGenericDAO(GenericDAO genericDAO) {
+        this.genericDAO = genericDAO;
+    }
+
+    @Override
+    public Set<User> findByGroup(long groupId) throws PersistenceException {
+        List<Long> docIds = new ArrayList<>();
+        try {
+            docIds = queryForList("select ld_userid from ld_usergroup where ld_groupid = %d".formatted(groupId),
+                    Long.class);
+        } catch (PersistenceException e) {
+            log.error(e.getMessage(), e);
+        }
+        Set<User> set = new HashSet<>();
+        if (!docIds.isEmpty()) {
+            List<User> users = findByWhere(
+                    "_entity.id in (%s)".formatted(StringUtil.arrayToString(docIds.toArray(new Long[0]), ",")),
+                    (Map<String, Object>) null, null, null);
+            for (User user : users) {
+                if (user.getDeleted() == 0 && !set.contains(user))
+                    set.add(user);
+            }
+        }
+        return set;
+    }
+
+    public void setPasswordHistoryDAO(PasswordHistoryDAO passwordHistoryDAO) {
+        this.passwordHistoryDAO = passwordHistoryDAO;
+    }
+
+    public void setConfig(ContextProperties config) {
+        this.config = config;
+    }
+
+    @PostConstruct
+    public void init() {
+        // Acquire the 'UserListener' extensions of the core plugin
+        PluginRegistry registry = PluginRegistry.getInstance();
+        Collection<Extension> exts = registry.getExtensions("logicaldoc-core", "UserListener");
+
+        // Sort the extensions according to ascending position
+        List<Extension> sortedExts = new ArrayList<>();
+        for (Extension extension : exts) {
+            sortedExts.add(extension);
+        }
+        Collections.sort(sortedExts, (Extension e1, Extension e2) -> {
+            int position1 = Integer.parseInt(e1.getParameter(POSITION).valueAsString());
+            int position2 = Integer.parseInt(e2.getParameter(POSITION).valueAsString());
+            if (position1 < position2)
+                return -1;
+            else if (position1 > position2)
+                return 1;
+            else
+                return 0;
+        });
+
+        for (Extension ext : sortedExts) {
+            String className = ext.getParameter("class").valueAsString();
+
+            try {
+                Class<?> clazz = Class.forName(className);
+                // Try to instantiate the listener
+                Object listener = clazz.getDeclaredConstructor().newInstance();
+                if (listener instanceof UserListener ul) {
+                    listeners.add(ul);
+                    if (log.isInfoEnabled())
+                        log.info("Added new user listener {} position {}", className,
+                                ext.getParameter(POSITION).valueAsString());
+                } else {
+                    throw new ClassNotFoundException(
+                            "The specified listener %s doesn't implement UserListener interface".formatted(className));
+                }
+            } catch (ClassNotFoundException | InstantiationException | IllegalAccessException | IllegalArgumentException
+                    | InvocationTargetException | NoSuchMethodException e) {
+                log.error(e.getMessage());
+            }
+        }
+    }
 }

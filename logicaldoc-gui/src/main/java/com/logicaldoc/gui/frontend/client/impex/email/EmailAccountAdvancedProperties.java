@@ -23,7 +23,9 @@ import com.smartgwt.client.widgets.layout.HLayout;
  * @since 6.0
  */
 public class EmailAccountAdvancedProperties extends EmailAccountDetailsTab {
-	private static final String DELETE = "delete";
+	private static final String TEMPLATE = "template";
+
+    private static final String DELETE = "delete";
 
 	private DynamicForm form = new DynamicForm();
 
@@ -90,7 +92,10 @@ public class EmailAccountAdvancedProperties extends EmailAccountDetailsTab {
 			}
 		});
 
-		form.setItems(folder, format, include, exclude, startDate, deleteFomMailbox);
+		SelectItem template = ItemFactory.newTemplateSelector(true, account.getTemplateId());
+		template.addChangedHandler(changedHandler);
+
+		form.setItems(folder, format, include, exclude, startDate, template, deleteFomMailbox);
 
 		formsContainer.addMember(form);
 	}
@@ -103,10 +108,14 @@ public class EmailAccountAdvancedProperties extends EmailAccountDetailsTab {
 			account.setMailFolder(form.getValueAsString("mailfolder"));
 			account.setFormat(Integer.parseInt(form.getValueAsString("format")));
 			account.setStartDate((Date) form.getValue("startdate"));
+			account.setTemplateId(
+					form.getValueAsString(TEMPLATE) != null && !form.getValueAsString(TEMPLATE).isEmpty()
+							? Long.parseLong(form.getValueAsString(TEMPLATE))
+							: null);
 		}
 		return !form.hasErrors();
 	}
-	
+
 	@Override
 	public boolean equals(Object other) {
 		return super.equals(other);

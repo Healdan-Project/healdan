@@ -56,6 +56,8 @@ import com.smartgwt.client.widgets.menu.MenuItem;
  */
 public class LastChangesReport extends AdminPanel {
 
+	private static final String IMPERSONATOR = "impersonator";
+
 	private static final String NAME = "name";
 
 	private static final String DISPLAYMAX = "displaymax";
@@ -117,6 +119,11 @@ public class LastChangesReport extends AdminPanel {
 		SelectItem user = ItemFactory.newUserSelector("user", "user", null, false, false);
 		user.setEndRow(true);
 
+		// Impersonator
+		SelectItem impersonatorSelector = ItemFactory.newUserSelector(IMPERSONATOR, IMPERSONATOR, null, false,
+				false);
+		impersonatorSelector.setEndRow(true);
+
 		// From
 		DateItem fromDate = ItemFactory.newDateItem(FROM_DATE, "from");
 		fromDate.setColSpan(4);
@@ -176,10 +183,10 @@ public class LastChangesReport extends AdminPanel {
 		export.setEndRow(false);
 
 		if (Feature.visible(Feature.EXPORT_CSV))
-			form.setItems(user, sessionId, fromDate, tillDate, folder, displayMax, searchButton, resetButton, export,
+			form.setItems(user, impersonatorSelector, sessionId, fromDate, tillDate, folder, displayMax, searchButton, resetButton, export,
 					print);
 		else
-			form.setItems(user, sessionId, fromDate, tillDate, folder, displayMax, searchButton, resetButton, print);
+			form.setItems(user, impersonatorSelector, sessionId, fromDate, tillDate, folder, displayMax, searchButton, resetButton, print);
 
 		DynamicForm eventForm = new DynamicForm();
 		eventForm.setValuesManager(vm);
@@ -256,6 +263,10 @@ public class LastChangesReport extends AdminPanel {
 		username.setCanFilter(true);
 		username.setHidden(true);
 
+		ListGridField impersonator = new ListGridField(IMPERSONATOR, I18N.message(IMPERSONATOR), 100);
+		impersonator.setCanFilter(true);
+		impersonator.setHidden(true);
+
 		ListGridField comment = new ListGridField(COMMENT, I18N.message(COMMENT), 200);
 		comment.setCanFilter(true);
 		comment.setHidden(true);
@@ -269,7 +280,7 @@ public class LastChangesReport extends AdminPanel {
 		histories.setWidth100();
 		histories.setHeight100();
 		histories.setFields(eventField, date, userField, name, folderField, sid, key, docId, folderId, userId, username,
-				ip, device, geolocation, comment, reason);
+				ip, device, geolocation, comment, reason, impersonator);
 		histories.setSelectionType(SelectionStyle.SINGLE);
 		histories.setShowRecordComponents(true);
 		histories.setShowRecordComponentsByCell(true);
@@ -315,7 +326,8 @@ public class LastChangesReport extends AdminPanel {
 
 		List<String> eventValues = getEvents();
 
-		Long userId = getUserId();
+		Long userId = getUserId("user");
+		Long impersonatorId = getUserId(IMPERSONATOR);
 
 		Date fromValue = null;
 		if (vm.getValue(FROM_DATE) != null)
@@ -330,7 +342,7 @@ public class LastChangesReport extends AdminPanel {
 
 		int displayMaxValue = getDisplayMax();
 
-		doSearch(eventValues, userId, fromValue, tillValue, sid, displayMaxValue);
+		doSearch(eventValues, userId, impersonatorId, fromValue, tillValue, sid, displayMaxValue);
 	}
 
 	private List<String> getEvents() {
@@ -345,13 +357,13 @@ public class LastChangesReport extends AdminPanel {
 		return Arrays.asList(eventValues);
 	}
 
-	private Long getUserId() {
+	private Long getUserId(String itemName) {
 		Long userId = null;
-		if (vm.getValue("user") != null) {
-			if (vm.getValue("user") instanceof Long longVal)
+		if (vm.getValue(itemName) != null) {
+			if (vm.getValue(itemName) instanceof Long longVal)
 				userId = longVal;
 			else
-				userId = Long.parseLong(vm.getValueAsString("user"));
+				userId = Long.parseLong(vm.getValueAsString(itemName));
 		}
 		return userId;
 	}
@@ -367,11 +379,11 @@ public class LastChangesReport extends AdminPanel {
 		return displayMaxValue;
 	}
 
-	private void doSearch(List<String> eventValues, Long userId, Date fromValue, Date tillValue, String sid,
-			int displayMaxValue) {
+	private void doSearch(List<String> eventValues, Long userId, Long impersonatorId, Date fromValue, Date tillValue,
+			String sid, int displayMaxValue) {
 		LD.contactingServer();
-		SystemService.Instance.get().search(userId, fromValue, tillValue, displayMaxValue, sid, eventValues,
-				folder.getFolderId(), new DefaultAsyncCallback<>() {
+		SystemService.Instance.get().search(userId, impersonatorId, fromValue, tillValue, displayMaxValue, sid,
+				eventValues, folder.getFolderId(), new DefaultAsyncCallback<>() {
 					@Override
 					public void handleSuccess(List<GUIHistory> result) {
 						List<ListGridRecord> records = new ArrayList<>();
@@ -393,6 +405,7 @@ public class LastChangesReport extends AdminPanel {
 							rec.setAttribute(USERNAME, hist.getUserLogin());
 							rec.setAttribute(COMMENT, hist.getComment());
 							rec.setAttribute(REASON, hist.getReason());
+							rec.setAttribute(IMPERSONATOR, hist.getImpersonator());
 							rec.setAttribute("icon", hist.getIcon());
 							records.add(rec);
 						}
@@ -446,15 +459,16 @@ public class LastChangesReport extends AdminPanel {
 		MenuItem preview = new MenuItem();
 		preview.setTitle(I18N.message("preview"));
 		if (docId != null)
-			preview.addClickHandler(event -> DocumentService.Instance.get().getById(docId, new DefaultAsyncCallback<>() {
-				@Override
-				public void handleSuccess(GUIDocument doc) {
-					new PreviewPopup(doc).show();
-				}
-			}));
+			preview.addClickHandler(
+					event -> DocumentService.Instance.get().getById(docId, new DefaultAsyncCallback<>() {
+						@Override
+						public void handleSuccess(GUIDocument doc) {
+							new PreviewPopup(doc).show();
+						}
+					}));
 		return preview;
 	}
-	
+
 	@Override
 	public boolean equals(Object other) {
 		return super.equals(other);

@@ -1,6 +1,5 @@
 package com.logicaldoc.core.document;
 
-import java.io.IOException;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -8,11 +7,14 @@ import java.util.StringTokenizer;
 
 import org.apache.commons.beanutils.BeanUtils;
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.util.config.ContextProperties;
+import com.logicaldoc.util.spring.Context;
 
 import jakarta.persistence.Cacheable;
 import jakarta.persistence.CollectionTable;
@@ -36,386 +38,409 @@ import jakarta.persistence.Table;
 @Cacheable
 public class Version extends AbstractDocument implements Comparable<Version> {
 
-	private static final long serialVersionUID = 1L;
+    private static final String DEFAULT_START_VERSION = "1.0";
 
-	@Column(name = "ld_documentid", nullable = false)
-	private long docId;
+    private static final long serialVersionUID = 1L;
 
-	@Column(name = "ld_username", length = 255)
-	private String username;
+    private static final Logger log = LoggerFactory.getLogger(Version.class);
 
-	@Column(name = "ld_userid")
-	private long userId;
+    @Column(name = "ld_documentid", nullable = false)
+    private long docId;
 
-	@Column(name = "ld_versiondate", columnDefinition = "DATETIME(3)")
-	private Date versionDate = new Date();
+    @Column(name = "ld_username", length = 255)
+    private String username;
 
-	@Column(name = "ld_folderid")
-	private long folderId;
+    @Column(name = "ld_userid")
+    private long userId;
 
-	@Column(name = "ld_foldername", length = 1000)
-	private String folderName;
+    @Column(name = "ld_versiondate", columnDefinition = "DATETIME(3)")
+    private Date versionDate = new Date();
 
-	@Column(name = "ld_event", length = 255)
-	private String event;
+    @Column(name = "ld_folderid")
+    private long folderId;
 
-	@Column(name = "ld_creator", length = 255)
-	private String creator;
+    @Column(name = "ld_foldername", length = 1000)
+    private String folderName;
 
-	@Column(name = "ld_creatorid", nullable = false)
-	private long creatorId;
+    @Column(name = "ld_event", length = 255)
+    private String event;
 
-	@Column(name = "ld_templateid")
-	private Long templateId;
+    @Column(name = "ld_creator", length = 255)
+    private String creator;
 
-	@Column(name = "ld_templatename")
-	private String templateName;
+    @Column(name = "ld_creatorid", nullable = false)
+    private long creatorId;
 
-	@ElementCollection(fetch = FetchType.LAZY)
-	@CollectionTable(name = "ld_version_ext", joinColumns = @JoinColumn(name = "ld_versionid"))
-	@MapKeyColumn(name = "ld_name", length = 255)
-	@OrderBy("ld_position ASC, ld_name ASC")
-	private Map<String, Attribute> attributes = new HashMap<>();
+    @Column(name = "ld_templateid")
+    private Long templateId;
 
-	public Version() {
-	}
+    @Column(name = "ld_templatename")
+    private String templateName;
 
-	public Version(Version source) {
-		copyAttributes(source);
-		setId(source.getId());
-		setFolderId(source.getFolderId());
-		if (source.getIndexed() != IndexingStatus.INDEXED)
-			setIndexingStatus(source.getIndexed());
-		setCustomId(null);
-	}
+    @ElementCollection(fetch = FetchType.LAZY) @CollectionTable(name = "ld_version_ext", joinColumns = @JoinColumn(name = "ld_versionid")) @MapKeyColumn(name = "ld_name", length = 255) @OrderBy("ld_position ASC, ld_name ASC")
+    private Map<String, Attribute> attributes = new HashMap<>();
 
-	@Override
-	public Map<String, Attribute> getAttributes() {
-		return attributes;
-	}
+    public Version() {
+    }
 
-	@Override
-	public void setAttributes(Map<String, Attribute> attributes) {
-		this.attributes = attributes;
-	}
+    protected void copyAttributes(Version source) {
+        super.copyAttributes(source);
+        setId(source.getId());
+        setFolderId(source.getFolderId());
+        setDocId(source.getDocId());
+        setVersionDate(source.getVersionDate());
+        setComment(source.getComment());
+    }
 
-	public long getUserId() {
-		return userId;
-	}
+    public Version(Version source) {
+        this.copyAttributes(source);
+        if (source.getIndexed() != IndexingStatus.INDEXED)
+            setIndexingStatus(source.getIndexed());
+        setCustomId(null);
+    }
 
-	public void setUserId(long userId) {
-		this.userId = userId;
-	}
+    @Override
+    public Map<String, Attribute> getAttributes() {
+        return attributes;
+    }
 
-	public String getUsername() {
-		return username;
-	}
+    @Override
+    public void setAttributes(Map<String, Attribute> attributes) {
+        this.attributes = attributes;
+    }
 
-	public void setUsername(String username) {
-		this.username = username;
-	}
+    public long getUserId() {
+        return userId;
+    }
 
-	/**
-	 * Calculate the new version name in the format <b>X</b>.<b>Y</b>.
-	 * 
-	 * <ul>
-	 * <li>if the new version is a release, then X will be raised by 1 and Y
-	 * will be 0 (e.g.: 12.3 will become 13.0)</li>
-	 * <li>if the new version is not a release, then Y will be raised by 1
-	 * (e.g.: 12.3 will become 12.4)</li>
-	 * </ul>
-	 * 
-	 * @param oldVersionName the old version in the format <b>X</b>.<b>Y</b>
-	 * @param major if the new version is a major release or not
-	 * 
-	 * @return the new version name in the format <b>X</b>.<b>Y</b>
-	 */
-	private String getNewVersionName(String oldVersionName, boolean major) {
-		if (StringUtils.isEmpty(oldVersionName)) {
-			ContextProperties config;
-			try {
-				config = new ContextProperties();
-				return config.getProperty("document.startversion");
-			} catch (IOException e) {
-				return "1.0";
-			}
-		}
+    public void setUserId(long userId) {
+        this.userId = userId;
+    }
 
-		return calculateNewVersion(oldVersionName, major);
-	}
+    public String getUsername() {
+        return username;
+    }
 
-	/**
-	 * Calculate the new version name in the format <b>X</b>.<b>Y</b>.
-	 * 
-	 * @see #getNewVersionName(String, boolean)
-	 * 
-	 * @param oldVersionName the old version in the format <b>X</b>.<b>Y</b>
-	 * @param major if the new version is a major release or not
-	 * 
-	 * @return the new version name in the format <b>X</b>.<b>Y</b>
-	 */
-	public static String calculateNewVersion(String oldVersionName, boolean major) {
-		String rel = oldVersionName.substring(0, oldVersionName.indexOf("."));
-		String version = oldVersionName.substring(oldVersionName.lastIndexOf(".") + 1);
+    public void setUsername(String username) {
+        this.username = username;
+    }
 
-		int number;
-		if (major) {
-			number = Integer.parseInt(rel);
-			rel = String.valueOf(number + 1);
-			version = "0";
-		} else {
-			number = Integer.parseInt(version);
-			version = String.valueOf(number + 1);
-		}
+    static String getStartVersion() {
+        try {
+            ContextProperties config = null;
+            if (Context.get() != null)
+                config = Context.get().getConfig();
+            else
+                config = new ContextProperties();
 
-		return rel + "." + version;
-	}
+            String startVersion = config.getString("document.startversion", DEFAULT_START_VERSION);
 
-	public int compareTo(Version other) {
-		try {
-			StringTokenizer st1 = new StringTokenizer(getVersion().trim(), ".", false);
-			StringTokenizer st2 = new StringTokenizer(other.getVersion().trim(), ".", false);
+            // Start version must me in the format major.minor or simply minor
+            if (startVersion.contains(".")) {
+                String[] parts = startVersion.split("\\.");
+                startVersion = "%d.%d".formatted(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]));
+            } else {
+                startVersion = "%d.0".formatted(Integer.parseInt(startVersion));
+            }
 
-			Integer num1 = Integer.parseInt(st1.nextToken());
-			Integer num2 = Integer.parseInt(st2.nextToken());
+            return startVersion;
+        } catch (Exception e) {
+            log.warn("Invalid start version specification, fallback to default {}", DEFAULT_START_VERSION);
+            return DEFAULT_START_VERSION;
+        }
 
-			if (num1.compareTo(num2) != 0)
-				return num1.compareTo(num2);
+    }
 
-			num1 = Integer.parseInt(st1.nextToken());
-			num2 = Integer.parseInt(st2.nextToken());
+    /**
+     * Calculate the new version name in the format <b>X</b>.<b>Y</b>.
+     * 
+     * <ul>
+     * <li>if the new version is a release, then X will be raised by 1 and Y
+     * will be 0 (e.g.: 12.3 will become 13.0)</li>
+     * <li>if the new version is not a release, then Y will be raised by 1
+     * (e.g.: 12.3 will become 12.4)</li>
+     * </ul>
+     * 
+     * @param oldVersionName the old version in the format <b>X</b>.<b>Y</b>
+     * @param major if the new version is a major release or not
+     * 
+     * @return the new version name in the format <b>X</b>.<b>Y</b>
+     */
+    private String getNewVersionName(String oldVersionName, boolean major) {
+        if (StringUtils.isEmpty(oldVersionName))
+            return getStartVersion();
+        else
+            return calculateNewVersion(oldVersionName, major);
+    }
 
-			return num1.compareTo(num2);
-		} catch (Exception t) {
-			if (this.getDate() != null && other.getDate() != null)
-				return this.getDate().compareTo(other.getDate());
-			else
-				return -1;
-		}
-	}
+    /**
+     * Calculate the new version name in the format <b>X</b>.<b>Y</b>.
+     * 
+     * @see #getNewVersionName(String, boolean)
+     * 
+     * @param oldVersionName the old version in the format <b>X</b>.<b>Y</b>
+     * @param major if the new version is a major release or not
+     * 
+     * @return the new version name in the format <b>X</b>.<b>Y</b>
+     */
+    public static String calculateNewVersion(String oldVersionName, boolean major) {
+        String rel = oldVersionName.substring(0, oldVersionName.indexOf("."));
+        String version = oldVersionName.substring(oldVersionName.lastIndexOf(".") + 1);
 
-	@Override
-	public String toString() {
-		return getVersion() + (getComment() != null ? "-" + getComment() : "");
-	}
+        int number;
+        if (major) {
+            number = Integer.parseInt(rel);
+            rel = String.valueOf(number + 1);
+            version = "0";
+        } else {
+            number = Integer.parseInt(version);
+            version = String.valueOf(number + 1);
+        }
 
-	public Date getVersionDate() {
-		return versionDate;
-	}
+        return "%s.%s".formatted(rel, version);
+    }
 
-	public void setVersionDate(Date versionDate) {
-		this.versionDate = versionDate;
-	}
+    public int compareTo(Version other) {
+        try {
+            StringTokenizer st1 = new StringTokenizer(getVersion().trim(), ".", false);
+            StringTokenizer st2 = new StringTokenizer(other.getVersion().trim(), ".", false);
 
-	public long getFolderId() {
-		return folderId;
-	}
+            Integer num1 = Integer.parseInt(st1.nextToken());
+            Integer num2 = Integer.parseInt(st2.nextToken());
 
-	public void setFolderId(long folderId) {
-		this.folderId = folderId;
-	}
+            if (num1.compareTo(num2) != 0)
+                return num1.compareTo(num2);
 
-	public String getFolderName() {
-		return folderName;
-	}
+            num1 = Integer.parseInt(st1.nextToken());
+            num2 = Integer.parseInt(st2.nextToken());
 
-	public void setFolderName(String folderName) {
-		this.folderName = folderName;
-	}
+            return num1.compareTo(num2);
+        } catch (Exception t) {
+            if (this.getDate() != null && other.getDate() != null)
+                return this.getDate().compareTo(other.getDate());
+            else
+                return -1;
+        }
+    }
 
-	@Override
-	public String getTemplateName() {
-		return templateName;
-	}
+    @Override
+    public String toString() {
+        return "%s%s".formatted(getVersion(),
+                StringUtils.isNotEmpty(getComment()) ? "-%s".formatted(getComment()) : "");
+    }
 
-	@Override
-	public void setTemplateName(String templateName) {
-		this.templateName = templateName;
-	}
+    public Date getVersionDate() {
+        return versionDate;
+    }
 
-	/**
-	 * Factory method that creates a Version and replicate all given document's
-	 * properties.<br>
-	 * The new version and fileVersion will be set in both Document and
-	 * Version<br>
-	 * <br>
-	 * <b>Important:</b> The created Version is not persistent
-	 * 
-	 * @param document The document to be versioned
-	 * @param user The user who made the changes
-	 * @param comment The version comment
-	 * @param event The event that caused the new release
-	 * @param release True if this is a new release(eg: 2.0) rather than a
-	 *        subversion(eg: 1.1)
-	 * @return The newly created version
-	 */
-	public static Version create(Document document, User user, String comment, DocumentEvent event, boolean release) {
-		Version version = new Version();
-		try {
-			BeanUtils.copyProperties(version, document);
-		} catch (Exception e) {
-			// Nothing to do
-		}
+    public void setVersionDate(Date versionDate) {
+        this.versionDate = versionDate;
+    }
 
-		version.setRevision(document.getRevision() != null ? document.getRevision() : document.getVersion());
-		version.setVersion(document.getVersion());
-		version.setType(document.getType());
-		version.setTenantId(document.getTenantId());
-		version.setDeleted(0);
-		version.setRecordVersion(0);
-		version.setComment(comment);
-		document.setComment(comment);
-		version.setEvent(event);
-		version.setUserId(user.getId());
-		version.setUsername(user.getFullName());
-		version.setOcrTemplateId(document.getOcrTemplateId());
-		version.setBarcodeTemplateId(document.getBarcodeTemplateId());
-		version.setWorkflowStatus(document.getWorkflowStatus());
-		version.setWorkflowStatusDisplay(document.getWorkflowStatusDisplay());
-		version.setColor(document.getColor());
-		version.setLastNote(document.getLastNote());
+    public long getFolderId() {
+        return folderId;
+    }
 
-		if (document.getTemplate() != null) {
-			version.setTemplateId(document.getTemplate().getId());
-			version.setTemplateName(document.getTemplate().getName());
-		}
+    public void setFolderId(long folderId) {
+        this.folderId = folderId;
+    }
 
-		version.setAttributes(new HashMap<>());
-		if (document.getAttributes() != null) {
-			try {
-				for (String name : document.getAttributeNames()) {
-					version.getAttributes().put(name, document.getAttributes().get(name));
-				}
-			} catch (Exception t) {
-				// Nothing to do
-			}
-		}
+    public String getFolderName() {
+        return folderName;
+    }
 
-		version.setFolderId(document.getFolder().getId());
-		version.setFolderName(document.getFolder().getName());
-		version.setTgs(document.getTagsString());
-		version.setDocId(document.getId());
-		version.setLinks(document.getLinks());
-		version.setDocAttrs(document.getDocAttrs());
+    public void setFolderName(String folderName) {
+        this.folderName = folderName;
+    }
 
-		version.setPublished(document.isPublished());
-		version.setStartPublishing(document.getStartPublishing());
-		version.setStopPublishing(document.getStopPublishing());
+    @Override
+    public String getTemplateName() {
+        return templateName;
+    }
 
-		String newVersionName = document.getVersion();
-		if (!event.equals(DocumentEvent.STORED)) {
-			newVersionName = version.getNewVersionName(document.getVersion(), release);
-			version.setVersion(newVersionName);
-			document.setVersion(newVersionName);
-		}
+    @Override
+    public void setTemplateName(String templateName) {
+        this.templateName = templateName;
+    }
 
-		// If the file changed, than the file version must be changed also
-		if (DocumentEvent.CHECKEDIN.equals(event) || DocumentEvent.STORED.equals(event)
-				|| StringUtils.isEmpty(document.getFileVersion())) {
-			version.setFileVersion(newVersionName);
-			document.setFileVersion(newVersionName);
-		}
+    /**
+     * Factory method that creates a Version and replicate all given document's
+     * properties.<br>
+     * The new version and fileVersion will be set in both Document and
+     * Version<br>
+     * <br>
+     * <b>Important:</b> The created Version is not persistent
+     * 
+     * @param document The document to be versioned
+     * @param user The user who made the changes
+     * @param comment The version comment
+     * @param event The event that caused the new release
+     * @param release True if this is a new release(eg: 2.0) rather than a
+     *        subversion(eg: 1.1)
+     * @return The newly created version
+     */
+    public static Version create(Document document, User user, String comment, DocumentEvent event, boolean release) {
+        Version version = new Version();
+        try {
+            BeanUtils.copyProperties(version, document);
+        } catch (Exception e) {
+            // Nothing to do
+        }
 
-		version.setExtResId(document.getExtResId());
-		version.setId(0);
-		return version;
-	}
+        version.setRevision(document.getRevision() != null ? document.getRevision() : document.getVersion());
+        version.setVersion(document.getVersion());
+        version.setType(document.getType());
+        version.setTenantId(document.getTenantId());
+        version.setDeleted(0);
+        version.setRecordVersion(0);
+        version.setComment(comment);
+        document.setComment(comment);
+        version.setEvent(event);
+        version.setUserId(user.getId());
+        version.setUsername(user.getFullName());
+        version.setWorkflowStatus(document.getWorkflowStatus());
+        version.setWorkflowStatusDisplay(document.getWorkflowStatusDisplay());
+        version.setColor(document.getColor());
+        version.setLastNote(document.getLastNote());
 
-	public void setEvent(DocumentEvent event) {
-		this.event = (event != null) ? event.toString() : null;
-	}
+        if (document.getTemplate() != null) {
+            version.setTemplateId(document.getTemplate().getId());
+            version.setTemplateName(document.getTemplate().getName());
+        }
 
-	public DocumentEvent getEventEnum() {
-		if (event == null)
-			return null;
-		return DocumentEvent.fromKey(event);
-	}
+        version.setAttributes(new HashMap<>());
+        if (document.getAttributes() != null) {
+            try {
+                for (String name : document.getAttributeNames()) {
+                    version.getAttributes().put(name, document.getAttributes().get(name));
+                }
+            } catch (Exception t) {
+                // Nothing to do
+            }
+        }
 
-	public String getEvent() {
-		return event;
-	}
+        version.setFolderId(document.getFolder().getId());
+        version.setFolderName(document.getFolder().getName());
+        version.setTgs(document.getTagsString());
+        version.setDocId(document.getId());
+        version.setLinks(document.getLinks());
+        version.setDocAttrs(document.getDocAttrs());
 
-	@Override
-	public String getCreator() {
-		return creator;
-	}
+        version.setPublished(document.isPublished());
+        version.setStartPublishing(document.getStartPublishing());
+        version.setStopPublishing(document.getStopPublishing());
 
-	@Override
-	public void setCreator(String creator) {
-		this.creator = creator;
-	}
+        String newVersionName = document.getVersion();
+        if (!event.equals(DocumentEvent.STORED)) {
+            newVersionName = version.getNewVersionName(document.getVersion(), release);
+            version.setVersion(newVersionName);
+            document.setVersion(newVersionName);
+        }
 
-	@Override
-	public long getCreatorId() {
-		return creatorId;
-	}
+        // If the file changed, than the file version must be changed also
+        if (DocumentEvent.CHECKEDIN.equals(event) || DocumentEvent.STORED.equals(event)
+                || StringUtils.isEmpty(document.getFileVersion())) {
+            version.setFileVersion(newVersionName);
+            document.setFileVersion(newVersionName);
+        }
 
-	@Override
-	public void setCreatorId(long creatorId) {
-		this.creatorId = creatorId;
-	}
+        version.setExtResId(document.getExtResId());
+        version.setId(0);
+        return version;
+    }
 
-	public long getDocId() {
-		return docId;
-	}
+    public void setEvent(DocumentEvent event) {
+        this.event = (event != null) ? event.toString() : null;
+    }
 
-	public void setDocId(long docId) {
-		this.docId = docId;
-	}
+    public DocumentEvent getEventEnum() {
+        if (event == null)
+            return null;
+        return DocumentEvent.fromKey(event);
+    }
 
-	@Override
-	public Long getTemplateId() {
-		return templateId;
-	}
+    public String getEvent() {
+        return event;
+    }
 
-	@Override
-	public void setTemplateId(Long templateId) {
-		this.templateId = templateId;
-	}
+    @Override
+    public String getCreator() {
+        return creator;
+    }
 
-	@Override
-	public Template getTemplate() {
-		return null;
-	}
+    @Override
+    public void setCreator(String creator) {
+        this.creator = creator;
+    }
 
-	@Override
-	public void setTemplate(Template template) {
-		if (template != null) {
-			templateId = template.getId();
-			setTemplateName(template.getName());
-		} else {
-			templateId = null;
-		}
-	}
+    @Override
+    public long getCreatorId() {
+        return creatorId;
+    }
 
-	@Override
-	public int hashCode() {
-		final int prime = 31;
-		int result = super.hashCode();
-		result = prime * result + (int) (creatorId ^ (creatorId >>> 32));
-		result = prime * result + (int) (docId ^ (docId >>> 32));
-		result = prime * result + ((versionDate == null) ? 0 : versionDate.hashCode());
-		return result;
-	}
+    @Override
+    public void setCreatorId(long creatorId) {
+        this.creatorId = creatorId;
+    }
 
-	@Override
-	public boolean equals(Object obj) {
-		if (this == obj)
-			return true;
-		if (!super.equals(obj))
-			return false;
-		if (getClass() != obj.getClass())
-			return false;
-		Version other = (Version) obj;
-		if (creatorId != other.creatorId)
-			return false;
-		if (docId != other.docId)
-			return false;
-		if (versionDate == null) {
-			if (other.versionDate != null)
-				return false;
-		} else if (!versionDate.equals(other.versionDate))
-			return false;
-		return true;
-	}
+    public long getDocId() {
+        return docId;
+    }
+
+    public void setDocId(long docId) {
+        this.docId = docId;
+    }
+
+    @Override
+    public Long getTemplateId() {
+        return templateId;
+    }
+
+    @Override
+    public void setTemplateId(Long templateId) {
+        this.templateId = templateId;
+    }
+
+    @Override
+    public Template getTemplate() {
+        return null;
+    }
+
+    @Override
+    public void setTemplate(Template template) {
+        if (template != null) {
+            templateId = template.getId();
+            setTemplateName(template.getName());
+        } else {
+            templateId = null;
+        }
+    }
+
+    @Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + (int) (docId ^ (docId >>> 32));
+        result = prime * result + ((versionDate == null) ? 0 : versionDate.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (!super.equals(obj))
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        Version other = (Version) obj;
+        if (docId != other.docId)
+            return false;
+        if (versionDate == null) {
+            if (other.versionDate != null)
+                return false;
+        } else if (!versionDate.equals(other.versionDate))
+            return false;
+        return true;
+    }
 }

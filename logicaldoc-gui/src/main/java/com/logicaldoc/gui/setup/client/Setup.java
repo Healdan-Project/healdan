@@ -219,9 +219,9 @@ public class Setup implements EntryPoint {
 		// Prepare the fieldsMap with all database engines
 		engines.put(MYSQL, new String[] { MYSQL, "com.mysql.cj.jdbc.Driver",
 				"jdbc:mysql://<server>[,<failoverhost>][<:3306>]/<database>?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
-				"org.hibernate.dialect.MySQL8Dialect", SELECT_1 });
+				"org.hibernate.dialect.MySQLDialect", SELECT_1 });
 		engines.put(MARIADB, new String[] { MARIADB, "org.mariadb.jdbc.Driver",
-				"jdbc:mariadb://<server>[<:3306>]/<database>", "org.hibernate.dialect.MariaDB106Dialect", SELECT_1 });
+				"jdbc:mariadb://<server>[<:3306>]/<database>", "org.hibernate.dialect.MariaDBDialect", SELECT_1 });
 		engines.put(POSTGRESQL,
 				new String[] { POSTGRESQL, "org.postgresql.Driver", "jdbc:postgresql:[<//server>[<:5432>/]]<database>",
 						"org.hibernate.dialect.PostgreSQLDialect", SELECT_1 });
@@ -230,7 +230,7 @@ public class Setup implements EntryPoint {
 						"org.hibernate.dialect.Oracle10gDialect", "SELECT 1 FROM DUAL" });
 		engines.put(SQLSERVER, new String[] { "SQL Server", "com.microsoft.sqlserver.jdbc.SQLServerDriver",
 				"jdbc:sqlserver://<server>[:<1433>];encrypt=false;trustServerCertificate=true;databaseName=<database>;instanceName=<instance>",
-				"org.hibernate.dialect.SQLServer2008Dialect", SELECT_1 });
+				"org.hibernate.dialect.SQLServer2012Dialect", SELECT_1 });
 
 		Tab databaseTab = new Tab();
 		databaseTab.setTitle(I18N.message("database"));
