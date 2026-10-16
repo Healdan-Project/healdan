@@ -89,7 +89,7 @@ public class DocUtil {
 			return "";
 
 		if (locked.intValue() == Constants.DOC_LOCKED) {
-			return AwesomeFactory.getIconHtml("lock-alt");
+			return AwesomeFactory.getIconHtml("lock");
 		} else if (locked.intValue() == Constants.DOC_CHECKED_OUT) {
 			return AwesomeFactory.getIconHtml("edit");
 		} else
@@ -121,7 +121,7 @@ public class DocUtil {
 			return "";
 
 		if (signed.intValue() == 1)
-			return AwesomeFactory.getIconHtml("badge-check");
+			return AwesomeFactory.getIconHtml("certificate");
 
 		return "";
 	}
@@ -159,11 +159,11 @@ public class DocUtil {
 			html = AwesomeFactory.getColoredIconHtmlWithoutI18N("cube", name, color);
 		else if (type == GUIFolder.TYPE_ALIAS) {
 			html = "<div><span class='fa-layers fa-fw'>";
-			html += "<i class='" + AwesomeFactory.getCssClassPrefix() + " fa-thin fa-fw fa-"
+			html += "<i class='" + AwesomeFactory.getCssClassPrefix() + " fa-fw fa-"
 					+ (open ? "folder-open" : "folder") + " ' "
 					+ (color != null && !color.isEmpty() ? "style='color: " + color + "'" : "") + "></i>";
 			// This is the small alias arrow
-			html += "<i class='fas fa-thin fa-fw fa-share' data-fa-transform='shrink-10 down-2 right-2'></i></span>&nbsp;&nbsp;&nbsp;";
+			html += "<i class='fas fa-fw fa-share' data-fa-transform='shrink-10 down-2 right-2'></i></span>&nbsp;&nbsp;&nbsp;";
 			html += name + "</div>";
 		} else {
 			if (open)

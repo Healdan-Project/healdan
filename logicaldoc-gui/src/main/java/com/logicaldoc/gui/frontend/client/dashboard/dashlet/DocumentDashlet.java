@@ -54,7 +54,7 @@ public class DocumentDashlet extends Dashlet {
 		if ("checkout".equals(guiDashlet.getName())) {
 			icn = "edit";
 		} else if ("locked".equals(guiDashlet.getName())) {
-			icn = "lock-alt";
+			icn = "lock";
 		}
 
 		setTitle(AwesomeFactory.getIconHtml(icn, title));

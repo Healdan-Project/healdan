@@ -30,7 +30,8 @@ public class AwesomeFactory {
 
 	private static final String TITLE = "title='";
 
-	private static final String STYLE = "light";
+	// Healdan bundles Font Awesome Free, which has no light or thin style, so icons always use solid
+	private static final String STYLE = "solid";
 
 	private AwesomeFactory() {
 	}
@@ -142,7 +143,7 @@ public class AwesomeFactory {
 	}
 
 	public static String getCssClassPrefix() {
-		return "fa" + (Util.isCommunity() ? "s" : "l");
+		return "fas";
 	}
 
 	public static String getIconHtml(String icon) {
@@ -218,7 +219,7 @@ public class AwesomeFactory {
 						: Util.downloadPdfURL(docId, null))
 				+ "');\"";
 		button += " >";
-		button += getColoredIconHtml("badge-check", null, color);
+		button += getColoredIconHtml("certificate", null, color);
 		button += CLOSE_DIV;
 		return button;
 	}
@@ -250,10 +251,10 @@ public class AwesomeFactory {
 		if (embedded == null || embedded.intValue() == Constants.EMBED_TO_EMBED)
 			return "";
 
-		String html = AwesomeFactory.getIconHtml("brain-circuit");
+		String html = AwesomeFactory.getIconHtml("brain");
 		if (embedded == Constants.EMBED_SKIP) {
 			html = "<span class='fa-stack' style='width: 13px; height: 12px;'><i class='" + getCssClassPrefix()
-					+ " fa-brain-circuit fa-stack-1x fa-" + STYLE + "' aria-hidden='true' ></i>";
+					+ " fa-brain fa-stack-1x fa-" + STYLE + "' aria-hidden='true' ></i>";
 			html += I_CLASS + AwesomeFactory.getCssClassPrefix()
 					+ " fa-times fa-stack-1x' style='color: red' ></i></span>";
 		}

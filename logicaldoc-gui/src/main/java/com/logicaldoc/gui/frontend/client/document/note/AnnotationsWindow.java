@@ -125,7 +125,7 @@ public class AnnotationsWindow extends AbstractAnnotationsWindow {
         menu.setShowShadow(true);
         menu.setShadowDepth(3);
 
-        MenuItem arrow = new MenuItem(AwesomeFactory.getIconHtml("arrow-alt-right"));
+        MenuItem arrow = new MenuItem(AwesomeFactory.getIconHtml("arrow-right"));
         arrow.addClickHandler(click -> addNewNote("thickarrow"));
 
         MenuItem comment = new MenuItem(AwesomeFactory.getIconHtml(COMMENT_ALT));
@@ -157,7 +157,7 @@ public class AnnotationsWindow extends AbstractAnnotationsWindow {
         menu.setShowShadow(true);
         menu.setShadowDepth(3);
 
-        MenuItem line = new MenuItem(AwesomeFactory.getIconHtml("horizontal-rule"));
+        MenuItem line = new MenuItem(AwesomeFactory.getIconHtml("minus"));
         line.addClickHandler(click -> addNewNote("line"));
 
         MenuItem arrow = new MenuItem(AwesomeFactory.getIconHtml("long-arrow-right"));
@@ -165,7 +165,7 @@ public class AnnotationsWindow extends AbstractAnnotationsWindow {
 
         menu.setItems(line, arrow);
 
-        return AwesomeFactory.newToolStripToolStripMenuButton("horizontal-rule", null, null, "line", menu);
+        return AwesomeFactory.newToolStripToolStripMenuButton("minus", null, null, "line", menu);
     }
 
     @Override

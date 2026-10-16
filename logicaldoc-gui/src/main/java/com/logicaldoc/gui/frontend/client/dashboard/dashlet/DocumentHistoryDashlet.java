@@ -187,7 +187,7 @@ public class DocumentHistoryDashlet extends DocumentDashlet {
 			if (event.equals(Constants.EVENT_CHECKEDOUT))
 				icn = "edit";
 			else if (event.equals(Constants.EVENT_LOCKED))
-				icn = "lock-alt";
+				icn = "lock";
 			else if (event.equals(Constants.EVENT_DOWNLOADED))
 				icn = "download";
 			else if (event.equals(Constants.EVENT_CHECKEDIN))
