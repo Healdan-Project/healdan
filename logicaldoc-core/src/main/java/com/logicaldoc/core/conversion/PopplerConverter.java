@@ -12,7 +12,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -176,7 +175,7 @@ public class PopplerConverter extends AbstractFormatConverter {
         switch (ext) {
             case "tif", "tiff":
                 commandLine.add("-tiff");
-                commandLine.add("-tiffcompression lzw");
+                commandLine.addAll(List.of("-tiffcompression", "lzw"));
                 break;
 
             case "png":
@@ -188,18 +187,18 @@ public class PopplerConverter extends AbstractFormatConverter {
         }
 
         if (dpi != null)
-            commandLine.add("-r %d".formatted(dpi));
+            commandLine.addAll(List.of("-r", dpi.toString()));
 
         if (firstPage != null)
-            commandLine.add("-f %d".formatted(firstPage));
+            commandLine.addAll(List.of("-f", firstPage.toString()));
 
         if (lastPage != null)
-            commandLine.add("-l %d".formatted(lastPage));
+            commandLine.addAll(List.of("-l", lastPage.toString()));
 
         if (CollectionUtils.isNotEmpty(arguments))
             commandLine.addAll(arguments);
 
-        commandLine.add(FileUtil.quotePath(src.getAbsolutePath()));
+        commandLine.add(src.getAbsolutePath());
 
         // Poppler wants the path prefix and appends the extension
         commandLine.add(FilenameUtils.removeExtension(dest.getAbsolutePath()));
@@ -262,8 +261,8 @@ public class PopplerConverter extends AbstractFormatConverter {
 
     private void executePoppler(List<String> commandLine, Integer timeout) throws IOException {
         log.debug("Executing: {}", commandLine);
-        new Exec().exec(commandLine.stream().collect(Collectors.joining(" ")), null, null,
-                Optional.ofNullable(timeout).orElse(getTimeout()));
+        // Each element is passed as one argument, so paths may contain spaces
+        new Exec().exec(commandLine, null, null, Optional.ofNullable(timeout).orElse(getTimeout()));
     }
 
     private List<String> buildConversionCommand(String extension) {
@@ -274,7 +273,7 @@ public class PopplerConverter extends AbstractFormatConverter {
                 commandLine.add(getParameter(PDFTOPPM));
                 commandLine.add(SINGLE_FILE);
                 commandLine.add("-tiff");
-                commandLine.add("-tiffcompression lzw");
+                commandLine.addAll(List.of("-tiffcompression", "lzw"));
                 addConfiguredArguments(commandLine, PPM_ARGUMENTS);
                 break;
 
