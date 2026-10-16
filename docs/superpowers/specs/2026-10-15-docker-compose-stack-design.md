@@ -46,7 +46,7 @@ All of these were checked in the source:
   - It runs them through `com.logicaldoc.util.dbinit.DBInit`, which uses HSQLDB `SqlFile` with Cp1252 encoding and continues on error.
   - `DBInit` is standalone: it takes a driver, URL, user, password and a list of classpath resources, and needs no Spring context.
 - **Upstream bug.** `logicaldoc-webservice/src/main/resources/plugin.xml` declares `sql/logicaldoc-webservices.sql`, but the files are named `logicaldoc-webservice.sql[.mariadb|…]`. As a result the wizard never creates `ld_webservicecall`.
-- **Path keys are not expanded.** `store.1.dir`, `index.dir` and `conf.*dir` are read raw (`getProperty`), so values like `${user.home}` are never substituted. Seeded values must be literal absolute paths.
+- **Reads expand `${…}`.** In 9.3.1, `AdvancedProperties.getProperty` itself substitutes `${…}` (system properties, then environment variables), so path keys such as `store.1.dir`, `index.dir` and `conf.*dir` are expanded too. Only `_b64_` decoding is limited to `getString`. Seeded values are literal absolute paths, so nothing depends on either.
 - **`LDOCHOME` is an ordinary config key** used by:
   - `ApplicationListener`: the PID file `LDOCHOME/bin/pid`
   - `SystemServiceImpl`: Admin → Restart runs `LDOCHOME/bin/restart.sh`
@@ -114,7 +114,7 @@ logicaldoc-webservice/src/main/resources/plugin.xml   fix sqlFile name (own comm
   - `entrypoint.sh` goes to `/usr/local/bin/logicaldoc-entrypoint.sh`, root-owned, because root runs it and uid 1000 must not be able to change it.
   - `restart.sh` goes under `/opt/logicaldoc/bin` and `docker-init.jar` under `/opt/logicaldoc/lib`.
   - `setenv.sh` goes in Tomcat's `bin/`.
-  - `allowed-commands.txt` (`convert`, `pdftoppm`, `pdftotext`, `pdftohtml`) goes into `defaults/`. LogicalDOC's `Exec` refuses any command not listed in the classpath `/allowed-commands.txt`.
+  - `allowed-commands.txt` (`convert`, `pdftoppm`, `pdftotext`, `pdftohtml`, and `/opt/logicaldoc/bin/restart.sh` for Admin → Restart, which runs it through `Exec.fork`) goes into `defaults/`. LogicalDOC's `Exec` refuses any command not listed in the classpath `/allowed-commands.txt`.
 - **User:** create `logicaldoc` (uid/gid 1000). It owns `/opt/logicaldoc` and the Tomcat dirs the webapp writes to (`webapps/ROOT`, `work`, `temp`, `logs`).
 - **Volumes:** `/opt/logicaldoc/conf` and `/opt/logicaldoc/repository`.
 - **Ports and health:** `EXPOSE 8080`. `HEALTHCHECK` runs `curl -fsS http://localhost:8080/login.jsp`.
@@ -144,7 +144,7 @@ The container starts as root. Only the entrypoint's preparation steps (the owner
 | `DB_PORT` | `jdbc.url` | `3306` | |
 | `DB_NAME` | `jdbc.url` | `logicaldoc` | |
 | `DB_USER` | `jdbc.username` | `logicaldoc` | |
-| `DB_PASSWORD` | `jdbc.password` | — | **Required.** The entrypoint exits with an error if it's unset. It must not contain `${` or start with `_b64_`, because LogicalDOC's `getString()` expands or decodes those. |
+| `DB_PASSWORD` | `jdbc.password` | — | **Required.** The entrypoint exits with an error if it's unset. It must not contain `${` or start with `_b64_`, because LogicalDOC expands `${…}` on every read and `getString()` decodes `_b64_`. |
 | `LOGICALDOC_PUBLIC_URL` | `server.url` | unset | When unset, the key isn't touched. |
 | `CATALINA_OPTS` | (JVM) | `-Xmx2g` | Set in compose and `.env.example`. |
 | `TZ` | (container) | `UTC` | |
@@ -186,7 +186,7 @@ Compose-only variables:
   | `initialized` | `true` |
   | `id` | a newly generated UUID |
 
-Properties are edited by DockerInit with LogicalDOC's own `ContextProperties(File)`, using `setProperty` and `write()`. Escaping and encoding (the shipped file is Latin-1 with CRLF line endings) then match exactly what the app writes. Values are written literally (no `${env.…}` references), which keeps every reader of the key, raw (`getProperty`) or expanded (`getString`), consistent.
+Properties are edited by DockerInit with LogicalDOC's own `ContextProperties(File)`, using `setProperty` and `write()`. Escaping and encoding (the shipped file is Latin-1 with CRLF line endings) then match exactly what the app writes. Values are written literally (no `${env.…}` references). A `DB_PASSWORD` containing `${` or starting with `_b64_` is refused (§5), so every reader of `jdbc.password`, with `getProperty` or with `getString`, gets the same value.
 
 ## 6. First boot and every boot (`entrypoint.sh`)
 
@@ -199,7 +199,7 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
    - Re-add any line of the default `allowed-commands.txt` that the conf copy lacks. Local additions stay.
    - If `chown` is refused (NFS with root_squash, some CIFS mounts), continue with a warning when uid 1000 can write the directory. Otherwise exit with instructions to give the share to uid/gid 1000.
    - Create the `repository/` subdirectories.
-4. **Run `DockerInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-init.jar' DockerInit`. It reads everything from the environment and behaves as follows:
+4. **Run `DockerInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-init.jar' DockerInit`, in the background (see **Stopping during init** below). It reads everything from the environment and behaves as follows:
    - **Validate** the env vars (§5). Errors exit 1 with `[docker-init] ERROR: …`.
    - **Apply config.**
      - It adds every key of `defaults/context.properties` that the conf file lacks, so settings upstream adds over time reach existing installs. It never overwrites a value.
@@ -221,6 +221,8 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 5. **Start Tomcat.** `exec setpriv --reuid=1000 --regid=1000 --init-groups "$@"`, which by default runs `catalina.sh run`. The JVM becomes PID 1 under `logicaldoc` and gets signals directly.
 
 **JVM flags.** `CATALINA_OPTS` defaults to `-Xmx2g`. The image's `$CATALINA_HOME/bin/setenv.sh` adds `-Dfile.encoding=UTF-8`. `--add-opens` flags start empty. A flag is added only when a startup or smoke-test failure proves it's needed, and each one gets a comment naming the failure. Candidates are the surefire set in `logicaldoc-parent/pom.xml`.
+
+**Stopping during init.** Until it execs Tomcat, the entrypoint's bash is PID 1, and the kernel drops signals PID 1 has no handler for. The entrypoint therefore runs DockerInit in the background and traps TERM and INT, passing TERM on to the JVM and exiting 143. Stopping the container during the DB wait or schema creation then takes moments instead of the whole grace period and a SIGKILL.
 
 **Restart.** `restart.sh` sends SIGTERM to PID 1. Tomcat shuts down cleanly, the container exits, and `restart: unless-stopped` brings it back.
 
@@ -250,7 +252,7 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 
 ### `compose.dev.yaml`
 
-- `app.ports` is replaced (with `!reset`) by `0.0.0.0:${LOGICALDOC_PORT:-8080}:8080`, so the UI is reachable from the LAN, plus `${JDWP_BIND:-127.0.0.1}:5005:5005`.
+- `app.ports` is replaced (with `!override`, which needs Compose 2.24.4 or newer) by `0.0.0.0:${LOGICALDOC_PORT:-8080}:8080`, so the UI is reachable from the LAN, plus `${JDWP_BIND:-127.0.0.1}:5005:5005`.
 - `app.command: ["catalina.sh", "jpda", "run"]` with `JPDA_ADDRESS=*:5005`. This is Tomcat's own debug launcher, so only the Tomcat JVM, and not the DB-init JVM, opens the debug port.
 - `db.ports` gets `127.0.0.1:${DEV_DB_PORT:-3306}:3306`.
 - Usage: `docker compose -f compose.yaml -f compose.dev.yaml up --build`, or `COMPOSE_FILE=compose.yaml:compose.dev.yaml` in `.env`. Reset with `docker compose down -v`.
@@ -319,7 +321,7 @@ Supporting integration tests, which also pin the Review Focus cases in the plan:
 
 - `docker build --target tools .`: unit and `ContextProperties` round-trip tests for the init tool.
 - `docker/tests/test-init.sh`: DockerInit against a throwaway MariaDB. It covers validation, a late DB, schema creation, re-runs, config loss and credential errors.
-- `docker/tests/test-image.sh`: the image with plain `docker run`. It covers the entrypoint guard, ownership repair, uid, `/setup`, restart, settings persistence and config loss.
+- `docker/tests/test-image.sh`: the image with plain `docker run`. It covers the entrypoint guard, a prompt stop during the DB wait, ownership repair, uid, `/setup`, Admin → Restart (the real RPC call), settings persistence and config loss.
 - `docker/tests/test-overlays.sh`: the rendered config and a live stack for the dev and proxy overlays.
 
 Manual checks, done once with the built-in browser on localhost:

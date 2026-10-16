@@ -78,7 +78,7 @@ public final class ConfigPlan {
         String password = env.get("DB_PASSWORD");
         if (password == null || password.isEmpty())
             throw new IllegalArgumentException("DB_PASSWORD is not set; copy .env.example to .env and set it");
-        // LogicalDOC expands ${...} and decodes a _b64_ prefix when it reads jdbc.password through getString().
+        // LogicalDOC expands ${...} on every read (getProperty too) and decodes a _b64_ prefix in getString().
         if (password.contains("${"))
             throw new IllegalArgumentException("DB_PASSWORD must not contain '${'");
         if (password.startsWith("_b64_"))

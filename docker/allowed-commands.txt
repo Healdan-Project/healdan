@@ -1,8 +1,10 @@
 # Commands LogicalDOC may run (com.logicaldoc.util.exec.Exec): a command line is allowed when it starts with
-# one of these lines. These are the tools the image installs for thumbnails and previews; Ghostscript is left
-# out on purpose (ImageMagick calls it directly, and an allowed `gs` could run arbitrary commands via %pipe%).
+# one of these lines. These are the tools the image installs for thumbnails and previews, plus the script
+# Admin > Restart runs. Ghostscript is left out on purpose (ImageMagick calls it directly, and an allowed `gs`
+# could run arbitrary commands via %pipe%).
 # Copied into /opt/logicaldoc/conf, where these lines are re-added on every start; add your own lines there.
 convert
 pdftoppm
 pdftotext
 pdftohtml
+/opt/logicaldoc/bin/restart.sh
