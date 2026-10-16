@@ -29,6 +29,17 @@ mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one
 - CI uses `-DskipTests`, so a green CI run proves compilation and packaging only, not test results.
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
+## Docker
+
+- `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. `docker/README.md` is the user guide; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
+- The container never runs the setup wizard. `docker/tools/src/DockerInit.java` seeds `context.properties` and, on a fresh database, creates the schema by running the `DbInit` scripts from every `plugin.xml`, so a plugin's `DbInit` extension is picked up for new installs. Existing databases are never migrated: a plugin or upstream change that adds SQL needs it applied by hand there.
+- On every start, keys in the image's default `context.properties` that the conf volume lacks are added (values are never overwritten).
+- LogicalDOC only runs external programs listed in a classpath `allowed-commands.txt`. The lines in `docker/allowed-commands.txt` are re-added to the conf volume's copy on every start; a new external tool needs a line there.
+- Tests:
+  - `docker build --target tools .` for the init tool's unit tests
+  - `docker/tests/test-*.sh`
+  - `docker/smoke-test.sh` for end to end
+
 ## Architecture
 
 **Modules.** `logicaldoc-util` sits at the bottom. `logicaldoc-core` builds on it, and the feature modules build on core: `webservice` (SOAP via CXF plus REST), `webdav`, `cmis`, `dropbox`, `android` and `ios`. `logicaldoc-webapp` is the WAR that bundles everything. `logicaldoc-gui` (GWT client) depends only on util. `logicaldoc-i18n` holds the resource bundles.

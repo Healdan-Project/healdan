@@ -1,0 +1,17 @@
+# Development overlay: UI on the LAN, Java debugger, MariaDB port. Use with
+#   docker compose -f compose.yaml -f compose.dev.yaml up -d --build
+# or COMPOSE_FILE=compose.yaml:compose.dev.yaml in .env. See docker/README.md.
+services:
+  app:
+    # Tomcat's own debug launcher, so only the Tomcat JVM (not the init tool) opens the debug port.
+    command: ["catalina.sh", "jpda", "run"]
+    environment:
+      JPDA_ADDRESS: "*:5005"
+    ports: !override
+      - "0.0.0.0:${LOGICALDOC_PORT:-8080}:8080"
+      # Anyone who can reach this port can run code in the JVM; keep it on localhost unless you need it.
+      - "${JDWP_BIND:-127.0.0.1}:5005:5005"
+
+  db:
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-3306}:3306"
