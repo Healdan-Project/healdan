@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# LogicalDOC Community (coffeemuse fork): build from source, run on Tomcat 11.
+# Healdan (LogicalDOC Community fork): build from source, run on Tomcat 11.
 # See docker/README.md for usage and docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md for the design.
 
 ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
@@ -62,9 +62,9 @@ RUN mkdir -p /opt/logicaldoc/defaults /opt/logicaldoc/conf /opt/logicaldoc/repos
 ARG VERSION=local
 ARG REVISION=unknown
 # description replaces the Ubuntu base image's own.
-LABEL org.opencontainers.image.title="LogicalDOC Community (coffeemuse fork)" \
+LABEL org.opencontainers.image.title="Healdan (LogicalDOC Community fork)" \
       org.opencontainers.image.description="LogicalDOC Community document management on Tomcat 11" \
-      org.opencontainers.image.source="https://github.com/coffeemuse/logicaldoc-community" \
+      org.opencontainers.image.source="https://github.com/Healdan-Project/healdan" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.licenses="LGPL-3.0-only"

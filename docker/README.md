@@ -10,8 +10,8 @@ Maven build, including the GWT compile: allow 5–30 minutes depending on your m
 8 GB of memory for Docker.
 
 ```bash
-git clone https://github.com/coffeemuse/logicaldoc-community.git
-cd logicaldoc-community
+git clone https://github.com/Healdan-Project/healdan.git
+cd healdan
 cp .env.example .env
 ```
 
@@ -32,12 +32,12 @@ To skip the build, run a published image instead (next section).
 
 ## Using a published image
 
-CI publishes images for amd64 and arm64 to `ghcr.io/coffeemuse/logicaldoc-community` once publishing is
+CI publishes images for amd64 and arm64 to `ghcr.io/healdan-project/healdan` once publishing is
 switched on (see "Continuous integration"), so a server doesn't have to run the Maven build. You still use this
 repository's `compose.yaml`. In `.env`, set:
 
 ```bash
-LOGICALDOC_IMAGE=ghcr.io/coffeemuse/logicaldoc-community:latest
+LOGICALDOC_IMAGE=ghcr.io/healdan-project/healdan:latest
 ```
 
 Then pull and start:
@@ -353,10 +353,10 @@ image as one multi-arch image under the tags above. To switch it on:
 1. Set the repository variable `GHCR_PUBLISH` to `true`, under Settings → Secrets and variables → Actions →
    Variables, or with:
    ```bash
-   gh variable set GHCR_PUBLISH --body true --repo coffeemuse/logicaldoc-community
+   gh variable set GHCR_PUBLISH --body true --repo Healdan-Project/healdan
    ```
    The workflow signs in with its own `GITHUB_TOKEN`, so no secret is needed.
-2. After the first publish, open the package (your GitHub profile → Packages → `logicaldoc-community`). If it's
+2. After the first publish, open the package (the Healdan-Project organization → Packages → `healdan`). If it's
    private, make it public under Package settings → Change visibility, so pulls work without `docker login`.
 
 To publish a release, push a tag such as `v9.3.1-1`.
