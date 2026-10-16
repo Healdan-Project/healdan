@@ -34,7 +34,7 @@ public class MessagePriorityListGridField extends ListGridField {
 
 		switch (priority) {
 		case GUIMessage.PRIO_INFO:
-			content += AwesomeFactory.getIconButtonHTML("exclamation", null, "medium", "orange", null);
+			content += AwesomeFactory.getIconButtonHTML("circle-exclamation", null, "medium", "orange", null);
 			break;
 		case GUIMessage.PRIO_WARN:
 			content += AwesomeFactory.getIconButtonHTML("triangle-exclamation", null, "high", "red", null);

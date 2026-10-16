@@ -30,9 +30,6 @@ public class AwesomeFactory {
 
 	private static final String TITLE = "title='";
 
-	// Healdan bundles Font Awesome Free, which has no light or thin style, so icons always use solid
-	private static final String STYLE = "solid";
-
 	private AwesomeFactory() {
 	}
 
@@ -142,6 +139,24 @@ public class AwesomeFactory {
 		return button;
 	}
 
+	/**
+	 * Creates a ToolStripButton using a font-awesome brand icon
+	 *
+	 * @param icon the brand icon name
+	 * @param toolTip the message to display when the user moves the cursor over
+	 *        the button
+	 *
+	 * @return the new button
+	 */
+	public static ToolStripButton newBrandToolStripButton(String icon, String toolTip) {
+		ToolStripButton button = new ToolStripButton();
+		button.setTooltip(I18N.message(toolTip));
+		button.setTitle(I_CLASS + "fab fa-" + icon + "' aria-hidden='true'></i>");
+		button.setAutoFit(true);
+		return button;
+	}
+
+	// Healdan bundles Font Awesome Free, which has no light or thin style, so icons always use solid
 	public static String getCssClassPrefix() {
 		return "fas";
 	}
@@ -152,10 +167,10 @@ public class AwesomeFactory {
 
 	public static String getSpinnerIconHtml(String icon, String text) {
 		if (text == null || text.isEmpty())
-			return I_CLASS + getCssClassPrefix() + " fa-" + icon + " fa-" + STYLE
+			return I_CLASS + getCssClassPrefix() + " fa-" + icon
 					+ " fa-spinner' aria-hidden='true'></i>";
 		else
-			return DIV_I_CLASS + getCssClassPrefix() + " fa-" + icon + " fa-" + STYLE
+			return DIV_I_CLASS + getCssClassPrefix() + " fa-" + icon
 					+ " fa-fw fa-spinner' aria-hidden='true'></i>&nbsp;" + I18N.message(text) + CLOSE_DIV;
 	}
 
@@ -240,7 +255,7 @@ public class AwesomeFactory {
 		String html = AwesomeFactory.getIconHtml("database");
 		if (indexed == Constants.INDEX_SKIP) {
 			html = "<span class='fa-stack' style='width: 13px; height: 12px;'><i class='" + getCssClassPrefix()
-					+ " fa-database fa-stack-1x fa-" + STYLE + "' aria-hidden='true' ></i>";
+					+ " fa-database fa-stack-1x' aria-hidden='true' ></i>";
 			html += I_CLASS + AwesomeFactory.getCssClassPrefix()
 					+ " fa-times fa-stack-1x' style='color: red' ></i></span>";
 		}
@@ -254,7 +269,7 @@ public class AwesomeFactory {
 		String html = AwesomeFactory.getIconHtml("brain");
 		if (embedded == Constants.EMBED_SKIP) {
 			html = "<span class='fa-stack' style='width: 13px; height: 12px;'><i class='" + getCssClassPrefix()
-					+ " fa-brain fa-stack-1x fa-" + STYLE + "' aria-hidden='true' ></i>";
+					+ " fa-brain fa-stack-1x' aria-hidden='true' ></i>";
 			html += I_CLASS + AwesomeFactory.getCssClassPrefix()
 					+ " fa-times fa-stack-1x' style='color: red' ></i></span>";
 		}
@@ -279,12 +294,12 @@ public class AwesomeFactory {
 
 	public static String getIconHtml(String icon, String rotation, String text, String animation) {
 		if (text == null || text.isEmpty())
-			return I_CLASS + getCssClassPrefix() + " fa-" + icon + (rotation != null ? " " + rotation : "") + " fa-"
-					+ STYLE + (animation != null && !animation.isEmpty() ? " fa-" + animation : "")
+			return I_CLASS + getCssClassPrefix() + " fa-" + icon + (rotation != null ? " " + rotation : "")
+					+ (animation != null && !animation.isEmpty() ? " fa-" + animation : "")
 					+ "' aria-hidden='true'></i>";
 		else
-			return DIV_I_CLASS + getCssClassPrefix() + " fa-" + icon + (rotation != null ? " " + rotation : "") + " fa-"
-					+ STYLE + " fa-fw' aria-hidden='true'></i> " + I18N.message(text) + CLOSE_DIV;
+			return DIV_I_CLASS + getCssClassPrefix() + " fa-" + icon + (rotation != null ? " " + rotation : "")
+					+ " fa-fw' aria-hidden='true'></i> " + I18N.message(text) + CLOSE_DIV;
 	}
 
 	public static String getColoredIconHtmlWithoutI18N(String icon, String text, String color) {
@@ -293,11 +308,11 @@ public class AwesomeFactory {
 
 	public static String getColoredIconHtmlWithoutI18N(String icon, String text, String color, String animation) {
 		if (text == null || text.isEmpty())
-			return I_CLASS + getCssClassPrefix() + " fa-" + icon + " fa-" + STYLE
+			return I_CLASS + getCssClassPrefix() + " fa-" + icon
 					+ (animation != null && !animation.isEmpty() ? " fa-" + animation : "") + "' aria-hidden='true'  "
 					+ (color != null && !color.isEmpty() ? "style='color: " + color + "'" : "") + "></i>";
 		else
-			return DIV_I_CLASS + getCssClassPrefix() + " fa-" + icon + " fa-" + STYLE
+			return DIV_I_CLASS + getCssClassPrefix() + " fa-" + icon
 					+ (animation != null && !animation.isEmpty() ? " fa-" + animation : "")
 					+ " fa-fw' aria-hidden='true'"
 					+ (color != null && !color.isEmpty() ? "style='color: " + color + "'" : "") + "></i> " + text
