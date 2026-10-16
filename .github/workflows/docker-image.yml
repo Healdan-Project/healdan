@@ -3,8 +3,8 @@ name: Docker image
 # Builds the Docker image (Dockerfile) natively on amd64 and arm64 runners; no QEMU, so the GWT compile runs at
 # full speed on both. Hosted runners give it 16 GB of memory, enough for the Maven build's two GWT workers.
 #
-# - Every pull request and push: per architecture, the init tool's unit tests (target "tools"), then the image,
-#   then docker/smoke-test.sh against that image through compose.yaml.
+# - Every pull request, and every push that changes more than docs: per architecture, the init tool's unit tests
+#   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
 #   cache, pushes it by digest, and joins both into one multi-arch image at ghcr.io/coffeemuse/logicaldoc-community.
 #   Tags: the branch or tag name, sha-<short sha>, and latest from master.
@@ -14,12 +14,14 @@ name: Docker image
 # package on the first push; if it shows as private, make it public in the package settings so anyone can pull it.
 
 on:
+  # No paths filter: master's ruleset requires Test (amd64) and Test (arm64), and a PR the workflow skips would never
+  # report them, so it could never merge.
   pull_request:
     branches: [ master ]
-    paths-ignore: [ 'docs/**', '**/*.md' ]
   push:
     branches: [ master ]
     tags: [ 'v*' ]
+    # Docs-only pushes don't change the image, so they aren't rebuilt or republished.
     paths-ignore: [ 'docs/**', '**/*.md' ]
 
 permissions:

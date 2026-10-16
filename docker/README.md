@@ -344,8 +344,10 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 ## Continuous integration
 
 `.github/workflows/docker-image.yml` builds the image natively on amd64 and arm64 runners for every pull request
-and every push to `master` or a `v*` tag. On each architecture it runs the init tool's unit tests (the `tools`
-target), builds the image and runs `docker/smoke-test.sh` against it.
+and every push to `master` or a `v*` tag (pushes that only change docs are skipped). On each architecture it runs
+the init tool's unit tests (the `tools` target), builds the image and runs `docker/smoke-test.sh` against it.
+`Test (amd64)` and `Test (arm64)` are required checks on `master`, which is why pull requests always run them, even
+docs-only ones.
 
 **Publishing to GHCR is off until you switch it on.** Pushes to `master` and `v*` tags then publish the tested
 image as one multi-arch image under the tags above. To switch it on:
