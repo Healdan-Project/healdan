@@ -27,6 +27,37 @@ http://127.0.0.1:8080 and sign in as `admin` / `admin`. **Change that password s
 By default the UI is only reachable from the machine running Docker. To use it from elsewhere, put a reverse
 proxy in front (see below) or use the dev overlay on a trusted LAN.
 
+To skip the build, run a published image instead (next section).
+
+## Using a published image
+
+CI publishes images for amd64 and arm64 to `ghcr.io/coffeemuse/logicaldoc-community` once publishing is
+switched on (see "Continuous integration"), so a server doesn't have to run the Maven build. You still use this
+repository's `compose.yaml`. In `.env`, set:
+
+```bash
+LOGICALDOC_IMAGE=ghcr.io/coffeemuse/logicaldoc-community:latest
+```
+
+Then pull and start:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+| Tag | Image |
+|---|---|
+| `latest`, `master` | the latest build of `master` |
+| `sha-<commit>` | the build of one commit (first 7 characters of its hash) |
+| `v…` | a release tag |
+
+- **Pin a `v…` or `sha-…` tag** to decide when to upgrade. `latest` moves with every merge to `master`.
+- **Don't add `--build`** to `docker compose up` while `LOGICALDOC_IMAGE` is set. Compose would build from your
+  checkout and store the result under the published name.
+- **To go back to building**, remove `LOGICALDOC_IMAGE` from `.env` and run `docker compose up -d --build`. Your
+  data stays in the volumes either way.
+
 ## What runs
 
 | Service | What | Data |
@@ -63,6 +94,7 @@ missing from yours, such as one introduced by an upstream update. It never chang
 | `LOGICALDOC_PUBLIC_URL` | unset | public URL behind a proxy, e.g. `https://docs.example.org` |
 | `LOGICALDOC_BIND` | `127.0.0.1` | host address the UI port is published on |
 | `LOGICALDOC_PORT` | `8080` | host port for the UI |
+| `LOGICALDOC_IMAGE` | `logicaldoc-community:local` | image the app runs; set it to a published image to pull instead of building |
 | `CATALINA_OPTS` | `-Xmx2g` | JVM options, e.g. heap size |
 | `TZ` | `UTC` | time zone |
 | `DB_WAIT_SECONDS` | `60` | how long the app waits for the database at startup |
@@ -244,10 +276,22 @@ Compose may warn that the two app volumes already exist. That's expected: it use
 
 ## Upgrading
 
+When building from source:
+
 ```bash
 git pull
 docker compose up -d --build
 ```
+
+With a published image (`LOGICALDOC_IMAGE`), change its tag in `.env` if you pinned one, then:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+To update MariaDB when you build from source, run `docker compose pull --ignore-buildable` (a plain
+`docker compose pull` fails, because the local image can't be pulled).
 
 Volumes are kept, and settings new in the image's defaults are added to your `context.properties` on start.
 **The container never migrates the database schema.** If an upstream merge changes the schema (look for changes
@@ -292,4 +336,26 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 | `docker/tests/test-init.sh` | init tool against a throwaway MariaDB |
 | `docker/tests/test-image.sh` | image behavior: ownership, `/setup` block, restart, settings persistence |
 | `docker/tests/test-overlays.sh` | dev and proxy overlays |
-| `docker/smoke-test.sh` | end to end: build, boot, REST login, uploads and thumbnails, data surviving a restart |
+| `docker/smoke-test.sh` | end to end: build, boot, REST login, uploads and thumbnails, data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building |
+
+## Continuous integration
+
+`.github/workflows/docker-image.yml` builds the image natively on amd64 and arm64 runners for every pull request
+and every push to `master` or a `v*` tag (pushes that only change docs are skipped). On each architecture it runs
+the init tool's unit tests (the `tools` target), builds the image and runs `docker/smoke-test.sh` against it.
+`Test (amd64)` and `Test (arm64)` are required checks on `master`, which is why pull requests always run them, even
+docs-only ones.
+
+**Publishing to GHCR is off until you switch it on.** Pushes to `master` and `v*` tags then publish the tested
+image as one multi-arch image under the tags above. To switch it on:
+
+1. Set the repository variable `GHCR_PUBLISH` to `true`, under Settings → Secrets and variables → Actions →
+   Variables, or with:
+   ```bash
+   gh variable set GHCR_PUBLISH --body true --repo coffeemuse/logicaldoc-community
+   ```
+   The workflow signs in with its own `GITHUB_TOKEN`, so no secret is needed.
+2. After the first publish, open the package (your GitHub profile → Packages → `logicaldoc-community`). If it's
+   private, make it public under Package settings → Change visibility, so pulls work without `docker login`.
+
+To publish a release, push a tag such as `v9.3.1-1`.

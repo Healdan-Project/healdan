@@ -39,6 +39,7 @@ mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one
   - `docker build --target tools .` for the init tool's unit tests
   - `docker/tests/test-*.sh`
   - `docker/smoke-test.sh` for end to end
+- CI: `.github/workflows/docker-image.yml` builds on native amd64 and arm64 runners and runs the `tools` target and `docker/smoke-test.sh` on each. It publishes to `ghcr.io/coffeemuse/logicaldoc-community` from `master` and `v*` tags only while the repository variable `GHCR_PUBLISH` is `true`.
 
 ## Architecture
 

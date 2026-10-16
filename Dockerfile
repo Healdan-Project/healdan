@@ -25,14 +25,6 @@ RUN bash /tools/build.sh /build/ROOT/WEB-INF/lib /build/ROOT/WEB-INF/classes/con
 
 # ---- runtime: Tomcat 11 serving the exploded WAR at / ----
 FROM ${TOMCAT_IMAGE} AS runtime
-ARG VERSION=local
-ARG REVISION=unknown
-LABEL org.opencontainers.image.title="LogicalDOC Community (coffeemuse fork)" \
-      org.opencontainers.image.source="https://github.com/coffeemuse/logicaldoc-community" \
-      org.opencontainers.image.version="${VERSION}" \
-      org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.licenses="LGPL-3.0-only"
-
 # Thumbnails and previews: ImageMagick (images; uses Ghostscript for PS/PDF input), Poppler (PDF).
 # curl serves the healthcheck.
 RUN apt-get update \
@@ -65,6 +57,17 @@ RUN mkdir -p /opt/logicaldoc/defaults /opt/logicaldoc/conf /opt/logicaldoc/repos
  && sed -i 's|^common.loader=.*|&,"/opt/logicaldoc/conf"|' "$CATALINA_HOME/conf/catalina.properties" \
  && grep -q '"/opt/logicaldoc/conf"' "$CATALINA_HOME/conf/catalina.properties" \
  && chown -R 1000:1000 /opt/logicaldoc "$CATALINA_HOME/logs" "$CATALINA_HOME/temp" "$CATALINA_HOME/work"
+
+# Declared last: CI passes a new REVISION for every commit, and an ARG invalidates the cache of every RUN after it.
+ARG VERSION=local
+ARG REVISION=unknown
+# description replaces the Ubuntu base image's own.
+LABEL org.opencontainers.image.title="LogicalDOC Community (coffeemuse fork)" \
+      org.opencontainers.image.description="LogicalDOC Community document management on Tomcat 11" \
+      org.opencontainers.image.source="https://github.com/coffeemuse/logicaldoc-community" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.licenses="LGPL-3.0-only"
 
 VOLUME ["/opt/logicaldoc/conf", "/opt/logicaldoc/repository"]
 EXPOSE 8080

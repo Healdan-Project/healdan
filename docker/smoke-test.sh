@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # End-to-end acceptance test for the compose stack (spec §10). Runs as its own compose project with its own
 # env file and removes everything it created on exit. Usage: docker/smoke-test.sh
+# SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image> docker/smoke-test.sh tests an existing image instead of building one
+# (CI builds it beforehand with Buildx).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 . docker/tests/lib.sh
@@ -61,7 +63,7 @@ app_logs_have() { compose logs app 2>&1 | grep -- "$1" >/dev/null; }
 is_png() { [ "$(od -An -tx1 -N4 "$1" | tr -d ' \n')" = 89504e47 ]; }
 
 echo "== 1. build and start"
-compose up -d --build
+if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -d --build; fi
 check "app healthy" wait_healthy "$(compose ps -q app)" 900
 [ "$FAILED" = 0 ] || exit 1
 
