@@ -10,6 +10,11 @@ docs
 **/.project
 **/.classpath
 **/*.bak
+# IDE and OS files: the build-stage COPY would see them change and re-run Maven.
+**/.idea
+**/*.iml
+**/.vscode
+**/.DS_Store
 .env
 .env.*
 compose*.yaml

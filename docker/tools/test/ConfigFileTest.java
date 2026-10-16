@@ -24,8 +24,8 @@ public class ConfigFileTest {
         Check.isTrue(seeded, "first call seeds the shipped defaults");
 
         ContextProperties reread = new ContextProperties(conf);
-        Check.eq(AWKWARD, reread.getProperty("jdbc.password"), "password via getProperty (raw readers)");
-        Check.eq(AWKWARD, reread.getString("jdbc.password"), "password via getString (Spring placeholders)");
+        Check.eq(AWKWARD, reread.getProperty("jdbc.password"), "password via getProperty (expands ${...})");
+        Check.eq(AWKWARD, reread.getString("jdbc.password"), "password via getString (also decodes _b64_)");
         Properties plain = new Properties();
         try (FileInputStream in = new FileInputStream(conf)) {
             plain.load(in);
@@ -39,6 +39,14 @@ public class ConfigFileTest {
         Check.eq("jdbc:mariadb://db:3306/logicaldoc", reread.getProperty("jdbc.url"), "jdbc.url applied");
         Check.eq("https://docs.example.org/", reread.getProperty("server.url"), "server.url applied");
         Check.eq("true", reread.getProperty("webservice.enabled"), "unmanaged key preserved");
+
+        // Why ConfigPlan refuses '${' and '_b64_' in the password: no reader of the file sees it raw.
+        ContextProperties probe = new ContextProperties(conf);
+        probe.setProperty("probe", "${java.home}");
+        Check.eq(System.getProperty("java.home"), probe.getProperty("probe"), "getProperty expands ${...}");
+        probe.setProperty("probe", "_b64_eA==");
+        Check.eq("_b64_eA==", probe.getProperty("probe"), "getProperty leaves _b64_ alone");
+        Check.eq("x", probe.getString("probe"), "getString decodes _b64_");
 
         // A later boot applies env keys only: a seed-once key the admin changed must survive. A key the conf
         // file lacks (as after an upstream sync adds one to the defaults) is filled in from the defaults.

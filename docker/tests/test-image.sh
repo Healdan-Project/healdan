@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Image-level checks with plain docker (spec §4, §6, §9): entrypoint guard, ownership repair, uid, /setup
-# block, restart, settings persistence and config-loss handling.
+# Image-level checks with plain docker (spec §4, §6, §9): entrypoint guard, prompt stop during init, ownership
+# repair, uid, /setup block, Admin > Restart, settings persistence and config-loss handling.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 . docker/tests/lib.sh
@@ -15,7 +15,7 @@ NAS=ldtest-image-nas
 PW='image test pw'
 
 cleanup() {
-  docker rm -f "$APP" "$DB" >/dev/null 2>&1 || true
+  docker rm -fv "$APP" "$DB" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
   docker volume rm -f "$CONF" "$REPO" "$NAS" >/dev/null 2>&1 || true
 }
@@ -49,6 +49,17 @@ ep=$(docker inspect -f '{{index .Config.Entrypoint 0}}' "$IMAGE")
 check "entrypoint and its directory not writable by uid 1000" \
   docker run --rm --entrypoint sh -u 1000 "$IMAGE" -c "test ! -w '$ep' && test ! -w \"\$(dirname '$ep')\""
 
+echo "== stopping the container while it waits for the database is prompt"
+docker run -d --name "$APP" --network "$NET" -e DB_HOST=ldtest-nowhere -e DB_PASSWORD="$PW" \
+  -e DB_WAIT_SECONDS=600 "$IMAGE" >/dev/null
+deadline=$((SECONDS + 60))
+until app_logs_have 'waiting for database' || [ "$SECONDS" -ge "$deadline" ]; do sleep 1; done
+started=$SECONDS
+docker stop -t 30 "$APP" >/dev/null
+check "stops in under 10s (grace period 30s)" test $((SECONDS - started)) -lt 10
+check "ended by SIGTERM, not SIGKILL" test "$(docker inspect -f '{{.State.ExitCode}}' "$APP")" != 137
+docker rm -fv "$APP" >/dev/null
+
 echo "== volumes owned by root (like a NAS bind mount) are handed to uid 1000"
 docker volume create "$CONF" >/dev/null
 docker volume create "$REPO" >/dev/null
@@ -69,9 +80,16 @@ check "app generated its encryption key in the conf volume" \
   docker exec "$APP" grep -qE '^encryption\.key *= *[^ ]' /opt/logicaldoc/conf/context.properties
 check "gs is not an allowed command" lacks '^gs$' "$(docker exec "$APP" cat /opt/logicaldoc/conf/allowed-commands.txt)"
 
-echo "== Admin > Restart: restart.sh stops Tomcat and the restart policy brings it back"
+echo "== Admin > Restart: the app runs restart.sh (allowed-commands.txt) and the restart policy brings it back"
 before=$(docker inspect -f '{{.RestartCount}}' "$APP")
-docker exec -u 1000 "$APP" /opt/logicaldoc/bin/restart.sh || true
+sid=$(curl -fsS "$base/services/rest/auth/login?u=admin&pw=admin" | tr -d '"[:space:]')
+# The GWT-RPC request the Restart button sends (SystemService.restart, no arguments), with the REST session id
+# in the sid header. Tomcat may be shutting down as it answers, hence || true.
+reply=$(curl -sS -X POST "$base/frontend/system" -H 'Content-Type: text/x-gwt-rpc; charset=utf-8' \
+  -H 'X-GWT-Permutation: 0' -H "sid: $sid" \
+  --data-binary "7|0|4|$base/frontend/|0|com.logicaldoc.gui.frontend.client.services.SystemService|restart|1|2|3|4|0|" \
+  2>&1 || true)
+check "restart call succeeds" grep -q '^//OK' <<<"$reply"
 deadline=$((SECONDS + 120))
 while [ "$(docker inspect -f '{{.RestartCount}}' "$APP")" = "$before" ] && [ "$SECONDS" -lt "$deadline" ]; do sleep 2; done
 check "container restarted" test "$(docker inspect -f '{{.RestartCount}}' "$APP")" -gt "$before"

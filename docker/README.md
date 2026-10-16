@@ -5,8 +5,9 @@ This directory holds the container build and compose stack for this fork. The de
 
 ## Quick start
 
-You need Docker with Compose v2.24 or newer. The first build runs the full Maven build, including the GWT
-compile: allow 5–30 minutes depending on your machine and network, and at least 8 GB of memory for Docker.
+You need Docker with Compose v2.24.4 or newer (the dev overlay uses `!override`). The first build runs the full
+Maven build, including the GWT compile: allow 5–30 minutes depending on your machine and network, and at least
+8 GB of memory for Docker.
 
 ```bash
 git clone https://github.com/coffeemuse/logicaldoc-community.git
@@ -72,9 +73,9 @@ What the container does at startup:
 - **The setup wizard** (`/setup`) is disabled and returns HTTP 403, because the database is configured from `.env`.
 
 The image includes ImageMagick, Poppler and Ghostscript for thumbnails and previews. LogicalDOC only runs
-external programs listed in `conf/allowed-commands.txt`. The container keeps the image's entries (`convert` and the
-Poppler tools) in that file on every start; add your own lines there. Ghostscript is deliberately not listed,
-because ImageMagick calls it directly.
+external programs listed in `conf/allowed-commands.txt`. The container keeps the image's entries (`convert`, the
+Poppler tools and the script Admin > Restart runs) in that file on every start; add your own lines there.
+Ghostscript is deliberately not listed, because ImageMagick calls it directly.
 
 On every start the container also adds any setting that's in the image's default `context.properties` but
 missing from yours, such as one introduced by an upstream update. It never changes a value you already have.
@@ -337,7 +338,7 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 |---|---|
 | `docker build --target tools .` | unit tests for the init tool |
 | `docker/tests/test-init.sh` | init tool against a throwaway MariaDB |
-| `docker/tests/test-image.sh` | image behavior: ownership, `/setup` block, restart, settings persistence |
+| `docker/tests/test-image.sh` | image behavior: prompt stop during init, ownership, `/setup` block, Admin > Restart, settings persistence |
 | `docker/tests/test-overlays.sh` | dev and proxy overlays |
 | `docker/smoke-test.sh` | end to end: build, boot, REST login, uploads and thumbnails, data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building |
 

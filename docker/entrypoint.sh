@@ -17,8 +17,11 @@ die() { echo "[entrypoint] ERROR: $*" >&2; exit 1; }
 
 export HOME=$LDOC_HOME
 
+# Runs a command as the app user. app_prefix is also used on its own where the command must be bash's direct child.
+as_app() { "${app_prefix[@]}" "$@"; }
+
 if [ "$(id -u)" = 0 ]; then
-  as_app() { setpriv --reuid="$APP_UID" --regid="$APP_GID" --init-groups "$@"; }
+  app_prefix=(setpriv --reuid="$APP_UID" --regid="$APP_GID" --init-groups)
   # Bind mounts and restored backups can arrive owned by another user; the app must write both volumes.
   for dir in "$CONF" "$REPO"; do
     mkdir -p "$dir"
@@ -36,7 +39,7 @@ if [ "$(id -u)" = 0 ]; then
   done
 else
   # Started with --user: assume the volumes are already writable.
-  as_app() { "$@"; }
+  app_prefix=(env)
 fi
 
 if [ ! -f "$CONF/context.properties" ]; then
@@ -55,7 +58,15 @@ done
 as_app mkdir -p "$REPO"/docs "$REPO"/index "$REPO"/users "$REPO"/plugins "$REPO"/impex/in "$REPO"/impex/out \
   "$REPO"/logs "$REPO"/db
 
-as_app java -cp "$CATALINA_HOME/webapps/ROOT/WEB-INF/lib/*:$LDOC_HOME/lib/docker-init.jar" DockerInit
+# Until the exec below, bash is PID 1, and the kernel drops signals PID 1 has no handler for: without the trap,
+# stopping the container during the DB wait or schema creation waits out the grace period and ends in SIGKILL.
+# Bash defers a trap until the foreground command ends, but a signal interrupts `wait`: so DockerInit runs in the
+# background while bash waits for it.
+init_pid=
+trap 'log "stopping"; [ -z "$init_pid" ] || kill -TERM "$init_pid" 2>/dev/null || true; wait; exit 143' TERM INT
+"${app_prefix[@]}" java -cp "$CATALINA_HOME/webapps/ROOT/WEB-INF/lib/*:$LDOC_HOME/lib/docker-init.jar" DockerInit &
+init_pid=$!
+wait "$init_pid"
 
 log "starting: $*"
 if [ "$(id -u)" = 0 ]; then
