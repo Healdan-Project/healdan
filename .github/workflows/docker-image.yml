@@ -6,7 +6,7 @@ name: Docker image
 # - Every pull request, and every push that changes more than docs: per architecture, the init tool's unit tests
 #   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
-#   cache, pushes it by digest, and joins both into one multi-arch image at ghcr.io/coffeemuse/logicaldoc-community.
+#   cache, pushes it by digest, and joins both into one multi-arch image at ghcr.io/healdan-project/healdan.
 #   Tags: the branch or tag name, sha-<short sha>, and latest from master.
 #
 # Publishing is off until the repository variable GHCR_PUBLISH is set to true (Settings → Secrets and variables →
@@ -32,7 +32,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  IMAGE: ghcr.io/coffeemuse/logicaldoc-community
+  IMAGE: ghcr.io/healdan-project/healdan
   # docker/metadata-action tag rules, shared by every job. The VERSION build arg comes from them, and the publish
   # job only reuses the test job's cache when its build args are the same.
   TAG_RULES: |
@@ -212,7 +212,7 @@ jobs:
           args=()
           while IFS= read -r tag; do args+=(-t "$tag"); done < <(jq -r '.tags[]' <<<"$DOCKER_METADATA_OUTPUT_JSON")
           args+=(
-            --annotation "index:org.opencontainers.image.title=LogicalDOC Community (coffeemuse fork)"
+            --annotation "index:org.opencontainers.image.title=Healdan (LogicalDOC Community fork)"
             --annotation "index:org.opencontainers.image.description=LogicalDOC Community document management on Tomcat 11"
             --annotation "index:org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
             --annotation "index:org.opencontainers.image.version=$VERSION"
