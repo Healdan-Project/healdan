@@ -50,9 +50,6 @@ missing from yours, such as one introduced by an upstream update. It never chang
 
 ## Known limitations
 
-- **Thumbnails of PDF documents aren't generated.** This is an upstream bug: `PopplerConverter` wraps the file
-  path in quotes and then runs the command without a shell, so `pdftoppm` receives the quotes literally on Linux.
-  Image thumbnails work. A fix belongs in `logicaldoc-core` and will come as its own change.
 - **The container never migrates the database schema** (see "Upgrading").
 
 ## Configuration

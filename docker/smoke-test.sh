@@ -87,13 +87,7 @@ check "PNG thumbnail generated (ImageMagick via allowed-commands.txt)" is_png "$
 check "Poppler renders the PDF inside the container" compose exec -T app sh -c \
   'cat > /tmp/smoke.pdf && pdftoppm -png -r 50 -f 1 -l 1 /tmp/smoke.pdf /tmp/smoke-render && test -s /tmp/smoke-render-1.png' \
   < "$WORK/smoke.pdf"
-# Known upstream bug: PopplerConverter.print quotes the source path, then Exec runs the line without a shell,
-# so pdftoppm gets literal quotes on Linux. Flips to FAIL once fixed, so this marker gets removed.
-if is_png "$WORK/smoke.pdf.thumb"; then
-  fail "PDF thumbnail through the app now works: remove the known-issue marker in smoke-test.sh"
-else
-  echo "XFAIL PDF thumbnail through the app (upstream PopplerConverter quoting bug)"
-fi
+check "PDF thumbnail generated (Poppler via allowed-commands.txt)" is_png "$WORK/smoke.pdf.thumb"
 
 echo "== 5. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
