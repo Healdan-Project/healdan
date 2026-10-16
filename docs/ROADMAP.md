@@ -40,7 +40,7 @@ Throughout, **(owner)** marks something the owner decided or described. **(call)
 
 ## 2. Principles
 
-1. **The doc # is the handle.** People say "can you revise doc #23456222?" in email, and the number is stamped in the document's footer. Typing `#23456222` and pressing Enter opens the document. (owner)
+1. **The doc # is the handle.** People say "can you revise doc #23456222?" in email, and the number is stamped in the document's footer. Typing `#23456222` and pressing Enter returns search results containing just that document, ready to act on. (owner)
 2. **Common lookups need no search-building.** If finding a document by number, or a matter by client or matter, takes convoluted search criteria, Healdan has failed, even if the feature technically works. This is the anti-goal. (owner)
 3. **The matter is the unit of organisation.** Properties, permissions and folder structure start at the matter workspace and flow down. (owner)
 4. **The server enforces every rule, whichever way a request comes in.** That covers the web UI, the API, WebDAV, CMIS and the add-ins. LogicalDOC gates features only in its GWT UI; Healdan doesn't rely on UI gating for anything that matters. (call)
@@ -106,7 +106,8 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - Set only by import and migration.
 - **Search box.**
   - A scope picker sits beside the search box: Documents (default), Emails, Docs & Emails, Folders, Matters, Clients.
-  - Typing `#123456` and pressing Enter opens that document directly. There is no results screen and no criteria to fill in.
+  - Typing `#123456` and pressing Enter shows search results containing just that document. There are no criteria to fill in.
+  - From that result you can do everything you'd do to the document anywhere else: open, preview, download, change permissions, amend properties and see its versions.
   - The Emails scopes only become useful with M5.
 - **Client and matter are first-class.** Both are easy to search.
 - **Stores.**
@@ -150,8 +151,8 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - It never changes: not on a move, a rename or a new version.
   - It is never reused, even after deletion.
 - **Version lookup.**
-  - `#n` opens the latest version.
-  - `#nvN` opens version N.
+  - `#n` finds the document and shows its latest version.
+  - `#nvN` finds version N.
 - **Jumping to a matter.** With the Matters or Clients scope, a client or matter number jumps straight to its workspace, the way `#` does for documents.
 - **Client and matter.**
   - The workspace is the matter. Client is one of its properties, not a folder level above it.
@@ -201,7 +202,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
    - create a matter workspace from a template;
    - upload documents through the browser into its folders;
    - see each document get a doc # and its inherited properties.
-2. `#n` in the search box opens the document, and a matter number finds its workspace.
+2. `#n` in the search box returns just that document, and you can open, preview, download, change permissions, edit properties and see versions from the result. A matter number finds its workspace.
 3. A document can't be saved at a workspace's top level or into a search folder, by any route.
 4. My Matters and recent matters work.
 5. Text inside Word documents and emails is found by full-text search.
