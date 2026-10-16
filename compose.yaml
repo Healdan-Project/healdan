@@ -26,7 +26,9 @@ services:
   app:
     build:
       context: .
-    image: logicaldoc-community:local
+    # Set LOGICALDOC_IMAGE to a published image (ghcr.io/coffeemuse/logicaldoc-community:<tag>) to pull it instead
+    # of building. See docker/README.md.
+    image: ${LOGICALDOC_IMAGE:-logicaldoc-community:local}
     restart: unless-stopped
     depends_on:
       db:
