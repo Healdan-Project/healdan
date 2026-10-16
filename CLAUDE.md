@@ -12,6 +12,13 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 - Upstream sometimes ships POMs that fail Maven validation (for example, a duplicate dependency). If CI fails within a minute, check POM errors first.
 - `README.md` and `Build_this_Sources.md` are upstream's and out of date. They mention `build/poms` and JDK 11, which don't apply here.
 
+## Roadmap
+
+- `docs/ROADMAP.md` holds Healdan's direction: who it's for, the glossary, the milestone order, and what's decided versus open for each milestone. Read it before starting feature work.
+  - Healdan's *Store* and *Workspace* don't mean what LogicalDOC's `Store` and workspace mean. See its glossary.
+  - Each milestone gets a design spec in `docs/superpowers/specs/` before anyone builds it. Update the milestone's status in the roadmap as it moves.
+- `docs/reference/logicaldoc-ce-capability-map.md` records what CE already has, what's only hidden by GUI feature gates, what's half built and what's missing, with file paths. Check it before re-researching.
+
 ## Build and test
 
 You need JDK 21 (`source.level` in `logicaldoc-parent/pom.xml`; the GWT client compiles at source level 17) and Maven 3.9+. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `.github/workflows/build-logicaldoc.yml` writes into `~/.m2/settings.xml`. Copy that block for local builds.
