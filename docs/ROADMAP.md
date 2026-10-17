@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); plan next |
+| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, awaiting owner review |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |

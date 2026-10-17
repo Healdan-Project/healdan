@@ -2,7 +2,7 @@
 
 - **Milestone:** M1 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-17
-- **Status:** approved by the owner on 2026-10-17. Next: an implementation plan in `docs/superpowers/plans/`.
+- **Status:** approved by the owner on 2026-10-17. Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). The plan lists the corrections to §13 it proposes.
 - **Inputs:**
   - the roadmap's M1 section and glossary;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md);
