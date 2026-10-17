@@ -68,7 +68,7 @@ import jakarta.transaction.Transactional;
  * @since 3.0
  */
 @Repository("documentDAO")
-@Transactional
+@Transactional(rollbackOn = com.logicaldoc.core.HealdanVetoException.class)
 public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document> implements DocumentDAO {
     private static final String AND_LD_TENANTID_D = " and ld_tenantid = %d";
 
@@ -1013,6 +1013,7 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
 
     @Override
     public void restore(long docId, long folderId, final DocumentHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeDocumentRestore(docId, folderId, transaction);
 
         // Resume document and versions with JDBC directly
         jdbcUpdate(
