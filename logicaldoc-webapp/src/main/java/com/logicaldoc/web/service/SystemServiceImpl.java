@@ -111,6 +111,12 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     // Settings > GUI settings, whose Languages tab switches the GUI languages
     private static final long GUI_SETTINGS_MENU = 102L;
 
+    // The menus of the System menu's Confirm update and Restart buttons.
+    // CE's database has neither, so only administrators pass.
+    private static final long UPDATES_AND_PATCHES_MENU = -1130L;
+
+    private static final long RESTART_MENU = -1190L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SystemServiceImpl.class);
@@ -559,7 +565,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void confirmUpdate() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(UPDATES_AND_PATCHES_MENU);
 
         ContextProperties conf = Context.get().getConfig();
         String prevRunLevel = conf.getProperty("runlevel.back", RunLevel.DEFAULT.toString());
@@ -574,7 +580,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void restart() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(RESTART_MENU);
 
         log.info("Restart requested");
 

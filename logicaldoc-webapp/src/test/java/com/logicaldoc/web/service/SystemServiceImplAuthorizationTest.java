@@ -7,6 +7,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -52,6 +53,9 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
 
     // System > General, whose tabs show the statistics and the plugins
     private static final long GENERAL = 70L;
+
+    // The Run level tab of System > General
+    private static final long RUNLEVEL = 73L;
 
     // Settings > GUI settings, whose Languages tab switches the GUI languages
     private static final long GUI_SETTINGS = 102L;
@@ -216,6 +220,34 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
         testSubject.setGUILanguageStatus("it", !enabled);
         assertNotEquals(status, config.getProperty("default.lang.it.gui"));
         testSubject.setGUILanguageStatus("it", enabled);
+    }
+
+    @Test
+    public void testRestartNeedsTheRestartMenu() throws ServerException, PersistenceException {
+        // CE's database has no restart menu, so only administrators pass. Only
+        // the refusal is tested, because a restart forks bin/restart.sh.
+        grant(SYSTEM);
+        grant(GENERAL);
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, testSubject::restart);
+    }
+
+    @Test
+    public void testConfirmUpdateNeedsTheUpdatesMenu() throws ServerException, PersistenceException, IOException {
+        // CE's database has no updates and patches menu either, so only
+        // administrators pass. The Run level tab doesn't open it.
+        grant(SYSTEM);
+        grant(GENERAL);
+        grant(RUNLEVEL);
+        prepareSession("author", "admin");
+        ContextProperties config = Context.get().getConfig();
+        try {
+            assertThrows(AccessDeniedException.class, testSubject::confirmUpdate);
+            assertEquals("default", config.getProperty("runlevel"));
+        } finally {
+            config.setProperty("runlevel", "default");
+            config.write();
+        }
     }
 
     private List<GUIHistory> search() throws ServerException {
