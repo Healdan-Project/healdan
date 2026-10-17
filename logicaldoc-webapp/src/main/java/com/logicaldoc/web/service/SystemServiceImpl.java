@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
@@ -616,6 +617,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
         int i = 0;
         StringBuilder query = new StringBuilder();
+        Map<String, Object> params = new HashMap<>();
         for (String table : History.eventTables()) {
             // Skip histories that does not have a folder reference(not
             // subclasses of AbstractDocumentHistory) in case one
@@ -643,17 +645,17 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                 }
             }
 
-            appendUserCondition(tableAlias, userId, impersonator, query);
-            appendSessionCondition(tableAlias, historySid, query);
+            appendUserCondition(tableAlias, userId, impersonator, query, params);
+            appendSessionCondition(tableAlias, historySid, query, params);
             appendDatesCondition(tableAlias, from, till, query);
             appendFolderCondition(tableAlias, rootFolderId, query);
-            appendEventsCondition(tableAlias, events, query);
+            appendEventsCondition(tableAlias, events, query, params);
         }
 
         query.append(" order by 3 desc ");
 
         try {
-            return executeQuery(query.toString(), maxResult, session);
+            return executeQuery(query.toString(), params, maxResult, session);
         } catch (PersistenceException e) {
             return throwServerException(session, log, e);
         }
@@ -707,11 +709,18 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                 || table.equals("ld_robot_history") || table.equals("ld_chatmessage");
     }
 
-    private void appendEventsCondition(String tableAlias, List<String> events, StringBuilder query) {
+    private void appendEventsCondition(String tableAlias, List<String> events, StringBuilder query,
+            Map<String, Object> params) {
         if (CollectionUtils.isNotEmpty(events)) {
+            List<String> conditions = new ArrayList<>();
+            for (String event : events) {
+                String name = "event" + conditions.size();
+                conditions.add(" " + tableAlias + ".ld_event = :" + name);
+                params.put(name, event);
+            }
+
             query.append(" and (");
-            query.append(events.stream().map(e -> " " + tableAlias + ".ld_event = '" + SqlUtil.doubleQuotes(e) + "'")
-                    .collect(Collectors.joining(" or ")));
+            query.append(String.join(" or ", conditions));
             query.append(" ) ");
         }
     }
@@ -732,20 +741,27 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
         }
     }
 
-    private void appendSessionCondition(String tableAlias, String historySid, StringBuilder query) {
-        if (historySid != null && StringUtils.isNotEmpty(historySid))
-            query.append(AND + tableAlias + ".ld_sessionid='%s' ".formatted(historySid));
+    private void appendSessionCondition(String tableAlias, String historySid, StringBuilder query,
+            Map<String, Object> params) {
+        if (historySid != null && StringUtils.isNotEmpty(historySid)) {
+            query.append(AND + tableAlias + ".ld_sessionid = :sessionId ");
+            params.put("sessionId", historySid);
+        }
     }
 
-    private void appendUserCondition(String tableAlias, Long userId, String impersonator, StringBuilder query) {
+    private void appendUserCondition(String tableAlias, Long userId, String impersonator, StringBuilder query,
+            Map<String, Object> params) {
         if (userId != null)
             query.append(AND + tableAlias + ".ld_userid = %d ".formatted(userId));
-        if (impersonator != null)
-            query.append(AND + tableAlias + ".ld_impersonator = '%s' ".formatted(impersonator));
+        if (impersonator != null) {
+            query.append(AND + tableAlias + ".ld_impersonator = :impersonator ");
+            params.put("impersonator", impersonator);
+        }
     }
 
-    private List<GUIHistory> executeQuery(String query, int maxResult, Session session) throws PersistenceException {
-        return DocumentHistoryDAO.get().query(query, new RowMapper<GUIHistory>() {
+    private List<GUIHistory> executeQuery(String query, Map<String, Object> params, int maxResult, Session session)
+            throws PersistenceException {
+        return DocumentHistoryDAO.get().query(query, params, new RowMapper<GUIHistory>() {
 
             @Override
             public GUIHistory mapRow(ResultSet rs, int row) throws SQLException {
