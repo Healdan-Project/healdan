@@ -79,6 +79,11 @@ public class HttpUtil {
 
 	public static CloseableHttpClient getNotValidatingClient(int timeout, String proxyServer, Integer proxyPort,
 			String proxyUser, String proxyPassword) {
+		return getClient(timeout, proxyServer, proxyPort, proxyUser, proxyPassword, false);
+	}
+
+	private static CloseableHttpClient getClient(int timeout, String proxyServer, Integer proxyPort, String proxyUser,
+			String proxyPassword, boolean validating) {
 
 		try {
 			ConnectionConfig connectionConfig = ConnectionConfig.custom().setConnectTimeout(timeout, TimeUnit.SECONDS)
@@ -124,12 +129,14 @@ public class HttpUtil {
 			}
 
 			// Non validating SSL policies
-			clientBuilder = clientBuilder.setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
-					.setSSLSocketFactory(SSLConnectionSocketFactoryBuilder.create()
-							.setSslContext(
-									SSLContextBuilder.create().loadTrustMaterial(TrustAllStrategy.INSTANCE).build())
-							.setHostnameVerifier(NoopHostnameVerifier.INSTANCE).build())
-					.build());
+			if (!validating) {
+				clientBuilder = clientBuilder.setConnectionManager(PoolingHttpClientConnectionManagerBuilder.create()
+						.setSSLSocketFactory(SSLConnectionSocketFactoryBuilder.create()
+								.setSslContext(
+										SSLContextBuilder.create().loadTrustMaterial(TrustAllStrategy.INSTANCE).build())
+								.setHostnameVerifier(NoopHostnameVerifier.INSTANCE).build())
+						.build());
+			}
 
 			return clientBuilder.build();
 		} catch (Exception t) {
@@ -140,6 +147,20 @@ public class HttpUtil {
 	public static CloseableHttpClient getNotValidatingClient(int timeout) {
 		String[] proxy = getProxy();
 		return getNotValidatingClient(timeout, proxy[0], Integer.parseInt(proxy[1]), proxy[2], proxy[3]);
+	}
+
+	/**
+	 * Gets a client that checks the server's certificate against the JVM's
+	 * trust store and the host name against the certificate. It goes through
+	 * the configured proxy, if any.
+	 *
+	 * @param timeout the connection, socket and response timeout in seconds
+	 *
+	 * @return the client
+	 */
+	public static CloseableHttpClient getValidatingClient(int timeout) {
+		String[] proxy = getProxy();
+		return getClient(timeout, proxy[0], Integer.parseInt(proxy[1]), proxy[2], proxy[3], true);
 	}
 
 	public static void close(ClassicHttpResponse response) {
