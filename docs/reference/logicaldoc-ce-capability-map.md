@@ -347,7 +347,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 
 ## 6. Defects found (fix in Healdan; consider reporting upstream)
 
-The first four rows were verified with failing tests and fixed on 2026-10-17. Each fix names the test that shows it. The rows after them were found during that work and are still open.
+Rows marked **Fixed** or **Hardened** were verified with failing tests and fixed on 2026-10-17. Each fix names the test that shows it. The first four came from the recon. The others were found while fixing those, and the rows marked Open are still to do.
 
 | Severity | Where | What | Status |
 |---|---|---|---|
@@ -359,7 +359,8 @@ The first four rows were verified with failing tests and fixed on 2026-10-17. Ea
 | Medium | `WEB/service/FolderServiceImpl.createAlias` ✔ checked | No permission check either. Any user can put an alias in any folder. The alias takes the target's ACL, so it doesn't widen read access, but it copies the target's name and description into a folder others can see. | **Fixed.** Needs ADD on the parent and READ on the target. `FolderServiceImplTest`. |
 | Medium | Other `HttpUtil.getNotValidatingClient` callers: `CORE/security/Geolocation.syncDB`, `CORE/automation/HttpTool`, `WEB/service/SettingServiceImpl.testProxy` ✔ checked | `Geolocation` sends the MaxMind license key in the download URL. `HttpTool` is the automation scripts' HTTP helper. | **Fixed.** All three use `getValidatingClient`. A script that calls a server with a private or self-signed certificate needs that certificate in the JVM's trust store (`-Djavax.net.ssl.trustStore=…`, through `CATALINA_OPTS` in Docker). `testProxy` validates too, so it fails for a TLS-intercepting proxy whose CA the JVM doesn't trust, as the real callers would. `StatsCollector` (plain HTTP, see its row) and `HttpUpload` (no callers) still use the non-validating client. `GeolocationTest`, `HttpToolTest`, `SettingServiceImplTest`. |
 | Low | `CORE/communication/oauth/Microsoft365TokenProvider` ✔ checked | Logs the access token, decoded, and part of the response at debug level. The part is everything after the 150th character, which holds most of the raw token. `Geolocation.syncDB` likewise logged its download URL, MaxMind license key included, at info level. | **Fixed.** Neither secret is logged. `Microsoft365TokenProviderTest`, `GeolocationTest`. |
-| Low | `WEB/service/SearchServiceImpl.shareSearch` | Any user can add their saved searches to any other user's list. Nothing checks the target users or groups. | Open. |
+| Low | `WEB/service/SearchServiceImpl.shareSearch` ✔ checked | Any user can add their saved searches to any other user's list. Nothing checks the target users or groups. | **Fixed.** Every target user and group must exist and be in the sharer's tenant, which is what the GUI's user and group pickers list. Within a tenant anyone can still share with anyone, as in the GUI. A shared search runs with the recipient's own permissions. `SearchServiceImplTest`. |
+| Low | `CORE/searchengine/saved/SavedSearch(SavedSearch)` | The copy constructor, which `shareSearch` uses, drops `tenantId`, so a shared copy is filed under the default tenant even when sharer and recipient are in another one. Lookups go by user, so the recipient still sees it. | Open. |
 | Low | `CORE/stats/StatsCollector` | Posts usage statistics to `http://stat.logicaldoc.com`, unencrypted. | Open. Decide whether Healdan keeps it. |
 | Low | `GUIUser.orderedSearches()` | `add()` on `Arrays.asList` throws `UnsupportedOperationException` for some stored preferences. | Open. |
 | Low | GUI vs core `Feature` 112 | Name mismatch (`SUPPORT_TICKET` vs `ACCESS_TICKET`). | Open. |
