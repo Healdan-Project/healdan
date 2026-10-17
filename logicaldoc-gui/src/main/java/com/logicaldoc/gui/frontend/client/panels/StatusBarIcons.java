@@ -32,7 +32,7 @@ public class StatusBarIcons extends HLayout implements ClipboardObserver, UserOb
 
 	private Button clipboardCounter = AwesomeFactory.newIconButton(CLIPBOARD, CLIPBOARD, "0");
 
-	private Button lockedCounter = AwesomeFactory.newIconButton("lock-alt", "event.lockeddocs", "0");
+	private Button lockedCounter = AwesomeFactory.newIconButton("lock", "event.lockeddocs", "0");
 
 	private Button checkoutCounter = AwesomeFactory.newIconButton("edit", "event.checkedoutdocs", "0");
 
@@ -125,7 +125,7 @@ public class StatusBarIcons extends HLayout implements ClipboardObserver, UserOb
 
 	@Override
 	public void onUserChanged(GUIUser user) {
-		lockedCounter.setTitle(AwesomeFactory.getIconHtml("lock-alt", Integer.toString(user.getLockedDocs())));
+		lockedCounter.setTitle(AwesomeFactory.getIconHtml("lock", Integer.toString(user.getLockedDocs())));
 		checkoutCounter.setTitle(AwesomeFactory.getIconHtml("edit", Integer.toString(user.getCheckedOutDocs())));
 		messagesCounter.setTitle(AwesomeFactory.getIconHtml("envelope", Integer.toString(user.getUnreadMessages())));
 		workflowsCounter.setTitle(AwesomeFactory.getIconHtml("tasks", Integer.toString(user.getTasks())));

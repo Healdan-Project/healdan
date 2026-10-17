@@ -68,7 +68,7 @@ public class DocumentToolbar extends ToolStrip implements FolderObserver {
 
 	protected ToolStripButton dropSpot = AwesomeFactory.newToolStripButton("eye-dropper", "dropspot");
 
-	protected ToolStripButton scan = AwesomeFactory.newToolStripButton("scanner-image", "scandocument");
+	protected ToolStripButton scan = AwesomeFactory.newToolStripButton("file-import", "scandocument");
 
 	protected ToolStripButton archive = AwesomeFactory.newToolStripButton("archive", "sendtoexparchive");
 
@@ -80,15 +80,15 @@ public class DocumentToolbar extends ToolStrip implements FolderObserver {
 
 	protected ToolStripButton gallery = AwesomeFactory.newToolStripButton("images", "gallery");
 
-	protected ToolStripButton office = AwesomeFactory.newToolStripButton("windows", "editwithoffice");
+	protected ToolStripButton office = AwesomeFactory.newBrandToolStripButton("windows", "editwithoffice");
 
-	protected ToolStripButton onlyoffice = AwesomeFactory.newToolStripButton("windows", "editwithonlyoffice");
+	protected ToolStripButton onlyoffice = AwesomeFactory.newToolStripButton("briefcase", "editwithonlyoffice");
 
 	protected ToolStripButton bulkUpdate = AwesomeFactory.newToolStripButton("edit", "bulkupdate");
 
 	protected ToolStripButton stamp = AwesomeFactory.newToolStripButton("tint", "stamp");
 
-	protected ToolStripButton sign = AwesomeFactory.newToolStripButton("badge-check", "sign");
+	protected ToolStripButton sign = AwesomeFactory.newToolStripButton("certificate", "sign");
 
 	protected ToolStripButton readingRequest = AwesomeFactory.newToolStripButton("glasses", "requestreading");
 
@@ -474,7 +474,6 @@ public class DocumentToolbar extends ToolStrip implements FolderObserver {
 		if (Feature.visible(Feature.OFFICE)) {
 			addButton(office);
 			office.setTooltip(I18N.message("editwithoffice"));
-			office.setTitle("<i class='fab fa-windows fa-thin' aria-hidden='true'></i>");
 			if (!Feature.enabled(Feature.OFFICE))
 				setFeatureDisabled(office);
 
@@ -489,7 +488,6 @@ public class DocumentToolbar extends ToolStrip implements FolderObserver {
 				&& Session.get().getConfigAsBoolean("converter.OnlyOfficeConverter.enabled")) {
 			addButton(onlyoffice);
 			onlyoffice.setTooltip(I18N.message("editwithonlyoffice"));
-			onlyoffice.setTitle("<i class='fal fa-briefcase fa-thin' aria-hidden='true'></i>");
 			if (!Feature.enabled(Feature.OFFICE))
 				setFeatureDisabled(onlyoffice);
 

@@ -14,6 +14,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      # The GUI bundles Font Awesome Free; upstream code targets Pro
+      - name: Check GUI icons against Font Awesome Free
+        run: python3 .github/scripts/check-fontawesome-icons.py
+
       - name: Set up JDK
         uses: actions/setup-java@v5
         with:
