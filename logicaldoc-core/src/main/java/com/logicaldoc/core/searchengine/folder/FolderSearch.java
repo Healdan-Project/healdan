@@ -201,11 +201,10 @@ public class FolderSearch extends Search {
                 if (!"or".equals(fOptions.getTopOperator()) || joinsCounter == 0)
                     joinsCounter++;
                 criteriaQueryPart.append("(C%d.ld_folderid = %s.ld_id".formatted(joinsCounter, tableAlias));
-                criteriaQueryPart.append(" and (C%d.ld_name='".formatted(joinsCounter));
-                criteriaQueryPart.append(criterion.getFieldName());
-                criteriaQueryPart.append("' or C%d.ld_name like '".formatted(joinsCounter));
-                criteriaQueryPart.append(criterion.getFieldName());
-                criteriaQueryPart.append("-%') and ");
+                criteriaQueryPart.append(" and (C%d.ld_name = :%s".formatted(joinsCounter,
+                        addParameter(params, criterion.getFieldName())));
+                criteriaQueryPart.append(" or C%d.ld_name like :%s) and ".formatted(joinsCounter,
+                        addParameter(params, criterion.getFieldName() + "-%")));
                 columnName = "C%d.".formatted(joinsCounter);
                 switch (criterion.getType()) {
                     case Attribute.TYPE_INT, Attribute.TYPE_USER, Attribute.TYPE_FOLDER, Attribute.TYPE_DOCUMENT, Attribute.TYPE_BOOLEAN:
@@ -234,9 +233,14 @@ public class FolderSearch extends Search {
         return criteriaQueryPart.toString();
     }
 
-    private String getCriterionColumnName(String tableAlias, FolderCriterion criterion) {
+    private String getCriterionColumnName(String tableAlias, FolderCriterion criterion) throws PersistenceException {
         String columnName;
         columnName = criterion.getColumnName();
+
+        // The column name derives from the criterion's field, which comes from
+        // the caller, so it must be a plain identifier
+        if (!columnName.matches("[\\w.]+"))
+            throw new PersistenceException("Invalid field %s".formatted(criterion.getFieldName()));
 
         // If the column name is not qualified, prepend the current
         // table alias
