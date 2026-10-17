@@ -191,7 +191,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 - **Configurable label.** The user-facing label "Matter" can be set per install, for example to "Project".
 - **Light rebrand of the old UI.** The name, logo, login page and browser title become Healdan. Full branding comes with M6.
 - **Fix full-text indexing.** CE has no text extractor for `.docx`, `.xlsx`, `.pptx`, `.eml` or `.msg`, so their contents aren't searchable today. Check it on a running server, then fix it. The capability map has the evidence.
-- **Fix the upstream security bugs the recon found.** They're listed in the capability map and are being fixed in PR [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15). The design session found more: CE's RPCs don't check who may change permissions or rename. The M1 spec fixes those (§7.3).
+- **Fix the upstream security bugs the recon found.** They're listed in the capability map. The four it listed first were fixed in PR [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15), and the map tracks the rest. The design session found more: CE's RPCs don't check who may change permissions or rename. The M1 spec fixes those (§7.3).
 - **Turn on cheap gated features where they help.** M1 turns on multiple LogicalDOC workspaces, which are Healdan's Stores. Saved searches stay off, because search folders cover the need.
 
 **Non-goals.**

@@ -845,7 +845,7 @@ Paths are relative to the repository root. Every edit is a small hook; all new l
 | a new file in `logicaldoc-core` (e.g. `.../core/HealdanHooks.java`, an interface plus a static registry) | lets the core hooks above call `healdan-core` without core depending on it | §7.5; a new file, so it doesn't conflict in merges |
 
 **What this list doesn't cover:**
-- **Already handled in PR #15.** The security fixes are in [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15), not this list. M1 builds on that PR once it merges.
+- **Already handled in PR #15.** The security fixes are in [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15), not this list. That PR merged on 2026-10-17, so M1 builds on it.
 - **The builder may need a few more edits.** If so, each goes in this table in the implementation PR, with its reason, and stays a hook rather than logic. Two likely examples:
   - selecting a version from a `#n.N` result;
   - refusing drops in the GUI.
