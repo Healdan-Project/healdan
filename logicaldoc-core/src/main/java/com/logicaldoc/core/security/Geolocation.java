@@ -148,9 +148,9 @@ public class Geolocation {
         File tmpDir = null;
         try {
             String downloadUrl = "https://download.maxmind.com/app/geoip_download?edition_id=GeoLite2-City&license_key=YOUR_LICENSE_KEY&suffix=tar.gz";
-            downloadUrl = downloadUrl.replace("YOUR_LICENSE_KEY", key);
-
             log.info("Downloading geolocation database {}", downloadUrl);
+
+            downloadUrl = downloadUrl.replace("YOUR_LICENSE_KEY", key);
 
             try (CloseableHttpClient httpclient = HttpUtil.getValidatingClient(60);) {
                 gzFile = FileUtil.createTempFile(CONST_GEOLOCATION, ".tar.gz");
