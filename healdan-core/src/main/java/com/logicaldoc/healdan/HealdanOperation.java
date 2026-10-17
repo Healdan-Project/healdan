@@ -22,7 +22,8 @@ public final class HealdanOperation {
 		void run() throws Exception;
 	}
 
-	private static final ThreadLocal<Deque<Kind>> STACK = ThreadLocal.withInitial(ArrayDeque::new);
+	/** The current thread's operations; unset on a thread that runs none */
+	static final ThreadLocal<Deque<Kind>> STACK = new ThreadLocal<>();
 
 	private HealdanOperation() {
 	}
@@ -38,6 +39,10 @@ public final class HealdanOperation {
 	 */
 	public static <T> T run(Kind kind, Callable<T> work) throws Exception {
 		Deque<Kind> stack = STACK.get();
+		if (stack == null) {
+			stack = new ArrayDeque<>();
+			STACK.set(stack);
+		}
 		stack.push(kind);
 		try {
 			return work.call();
@@ -67,6 +72,8 @@ public final class HealdanOperation {
 	 * @return true if the current thread is inside an operation of that kind
 	 */
 	public static boolean active(Kind kind) {
-		return STACK.get().contains(kind);
+		// Only asking must not leave a stack on the thread
+		Deque<Kind> stack = STACK.get();
+		return stack != null && stack.contains(kind);
 	}
 }

@@ -13,19 +13,35 @@ import com.logicaldoc.healdan.HealdanConstants;
 
 public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 
-	@Test
-	public void testNewUserJoinsEveryone() throws Exception {
+	private static User newUser(String username, User.Type type) {
 		User user = new User();
-		user.setUsername("newbie");
-		user.setName("Newbie");
-		user.setFirstName("New");
-		user.setEmail("newbie@example.com");
+		user.setUsername(username);
+		user.setName(username);
+		user.setFirstName(username);
+		user.setEmail(username + "@example.com");
 		user.setPassword("Secret-1234");
 		user.setTenantId(Tenant.DEFAULT_ID);
-		UserDAO.get().store(user);
+		user.setType(type);
+		return user;
+	}
+
+	@Test
+	public void testNewUserJoinsEveryone() throws Exception {
+		UserDAO.get().store(newUser("newbie", User.Type.DEFAULT));
 
 		User stored = UserDAO.get().findByUsername("newbie", true);
 		assertTrue(stored.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(stored.isMemberOf("_user_" + stored.getId()));
+	}
+
+	@Test
+	public void testNewReadOnlyUserStaysOutOfEveryone() throws Exception {
+		// CE keeps a read-only user in its own group and guest only
+		UserDAO.get().store(newUser("reader", User.Type.READONLY));
+
+		User stored = UserDAO.get().findByUsername("reader", true);
+		assertFalse(stored.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(stored.isMemberOf("guest"));
 		assertTrue(stored.isMemberOf("_user_" + stored.getId()));
 	}
 

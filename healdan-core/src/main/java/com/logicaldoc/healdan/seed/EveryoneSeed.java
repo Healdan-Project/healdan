@@ -10,7 +10,8 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
 
 /**
- * Creates the Everyone group, unless it exists, and adds every user to it.
+ * Creates the Everyone group, unless it exists, and adds every user to it
+ * except the system user and read-only users.
  */
 @Component
 public class EveryoneSeed implements SeedStep {
@@ -38,7 +39,11 @@ public class EveryoneSeed implements SeedStep {
 				continue;
 			// Initialize first: storing rewrites all the user's group memberships
 			User user = userDao.findById(id, true);
-			if (user == null || user.isMemberOf(HealdanConstants.EVERYONE_GROUP))
+			/*
+			 * Read-only users follow CE, which keeps them in their own group and
+			 * guest only: HibernateUserDAO.store would strip Everyone again.
+			 */
+			if (user == null || user.isReadonly() || user.isMemberOf(HealdanConstants.EVERYONE_GROUP))
 				continue;
 			user.addGroup(everyone);
 			userDao.store(user);

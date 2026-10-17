@@ -68,6 +68,11 @@ public class SeedsTest extends AbstractHealdanTestCase {
 		User admin = UserDAO.get().findByUsername("admin", true);
 		assertTrue(admin.isMemberOf(HealdanConstants.EVERYONE_GROUP));
 
+		// A read-only user, whom CE keeps in its own group and guest only
+		User reader = newUser("reader");
+		reader.setType(User.Type.READONLY);
+		UserDAO.get().store(reader);
+
 		// Back to the state before the seed: no membership, no marker
 		jdbc().update("delete from ld_usergroup where ld_groupid = ?", everyone.getId());
 		forget("everyone");
@@ -82,6 +87,9 @@ public class SeedsTest extends AbstractHealdanTestCase {
 
 		User system = UserDAO.get().findById(User.USERID_SYSTEM, true);
 		assertFalse(system.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		reader = UserDAO.get().findByUsername("reader", true);
+		assertFalse(reader.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(reader.isMemberOf("guest"));
 		assertEquals(1, jdbc().queryForObject("select count(*) from ld_group where ld_name = ?", Integer.class,
 				HealdanConstants.EVERYONE_GROUP).intValue());
 	}

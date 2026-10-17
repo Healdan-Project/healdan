@@ -18,7 +18,9 @@ import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.util.spring.Context;
 
 /**
- * Healdan's settings, kept in the {@code hd_setting} table.
+ * Healdan's settings, kept in the {@code hd_setting} table. Every typed getter
+ * falls back to an in-code default (the plan's Global Constraints) when its
+ * setting is missing or blank; the ids of things Healdan creates have none.
  */
 @Component
 public class HealdanSettings {
@@ -38,6 +40,16 @@ public class HealdanSettings {
 	public static final String CLASS_DEFAULT = "class.default";
 
 	public static final String RECENT_MATTERS_DAYS = "recentmatters.days";
+
+	static final String DEFAULT_MATTER_LABEL = "Matter";
+
+	static final String DEFAULT_MATTER_LABEL_PLURAL = "Matters";
+
+	static final NumberingMode DEFAULT_NUMBERING = NumberingMode.PER_CLIENT;
+
+	static final String DEFAULT_CLASS = "Docs";
+
+	static final int DEFAULT_RECENT_MATTERS_DAYS = 30;
 
 	private static final Logger log = LoggerFactory.getLogger(HealdanSettings.class);
 
@@ -89,21 +101,30 @@ public class HealdanSettings {
 		return true;
 	}
 
+	/**
+	 * @return the matter label, "Matter" by default
+	 */
 	public String matterLabel() {
-		return get(MATTER_LABEL);
+		return stringValue(MATTER_LABEL, DEFAULT_MATTER_LABEL);
 	}
 
+	/**
+	 * @return the plural matter label, "Matters" by default
+	 */
 	public String matterLabelPlural() {
-		return get(MATTER_LABEL_PLURAL);
+		return stringValue(MATTER_LABEL_PLURAL, DEFAULT_MATTER_LABEL_PLURAL);
 	}
 
+	/**
+	 * @return the numbering mode, per client by default
+	 */
 	public NumberingMode numberingMode() {
 		String value = get(MATTER_NUMBERING);
 		try {
-			return StringUtils.isBlank(value) ? NumberingMode.PER_CLIENT : NumberingMode.valueOf(value.trim());
+			return StringUtils.isBlank(value) ? DEFAULT_NUMBERING : NumberingMode.valueOf(value.trim());
 		} catch (IllegalArgumentException e) {
-			log.warn("Unknown numbering mode '{}', using per client", value);
-			return NumberingMode.PER_CLIENT;
+			log.warn("Unknown numbering mode '{}', using {}", value, DEFAULT_NUMBERING);
+			return DEFAULT_NUMBERING;
 		}
 	}
 
@@ -124,21 +145,38 @@ public class HealdanSettings {
 		}
 	}
 
+	/**
+	 * @return the id of the Templates Store, null if none is set
+	 */
 	public Long templatesStoreId() {
 		return longValue(STORE_TEMPLATES);
 	}
 
+	/**
+	 * @return the id of the Healdan profile template, null if none is set
+	 */
 	public Long profileTemplateId() {
 		return longValue(PROFILE_TEMPLATE);
 	}
 
+	/**
+	 * @return the default Class, "Docs" by default
+	 */
 	public String defaultClass() {
-		return get(CLASS_DEFAULT);
+		return stringValue(CLASS_DEFAULT, DEFAULT_CLASS);
 	}
 
+	/**
+	 * @return how many days Recent Matters looks back, 30 by default
+	 */
 	public int recentMattersDays() {
 		Long days = longValue(RECENT_MATTERS_DAYS);
-		return days != null ? days.intValue() : 30;
+		return days != null ? days.intValue() : DEFAULT_RECENT_MATTERS_DAYS;
+	}
+
+	private String stringValue(String key, String defaultValue) {
+		String value = get(key);
+		return StringUtils.isBlank(value) ? defaultValue : value;
 	}
 
 	private Long longValue(String key) {

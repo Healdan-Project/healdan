@@ -130,6 +130,26 @@ public class SearchFolderToleranceTest extends AbstractHealdanTestCase {
 				workspace.getTenantId(), null).size());
 	}
 
+	@Test
+	public void testCmisUploadIntoAnotherWorkspace() throws Exception {
+		// Task 9 uploads into matter workspaces, not the Default one
+		Folder other = new Folder("Other workspace");
+		other.setType(Folder.TYPE_WORKSPACE);
+		other.setTenantId(workspace.getTenantId());
+		other = FolderDAO.get().create(FolderDAO.get().findRoot(workspace.getTenantId()), other, true,
+				new FolderHistory());
+		Folder target = FolderDAO.get().create(other, new Folder("Correspondence"), true, new FolderHistory());
+
+		// The CMIS servlet serves each workspace as its own repository
+		assertEquals(other.getId(), harness.cmisFor(target.getId(), session).getRoot().getId());
+		assertEquals(workspace.getId(), harness.cmisFor(searchFolder.getId(), session).getRoot().getId());
+
+		harness.cmisCreateDocument(target.getId(), "elsewhere.txt", "cmis".getBytes(), session);
+
+		assertEquals(1, DocumentDAO.get().findByFileNameAndParentFolderId(target.getId(), "elsewhere.txt", null,
+				workspace.getTenantId(), null).size());
+	}
+
 	private void assertInSearchFolder(long docId) throws Exception {
 		Document doc = DocumentDAO.get().findById(docId);
 		assertNotNull(doc);

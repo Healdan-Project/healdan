@@ -82,6 +82,18 @@ public class ChannelHarness {
 	}
 
 	/**
+	 * The CMIS servlet serves each workspace as its own repository, so a
+	 * folder is reached through the repository of its workspace.
+	 * 
+	 * @param folderId a folder
+	 * @param s the session the CMIS calls run in
+	 * @return the CMIS repository rooted at the folder's workspace
+	 */
+	public LDRepository cmisFor(long folderId, Session s) throws PersistenceException {
+		return cmis(FolderDAO.get().findWorkspace(folderId), s);
+	}
+
+	/**
 	 * Uploads through the REST channel, which delegates to
 	 * {@code SoapDocumentService.create}.
 	 * 
@@ -111,7 +123,8 @@ public class ChannelHarness {
 	}
 
 	/**
-	 * Uploads through CMIS as {@code createDocument} would.
+	 * Uploads through CMIS as {@code createDocument} would, in the repository of
+	 * the target folder's workspace.
 	 */
 	public void cmisCreateDocument(long folderId, String name, byte[] content, Session s) throws PersistenceException {
 		PropertiesImpl props = new PropertiesImpl();
@@ -124,6 +137,6 @@ public class ChannelHarness {
 
 		ContentStreamImpl stream = new ContentStreamImpl(name, BigInteger.valueOf(content.length),
 				"application/octet-stream", new ByteArrayInputStream(content));
-		cmis(FolderDAO.get().findDefaultWorkspace(s.getTenantId()), s).createDocument(null, props, "fld." + folderId, stream);
+		cmisFor(folderId, s).createDocument(null, props, "fld." + folderId, stream);
 	}
 }
