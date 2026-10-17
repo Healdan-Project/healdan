@@ -1,13 +1,21 @@
 package com.logicaldoc.core.searchengine.saved;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
+import com.logicaldoc.core.searchengine.FulltextSearchOptions;
 import com.logicaldoc.core.searchengine.SearchOptions;
+import com.logicaldoc.core.searchengine.TagSearchOptions;
+import com.logicaldoc.core.searchengine.folder.FolderCriterion;
+import com.logicaldoc.core.searchengine.folder.FolderSearchOptions;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.util.io.IOUtil;
+import com.logicaldoc.util.io.XMLDecoderGuard;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.persistence.Cacheable;
@@ -28,6 +36,14 @@ import jakarta.persistence.Table;
 public class SavedSearch extends PersistentObject implements Serializable, Comparable<SavedSearch> {
 
     private static final long serialVersionUID = 1L;
+
+    /**
+     * The classes saveOptions() writes into the options, the only ones
+     * readOptions() lets the decoder create
+     */
+    private static final Set<String> OPTIONS_CLASSES = Set.of(FulltextSearchOptions.class.getName(),
+            TagSearchOptions.class.getName(), FolderSearchOptions.class.getName(), FolderCriterion.class.getName(),
+            ArrayList.class.getName(), HashSet.class.getName(), Date.class.getName());
 
     @Column(name = "ld_userid", nullable = false)
     private long userId;
@@ -69,6 +85,7 @@ public class SavedSearch extends PersistentObject implements Serializable, Compa
     }
 
     public SearchOptions readOptions() {
+        XMLDecoderGuard.check(getOptions(), OPTIONS_CLASSES);
         SearchOptions searchOptions = (SearchOptions) IOUtil.deserialize(getOptions());
         searchOptions.setName(getName());
         searchOptions.setDescription(getDescription());

@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -25,6 +26,7 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.TemplateDAO;
 import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIAttribute;
@@ -398,6 +400,47 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
 
         newFolder = testSubject.create(newFolder, true);
         assertNotNull(newFolder);
+    }
+
+    @Test
+    public void testCreateNeedsAddPermission() throws ServerException, PersistenceException {
+        // author can add in folder6 but not in the root
+        prepareSession("author", "admin");
+
+        GUIFolder folder = new GUIFolder();
+        folder.setName("NotAllowed");
+        folder.setParentId(5L);
+        assertThrows(AccessDeniedException.class, () -> testSubject.create(folder, true));
+        assertTrue(folderDao.findByName("NotAllowed", 1L).isEmpty());
+
+        folder.setName("Allowed");
+        folder.setParentId(6L);
+        assertNotNull(testSubject.create(folder, true));
+    }
+
+    @Test
+    public void testCreateInAliasNeedsAddPermissionOnTarget() throws ServerException, PersistenceException {
+        // An alias in folder6, where author can add, of a folder where author
+        // can't
+        Folder alias = folderDao.createAlias(6L, 1200L, null);
+
+        prepareSession("author", "admin");
+        GUIFolder folder = new GUIFolder();
+        folder.setName("NotAllowed");
+        folder.setParentId(alias.getId());
+        assertThrows(AccessDeniedException.class, () -> testSubject.create(folder, true));
+        assertTrue(folderDao.findByName("NotAllowed", 1L).isEmpty());
+    }
+
+    @Test
+    public void testCreateWorkspaceNeedsAdmin() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+
+        GUIFolder workspace = new GUIFolder();
+        workspace.setName("NotAllowed");
+        workspace.setType(Folder.TYPE_WORKSPACE);
+        assertThrows(AccessDeniedException.class, () -> testSubject.create(workspace, false));
+        assertTrue(folderDao.findByName("NotAllowed", 1L).isEmpty());
     }
 
     @Test
