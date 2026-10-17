@@ -7,10 +7,12 @@ import com.logicaldoc.core.folder.FolderHistory;
 
 /**
  * Healdan's checks on the operations whose side effects a listener veto can't
- * undo. Each method is called at the very top of the CE method it guards (the
- * after-hook at its very end), so a {@link PersistenceException} it throws
- * refuses the operation before anything is written. Every method is a no-op by
- * default, and {@link #get()} returns a no-op until healdan-core registers its
+ * undo. Each method is called at the top of the CE method it guards, before
+ * any side effect (the after-hook at its very end), so a
+ * {@link HealdanVetoException} it throws refuses the operation before anything
+ * is written. The document and folder DAOs roll back on that exception, not on
+ * other {@link PersistenceException}s. Every method is a no-op by default, and
+ * {@link #get()} returns a no-op until healdan-core registers its
  * implementation, so CE behaves as before without Healdan.
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
@@ -18,8 +20,9 @@ import com.logicaldoc.core.folder.FolderHistory;
 public interface HealdanHooks {
 
     /**
-     * Called first in {@code DocumentManager.moveToFolder}, before the hit is
-     * removed from the index and the aliases are marked for reindexing
+     * Called in {@code DocumentManager.moveToFolder} once the target is known to
+     * differ from the current folder, before the hit is removed from the index
+     * and the aliases are marked for reindexing
      *
      * @param document the document to move
      * @param target the target folder

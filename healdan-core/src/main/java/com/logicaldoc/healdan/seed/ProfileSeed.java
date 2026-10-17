@@ -1,6 +1,5 @@
 package com.logicaldoc.healdan.seed;
 
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -23,8 +22,6 @@ import com.logicaldoc.healdan.setting.HealdanSettings;
  */
 @Component
 public class ProfileSeed implements SeedStep {
-
-	private static final String DEFAULT_CLASS = "Docs";
 
 	private final HealdanSettings settings;
 
@@ -80,7 +77,7 @@ public class ProfileSeed implements SeedStep {
 	}
 
 	private void addAttributes(Template template, long setId) {
-		String matterLabel = StringUtils.defaultIfBlank(settings.matterLabel(), "Matter");
+		String matterLabel = settings.matterLabel();
 
 		Attribute client = put(template, HealdanConstants.ATTR_CLIENT, "Client", Attribute.TYPE_STRING, 0);
 		client.setReadonly(true);
@@ -123,7 +120,7 @@ public class ProfileSeed implements SeedStep {
 	}
 
 	private void addDefaultClassOption(long setId) throws Exception {
-		String value = StringUtils.defaultIfBlank(settings.defaultClass(), DEFAULT_CLASS);
+		String value = settings.defaultClass();
 		AttributeOptionDAO dao = AttributeOptionDAO.get();
 		boolean present = dao.findByAttribute(setId, HealdanConstants.ATTR_DOCCLASS).stream()
 				.anyMatch(o -> value.equals(o.getValue()));

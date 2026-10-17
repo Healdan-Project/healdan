@@ -68,7 +68,7 @@ import jakarta.transaction.Transactional;
  * @since 3.0
  */
 @Repository("documentDAO")
-@Transactional(rollbackOn = PersistenceException.class)
+@Transactional(rollbackOn = com.logicaldoc.core.HealdanVetoException.class)
 public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document> implements DocumentDAO {
     private static final String AND_LD_TENANTID_D = " and ld_tenantid = %d";
 

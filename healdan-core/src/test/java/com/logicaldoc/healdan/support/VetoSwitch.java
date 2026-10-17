@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.LongStream;
 
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -13,7 +14,7 @@ import com.logicaldoc.util.spring.Context;
  * Turns on the veto of the test listeners and hooks at one check point, the
  * place a Healdan rule would refuse the operation: a listener method or a
  * {@code HealdanHooks} method, named by the constants below. While it's on,
- * that check point throws {@code PersistenceException("veto")}, after asking
+ * that check point throws {@code HealdanVetoException("veto")}, after asking
  * {@link CacheEvictor} to evict on rollback the folders and documents it
  * refuses, as every Healdan rule must (plan, D3).
  */
@@ -108,7 +109,7 @@ public final class VetoSwitch {
 			CacheEvictor evictor = Context.get(CacheEvictor.class);
 			evictor.evictFoldersOnRollback(folderIds);
 			evictor.evictDocumentsOnRollback(documentIds);
-			throw new PersistenceException(MESSAGE);
+			throw new HealdanVetoException(MESSAGE);
 		}
 	}
 

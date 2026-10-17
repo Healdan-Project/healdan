@@ -41,15 +41,15 @@ public class HealdanSettings {
 
 	public static final String RECENT_MATTERS_DAYS = "recentmatters.days";
 
-	static final String DEFAULT_MATTER_LABEL = "Matter";
+	public static final String DEFAULT_MATTER_LABEL = "Matter";
 
-	static final String DEFAULT_MATTER_LABEL_PLURAL = "Matters";
+	public static final String DEFAULT_MATTER_LABEL_PLURAL = "Matters";
 
-	static final NumberingMode DEFAULT_NUMBERING = NumberingMode.PER_CLIENT;
+	public static final NumberingMode DEFAULT_NUMBERING = NumberingMode.PER_CLIENT;
 
-	static final String DEFAULT_CLASS = "Docs";
+	public static final String DEFAULT_CLASS = "Docs";
 
-	static final int DEFAULT_RECENT_MATTERS_DAYS = 30;
+	public static final int DEFAULT_RECENT_MATTERS_DAYS = 30;
 
 	private static final Logger log = LoggerFactory.getLogger(HealdanSettings.class);
 

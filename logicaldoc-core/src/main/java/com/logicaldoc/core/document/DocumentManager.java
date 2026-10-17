@@ -910,11 +910,11 @@ public class DocumentManager {
      */
     public DocumentFuture moveToFolder(Document doc, Folder targetFolder, DocumentHistory transaction)
             throws PersistenceException {
-        com.logicaldoc.core.HealdanHooks.get().beforeDocumentMove(doc, targetFolder, transaction);
         validateTransaction(transaction);
 
         if (targetFolder.equals(doc.getFolder()))
             return new DocumentFuture(doc, new FutureValue<>(doc));
+        com.logicaldoc.core.HealdanHooks.get().beforeDocumentMove(doc, targetFolder, transaction);
 
         /*
          * Better to synchronize this block because under high multi-threading

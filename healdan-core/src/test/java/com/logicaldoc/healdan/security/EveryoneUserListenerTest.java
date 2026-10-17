@@ -35,6 +35,16 @@ public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testUserOfAnotherTenantStaysOutOfDefaultEveryone() throws Exception {
+		User user = newUser("outsider", User.Type.DEFAULT);
+		user.setTenantId(2L);
+		UserDAO.get().store(user);
+
+		User stored = UserDAO.get().findByUsername("outsider", true);
+		assertFalse(stored.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+	}
+
+	@Test
 	public void testNewReadOnlyUserStaysOutOfEveryone() throws Exception {
 		// CE keeps a read-only user in its own group and guest only
 		UserDAO.get().store(newUser("reader", User.Type.READONLY));

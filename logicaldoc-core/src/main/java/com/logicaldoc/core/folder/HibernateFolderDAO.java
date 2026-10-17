@@ -65,7 +65,7 @@ import jakarta.transaction.Transactional;
  * @since 6.0
  */
 @Repository("folderDAO")
-@Transactional(rollbackOn = PersistenceException.class)
+@Transactional(rollbackOn = com.logicaldoc.core.HealdanVetoException.class)
 public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> implements FolderDAO {
 
     private static final String ORACLE_DUPLE = "(%d,0)";

@@ -25,6 +25,7 @@ import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -335,7 +336,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 					throws PersistenceException {
 				// As every Healdan veto must: restore has loaded the undeleted folder into the cache
 				Context.get(CacheEvictor.class).evictFoldersOnRollback(List.of(folderId));
-				throw new PersistenceException(VetoSwitch.MESSAGE);
+				throw new HealdanVetoException(VetoSwitch.MESSAGE);
 			}
 		});
 		try {

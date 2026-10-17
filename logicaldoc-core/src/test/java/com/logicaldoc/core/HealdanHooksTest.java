@@ -54,48 +54,48 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         public void beforeDocumentMove(Document document, Folder target, DocumentHistory transaction)
                 throws PersistenceException {
             calls.add("beforeDocumentMove:%d,%d".formatted(document.getId(), target.getId()));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeDocumentRename(long docId, String newName, DocumentHistory transaction)
                 throws PersistenceException {
             calls.add("beforeDocumentRename:%d,%s".formatted(docId, newName));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeDocumentUpdate(Document document, Document docVO, DocumentHistory transaction)
                 throws PersistenceException {
             calls.add("beforeDocumentUpdate:%d,%s".formatted(document.getId(), docVO.getLanguage()));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeDocumentRestore(long docId, long folderId, DocumentHistory transaction)
                 throws PersistenceException {
             calls.add("beforeDocumentRestore:%d,%d".formatted(docId, folderId));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeFolderDeleteTree(long folderId, FolderHistory transaction) throws PersistenceException {
             calls.add("beforeFolderDeleteTree:%d".formatted(folderId));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeFolderRestore(long folderId, long parentId, FolderHistory transaction)
                 throws PersistenceException {
             calls.add("beforeFolderRestore:%d,%d".formatted(folderId, parentId));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeFolderMerge(Folder source, Folder target, FolderHistory transaction)
                 throws PersistenceException {
             calls.add("beforeFolderMerge:%d,%d".formatted(source.getId(), target.getId()));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
@@ -103,13 +103,13 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
                 String securityOption, FolderHistory transaction) throws PersistenceException {
             calls.add("beforeFolderCopy:%d,%d,%s,%s,%s".formatted(source.getId(), target.getId(), newName,
                     foldersOnly, securityOption));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
 
         @Override
         public void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
             calls.add("beforeApplySecurityToTree:%d".formatted(rootId));
-            throw new PersistenceException(VETO);
+            throw new HealdanVetoException(VETO);
         }
     };
 
@@ -154,6 +154,11 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertNotNull(SearchEngine.get().getHit(1L));
 
         HealdanHooks.register(vetoing);
+
+        // A move into the current folder does nothing, so there's nothing to veto
+        DocumentManager.get().moveToFolder(doc, doc.getFolder(), documentTransaction());
+        assertTrue(calls.isEmpty());
+
         Folder target = folderDao.findById(1200L);
         try {
             DocumentManager.get().moveToFolder(doc, target, documentTransaction());

@@ -114,6 +114,24 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testColumnsReplaceCeDefault() throws Exception {
+		Context.get().getConfig().setProperty(ColumnsSeed.PROPERTY, ColumnsSeed.CE_DEFAULT);
+		new ColumnsSeed().run();
+		assertEquals(ColumnsSeed.COLUMNS, Context.get().getConfig().getProperty(ColumnsSeed.PROPERTY));
+	}
+
+	@Test
+	public void testColumnsKeepAdminChoice() throws Exception {
+		Context.get().getConfig().setProperty(ColumnsSeed.PROPERTY, "filename,size");
+		try {
+			new ColumnsSeed().run();
+			assertEquals("filename,size", Context.get().getConfig().getProperty(ColumnsSeed.PROPERTY));
+		} finally {
+			Context.get().getConfig().setProperty(ColumnsSeed.PROPERTY, ColumnsSeed.COLUMNS);
+		}
+	}
+
+	@Test
 	public void testReindexIsNotABeanUntilTheParsersExist() {
 		// Task 21 makes it a bean; until then startup must not flag anything
 		assertTrue(Context.get().getBeansOfType(ReindexOfficeSeed.class).isEmpty());

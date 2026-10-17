@@ -1,7 +1,10 @@
 package com.logicaldoc.healdan.util;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.hibernate.Cache;
 import org.hibernate.SessionFactory;
@@ -30,6 +33,9 @@ import com.logicaldoc.core.folder.Folder;
 public class CacheEvictor {
 
 	private final SessionFactory sessionFactory;
+
+	/** Each entity's collection roles, fixed once the session factory exists */
+	private final Map<Class<?>, List<String>> collectionRoles = new ConcurrentHashMap<>();
 
 	@Autowired
 	public CacheEvictor(@Qualifier("sessionFactory") SessionFactory sessionFactory) {
@@ -101,13 +107,20 @@ public class CacheEvictor {
 		for (Long id : ids)
 			cache.evictEntityData(entity, id);
 
+		for (String role : collectionRoles.computeIfAbsent(entity, this::findCollectionRoles))
+			for (Long id : ids)
+				cache.evictCollectionData(role, id);
+	}
+
+	private List<String> findCollectionRoles(Class<?> entity) {
 		String prefix = entity.getName() + ".";
 		String parentPrefix = entity == Document.class ? AbstractDocument.class.getName() + "." : prefix;
+		List<String> roles = new ArrayList<>();
 		((SessionFactoryImplementor) sessionFactory).getMappingMetamodel().forEachCollectionDescriptor(collection -> {
 			String role = collection.getRole();
 			if (role.startsWith(prefix) || role.startsWith(parentPrefix))
-				for (Long id : ids)
-					cache.evictCollectionData(role, id);
+				roles.add(role);
 		});
+		return List.copyOf(roles);
 	}
 }

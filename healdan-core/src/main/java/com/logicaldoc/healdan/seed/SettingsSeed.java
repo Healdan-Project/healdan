@@ -6,7 +6,6 @@ import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 
 /**
@@ -31,11 +30,11 @@ public class SettingsSeed implements SeedStep {
 	@Override
 	public void run() {
 		Map<String, String> defaults = new LinkedHashMap<>();
-		defaults.put(HealdanSettings.MATTER_LABEL, "Matter");
-		defaults.put(HealdanSettings.MATTER_LABEL_PLURAL, "Matters");
-		defaults.put(HealdanSettings.MATTER_NUMBERING, NumberingMode.PER_CLIENT.name());
-		defaults.put(HealdanSettings.CLASS_DEFAULT, "Docs");
-		defaults.put(HealdanSettings.RECENT_MATTERS_DAYS, "30");
+		defaults.put(HealdanSettings.MATTER_LABEL, HealdanSettings.DEFAULT_MATTER_LABEL);
+		defaults.put(HealdanSettings.MATTER_LABEL_PLURAL, HealdanSettings.DEFAULT_MATTER_LABEL_PLURAL);
+		defaults.put(HealdanSettings.MATTER_NUMBERING, HealdanSettings.DEFAULT_NUMBERING.name());
+		defaults.put(HealdanSettings.CLASS_DEFAULT, HealdanSettings.DEFAULT_CLASS);
+		defaults.put(HealdanSettings.RECENT_MATTERS_DAYS, Integer.toString(HealdanSettings.DEFAULT_RECENT_MATTERS_DAYS));
 		defaults.forEach(settings::setIfMissing);
 	}
 }

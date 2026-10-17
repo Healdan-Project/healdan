@@ -10,6 +10,7 @@ import javax.sql.DataSource;
 
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
+import org.flywaydb.core.api.MigrationVersion;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.flywaydb.core.api.output.MigrateResult;
 import org.slf4j.Logger;
@@ -83,7 +84,7 @@ public class HealdanMigrator {
 			String[] effective = locations;
 			try (Connection con = dataSource.getConnection()) {
 				meta = con.getMetaData();
-				ceSchema = tableExists(meta, "ld_user");
+				ceSchema = tableExists(meta, con.getCatalog(), con.getSchema(), "ld_user");
 				if (ceSchema) {
 					String vendor = vendorFolder(meta);
 					effective = (locations.length == 0 ? new String[] { DEFAULT_LOCATION } : locations).clone();
@@ -118,14 +119,14 @@ public class HealdanMigrator {
 	/**
 	 * @return the highest migration version applied, 0 if there is none
 	 */
-	public int currentVersion() {
+	public MigrationVersion currentVersion() {
 		try {
 			String location;
 			try (Connection con = dataSource.getConnection()) {
 				location = defaultLocation(con.getMetaData());
 			}
 			MigrationInfo current = configure(dataSource, location).load().info().current();
-			return current == null ? 0 : Integer.parseInt(current.getVersion().getVersion());
+			return current == null ? MigrationVersion.fromVersion("0") : current.getVersion();
 		} catch (HealdanStartupException e) {
 			throw e;
 		} catch (Exception e) {
@@ -176,10 +177,15 @@ public class HealdanMigrator {
 				.locations(locations).baselineOnMigrate(true).baselineVersion("0").validateMigrationNaming(true);
 	}
 
-	private static boolean tableExists(DatabaseMetaData meta, String table) throws SQLException {
+	/*
+	 * Only in the connection's own database: with a null catalog, MariaDB's
+	 * driver searches every database on the server.
+	 */
+	private static boolean tableExists(DatabaseMetaData meta, String catalog, String schema, String table)
+			throws SQLException {
 		// HSQLDB stores names in upper case, MariaDB keeps what was created
 		for (String name : new String[] { table.toLowerCase(Locale.ROOT), table.toUpperCase(Locale.ROOT) })
-			try (ResultSet rs = meta.getTables(null, null, name, new String[] { "TABLE" })) {
+			try (ResultSet rs = meta.getTables(catalog, schema, name, new String[] { "TABLE" })) {
 				if (rs.next())
 					return true;
 			}

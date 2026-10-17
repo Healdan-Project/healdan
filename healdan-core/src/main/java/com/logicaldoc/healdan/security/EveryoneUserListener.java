@@ -3,7 +3,6 @@ package com.logicaldoc.healdan.security;
 import java.util.Map;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
@@ -39,7 +38,7 @@ public class EveryoneUserListener implements UserListener {
 		if (user.getId() != 0 || user.isReadonly())
 			return;
 
-		Group everyone = GroupDAO.get().findByName(HealdanConstants.EVERYONE_GROUP, Tenant.DEFAULT_ID);
+		Group everyone = GroupDAO.get().findByName(HealdanConstants.EVERYONE_GROUP, user.getTenantId());
 		if (everyone != null)
 			user.addGroup(everyone);
 	}

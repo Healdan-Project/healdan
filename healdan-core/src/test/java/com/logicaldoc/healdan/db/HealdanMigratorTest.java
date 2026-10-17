@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import javax.sql.DataSource;
 
+import org.flywaydb.core.api.MigrationVersion;
 import org.hsqldb.jdbc.JDBCDataSource;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -43,7 +44,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testMigratesFreshCeSchema() {
-		assertEquals(1, migrator.currentVersion());
+		assertEquals(MigrationVersion.fromVersion("1"), migrator.currentVersion());
 		for (String t : List.of("hd_setting", "hd_counter", "hd_client", "hd_matter", "hd_searchfolder", "hd_local_value"))
 			assertTrue(t, tableExists(jdbc, t));
 		assertEquals(1L, jdbc.queryForObject("select next_value from hd_counter where name='docnumber'", Long.class).longValue());
