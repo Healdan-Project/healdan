@@ -444,6 +444,37 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
     }
 
     @Test
+    public void testCreateAliasNeedsAddPermissionOnParent() throws ServerException, PersistenceException {
+        // author can read folder6 but can't add in the root
+        prepareSession("author", "admin");
+
+        assertThrows(AccessDeniedException.class, () -> testSubject.createAlias(5L, 6L));
+        assertEquals(1, folderDao.findByNameAndParentId("folder6", 5L).size());
+    }
+
+    @Test
+    public void testCreateAliasNeedsReadPermissionOnTarget() throws ServerException, PersistenceException {
+        // author can add in folder6 but can't read folder1200
+        prepareSession("author", "admin");
+
+        assertThrows(AccessDeniedException.class, () -> testSubject.createAlias(6L, 1200L));
+        assertTrue(folderDao.findByNameAndParentId("test", 6L).isEmpty());
+    }
+
+    @Test
+    public void testCreateAliasWithPermissions() throws ServerException, PersistenceException {
+        // A folder author can read, as it takes folder6's security
+        Folder subfolder = new Folder();
+        subfolder.setName("Readable");
+        subfolder.setTenantId(1L);
+        subfolder = folderDao.create(folderDao.findById(6L), subfolder, true, null);
+
+        prepareSession("author", "admin");
+        GUIFolder alias = testSubject.createAlias(6L, subfolder.getId());
+        assertEquals(subfolder.getId(), alias.getFoldRef().longValue());
+    }
+
+    @Test
     public void testMoveFolderSimple() throws Exception {
         Folder docsFolder = folderDao.findById(Folder.ROOTID);
         Folder folderA = folderDao.create(docsFolder, new Folder("folderA"), true, null);
