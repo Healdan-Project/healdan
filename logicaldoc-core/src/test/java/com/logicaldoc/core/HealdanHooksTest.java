@@ -92,6 +92,13 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         }
 
         @Override
+        public void beforeFolderMerge(Folder source, Folder target, FolderHistory transaction)
+                throws PersistenceException {
+            calls.add("beforeFolderMerge:%d,%d".formatted(source.getId(), target.getId()));
+            throw new PersistenceException(VETO);
+        }
+
+        @Override
         public void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
             calls.add("beforeApplySecurityToTree:%d".formatted(rootId));
             throw new PersistenceException(VETO);
@@ -283,6 +290,35 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertEquals(List.of("beforeApplySecurityToTree:1200"), calls);
         assertOwnAcl(1201L);
         assertOwnAcl(1202L);
+    }
+
+    @Test
+    public void testMerge() throws Exception {
+        String documentsIn6 = "select count(*) from ld_document where ld_deleted = 0 and ld_folderid = 6";
+        String versionCount = "select count(*) from ld_version";
+        long documentsBefore = folderDao.queryForLong(documentsIn6);
+        long versionsBefore = folderDao.queryForLong(versionCount);
+        assertTrue(documentsBefore > 0);
+        Document doc = documentDao.findById(1L, true);
+        assertEquals(6L, doc.getFolder().getId());
+        SearchEngine.get().unlock();
+        SearchEngine.get().addHit(doc, "Healdan merge content");
+
+        HealdanHooks.register(vetoing);
+        try {
+            folderDao.merge(folderDao.findById(6L), folderDao.findById(1200L), folderTransaction());
+            fail("The hook should have vetoed the merge");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+
+        assertEquals(List.of("beforeFolderMerge:6,1200"), calls);
+        // Each moved document would save a version in the background
+        awaitVersionSaves();
+        assertEquals(documentsBefore, folderDao.queryForLong(documentsIn6));
+        assertEquals(versionsBefore, folderDao.queryForLong(versionCount));
+        assertEquals(0, column("ld_folder", "ld_deleted", 6L));
+        assertNotNull(SearchEngine.get().getHit(1L));
     }
 
     @Test

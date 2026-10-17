@@ -92,6 +92,23 @@ public interface HealdanHooks {
     }
 
     /**
+     * Called first in {@code HibernateFolderDAO.merge}, and again for each
+     * clashing subfolder it merges, before any document is moved: each move
+     * removes the document's hit from the index and saves a version in the
+     * background, which a later veto can't undo
+     *
+     * @param source the folder to merge, possibly {@code null}
+     * @param target the folder to merge it into, possibly {@code null}
+     * @param transaction the history entry, possibly {@code null}
+     *
+     * @throws PersistenceException to refuse the merge
+     */
+    default void beforeFolderMerge(Folder source, Folder target, FolderHistory transaction)
+            throws PersistenceException {
+        // No check by default
+    }
+
+    /**
      * Called first in {@code HibernateFolderDAO.restore}, before the rows are
      * undeleted with JDBC
      *

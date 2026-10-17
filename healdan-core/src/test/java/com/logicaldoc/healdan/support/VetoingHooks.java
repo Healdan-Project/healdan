@@ -44,6 +44,12 @@ public class VetoingHooks implements HealdanHooks {
 	}
 
 	@Override
+	public void beforeFolderMerge(Folder source, Folder target, FolderHistory transaction)
+			throws PersistenceException {
+		VetoSwitch.check(VetoSwitch.BEFORE_FOLDER_MERGE);
+	}
+
+	@Override
 	public void beforeFolderRestore(long folderId, long parentId, FolderHistory transaction)
 			throws PersistenceException {
 		VetoSwitch.check(VetoSwitch.BEFORE_FOLDER_RESTORE);

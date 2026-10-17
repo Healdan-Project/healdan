@@ -28,6 +28,8 @@ public final class VetoSwitch {
 
 	public static final String BEFORE_FOLDER_DELETE_TREE = "HealdanHooks.beforeFolderDeleteTree";
 
+	public static final String BEFORE_FOLDER_MERGE = "HealdanHooks.beforeFolderMerge";
+
 	public static final String BEFORE_FOLDER_RESTORE = "HealdanHooks.beforeFolderRestore";
 
 	public static final String BEFORE_APPLY_SECURITY_TO_TREE = "HealdanHooks.beforeApplySecurityToTree";
@@ -35,6 +37,10 @@ public final class VetoSwitch {
 	private static volatile String route;
 
 	private static final AtomicInteger vetoes = new AtomicInteger();
+
+	private static volatile int allowedPasses;
+
+	private static final AtomicInteger passes = new AtomicInteger();
 
 	private VetoSwitch() {
 	}
@@ -45,7 +51,20 @@ public final class VetoSwitch {
 	 * @param route the check point, one of the constants of this class
 	 */
 	public static void on(String route) {
+		on(route, 0);
+	}
+
+	/**
+	 * Vetoes at a check point from its next pass after the given number, e.g.
+	 * at the second document of a merge
+	 * 
+	 * @param route the check point, one of the constants of this class
+	 * @param allowedPasses how many passes to let through first
+	 */
+	public static void on(String route, int allowedPasses) {
 		vetoes.set(0);
+		passes.set(0);
+		VetoSwitch.allowedPasses = allowedPasses;
 		VetoSwitch.route = route;
 	}
 
@@ -72,7 +91,7 @@ public final class VetoSwitch {
 	 *         point
 	 */
 	public static void check(String checkPoint) throws PersistenceException {
-		if (checkPoint.equals(route)) {
+		if (checkPoint.equals(route) && passes.getAndIncrement() >= allowedPasses) {
 			vetoes.incrementAndGet();
 			throw new PersistenceException(MESSAGE);
 		}

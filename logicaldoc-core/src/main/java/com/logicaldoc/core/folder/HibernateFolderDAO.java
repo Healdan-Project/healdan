@@ -2343,6 +2343,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
 
     @Override
     public void merge(Folder source, Folder target, FolderHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeFolderMerge(source, target, transaction);
         if (!checkStoringAspect())
             return;
 

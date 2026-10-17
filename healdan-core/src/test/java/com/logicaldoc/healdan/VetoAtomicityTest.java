@@ -11,7 +11,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.stream.LongStream;
 
 import javax.sql.DataSource;
 
@@ -85,6 +87,9 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	/** A deleted document in A */
 	private Document deletedDoc;
+
+	/** Folder to merge, made by {@link #createMergeSource()} */
+	private long mergeSource;
 
 	@Override
 	protected List<String> getPluginArchives() {
@@ -232,6 +237,13 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testDocumentRestoreVetoedAtStore() throws Exception {
+		// The DAO undeletes the rows with JDBC, then stores the document in the same transaction
+		assertVetoLeavesNothing(VetoSwitch.DOCUMENT_BEFORE_STORE,
+				() -> documentDao.restore(deletedDoc.getId(), folderB.getId(), documentTransaction()));
+	}
+
+	@Test
 	public void testFolderCreate() throws Exception {
 		assertVetoLeavesNothing(VetoSwitch.FOLDER_BEFORE_STORE, () -> {
 			Folder vo = new Folder("New");
@@ -316,6 +328,53 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testFolderMerge() throws Exception {
+		long[] moved = createMergeSource();
+		assertVetoLeavesNothing(VetoSwitch.BEFORE_FOLDER_MERGE, () -> folderDao.merge(folderDao.findById(mergeSource),
+				folderDao.findById(folderB.getId()), folderTransaction(null)), moved);
+	}
+
+	/**
+	 * Characterises, rather than guarantees: a listener veto in the middle of a
+	 * merge rolls the database back, but each document moved before it keeps a
+	 * MOVED version saved in the background, and it and the vetoed document
+	 * have lost their index hits (moveToFolder removes the hit before the
+	 * store). So rules that can refuse any part of a merge must run in
+	 * beforeFolderMerge (D3).
+	 */
+	@Test
+	public void testFolderMergeVetoedAtSecondDocumentKeepsFirstMoveSideEffects() throws Exception {
+		long[] moved = createMergeSource();
+		DbSnapshot db = DbSnapshot.take(jdbc);
+		IndexSnapshot index = IndexSnapshot.of(moved);
+
+		runVetoed(VetoSwitch.DOCUMENT_BEFORE_STORE, 1, () -> folderDao.merge(folderDao.findById(mergeSource),
+				folderDao.findById(folderB.getId()), folderTransaction(null)));
+
+		assertEquals(Set.of("ld_version"), db.changedTables());
+		assertMovedVersions(db.addedRows("ld_version"), 1);
+		assertEquals(Set.of(moved[0], moved[1]), index.changedDocuments());
+	}
+
+	/**
+	 * Characterises, as above: a veto at the subfolder's store comes after
+	 * every document has been moved
+	 */
+	@Test
+	public void testFolderMergeVetoedAtSubfolderKeepsDocumentMoveSideEffects() throws Exception {
+		long[] moved = createMergeSource();
+		DbSnapshot db = DbSnapshot.take(jdbc);
+		IndexSnapshot index = IndexSnapshot.of(moved);
+
+		runVetoed(VetoSwitch.FOLDER_BEFORE_STORE, 0, () -> folderDao.merge(folderDao.findById(mergeSource),
+				folderDao.findById(folderB.getId()), folderTransaction(null)));
+
+		assertEquals(Set.of("ld_version"), db.changedTables());
+		assertMovedVersions(db.addedRows("ld_version"), 2);
+		assertEquals(Set.of(moved[0], moved[1]), index.changedDocuments());
+	}
+
+	@Test
 	public void testFolderApplySecurityToTree() throws Exception {
 		assertVetoLeavesNothing(VetoSwitch.BEFORE_APPLY_SECURITY_TO_TREE,
 				() -> folderDao.applySecurityToTree(folderA.getId(), folderTransaction(null)));
@@ -326,24 +385,15 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	 * route reached the check point, was refused there, and left the database
 	 * and the index as they were
 	 */
-	private void assertVetoLeavesNothing(String route, Route operation) throws Exception {
+	private void assertVetoLeavesNothing(String route, Route operation, long... moreDocIds) throws Exception {
 		assertNotNull("the indexed document must be in the index", SearchEngine.get().getHit(doc.getId()));
 		DbSnapshot db = DbSnapshot.take(jdbc);
-		IndexSnapshot index = IndexSnapshot.of(doc.getId(), alias.getId(), deletedDoc.getId());
+		long[] docIds = LongStream.concat(LongStream.of(doc.getId(), alias.getId(), deletedDoc.getId()),
+				LongStream.of(moreDocIds)).toArray();
+		IndexSnapshot index = IndexSnapshot.of(docIds);
 
-		VetoSwitch.on(route);
-		try {
-			operation.run();
-			fail("The route wasn't vetoed at " + route);
-		} catch (PersistenceException e) {
-			assertEquals(VetoSwitch.MESSAGE, e.getMessage());
-		} finally {
-			VetoSwitch.off();
-		}
-		assertTrue("the veto didn't fire at " + route, VetoSwitch.vetoes() > 0);
+		runVetoed(route, 0, operation);
 
-		// Work CE started asynchronously must not write anything either
-		awaitAsyncWork();
 		db.assertUnchanged();
 		index.assertUnchanged();
 
@@ -353,6 +403,25 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		awaitAsyncWork();
 		assertTrue("the route changed nothing even without the veto",
 				changed(db::assertUnchanged) || changed(index::assertUnchanged));
+	}
+
+	/**
+	 * Runs a route with the veto on at a check point and proves that the route
+	 * reached the check point and was refused there. Then waits for the work CE
+	 * started in the background.
+	 */
+	private static void runVetoed(String route, int allowedPasses, Route operation) throws Exception {
+		VetoSwitch.on(route, allowedPasses);
+		try {
+			operation.run();
+			fail("The route wasn't vetoed at " + route);
+		} catch (PersistenceException e) {
+			assertEquals(VetoSwitch.MESSAGE, e.getMessage());
+		} finally {
+			VetoSwitch.off();
+		}
+		assertTrue("the veto didn't fire at " + route, VetoSwitch.vetoes() > 0);
+		awaitAsyncWork();
 	}
 
 	@FunctionalInterface
@@ -389,6 +458,27 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 				fail("Background version saves didn't finish");
 			Thread.sleep(50L);
 		}
+	}
+
+	/**
+	 * Creates the folder to merge into B: two indexed documents and a
+	 * subfolder
+	 * 
+	 * @return the ids of the two documents
+	 */
+	private long[] createMergeSource() throws Exception {
+		Folder source = createFolder(folderDao.findDefaultWorkspace(Tenant.DEFAULT_ID), "Merge", true);
+		mergeSource = source.getId();
+		long[] docIds = { createIndexedDocument(source, "m1.txt").getId(), createIndexedDocument(source, "m2.txt").getId() };
+		createFolder(source, "Sub", true);
+		awaitAsyncWork();
+		return docIds;
+	}
+
+	private static void assertMovedVersions(List<String> rows, int count) {
+		assertEquals(rows.toString(), count, rows.size());
+		for (String row : rows)
+			assertTrue(row, row.contains("ld_event=event.moved"));
 	}
 
 	private Folder createFolder(Folder parent, String name, boolean inheritSecurity) throws PersistenceException {

@@ -4,6 +4,8 @@ import static org.junit.Assert.fail;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 import com.logicaldoc.core.searchengine.SearchEngine;
 
@@ -50,6 +52,19 @@ public final class IndexSnapshot {
 		}
 		if (!diff.isEmpty())
 			fail("The search index changed:\n" + diff);
+	}
+
+	/**
+	 * @return the documents whose presence in the index changed since this
+	 *         snapshot
+	 */
+	public Set<Long> changedDocuments() {
+		Set<Long> changed = new TreeSet<>();
+		hits.forEach((docId, present) -> {
+			if (present != (SearchEngine.get().getHit(docId) != null))
+				changed.add(docId);
+		});
+		return changed;
 	}
 
 	private static String presence(boolean present) {

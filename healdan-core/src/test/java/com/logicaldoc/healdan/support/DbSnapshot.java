@@ -14,7 +14,9 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -75,6 +77,33 @@ public final class DbSnapshot {
 				appendDiff(diff, table, List.of(), now.tables.get(table));
 		if (!diff.isEmpty())
 			fail("The database changed:\n" + diff);
+	}
+
+	/**
+	 * @return the tables whose rows now differ from this snapshot
+	 */
+	public Set<String> changedTables() {
+		DbSnapshot now = take(jdbc);
+		Set<String> changed = new TreeSet<>();
+		Set<String> names = new TreeSet<>(tables.keySet());
+		names.addAll(now.tables.keySet());
+		for (String table : names) {
+			List<String> before = tables.getOrDefault(table, List.of());
+			List<String> after = now.tables.getOrDefault(table, List.of());
+			if (!minus(before, after).isEmpty() || !minus(after, before).isEmpty())
+				changed.add(table);
+		}
+		return changed;
+	}
+
+	/**
+	 * @param table the lower-case table name
+	 * 
+	 * @return the rows of the table that are new, or changed, since this
+	 *         snapshot
+	 */
+	public List<String> addedRows(String table) {
+		return minus(take(jdbc).tables.getOrDefault(table, List.of()), tables.getOrDefault(table, List.of()));
 	}
 
 	private static void appendDiff(StringBuilder diff, String table, List<String> before, List<String> after) {
