@@ -38,10 +38,10 @@ import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.Tenant;
-import com.logicaldoc.core.store.FSStore;
-import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.core.store.FSStore;
+import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.support.DaoSnapshot;
 import com.logicaldoc.healdan.support.DbSnapshot;
@@ -53,10 +53,11 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * Spec §7.5: for every route a Healdan rule guards, a veto at the route's
- * first check point leaves the database and the search index exactly as they
- * were. The check point is the core hook where the route has one, otherwise
- * the listener's {@code beforeStore}. The findings are in the plan's decision
- * log, D3.
+ * first check point leaves the database, the search index and what the DAOs
+ * read exactly as they were. The check point is the core hook where the route
+ * has one, otherwise the listener's {@code beforeStore}; like Healdan's rules,
+ * the vetoes evict what they refuse from the second-level cache on rollback.
+ * The findings are in the plan's decision log, D3.
  */
 public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
