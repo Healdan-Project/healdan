@@ -45,6 +45,7 @@ import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.security.menu.Menu;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.stats.StatsCollector;
@@ -91,6 +92,15 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     private static final String SECONDS = "seconds";
 
     private static final String TRASH = "trash";
+
+    // The screens that run the searches: Reports > Last changes runs
+    // search(), Reports > API calls and Settings > Protocols run
+    // searchApiCalls()
+    private static final long LAST_CHANGES_MENU = -2L;
+
+    private static final long API_CALLS_MENU = -8L;
+
+    private static final long PROTOCOLS_MENU = 3L;
 
     private static final long serialVersionUID = 1L;
 
@@ -613,7 +623,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
             String historySid,
             List<String> events,
             Long rootFolderId) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(LAST_CHANGES_MENU);
 
         int i = 0;
         StringBuilder query = new StringBuilder();
@@ -761,6 +771,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     private List<GUIHistory> executeQuery(String query, Map<String, Object> params, int maxResult, Session session)
             throws PersistenceException {
+        // A session ID logs in as that session
+        boolean showSid = MenuDAO.get().isReadAllowed(Menu.SESSIONS, session.getUserId());
+
         return DocumentHistoryDAO.get().query(query, params, new RowMapper<GUIHistory>() {
 
             @Override
@@ -774,7 +787,8 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                 history.setFileName(rs.getString(4));
                 history.setFolderId(rs.getLong(5));
                 history.setPath(rs.getString(6));
-                history.setSessionId(rs.getString(7));
+                if (showSid)
+                    history.setSessionId(rs.getString(7));
                 history.setDocId(rs.getLong(8));
                 history.setUserId(rs.getLong(9));
                 history.setIp(rs.getString(10));
@@ -830,7 +844,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
             String protocol,
             String uri,
             int maxResult) throws ServerException {
-        Session session = validateSession();
+        Session session = checkEvenOneMenu(getThreadLocalRequest(), API_CALLS_MENU, PROTOCOLS_MENU);
 
         try {
             TenantDAO dao = TenantDAO.get();
@@ -841,10 +855,13 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
             // Search in the document/folder history
             StringBuilder query = new StringBuilder(
                     "select ld_username, ld_date, ld_path, ld_sessionid, ld_userid, ld_ip as ip, ld_userlogin, ld_comment, ld_device, ld_geolocation, ld_protocol, ld_tenantId, ld_keylabel, ld_impersonator from ld_webservicecall where 1 = 1 ");
+            Map<String, Object> params = new HashMap<>();
             if (userId != null)
                 query.append(" and ld_userid = %d".formatted(userId));
-            if (callSid != null && StringUtils.isNotEmpty(callSid))
-                query.append(" and ld_sessionid='%s' ".formatted(callSid));
+            if (callSid != null && StringUtils.isNotEmpty(callSid)) {
+                query.append(" and ld_sessionid = :sessionId ");
+                params.put("sessionId", callSid);
+            }
             if (from != null) {
                 query.append(" and ld_date > '%s' ".formatted(new Timestamp(from.getTime())));
             }
@@ -852,7 +869,8 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                 query.append(" and ld_date < '%s' ".formatted(new Timestamp(till.getTime())));
             }
             if (protocol != null) {
-                query.append(" and ld_protocol = '%s' ".formatted(protocol));
+                query.append(" and ld_protocol = :protocol ");
+                params.put("protocol", protocol);
             }
 
             if (session.getTenantId() != Tenant.DEFAULT_ID)
@@ -860,7 +878,10 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
             query.append(" order by ld_date desc ");
 
-            return dao.query(query.toString(), new RowMapper<GUIHistory>() {
+            // A session ID logs in as that session
+            boolean showSid = MenuDAO.get().isReadAllowed(Menu.SESSIONS, session.getUserId());
+
+            return dao.query(query.toString(), params, new RowMapper<GUIHistory>() {
 
                 @Override
                 public GUIHistory mapRow(ResultSet rs, int arg1) throws SQLException {
@@ -868,7 +889,8 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                     history.setUsername(rs.getString(1));
                     history.setDate(SqlUtil.getColumnDateValue(rs, 2));
                     history.setPath(rs.getString(3));
-                    history.setSessionId(rs.getString(4));
+                    if (showSid)
+                        history.setSessionId(rs.getString(4));
                     history.setUserId(rs.getLong(5));
                     history.setIp(rs.getString(6));
                     history.setUserLogin(rs.getString(7));

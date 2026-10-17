@@ -15,6 +15,8 @@ public class Menu {
 
 	public static final long TICKETS = -7;
 
+	public static final long API_CALLS = -8;
+
 	public static final long DELETED_FOLDERS = -6;
 
 	public static final long DELETED_DOCS = -5;

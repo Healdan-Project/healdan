@@ -1,5 +1,6 @@
 package com.logicaldoc.web.service;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -20,10 +21,10 @@ import com.logicaldoc.web.AbstractWPTestCase;
 import com.logicaldoc.web.WebappTestContext;
 
 /**
- * Checks that the history search in {@link SystemServiceImpl} binds the
- * values it gets from users as parameters. Doubling the quotes doesn't
- * protect a quoted value on MariaDB and MySQL, where a backslash escapes the
- * closing quote.
+ * Checks that the history and API call searches in {@link SystemServiceImpl}
+ * bind the values they get from users as parameters. Doubling the quotes
+ * doesn't protect a quoted value on MariaDB and MySQL, where a backslash
+ * escapes the closing quote.
  */
 public class SystemServiceImplInjectionTest extends AbstractWPTestCase {
 
@@ -71,5 +72,26 @@ public class SystemServiceImplInjectionTest extends AbstractWPTestCase {
 
         assertTrue(testSubject.search(null, 3L, null, null, 100, null, null, null).isEmpty());
         sql.assertNotInlined(VALUE);
+    }
+
+    @Test
+    public void testSearchApiCallsBindsTheSessionId() throws ServerException {
+        assertTrue(testSubject.searchApiCalls(null, null, null, VALUE, null, null, 100).isEmpty());
+        sql.assertNotInlined(VALUE);
+    }
+
+    @Test
+    public void testSearchApiCallsBindsTheProtocol() throws ServerException {
+        assertTrue(testSubject.searchApiCalls(null, null, null, null, VALUE, null, 100).isEmpty());
+        sql.assertNotInlined(VALUE);
+    }
+
+    @Test
+    public void testSearchApiCallsStillFiltersBySessionIdAndProtocol() throws ServerException {
+        assertEquals(6, testSubject
+                .searchApiCalls(null, null, null, "8d7b32e8-fe82-45c4-b0e1-f69083e90133", "soap", null, 100).size());
+        assertTrue(testSubject
+                .searchApiCalls(null, null, null, "8d7b32e8-fe82-45c4-b0e1-f69083e90133", "rest", null, 100)
+                .isEmpty());
     }
 }
