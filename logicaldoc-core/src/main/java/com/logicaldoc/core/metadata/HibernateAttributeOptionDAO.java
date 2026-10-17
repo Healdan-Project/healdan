@@ -13,7 +13,6 @@ import org.springframework.stereotype.Repository;
 import com.logicaldoc.core.HibernatePersistentObjectDAO;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
-import com.logicaldoc.util.sql.SqlUtil;
 
 import jakarta.transaction.Transactional;
 
@@ -121,10 +120,8 @@ public class HibernateAttributeOptionDAO extends HibernatePersistentObjectDAO<At
         if (currentAttributes == null || currentAttributes.isEmpty() || !checkStoringAspect())
             return;
         List<AttributeOption> options = findByQuery(
-                "from AttributeOption _opt where _opt.setId = :setId and _opt.attribute not in (%s)"
-                        .formatted(currentAttributes.stream().map(name -> "'%s'".formatted(SqlUtil.doubleQuotes(name)))
-                                .collect(Collectors.joining(","))),
-                Map.of(SET_ID, setId), AttributeOption.class, null);
+                "from AttributeOption _opt where _opt.setId = :setId and _opt.attribute not in (:attributes)",
+                Map.of(SET_ID, setId, "attributes", currentAttributes), AttributeOption.class, null);
 
         for (AttributeOption option : options)
             del(option, PersistentObject.DELETED_CODE_DEFAULT);

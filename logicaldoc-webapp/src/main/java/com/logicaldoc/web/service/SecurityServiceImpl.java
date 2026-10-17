@@ -91,7 +91,6 @@ import com.logicaldoc.util.security.PasswordCriteria;
 import com.logicaldoc.util.security.PasswordGenerator;
 import com.logicaldoc.util.security.PasswordValidator;
 import com.logicaldoc.util.spring.Context;
-import com.logicaldoc.util.sql.SqlUtil;
 import com.logicaldoc.web.UploadServlet;
 
 import jakarta.mail.MessagingException;
@@ -1363,12 +1362,12 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
             query.append(", ld_usergroup B");
         query.append(" where A.ld_deleted = 0 and A.ld_type = %d".formatted(Type.DEFAULT.ordinal()));
         if (StringUtils.isNotEmpty(username))
-            query.append(" and A.ld_username like '%%%s%%'".formatted(SqlUtil.doubleQuotes(username)));
+            query.append(" and A.ld_username like :username");
         if (StringUtils.isNotEmpty(groupId))
-            query.append(" and A.ld_id = B.ld_userid and B.ld_groupid = %s".formatted(groupId));
+            query.append(" and A.ld_id = B.ld_userid and B.ld_groupid = %d".formatted(Long.parseLong(groupId)));
 
         try {
-            return userDao.query(query.toString(), new RowMapper<>() {
+            return userDao.query(query.toString(), Map.of("username", "%" + username + "%"), new RowMapper<>() {
 
                 @Override
                 public GUIUser mapRow(ResultSet rs, int row) throws SQLException {
