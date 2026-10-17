@@ -96,4 +96,9 @@
 	<extension plugin-id="logicaldoc-core" point-id="Feature" id="feature71">
 		<parameter id="name" value="Feature_71" />
 	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanEveryone">
+		<parameter id="position" value="100" />
+		<parameter id="class" value="com.logicaldoc.healdan.security.EveryoneUserListener" />
+	</extension>
 </plugin>
