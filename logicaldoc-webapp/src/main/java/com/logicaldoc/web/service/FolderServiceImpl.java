@@ -741,6 +741,10 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     public GUIFolder createAlias(long parentId, long foldRef) throws ServerException {
         Session session = validateSession();
 
+        // The alias shows the target's name in the parent
+        checkPermission(Permission.ADD, session.getUser(), parentId);
+        checkPermission(Permission.READ, session.getUser(), foldRef);
+
         FolderDAO folderDao = FolderDAO.get();
 
         // Prepare the transaction
