@@ -64,6 +64,11 @@ jobs:
       - name: Maven install (all modules)
         run: mvn -B -ntp -DskipTests install
 
+      - name: Test Healdan
+        run: |
+          touch ~/logicaldoc-dev.properties
+          mvn -B -ntp -pl healdan-core test
+
       # Build just the webapp WAR (and its deps) if you want a deployable artifact
       - name: Build LogicalDOC webapp
         run: mvn -B -ntp -pl logicaldoc-webapp -am -DskipTests package
