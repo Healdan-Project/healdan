@@ -1502,6 +1502,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
             boolean foldersOnly,
             String securityOption,
             FolderHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeFolderCopy(source, target, newName, foldersOnly, securityOption, transaction);
         Folder newFolder = internalCopy(source, target, newName, foldersOnly, securityOption, transaction);
 
         if (REPLICATE.equals(securityOption)) {

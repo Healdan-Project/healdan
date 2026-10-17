@@ -53,6 +53,12 @@ public class VetoingHooks implements HealdanHooks {
 	}
 
 	@Override
+	public void beforeFolderCopy(Folder source, Folder target, String newName, boolean foldersOnly,
+			String securityOption, FolderHistory transaction) throws PersistenceException {
+		VetoSwitch.check(VetoSwitch.BEFORE_FOLDER_COPY, VetoSwitch.ids(source.getId(), target.getId()), List.of());
+	}
+
+	@Override
 	public void beforeFolderRestore(long folderId, long parentId, FolderHistory transaction)
 			throws PersistenceException {
 		VetoSwitch.check(VetoSwitch.BEFORE_FOLDER_RESTORE, VetoSwitch.ids(folderId, parentId), List.of());

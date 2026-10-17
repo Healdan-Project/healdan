@@ -99,6 +99,14 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         }
 
         @Override
+        public void beforeFolderCopy(Folder source, Folder target, String newName, boolean foldersOnly,
+                String securityOption, FolderHistory transaction) throws PersistenceException {
+            calls.add("beforeFolderCopy:%d,%d,%s,%s,%s".formatted(source.getId(), target.getId(), newName,
+                    foldersOnly, securityOption));
+            throw new PersistenceException(VETO);
+        }
+
+        @Override
         public void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
             calls.add("beforeApplySecurityToTree:%d".formatted(rootId));
             throw new PersistenceException(VETO);
@@ -319,6 +327,33 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertEquals(versionsBefore, folderDao.queryForLong(versionCount));
         assertEquals(0, column("ld_folder", "ld_deleted", 6L));
         assertNotNull(SearchEngine.get().getHit(1L));
+    }
+
+    @Test
+    public void testCopy() throws Exception {
+        String foldersIn1200 = "select count(*) from ld_folder where ld_deleted = 0 and ld_parentid = 1200";
+        String documentCount = "select count(*) from ld_document";
+        String versionCount = "select count(*) from ld_version";
+        long foldersBefore = folderDao.queryForLong(foldersIn1200);
+        long documentsBefore = folderDao.queryForLong(documentCount);
+        long versionsBefore = folderDao.queryForLong(versionCount);
+        assertTrue(folderDao.queryForLong("select count(*) from ld_document where ld_deleted = 0 and ld_folderid = 6") > 0);
+
+        HealdanHooks.register(vetoing);
+        try {
+            folderDao.copy(folderDao.findById(6L), folderDao.findById(1200L), "copied", false, "inherit",
+                    folderTransaction());
+            fail("The hook should have vetoed the copy");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+
+        assertEquals(List.of("beforeFolderCopy:6,1200,copied,false,inherit"), calls);
+        // Each copied document would save a version in the background
+        awaitVersionSaves();
+        assertEquals(foldersBefore, folderDao.queryForLong(foldersIn1200));
+        assertEquals(documentsBefore, folderDao.queryForLong(documentCount));
+        assertEquals(versionsBefore, folderDao.queryForLong(versionCount));
     }
 
     @Test

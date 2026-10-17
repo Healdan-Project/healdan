@@ -18,6 +18,7 @@ import java.util.stream.LongStream;
 
 import javax.sql.DataSource;
 
+import org.apache.commons.io.FileUtils;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -37,6 +38,8 @@ import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.store.FSStore;
+import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.threading.ThreadPools;
@@ -119,6 +122,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	public void createFixture() throws Exception {
 		VetoSwitch.off();
 		HealdanHooks.register(new VetoingHooks());
+		// Ids restart with each test's database, so files of earlier tests would be overwritten unseen
+		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
 
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		documentDao = DocumentDAO.get();
@@ -393,6 +398,65 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testFolderCopy() throws Exception {
+		long[] sourceDocs = createMergeSource();
+		long storeSize = Store.get().getTotalSize();
+		// runVetoed also proves no version save is left waiting
+		assertVetoLeavesNothing(VetoSwitch.BEFORE_FOLDER_COPY, this::copyMergeSource,
+				() -> assertEquals("files left in the Store", storeSize, Store.get().getTotalSize()), sourceDocs);
+	}
+
+	/**
+	 * Characterises, rather than guarantees: a listener veto at the second
+	 * copied document rolls the database back, and the index and DAO reads stay
+	 * as they were, but the first copy's file stays in the Store, and its
+	 * version save keeps polling in the background for a document row that
+	 * never appears (CE gives up after 100 tries a second apart, holding a
+	 * VersionSave thread, then logs an error). So rules that can refuse any part
+	 * of a copy must run in beforeFolderCopy (D3).
+	 */
+	@Test
+	public void testFolderCopyVetoedAtSecondDocumentLeavesFileAndVersionSave() throws Exception {
+		assertCopyVetoLeaves(VetoSwitch.DOCUMENT_BEFORE_STORE, 1);
+	}
+
+	/**
+	 * Characterises, as above: the subfolder is copied after both documents
+	 */
+	@Test
+	public void testFolderCopyVetoedAtSubfolderLeavesFilesAndVersionSaves() throws Exception {
+		// The first folder store is the copy of the source itself
+		assertCopyVetoLeaves(VetoSwitch.FOLDER_BEFORE_STORE, 2);
+	}
+
+	private void assertCopyVetoLeaves(String route, int copiedDocuments) throws Exception {
+		long[] sourceDocs = createMergeSource();
+		DbSnapshot db = DbSnapshot.take(jdbc);
+		IndexSnapshot index = IndexSnapshot.of(LongStream.concat(LongStream.of(sourceDocs), LongStream.of(doc.getId()))
+				.toArray());
+		DaoSnapshot dao = DaoSnapshot.take(jdbc);
+		long storeSize = Store.get().getTotalSize();
+
+		runVetoed(route, 1, false, this::copyMergeSource);
+
+		// Give a real version save time to finish: these never will
+		Thread.sleep(3000L);
+		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		assertEquals("version saves still waiting for their document", copiedDocuments,
+				pool.getActiveCount() + pool.getQueue().size());
+		assertEquals("files left in the Store", copiedDocuments * (long) CONTENT.length(),
+				Store.get().getTotalSize() - storeSize);
+		db.assertUnchanged();
+		index.assertUnchanged();
+		dao.assertUnchanged();
+	}
+
+	private void copyMergeSource() throws PersistenceException {
+		folderDao.copy(folderDao.findById(mergeSource), folderDao.findById(folderB.getId()), null, false, "inherit",
+				folderTransaction(null));
+	}
+
+	@Test
 	public void testFolderApplySecurityToTree() throws Exception {
 		assertVetoLeavesNothing(VetoSwitch.BEFORE_APPLY_SECURITY_TO_TREE,
 				() -> folderDao.applySecurityToTree(folderA.getId(), folderTransaction(null)));
@@ -444,6 +508,15 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	 * started in the background.
 	 */
 	private static void runVetoed(String route, int allowedPasses, Route operation) throws Exception {
+		runVetoed(route, allowedPasses, true, operation);
+	}
+
+	/**
+	 * As above, waiting for CE's background work only if asked: some refused
+	 * routes leave work behind that never finishes
+	 */
+	private static void runVetoed(String route, int allowedPasses, boolean awaitAsyncWork, Route operation)
+			throws Exception {
 		VetoSwitch.on(route, allowedPasses);
 		try {
 			operation.run();
@@ -454,7 +527,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 			VetoSwitch.off();
 		}
 		assertTrue("the veto didn't fire at " + route, VetoSwitch.vetoes() > 0);
-		awaitAsyncWork();
+		if (awaitAsyncWork)
+			awaitAsyncWork();
 	}
 
 	@FunctionalInterface

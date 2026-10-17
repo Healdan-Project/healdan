@@ -37,6 +37,8 @@ public final class VetoSwitch {
 
 	public static final String BEFORE_FOLDER_MERGE = "HealdanHooks.beforeFolderMerge";
 
+	public static final String BEFORE_FOLDER_COPY = "HealdanHooks.beforeFolderCopy";
+
 	public static final String BEFORE_FOLDER_RESTORE = "HealdanHooks.beforeFolderRestore";
 
 	public static final String BEFORE_APPLY_SECURITY_TO_TREE = "HealdanHooks.beforeApplySecurityToTree";

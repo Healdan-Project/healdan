@@ -109,6 +109,27 @@ public interface HealdanHooks {
     }
 
     /**
+     * Called first in {@code HibernateFolderDAO.copy}, once per copy, before
+     * any folder or document is created: each copied document writes its file
+     * to the store and schedules its first version's save in the background,
+     * which a later veto can't undo
+     *
+     * @param source the folder to copy, possibly {@code null}
+     * @param target the folder to copy it into, possibly {@code null}
+     * @param newName the name of the copy, {@code null} for the source's name
+     * @param foldersOnly true if only the folder tree is copied
+     * @param securityOption how the copies get their security: {@code null} or
+     *        {@code none}, {@code inherit} or {@code replicate}
+     * @param transaction the history entry, possibly {@code null}
+     *
+     * @throws PersistenceException to refuse the copy
+     */
+    default void beforeFolderCopy(Folder source, Folder target, String newName, boolean foldersOnly,
+            String securityOption, FolderHistory transaction) throws PersistenceException {
+        // No check by default
+    }
+
+    /**
      * Called first in {@code HibernateFolderDAO.restore}, before the rows are
      * undeleted with JDBC
      *

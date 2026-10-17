@@ -10,8 +10,9 @@ import java.util.TreeSet;
 import com.logicaldoc.core.searchengine.SearchEngine;
 
 /**
- * Whether each of some documents has a hit in the search index. Take one
- * before an operation and call {@link #assertUnchanged()} after it.
+ * Whether each of some documents has a hit in the search index, and how many
+ * hits the index holds. Take one before an operation and call
+ * {@link #assertUnchanged()} after it.
  */
 public final class IndexSnapshot {
 
@@ -20,8 +21,15 @@ public final class IndexSnapshot {
 	 */
 	private final Map<Long, Boolean> hits;
 
-	private IndexSnapshot(Map<Long, Boolean> hits) {
+	/**
+	 * How many hits the whole index held, which shows hits added for documents
+	 * that aren't listed, e.g. copies
+	 */
+	private final long count;
+
+	private IndexSnapshot(Map<Long, Boolean> hits, long count) {
 		this.hits = hits;
+		this.count = count;
 	}
 
 	/**
@@ -35,7 +43,7 @@ public final class IndexSnapshot {
 		Map<Long, Boolean> hits = new LinkedHashMap<>();
 		for (long docId : docIds)
 			hits.put(docId, SearchEngine.get().getHit(docId) != null);
-		return new IndexSnapshot(hits);
+		return new IndexSnapshot(hits, SearchEngine.get().getCount());
 	}
 
 	/**
@@ -50,6 +58,9 @@ public final class IndexSnapshot {
 				diff.append("  document %d: %s before, %s now%n".formatted(entry.getKey(), presence(entry.getValue()),
 						presence(now)));
 		}
+		long now = SearchEngine.get().getCount();
+		if (now != count)
+			diff.append("  hits in the index: %d before, %d now%n".formatted(count, now));
 		if (!diff.isEmpty())
 			fail("The search index changed:\n" + diff);
 	}
