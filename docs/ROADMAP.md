@@ -1,7 +1,7 @@
 # Healdan roadmap
 
 - **Date:** 2026-10-16
-- **Status:** direction agreed with the owner in an interview session. No milestone has a design spec yet.
+- **Status:** direction agreed with the owner in an interview session. M1 has an approved design spec ([`superpowers/specs/2026-10-17-m1-move-in-design.md`](superpowers/specs/2026-10-17-m1-move-in-design.md)).
 - **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE 9.3.1 already has, what's hidden, half built or missing, with file paths.
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
@@ -61,9 +61,9 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 | **Storage backend** | The physical place file bytes go. | What LogicalDOC calls a `Store` (`FSStore` etc.). In Healdan documents, call it "storage backend", never "store". |
 | **Workspace** (matter workspace) | One per client/matter, built from a workspace template. (owner) | **Call:** an ordinary LogicalDOC folder inside a Store, marked as a matter workspace and carrying the client/matter properties. It is **not** a LogicalDOC workspace. |
 | **Client**, **Matter** | Managed lists. A matter belongs to a client. A workspace *is* a matter, and client is one of its properties. (call) **Everything uses client/matter**, including non-client work, which gets house numbers. A client can be the owner themself ("Personal"), and "matter" also means "project". (owner) | New Healdan data. |
-| **Workspace template** | A predefined set of folders and search folders that a new workspace is created from. (owner) | Folder templates are stubs in CE (see the capability map). They need to be built. |
-| **Search folder** | A virtual folder inside a workspace. Its contents come from a saved search, and it can't hold documents. (owner) | New. Saved searches exist on the server. |
-| **Doc #** | The document number: numeric and unique across the whole system. It covers every version of the document. (owner) | **Call:** a dedicated counter, not LogicalDOC's internal ID. See M1. |
+| **Workspace template** | A predefined set of folders and search folders that a new workspace is created from. (owner) | CE's folder templates are stubs. M1 builds templates as real folder trees in an admin-only Templates Store, copied when a matter is created ([M1 spec](superpowers/specs/2026-10-17-m1-move-in-design.md) §5.2). |
+| **Search folder** | A virtual folder inside a workspace. Its contents come from a saved search, and it can't hold documents. (owner) | New. M1 gives each search folder its own rule (time window, whose changes, kind, Class) rather than a CE saved search ([M1 spec](superpowers/specs/2026-10-17-m1-move-in-design.md) §5.4). |
+| **Doc #** | The document number: numeric and unique across the whole system. It covers every version of the document. (owner) | Healdan's own counter, stored in LogicalDOC's `customId` field ([M1 spec](superpowers/specs/2026-10-17-m1-move-in-design.md) §6.2). |
 | **Legacy doc #** | A document's number from the DMS it was migrated from. Searchable. Imports set it; Healdan never assigns it. (owner) | New. |
 | **Properties** (profile) | Metadata on a document or folder: client, matter, doc type, classification and so on. | Templates and extended attributes. |
 | **Ethical wall** | A client- or matter-level access restriction that overrides every permission. (owner) | New. LogicalDOC has no deny semantics. |
@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | not started |
+| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); plan next |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
@@ -137,6 +137,16 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - Original file dates don't matter for anything else.
 - **Network.** The M1 server is reachable only on the LAN or over VPN. The internet-facing piece is the separate Healdan Share project (backlog).
 - **Previews.** Office previews aren't in M1. They're M1.5.
+- **Design session, 2026-10-17.** The owner settled the details in the [M1 design spec](superpowers/specs/2026-10-17-m1-move-in-design.md). Its §16 lists every decision. The main ones:
+  - Doc #s are unpadded whole numbers with room for at least 999,999,999.
+  - Versions use LogicalDOC's numbering: the major number is the version and minors are snapshots on its timeline. The footer shows `# 1234.2.1`.
+  - Matter numbers are either per client (`998.1`) or system-wide, chosen per install.
+  - Admins create matters. The dialog picks client, number, name, Store (the default Store is pre-selected), owner and template.
+  - Every document carries Author, Typist, Class (required, default "Docs") and an optional Subclass.
+  - Emails also capture From, To, CC and Subject, and are named after their subject.
+  - Only admins add, rename, move or delete a matter's top-level folders.
+  - A document can be granted to people who can't see its folder. This is a one-off or temporary exception, as in iManage.
+  - My Matters and Recent Matters are lists in the old UI's left pane; trees wait for M6.
 
 **Calls.**
 
@@ -150,19 +160,19 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - The number is assigned when the document is created.
   - It never changes: not on a move, a rename or a new version.
   - It is never reused, even after deletion.
-- **Version lookup.**
+- **Version lookup** (refined in the design session).
   - `#n` finds the document and shows its latest version.
-  - `#nvN` finds version N.
-- **Jumping to a matter.** With the Matters or Clients scope, a client or matter number jumps straight to its workspace, the way `#` does for documents.
+  - `#n.N` finds version N as it stands, and `#n.N.M` finds one snapshot. `#nvN` also works.
+- **Jumping to a matter.** With the Matters scope, a matter number jumps straight to its workspace, the way `#` does for documents.
 - **Client and matter.**
   - The workspace is the matter. Client is one of its properties, not a folder level above it.
-  - The Clients scope lists clients and lets you drill into their matters.
+  - The Clients scope lists the matters of every matching client. M1 has no separate client list.
   - Client and matter numbers are picked from managed lists, so nobody can create a matter under a mistyped client.
 - **Inherited values.**
   - Inherited property values are copied onto each document, so search is fast and the document carries its own profile.
   - Moving a document to another matter re-stamps it with the new matter's values.
 - **Overrides.**
-  - An override is explicit and applies to one property at a time.
+  - An override applies to one property at a time. In the old UI, giving a property a value different from the one it would inherit makes it an override. Setting it back, or clearing it, follows the parent again.
   - An overridden value stops following its parent.
   - Client/matter can't be overridden.
 - **Folder permissions.** A folder can restrict access more tightly than its workspace (a "Privileged" folder, say), but it can't loosen it.
@@ -181,8 +191,8 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 - **Configurable label.** The user-facing label "Matter" can be set per install, for example to "Project".
 - **Light rebrand of the old UI.** The name, logo, login page and browser title become Healdan. Full branding comes with M6.
 - **Fix full-text indexing.** CE has no text extractor for `.docx`, `.xlsx`, `.pptx`, `.eml` or `.msg`, so their contents aren't searchable today. Check it on a running server, then fix it. The capability map has the evidence.
-- **Fix the upstream security bugs the recon found.** They're listed in the capability map.
-- **Turn on cheap gated features where they help.** Saved searches are an example: the server code exists, and only the UI gate and one data feed are missing.
+- **Fix the upstream security bugs the recon found.** They're listed in the capability map. The four it listed first were fixed in PR [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15), and the map tracks the rest. The design session found more: CE's RPCs don't check who may change permissions or rename. The M1 spec fixes those (§7.3).
+- **Turn on cheap gated features where they help.** M1 turns on multiple LogicalDOC workspaces, which are Healdan's Stores. Saved searches stay off, because search folders cover the need.
 
 **Non-goals.**
 
@@ -209,22 +219,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 6. An uploaded email shows its sent and received timestamps, and every document shows its Date filed.
 7. Data survives upgrading to the next Healdan release. See the schema upgrades item in §6.
 
-**For the design session.**
-
-- **Doc # format.**
-  - The starting value and the number of digits.
-  - Whether a bare number (no `#`) also works in the Documents scope.
-  - Whether `#` also matches legacy doc #s, and in what order.
-- **Versions.** LogicalDOC versions are `major.minor`, such as `1.0`, `1.1` and `2.0`. iManage-style `#nvN` assumes whole-number versions. Decide how they map.
-- **Number formats.** What client and matter numbers look like and how they're checked. iManage shows `00000092.L-000509 – Project Arae`.
-- **Search folder definitions.** How a workspace template stores its search folders' definitions.
-- **Where the doc # lives.** Two candidates:
-  - LogicalDOC's `customId` column, assigned by a document listener from the existing `ld_sequence` counter;
-  - a new Healdan column or table.
-
-  Points to weigh: `customId` is unique per tenant, not system-wide; it's copied onto versions; and CE overwrites it with a random UUID unless the `customId` aspect is on.
-- **How Healdan's Store and workspace map onto LogicalDOC folders.** The calls above are the starting point. The server already allows several LogicalDOC workspaces, and only the UI hides that.
-- **How much of the old UI to change**, given each change can conflict with upstream.
+**Design.** Settled in the [M1 design spec](superpowers/specs/2026-10-17-m1-move-in-design.md), which the owner approved on 2026-10-17.
 
 ---
 
