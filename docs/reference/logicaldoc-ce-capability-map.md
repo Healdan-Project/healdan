@@ -95,7 +95,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 - **Gotchas.**
   - It loads every matching row and filters by permission in Java, with no SQL limit.
   - `GUIUser.orderedSearches()` calls `add()` on `Arrays.asList`. That throws if a user's stored search preference lacks a search type.
-  - **SQL injection.** See §6.
+  - **SQL injection**, now fixed. See §6.
 
 ### 2.3 Attribute and metadata search
 
@@ -347,11 +347,19 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 
 ## 6. Defects found (fix in Healdan; consider reporting upstream)
 
-| Severity | Where | What |
-|---|---|---|
-| High | `CORE/searchengine/folder/FolderSearch.java` ~203–208 ✔ checked | A criterion's field name is concatenated straight into SQL (`ld_name='` + `getFieldName()` + `'`). SQL injection through folder search criteria. |
-| High | `IOUtil.deserialize`, used for `ld_search.ld_options` | Saved-search options are read back with `java.beans.XMLDecoder`, which can run arbitrary code if that column's content can be influenced. Check whether a user can control the stored XML. |
-| Medium | `WEB/service/FolderServiceImpl.create` | No ADD-permission check, only session validation. It also lets any user create workspaces. |
-| Medium | `HttpUtil.getNotValidatingClient`, used by `Microsoft365TokenProvider` | The outbound OAuth client skips TLS certificate validation. |
-| Low | `GUIUser.orderedSearches()` | `add()` on `Arrays.asList` throws `UnsupportedOperationException` for some stored preferences. |
-| Low | GUI vs core `Feature` 112 | Name mismatch (`SUPPORT_TICKET` vs `ACCESS_TICKET`). |
+The first four rows were verified with failing tests and fixed on 2026-10-17. Each fix names the test that shows it. The rows after them were found during that work and are still open.
+
+| Severity | Where | What | Status |
+|---|---|---|---|
+| High | `CORE/searchengine/folder/FolderSearch.java` ✔ checked | A criterion's field name went straight into the SQL, as the extended attribute name and as the column name. The field comes from the search RPC, so any user could rewrite the query. The language value had no escaping at all. String values only had their quotes doubled, which a backslash defeats on MariaDB and MySQL: `zzz\' or 1=1 -- ` matched every row on `mariadb:11.4` with the default `sql_mode`, which Healdan's Docker stack uses. | **Fixed.** Names and values are bound as parameters, and a column name must be an identifier. `FolderSearchTest`. |
+| High | `IOUtil.deserialize`, used for `ld_search.ld_options` ✔ checked | Saved-search options are read back with `java.beans.XMLDecoder`, which runs any code the XML names. **Users can't control that XML today.** `SavedSearch.saveOptions()` is the only writer, and XMLEncoder escapes everything users type. `shareSearch` copies a row as is, and no REST or SOAP endpoint touches `ld_search`. A row written some other way, such as SQL injection or a tampered backup, would still run code. | **Hardened.** `XMLDecoderGuard` (util) allows only what the encoder writes for the search option classes. `SavedSearchTest`, `XMLDecoderGuardTest`. |
+| Medium | `WEB/service/FolderServiceImpl.create` ✔ checked | No ADD-permission check, only session validation. It also let any user create workspaces. | **Fixed.** Needs ADD on the parent, or on an alias parent's target. Workspaces need the admin group. `FolderServiceImplTest`. |
+| Medium | `HttpUtil.getNotValidatingClient`, used by `Microsoft365TokenProvider` ✔ checked | The token request sent the OAuth client secret through a client that trusts any certificate. | **Fixed.** New `HttpUtil.getValidatingClient`. `Microsoft365TokenProviderTest` impersonates the endpoint through a proxy. |
+| High | `SqlUtil.doubleQuotes` callers: `CORE/folder/HibernateFolderDAO`, `HibernateFolderHistoryDAO`, `CORE/document/HibernateDocumentDAO`, `HibernateDocumentHistoryDAO`, `CORE/metadata/HibernateAttributeOptionDAO`, `WEB/service/SecurityServiceImpl`, `SystemServiceImpl` | Same quoting as FolderSearch had, so the same backslash bypass applies on MariaDB and MySQL wherever user input reaches these. Which call sites take user input hasn't been checked. | Open. |
+| Medium | `WEB/service/FolderServiceImpl.createAlias` | No permission check either. Any user can put an alias in any folder. The alias takes the target's ACL, so it doesn't widen read access, but it copies the target's name and description into a folder others can see. | Open. |
+| Medium | Other `HttpUtil.getNotValidatingClient` callers: `CORE/security/Geolocation.syncDB`, `CORE/automation/HttpTool`, `WEB/service/SettingServiceImpl.testProxy` | `Geolocation` sends the MaxMind license key in the download URL. `HttpTool` is the automation scripts' HTTP helper. | Open. Switch to `getValidatingClient` where nothing depends on self-signed servers. |
+| Low | `CORE/communication/oauth/Microsoft365TokenProvider` | Logs the access token, decoded, and part of the response at debug level. | Open. |
+| Low | `WEB/service/SearchServiceImpl.shareSearch` | Any user can add their saved searches to any other user's list. Nothing checks the target users or groups. | Open. |
+| Low | `CORE/stats/StatsCollector` | Posts usage statistics to `http://stat.logicaldoc.com`, unencrypted. | Open. Decide whether Healdan keeps it. |
+| Low | `GUIUser.orderedSearches()` | `add()` on `Arrays.asList` throws `UnsupportedOperationException` for some stored preferences. | Open. |
+| Low | GUI vs core `Feature` 112 | Name mismatch (`SUPPORT_TICKET` vs `ACCESS_TICKET`). | Open. |
