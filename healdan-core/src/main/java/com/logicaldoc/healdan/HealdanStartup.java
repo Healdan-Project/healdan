@@ -3,6 +3,7 @@ package com.logicaldoc.healdan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.db.HealdanMigrator;
@@ -15,7 +16,12 @@ import jakarta.annotation.PostConstruct;
  * Prepares Healdan's data when the Spring context starts: first the schema, then the seeds.
  * A failure throws {@link HealdanStartupException} and stops the startup.
  */
+/*
+ * The seeds reach the DAOs and the config through Context.get(), which is only
+ * set once CE's "context" bean exists.
+ */
 @Component
+@DependsOn("context")
 public class HealdanStartup {
 
 	private static final Logger log = LoggerFactory.getLogger(HealdanStartup.class);
