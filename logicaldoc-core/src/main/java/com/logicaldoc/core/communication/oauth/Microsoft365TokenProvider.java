@@ -32,7 +32,7 @@ public class Microsoft365TokenProvider implements TokenProvider {
 
     @Override
     public String getAccessToken(String clientSecret, String clientId, String clientTenant) throws IOException {
-        try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(60);) {
+        try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(60);) {
 
             // Prepare the post parameters
             HttpPost post = new HttpPost(

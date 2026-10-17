@@ -38,6 +38,7 @@ import com.logicaldoc.core.metadata.TemplateDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.authorization.PermissionException;
+import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.sequence.SequenceDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.Constants;
@@ -703,12 +704,20 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
             return throwServerException(session, log, e);
         }
 
-        if (newFolder.getType() == Folder.TYPE_WORKSPACE)
+        if (newFolder.getType() == Folder.TYPE_WORKSPACE) {
+            if (!session.getUser().isMemberOf(Group.GROUP_ADMIN))
+                throw new AccessDeniedException("Only administrators can create workspaces");
             newFolder.setParentId(root.getId());
+        }
 
         Folder f = null;
         try {
             Folder parent = folderDao.findById(newFolder.getParentId());
+
+            // Inside an alias the folder goes into the alias' target
+            checkPermission(Permission.ADD, session.getUser(),
+                    parent.getFoldRef() != null ? parent.getFoldRef() : parent.getId());
+
             if (parent.getFoldRef() != null)
                 folderVO.setParentId(parent.getFoldRef());
 
