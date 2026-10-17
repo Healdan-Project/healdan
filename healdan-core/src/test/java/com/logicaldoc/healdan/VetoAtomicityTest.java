@@ -44,8 +44,10 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.threading.ThreadPools;
+import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.DaoSnapshot;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.IndexSnapshot;
 import com.logicaldoc.healdan.support.VetoSwitch;
 import com.logicaldoc.healdan.support.VetoingHooks;
@@ -59,6 +61,10 @@ import com.logicaldoc.util.spring.Context;
  * has one, otherwise the listener's {@code beforeStore}; like Healdan's rules,
  * the vetoes evict what they refuse from the second-level cache on rollback.
  * The findings are in the plan's decision log, D3.
+ * <p>
+ * Everything happens inside a matter, where Healdan's own rules (which stay
+ * on: the test hooks hand over to them) let every route through, so each
+ * refusal here is the test veto's.
  */
 public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
@@ -102,6 +108,12 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	/** Folder to merge, made by {@link #createMergeSource()} */
 	private long mergeSource;
 
+	/** The matter workspace everything happens in */
+	private Folder workspace;
+
+	/** The hooks registered before the test's, put back afterwards */
+	private HealdanHooks healdanHooks;
+
 	@Override
 	protected List<String> getPluginArchives() {
 		List<String> archives = new ArrayList<>(super.getPluginArchives());
@@ -123,7 +135,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	@Before
 	public void createFixture() throws Exception {
 		VetoSwitch.off();
-		HealdanHooks.register(new VetoingHooks());
+		healdanHooks = HealdanHooks.get();
+		HealdanHooks.register(new VetoingHooks(healdanHooks));
 		// Ids restart with each test's database, so files of earlier tests would be overwritten unseen
 		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
 
@@ -132,7 +145,10 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		folderDao = FolderDAO.get();
 		admin = UserDAO.get().findById(User.USERID_ADMIN, true);
 
-		Folder workspace = folderDao.findDefaultWorkspace(Tenant.DEFAULT_ID);
+		HealdanFixtures fx = new HealdanFixtures();
+		Matter matter = fx.matter(fx.client(998, "Healdan"), 1, "Veto atomicity", fx.store("Main"));
+		workspace = folderDao.findById(matter.getFolderId());
+		// Top-level folders, which an admin may create
 		folderA = createFolder(workspace, "A", true);
 		folderB = createFolder(workspace, "B", true);
 		inheriting = createFolder(folderA, "Inheriting", true);
@@ -144,8 +160,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		folderDao.store(restricted, folderTransaction(FolderEvent.PERMISSION));
 
 		doc = createIndexedDocument(folderA, "doc.txt");
-		alias = documentDao.findById(DocumentManager.get().createAlias(doc, folderB, null, documentTransaction()).getId(),
-				true);
+		// Healdan refuses shortcuts inside Stores, so this one is made as data from before Healdan
+		alias = fx.legacyShortcut(doc, folderB);
 		alias.setIndexingStatus(IndexingStatus.INDEXED);
 		documentDao.store(alias);
 
@@ -155,6 +171,14 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		deletedFolder = createFolder(folderA, "Deleted", true);
 		insideDoc = createDocument(deletedFolder, "inside.txt");
 		folderDao.deleteTree(deletedFolder.getId(), folderTransaction(null));
+		/*
+		 * deleteTree deletes the documents with JDBC and leaves them in the
+		 * second-level cache, and CE then deletes the attributes (the profile
+		 * the folders give them in a matter) of such a document the first time
+		 * DocumentDAO.findById reads it, as DaoSnapshot does. That has nothing to
+		 * do with vetoes, so the fixture starts from a clean cache.
+		 */
+		Context.get(CacheEvictor.class).evictDocuments(List.of(insideDoc.getId()));
 
 		awaitAsyncWork();
 	}
@@ -163,7 +187,8 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	@Override
 	public void tearDown() throws IOException {
 		VetoSwitch.off();
-		HealdanHooks.register(null);
+		// Never register(null): that would turn Healdan's rules off
+		HealdanHooks.register(healdanHooks);
 		SearchEngine.get().unlock();
 		SearchEngine.get().close();
 		super.tearDown();
@@ -330,7 +355,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		// The after-hook runs in restore's transaction, once the rows are back
 		DbSnapshot db = DbSnapshot.take(jdbc);
 		DaoSnapshot dao = DaoSnapshot.take(jdbc);
-		HealdanHooks.register(new HealdanHooks() {
+		HealdanHooks.register(new VetoingHooks(healdanHooks) {
 			@Override
 			public void afterFolderRestore(long folderId, long parentId, FolderHistory transaction)
 					throws PersistenceException {
@@ -576,7 +601,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	 * @return the ids of the two documents
 	 */
 	private long[] createMergeSource() throws Exception {
-		Folder source = createFolder(folderDao.findDefaultWorkspace(Tenant.DEFAULT_ID), "Merge", true);
+		Folder source = createFolder(workspace, "Merge", true);
 		mergeSource = source.getId();
 		long[] docIds = { createIndexedDocument(source, "m1.txt").getId(), createIndexedDocument(source, "m2.txt").getId() };
 		createFolder(source, "Sub", true);

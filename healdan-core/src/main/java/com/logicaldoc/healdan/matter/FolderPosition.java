@@ -53,10 +53,10 @@ public record FolderPosition(Kind kind, Long storeId, Matter matter, Long worksp
 	}
 
 	/**
-	 * @return true if the folder is somewhere below a Store (the Store itself
-	 *         is not)
+	 * @return true if the folder is a Store or anywhere in one: the Store, a
+	 *         matter's workspace or a folder inside it
 	 */
 	public boolean isUnderAStore() {
-		return isInsideMatter();
+		return kind == Kind.STORE || kind == Kind.MATTER_WORKSPACE || kind == Kind.IN_MATTER;
 	}
 }

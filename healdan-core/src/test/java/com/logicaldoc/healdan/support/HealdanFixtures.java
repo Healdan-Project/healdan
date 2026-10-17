@@ -2,12 +2,14 @@ package com.logicaldoc.healdan.support;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import javax.sql.DataSource;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
@@ -28,6 +30,7 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.profile.ProfileSchema;
+import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -147,9 +150,71 @@ public class HealdanFixtures {
 	 * @throws Exception if the folder can't be created
 	 */
 	public Folder folder(Folder parent, String name) throws Exception {
+		return folder(parent, name, admin());
+	}
+
+	/**
+	 * @param parent the parent folder
+	 * @param name the folder name
+	 * @param as the user who creates it
+	 * @return a new folder that inherits the parent's security
+	 * @throws Exception if the folder can't be created
+	 */
+	public Folder folder(Folder parent, String name, User as) throws Exception {
 		Folder vo = new Folder(name);
 		vo.setTenantId(Tenant.DEFAULT_ID);
-		return FolderDAO.get().create(parent, vo, true, folderHistory());
+		return FolderDAO.get().create(parent, vo, true, folderHistory(as));
+	}
+
+	/**
+	 * @param parent the parent folder
+	 * @param name the folder name
+	 * @return a new search folder (type 1001), created by the admin as Healdan's
+	 *         search-folder service will
+	 * @throws Exception if the folder can't be created
+	 */
+	public Folder searchFolder(Folder parent, String name) throws Exception {
+		return HealdanOperation.run(HealdanOperation.Kind.SEARCH_FOLDER, () -> {
+			Folder vo = new Folder(name);
+			vo.setType(HealdanConstants.FOLDER_TYPE_SEARCH);
+			vo.setTenantId(Tenant.DEFAULT_ID);
+			return FolderDAO.get().create(parent, vo, true, folderHistory());
+		});
+	}
+
+	/**
+	 * Turns a new document into a shortcut to another, with JDBC, as data from
+	 * before Healdan may hold: Healdan refuses to create shortcuts inside Stores.
+	 *
+	 * @param target the document the shortcut points to
+	 * @param folder where to put the shortcut
+	 * @return the shortcut
+	 * @throws Exception if the document can't be created
+	 */
+	public Document legacyShortcut(Document target, Folder folder) throws Exception {
+		Document shortcut = upload(folder, target.getFileName(), "shortcut", admin());
+		jdbc().update("update ld_document set ld_docref = ? where ld_id = ?", target.getId(), shortcut.getId());
+		Context.get(CacheEvictor.class).evictDocuments(List.of(shortcut.getId()));
+		return DocumentDAO.get().findById(shortcut.getId(), true);
+	}
+
+	/**
+	 * Turns a new folder into an alias of another, with JDBC, as data from
+	 * before Healdan may hold: Healdan refuses to create folder aliases inside
+	 * Stores.
+	 *
+	 * @param parent where to put the alias
+	 * @param name the alias name
+	 * @param target the folder the alias points to
+	 * @return the alias
+	 * @throws Exception if the folder can't be created
+	 */
+	public Folder legacyAlias(Folder parent, String name, Folder target) throws Exception {
+		Folder alias = folder(parent, name);
+		jdbc().update("update ld_folder set ld_type = ?, ld_foldref = ? where ld_id = ?", Folder.TYPE_ALIAS,
+				target.getId(), alias.getId());
+		Context.get(CacheEvictor.class).evictFolders(List.of(alias.getId()));
+		return FolderDAO.get().findById(alias.getId());
 	}
 
 	/**
@@ -194,17 +259,46 @@ public class HealdanFixtures {
 	 * @return the database as it is now, to prove later that it didn't change
 	 */
 	public DbSnapshot snapshot() {
-		return DbSnapshot.take(new JdbcTemplate(Context.get(DataSource.class)));
+		return DbSnapshot.take(jdbc());
 	}
 
-	private User admin() throws Exception {
+	/**
+	 * @return the admin user, with its groups
+	 * @throws Exception if the user can't be read
+	 */
+	public User admin() throws Exception {
 		return UserDAO.get().findByUsername("admin", true);
 	}
 
-	private FolderHistory folderHistory() throws Exception {
+	/**
+	 * @param as the user, null for none
+	 * @return a folder history entry naming the user
+	 */
+	public FolderHistory folderHistory(User as) {
 		FolderHistory history = new FolderHistory();
 		history.setSessionId("fixtures");
-		history.setUser(admin());
+		if (as != null)
+			history.setUser(as);
 		return history;
+	}
+
+	/**
+	 * @param as the user, null for none
+	 * @return a document history entry naming the user
+	 */
+	public DocumentHistory documentHistory(User as) {
+		DocumentHistory history = new DocumentHistory();
+		history.setSessionId("fixtures");
+		if (as != null)
+			history.setUser(as);
+		return history;
+	}
+
+	private FolderHistory folderHistory() throws Exception {
+		return folderHistory(admin());
+	}
+
+	private static JdbcTemplate jdbc() {
+		return new JdbcTemplate(Context.get(DataSource.class));
 	}
 }

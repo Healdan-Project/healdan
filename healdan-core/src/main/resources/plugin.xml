@@ -101,4 +101,14 @@
 		<parameter id="position" value="100" />
 		<parameter id="class" value="com.logicaldoc.healdan.security.EveryoneUserListener" />
 	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanRules">
+		<parameter id="position" value="100" />
+		<parameter id="class" value="com.logicaldoc.healdan.rules.RulesDocumentListener" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanFolderRules">
+		<parameter id="position" value="100" />
+		<parameter id="class" value="com.logicaldoc.healdan.rules.RulesFolderListener" />
+	</extension>
 </plugin>

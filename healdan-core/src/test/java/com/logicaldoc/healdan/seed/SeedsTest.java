@@ -35,7 +35,9 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanStartup;
 import com.logicaldoc.healdan.HealdanStartupException;
+import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -140,10 +142,14 @@ public class SeedsTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testReindexFlagsOnlyOfficeAndEmail() throws Exception {
-		Folder root = FolderDAO.get().findFolder(Folder.DEFAULTWORKSPACEID);
+		// Documents can only be filed inside a matter
+		HealdanFixtures fx = new HealdanFixtures();
+		Matter matter = fx.matter(fx.client(998, "Healdan"), 1, "Reindex", fx.store("Main"), "Documents");
+		Folder folder = FolderDAO.get()
+				.findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents", Tenant.DEFAULT_ID, true).get(0);
 		List<String> names = List.of("a.docx", "b.XLSX", "c.pptx", "d.eml", "e.msg", "f.txt", "g.pdf", "h.docx");
 		for (String name : names)
-			createDocument(root, name);
+			createDocument(folder, name);
 
 		// Everything looks indexed, as it would after a normal life; an admin set h.docx to skip indexing
 		jdbc().update("update ld_document set ld_indexed = ?", IndexingStatus.INDEXED.ordinal());

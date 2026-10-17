@@ -16,10 +16,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
-import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
-import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.setting.HealdanSettings;
@@ -58,12 +56,7 @@ public class MatterLocatorTest extends AbstractHealdanTestCase {
 		workspace = FolderDAO.get().findById(matter.getFolderId());
 		documents = child(workspace, "Documents");
 		secured = child(workspace, "Secured Documents");
-		search = HealdanOperation.run(HealdanOperation.Kind.SEARCH_FOLDER, () -> {
-			Folder vo = new Folder("Recent");
-			vo.setType(HealdanConstants.FOLDER_TYPE_SEARCH);
-			vo.setTenantId(Tenant.DEFAULT_ID);
-			return FolderDAO.get().create(workspace, vo, true, new FolderHistory());
-		});
+		search = fx.searchFolder(workspace, "Recent");
 		deep = fx.folder(fx.folder(documents, "2026"), "Invoices");
 	}
 
@@ -87,7 +80,27 @@ public class MatterLocatorTest extends AbstractHealdanTestCase {
 	public void testStore() throws Exception {
 		assertPosition(store, Kind.STORE, -1);
 		assertEquals(Long.valueOf(store.getId()), locator.locate(store).storeId());
-		assertFalse(locator.locate(store).isUnderAStore());
+		assertTrue(locator.locate(store).isUnderAStore());
+	}
+
+	@Test
+	public void testIsUnderAStore() throws Exception {
+		Folder templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId());
+		Folder defaultWorkspace = FolderDAO.get().findById(Folder.DEFAULTWORKSPACEID);
+
+		// The Store and everything in it
+		assertTrue(locator.locate(store).isUnderAStore());
+		assertTrue(locator.locate(workspace).isUnderAStore());
+		assertTrue(locator.locate(documents).isUnderAStore());
+		assertTrue(locator.locate(deep).isUnderAStore());
+		assertTrue(locator.locate(search).isUnderAStore());
+
+		// Nothing else
+		assertFalse(locator.locate(root).isUnderAStore());
+		assertFalse(locator.locate(templates).isUnderAStore());
+		assertFalse(locator.locate(fx.folder(templates, "Standard")).isUnderAStore());
+		assertFalse(locator.locate(defaultWorkspace).isUnderAStore());
+		assertFalse(locator.locate(fx.folder(defaultWorkspace, "Loose")).isUnderAStore());
 	}
 
 	@Test
@@ -150,7 +163,7 @@ public class MatterLocatorTest extends AbstractHealdanTestCase {
 	@Test
 	public void testWorkspaceWithoutAMatterRowIsStillAMatterWorkspace() throws Exception {
 		// As during matter creation: the folders exist before the hd_matter row
-		Folder bare = fx.folder(store, "Being created");
+		Folder bare = HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE, () -> fx.folder(store, "Being created"));
 		Folder inside = fx.folder(bare, "Documents");
 
 		FolderPosition workspacePosition = locator.locate(bare);
@@ -168,7 +181,7 @@ public class MatterLocatorTest extends AbstractHealdanTestCase {
 	@Test
 	public void testSecondStoreIsAStoreToo() throws Exception {
 		Folder other = fx.store("Archive");
-		Folder inOther = fx.folder(other, "Old matter");
+		Folder inOther = HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE, () -> fx.folder(other, "Old matter"));
 
 		assertPosition(other, Kind.STORE, -1);
 		assertPosition(inOther, Kind.MATTER_WORKSPACE, 0);
