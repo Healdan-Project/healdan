@@ -26,9 +26,12 @@ import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.searchengine.saved.SearchDAO;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserHistory;
+import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIAttribute;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
@@ -300,11 +303,30 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
             List<Long> allUsers = new ArrayList<>();
             allUsers.addAll(userIds);
             addUsersFromGroups(groupIds, allUsers);
+            checkSameTenant(session, groupIds, allUsers);
 
             for (Long userId : allUsers)
                 store(search, userId);
         } catch (Exception t) {
             throwServerException(session, log, t);
+        }
+    }
+
+    /**
+     * Searches can only be shared within the sharer's tenant, whose users and
+     * groups are the ones the GUI offers
+     */
+    private void checkSameTenant(Session session, Collection<Long> groupIds, Collection<Long> userIds)
+            throws PersistenceException, AccessDeniedException {
+        for (Long groupId : groupIds) {
+            Group group = GroupDAO.get().findById(groupId);
+            if (group == null || group.getTenantId() != session.getTenantId())
+                throw new AccessDeniedException("Cannot share with group " + groupId);
+        }
+        for (Long userId : userIds) {
+            User user = UserDAO.get().findById(userId);
+            if (user == null || user.getTenantId() != session.getTenantId())
+                throw new AccessDeniedException("Cannot share with user " + userId);
         }
     }
 

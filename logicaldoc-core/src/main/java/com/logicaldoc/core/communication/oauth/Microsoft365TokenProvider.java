@@ -3,8 +3,6 @@ package com.logicaldoc.core.communication.oauth;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
 import org.apache.hc.client5.http.entity.UrlEncodedFormEntity;
 import org.apache.hc.client5.http.impl.classic.BasicHttpClientResponseHandler;
@@ -55,16 +53,12 @@ public class Microsoft365TokenProvider implements TokenProvider {
                         throw new IOException(e);
                     }
 
-                    log.debug("got 365 response: {}", StringUtils.substring(content, 150));
-
                     ObjectMapper mapper = new ObjectMapper();
                     JsonNode responseObj = mapper.readTree(content);
                     if (content.contains("error"))
                         throw new IOException("%s - %s".formatted(responseObj.get("error").asText(),
                                 responseObj.get("error_description").asText()));
 
-                    String token = new String(new Base64().decode(responseObj.get("access_token").asText().getBytes()));
-                    log.debug("got access_token: {}", token);
                     return responseObj.get("access_token").asText();
                 }
             });
