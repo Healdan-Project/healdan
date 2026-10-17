@@ -11,7 +11,9 @@
 #   - no Pro-only style class appears;
 #   - the icon passed to an AwesomeFactory method (as a literal, or a
 #     `static final String` constant) is a Free solid icon, or a brand icon for
-#     newBrandToolStripButton;
+#     newBrandToolStripButton. Inside AwesomeFactory the calls are unqualified;
+#   - an icon picked into an `icn` variable, as the dashlets do, is a Free solid
+#     icon;
 #   - every fa-<name> class is a Free icon in the style its literal names (fab,
 #     far, otherwise solid) or a Font Awesome utility class.
 # Icon names built at runtime aren't covered.
@@ -27,7 +29,11 @@ ROOT = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else pathlib.Path(__file__)
 GUI_SRC = ROOT / "logicaldoc-gui/src/main/java"
 FA_JS = ROOT / "logicaldoc-gui/war/fontawesome/js"
 
-PRO_STYLES = {"fal", "fat", "fad", "fa-light", "fa-thin", "fa-duotone", "fa-sharp"}
+# Short prefixes and style classes of the Pro styles, the sharp family and kits
+PRO_STYLES = {
+    "fal", "fat", "fad", "fass", "fasr", "fasl", "fast", "fasds", "fak", "fakd",
+    "fa-light", "fa-thin", "fa-duotone", "fa-sharp", "fa-sharp-duotone", "fa-kit", "fa-kit-duotone",
+}
 
 # Classes that modify an icon rather than name one
 UTILITY = {
@@ -59,6 +65,9 @@ ICON_METHODS = {
 STRING_LITERAL = re.compile(r'"((?:[^"\\\n]|\\.)*)"')
 CONSTANT = re.compile(r'static\s+final\s+String\s+(\w+)\s*=\s*"((?:[^"\\\n]|\\.)*)"\s*;')
 ICON_CALL = re.compile(r'AwesomeFactory\.(\w+)\(\s*(?:"([^"]*)"|([A-Z][A-Z0-9_]*)\s*[,)])')
+# The same call made from inside AwesomeFactory, without the class name
+LOCAL_ICON_CALL = re.compile(r'(?<![\w.])(\w+)\(\s*(?:"([^"]*)"|([A-Z][A-Z0-9_]*)\s*[,)])')
+ICON_VARIABLE = re.compile(r'\bicn\s*=\s*"([^"]*)"')
 
 
 def icon_names(js_file):
@@ -102,7 +111,12 @@ def main():
                 if name and name not in UTILITY and token not in PRO_STYLES and name not in sets[style]:
                     report(m.start(), f"'{token}' is not a Font Awesome Free {style} icon")
 
-        for m in ICON_CALL.finditer(text):
+        for m in ICON_VARIABLE.finditer(text):
+            if m.group(1) not in sets["solid"]:
+                report(m.start(), f"icn = '{m.group(1)}' is not a Font Awesome Free solid name")
+
+        calls = LOCAL_ICON_CALL if path.name == "AwesomeFactory.java" else ICON_CALL
+        for m in calls.finditer(text):
             style = ICON_METHODS.get(m.group(1))
             if style is None:
                 continue
