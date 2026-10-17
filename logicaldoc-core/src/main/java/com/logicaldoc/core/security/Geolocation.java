@@ -152,7 +152,7 @@ public class Geolocation {
 
             log.info("Downloading geolocation database {}", downloadUrl);
 
-            try (CloseableHttpClient httpclient = HttpUtil.getNotValidatingClient(60);) {
+            try (CloseableHttpClient httpclient = HttpUtil.getValidatingClient(60);) {
                 gzFile = FileUtil.createTempFile(CONST_GEOLOCATION, ".tar.gz");
                 httpclient.execute(new HttpGet(downloadUrl), new FileHttpClientResponseHandler(gzFile));
             }

@@ -575,7 +575,7 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     public Boolean testProxy(String host, int port, String username, String password) throws ServerException {
         Session session = validateSession();
         HttpGet get = new HttpGet("https://activation.logicaldoc.com");
-        try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(40, host, port, username, password);) {
+        try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(40, host, port, username, password);) {
             return httpClient.execute(get, new AbstractHttpClientResponseHandler<Boolean>() {
 
                 @Override

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -21,6 +22,7 @@ import com.logicaldoc.gui.common.client.beans.GUIEmailSettings;
 import com.logicaldoc.gui.common.client.beans.GUIParameter;
 import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.web.AbstractWPTestCase;
+import com.logicaldoc.web.ImpersonatingProxy;
 
 /**
  * Test case for {@link SettingServiceImpl}
@@ -226,5 +228,17 @@ public class SettingServiceImplTest extends AbstractWPTestCase {
     @Test(expected = ServerException.class)
     public void testProxy() throws ServerException {
         testSubject.testProxy("localhost", 1234, null, null);
+    }
+
+    @Test
+    public void testProxyRejectsServerWithUntrustedCertificate() throws Exception {
+        // A proxy that intercepts TLS fails for the clients that check
+        // certificates, so the test must fail too
+        try (ImpersonatingProxy proxy = new ImpersonatingProxy("activation.logicaldoc.com",
+                "<html><body></body></html>")) {
+            assertThrows(ServerException.class,
+                    () -> testSubject.testProxy(proxy.getHost(), proxy.getPort(), null, null));
+            assertNull(proxy.getRequest());
+        }
     }
 }
