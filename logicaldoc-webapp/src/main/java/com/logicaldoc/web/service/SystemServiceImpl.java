@@ -45,6 +45,7 @@ import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.TenantDAO;
 import com.logicaldoc.core.security.menu.Menu;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.stats.StatsCollector;
@@ -770,6 +771,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     private List<GUIHistory> executeQuery(String query, Map<String, Object> params, int maxResult, Session session)
             throws PersistenceException {
+        // A session ID logs in as that session
+        boolean showSid = MenuDAO.get().isReadAllowed(Menu.SESSIONS, session.getUserId());
+
         return DocumentHistoryDAO.get().query(query, params, new RowMapper<GUIHistory>() {
 
             @Override
@@ -783,7 +787,8 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                 history.setFileName(rs.getString(4));
                 history.setFolderId(rs.getLong(5));
                 history.setPath(rs.getString(6));
-                history.setSessionId(rs.getString(7));
+                if (showSid)
+                    history.setSessionId(rs.getString(7));
                 history.setDocId(rs.getLong(8));
                 history.setUserId(rs.getLong(9));
                 history.setIp(rs.getString(10));
@@ -873,6 +878,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
             query.append(" order by ld_date desc ");
 
+            // A session ID logs in as that session
+            boolean showSid = MenuDAO.get().isReadAllowed(Menu.SESSIONS, session.getUserId());
+
             return dao.query(query.toString(), params, new RowMapper<GUIHistory>() {
 
                 @Override
@@ -881,7 +889,8 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                     history.setUsername(rs.getString(1));
                     history.setDate(SqlUtil.getColumnDateValue(rs, 2));
                     history.setPath(rs.getString(3));
-                    history.setSessionId(rs.getString(4));
+                    if (showSid)
+                        history.setSessionId(rs.getString(4));
                     history.setUserId(rs.getLong(5));
                     history.setIp(rs.getString(6));
                     history.setUserLogin(rs.getString(7));

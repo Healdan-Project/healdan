@@ -2,9 +2,13 @@ package com.logicaldoc.web.service;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.apache.commons.lang.StringUtils;
 import org.junit.Test;
 
 import com.logicaldoc.core.PersistenceException;
@@ -13,13 +17,16 @@ import com.logicaldoc.core.security.menu.Menu;
 import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
+import com.logicaldoc.gui.common.client.beans.GUIHistory;
 import com.logicaldoc.web.AbstractWPTestCase;
 
 /**
  * Checks who may run the history and API call searches in
  * {@link SystemServiceImpl}. Their results hold every user's session IDs, and
  * a session ID sent in the <code>sid</code> header logs in as that session, so
- * only users who can open the screens that run them may call them.
+ * only users who can open the screens that run them may call them, and only
+ * users who can open the sessions get the session IDs, as in the history data
+ * servlets.
  */
 public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
 
@@ -79,12 +86,44 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
         assertThrows(AccessDeniedException.class, this::searchApiCalls);
     }
 
-    private List<?> search() throws ServerException {
+    @Test
+    public void testSearchShowsSessionIdsOnlyWithTheSessionsMenu() throws ServerException, PersistenceException {
+        String adminSid = session.getSid();
+        grant(LAST_CHANGES);
+        prepareSession("author", "admin");
+
+        List<GUIHistory> hits = search();
+        assertFalse(hits.isEmpty());
+        assertTrue(sessionIds(hits).isEmpty());
+
+        grant(Menu.SESSIONS);
+        assertTrue(sessionIds(search()).contains(adminSid));
+    }
+
+    @Test
+    public void testSearchApiCallsShowsSessionIdsOnlyWithTheSessionsMenu()
+            throws ServerException, PersistenceException {
+        grant(API_CALLS);
+        prepareSession("author", "admin");
+
+        List<GUIHistory> hits = searchApiCalls();
+        assertFalse(hits.isEmpty());
+        assertTrue(sessionIds(hits).isEmpty());
+
+        grant(Menu.SESSIONS);
+        assertTrue(sessionIds(searchApiCalls()).contains("8d7b32e8-fe82-45c4-b0e1-f69083e90133"));
+    }
+
+    private List<GUIHistory> search() throws ServerException {
         return testSubject.search(null, null, null, null, 100, null, null, null);
     }
 
-    private List<?> searchApiCalls() throws ServerException {
+    private List<GUIHistory> searchApiCalls() throws ServerException {
         return testSubject.searchApiCalls(null, null, null, null, null, null, 100);
+    }
+
+    private static Set<String> sessionIds(List<GUIHistory> hits) {
+        return hits.stream().map(GUIHistory::getSessionId).filter(StringUtils::isNotEmpty).collect(Collectors.toSet());
     }
 
     private void grant(long menuId) throws PersistenceException {
