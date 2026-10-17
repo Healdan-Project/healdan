@@ -238,14 +238,20 @@ public class FilingRules {
 		FolderRow row = rows.folder(folderId);
 		if (row == null)
 			return;
-		Collection<Long> ids = ids(folderId, parentId);
+		// CE restores under the folder an alias points to
+		Folder into = row.type() == Folder.TYPE_WORKSPACE ? FolderDAO.get().findById(Folder.ROOTID)
+				: resolve(FolderDAO.get().findById(parentId));
+		Collection<Long> ids = ids(folderId, parentId, into != null ? into.getId() : null);
 		boolean admin = isAdmin(user);
 		if (!admin && (user == null || !rows.mayDelete(folderId, user.getId())))
 			throw refuse(RESTORE_PERMISSION, ids);
 
-		FolderPosition parent = locator.locate(row.type() == Folder.TYPE_WORKSPACE ? Folder.ROOTID : parentId);
-		boolean workspace = parent.kind() == Kind.STORE || locator.locate(row.parentId()).kind() == Kind.STORE;
-		if (workspace) {
+		FolderPosition parent = locator.locate(into);
+		// CE doesn't check that the folder is deleted: restoring a live one moves it
+		if (row.deleted() == 0)
+			checkMoveAt(currentPosition(folderId, row), parent, row.alias(), admin, ids);
+		if (locator.locate(row.parentId()).kind() == Kind.STORE) {
+			// A matter's workspace goes back into a Store, by an admin
 			if (!admin || parent.kind() != Kind.STORE)
 				throw refuse(label(WORKSPACE_DELETE_MOVE), ids);
 		} else {
@@ -333,11 +339,16 @@ public class FilingRules {
 	public void checkFolderMerge(Folder source, Folder target, User user) throws PersistenceException {
 		if (source == null || target == null)
 			return;
-		Collection<Long> ids = ids(source.getId(), target.getId());
+		/*
+		 * Documents and folders moved into an alias land in the folder it points
+		 * to, but CE looks for clashing names among the alias's own children
+		 */
+		Folder into = resolve(target);
+		Collection<Long> ids = ids(source.getId(), target.getId(), into.getId());
 		boolean admin = isAdmin(user);
 		Map<String, List<FolderRow>> byName = rows.descendants(source.getId()).stream()
 				.collect(Collectors.groupingBy(FolderRow::name));
-		checkMergeInto(source.getId(), Place.real(target.getId(), locator.locate(target)), byName, admin, ids,
+		checkMergeInto(source.getId(), Place.real(target.getId(), locator.locate(into)), byName, admin, ids,
 				new HashSet<>());
 		checkDeleteAt(currentPosition(source.getId()), admin, ids);
 	}

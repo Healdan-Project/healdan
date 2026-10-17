@@ -13,16 +13,22 @@ import com.logicaldoc.core.folder.Folder;
 /**
  * Applies the filing rule, and the shortcut rule, to every document that comes
  * into a folder: a new document (upload, API, WebDAV, CMIS, copy, import), a
- * move, a restore, a shortcut, or any store that changes the folder. Ordinary
+ * move, a shortcut, or any store that changes the folder (a restore is checked
+ * by {@link HealdanHooksImpl} before CE writes anything). Ordinary
  * stores of a document that stays where it is are never vetoed, wherever it
  * is (plan, D3). CE creates it by reflection, hence the public no-arg
  * constructor.
  */
 public class RulesDocumentListener implements DocumentListener {
 
-	/** The events that bring a document into a folder */
+	/**
+	 * The events that bring a document into a folder. Not RESTORED: CE's
+	 * unarchive stores a document where it is with that event, and
+	 * {@code DocumentDAO.restore} is checked by
+	 * {@code HealdanHooks.beforeDocumentRestore} before it writes anything.
+	 */
 	private static final Set<String> ARRIVALS = Set.of(DocumentEvent.MOVED.toString(),
-			DocumentEvent.RESTORED.toString(), DocumentEvent.SHORTCUT_STORED.toString());
+			DocumentEvent.SHORTCUT_STORED.toString());
 
 	public RulesDocumentListener() {
 		// Instantiated by CE

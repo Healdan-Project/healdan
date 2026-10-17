@@ -42,7 +42,8 @@ import com.logicaldoc.util.spring.Context;
  */
 public class HealdanFixtures {
 
-	private static final String PASSWORD = "Secret-1234";
+	/** The password of the users {@link #user} creates */
+	public static final String PASSWORD = "Kx7!Rmq-Tz8vW";
 
 	/**
 	 * @param username the login
@@ -57,7 +58,7 @@ public class HealdanFixtures {
 		user.setName(username);
 		user.setFirstName(username);
 		user.setEmail(username + "@example.com");
-		user.setPassword(PASSWORD);
+		user.setDecodedPassword(PASSWORD);
 		user.setTenantId(Tenant.DEFAULT_ID);
 		user.setType(User.Type.DEFAULT);
 		for (String name : groups) {

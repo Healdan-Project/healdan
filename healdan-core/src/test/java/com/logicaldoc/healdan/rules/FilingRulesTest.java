@@ -14,6 +14,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.util.CacheEvictor;
@@ -159,6 +160,11 @@ public class FilingRulesTest extends AbstractRulesTestCase {
 			documentDao.store(document, transaction);
 		});
 		assertEquals("red", reload(doc).getColor());
+
+		// Unarchiving stores it where it is, with the event RESTORED
+		allowed(() -> documentDao.archive(doc.getId(), documentHistory(admin)));
+		allowed(() -> documentDao.unarchive(doc.getId(), documentHistory(admin)));
+		assertEquals(DocumentStatus.UNLOCKED, reload(doc).getStatus());
 
 		// Moving it out of there is a transition, to a folder that must be allowed
 		assertRefused(DOCUMENT_TOP_LEVEL,

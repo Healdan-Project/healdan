@@ -92,6 +92,9 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 	protected User admin;
 
+	/** Alice's group */
+	protected Group lawyers;
+
 	/** Every permission on the Store, not an admin */
 	protected User alice;
 
@@ -139,7 +142,7 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 		documentDao = DocumentDAO.get();
 
 		admin = fx.admin();
-		Group lawyers = fx.group("lawyers");
+		lawyers = fx.group("lawyers");
 		Group readers = fx.group("readers");
 		alice = fx.user("alice", lawyers.getName());
 		bob = fx.user("bob", readers.getName());
@@ -191,6 +194,25 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 	 * @throws Exception if something else fails
 	 */
 	protected void assertRefused(String message, Route route, long... moreDocIds) throws Exception {
+		assertRefused(message, e -> {
+			HealdanRuleException rule = ruleIn(e);
+			assertNotNull("Refused, but not by a Healdan rule: " + e, rule);
+			assertEquals(message, rule.getMessage());
+		}, route, moreDocIds);
+	}
+
+	/**
+	 * As above, for a route that reports the refusal its own way
+	 *
+	 * @param expected what refuses it, for the failure message
+	 * @param refusal checks the exception the route threw
+	 * @param route the operation
+	 * @param moreDocIds more documents whose index hits must stay as they are
+	 *
+	 * @throws Exception if something else fails
+	 */
+	protected void assertRefused(String expected, Refusal refusal, Route route, long... moreDocIds)
+			throws Exception {
 		awaitAsyncWork();
 		DbSnapshot db = DbSnapshot.take(jdbc);
 		IndexSnapshot index = IndexSnapshot.of(
@@ -200,11 +222,9 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 		try {
 			route.run();
-			fail("Not refused, expected: " + message);
+			fail("Not refused, expected: " + expected);
 		} catch (Exception e) {
-			HealdanRuleException rule = ruleIn(e);
-			assertNotNull("Refused, but not by a Healdan rule: " + e, rule);
-			assertEquals(message, rule.getMessage());
+			refusal.check(e);
 		}
 
 		awaitAsyncWork();
@@ -241,6 +261,11 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 	@FunctionalInterface
 	protected interface Route {
 		void run() throws Exception;
+	}
+
+	@FunctionalInterface
+	protected interface Refusal {
+		void check(Exception e) throws Exception;
 	}
 
 	/**

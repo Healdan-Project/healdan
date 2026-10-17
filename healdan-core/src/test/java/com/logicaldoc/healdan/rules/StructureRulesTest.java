@@ -12,6 +12,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -224,13 +225,54 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 				() -> folderDao.restore(letters.getId(), search.getId(), folderHistory(alice)));
 		assertRefused(TOP_LEVEL, () -> folderDao.restore(letters.getId(), workspace.getId(), folderHistory(alice)));
 		assertRefused(DOCUMENT_OUTSIDE, () -> folderDao.restore(letters.getId(), loose.getId(), folderHistory(admin)));
-		// Into a Store it would become a workspace
-		assertRefused(WORKSPACE_DELETE_MOVE,
-				() -> folderDao.restore(letters.getId(), store.getId(), folderHistory(alice)));
+		// A plain folder can't go directly into a Store, for admins too
+		assertRefused(FOLDER_IN_STORE, () -> folderDao.restore(letters.getId(), store.getId(), folderHistory(alice)));
+		assertRefused(FOLDER_IN_STORE, () -> folderDao.restore(letters.getId(), store.getId(), folderHistory(admin)));
 
 		allowed(() -> folderDao.restore(letters.getId(), correspondence.getId(), folderHistory(alice)));
 		assertNotNull(folderDao.findById(letters.getId()));
 		assertNotNull(documentDao.findById(letter.getId()));
+	}
+
+	@Test
+	public void testRestoreThroughAnAlias() throws Exception {
+		// Aliases may be outside the Stores; CE restores into the folder an alias points to
+		Folder toWorkspace = folderDao.createAlias(loose.getId(), workspace.getId(), folderHistory(admin));
+		Folder toSearch = folderDao.createAlias(loose.getId(), search.getId(), folderHistory(admin));
+		Folder toStore = folderDao.createAlias(loose.getId(), store.getId(), folderHistory(admin));
+		Folder toTemplate = folderDao.createAlias(loose.getId(), template.getId(), folderHistory(admin));
+		Folder toCorrespondence = folderDao.createAlias(loose.getId(), correspondence.getId(), folderHistory(admin));
+		// Empty: no document could give the restore away
+		Folder empty = fx.folder(correspondence, "Empty");
+		fx.folder(empty, "Inside");
+		allowed(() -> folderDao.deleteTree(empty.getId(), folderHistory(admin)));
+
+		assertRefused(TOP_LEVEL, () -> folderDao.restore(empty.getId(), toWorkspace.getId(), folderHistory(alice)));
+		assertRefused(FOLDER_IN_SEARCH_FOLDER,
+				() -> folderDao.restore(empty.getId(), toSearch.getId(), folderHistory(alice)));
+		assertRefused(FOLDER_IN_STORE, () -> folderDao.restore(empty.getId(), toStore.getId(), folderHistory(admin)));
+		assertRefused(TEMPLATES, () -> folderDao.restore(empty.getId(), toTemplate.getId(), folderHistory(alice)));
+
+		allowed(() -> folderDao.restore(empty.getId(), toCorrespondence.getId(), folderHistory(alice)));
+		assertEquals(Long.valueOf(correspondence.getId()),
+				jdbc.queryForObject("select ld_parentid from ld_folder where ld_id = ?", Long.class, empty.getId()));
+	}
+
+	@Test
+	public void testRestoringALiveFolderIsAMove() throws Exception {
+		// CE's restore doesn't check that the folder is deleted, so on a live one it moves it
+		Folder inner = fx.folder(template, "Correspondence");
+		// Alice may delete it (the template's folders use the Templates Store's ACL), so only the rules stand in her way
+		fx.grant(templates, lawyers, Permission.READ, Permission.DELETE);
+		Folder deep = fx.folder(correspondence, "Deep");
+
+		assertRefused(TOP_LEVEL, () -> folderDao.restore(documents.getId(), correspondence.getId(), folderHistory(alice)));
+		assertRefused(TEMPLATES, () -> folderDao.restore(inner.getId(), loose.getId(), folderHistory(alice)));
+
+		allowed(() -> folderDao.restore(deep.getId(), documents.getId(), folderHistory(alice)));
+		// Restore is JDBC and leaves the cached folder as it was, so ask the database
+		assertEquals(Long.valueOf(documents.getId()),
+				jdbc.queryForObject("select ld_parentid from ld_folder where ld_id = ?", Long.class, deep.getId()));
 	}
 
 	@Test

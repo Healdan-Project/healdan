@@ -881,6 +881,12 @@ public class LDRepository {
 
         try {
             if (object instanceof Folder folder) {
+                // Healdan addition: deleteFolder commits each document and subfolder on its own, so check the tree first
+                FolderHistory transaction = new FolderHistory();
+                transaction.setUser(getSessionUser(context));
+                transaction.setEvent(FolderEvent.DELETED);
+                transaction.setSessionId(sid);
+                com.logicaldoc.core.HealdanHooks.get().beforeFolderDeleteTree(folder.getId(), transaction);
                 deleteFolder(folder, cof, result);
             } else {
                 Document doc = (Document) object;
