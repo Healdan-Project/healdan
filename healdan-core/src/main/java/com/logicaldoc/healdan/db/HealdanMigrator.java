@@ -11,6 +11,7 @@ import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.MigrationInfo;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
+import org.flywaydb.core.api.output.MigrateResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,7 +21,9 @@ import com.logicaldoc.healdan.HealdanStartupException;
 
 /**
  * Creates and upgrades Healdan's own tables (prefix {@code hd_}) with Flyway.
- * LogicalDOC's tables are never touched.
+ * LogicalDOC's tables are never touched. Only MariaDB (production) and HSQLDB
+ * (tests) are supported; any other database, MySQL included, is refused before
+ * Flyway runs.
  */
 @Component
 public class HealdanMigrator {
@@ -39,6 +42,11 @@ public class HealdanMigrator {
 	private static final Logger log = LoggerFactory.getLogger(HealdanMigrator.class);
 
 	private static final String HISTORY_TABLE = "hd_schema_history";
+
+	/** How an admin recovers from a failed migration; MariaDB's DDL isn't transactional */
+	static final String RECOVERY = ". To recover, fix the cause, drop the hd_ tables the failed script created, "
+			+ "delete its failed row from hd_schema_history (delete from hd_schema_history where success = 0), "
+			+ "and restart";
 
 	private final DataSource dataSource;
 
@@ -86,14 +94,25 @@ public class HealdanMigrator {
 			if (!ceSchema)
 				return Status.SKIPPED_NO_CE_SCHEMA;
 
-			configure(dataSource, effective).load().migrate();
+			MigrateResult result = configure(dataSource, effective).load().migrate();
+			logOutcome(result);
 			return Status.MIGRATED;
 		} catch (HealdanStartupException e) {
 			throw e;
 		} catch (Exception e) {
 			log.error("Healdan's database migration failed: {}", e.getMessage(), e);
-			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage(), e);
+			throw new HealdanStartupException("Healdan's database migration failed: " + e.getMessage() + RECOVERY, e);
 		}
+	}
+
+	private static void logOutcome(MigrateResult result) {
+		String version = result.targetSchemaVersion != null ? result.targetSchemaVersion
+				: result.initialSchemaVersion;
+		log.info("Healdan's tables: {} migration{} applied, schema version {}", result.migrationsExecuted,
+				result.migrationsExecuted == 1 ? "" : "s", version);
+		if (result.warnings != null)
+			for (String warning : result.warnings)
+				log.warn("Healdan's database migration: {}", warning);
 	}
 
 	/**
@@ -127,27 +146,34 @@ public class HealdanMigrator {
 
 	/**
 	 * Flyway's OSS edition doesn't resolve a vendor placeholder in locations, so
-	 * we do: MySQL reuses the MariaDB scripts.
+	 * we do. MariaDB is recognised by its product name or, through the MySQL
+	 * driver (which reports product "MySQL"), by a version naming MariaDB. MySQL
+	 * itself is refused: V1 uses {@code create sequence}, which MySQL lacks, and
+	 * MySQL's DDL isn't transactional, so a half-run V1 would leave every later
+	 * start failing.
 	 */
 	private static String vendorFolder(DatabaseMetaData meta) {
 		String product;
+		String version;
 		try {
 			product = meta.getDatabaseProductName();
+			version = meta.getDatabaseProductVersion();
 		} catch (SQLException e) {
 			throw new HealdanStartupException("Cannot detect the database product: " + e.getMessage(), e);
 		}
-		String lower = product == null ? "" : product.toLowerCase(Locale.ROOT);
-		if (lower.contains("mariadb") || lower.contains("mysql"))
+		String lowerProduct = product == null ? "" : product.toLowerCase(Locale.ROOT);
+		String lowerVersion = version == null ? "" : version.toLowerCase(Locale.ROOT);
+		if (lowerProduct.contains("mariadb") || lowerVersion.contains("mariadb"))
 			return "mariadb";
-		if (lower.contains("hsql"))
+		if (lowerProduct.contains("hsql"))
 			return "hsqldb";
 		throw new HealdanStartupException(
-				"Healdan's tables support MariaDB, MySQL and HSQLDB only; found " + product);
+				"Healdan's tables support MariaDB and HSQLDB only; found " + product + " " + version);
 	}
 
 	static FluentConfiguration configure(DataSource dataSource, String... locations) {
 		return Flyway.configure(HealdanMigrator.class.getClassLoader()).dataSource(dataSource).table(HISTORY_TABLE)
-				.locations(locations).baselineOnMigrate(true).baselineVersion("0");
+				.locations(locations).baselineOnMigrate(true).baselineVersion("0").validateMigrationNaming(true);
 	}
 
 	private static boolean tableExists(DatabaseMetaData meta, String table) throws SQLException {

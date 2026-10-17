@@ -185,6 +185,9 @@ public class SeedsTest extends AbstractHealdanTestCase {
 				() -> Context.get(SeedRunner.class).runPending(List.of(failing)));
 
 		assertTrue(e.getMessage().contains("smoke-fixture"));
+		// The message says how to skip the step
+		assertTrue(e.getMessage(), e.getMessage().contains("insert into hd_setting"));
+		assertTrue(e.getMessage(), e.getMessage().contains("'seed.smoke-fixture'"));
 		assertNull(HealdanSettings.get().get("seed.smoke-fixture"));
 	}
 

@@ -64,7 +64,9 @@ public class SeedRunner {
 				HealdanOperation.run(Kind.SEED, step::run);
 				settings.set(marker, "done");
 			} catch (Exception e) {
-				throw new HealdanStartupException("Seed step '%s' failed".formatted(step.name()), e);
+				throw new HealdanStartupException(("Seed step '%s' failed: %s. Fix the cause and restart; to skip the "
+						+ "step instead, run insert into hd_setting (name, value) values ('%s', 'done')")
+						.formatted(step.name(), e.getMessage(), marker), e);
 			}
 		}
 	}
