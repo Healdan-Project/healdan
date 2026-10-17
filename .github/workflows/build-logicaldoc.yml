@@ -69,6 +69,9 @@ jobs:
           touch ~/logicaldoc-dev.properties
           mvn -B -ntp -pl healdan-core test
 
+      - name: Test Healdan hooks in upstream modules
+        run: mvn -B -ntp -pl logicaldoc-core,logicaldoc-webapp test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest='HealdanHooksTest'
+
       # Build just the webapp WAR (and its deps) if you want a deployable artifact
       - name: Build LogicalDOC webapp
         run: mvn -B -ntp -pl logicaldoc-webapp -am -DskipTests package

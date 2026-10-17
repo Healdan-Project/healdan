@@ -1013,6 +1013,7 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
 
     @Override
     public void restore(long docId, long folderId, final DocumentHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeDocumentRestore(docId, folderId, transaction);
 
         // Resume document and versions with JDBC directly
         jdbcUpdate(

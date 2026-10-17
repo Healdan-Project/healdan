@@ -757,6 +757,7 @@ public class DocumentManager {
      * @throws PersistenceException if an error occurs, this exception is thrown
      */
     public Document update(Document document, Document docVO, DocumentHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeDocumentUpdate(document, docVO, transaction);
         validateTransaction(transaction);
         if (document == null)
             throw new IllegalArgumentException("No document has been provided");
@@ -909,6 +910,7 @@ public class DocumentManager {
      */
     public DocumentFuture moveToFolder(Document doc, Folder targetFolder, DocumentHistory transaction)
             throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeDocumentMove(doc, targetFolder, transaction);
         validateTransaction(transaction);
 
         if (targetFolder.equals(doc.getFolder()))
@@ -1401,6 +1403,7 @@ public class DocumentManager {
      * @throws PersistenceException if an error occurs, this exception is thrown
      */
     public DocumentFuture rename(long docId, String newName, DocumentHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeDocumentRename(docId, newName, transaction);
         validateTransaction(transaction);
 
         /*

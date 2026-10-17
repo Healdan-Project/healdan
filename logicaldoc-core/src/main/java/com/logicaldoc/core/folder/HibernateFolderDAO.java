@@ -65,7 +65,7 @@ import jakarta.transaction.Transactional;
  * @since 6.0
  */
 @Repository("folderDAO")
-@Transactional
+@Transactional(rollbackOn = PersistenceException.class)
 public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> implements FolderDAO {
 
     private static final String ORACLE_DUPLE = "(%d,0)";
@@ -856,6 +856,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
 
     @Override
     public void restore(long folderId, long parentId, FolderHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeFolderRestore(folderId, parentId, transaction);
         // The parent folder
         Folder parent = findFolder(parentId);
         int count = jdbcUpdate(
@@ -889,6 +890,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
                     "update ld_document set ld_deleted = 0, ld_lastmodified = CURRENT_TIMESTAMP where ld_deleted = 1 and ld_folderid in (%s)"
                             .formatted(idsStr));
         }
+        com.logicaldoc.core.HealdanHooks.get().afterFolderRestore(folderId, parentId, transaction);
     }
 
     @Override
@@ -1245,6 +1247,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
 
     @Override
     public void applySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeApplySecurityToTree(rootId, transaction);
         validateTransaction(transaction);
         if (transaction.getSessionId() == null)
             throw new PersistenceException("No session specified in transaction");
@@ -1706,6 +1709,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
 
     @Override
     public List<Folder> deleteTree(Folder folder, int delCode, FolderHistory transaction) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeFolderDeleteTree(folder != null ? folder.getId() : 0L, transaction);
         if (!checkStoringAspect())
             throw new PersistenceException("Tree has not been deleted");
 
