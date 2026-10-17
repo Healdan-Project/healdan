@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.setting;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
@@ -22,7 +23,7 @@ public class HealdanSettingsTest extends AbstractHealdanTestCase {
 		assertEquals("Docs", settings.defaultClass());
 		assertEquals(30, settings.recentMattersDays());
 		assertNull(settings.defaultStoreId());
-		assertNull(settings.profileTemplateId());
+		assertNotNull(settings.profileTemplateId());
 	}
 
 	@Test
