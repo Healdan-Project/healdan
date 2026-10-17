@@ -49,7 +49,7 @@ public class HttpTool {
 	 * @return The response body
 	 */
 	public String get(String url, Map<String, String> headers, int timeout) {
-		try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(timeout);) {
+		try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(timeout);) {
 			HttpGet get = new HttpGet(url);
 			putHeaders(get, headers);
 
@@ -71,7 +71,7 @@ public class HttpTool {
 	 */
 	public File download(String url, Map<String, String> headers, int timeout) {
 		File downloadedFile = null;
-		try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(timeout);) {
+		try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(timeout);) {
 			downloadedFile = FileUtil.createTempFile("download-", ".dld");
 			HttpGet get = new HttpGet(url);
 			putHeaders(get, headers);
@@ -96,7 +96,7 @@ public class HttpTool {
 	 * @return The response body
 	 */
 	public String post(String url, Map<String, String> headers, String entity, int timeout) {
-		try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(timeout);) {
+		try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(timeout);) {
 			HttpPost post = new HttpPost(url);
 			putHeaders(post, headers);
 
@@ -121,7 +121,7 @@ public class HttpTool {
 	 * @return The response body
 	 */
 	public String postForm(String url, Map<String, String> headers, Map<String, String> fields, int timeout) {
-		try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(timeout);) {
+		try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(timeout);) {
 			HttpPost post = new HttpPost(url);
 			putHeaders(post, headers);
 
@@ -151,7 +151,7 @@ public class HttpTool {
 	 */
 	public String postMultipart(String url, Map<String, String> headers, Map<String, AbstractContentBody> parts,
 			int timeout) {
-		try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(timeout);) {
+		try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(timeout);) {
 			HttpPost post = new HttpPost(url);
 			putHeaders(post, headers);
 
@@ -176,7 +176,7 @@ public class HttpTool {
 	 */
 	public File download(String url, Map<String, String> headers, Map<String, AbstractContentBody> parts, int timeout) {
 		File downloadedFile = null;
-		try (CloseableHttpClient httpClient = HttpUtil.getNotValidatingClient(timeout);) {
+		try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(timeout);) {
 			downloadedFile = FileUtil.createTempFile("download-", ".dld");
 
 			HttpPost post = new HttpPost(url);

@@ -2,6 +2,8 @@ package com.logicaldoc.web.service;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -14,6 +16,8 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.searchengine.folder.FolderCriterion;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.GroupDAO;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUICriterion;
 import com.logicaldoc.gui.common.client.beans.GUIResult;
@@ -130,5 +134,28 @@ public class SearchServiceImplTest extends AbstractFulltextTestCase {
 
 		testSubject.shareSearch("test", List.of(3L, 4L), List.of(2L, 3L));
 		assertEquals(4, searchDao.findAll(Tenant.DEFAULT_ID).size());
+	}
+
+	@Test
+	public void testShareSearchOnlyWithinTenant() throws ServerException, PersistenceException {
+		// User "test" and group testGroup move to another tenant
+		UserDAO.get().jdbcUpdate("update ld_user set ld_tenantid = 2 where ld_id = 5");
+		GroupDAO.get().jdbcUpdate("update ld_group set ld_tenantid = 2 where ld_id = 10");
+
+		GUISearchOptions options = new GUISearchOptions();
+		options.setUserId(1L);
+		options.setExpression("document");
+		options.setType(SearchOptions.TYPE_FULLTEXT);
+		options.setName("test");
+		testSubject.save(options);
+
+		assertThrows(ServerException.class, () -> testSubject.shareSearch("test", List.of(3L, 5L), List.of()));
+		assertThrows(ServerException.class, () -> testSubject.shareSearch("test", List.of(3L), List.of(10L)));
+		assertThrows(ServerException.class, () -> testSubject.shareSearch("test", List.of(3L, 9999L), List.of()));
+
+		// Nobody got it, not even the user in the tenant
+		assertNull(searchDao.findByUserIdAndName(3L, "test"));
+		assertNull(searchDao.findByUserIdAndName(5L, "test"));
+		assertNull(searchDao.findByUserIdAndName(9999L, "test"));
 	}
 }

@@ -160,7 +160,16 @@ public class HttpUtil {
 	 */
 	public static CloseableHttpClient getValidatingClient(int timeout) {
 		String[] proxy = getProxy();
-		return getClient(timeout, proxy[0], Integer.parseInt(proxy[1]), proxy[2], proxy[3], true);
+		return getValidatingClient(timeout, proxy[0], Integer.parseInt(proxy[1]), proxy[2], proxy[3]);
+	}
+
+	/**
+	 * Like {@link #getValidatingClient(int)}, but goes through the given proxy
+	 * instead of the configured one
+	 */
+	public static CloseableHttpClient getValidatingClient(int timeout, String proxyServer, Integer proxyPort,
+			String proxyUser, String proxyPassword) {
+		return getClient(timeout, proxyServer, proxyPort, proxyUser, proxyPassword, true);
 	}
 
 	public static void close(ClassicHttpResponse response) {
