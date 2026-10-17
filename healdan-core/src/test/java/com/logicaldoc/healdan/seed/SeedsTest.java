@@ -106,18 +106,26 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testReindexIsNotABeanUntilTheParsersExist() {
+		// Task 21 makes it a bean; until then startup must not flag anything
+		assertTrue(Context.get().getBeansOfType(ReindexOfficeSeed.class).isEmpty());
+		assertNull(HealdanSettings.get().get("seed.reindex-office"));
+	}
+
+	@Test
 	public void testReindexFlagsOnlyOfficeAndEmail() throws Exception {
 		Folder root = FolderDAO.get().findFolder(Folder.DEFAULTWORKSPACEID);
-		List<String> names = List.of("a.docx", "b.XLSX", "c.pptx", "d.eml", "e.msg", "f.txt", "g.pdf");
+		List<String> names = List.of("a.docx", "b.XLSX", "c.pptx", "d.eml", "e.msg", "f.txt", "g.pdf", "h.docx");
 		for (String name : names)
 			createDocument(root, name);
 
-		// Everything looks indexed, as it would after a normal life
+		// Everything looks indexed, as it would after a normal life; an admin set h.docx to skip indexing
 		jdbc().update("update ld_document set ld_indexed = ?", IndexingStatus.INDEXED.ordinal());
+		jdbc().update("update ld_document set ld_indexed = ? where ld_filename = 'h.docx'",
+				IndexingStatus.SKIP.ordinal());
 		Context.get(CacheEvictor.class).evictDocuments(jdbc().queryForList("select ld_id from ld_document", Long.class));
-		forget("reindex-office");
 
-		Context.get(HealdanStartup.class).run();
+		new ReindexOfficeSeed(Context.get(DataSource.class), Context.get(CacheEvictor.class)).run();
 
 		Set<String> flagged = Set.copyOf(jdbc().queryForList(
 				"select lower(ld_filename) from ld_document where ld_indexed = ?", String.class,
@@ -127,6 +135,7 @@ public class SeedsTest extends AbstractHealdanTestCase {
 		// The DAO sees it too
 		assertEquals(IndexingStatus.TO_INDEX, DocumentDAO.get().findById(idOf("a.docx")).getIndexingStatus());
 		assertEquals(IndexingStatus.INDEXED, DocumentDAO.get().findById(idOf("f.txt")).getIndexingStatus());
+		assertEquals(IndexingStatus.SKIP, DocumentDAO.get().findById(idOf("h.docx")).getIndexingStatus());
 	}
 
 	@Test

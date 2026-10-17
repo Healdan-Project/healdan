@@ -6,20 +6,23 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
 /**
  * Flags the existing Office and email documents for indexing again, because
- * Healdan's parsers can read their content.
+ * Healdan's parsers can read their content. Documents an admin set to skip
+ * indexing stay skipped.
+ * <p>
+ * Not a bean until Task 21 adds Healdan's parsers; see the plan. Run before
+ * the parsers exist, CE would re-index these documents with its own parsers,
+ * extract nothing, and the marker would stop the step from ever running again.
  */
-@Component
 public class ReindexOfficeSeed implements SeedStep {
 
-	private static final String WHERE = "ld_deleted = 0 and lower(ld_type) in "
-			+ "('docx','docm','dotx','xlsx','xlsm','pptx','ppsx','eml','msg')";
+	private static final String WHERE = "ld_deleted = 0 and ld_indexed <> " + IndexingStatus.SKIP.ordinal()
+			+ " and lower(ld_type) in ('docx','docm','dotx','xlsx','xlsm','pptx','ppsx','eml','msg')";
 
 	private final JdbcTemplate jdbc;
 
