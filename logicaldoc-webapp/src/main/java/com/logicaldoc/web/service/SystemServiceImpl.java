@@ -102,6 +102,21 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     private static final long PROTOCOLS_MENU = 3L;
 
+    // System, whose Scheduled tasks screen manages the tasks and jobs
+    private static final long SYSTEM_MENU = 80L;
+
+    // System > General, whose tabs show the statistics and the plugins
+    private static final long GENERAL_MENU = 70L;
+
+    // Settings > GUI settings, whose Languages tab switches the GUI languages
+    private static final long GUI_SETTINGS_MENU = 102L;
+
+    // The menus of the System menu's Confirm update and Restart buttons.
+    // CE's database has neither, so only administrators pass.
+    private static final long UPDATES_AND_PATCHES_MENU = -1130L;
+
+    private static final long RESTART_MENU = -1190L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SystemServiceImpl.class);
@@ -110,7 +125,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public boolean disableTask(String taskName) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SYSTEM_MENU);
 
         Task task = getTask(taskName);
 
@@ -128,7 +143,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public boolean enableTask(String taskName) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SYSTEM_MENU);
 
         Task task = getTask(taskName);
         if (task == null)
@@ -151,7 +166,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public List<List<GUIParameter>> getStatistics(String locale) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(GENERAL_MENU);
 
         try {
             GenericDAO genDao = GenericDAO.get();
@@ -329,7 +344,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public GUITask getTaskByName(String taskName, String locale) throws ServerException {
-        validateSession();
+        checkMenu(SYSTEM_MENU);
 
         Task tsk = getTask(taskName);
         if (tsk == null)
@@ -409,7 +424,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public List<GUITask> loadTasks(String locale) throws ServerException {
-        validateSession();
+        checkMenu(SYSTEM_MENU);
 
         TaskManager manager = Context.get(TaskManager.class);
         List<GUITask> guiTasks = new ArrayList<>();
@@ -457,7 +472,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public GUITask saveTask(GUITask guiTask, String locale) throws ServerException {
-        validateSession();
+        checkMenu(SYSTEM_MENU);
 
         TaskManager manager = Context.get(TaskManager.class);
         Task task = null;
@@ -508,7 +523,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     }
 
     @Override
-    public void startTask(String taskName) {
+    public void startTask(String taskName) throws ServerException {
+        checkMenu(SYSTEM_MENU);
+
         TaskManager manager = Context.get(TaskManager.class);
 
         for (Task task : manager.getTasks()) {
@@ -521,7 +538,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     }
 
     @Override
-    public void stopTask(String taskName) {
+    public void stopTask(String taskName) throws ServerException {
+        checkMenu(SYSTEM_MENU);
+
         TaskManager manager = Context.get(TaskManager.class);
         for (Task task : manager.getTasks()) {
             if (task.getName().equals(taskName)) {
@@ -533,7 +552,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void setGUILanguageStatus(String language, boolean active) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(GUI_SETTINGS_MENU);
 
         ContextProperties conf = Context.get().getConfig();
         conf.setProperty(session.getTenantName() + ".lang." + language + ".gui", active ? "enabled" : "disabled");
@@ -546,7 +565,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void confirmUpdate() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(UPDATES_AND_PATCHES_MENU);
 
         ContextProperties conf = Context.get().getConfig();
         String prevRunLevel = conf.getProperty("runlevel.back", RunLevel.DEFAULT.toString());
@@ -561,7 +580,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void restart() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(RESTART_MENU);
 
         log.info("Restart requested");
 
@@ -913,7 +932,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void unscheduleJobs(List<GUIValue> jobs) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SYSTEM_MENU);
         JobManager jobManager = Context.get(JobManager.class);
         for (GUIValue trigger : jobs)
             try {
@@ -925,7 +944,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public List<GUIValue> getPlugins() throws ServerException {
-        validateSession();
+        checkMenu(GENERAL_MENU);
 
         Collection<PluginDescriptor> descriptors = PluginRegistry.getInstance().getPlugins();
         List<GUIValue> plugins = new ArrayList<>();

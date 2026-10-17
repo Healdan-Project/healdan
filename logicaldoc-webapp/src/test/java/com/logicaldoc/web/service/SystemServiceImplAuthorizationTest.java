@@ -1,9 +1,13 @@
 package com.logicaldoc.web.service;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -18,15 +22,20 @@ import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIHistory;
+import com.logicaldoc.gui.common.client.beans.GUITask;
+import com.logicaldoc.util.config.ContextProperties;
+import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.web.AbstractWPTestCase;
 
 /**
- * Checks who may run the history and API call searches in
- * {@link SystemServiceImpl}. Their results hold every user's session IDs, and
- * a session ID sent in the <code>sid</code> header logs in as that session, so
- * only users who can open the screens that run them may call them, and only
- * users who can open the sessions get the session IDs, as in the history data
- * servlets.
+ * Checks who may call the RPCs in {@link SystemServiceImpl}. Each one needs a
+ * menu that opens a screen calling it, so a screen delegated through menu
+ * security keeps working and nobody else gets in.
+ * <p>
+ * The history and API call searches' results hold every user's session IDs,
+ * and a session ID sent in the <code>sid</code> header logs in as that
+ * session, so only users who can open the sessions get the session IDs, as in
+ * the history data servlets.
  */
 public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
 
@@ -39,10 +48,33 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
     // Settings > Protocols, whose API calls tab runs searchApiCalls()
     private static final long PROTOCOLS = 3L;
 
+    // System, whose Scheduled tasks screen manages the tasks and jobs
+    private static final long SYSTEM = 80L;
+
+    // System > General, whose tabs show the statistics and the plugins
+    private static final long GENERAL = 70L;
+
+    // The Run level tab of System > General
+    private static final long RUNLEVEL = 73L;
+
+    // Settings > GUI settings, whose Languages tab switches the GUI languages
+    private static final long GUI_SETTINGS = 102L;
+
     // The author user's group. The author isn't an administrator.
     private static final long AUTHOR_GROUP = 2L;
 
+    // The author user's own group, which the fixture gives GUI settings
+    private static final long AUTHOR_USER_GROUP = -4L;
+
+    private static final String TASK = "IndexerTask";
+
     private SystemServiceImpl testSubject = new SystemServiceImpl();
+
+    @Override
+    protected List<String> getPluginArchives() {
+        // The core plugin declares the tasks
+        return List.of("/logicaldoc-core-plugin.jar");
+    }
 
     @Test
     public void testSearchNeedsTheLastChangesMenu() throws ServerException, PersistenceException {
@@ -77,12 +109,8 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
         assertThrows(AccessDeniedException.class, this::search);
 
         grant(LAST_CHANGES);
-        MenuDAO dao = MenuDAO.get();
-        for (long menuId : List.of(API_CALLS, PROTOCOLS)) {
-            Menu menu = dao.findById(menuId, true);
-            menu.removeAccessControlEntries(AUTHOR_GROUP);
-            dao.store(menu);
-        }
+        revoke(API_CALLS, AUTHOR_GROUP);
+        revoke(PROTOCOLS, AUTHOR_GROUP);
         assertThrows(AccessDeniedException.class, this::searchApiCalls);
     }
 
@@ -114,6 +142,114 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
         assertTrue(sessionIds(searchApiCalls()).contains("8d7b32e8-fe82-45c4-b0e1-f69083e90133"));
     }
 
+    @Test
+    public void testTaskReadsNeedTheSystemMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.loadTasks("en"));
+        assertThrows(AccessDeniedException.class, () -> testSubject.getTaskByName(TASK, "en"));
+
+        grant(SYSTEM);
+        assertFalse(testSubject.loadTasks("en").isEmpty());
+        assertNotNull(testSubject.getTaskByName(TASK, "en"));
+    }
+
+    @Test
+    public void testTaskChangesNeedTheSystemMenu() throws ServerException, PersistenceException {
+        GUITask task = testSubject.getTaskByName(TASK, "en");
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveTask(task, "en"));
+        assertThrows(AccessDeniedException.class, () -> testSubject.disableTask(TASK));
+        assertThrows(AccessDeniedException.class, () -> testSubject.enableTask(TASK));
+
+        grant(SYSTEM);
+        testSubject.saveTask(task, "en");
+        assertTrue(testSubject.disableTask(TASK));
+        assertTrue(testSubject.enableTask(TASK));
+    }
+
+    @Test
+    public void testStartAndStopNeedTheSystemMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.startTask(TASK));
+        assertThrows(AccessDeniedException.class, () -> testSubject.stopTask(TASK));
+
+        // No task has this name, so nothing actually runs
+        grant(SYSTEM);
+        testSubject.startTask("unexisting");
+        testSubject.stopTask("unexisting");
+    }
+
+    @Test
+    public void testUnscheduleJobsNeedsTheSystemMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.unscheduleJobs(List.of()));
+
+        grant(SYSTEM);
+        testSubject.unscheduleJobs(List.of());
+    }
+
+    @Test
+    public void testGetStatisticsNeedsTheGeneralMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.getStatistics("en"));
+
+        grant(GENERAL);
+        assertFalse(testSubject.getStatistics("en").isEmpty());
+    }
+
+    @Test
+    public void testGetPluginsNeedsTheGeneralMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, testSubject::getPlugins);
+
+        grant(GENERAL);
+        assertFalse(testSubject.getPlugins().isEmpty());
+    }
+
+    @Test
+    public void testSetGUILanguageStatusNeedsTheGUISettingsMenu() throws ServerException, PersistenceException {
+        revoke(GUI_SETTINGS, AUTHOR_USER_GROUP);
+        prepareSession("author", "admin");
+        ContextProperties config = Context.get().getConfig();
+        String status = config.getProperty("default.lang.it.gui");
+        boolean enabled = "enabled".equals(status);
+        assertThrows(AccessDeniedException.class, () -> testSubject.setGUILanguageStatus("it", !enabled));
+        assertEquals(status, config.getProperty("default.lang.it.gui"));
+
+        grant(GUI_SETTINGS);
+        testSubject.setGUILanguageStatus("it", !enabled);
+        assertNotEquals(status, config.getProperty("default.lang.it.gui"));
+        testSubject.setGUILanguageStatus("it", enabled);
+    }
+
+    @Test
+    public void testRestartNeedsTheRestartMenu() throws ServerException, PersistenceException {
+        // CE's database has no restart menu, so only administrators pass. Only
+        // the refusal is tested, because a restart forks bin/restart.sh.
+        grant(SYSTEM);
+        grant(GENERAL);
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, testSubject::restart);
+    }
+
+    @Test
+    public void testConfirmUpdateNeedsTheUpdatesMenu() throws ServerException, PersistenceException, IOException {
+        // CE's database has no updates and patches menu either, so only
+        // administrators pass. The Run level tab doesn't open it.
+        grant(SYSTEM);
+        grant(GENERAL);
+        grant(RUNLEVEL);
+        prepareSession("author", "admin");
+        ContextProperties config = Context.get().getConfig();
+        try {
+            assertThrows(AccessDeniedException.class, testSubject::confirmUpdate);
+            assertEquals("default", config.getProperty("runlevel"));
+        } finally {
+            config.setProperty("runlevel", "default");
+            config.write();
+        }
+    }
+
     private List<GUIHistory> search() throws ServerException {
         return testSubject.search(null, null, null, null, 100, null, null, null);
     }
@@ -130,6 +266,13 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
         MenuDAO dao = MenuDAO.get();
         Menu menu = dao.findById(menuId, true);
         menu.addAccessControlEntry(new AccessControlEntry(AUTHOR_GROUP));
+        dao.store(menu);
+    }
+
+    private static void revoke(long menuId, long groupId) throws PersistenceException {
+        MenuDAO dao = MenuDAO.get();
+        Menu menu = dao.findById(menuId, true);
+        menu.removeAccessControlEntries(groupId);
         dao.store(menu);
     }
 }
