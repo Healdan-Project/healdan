@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.support;
 
+import java.util.List;
 import java.util.Map;
 
 import com.logicaldoc.core.PersistenceException;
@@ -17,7 +18,7 @@ public class VetoingFolderListener implements FolderListener {
 	@Override
 	public void beforeStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		VetoSwitch.check(VetoSwitch.FOLDER_BEFORE_STORE);
+		VetoSwitch.check(VetoSwitch.FOLDER_BEFORE_STORE, VetoSwitch.ids(folder.getId()), List.of());
 	}
 
 	@Override

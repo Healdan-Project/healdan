@@ -1,14 +1,21 @@
 package com.logicaldoc.healdan.support;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.LongStream;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Turns on the veto of the test listeners and hooks at one check point, the
  * place a Healdan rule would refuse the operation: a listener method or a
  * {@code HealdanHooks} method, named by the constants below. While it's on,
- * that check point throws {@code PersistenceException("veto")}.
+ * that check point throws {@code PersistenceException("veto")}, after asking
+ * {@link CacheEvictor} to evict on rollback the folders and documents it
+ * refuses, as every Healdan rule must (plan, D3).
  */
 public final class VetoSwitch {
 
@@ -86,14 +93,28 @@ public final class VetoSwitch {
 	 * Called by the test listeners and hooks at each check point
 	 *
 	 * @param checkPoint the check point being passed
+	 * @param folderIds the folders the check point would refuse
+	 * @param documentIds the documents the check point would refuse
 	 *
 	 * @throws PersistenceException the veto, if the switch is on for this check
 	 *         point
 	 */
-	public static void check(String checkPoint) throws PersistenceException {
+	public static void check(String checkPoint, Collection<Long> folderIds, Collection<Long> documentIds)
+			throws PersistenceException {
 		if (checkPoint.equals(route) && passes.getAndIncrement() >= allowedPasses) {
 			vetoes.incrementAndGet();
+			CacheEvictor evictor = Context.get(CacheEvictor.class);
+			evictor.evictFoldersOnRollback(folderIds);
+			evictor.evictDocumentsOnRollback(documentIds);
 			throw new PersistenceException(MESSAGE);
 		}
+	}
+
+	/**
+	 * @param ids object ids, 0 for an object not saved yet
+	 * @return the ids of the saved objects
+	 */
+	public static List<Long> ids(long... ids) {
+		return LongStream.of(ids).filter(id -> id != 0L).boxed().toList();
 	}
 }

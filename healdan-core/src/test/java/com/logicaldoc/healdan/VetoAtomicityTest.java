@@ -2,6 +2,7 @@ package com.logicaldoc.healdan;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -39,10 +40,12 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.threading.ThreadPools;
+import com.logicaldoc.healdan.support.DaoSnapshot;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.IndexSnapshot;
 import com.logicaldoc.healdan.support.VetoSwitch;
 import com.logicaldoc.healdan.support.VetoingHooks;
+import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -78,6 +81,9 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	/** Deleted child of A, holding a document */
 	private Folder deletedFolder;
+
+	/** The deleted document in {@link #deletedFolder} */
+	private Document insideDoc;
 
 	/** An indexed document in A */
 	private Document doc;
@@ -140,7 +146,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		documentDao.delete(deletedDoc.getId(), documentTransaction());
 
 		deletedFolder = createFolder(folderA, "Deleted", true);
-		createDocument(deletedFolder, "inside.txt");
+		insideDoc = createDocument(deletedFolder, "inside.txt");
 		folderDao.deleteTree(deletedFolder.getId(), folderTransaction(null));
 
 		awaitAsyncWork();
@@ -158,12 +164,16 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testSnapshotsSeeChanges() throws Exception {
+		DaoSnapshot dao = DaoSnapshot.take(jdbc);
 		DbSnapshot db = DbSnapshot.take(jdbc);
 		jdbc.update("update ld_folder set ld_name = 'Changed' where ld_id = ?", folderA.getId());
 		jdbc.update("insert into hd_setting (name, value) values ('veto.test', 'x')");
 		AssertionError error = assertThrows(db::assertUnchanged);
 		assertTrue(error.getMessage(), error.getMessage().contains("ld_folder:"));
 		assertTrue(error.getMessage(), error.getMessage().contains("hd_setting:"));
+		Context.get(CacheEvictor.class).evictFolders(List.of(folderA.getId()));
+		error = assertThrows(dao::assertUnchanged);
+		assertTrue(error.getMessage(), error.getMessage().contains("folder %d:".formatted(folderA.getId())));
 
 		IndexSnapshot index = IndexSnapshot.of(doc.getId());
 		SearchEngine.get().deleteHit(doc.getId());
@@ -238,9 +248,10 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testDocumentRestoreVetoedAtStore() throws Exception {
-		// The DAO undeletes the rows with JDBC, then stores the document in the same transaction
+		// The DAO undeletes the rows with JDBC, then loads the document, then stores it in the same transaction
 		assertVetoLeavesNothing(VetoSwitch.DOCUMENT_BEFORE_STORE,
-				() -> documentDao.restore(deletedDoc.getId(), folderB.getId(), documentTransaction()));
+				() -> documentDao.restore(deletedDoc.getId(), folderB.getId(), documentTransaction()),
+				() -> assertDocumentsDeleted(deletedDoc.getId()));
 	}
 
 	@Test
@@ -311,10 +322,13 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	public void testFolderRestoreRollsBackWhenAfterHookThrows() throws Exception {
 		// The after-hook runs in restore's transaction, once the rows are back
 		DbSnapshot db = DbSnapshot.take(jdbc);
+		DaoSnapshot dao = DaoSnapshot.take(jdbc);
 		HealdanHooks.register(new HealdanHooks() {
 			@Override
 			public void afterFolderRestore(long folderId, long parentId, FolderHistory transaction)
 					throws PersistenceException {
+				// As every Healdan veto must: restore has loaded the undeleted folder into the cache
+				Context.get(CacheEvictor.class).evictFoldersOnRollback(List.of(folderId));
 				throw new PersistenceException(VetoSwitch.MESSAGE);
 			}
 		});
@@ -325,6 +339,10 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 			assertEquals(VetoSwitch.MESSAGE, e.getMessage());
 		}
 		db.assertUnchanged();
+		// restore loaded the undeleted folder before the after-hook threw
+		assertFoldersDeleted(deletedFolder.getId());
+		assertDocumentsDeleted(insideDoc.getId());
+		dao.assertUnchanged();
 	}
 
 	@Test
@@ -386,16 +404,31 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	 * and the index as they were
 	 */
 	private void assertVetoLeavesNothing(String route, Route operation, long... moreDocIds) throws Exception {
+		assertVetoLeavesNothing(route, operation, () -> {
+		}, moreDocIds);
+	}
+
+	/**
+	 * As above, and also runs a check of what the DAOs read after the refusal,
+	 * before the control run: Hibernate's second-level cache isn't
+	 * transactional, so an entity loaded during the refused route can outlive
+	 * the rollback
+	 */
+	private void assertVetoLeavesNothing(String route, Route operation, Route daoCheck, long... moreDocIds)
+			throws Exception {
 		assertNotNull("the indexed document must be in the index", SearchEngine.get().getHit(doc.getId()));
 		DbSnapshot db = DbSnapshot.take(jdbc);
 		long[] docIds = LongStream.concat(LongStream.of(doc.getId(), alias.getId(), deletedDoc.getId()),
 				LongStream.of(moreDocIds)).toArray();
 		IndexSnapshot index = IndexSnapshot.of(docIds);
+		DaoSnapshot dao = DaoSnapshot.take(jdbc);
 
 		runVetoed(route, 0, operation);
 
 		db.assertUnchanged();
 		index.assertUnchanged();
+		daoCheck.run();
+		dao.assertUnchanged();
 
 		// Control: without the veto the same route does write, so the
 		// snapshots had something to miss
@@ -473,6 +506,27 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		createFolder(source, "Sub", true);
 		awaitAsyncWork();
 		return docIds;
+	}
+
+	/**
+	 * Asserts that the DAOs, through the lookups CE's GUI and web services use,
+	 * see the documents as deleted
+	 */
+	private void assertDocumentsDeleted(long... docIds) throws PersistenceException {
+		for (long id : docIds) {
+			assertNull("DocumentDAO.findById sees document %d".formatted(id), documentDao.findById(id));
+			assertNull("DocumentDAO.findDocument sees document %d".formatted(id), documentDao.findDocument(id));
+		}
+	}
+
+	/**
+	 * Asserts that the DAOs see the folders as deleted
+	 */
+	private void assertFoldersDeleted(long... folderIds) throws PersistenceException {
+		for (long id : folderIds) {
+			assertNull("FolderDAO.findById sees folder %d".formatted(id), folderDao.findById(id, true));
+			assertNull("FolderDAO.findFolder sees folder %d".formatted(id), folderDao.findFolder(id));
+		}
 	}
 
 	private static void assertMovedVersions(List<String> rows, int count) {

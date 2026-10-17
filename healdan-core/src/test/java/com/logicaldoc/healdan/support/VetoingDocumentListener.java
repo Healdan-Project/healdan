@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.support;
 
+import java.util.List;
 import java.util.Map;
 
 import com.logicaldoc.core.PersistenceException;
@@ -17,7 +18,7 @@ public class VetoingDocumentListener implements DocumentListener {
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		VetoSwitch.check(VetoSwitch.DOCUMENT_BEFORE_STORE);
+		VetoSwitch.check(VetoSwitch.DOCUMENT_BEFORE_STORE, List.of(), VetoSwitch.ids(document.getId()));
 	}
 
 	@Override

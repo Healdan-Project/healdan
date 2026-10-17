@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.util;
 
 import java.util.Collection;
+import java.util.List;
 
 import org.hibernate.Cache;
 import org.hibernate.SessionFactory;
@@ -8,6 +9,8 @@ import org.hibernate.engine.spi.SessionFactoryImplementor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
@@ -16,6 +19,12 @@ import com.logicaldoc.core.folder.Folder;
 /**
  * Evicts rows from Hibernate's second-level cache after Healdan changed them
  * with JDBC, so that the DAOs see the change.
+ * <p>
+ * It also cleans up after a veto. The cache isn't transactional (Infinispan,
+ * transaction mode NONE): a row CE writes with JDBC and then loads, as document
+ * and folder restore do, is cached at load time, and a rollback doesn't take
+ * it out. Every Healdan veto therefore calls {@link #evictFoldersOnRollback}
+ * or {@link #evictDocumentsOnRollback} with the ids it refuses (plan, D3).
  */
 @Component
 public class CacheEvictor {
@@ -43,6 +52,45 @@ public class CacheEvictor {
 	 */
 	public void evictDocuments(Collection<Long> ids) {
 		evict(Document.class, ids);
+	}
+
+	/**
+	 * Evicts folders if the current transaction rolls back, e.g. because a
+	 * Healdan rule is refusing the operation that loaded them. Outside a
+	 * transaction it evicts them at once.
+	 * 
+	 * @param ids the folder ids
+	 */
+	public void evictFoldersOnRollback(Collection<Long> ids) {
+		onRollback(Folder.class, ids);
+	}
+
+	/**
+	 * Evicts documents if the current transaction rolls back, e.g. because a
+	 * Healdan rule is refusing the operation that loaded them. Outside a
+	 * transaction it evicts them at once.
+	 * 
+	 * @param ids the document ids
+	 */
+	public void evictDocumentsOnRollback(Collection<Long> ids) {
+		onRollback(Document.class, ids);
+	}
+
+	private void onRollback(Class<?> entity, Collection<Long> ids) {
+		if (ids == null || ids.isEmpty())
+			return;
+		List<Long> copy = List.copyOf(ids);
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			evict(entity, copy);
+			return;
+		}
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+			@Override
+			public void afterCompletion(int status) {
+				if (status != STATUS_COMMITTED)
+					evict(entity, copy);
+			}
+		});
 	}
 
 	private void evict(Class<?> entity, Collection<Long> ids) {
