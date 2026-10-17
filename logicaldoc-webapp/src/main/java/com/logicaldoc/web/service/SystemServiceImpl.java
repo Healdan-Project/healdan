@@ -105,6 +105,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     // System, whose Scheduled tasks screen manages the tasks and jobs
     private static final long SYSTEM_MENU = 80L;
 
+    // System > General, whose tabs show the statistics and the plugins
+    private static final long GENERAL_MENU = 70L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SystemServiceImpl.class);
@@ -154,7 +157,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public List<List<GUIParameter>> getStatistics(String locale) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(GENERAL_MENU);
 
         try {
             GenericDAO genDao = GenericDAO.get();
@@ -932,7 +935,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public List<GUIValue> getPlugins() throws ServerException {
-        validateSession();
+        checkMenu(GENERAL_MENU);
 
         Collection<PluginDescriptor> descriptors = PluginRegistry.getInstance().getPlugins();
         List<GUIValue> plugins = new ArrayList<>();

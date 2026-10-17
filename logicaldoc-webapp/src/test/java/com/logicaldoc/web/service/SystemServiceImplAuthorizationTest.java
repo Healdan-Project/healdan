@@ -46,6 +46,9 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
     // System, whose Scheduled tasks screen manages the tasks and jobs
     private static final long SYSTEM = 80L;
 
+    // System > General, whose tabs show the statistics and the plugins
+    private static final long GENERAL = 70L;
+
     // The author user's group. The author isn't an administrator.
     private static final long AUTHOR_GROUP = 2L;
 
@@ -169,6 +172,24 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
 
         grant(SYSTEM);
         testSubject.unscheduleJobs(List.of());
+    }
+
+    @Test
+    public void testGetStatisticsNeedsTheGeneralMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.getStatistics("en"));
+
+        grant(GENERAL);
+        assertFalse(testSubject.getStatistics("en").isEmpty());
+    }
+
+    @Test
+    public void testGetPluginsNeedsTheGeneralMenu() throws ServerException, PersistenceException {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, testSubject::getPlugins);
+
+        grant(GENERAL);
+        assertFalse(testSubject.getPlugins().isEmpty());
     }
 
     private List<GUIHistory> search() throws ServerException {
