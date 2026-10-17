@@ -92,6 +92,15 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     private static final String TRASH = "trash";
 
+    // The screens that run the searches: Reports > Last changes runs
+    // search(), Reports > API calls and Settings > Protocols run
+    // searchApiCalls()
+    private static final long LAST_CHANGES_MENU = -2L;
+
+    private static final long API_CALLS_MENU = -8L;
+
+    private static final long PROTOCOLS_MENU = 3L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SystemServiceImpl.class);
@@ -613,7 +622,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
             String historySid,
             List<String> events,
             Long rootFolderId) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(LAST_CHANGES_MENU);
 
         int i = 0;
         StringBuilder query = new StringBuilder();
@@ -830,7 +839,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
             String protocol,
             String uri,
             int maxResult) throws ServerException {
-        Session session = validateSession();
+        Session session = checkEvenOneMenu(getThreadLocalRequest(), API_CALLS_MENU, PROTOCOLS_MENU);
 
         try {
             TenantDAO dao = TenantDAO.get();
