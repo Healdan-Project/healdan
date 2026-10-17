@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 
+import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.util.junit.AbstractTestCase;
 import com.logicaldoc.util.plugin.PluginException;
 
@@ -26,5 +27,7 @@ public abstract class AbstractHealdanTestCase extends AbstractTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
+		// The context was built before the CE schema existed, so this is the run that migrates
+		Context.get(HealdanStartup.class).run();
 	}
 }

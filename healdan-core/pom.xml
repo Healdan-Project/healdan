@@ -12,7 +12,26 @@
 	<artifactId>healdan-core</artifactId>
 	<name>healdan-core</name>
 	<packaging>jar</packaging>
+	<properties>
+		<flyway.version>13.10.3</flyway.version>
+	</properties>
 	<dependencies>
+		<!-- Flyway ships inside the plugin zip (see assemblyplugin.xml) -->
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+			<version>${flyway.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-mysql</artifactId>
+			<version>${flyway.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-hsqldb</artifactId>
+			<version>${flyway.version}</version>
+		</dependency>
 		<dependency>
 			<groupId>net.sf.jpf</groupId>
 			<artifactId>jpf-boot</artifactId>
