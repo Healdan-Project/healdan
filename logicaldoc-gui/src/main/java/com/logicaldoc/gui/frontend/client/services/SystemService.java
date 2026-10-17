@@ -57,15 +57,19 @@ public interface SystemService extends RemoteService {
 	 * Starts the task execution.
 	 * 
 	 * @param taskName The task name
+	 *
+	 * @throws ServerException an error happened in the server application
 	 */
-	public void startTask(String taskName);
+	public void startTask(String taskName) throws ServerException;
 
 	/**
 	 * Stops the task execution.
-	 * 
+	 *
 	 * @param taskName The task name
+	 *
+	 * @throws ServerException an error happened in the server application
 	 */
-	public void stopTask(String taskName);
+	public void stopTask(String taskName) throws ServerException;
 
 	/**
 	 * Retrieves a specific task by its name

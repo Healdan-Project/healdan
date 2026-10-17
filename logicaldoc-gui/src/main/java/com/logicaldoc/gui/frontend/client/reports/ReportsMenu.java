@@ -66,7 +66,7 @@ public class ReportsMenu extends VLayout {
 		apiCalls.setWidth100();
 		apiCalls.setHeight(25);
 		apiCalls.addClickHandler(click -> AdminScreen.get().setContent(new ApiCallsReport()));
-		if (Menu.enabled(Menu.TICKETS))
+		if (Menu.enabled(Menu.API_CALLS))
 			addMember(apiCalls);
 	}
 
