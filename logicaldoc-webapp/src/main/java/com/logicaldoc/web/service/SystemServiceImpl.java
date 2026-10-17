@@ -841,10 +841,13 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
             // Search in the document/folder history
             StringBuilder query = new StringBuilder(
                     "select ld_username, ld_date, ld_path, ld_sessionid, ld_userid, ld_ip as ip, ld_userlogin, ld_comment, ld_device, ld_geolocation, ld_protocol, ld_tenantId, ld_keylabel, ld_impersonator from ld_webservicecall where 1 = 1 ");
+            Map<String, Object> params = new HashMap<>();
             if (userId != null)
                 query.append(" and ld_userid = %d".formatted(userId));
-            if (callSid != null && StringUtils.isNotEmpty(callSid))
-                query.append(" and ld_sessionid='%s' ".formatted(callSid));
+            if (callSid != null && StringUtils.isNotEmpty(callSid)) {
+                query.append(" and ld_sessionid = :sessionId ");
+                params.put("sessionId", callSid);
+            }
             if (from != null) {
                 query.append(" and ld_date > '%s' ".formatted(new Timestamp(from.getTime())));
             }
@@ -852,7 +855,8 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
                 query.append(" and ld_date < '%s' ".formatted(new Timestamp(till.getTime())));
             }
             if (protocol != null) {
-                query.append(" and ld_protocol = '%s' ".formatted(protocol));
+                query.append(" and ld_protocol = :protocol ");
+                params.put("protocol", protocol);
             }
 
             if (session.getTenantId() != Tenant.DEFAULT_ID)
@@ -860,7 +864,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
             query.append(" order by ld_date desc ");
 
-            return dao.query(query.toString(), new RowMapper<GUIHistory>() {
+            return dao.query(query.toString(), params, new RowMapper<GUIHistory>() {
 
                 @Override
                 public GUIHistory mapRow(ResultSet rs, int arg1) throws SQLException {
