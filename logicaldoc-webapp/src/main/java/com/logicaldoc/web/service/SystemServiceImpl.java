@@ -102,6 +102,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     private static final long PROTOCOLS_MENU = 3L;
 
+    // System, whose Scheduled tasks screen manages the tasks and jobs
+    private static final long SYSTEM_MENU = 80L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SystemServiceImpl.class);
@@ -110,7 +113,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public boolean disableTask(String taskName) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SYSTEM_MENU);
 
         Task task = getTask(taskName);
 
@@ -128,7 +131,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public boolean enableTask(String taskName) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SYSTEM_MENU);
 
         Task task = getTask(taskName);
         if (task == null)
@@ -329,7 +332,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public GUITask getTaskByName(String taskName, String locale) throws ServerException {
-        validateSession();
+        checkMenu(SYSTEM_MENU);
 
         Task tsk = getTask(taskName);
         if (tsk == null)
@@ -409,7 +412,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public List<GUITask> loadTasks(String locale) throws ServerException {
-        validateSession();
+        checkMenu(SYSTEM_MENU);
 
         TaskManager manager = Context.get(TaskManager.class);
         List<GUITask> guiTasks = new ArrayList<>();
@@ -457,7 +460,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public GUITask saveTask(GUITask guiTask, String locale) throws ServerException {
-        validateSession();
+        checkMenu(SYSTEM_MENU);
 
         TaskManager manager = Context.get(TaskManager.class);
         Task task = null;
@@ -508,7 +511,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     }
 
     @Override
-    public void startTask(String taskName) {
+    public void startTask(String taskName) throws ServerException {
+        checkMenu(SYSTEM_MENU);
+
         TaskManager manager = Context.get(TaskManager.class);
 
         for (Task task : manager.getTasks()) {
@@ -521,7 +526,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     }
 
     @Override
-    public void stopTask(String taskName) {
+    public void stopTask(String taskName) throws ServerException {
+        checkMenu(SYSTEM_MENU);
+
         TaskManager manager = Context.get(TaskManager.class);
         for (Task task : manager.getTasks()) {
             if (task.getName().equals(taskName)) {
@@ -913,7 +920,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void unscheduleJobs(List<GUIValue> jobs) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SYSTEM_MENU);
         JobManager jobManager = Context.get(JobManager.class);
         for (GUIValue trigger : jobs)
             try {
