@@ -127,14 +127,56 @@ public class FolderSearchTest extends AbstractCoreTestCase {
 		assertThrows(SearchException.class, () -> search(criterion));
 	}
 
+	@Test
+	public void testLanguageValueIsNotInjectable() throws SearchException {
+		// Concatenated into the SQL this value would match every folder
+		FolderCriterion criterion = new FolderCriterion();
+		criterion.setField("val1 type:" + FolderCriterion.TYPE_LANGUAGE);
+		criterion.setOperator(FolderCriterion.OPERATOR_EQUALS);
+		criterion.setValue("x' or 'a'='a");
+
+		assertTrue(search(criterion).isEmpty());
+	}
+
+	@Test
+	public void testStringValueIsBoundAsParameter() throws SearchException {
+		// Doubling the quotes doesn't protect a quoted value on MariaDB and
+		// MySQL, where this backslash would escape the closing quote. HSQLDB
+		// can't show that, so check that the value never reaches the SQL text.
+		String value = "zzz\\' or 1=1 -- ";
+		for (String operator : List.of(FolderCriterion.OPERATOR_EQUALS, FolderCriterion.OPERATOR_NOTEQUAL,
+				FolderCriterion.OPERATOR_CONTAINS, FolderCriterion.OPERATOR_NOTCONTAINS,
+				FolderCriterion.OPERATOR_BEGINSWITH, FolderCriterion.OPERATOR_ENDSWITH))
+			for (boolean caseSensitive : List.of(true, false)) {
+				FolderCriterion criterion = new FolderCriterion();
+				criterion.setField("name");
+				criterion.setOperator(operator);
+				criterion.setValue(value);
+
+				FolderSearchOptions opt = newOptions(criterion);
+				opt.setCaseSensitive(caseSensitive);
+				search(opt);
+
+				assertTrue(operator + " caseSensitive=" + caseSensitive, opt.getParameters().values().stream()
+						.anyMatch(param -> param.toString().contains(value)));
+			}
+	}
+
 	private List<Hit> search(FolderCriterion criterion) throws SearchException {
+		return search(newOptions(criterion));
+	}
+
+	private List<Hit> search(FolderSearchOptions opt) throws SearchException {
+		FolderSearch search = new FolderSearch();
+		search.setOptions(opt);
+		return search.search();
+	}
+
+	private FolderSearchOptions newOptions(FolderCriterion criterion) {
 		FolderSearchOptions opt = new FolderSearchOptions();
 		opt.setMaxHits(100);
 		opt.setUserId(1);
 		opt.setCriteria(List.of(criterion));
-
-		FolderSearch search = new FolderSearch();
-		search.setOptions(opt);
-		return search.search();
+		return opt;
 	}
 }
