@@ -84,9 +84,9 @@ public class HibernateDocumentHistoryDAO extends HibernateHistoryDAO<DocumentHis
 
     @Override
     public void markHistoriesAsRead(String event, long userId) throws PersistenceException {
-        String statement = "update ld_history set ld_new = 0 where ld_new = 1 and ld_userid = %d and ld_event = '%s'"
-                .formatted(userId, SqlUtil.doubleQuotes(event));
-        jdbcUpdate(statement);
+        String statement = "update ld_history set ld_new = 0 where ld_new = 1 and ld_userid = %d and ld_event = :event"
+                .formatted(userId);
+        jdbcUpdate(statement, Map.of("event", StringUtils.defaultString(event)));
     }
 
     @Override

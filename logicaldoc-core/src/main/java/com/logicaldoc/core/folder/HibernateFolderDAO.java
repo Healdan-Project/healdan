@@ -622,9 +622,9 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
 
         StringBuilder query = new StringBuilder("select ld_id from ld_folder where ld_deleted = 0 and ");
         if (caseSensitive)
-            query.append("ld_name like '%s' ".formatted(SqlUtil.doubleQuotes(name)));
+            query.append("ld_name like :name ");
         else
-            query.append("lower(ld_name) like '%s' ".formatted(SqlUtil.doubleQuotes(name.toLowerCase())));
+            query.append("lower(ld_name) like :name ");
 
         if (parent != null) {
             query.append(" and ld_parentid = %d ".formatted(parent.getId()));
@@ -635,7 +635,8 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         if (tenantId != null)
             query.append(" and ld_tenantid = %d ".formatted(tenantId));
 
-        List<Long> ids = queryForList(query.toString(), Long.class);
+        List<Long> ids = queryForList(query.toString(),
+                Map.of("name", caseSensitive ? StringUtils.defaultString(name) : name.toLowerCase()), Long.class, null);
         List<Folder> folders = new ArrayList<>();
         for (Long id : ids)
             folders.add(findById(id));
@@ -798,9 +799,8 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
 
     @Override
     public List<Folder> findByNameAndParentId(String name, long parentId) throws PersistenceException {
-        return findByWhere(
-                "_entity.parentId = %d and _entity.name like '%s'".formatted(parentId, SqlUtil.doubleQuotes(name)),
-                null, null);
+        return findByWhere("_entity.parentId = %d and _entity.name like :name".formatted(parentId),
+                Map.of("name", StringUtils.defaultString(name)), null, null);
     }
 
     @Override
@@ -1482,9 +1482,9 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
     private void setUniqueName(Folder folder) throws PersistenceException {
         String folderName = folder.getName();
         List<String> collisions = queryForList(
-                "select ld_name from ld_folder where ld_deleted = 0 and ld_parentid = %d and ld_name like'%s%%' and not ld_id = %d"
-                        .formatted(folder.getParentId(), SqlUtil.doubleQuotes(folderName), folder.getId()),
-                String.class);
+                "select ld_name from ld_folder where ld_deleted = 0 and ld_parentid = %d and ld_name like :name and not ld_id = %d"
+                        .formatted(folder.getParentId(), folder.getId()),
+                Map.of("name", StringUtils.defaultString(folderName) + "%"), String.class, null);
 
         int counter = 1;
         while (collisions.contains(folder.getName()))
@@ -2260,9 +2260,8 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
     public List<Long> findFolderIdByTag(String tag) {
         try {
             return queryForList(
-                    "select distinct(A.ld_folderid) from ld_foldertag A, ld_folder B where A.ld_folderid = B.ld_id and B.ld_deleted = 0 and lower(ld_tag) = '%s'"
-                            .formatted(SqlUtil.doubleQuotes(tag).toLowerCase()),
-                    Long.class);
+                    "select distinct(A.ld_folderid) from ld_foldertag A, ld_folder B where A.ld_folderid = B.ld_id and B.ld_deleted = 0 and lower(ld_tag) = :tag",
+                    Map.of("tag", StringUtils.defaultString(tag).toLowerCase()), Long.class, null);
         } catch (PersistenceException e) {
             log.error(e.getMessage(), e);
             return new ArrayList<>();
@@ -2300,9 +2299,10 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
                         accessibleIds.stream().map(id -> Long.toString(id)).collect(Collectors.joining(","))));
             }
 
-            query.append(" and D.ld_tag = '%s' ".formatted(SqlUtil.doubleQuotes(tag)));
+            query.append(" and D.ld_tag = :tag ");
 
-            List<Long> folderIds = queryForList(query.toString(), Long.class);
+            List<Long> folderIds = queryForList(query.toString(), Map.of("tag", StringUtils.defaultString(tag)),
+                    Long.class, null);
             ids.addAll(folderIds);
         }
 
