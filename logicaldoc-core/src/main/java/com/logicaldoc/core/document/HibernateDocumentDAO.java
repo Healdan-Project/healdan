@@ -585,10 +585,10 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
                             from ld_document
                            where ld_deleted = 0
                              and ld_folderid = %d
-                             and ld_filename like '%s%%'
+                             and ld_filename like :fileName
                              and not ld_id = %d
-                          """.formatted(doc.getFolder().getId(), SqlUtil.doubleQuotes(baseName), doc.getId()), null,
-                null, rs -> {
+                          """.formatted(doc.getFolder().getId(), doc.getId()),
+                Map.of("fileName", StringUtils.defaultString(baseName) + "%"), null, rs -> {
                     while (rs.next()) {
                         String file = rs.getString(1);
                         if (file != null && !fileNames.contains(file))
@@ -739,13 +739,12 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
                              and C.ld_deleted = 0
                              and not C.ld_status = %d
                              and C.ld_folderid in (%s)
-                             and lower(D.ld_tag) = '%s'
+                             and lower(D.ld_tag) = :tag
                            """.formatted(DocumentStatus.ARCHIVED.ordinal(),
-                    CollectionUtil.join(folderDAO.findFolderIdByUserId(userId, null, true)),
-                    SqlUtil.doubleQuotes(tag.toLowerCase()));
+                    CollectionUtil.join(folderDAO.findFolderIdByUserId(userId, null, true)));
 
             log.debug("Find by tag: {}", query);
-            ids.addAll(queryForList(query, Long.class));
+            ids.addAll(queryForList(query, Map.of("tag", tag.toLowerCase()), Long.class, null));
         }
 
         return ids;
@@ -861,8 +860,7 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
             Long excludeId,
             Long tenantId,
             Integer max) throws PersistenceException {
-        StringBuilder query = new StringBuilder(
-                "lower(_entity.fileName) like '%%%s%%'".formatted(SqlUtil.doubleQuotes(fileName.toLowerCase())));
+        StringBuilder query = new StringBuilder("lower(_entity.fileName) like :fileName");
 
         if (tenantId != null)
             query.append(" and _entity.tenantId = %d".formatted(tenantId));
@@ -875,7 +873,7 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
 
         query.append(" and not _entity.status = %d".formatted(DocumentStatus.ARCHIVED.ordinal()));
 
-        return findByWhere(query.toString(), null, max);
+        return findByWhere(query.toString(), Map.of("fileName", "%" + fileName.toLowerCase() + "%"), null, max);
     }
 
     @Override
@@ -1046,8 +1044,8 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
     public Document findByCustomId(String customId, long tenantId, boolean initialize) throws PersistenceException {
         Document doc = null;
         if (customId != null) {
-            doc = findByWhere("_entity.customId = '%s' and _entity.tenantId = %d"
-                    .formatted(SqlUtil.doubleQuotes(customId), tenantId), null, null).stream().findFirst().orElse(null);
+            doc = findByWhere("_entity.customId = :customId and _entity.tenantId = %d".formatted(tenantId),
+                    Map.of("customId", customId), null, null).stream().findFirst().orElse(null);
             if (initialize)
                 doc = initialize(doc);
         }
@@ -1292,22 +1290,13 @@ public class HibernateDocumentDAO extends HibernatePersistentObjectDAO<Document>
                     .collect(Collectors.groupingBy(Function.identity()))).keySet();
 
             if (CollectionUtils.isNotEmpty(currentlyUsedTags)) {
-                // Delete all currently recorded unique tags no more used
-                if (isOracle()) {
-                    /*
-                     * In Oracle the limit of 1000 elements applies to sets of
-                     * single items: (x) IN ((1), (2), (3), ...). There is no
-                     * limit if the sets contain two or more items: (x, 0) IN
-                     * ((1,0), (2,0), (3,0), ...):
-                     */
-                    jdbcUpdate("delete from ld_uniquetag where ld_tenantid = %d and (ld_tag,0) not in (%s)"
-                            .formatted(tenantId, CollectionUtil.join(currentlyUsedTags,
-                                    tag -> ("('%s',0)".formatted(SqlUtil.doubleQuotes(tag))))));
-                } else {
-                    jdbcUpdate("delete from ld_uniquetag where ld_tenantid = %d and ld_tag not in (%s)"
-                            .formatted(tenantId, CollectionUtil.join(currentlyUsedTags,
-                                    tag -> "'%s'".formatted(SqlUtil.doubleQuotes(tag)))));
-                }
+                // Delete all currently recorded unique tags no more used, one
+                // at a time so each tag is bound as a parameter
+                for (String tag : queryForList("select ld_tag from ld_uniquetag where ld_tenantid = %d"
+                        .formatted(tenantId), String.class))
+                    if (tag != null && !currentlyUsedTags.contains(tag))
+                        jdbcUpdate("delete from ld_uniquetag where ld_tenantid = %d and ld_tag = :tag"
+                                .formatted(tenantId), Map.of("tag", tag));
             }
         }
     }
