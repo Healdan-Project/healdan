@@ -1,6 +1,8 @@
 package com.logicaldoc.web.service;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
@@ -20,6 +22,8 @@ import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIHistory;
 import com.logicaldoc.gui.common.client.beans.GUITask;
+import com.logicaldoc.util.config.ContextProperties;
+import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.web.AbstractWPTestCase;
 
 /**
@@ -49,8 +53,14 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
     // System > General, whose tabs show the statistics and the plugins
     private static final long GENERAL = 70L;
 
+    // Settings > GUI settings, whose Languages tab switches the GUI languages
+    private static final long GUI_SETTINGS = 102L;
+
     // The author user's group. The author isn't an administrator.
     private static final long AUTHOR_GROUP = 2L;
+
+    // The author user's own group, which the fixture gives GUI settings
+    private static final long AUTHOR_USER_GROUP = -4L;
 
     private static final String TASK = "IndexerTask";
 
@@ -190,6 +200,22 @@ public class SystemServiceImplAuthorizationTest extends AbstractWPTestCase {
 
         grant(GENERAL);
         assertFalse(testSubject.getPlugins().isEmpty());
+    }
+
+    @Test
+    public void testSetGUILanguageStatusNeedsTheGUISettingsMenu() throws ServerException, PersistenceException {
+        revoke(GUI_SETTINGS, AUTHOR_USER_GROUP);
+        prepareSession("author", "admin");
+        ContextProperties config = Context.get().getConfig();
+        String status = config.getProperty("default.lang.it.gui");
+        boolean enabled = "enabled".equals(status);
+        assertThrows(AccessDeniedException.class, () -> testSubject.setGUILanguageStatus("it", !enabled));
+        assertEquals(status, config.getProperty("default.lang.it.gui"));
+
+        grant(GUI_SETTINGS);
+        testSubject.setGUILanguageStatus("it", !enabled);
+        assertNotEquals(status, config.getProperty("default.lang.it.gui"));
+        testSubject.setGUILanguageStatus("it", enabled);
     }
 
     private List<GUIHistory> search() throws ServerException {

@@ -108,6 +108,9 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
     // System > General, whose tabs show the statistics and the plugins
     private static final long GENERAL_MENU = 70L;
 
+    // Settings > GUI settings, whose Languages tab switches the GUI languages
+    private static final long GUI_SETTINGS_MENU = 102L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SystemServiceImpl.class);
@@ -543,7 +546,7 @@ public class SystemServiceImpl extends AbstractRemoteService implements SystemSe
 
     @Override
     public void setGUILanguageStatus(String language, boolean active) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(GUI_SETTINGS_MENU);
 
         ContextProperties conf = Context.get().getConfig();
         conf.setProperty(session.getTenantName() + ".lang." + language + ".gui", active ? "enabled" : "disabled");
