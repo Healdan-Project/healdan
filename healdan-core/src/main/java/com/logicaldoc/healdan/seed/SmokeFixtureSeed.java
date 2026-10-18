@@ -5,6 +5,8 @@ import java.util.function.Supplier;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
@@ -23,6 +25,7 @@ import com.logicaldoc.healdan.matter.ClientService;
 import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.matter.NewMatter;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * For the smoke test only: when {@code HEALDAN_SMOKE_FIXTURE} is {@code true},
@@ -62,8 +65,25 @@ public class SmokeFixtureSeed implements SeedStep {
 		return "true".equals(flag.get());
 	}
 
+	/**
+	 * Creates the fixture in one transaction: a failure leaves nothing behind,
+	 * so the next start, which finds no marker, can run it again
+	 */
 	@Override
 	public void run() throws Exception {
+		new TransactionTemplate(Context.get(PlatformTransactionManager.class)).execute(status -> {
+			try {
+				create();
+			} catch (RuntimeException e) {
+				throw e;
+			} catch (Exception e) {
+				throw new IllegalStateException(e.getMessage(), e);
+			}
+			return null;
+		});
+	}
+
+	private void create() throws Exception {
 		FolderDAO dao = FolderDAO.get();
 		Group everyone = GroupDAO.get().findByName(HealdanConstants.EVERYONE_GROUP, Tenant.DEFAULT_ID);
 

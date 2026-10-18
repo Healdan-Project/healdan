@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
@@ -24,6 +25,7 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanOperation.Kind;
+import com.logicaldoc.healdan.HealdanStartupException;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.Matter;
@@ -99,6 +101,37 @@ public class SmokeFixtureSeedTest extends AbstractHealdanTestCase {
 		assertNull(ClientDAO.get().findByNumber(1));
 		// No marker, so a later start with the flag runs it
 		assertNull(HealdanSettings.get().get("seed.smoke-fixture"));
+	}
+
+	/**
+	 * A failure halfway leaves nothing behind, so the next start can run the
+	 * step again instead of failing on the client it left
+	 */
+	@Test
+	public void testAFailedRunLeavesNothingAndTheNextOneSucceeds() throws Exception {
+		// The matter refuses a disabled owner, after the Store, the template and the client are made
+		setAdminEnabled(false);
+		assertThrows(HealdanStartupException.class,
+				() -> Context.get(SeedRunner.class).runPending(List.of(seed("true"))));
+
+		Folder root = FolderDAO.get().findRoot(Tenant.DEFAULT_ID);
+		assertTrue(FolderDAO.get().findByName(root, "Smoke", Tenant.DEFAULT_ID, false).isEmpty());
+		Folder templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId());
+		assertTrue(FolderDAO.get().findByName(templates, "Smoke template", Tenant.DEFAULT_ID, false).isEmpty());
+		assertNull(ClientDAO.get().findByNumber(1));
+		assertNull(HealdanSettings.get().get("seed.smoke-fixture"));
+
+		setAdminEnabled(true);
+		Context.get(SeedRunner.class).runPending(List.of(seed("true")));
+		assertEquals("done", HealdanSettings.get().get("seed.smoke-fixture"));
+		assertEquals(1, FolderDAO.get().findByName(root, "Smoke", Tenant.DEFAULT_ID, false).size());
+		assertNotNull(MatterDAO.get().findByClientAndNumber(ClientDAO.get().findByNumber(1).getId(), 1));
+	}
+
+	private static void setAdminEnabled(boolean enabled) throws Exception {
+		User admin = UserDAO.get().findByUsername("admin", true);
+		admin.setEnabled(enabled);
+		UserDAO.get().store(admin);
 	}
 
 	@Test
