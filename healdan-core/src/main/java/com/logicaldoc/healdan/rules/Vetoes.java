@@ -15,11 +15,11 @@ import com.logicaldoc.util.spring.Context;
  * refused operation touched, so that nothing CE loaded on the way outlives the
  * rollback in the second-level cache (plan, D3).
  */
-final class Vetoes {
+public final class Vetoes {
 
 	/** Rules to run */
 	@FunctionalInterface
-	interface Check {
+	public interface Check {
 		void run() throws PersistenceException;
 	}
 
@@ -32,7 +32,7 @@ final class Vetoes {
 	 * @param check the rules
 	 * @throws PersistenceException the refusal, or an error at data layer
 	 */
-	static void check(Collection<Long> folderIds, Collection<Long> documentIds, Check check)
+	public static void check(Collection<Long> folderIds, Collection<Long> documentIds, Check check)
 			throws PersistenceException {
 		try {
 			check.run();
@@ -48,7 +48,7 @@ final class Vetoes {
 	 * @param ids object ids, possibly null or 0 for an object not saved yet
 	 * @return the distinct ids of the saved objects
 	 */
-	static List<Long> ids(Long... ids) {
+	public static List<Long> ids(Long... ids) {
 		List<Long> list = new ArrayList<>();
 		for (Long id : ids)
 			if (id != null && id != 0L && !list.contains(id))

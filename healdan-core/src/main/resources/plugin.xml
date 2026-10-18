@@ -112,6 +112,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.rules.RulesFolderListener" />
 	</extension>
 
+	<!-- After the rules (100); before the email listener (130), so that the email attributes exist with the template's definitions -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanProfile">
+		<parameter id="position" value="120" />
+		<parameter id="class" value="com.logicaldoc.healdan.profile.ProfileDocumentListener" />
+	</extension>
+
 	<!-- After the rules (100) and the later profile (120) and email (130) listeners, so that a veto never burns a number -->
 	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanDocNumber">
 		<parameter id="position" value="140" />

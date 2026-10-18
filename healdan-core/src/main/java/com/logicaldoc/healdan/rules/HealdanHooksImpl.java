@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.rules;
 
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -10,7 +11,12 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
+import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.profile.Inheritance;
+import com.logicaldoc.healdan.profile.ProfileDocumentListener;
+import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
 
@@ -56,9 +62,35 @@ public class HealdanHooksImpl implements HealdanHooks {
 	 * another document raises no duplicate error (spec 6.3: a change is ignored).
 	 */
 	@Override
-	public void beforeDocumentUpdate(Document document, Document docVO, DocumentHistory transaction) {
+	public void beforeDocumentUpdate(Document document, Document docVO, DocumentHistory transaction)
+			throws PersistenceException {
 		if (document != null)
 			DocNumberListener.protect(document.getId(), docVO);
+		if (document != null && docVO != null)
+			checkSubclass(document, docVO);
+	}
+
+	/**
+	 * Refuses an update that leaves the Subclass outside its Class (spec 6.6),
+	 * before CE writes anything. An unchanged Class and Subclass are never
+	 * refused, nor is a document outside a matter.
+	 */
+	private void checkSubclass(Document document, Document docVO) throws PersistenceException {
+		Object subclass = docVO.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
+		if (Inheritance.isBlank(subclass) || document.getFolder() == null
+				|| !MatterLocator.get().locate(document.getFolder()).isInsideMatter())
+			return;
+
+		Object docClass = docVO.getValue(HealdanConstants.ATTR_DOCCLASS);
+		String effective = !Inheritance.isBlank(docClass) ? docClass.toString()
+				: String.valueOf(Inheritance.get().inheritedFrom(document.getFolder().getId())
+						.get(HealdanConstants.ATTR_DOCCLASS));
+		if (ProfileSchema.get().subclassBelongs(subclass.toString(), effective))
+			return;
+		if (Objects.equals(subclass, document.getValue(HealdanConstants.ATTR_DOCSUBCLASS))
+				&& Objects.equals(docClass, document.getValue(HealdanConstants.ATTR_DOCCLASS)))
+			return;
+		ProfileDocumentListener.refuse(document, subclass.toString(), effective);
 	}
 
 	@Override
