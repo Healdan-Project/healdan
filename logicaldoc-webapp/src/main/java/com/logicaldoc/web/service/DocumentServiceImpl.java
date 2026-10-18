@@ -777,6 +777,12 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Session session = validateSession();
 
         try {
+            // A document that doesn't exist still gives null
+            DocumentDAO docDao = DocumentDAO.get();
+            if (docDao.findById(docId) != null
+                    && !docDao.isPermissionAllowed(Permission.READ, docId, session.getUserId()))
+                throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                        .formatted(session.getUsername(), Permission.READ.name(), docId));
             return getDocument(session, docId);
         } catch (InvalidSessionServerException | PermissionException | PersistenceException e) {
             return throwServerException(session, log, e);
@@ -944,6 +950,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Version docVersion;
         try {
             docVersion = versDao.findById(id1, true);
+            checkVersionReadable(session, docVersion);
         } catch (Exception e) {
             return super.<List<GUIVersion>> throwServerException(session, log, e);
         }
@@ -987,6 +994,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         try {
             docVersion = versDao.findById(id2, true);
+            checkVersionReadable(session, docVersion);
         } catch (Exception e) {
             return super.<List<GUIVersion>> throwServerException(session, log, e);
         }
@@ -1037,6 +1045,14 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         }
 
         return versions;
+    }
+
+    private static void checkVersionReadable(Session session, Version version)
+            throws PersistenceException, AccessDeniedException {
+        if (version != null
+                && !DocumentDAO.get().isPermissionAllowed(Permission.READ, version.getDocId(), session.getUserId()))
+            throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                    .formatted(session.getUsername(), Permission.READ.name(), version.getDocId()));
     }
 
     private void setGUIExtendedAttributes(Version docVersion, GUIVersion guiVersion) throws ServerException {
@@ -1213,6 +1229,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         try {
             DocumentDAO docDao = DocumentDAO.get();
+            if (!docDao.isPermissionAllowed(Permission.WRITE, guiDocument.getId(), session.getUserId()))
+                throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                        .formatted(session.getUsername(), Permission.WRITE.name(), guiDocument.getId()));
             Document document = docDao.findById(guiDocument.getId(), true);
 
             if (guiDocument.getDocRef() != null) {

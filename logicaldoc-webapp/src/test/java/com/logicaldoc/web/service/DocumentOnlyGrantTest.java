@@ -5,6 +5,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -41,6 +42,7 @@ import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
@@ -66,12 +68,16 @@ import jakarta.servlet.WriteListener;
  * stays out of their reach.
  * <p>
  * Alice isn't in IT. A PDF in Secured Documents, a folder only IT can read,
- * gives Alice READ, DOWNLOAD and PREVIEW in its own ACL. Bob has no grant at
- * all. The doc # lookup itself is Healdan's, so healdan-core's
+ * gives Alice READ, DOWNLOAD and PREVIEW in its own ACL, and IT READ, WRITE,
+ * DOWNLOAD and PREVIEW. Carol is in IT. Bob has no grant at all. The doc #
+ * lookup itself is Healdan's, so healdan-core's
  * {@code DocumentOnlyGrantLookupTest} covers it.
  * <p>
- * Two tests, one per user, because each test builds its database and its
- * document again, which takes seconds.
+ * Reading the document, listing its versions and saving its properties need
+ * READ, READ and WRITE on the document (T19-c): CE checked none of them.
+ * <p>
+ * Two tests, because each test builds its database and its document again,
+ * which takes seconds.
  */
 public class DocumentOnlyGrantTest extends AbstractWPTestCase {
 
@@ -110,6 +116,8 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
                 DocumentDAO.get().getAllowedPermissions(doc.getId(), alice));
         // The admin, whose session setUp opened, gets the folder
         assertNotNull(new FolderServiceImpl().getFolder(secured.getId(), false, false, false));
+        GUIDocument edited = new DocumentServiceImpl().getById(doc.getId());
+        edited.setColor("red");
 
         prepareSession("alice", PASSWORD);
 
@@ -133,7 +141,9 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
                 allowed(documents.getAllowedPermissions(List.of(doc.getId()))));
 
         // The Versions tab lists /data/versions.xml?docId=, and comparing two versions calls getVersionsById
-        String xml = versionsXml();
+        MemoryResponse versionsXml = versionsXml();
+        assertNull(versionsXml.error);
+        String xml = versionsXml.text();
         assertTrue(xml, xml.contains("<docid>%d</docid>".formatted(doc.getId())));
         assertTrue(xml, xml.contains("<version>1.0</version>"));
         List<GUIVersion> versions = documents.getVersionsById(version.getId(), version.getId());
@@ -157,6 +167,13 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         // The folder stays out of reach. The GUI asks for it when a hit is double-clicked
         // or right-clicked (D7).
         assertNull(new FolderServiceImpl().getFolder(secured.getId(), false, false, false));
+
+        // Saving the properties needs WRITE, which Alice hasn't got and Carol has through IT
+        assertThrows(AccessDeniedException.class, () -> documents.save(edited));
+        assertNull(DocumentDAO.get().findById(doc.getId()).getColor());
+        prepareSession("carol", PASSWORD);
+        assertEquals("red", new DocumentServiceImpl().save(edited).getColor());
+        assertEquals("red", DocumentDAO.get().findById(doc.getId()).getColor());
     }
 
     @Test
@@ -164,10 +181,23 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         long bob = UserDAO.get().findByUsername("bob").getId();
         assertFalse(FolderDAO.get().isReadAllowed(secured.getId(), bob));
         assertTrue(DocumentDAO.get().getAllowedPermissions(doc.getId(), bob).isEmpty());
+        GUIDocument edited = new DocumentServiceImpl().getById(doc.getId());
+        edited.setColor("red");
 
         prepareSession("bob", PASSWORD);
 
-        assertTrue(allowed(new DocumentServiceImpl().getAllowedPermissions(List.of(doc.getId()))).isEmpty());
+        DocumentServiceImpl documents = new DocumentServiceImpl();
+        assertTrue(allowed(documents.getAllowedPermissions(List.of(doc.getId()))).isEmpty());
+        assertThrows(AccessDeniedException.class, () -> documents.getById(doc.getId()));
+
+        MemoryResponse versionsXml = versionsXml();
+        assertEquals(500, versionsXml.getStatus());
+        assertEquals("Document %d is not accessible by user bob".formatted(doc.getId()), versionsXml.error);
+        assertEquals("", versionsXml.text());
+        assertThrows(AccessDeniedException.class, () -> documents.getVersionsById(version.getId(), version.getId()));
+
+        assertThrows(AccessDeniedException.class, () -> documents.save(edited));
+        assertNull(DocumentDAO.get().findById(doc.getId()).getColor());
 
         MemoryResponse download = download();
         assertEquals(500, download.getStatus());
@@ -190,6 +220,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         GroupDAO.get().store(it);
         User alice = user("alice");
         user("bob");
+        user("carol", it);
 
         // A folder only IT can read
         Folder vo = new Folder("Secured Documents");
@@ -236,14 +267,13 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         doc = DocumentDAO.get().findById(doc.getId());
     }
 
-    private String versionsXml() throws Exception {
+    private MemoryResponse versionsXml() throws Exception {
         MockServletRequest request = new MockServletRequest(servletSession);
         request.setParameter("docId", Long.toString(doc.getId()));
         MemoryResponse response = new MemoryResponse();
         // HttpServlet's public entry, which calls the data servlet's own service method
         new VersionsDataServlet().service((ServletRequest) request, (ServletResponse) response);
-        assertNull(response.error);
-        return response.text();
+        return response;
     }
 
     private MemoryResponse download() {
@@ -275,7 +305,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         return Set.copyOf(ace.getAllowedPermissions());
     }
 
-    private static User user(String username) throws Exception {
+    private static User user(String username, Group... groups) throws Exception {
         User user = new User();
         user.setUsername(username);
         user.setName(username);
@@ -284,6 +314,8 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         user.setDecodedPassword(PASSWORD);
         user.setTenantId(Tenant.DEFAULT_ID);
         user.setType(User.Type.DEFAULT);
+        for (Group group : groups)
+            user.addGroup(group);
         UserDAO.get().store(user);
         return UserDAO.get().findByUsername(username);
     }
