@@ -248,8 +248,7 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	@Test
 	public void testNarrowingStoreNarrowsMattersThatInheritIt() throws Exception {
 		// A second matter, whose workspace inherits the Store
-		Folder second = reload(folderDao.findById(
-				fx.matter(fx.client(997, "Other"), 1, "Second", reload(store), "Papers").getFolderId()));
+		Folder second = inheritingMatter(997, "Second", "Papers");
 		Folder papers = child(second, "Papers");
 		setAcl(papers, admin, ace(readers, Permission.READ), ace(lawyers, Permission.READ));
 		Map<Long, Set<Permission>> firstWorkspace = acl(workspace);
@@ -494,9 +493,12 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		Folder third = reload(folderDao.findById(
 				fx.matter(fx.client(996, "Third"), 1, "Inherits", reload(inherited), "Docs").getFolderId()));
 
-		// CE would point the workspace at the root; it gets a copy of the root's ACL
+		// It gets a copy of its template's ACL, which grants what the root does, and the owner's own group
 		assertNull(third.getSecurityRef());
-		assertEquals(acl(root), acl(third));
+		Map<Long, Set<Permission>> expected = new TreeMap<>(acl(root));
+		expected.put(GroupDAO.get().findByName(admin.getUserGroupName(), Tenant.DEFAULT_ID).getId(),
+				set(Permission.values()));
+		assertEquals(expected, acl(third));
 		assertEquals(Long.valueOf(third.getId()), reload(child(third, "Docs")).getSecurityRef());
 		assertNoReferenceTo(root, third);
 	}
@@ -560,12 +562,19 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	}
 
 	/**
-	 * @return the workspace of a new matter in the Store, which inherits the
-	 *         Store as CE's create makes it, with a folder Docs
+	 * @return the workspace of a new matter in the Store, with a folder Docs,
+	 *         made to inherit the Store as an admin can with CE's Security tab
+	 *         (a new matter's workspace has an ACL of its own)
 	 */
 	private Folder inheritingMatter(long clientNumber, String name) throws Exception {
-		return reload(folderDao.findById(
-				fx.matter(fx.client(clientNumber, name), 1, name, reload(store), "Docs").getFolderId()));
+		return inheritingMatter(clientNumber, name, "Docs");
+	}
+
+	private Folder inheritingMatter(long clientNumber, String name, String topFolder) throws Exception {
+		Folder workspace = folderDao.findById(
+				fx.matter(fx.client(clientNumber, name), 1, name, reload(store), topFolder).getFolderId());
+		folderDao.updateSecurityRef(workspace.getId(), store.getId(), folderHistory(admin));
+		return reload(workspace);
 	}
 
 	/**

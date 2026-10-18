@@ -116,11 +116,11 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testTheWorkspaceIsRenamedOnlyByEditMatter() throws Exception {
-		assertRefused(WORKSPACE_RENAME, () -> rename(workspace, "998.1 – Renamed", admin));
-		assertRefused(WORKSPACE_RENAME, () -> rename(workspace, "998.1 – Renamed", alice));
+		assertRefused(WORKSPACE_RENAME, () -> rename(workspace, "998.1 \u2013 Renamed", admin));
+		assertRefused(WORKSPACE_RENAME, () -> rename(workspace, "998.1 \u2013 Renamed", alice));
 
-		allowed(() -> HealdanOperation.run(Kind.MATTER_EDIT, () -> rename(workspace, "998.1 – Renamed", alice)));
-		assertEquals("998.1 – Renamed", reload(workspace).getName());
+		allowed(() -> HealdanOperation.run(Kind.MATTER_EDIT, () -> rename(workspace, "998.1 \u2013 Renamed", alice)));
+		assertEquals("998.1 \u2013 Renamed", reload(workspace).getName());
 	}
 
 	@Test

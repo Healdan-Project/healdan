@@ -15,6 +15,7 @@ import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
@@ -27,10 +28,10 @@ import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.Matter;
-import com.logicaldoc.healdan.matter.MatterDAO;
-import com.logicaldoc.healdan.matter.MatterDisplay;
-import com.logicaldoc.healdan.profile.ProfileSchema;
-import com.logicaldoc.healdan.profile.Propagation;
+import com.logicaldoc.healdan.matter.MatterService;
+import com.logicaldoc.healdan.matter.NewMatter;
+import com.logicaldoc.healdan.security.AclMath;
+import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -38,8 +39,8 @@ import com.logicaldoc.util.spring.Context;
  * Builds the users, groups, Stores, clients, matters, folders and documents
  * that Healdan's tests need.
  * <p>
- * Until Task 15, {@link #matter} builds the workspace directly; Task 15 points
- * it at {@code MatterService}.
+ * {@link #matter} creates matters the way an admin does, with
+ * {@link MatterService}, from a one-folder template for each Store.
  */
 public class HealdanFixtures {
 
@@ -110,6 +111,12 @@ public class HealdanFixtures {
 	}
 
 	/**
+	 * Creates a matter as an admin does, with {@link MatterService}: owned by
+	 * the admin, from the Store's template (see {@link #storeTemplate}), so its
+	 * workspace has an ACL of its own that grants what the Store grants, plus
+	 * every permission to the admin's own group. Then the admin adds the
+	 * top-level folders, which inherit the workspace.
+	 *
 	 * @param client the client
 	 * @param number the matter number
 	 * @param name the matter name
@@ -120,31 +127,41 @@ public class HealdanFixtures {
 	 */
 	public Matter matter(Client client, long number, String name, Folder store, String... topFolders)
 			throws Exception {
-		return HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE, () -> {
-			Folder vo = new Folder(MatterDisplay.format(client.getNumber(), number, name));
-			vo.setTenantId(Tenant.DEFAULT_ID);
-			Folder workspace = FolderDAO.get().create(store, vo, true, folderHistory());
-			for (String top : topFolders)
-				folder(workspace, top);
+		User admin = admin();
+		Folder template = storeTemplate(store);
+		Matter matter = MatterService.get().create(
+				new NewMatter(client.getId(), number, name, null, store.getId(), admin.getId(), template.getId()),
+				admin);
+		Folder workspace = FolderDAO.get().findById(matter.getFolderId());
+		for (String top : topFolders)
+			folder(workspace, top);
+		return matter;
+	}
 
-			// The row comes after the folders, as when Task 15 creates a matter
-			Matter matter = new Matter();
-			matter.setClientId(client.getId());
-			matter.setNumber(number);
-			matter.setName(name);
-			matter.setFolderId(workspace.getId());
-			matter.setOwnerId(admin().getId());
-			MatterDAO.get().store(matter);
-
-			workspace = FolderDAO.get().findById(workspace.getId(), true);
-			workspace.setTemplate(ProfileSchema.get().template());
-			workspace.setValue(HealdanConstants.ATTR_CLIENT, Long.toString(client.getNumber()));
-			workspace.setValue(HealdanConstants.ATTR_MATTER, Long.toString(number));
-			FolderDAO.get().store(workspace, folderHistory());
-			// As MatterService will: the folders made before the row get client and matter
-			Propagation.get().restampSubtree(workspace.getId());
-			return matter;
+	/**
+	 * @param store a Store
+	 * @return the Store's one-folder template, directly under the Templates
+	 *         Store, with an ACL of its own that grants what the Store grants
+	 *         now
+	 * @throws Exception if the template can't be created or stored
+	 */
+	public Folder storeTemplate(Folder store) throws Exception {
+		Folder templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId());
+		String name = "Store %d".formatted(store.getId());
+		List<Folder> found = FolderDAO.get().findByName(templates, name, Tenant.DEFAULT_ID, true);
+		Folder template = FolderDAO.get().findById(found.isEmpty() ? folder(templates, name).getId()
+				: found.get(0).getId(), true);
+		template.setSecurityRef(null);
+		template.getAccessControlList().clear();
+		AclMath.effective(store.getId()).forEach((group, flags) -> {
+			FolderAccessControlEntry ace = new FolderAccessControlEntry(group);
+			ace.grantPermissions(flags);
+			template.addAccessControlEntry(ace);
 		});
+		FolderHistory history = folderHistory();
+		history.setEvent(FolderEvent.PERMISSION);
+		FolderDAO.get().store(template, history);
+		return template;
 	}
 
 	/**
