@@ -228,6 +228,9 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 				folderVO("Recent Work", HealdanConstants.FOLDER_TYPE_SEARCH), true, folderHistory(admin))));
 		assertRefused(SEARCH_FOLDER_TYPE, () -> changeType(sub, HealdanConstants.FOLDER_TYPE_SEARCH, admin));
 		assertRefused(SEARCH_FOLDER_TYPE, () -> changeType(search, Folder.TYPE_DEFAULT, admin));
+		// Inside a matter or a template only, even for those operations
+		assertRefused(SEARCH_FOLDER_PLACE, () -> HealdanOperation.run(Kind.SEARCH_FOLDER, () -> folderDao.create(loose,
+				folderVO("Recent Work", HealdanConstants.FOLDER_TYPE_SEARCH), true, folderHistory(admin))));
 
 		allowed(() -> HealdanOperation.run(Kind.SEARCH_FOLDER, () -> folderDao.create(documents,
 				folderVO("Recent Work", HealdanConstants.FOLDER_TYPE_SEARCH), true, folderHistory(alice))));

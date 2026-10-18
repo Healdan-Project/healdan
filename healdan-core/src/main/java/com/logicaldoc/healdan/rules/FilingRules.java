@@ -81,6 +81,8 @@ public class FilingRules {
 
 	static final String SEARCH_FOLDER_TYPE = "Search folders can only be created with New search folder.";
 
+	static final String SEARCH_FOLDER_PLACE = "Search folders can only be created inside a %s or a workspace template.";
+
 	static final String TEMPLATES = "Only administrators can change workspace templates.";
 
 	static final String RESTORE_PERMISSION = "You need the delete permission on this folder to restore it.";
@@ -549,6 +551,10 @@ public class FilingRules {
 			throw refuse(STORE_TYPE, ids);
 		if (!restore && type == HealdanConstants.FOLDER_TYPE_SEARCH && !searchFolderService())
 			throw refuse(SEARCH_FOLDER_TYPE, ids);
+		// In a matter or below a template: directly in the Templates Store it would be a template itself
+		if (!restore && type == HealdanConstants.FOLDER_TYPE_SEARCH
+				&& !(parent.isInsideMatter() || parent.kind() == Kind.IN_TEMPLATES))
+			throw refuse(label(SEARCH_FOLDER_PLACE), ids);
 		if (alias && noShortcuts(parent))
 			throw refuse(SHORTCUT, ids);
 		if (parent.kind() == Kind.STORE && !HealdanOperation.active(HealdanOperation.Kind.MATTER_CREATE))

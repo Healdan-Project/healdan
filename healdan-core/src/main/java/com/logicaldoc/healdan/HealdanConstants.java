@@ -2,6 +2,8 @@ package com.logicaldoc.healdan;
 
 import java.util.Set;
 
+import com.logicaldoc.core.document.DocumentEvent;
+
 /**
  * Names and codes shared by all the Healdan classes.
  */
@@ -21,6 +23,15 @@ public final class HealdanConstants {
 
 	/** Extensions of the files that are considered emails */
 	public static final Set<String> EMAIL_EXTENSIONS = Set.of("eml", "msg");
+
+	/**
+	 * The document history events that count as a change (spec 5.4): created,
+	 * new version or snapshot, properties edited, renamed and moved in. CE's
+	 * last modified date isn't used, because check-outs and locks change it
+	 * too.
+	 */
+	public static final Set<DocumentEvent> CHANGE_EVENTS = Set.of(DocumentEvent.STORED, DocumentEvent.CHECKEDIN,
+			DocumentEvent.CHANGED, DocumentEvent.RENAMED, DocumentEvent.MOVED);
 
 	public static final String ATTR_CLIENT = "client";
 

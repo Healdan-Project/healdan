@@ -7,10 +7,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import javax.sql.DataSource;
-
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +23,7 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
+import com.logicaldoc.healdan.searchfolder.SearchFolderRuleDAO;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -71,13 +69,13 @@ public class TemplateCopier {
 
 	private final CacheEvictor evictor;
 
-	private final JdbcTemplate jdbc;
+	private final SearchFolderRuleDAO searchFolderRules;
 
 	@Autowired
-	public TemplateCopier(LocalValueDAO locals, CacheEvictor evictor, DataSource dataSource) {
+	public TemplateCopier(LocalValueDAO locals, CacheEvictor evictor, SearchFolderRuleDAO searchFolderRules) {
 		this.locals = locals;
 		this.evictor = evictor;
-		this.jdbc = new JdbcTemplate(dataSource);
+		this.searchFolderRules = searchFolderRules;
 	}
 
 	/**
@@ -151,7 +149,7 @@ public class TemplateCopier {
 		// After the stores above, which recalculate the marks a create leaves
 		locals.copy(LocalValueDAO.FOLDER, source.getId(), copy.getId());
 		if (copy.getType() == HealdanConstants.FOLDER_TYPE_SEARCH)
-			copySearchFolderRule(source.getId(), copy.getId());
+			searchFolderRules.copy(source.getId(), copy.getId());
 
 		Set<Long> below = new HashSet<>(above);
 		below.add(source.getId());
@@ -204,16 +202,6 @@ public class TemplateCopier {
 			entry.grantPermissions(flags);
 			folder.addAccessControlEntry(entry);
 		});
-	}
-
-	/*
-	 * Task 17 replaces this with SearchFolderRuleDAO.copy
-	 */
-	private void copySearchFolderRule(long fromId, long toId) {
-		jdbc.update("""
-				insert into hd_searchfolder (hd_folderid, hd_days, hd_onlymine, hd_kind, hd_docclass, hd_docsubclass)
-				select ?, hd_days, hd_onlymine, hd_kind, hd_docclass, hd_docsubclass from hd_searchfolder where hd_folderid = ?
-				""", toId, fromId);
 	}
 
 	private static FolderHistory permissionHistory(FolderHistory tx) {
