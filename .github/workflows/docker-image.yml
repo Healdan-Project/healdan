@@ -106,7 +106,8 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.arch }}
           # mode=max also caches the Maven stage, so changes only under docker/ skip the Maven build. Only pushes
           # write the cache: exporting it takes about five minutes, and other pull requests can't read a pull
-          # request's cache anyway. Pull requests read the cache master's pushes write.
+          # request's cache anyway. Pull requests read the cache master's pushes write. The cost: a later push to a
+          # pull request that changed code rebuilds the Maven stage even if it only touches docker/.
           cache-to: ${{ github.event_name == 'push' && format('type=gha,scope={0},mode=max,ignore-error=true', matrix.arch) || '' }}
 
       - name: Smoke test

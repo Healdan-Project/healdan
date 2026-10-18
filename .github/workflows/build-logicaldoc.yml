@@ -12,9 +12,10 @@ on:
   pull_request:
     branches: [ master, main ]
 
-# A new push to a pull request cancels its outdated run.
+# A new push to a pull request cancels its outdated run. Pushes get a group per commit: GitHub cancels a run still
+# pending in its group when a newer one queues, which would leave some master commits without a build.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -81,10 +82,12 @@ jobs:
           </settings>
           EOF
       # Every module but the WAR, and the GUI's Java without its GWT compile (healdan-core needs the GUI's classes).
-      # The Docker image CI runs both, and they're most of a full build's time.
+      # The Docker image CI runs both, and they're most of a full build's time. The antrun skip goes with the GWT one:
+      # the GUI's package step edits files the GWT compile writes, and the other modules' antrun steps only finish
+      # the plugin zips the WAR unpacks.
       - name: Maven install (all modules but the WAR, without the GWT compile)
         if: steps.changes.outputs.code == 'true'
-        run: mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -pl '!logicaldoc-webapp' install
+        run: mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -pl '!logicaldoc-webapp' install
 
       - name: Test Healdan
         if: steps.changes.outputs.code == 'true'
