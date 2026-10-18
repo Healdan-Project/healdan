@@ -3,8 +3,9 @@ name: Docker image
 # Builds the Docker image (Dockerfile) natively on amd64 and arm64 runners; no QEMU, so the GWT compile runs at
 # full speed on both. Hosted runners give it 16 GB of memory, enough for the Maven build's two GWT workers.
 #
-# - Every pull request, and every push that changes more than docs: per architecture, the init tool's unit tests
+# - Every pull request and push that changes more than docs: per architecture, the init tool's unit tests
 #   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml.
+#   A docs-only pull request runs the test job with those steps skipped, so it still reports the required checks.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
 #   cache, pushes it by digest, and joins both into one multi-arch image at ghcr.io/healdan-project/healdan.
 #   Tags: the branch or tag name, sha-<short sha>, and latest from master.
@@ -15,7 +16,7 @@ name: Docker image
 
 on:
   # No paths filter: master's ruleset requires Test (amd64) and Test (arm64), and a PR the workflow skips would never
-  # report them, so it could never merge.
+  # report them, so it could never merge. Docs-only pull requests skip the test job's steps instead.
   pull_request:
     branches: [ master ]
   push:
@@ -59,9 +60,17 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
+        with:
+          # A pull request's merge commit and its base, so code-changed.sh can list the files it changes.
+          fetch-depth: 2
+
+      - name: Check for code changes
+        id: changes
+        run: bash .github/scripts/code-changed.sh
 
       - name: Image metadata
         id: meta
+        if: steps.changes.outputs.code == 'true'
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
@@ -69,10 +78,12 @@ jobs:
           tags: ${{ env.TAG_RULES }}
 
       - name: Set up Buildx
+        if: steps.changes.outputs.code == 'true'
         uses: docker/setup-buildx-action@v4
 
       # Runs the Maven build too (tools builds on it). The image build below reuses it from the builder's cache.
       - name: Init tool unit tests (docker build --target tools)
+        if: steps.changes.outputs.code == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -82,6 +93,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.arch }}
 
       - name: Build image
+        if: steps.changes.outputs.code == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -92,10 +104,14 @@ jobs:
             VERSION=${{ steps.meta.outputs.version }}
             REVISION=${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.arch }}
-          # mode=max also caches the Maven stage, so changes only under docker/ skip the Maven build.
-          cache-to: type=gha,scope=${{ matrix.arch }},mode=max,ignore-error=true
+          # mode=max also caches the Maven stage, so changes only under docker/ skip the Maven build. Only pushes
+          # write the cache: exporting it takes about five minutes, and other pull requests can't read a pull
+          # request's cache anyway. Pull requests read the cache master's pushes write. The cost: a later push to a
+          # pull request that changed code rebuilds the Maven stage even if it only touches docker/.
+          cache-to: ${{ github.event_name == 'push' && format('type=gha,scope={0},mode=max,ignore-error=true', matrix.arch) || '' }}
 
       - name: Smoke test
+        if: steps.changes.outputs.code == 'true'
         env:
           LOGICALDOC_IMAGE: logicaldoc-community:ci
           SMOKE_BUILD: '0'

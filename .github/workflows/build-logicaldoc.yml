@@ -1,10 +1,22 @@
 name: Build LogicalDOC (Maven)
 
+# Compiles every module and runs the Healdan tests. It leaves the GWT compile and the WAR to the Docker image CI
+# (docker-image.yml), which builds both on every pull request and whose Test checks master also requires.
+
 on:
   push:
     branches: [ master, main ]
+    # Docs-only pushes don't change any code.
+    paths-ignore: [ 'docs/**', '**/*.md' ]
+  # No paths filter: master's ruleset requires build, so a docs-only pull request runs it with the build steps skipped.
   pull_request:
     branches: [ master, main ]
+
+# A new push to a pull request cancels its outdated run. Pushes get a group per commit: GitHub cancels a run still
+# pending in its group when a newer one queues, which would leave some master commits without a build.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -13,18 +25,27 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          # A pull request's merge commit and its base, so code-changed.sh can list the files it changes.
+          fetch-depth: 2
+
+      - name: Check for code changes
+        id: changes
+        run: bash .github/scripts/code-changed.sh
 
       # The GUI bundles Font Awesome Free; upstream code targets Pro
       - name: Check GUI icons against Font Awesome Free
         run: python3 .github/scripts/check-fontawesome-icons.py
 
       - name: Set up JDK
+        if: steps.changes.outputs.code == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
           cache: 'maven'
       - name: Configure Maven settings (LogicalDOC & Terracotta repos)
+        if: steps.changes.outputs.code == 'true'
         run: |
           mkdir -p ~/.m2
           cat > ~/.m2/settings.xml << 'EOF'
@@ -60,24 +81,20 @@ jobs:
             </activeProfiles>
           </settings>
           EOF
-      # Build all modules from the root pom.xml
-      - name: Maven install (all modules)
-        run: mvn -B -ntp -DskipTests install
+      # Every module but the WAR, and the GUI's Java without its GWT compile (healdan-core needs the GUI's classes).
+      # The Docker image CI runs both, and they're most of a full build's time. The antrun skip goes with the GWT one:
+      # the GUI's package step edits files the GWT compile writes, and the other modules' antrun steps only finish
+      # the plugin zips the WAR unpacks.
+      - name: Maven install (all modules but the WAR, without the GWT compile)
+        if: steps.changes.outputs.code == 'true'
+        run: mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -pl '!logicaldoc-webapp' install
 
       - name: Test Healdan
+        if: steps.changes.outputs.code == 'true'
         run: |
           touch ~/logicaldoc-dev.properties
           mvn -B -ntp -pl healdan-core test
 
       - name: Test Healdan hooks in upstream modules
+        if: steps.changes.outputs.code == 'true'
         run: mvn -B -ntp -pl logicaldoc-core test -Dtest='HealdanHooksTest'
-
-      # Build just the webapp WAR (and its deps) if you want a deployable artifact
-      - name: Build LogicalDOC webapp
-        run: mvn -B -ntp -pl logicaldoc-webapp -am -DskipTests package
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: logicaldoc-webapp
-          path: logicaldoc-webapp/target/*.war
