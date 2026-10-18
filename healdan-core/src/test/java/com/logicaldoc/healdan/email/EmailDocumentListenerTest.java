@@ -204,6 +204,10 @@ public class EmailDocumentListenerTest extends AbstractHealdanTestCase {
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILFROM));
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILSENT));
+
+		// An email that can't be read keeps its own name, without what MariaDB's utf8 tables can't hold (R33)
+		Document party = file("corrupt.msg", "Party " + new String(Character.toChars(0x1F389)) + ".msg");
+		assertEquals("Party \ufffd.msg", party.getFileName());
 	}
 
 	@Test

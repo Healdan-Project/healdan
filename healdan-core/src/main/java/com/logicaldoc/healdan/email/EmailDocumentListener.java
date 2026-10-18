@@ -49,7 +49,7 @@ public class EmailDocumentListener implements DocumentListener {
 
 	private static void fillEmail(Document document, DocumentHistory transaction) {
 		String fileName = document.getFileName();
-		if (fileName == null || transaction == null || transaction.getFile() == null)
+		if (fileName == null)
 			return;
 		// The name keeps the extension as it came; only the lookup is case-insensitive
 		// (CE's FileUtil.getExtension lower-cases, so take the original case from the name itself)
@@ -57,23 +57,25 @@ public class EmailDocumentListener implements DocumentListener {
 		if (!fileName.contains(".") || !HealdanConstants.EMAIL_EXTENSIONS.contains(extension.toLowerCase()))
 			return;
 
-		File file = transaction.getFile();
-		Optional<EmailFields> extracted = EmailFields.extract(file, extension);
-		if (extracted.isEmpty())
-			return;
+		// An email that can't be read keeps its own name, which must still fit the database (R33)
+		File file = transaction != null ? transaction.getFile() : null;
+		Optional<EmailFields> extracted = file != null ? EmailFields.extract(file, extension) : Optional.empty();
+		String named = FileNames.keep(fileName);
+		if (extracted.isPresent()) {
+			EmailFields fields = extracted.get();
+			set(document, HealdanConstants.ATTR_EMAILFROM, fields.from());
+			set(document, HealdanConstants.ATTR_EMAILTO, fields.to());
+			set(document, HealdanConstants.ATTR_EMAILCC, fields.cc());
+			set(document, HealdanConstants.ATTR_EMAILSUBJECT, fields.subject());
+			set(document, HealdanConstants.ATTR_EMAILSENT, fields.sent());
+			set(document, HealdanConstants.ATTR_EMAILRECEIVED, fields.received());
+			named = FileNames.fromSubject(fields.subject(), extension, fileName);
+		}
 
-		EmailFields fields = extracted.get();
-		set(document, HealdanConstants.ATTR_EMAILFROM, fields.from());
-		set(document, HealdanConstants.ATTR_EMAILTO, fields.to());
-		set(document, HealdanConstants.ATTR_EMAILCC, fields.cc());
-		set(document, HealdanConstants.ATTR_EMAILSUBJECT, fields.subject());
-		set(document, HealdanConstants.ATTR_EMAILSENT, fields.sent());
-		set(document, HealdanConstants.ATTR_EMAILRECEIVED, fields.received());
-
-		String named = FileNames.fromSubject(fields.subject(), extension, fileName);
 		if (!named.equals(fileName)) {
 			document.setFileName(named);
-			transaction.setFilename(named);
+			if (transaction != null)
+				transaction.setFilename(named);
 		}
 	}
 

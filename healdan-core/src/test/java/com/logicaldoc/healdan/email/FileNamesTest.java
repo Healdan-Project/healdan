@@ -53,6 +53,15 @@ public class FileNamesTest {
 	}
 
 	@Test
+	public void testTheFallbackFitsTheDatabaseToo() {
+		// A blank subject keeps the name the email came with, which mustn't fail the insert either (R33)
+		String party = "Party " + new String(Character.toChars(0x1F389)) + ".eml";
+		assertEquals("Party \ufffd.eml", FileNames.fromSubject(null, "eml", party));
+		assertEquals("Party \ufffd.eml", FileNames.fromSubject("   ", "eml", party));
+		assertEquals("Party \ufffd.eml", FileNames.fromSubject("...", "eml", party));
+	}
+
+	@Test
 	public void testExtensionKeepsItsCase() {
 		assertEquals("Hello.EML", FileNames.fromSubject("Hello", "EML", "x.EML"));
 	}

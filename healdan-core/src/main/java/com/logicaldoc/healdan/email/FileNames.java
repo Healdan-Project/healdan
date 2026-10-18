@@ -22,18 +22,19 @@ public final class FileNames {
 	 *         control characters replaced by {@code _}, and every character
 	 *         beyond the Basic Multilingual Plane by U+FFFD (R33), trimmed and
 	 *         shortened so that the whole name is at most 255 characters; the
-	 *         fallback when the subject is blank
+	 *         fallback, with U+FFFD for the characters beyond the plane, when
+	 *         the subject is blank
 	 */
 	public static String fromSubject(String subject, String extension, String fallback) {
 		if (subject == null)
-			return fallback;
+			return keep(fallback);
 		// Before the cut, which then splits no surrogate pair
 		String plane = BasicPlane.replaceOthers(subject);
 		StringBuilder clean = new StringBuilder(plane.length());
 		plane.chars().forEach(c -> clean.append(forbidden(c) ? '_' : (char) c));
 		String base = clean.toString().trim();
 		if (base.isEmpty())
-			return fallback;
+			return keep(fallback);
 
 		String suffix = "." + extension;
 		int room = MAX_LENGTH - suffix.length();
@@ -43,8 +44,17 @@ public final class FileNames {
 		while (base.endsWith("."))
 			base = base.substring(0, base.length() - 1).trim();
 		if (base.isEmpty())
-			return fallback;
+			return keep(fallback);
 		return base + suffix;
+	}
+
+	/**
+	 * @param name the name an email came with
+	 * @return the name with U+FFFD for each character beyond the Basic
+	 *         Multilingual Plane, which would fail the insert on MariaDB (R33)
+	 */
+	public static String keep(String name) {
+		return BasicPlane.replaceOthers(name);
 	}
 
 	private static boolean forbidden(int c) {
