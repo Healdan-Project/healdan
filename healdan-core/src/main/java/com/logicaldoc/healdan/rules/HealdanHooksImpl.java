@@ -11,14 +11,15 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.matter.MatterLocator;
-import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.EditMarks;
+import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.StoredProfile;
-import com.logicaldoc.core.folder.FolderDAO;
-import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.healdan.util.CacheEvictor;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -134,6 +135,23 @@ public class HealdanHooksImpl implements HealdanHooks {
 			return;
 		Vetoes.check(Vetoes.ids(folderId), List.of(),
 				() -> rules.checkFolderDelete(folder, FilingRules.actor(transaction)));
+		evictTreeAfterCompletion(folderId);
+	}
+
+	/**
+	 * Not a rule: CE deletes the tree with JDBC and evicts only the folders
+	 * from the second-level cache. A document left there live would be loaded
+	 * as live by the next DAO read, and Hibernate would then delete its
+	 * attribute and ACL rows, which a restore can't bring back (plan, R9). So
+	 * the tree's folders and documents, collected before CE marks them
+	 * deleted, are evicted once the delete's transaction ends.
+	 */
+	private void evictTreeAfterCompletion(long folderId) {
+		List<Long> folderIds = rows.tree(folderId);
+		List<Long> documentIds = rows.documentIds(folderIds);
+		CacheEvictor evictor = CacheEvictor.get();
+		evictor.evictFoldersAfterCompletion(folderIds);
+		evictor.evictDocumentsAfterCompletion(documentIds);
 	}
 
 	@Override
@@ -141,6 +159,24 @@ public class HealdanHooksImpl implements HealdanHooks {
 			throws PersistenceException {
 		Vetoes.check(Vetoes.ids(folderId, parentId), List.of(),
 				() -> rules.checkFolderRestore(folderId, parentId, FilingRules.actor(transaction)));
+	}
+
+	/**
+	 * CE restores the folder, its subtree and their documents with JDBC, so
+	 * what the second-level cache holds of them (deleted, or under the old
+	 * parent) is evicted now and again when the transaction ends (carry-forward:
+	 * an after-restore rule evicts the whole restored tree).
+	 */
+	@Override
+	public void afterFolderRestore(long folderId, long parentId, FolderHistory transaction)
+			throws PersistenceException {
+		List<Long> folderIds = rows.tree(folderId);
+		List<Long> documentIds = rows.documentIds(folderIds);
+		CacheEvictor evictor = CacheEvictor.get();
+		evictor.evictFolders(folderIds);
+		evictor.evictDocuments(documentIds);
+		evictor.evictFoldersAfterCompletion(folderIds);
+		evictor.evictDocumentsAfterCompletion(documentIds);
 	}
 
 	@Override

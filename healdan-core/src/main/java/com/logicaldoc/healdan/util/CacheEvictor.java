@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Evicts rows from Hibernate's second-level cache after Healdan changed them
@@ -40,6 +41,13 @@ public class CacheEvictor {
 	@Autowired
 	public CacheEvictor(@Qualifier("sessionFactory") SessionFactory sessionFactory) {
 		this.sessionFactory = sessionFactory;
+	}
+
+	/**
+	 * @return the bean
+	 */
+	public static CacheEvictor get() {
+		return Context.get(CacheEvictor.class);
 	}
 
 	/**
@@ -82,7 +90,34 @@ public class CacheEvictor {
 		onRollback(Document.class, ids);
 	}
 
+	/**
+	 * Evicts folders once the current transaction ends, however it ends: for
+	 * rows CE changes with JDBC later in the transaction, which an entity
+	 * loaded meanwhile would hide. Outside a transaction it evicts them at
+	 * once.
+	 *
+	 * @param ids the folder ids
+	 */
+	public void evictFoldersAfterCompletion(Collection<Long> ids) {
+		afterCompletion(Folder.class, ids, true);
+	}
+
+	/**
+	 * Evicts documents once the current transaction ends, however it ends (see
+	 * {@link #evictFoldersAfterCompletion}). Outside a transaction it evicts
+	 * them at once.
+	 *
+	 * @param ids the document ids
+	 */
+	public void evictDocumentsAfterCompletion(Collection<Long> ids) {
+		afterCompletion(Document.class, ids, true);
+	}
+
 	private void onRollback(Class<?> entity, Collection<Long> ids) {
+		afterCompletion(entity, ids, false);
+	}
+
+	private void afterCompletion(Class<?> entity, Collection<Long> ids, boolean alsoOnCommit) {
 		if (ids == null || ids.isEmpty())
 			return;
 		List<Long> copy = List.copyOf(ids);
@@ -93,7 +128,7 @@ public class CacheEvictor {
 		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
 			@Override
 			public void afterCompletion(int status) {
-				if (status != STATUS_COMMITTED)
+				if (alsoOnCommit || status != STATUS_COMMITTED)
 					evict(entity, copy);
 			}
 		});

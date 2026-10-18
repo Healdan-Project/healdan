@@ -319,6 +319,28 @@ public class StoredRows implements PreUpdateEventListener {
 
 	/**
 	 * @param rootId a folder
+	 * @return the folder and every live folder below it
+	 */
+	public List<Long> tree(long rootId) {
+		List<Long> ids = new ArrayList<>(List.of(rootId));
+		descendants(rootId).forEach(row -> ids.add(row.id()));
+		return ids;
+	}
+
+	/**
+	 * @param folderIds folders
+	 * @return the documents in them, deleted or not
+	 */
+	public List<Long> documentIds(Collection<Long> folderIds) {
+		List<Long> ids = new ArrayList<>();
+		for (List<Long> chunk : chunks(folderIds))
+			ids.addAll(named.queryForList("select ld_id from ld_document where ld_folderid in (:ids)",
+					new MapSqlParameterSource("ids", chunk), Long.class));
+		return ids;
+	}
+
+	/**
+	 * @param rootId a folder
 	 * @param type a folder type
 	 * @return true if the folder or a live folder below it has the type
 	 */

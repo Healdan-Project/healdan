@@ -214,11 +214,11 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 	protected void assertRefused(String expected, Refusal refusal, Route route, long... moreDocIds)
 			throws Exception {
 		awaitAsyncWork();
-		// First: CE's DAO read of a deleted document that is still cached drops its ext rows and ACL
-		DaoSnapshot dao = DaoSnapshot.take(jdbc);
+		// The database first, so that rows a DAO read deletes are caught as a change
 		DbSnapshot db = DbSnapshot.take(jdbc);
 		IndexSnapshot index = IndexSnapshot.of(
 				LongStream.concat(LongStream.of(doc.getId(), deletedDoc.getId()), LongStream.of(moreDocIds)).toArray());
+		DaoSnapshot dao = DaoSnapshot.take(jdbc);
 		long storeSize = Store.get().getTotalSize();
 
 		try {
