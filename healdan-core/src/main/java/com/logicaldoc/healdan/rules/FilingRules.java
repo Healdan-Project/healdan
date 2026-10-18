@@ -1,7 +1,10 @@
 package com.logicaldoc.healdan.rules;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +17,8 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
@@ -80,6 +85,9 @@ public class FilingRules {
 
 	static final String RESTORE_PERMISSION = "You need the delete permission on this folder to restore it.";
 
+	/** Key of what the current transaction found of who is an admin */
+	private static final String ADMINS = FilingRules.class.getName() + ".admins";
+
 	private final MatterLocator locator;
 
 	private final HealdanSettings settings;
@@ -124,11 +132,41 @@ public class FilingRules {
 			return false;
 		// A user's groups are transient: empty until the DAO initializes the user
 		if (user.getId() != 0L) {
+			Map<Long, Boolean> known = admins();
+			Boolean admin = known != null ? known.get(user.getId()) : null;
+			if (admin != null)
+				return admin;
 			User loaded = UserDAO.get().findById(user.getId(), true);
-			if (loaded != null)
+			if (loaded != null) {
+				if (known != null)
+					known.put(user.getId(), loaded.isAdmin());
 				return loaded.isAdmin();
+			}
 		}
 		return user.isAdmin();
+	}
+
+	/**
+	 * @return whether each user is an admin, as found so far in the current
+	 *         transaction, whose checks each ask again; null outside a
+	 *         transaction
+	 */
+	@SuppressWarnings("unchecked")
+	private static Map<Long, Boolean> admins() {
+		if (!TransactionSynchronizationManager.isSynchronizationActive())
+			return null;
+		Map<Long, Boolean> admins = (Map<Long, Boolean>) TransactionSynchronizationManager.getResource(ADMINS);
+		if (admins == null) {
+			admins = new HashMap<>();
+			TransactionSynchronizationManager.bindResource(ADMINS, admins);
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCompletion(int status) {
+					TransactionSynchronizationManager.unbindResourceIfPossible(ADMINS);
+				}
+			});
+		}
+		return admins;
 	}
 
 	/**
@@ -355,40 +393,66 @@ public class FilingRules {
 		Folder into = resolve(target);
 		Collection<Long> ids = ids(source.getId(), target.getId(), into.getId());
 		boolean admin = isAdmin(user);
-		Map<String, List<FolderRow>> byName = rows.descendants(source.getId()).stream()
+		// The source's tree is read once: the checks below walk parts of it many times
+		Subtree tree = new Subtree(source.getId());
+		Map<String, List<FolderRow>> byName = tree.descendants(source.getId()).stream()
 				.collect(Collectors.groupingBy(FolderRow::name));
-		checkMergeInto(source.getId(), Place.real(target.getId(), locator.locate(into)), byName, admin, ids,
+		checkMergeInto(tree, source.getId(), Place.real(target.getId(), locator.locate(into)), byName, admin, ids,
 				new HashSet<>());
-		checkDeleteAt(currentPosition(source.getId()), admin, ids);
+		checkDeleteAt(tree.position(source.getId()), admin, ids);
 	}
 
-	private void checkMergeInto(long sourceId, Place place, Map<String, List<FolderRow>> byName, boolean admin,
-			Collection<Long> ids, Set<String> checked) throws PersistenceException {
+	private void checkMergeInto(Subtree tree, long sourceId, Place place, Map<String, List<FolderRow>> byName,
+			boolean admin, Collection<Long> ids, Set<String> checked) throws PersistenceException {
 		if (!checked.add(sourceId + ">" + place.key()))
 			return;
-		checkContentAt(rows.contents(sourceId), place.position(), ids);
+		checkContentAt(tree.contents(sourceId), place.position(), ids);
 
-		for (FolderRow folder : rows.descendants(sourceId)) {
+		for (FolderRow folder : tree.descendants(sourceId)) {
 			FolderRow namesake = place.id() != null ? rows.liveChild(place.id(), folder.name(), true) : null;
 			if (namesake != null) {
-				checkMergeInto(folder.id(), Place.real(namesake.id(), locator.locate(namesake.id())), byName, admin,
-						ids, checked);
-				checkDeleteAt(currentPosition(folder.id()), admin, ids);
+				checkMergeInto(tree, folder.id(), Place.real(namesake.id(), locator.locate(namesake.id())), byName,
+						admin, ids, checked);
+				checkDeleteAt(tree.position(folder.id()), admin, ids);
 				continue;
 			}
 
 			// Moved into the target...
-			FolderPosition current = currentPosition(folder.id());
+			FolderPosition current = tree.position(folder.id());
 			checkMoveAt(current, place.position(), folder.alias(), admin, ids);
-			checkPlacement(folder.id(), childOf(place.position(), folder.id(), folder.type()), false, ids);
+			checkPlacement(tree, folder.id(), childOf(place.position(), folder.id(), folder.type()), ids);
 
 			// ...or merged into a namesake that was moved there first
 			for (FolderRow other : byName.getOrDefault(folder.name(), List.of()))
 				if (other.id() != folder.id()) {
-					checkMergeInto(folder.id(), Place.virtual(childOf(place.position(), other.id(), other.type()),
-							"%d@%s".formatted(other.id(), place.key())), byName, admin, ids, checked);
+					checkMergeInto(tree, folder.id(),
+							Place.virtual(childOf(place.position(), other.id(), other.type()),
+									"%d@%s".formatted(other.id(), place.key())),
+							byName, admin, ids, checked);
 					checkDeleteAt(current, admin, ids);
 				}
+		}
+	}
+
+	/**
+	 * {@link #checkPlacement(long, FolderPosition, boolean, Collection)} for a
+	 * part of a tree already read, live folders and documents only
+	 */
+	private void checkPlacement(Subtree tree, long rootId, FolderPosition rootPosition, Collection<Long> ids)
+			throws HealdanRuleException {
+		Map<Long, FolderPosition> level = Map.of(rootId, rootPosition);
+		while (!level.isEmpty()) {
+			for (Map.Entry<Long, FolderPosition> folder : level.entrySet())
+				checkContentAt(tree.contents(folder.getKey()), folder.getValue(), ids);
+
+			Map<Long, FolderPosition> next = new LinkedHashMap<>();
+			for (FolderRow child : tree.children(level.keySet())) {
+				FolderPosition parent = level.get(child.parentId());
+				if (child.alias() && noShortcuts(parent))
+					throw refuse(SHORTCUT, ids);
+				next.put(child.id(), childOf(parent, child.id(), child.type()));
+			}
+			level = next;
 		}
 	}
 
@@ -624,6 +688,80 @@ public class FilingRules {
 
 	private static Collection<Long> ids(Long... ids) {
 		return Vetoes.ids(ids);
+	}
+
+	/**
+	 * A folder and every live folder below it, with their live documents and
+	 * where each folder is stored, read with one query a level
+	 */
+	private final class Subtree {
+
+		private final Map<Long, List<FolderRow>> children = new HashMap<>();
+
+		private final Map<Long, FolderPosition> positions = new HashMap<>();
+
+		private final Map<Long, Contents> contents;
+
+		Subtree(long rootId) throws PersistenceException {
+			positions.put(rootId, currentPosition(rootId));
+			List<Long> all = new ArrayList<>(List.of(rootId));
+			Set<Long> seen = new HashSet<>(all);
+			List<Long> level = List.of(rootId);
+			while (!level.isEmpty()) {
+				List<Long> next = new ArrayList<>();
+				for (FolderRow child : rows.children(level, false))
+					if (seen.add(child.id())) {
+						children.computeIfAbsent(child.parentId(), id -> new ArrayList<>()).add(child);
+						// As currentPosition places it: under its stored parent
+						positions.put(child.id(), childOf(positions.get(child.parentId()), child.id(), child.type()));
+						next.add(child.id());
+					}
+				all.addAll(next);
+				level = next;
+			}
+			contents = rows.contents(all, false);
+		}
+
+		/**
+		 * @return where the folder is stored
+		 */
+		FolderPosition position(long folderId) {
+			return positions.get(folderId);
+		}
+
+		/**
+		 * @return the folder's live documents
+		 */
+		Contents contents(long folderId) {
+			return contents.getOrDefault(folderId, Contents.NONE);
+		}
+
+		/**
+		 * @return the children of the folders, by id, as
+		 *         {@link StoredRows#children(Collection, boolean)} lists them
+		 */
+		List<FolderRow> children(Collection<Long> parentIds) {
+			List<FolderRow> found = new ArrayList<>();
+			for (Long parentId : parentIds)
+				found.addAll(children.getOrDefault(parentId, List.of()));
+			found.sort(Comparator.comparingLong(FolderRow::id));
+			return found;
+		}
+
+		/**
+		 * @return every folder below the folder, top-down, as
+		 *         {@link StoredRows#descendants(long)} lists them
+		 */
+		List<FolderRow> descendants(long folderId) {
+			List<FolderRow> all = new ArrayList<>();
+			List<Long> level = List.of(folderId);
+			while (!level.isEmpty()) {
+				List<FolderRow> next = children(level);
+				all.addAll(next);
+				level = next.stream().map(FolderRow::id).toList();
+			}
+			return all;
+		}
 	}
 
 	/**

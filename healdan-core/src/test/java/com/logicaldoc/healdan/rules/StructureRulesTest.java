@@ -166,6 +166,31 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 		assertNull(folderDao.findById(workspace.getId()));
 	}
 
+	/**
+	 * A move may give the folder a "(n)" name of its own only where CE's move
+	 * makes a taken name unique; any other new name with a new parent, as a
+	 * web service update can give, is a rename
+	 */
+	@Test
+	public void testAMoveRenamesOnlyToMakeATakenNameUnique() throws Exception {
+		Folder archive = fx.store("Archive");
+		fx.grant(archive, lawyers, Permission.READ);
+		fx.grant(archive, GroupDAO.get().findByName("readers", Tenant.DEFAULT_ID), Permission.READ);
+		String name = reload(workspace).getName();
+
+		assertRefused(WORKSPACE_RENAME, () -> {
+			Folder current = reload(workspace);
+			current.setParentId(archive.getId());
+			current.setName(name + "(7)");
+			folderDao.store(current, folderHistory(admin));
+		});
+
+		allowed(() -> HealdanOperation.run(Kind.MATTER_CREATE, () -> createFolder(archive, name, admin)));
+		allowed(() -> move(workspace, archive, admin));
+		assertEquals(name + "(1)", reload(workspace).getName());
+		assertEquals(archive.getId(), reload(workspace).getParentId());
+	}
+
 	@Test
 	public void testOnlyAdminsCreateStores() throws Exception {
 		assertRefused(STORE_TYPE, () -> folderDao.create(root, folderVO("Personal", Folder.TYPE_WORKSPACE), false,

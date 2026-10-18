@@ -65,6 +65,13 @@ public class PermissionsFolderListener implements FolderListener {
 	@Override
 	public void beforeStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
+			check(folder, transaction, dictionary);
+		}
+	}
+
+	private static void check(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
+			throws PersistenceException {
 		if (folder.getDeleted() != 0)
 			return;
 		MatterLocator locator = MatterLocator.get();

@@ -3,10 +3,14 @@ package com.logicaldoc.healdan.matter;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
@@ -69,6 +73,38 @@ public class MatterLocatorTest extends AbstractHealdanTestCase {
 		assertEquals(folder.getName(), kind, position.kind());
 		assertEquals(folder.getName(), depth, position.depth());
 		assertEquals(position.kind(), locator.locate(folder).kind());
+	}
+
+	/**
+	 * The listeners of one store share what they found through the store's
+	 * dictionary; outside a listener call nothing is kept
+	 */
+	@Test
+	public void testRememberedPositionsLastOneListenerCall() throws Exception {
+		Map<String, Object> dictionary = new HashMap<>();
+		FolderPosition first;
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
+			first = locator.locate(deep.getId());
+			assertSame(first, locator.locate(deep.getId()));
+		}
+		assertNotSame(first, locator.locate(deep.getId()));
+
+		// The next listener of the same store reuses it; another store's doesn't
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
+			assertSame(first, locator.locate(deep.getId()));
+			try (MatterLocator.Remembering nested = MatterLocator.remember(new HashMap<>())) {
+				assertNotSame(first, locator.locate(deep.getId()));
+			}
+			assertSame(first, locator.locate(deep.getId()));
+		}
+
+		// A folder's own type is part of what is kept: under the root it tells a Store
+		Folder unsaved = FolderDAO.get().findById(store.getId());
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(new HashMap<>())) {
+			assertEquals(Kind.STORE, locator.locate(unsaved).kind());
+			unsaved.setType(Folder.TYPE_DEFAULT);
+			assertEquals(Kind.OUTSIDE, locator.locate(unsaved).kind());
+		}
 	}
 
 	@Test

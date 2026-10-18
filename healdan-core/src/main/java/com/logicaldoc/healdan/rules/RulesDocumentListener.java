@@ -9,6 +9,7 @@ import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.healdan.matter.MatterLocator;
 
 /**
  * Applies the filing rule, and the shortcut rule, to every document that comes
@@ -41,12 +42,14 @@ public class RulesDocumentListener implements DocumentListener {
 			return;
 
 		Folder folder = document.getFolder();
-		Vetoes.check(Vetoes.ids(folder != null ? folder.getId() : null), Vetoes.ids(document.getId()), () -> {
-			FilingRules rules = FilingRules.get();
-			if (document.getDocRef() != null)
-				rules.checkShortcut(folder);
-			rules.checkDocumentTarget(folder);
-		});
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
+			Vetoes.check(Vetoes.ids(folder != null ? folder.getId() : null), Vetoes.ids(document.getId()), () -> {
+				FilingRules rules = FilingRules.get();
+				if (document.getDocRef() != null)
+					rules.checkShortcut(folder);
+				rules.checkDocumentTarget(folder);
+			});
+		}
 	}
 
 	/**

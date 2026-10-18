@@ -45,6 +45,13 @@ public class ProfileDocumentListener implements DocumentListener {
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
+			stamp(document, transaction, dictionary);
+		}
+	}
+
+	private static void stamp(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
+			throws PersistenceException {
 		if (document.getDocRef() != null || document.getFolder() == null)
 			return;
 		FolderPosition position = MatterLocator.get().locate(document.getFolder());

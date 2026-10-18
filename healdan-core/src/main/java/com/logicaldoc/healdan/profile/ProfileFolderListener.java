@@ -13,6 +13,7 @@ import com.logicaldoc.core.folder.FolderListener;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.Propagation.Place;
 import com.logicaldoc.healdan.profile.Propagation.Value;
 import com.logicaldoc.healdan.rules.StoredRows;
@@ -63,6 +64,13 @@ public class ProfileFolderListener implements FolderListener {
 
 	@Override
 	public void beforeStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
+			throws PersistenceException {
+		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
+			stamp(folder, transaction, dictionary);
+		}
+	}
+
+	private static void stamp(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
 		if (folder.getDeleted() != 0 || folder.getFoldRef() != null || folder.getType() == Folder.TYPE_ALIAS)
 			return;
