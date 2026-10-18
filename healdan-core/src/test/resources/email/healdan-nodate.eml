@@ -1,0 +1,8 @@
+From: ann@example.com
+To: bob@example.com
+Subject: No date here
+Message-ID: <2@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain
+
+No Date header.

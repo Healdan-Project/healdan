@@ -118,6 +118,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.profile.ProfileDocumentListener" />
 	</extension>
 
+	<!-- After the profile (120), whose email attributes it fills; before the doc # (140) -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanEmail">
+		<parameter id="position" value="130" />
+		<parameter id="class" value="com.logicaldoc.healdan.email.EmailDocumentListener" />
+	</extension>
+
 	<!-- After the rules (100) and the permissions (110) -->
 	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanFolderProfile">
 		<parameter id="position" value="120" />
