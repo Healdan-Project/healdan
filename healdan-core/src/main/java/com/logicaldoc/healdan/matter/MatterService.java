@@ -6,7 +6,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 
+import javax.sql.DataSource;
+
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -97,10 +100,12 @@ public class MatterService {
 
 	private final CacheEvictor evictor;
 
+	private final JdbcTemplate jdbc;
+
 	@Autowired
 	public MatterService(FilingRules filingRules, MatterNumbering numbering, MatterLocator locator,
 			TemplateCopier copier, PermissionRules permissionRules, LocalValueDAO locals, Propagation propagation,
-			HealdanSettings settings, CacheEvictor evictor) {
+			HealdanSettings settings, CacheEvictor evictor, DataSource dataSource) {
 		this.filingRules = filingRules;
 		this.numbering = numbering;
 		this.locator = locator;
@@ -110,6 +115,7 @@ public class MatterService {
 		this.propagation = propagation;
 		this.settings = settings;
 		this.evictor = evictor;
+		this.jdbc = new JdbcTemplate(dataSource);
 	}
 
 	/**
@@ -246,9 +252,8 @@ public class MatterService {
 			// An inheriting workspace takes what it inherits as its own, to change it
 			if (workspace.getSecurityRef() != null && workspace.getSecurityRef() != workspace.getId())
 				TemplateCopier.setOwnAcl(workspace, AclMath.effective(workspace.getId()));
-			Group oldGroup = ownGroupOrNull(oldOwnerId);
-			if (oldGroup != null)
-				workspace.removeAccessControlEntries(oldGroup.getId());
+			for (long oldGroup : ownGroupIds(oldOwnerId))
+				workspace.removeAccessControlEntries(oldGroup);
 			grantAll(workspace, ownGroup(owner.getId()));
 			// The folders below that granted the old owner's group are narrowed with it (P1)
 			FolderDAO.get().store(workspace, history(tx, FolderEvent.PERMISSION));
@@ -366,14 +371,26 @@ public class MatterService {
 	}
 
 	private static Group ownGroup(long userId) throws PersistenceException {
-		Group group = ownGroupOrNull(userId);
+		Group group = GroupDAO.get().findByName("_user_" + userId, Tenant.DEFAULT_ID);
 		if (group == null)
 			throw new HealdanRuleException(NO_OWNER);
 		return group;
 	}
 
-	private static Group ownGroupOrNull(long userId) throws PersistenceException {
-		return GroupDAO.get().findByName("_user_" + userId, Tenant.DEFAULT_ID);
+	/**
+	 * @return the user's own group, live or deleted: when CE deletes a user it
+	 *         renames the group {@code _user_<user id>.<group id>}, marks it
+	 *         deleted and keeps its ACL rows
+	 */
+	private List<Long> ownGroupIds(long userId) {
+		String name = "_user_" + userId;
+		return jdbc.query(
+				"select ld_id, ld_name from ld_group where ld_tenantid = ? and (ld_name = ? or ld_name like ?)",
+				(rs, i) -> {
+					String found = rs.getString(2);
+					// In LIKE '_' matches any character: keep the exact names only
+					return found.equals(name) || found.startsWith(name + ".") ? rs.getLong(1) : null;
+				}, Tenant.DEFAULT_ID, name, name + ".%").stream().filter(Objects::nonNull).toList();
 	}
 
 	private static void grantAll(Folder folder, Group group) {

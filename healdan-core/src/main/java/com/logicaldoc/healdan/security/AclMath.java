@@ -12,6 +12,8 @@ import java.util.TreeMap;
 import javax.sql.DataSource;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.security.Permission;
@@ -21,9 +23,12 @@ import com.logicaldoc.util.spring.Context;
 /**
  * Arithmetic on folder ACLs. An ACL here is the permissions each group is
  * granted, by group id; a group granted nothing is left out, since it grants
- * nothing. The ACLs are read from {@code ld_folder_acl} with JDBC on CE's data
- * source, so the reads join the caller's transaction and see what it has
- * flushed.
+ * nothing. So is a deleted group: CE keeps its rows when it deletes a group
+ * (or a user, with the user's own group), but it has no members and grants
+ * nobody anything (plan, R30), so the permission rules and narrowing neither
+ * count nor touch its rows. The ACLs are read from {@code ld_folder_acl} with
+ * JDBC on CE's data source, so the reads join the caller's transaction and see
+ * what it has flushed.
  */
 public final class AclMath {
 
@@ -32,6 +37,9 @@ public final class AclMath {
 
 	/** A chain of security references longer than this is a cycle */
 	private static final int MAX_CHAIN = 50;
+
+	/** Keeps the {@code ld_folder_acl} rows of live groups only */
+	static final String LIVE_GROUPS = "ld_groupid not in (select ld_id from ld_group where not ld_deleted = 0)";
 
 	private AclMath() {
 	}
@@ -70,11 +78,11 @@ public final class AclMath {
 	/**
 	 * @param folderId a folder
 	 * @return the folder's own rows, by group, each with the permissions it
-	 *         grants, groups granted nothing included
+	 *         grants, groups granted nothing included, deleted groups left out
 	 */
 	public static Map<Long, Set<Permission>> rows(long folderId) {
 		Map<Long, Set<Permission>> rows = new TreeMap<>();
-		jdbc().query("select * from ld_folder_acl where ld_folderid = ?", rs -> {
+		jdbc().query("select * from ld_folder_acl where ld_folderid = ? and " + LIVE_GROUPS, rs -> {
 			Set<Permission> granted = EnumSet.noneOf(Permission.class);
 			for (Permission flag : FLAGS)
 				if (rs.getInt(column(flag)) == 1)
@@ -94,7 +102,8 @@ public final class AclMath {
 
 	/**
 	 * @param entries a folder's entries, as the folder object holds them
-	 * @return their rows, groups granted nothing included
+	 * @return their rows, groups granted nothing included, deleted groups left
+	 *         out
 	 */
 	static Map<Long, Set<Permission>> entriesWithEmpty(Collection<FolderAccessControlEntry> entries) {
 		Map<Long, Set<Permission>> rows = new TreeMap<>();
@@ -107,7 +116,20 @@ public final class AclMath {
 					return a;
 				});
 			}
+		rows.keySet().removeAll(deletedGroups(rows.keySet()));
 		return rows;
+	}
+
+	/**
+	 * @param groupIds some groups
+	 * @return those of them that are deleted
+	 */
+	static Set<Long> deletedGroups(Collection<Long> groupIds) {
+		if (groupIds.isEmpty())
+			return Set.of();
+		return new HashSet<>(new NamedParameterJdbcTemplate(jdbc()).queryForList(
+				"select ld_id from ld_group where not ld_deleted = 0 and ld_id in (:ids)",
+				new MapSqlParameterSource("ids", groupIds), Long.class));
 	}
 
 	/**
@@ -168,21 +190,30 @@ public final class AclMath {
 	/**
 	 * @param groupId a group
 	 * @return how messages name it: "group IT", or "user jdoe" for a user's
-	 *         own group
+	 *         own group; "a deleted group" or "a deleted user" once CE has
+	 *         deleted it (and renamed it, e.g. {@code _user_12.34})
 	 */
 	public static String describe(long groupId) {
 		JdbcTemplate jdbc = jdbc();
-		List<Map<String, Object>> found = jdbc.queryForList("select ld_name, ld_type from ld_group where ld_id = ?",
-				groupId);
+		List<Map<String, Object>> found = jdbc
+				.queryForList("select ld_name, ld_type, ld_deleted from ld_group where ld_id = ?", groupId);
 		if (found.isEmpty())
 			return "group " + groupId;
 		String name = (String) found.get(0).get("LD_NAME");
 		int type = ((Number) found.get(0).get("LD_TYPE")).intValue();
-		if (type == Group.Type.USER.ordinal() && name != null && name.startsWith("_user_")) {
-			List<String> usernames = jdbc.queryForList("select ld_username from ld_user where ld_id = ?",
-					String.class, Long.parseLong(name.substring("_user_".length())));
-			if (!usernames.isEmpty() && usernames.get(0) != null)
-				return "user " + usernames.get(0);
+		boolean deleted = ((Number) found.get(0).get("LD_DELETED")).intValue() != 0;
+		boolean personal = type == Group.Type.USER.ordinal() && name != null && name.startsWith("_user_");
+		if (deleted)
+			return personal ? "a deleted user" : "a deleted group";
+		if (personal) {
+			try {
+				List<String> usernames = jdbc.queryForList("select ld_username from ld_user where ld_id = ?",
+						String.class, Long.parseLong(name.substring("_user_".length())));
+				if (!usernames.isEmpty() && usernames.get(0) != null)
+					return "user " + usernames.get(0);
+			} catch (NumberFormatException e) {
+				// Not a user id: named as a group
+			}
 		}
 		return "group " + name;
 	}

@@ -435,6 +435,51 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testOwnerChangeAfterTheOwnerWasDeleted() throws Exception {
+		User lena = fx.user("lena", lawyers.getName());
+		Matter created = create(2, "Demo", lena, demo);
+		Folder ws = workspace(created);
+		long lenasGroup = GroupDAO.get().findByName(lena.getUserGroupName(), Tenant.DEFAULT_ID).getId();
+		assertEquals(set(Permission.values()), acl(ws).get(lenasGroup));
+
+		// CE renames and deletes her own group, and leaves its ACL rows
+		UserDAO.get().delete(lena.getId(), null);
+		assertEquals(Integer.valueOf(1),
+				jdbc.queryForObject("select ld_deleted from ld_group where ld_id = ?", Integer.class, lenasGroup));
+		assertTrue(acl(ws).containsKey(lenasGroup));
+
+		service.update(created.getId(), "Demo", null, bob.getId(), admin);
+
+		assertEquals(bob.getId(), MatterDAO.get().findById(created.getId()).getOwnerId());
+		Map<Long, Set<Permission>> acl = acl(ws);
+		assertFalse(acl.containsKey(lenasGroup));
+		assertEquals(set(Permission.values()), acl.get(bobsGroup.getId()));
+		assertEquals(set(READ_ONLY), acl.get(everyone.getId()));
+		assertEquals(set(MODIFY), acl.get(it.getId()));
+	}
+
+	@Test
+	public void testAclSaveAfterTheOwnerWasDeleted() throws Exception {
+		User lena = fx.user("lena", lawyers.getName());
+		Folder ws = workspace(create(2, "Demo", lena, demo));
+		long lenasGroup = GroupDAO.get().findByName(lena.getUserGroupName(), Tenant.DEFAULT_ID).getId();
+		UserDAO.get().delete(lena.getId(), null);
+
+		// The Security tab saves the rows it shows, the deleted group's among them, and adds the readers
+		Folder current = reload(ws);
+		current.addAccessControlEntry(ace(GroupDAO.get().findByName("readers", Tenant.DEFAULT_ID),
+				Permission.READ));
+		FolderHistory history = folderHistory(admin);
+		history.setEvent(FolderEvent.PERMISSION);
+		folderDao.store(current, history);
+
+		Map<Long, Set<Permission>> acl = acl(ws);
+		assertEquals(Set.of(Permission.READ),
+				acl.get(GroupDAO.get().findByName("readers", Tenant.DEFAULT_ID).getId()));
+		assertTrue(acl.containsKey(lenasGroup));
+	}
+
+	@Test
 	public void testOwnerChangeOnAnInheritingWorkspace() throws Exception {
 		// The layout's matter, made to inherit its Store as an admin can with the Security tab
 		folderDao.updateSecurityRef(workspace.getId(), store.getId(), folderHistory(admin));

@@ -30,6 +30,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.channels.ChannelHarness;
 import com.logicaldoc.healdan.matter.MatterDAO;
@@ -118,6 +119,35 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 
 		allowed(() -> folderDao.create(secured, folderVO("Admin's", Folder.TYPE_DEFAULT), false,
 				folderHistory(admin)));
+	}
+
+	@Test
+	public void testDeletedGroupsGrantNothing() throws Exception {
+		// CE keeps a deleted group's ACL rows; they grant nobody, so P1 ignores them (R30)
+		Group former = fx.group("Former");
+		GroupDAO.get().delete(former.getId());
+		allowed(() -> setAcl(secured, admin, ace(it, MODIFY), ace(former, Permission.READ)));
+		assertEquals(Set.of(Permission.READ), acl(secured).get(former.getId()));
+		assertEquals(set(MODIFY), acl(secured).get(it.getId()));
+
+		// Nor does narrowing touch them
+		allowed(() -> setAcl(workspace, admin, ace(readers, READ_ONLY), ace(it, READ_ONLY),
+				ace(alicesGroup, Permission.values())));
+		assertEquals(Map.of(it.getId(), set(READ_ONLY), former.getId(), Set.of(Permission.READ)), acl(secured));
+	}
+
+	@Test
+	public void testDescribeADeletedUsersGroup() throws Exception {
+		User erin = fx.user("erin");
+		long erinsGroup = GroupDAO.get().findByName(erin.getUserGroupName(), Tenant.DEFAULT_ID).getId();
+		assertEquals("user erin", AclMath.describe(erinsGroup));
+
+		UserDAO.get().delete(erin.getId(), null);
+
+		assertEquals("a deleted user", AclMath.describe(erinsGroup));
+		Group former = fx.group("Former");
+		GroupDAO.get().delete(former.getId());
+		assertEquals("a deleted group", AclMath.describe(former.getId()));
 	}
 
 	@Test
