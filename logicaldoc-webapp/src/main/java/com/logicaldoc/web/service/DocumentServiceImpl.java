@@ -172,7 +172,10 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         for (Long id : ids) {
             try {
                 Bookmark bookmark = null;
-                if (bookmarkDao.findByUserIdAndDocId(session.getUserId(), id) != null) {
+                // Healdan: a folder bookmark is looked up by folder, not by document (spec 8.2)
+                boolean folderBookmark = type == Bookmark.Type.FOLDER.ordinal();
+                if ((folderBookmark ? bookmarkDao.findByUserIdAndFolderId(session.getUserId(), id)
+                        : bookmarkDao.findByUserIdAndDocId(session.getUserId(), id)) != null) {
                     // The bookmark already exists
                 } else {
                     bookmark = new Bookmark();
@@ -189,6 +192,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
                         bookmark.setFileType(doc.getType());
                     } else {
                         Folder f = fdao.findById(id);
+                        // Healdan: skip a folder that is missing or deleted
+                        if (f == null)
+                            continue;
                         bookmark.setTitle(f.getName());
                     }
 

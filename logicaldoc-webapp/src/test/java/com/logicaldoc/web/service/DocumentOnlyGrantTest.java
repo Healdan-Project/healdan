@@ -9,13 +9,8 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.EnumSet;
 import java.util.List;
@@ -50,16 +45,14 @@ import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.util.io.ResourceUtil;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.servlet.MockServletRequest;
-import com.logicaldoc.util.servlet.MockServletResponse;
 import com.logicaldoc.web.AbstractWPTestCase;
 import com.logicaldoc.web.ConvertPdf;
 import com.logicaldoc.web.DownloadServlet;
+import com.logicaldoc.web.MemoryResponse;
 import com.logicaldoc.web.data.VersionsDataServlet;
 
-import jakarta.servlet.ServletOutputStream;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
-import jakarta.servlet.WriteListener;
 
 /**
  * Roadmap M1: a document can be granted to people who can't see its folder, as
@@ -162,7 +155,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
 
         // The Versions tab lists /data/versions.xml?docId=, and comparing two versions calls getVersionsById
         MemoryResponse versionsXml = versionsXml();
-        assertNull(versionsXml.error);
+        assertNull(versionsXml.error());
         String xml = versionsXml.text();
         assertTrue(xml, xml.contains("<docid>%d</docid>".formatted(doc.getId())));
         assertTrue(xml, xml.contains("<version>1.0</version>"));
@@ -173,16 +166,16 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
 
         // Download, as Util.downloadURL(docId, fileVersion) asks for it
         MemoryResponse download = download();
-        assertNull(download.error);
+        assertNull(download.error());
         assertEquals(200, download.getStatus());
-        assertArrayEquals(content, download.body.toByteArray());
+        assertArrayEquals(content, download.bytes());
 
         // PreviewPanel loads prev/index.jsp?docId=&fileVersion=, which shows the viewer only if
         // the document grants READ and PREVIEW (lines 37-38), and the viewer loads the PDF from
         // /convertpdf with the same query
         assertTrue(DocumentDAO.get().isReadAllowed(doc.getId(), alice)
                 && DocumentDAO.get().isPreviewAllowed(doc.getId(), alice));
-        assertArrayEquals(content, preview().body.toByteArray());
+        assertArrayEquals(content, preview().bytes());
 
         // The folder stays out of reach. The GUI asks for it when a hit is double-clicked
         // or right-clicked (D7).
@@ -214,7 +207,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
 
         MemoryResponse versionsXml = versionsXml();
         assertEquals(500, versionsXml.getStatus());
-        assertEquals("Document %d is not accessible by user bob".formatted(doc.getId()), versionsXml.error);
+        assertEquals("Document %d is not accessible by user bob".formatted(doc.getId()), versionsXml.error());
         assertEquals("", versionsXml.text());
         assertThrows(AccessDeniedException.class,
                 () -> documents.getVersionsById(version.getId(), version.getId()));
@@ -224,13 +217,13 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
 
         MemoryResponse download = download();
         assertEquals(500, download.getStatus());
-        assertEquals("You don't have the DOWNLOAD permission", download.error);
-        assertEquals(0, download.body.size());
+        assertEquals("You don't have the DOWNLOAD permission", download.error());
+        assertEquals(0, download.bytes().length);
 
         assertFalse(DocumentDAO.get().isReadAllowed(doc.getId(), bob)
                 || DocumentDAO.get().isPreviewAllowed(doc.getId(), bob));
         try (InputStream in = ResourceUtil.getInputStream("pdf/notavailable.pdf")) {
-            assertArrayEquals(in.readAllBytes(), preview().body.toByteArray());
+            assertArrayEquals(in.readAllBytes(), preview().bytes());
         }
 
         assertNull(new FolderServiceImpl().getFolder(secured.getId(), false, false, false));
@@ -402,81 +395,6 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
             if (System.currentTimeMillis() > deadline)
                 fail("The first version wasn't saved");
             Thread.sleep(50L);
-        }
-    }
-
-    /**
-     * A response kept in memory, with the error it was sent if any. The data
-     * servlet tests' {@code MockServletResponse} writes to a file instead.
-     */
-    private static class MemoryResponse extends MockServletResponse {
-
-        private final ByteArrayOutputStream body = new ByteArrayOutputStream();
-
-        private PrintWriter writer;
-
-        private Integer status;
-
-        private String error;
-
-        MemoryResponse() {
-            // Never written: both ways to write are overridden
-            super(new File("target/unused-response"));
-        }
-
-        @Override
-        public ServletOutputStream getOutputStream() {
-            return new ServletOutputStream() {
-
-                @Override
-                public void write(int b) {
-                    body.write(b);
-                }
-
-                @Override
-                public boolean isReady() {
-                    return true;
-                }
-
-                @Override
-                public void setWriteListener(WriteListener listener) {
-                    // Nothing to do
-                }
-            };
-        }
-
-        @Override
-        public PrintWriter getWriter() {
-            if (writer == null)
-                writer = new PrintWriter(new OutputStreamWriter(body, StandardCharsets.UTF_8), true);
-            return writer;
-        }
-
-        @Override
-        public void sendError(int sc, String message) {
-            status = sc;
-            error = message;
-        }
-
-        @Override
-        public void sendError(int sc) {
-            status = sc;
-        }
-
-        @Override
-        public void setStatus(int sc) {
-            status = sc;
-        }
-
-        @Override
-        public int getStatus() {
-            return status != null ? status : 200;
-        }
-
-        String text() {
-            if (writer != null)
-                writer.flush();
-            return body.toString(StandardCharsets.UTF_8);
         }
     }
 }

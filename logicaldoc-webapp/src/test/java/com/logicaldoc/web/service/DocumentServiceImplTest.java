@@ -1332,6 +1332,30 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         assertTrue(exceptionHappened);
     }
 
+    /**
+     * Healdan (spec 8.2): a folder bookmark is looked up by folder, not by
+     * document, and a folder that is missing or deleted is skipped
+     */
+    @Test
+    public void testFolderBookmarkNotDuplicated() throws ServerException, PersistenceException {
+        // A bookmark on document 6 doesn't stand for one on folder 6
+        testSubject.addBookmarks(List.of(6L), Bookmark.Type.DOCUMENT.ordinal());
+        testSubject.addBookmarks(List.of(6L, 6L), Bookmark.Type.FOLDER.ordinal());
+        testSubject.addBookmarks(List.of(6L), Bookmark.Type.FOLDER.ordinal());
+
+        List<Bookmark> folder6 = bookDao.findByUserId(session.getUserId()).stream()
+                .filter(b -> b.getType() == Bookmark.Type.FOLDER && b.getTargetId() == 6L).toList();
+        assertEquals(1, folder6.size());
+        assertEquals("folder6", folder6.get(0).getTitle());
+        assertNotNull(bookDao.findByUserIdAndDocId(session.getUserId(), 6L));
+
+        // Folder 8 is deleted, the other doesn't exist
+        testSubject.addBookmarks(List.of(987654321L, 8L, 7L), Bookmark.Type.FOLDER.ordinal());
+        assertNull(bookDao.findByUserIdAndFolderId(session.getUserId(), 987654321L));
+        assertNull(bookDao.findByUserIdAndFolderId(session.getUserId(), 8L));
+        assertNotNull(bookDao.findByUserIdAndFolderId(session.getUserId(), 7L));
+    }
+
     @Test
     public void testMarkHistoryAsRead() throws ServerException, PersistenceException {
         List<DocumentHistory> histories = documentHistoryDao.findByUserIdAndEvent(1, "data test 01", null);
