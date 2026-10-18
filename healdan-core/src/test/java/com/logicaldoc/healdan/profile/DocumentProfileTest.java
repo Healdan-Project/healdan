@@ -273,6 +273,44 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testMoveGivesTheTargetsSubclassAsAnInheritedValue() throws Exception {
+		Document created = createWith(correspondence, "sub.txt", alice, Map.of(SUBCLASS, "Sub2"));
+		setFolderValue(documents, CLASS, "Letters");
+		setFolderValue(documents, SUBCLASS, "Sub1");
+
+		DocumentManager.get().moveToFolder(reload(created), documents, documentHistory(alice));
+		awaitAsyncWork();
+
+		assertEquals("Letters", text(created, CLASS));
+		assertEquals("Sub1", text(created, SUBCLASS));
+		assertEquals(Set.of(), locals(created));
+		// ...and it stays that way
+		documentDao.store(reload(created));
+		assertEquals("Sub1", text(created, SUBCLASS));
+		assertEquals(Set.of(), locals(created));
+	}
+
+	@Test
+	public void testCheckinWithoutMetadataKeepsTheLocalMarks() throws Exception {
+		setFolderValue(documents, CLASS, "Letters");
+		Document override = createWith(documents, "override.txt", alice, Map.of(CLASS, "Docs"));
+		setFolderValue(documents, CLASS, "Docs");
+		DocumentManager.get().checkout(override.getId(), documentHistory(alice));
+
+		allowed(() -> checkin(override, alice, null));
+		assertEquals(Set.of(CLASS), locals(override));
+
+		// A check-in that carries a changed Class is an edit
+		DocumentManager.get().checkout(override.getId(), documentHistory(alice));
+		allowed(() -> checkin(override, alice, Map.of(CLASS, "Letters")));
+		assertEquals("Letters", text(override, CLASS));
+		assertEquals(Set.of(CLASS), locals(override));
+		DocumentManager.get().checkout(override.getId(), documentHistory(alice));
+		allowed(() -> checkin(override, alice, Map.of(CLASS, "Docs")));
+		assertEquals(Set.of(), locals(override));
+	}
+
+	@Test
 	public void testOnlyAnEditChangesTheLocalMarks() throws Exception {
 		setFolderValue(documents, CLASS, "Letters");
 		Document override = createWith(documents, "override.txt", alice, Map.of(CLASS, "Docs"));
@@ -420,9 +458,12 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 	}
 
 	private void checkin(Document document, User as, Map<String, Object> values) throws Exception {
-		Document vo = new Document(reload(document));
-		vo.getAttributes().replaceAll((n, a) -> new Attribute(a));
-		values.forEach(vo::setValue);
+		Document vo = null;
+		if (values != null) {
+			vo = new Document(reload(document));
+			vo.getAttributes().replaceAll((n, a) -> new Attribute(a));
+			values.forEach(vo::setValue);
+		}
 		java.io.File file = java.io.File.createTempFile("checkin", ".txt");
 		try {
 			java.nio.file.Files.writeString(file.toPath(), "new content");

@@ -208,8 +208,25 @@ public class Inheritance {
 
 		// A Subclass that doesn't belong to the Class is cleared, never refused
 		Attribute subclass = doc.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (subclass != null && foreign(doc) && (moved || !local.contains(HealdanConstants.ATTR_DOCSUBCLASS)))
-			clear(subclass);
+		if (subclass != null && foreign(doc)) {
+			if (moved && local.contains(HealdanConstants.ATTR_DOCSUBCLASS)) {
+				// The move takes the override away: the Subclass is the target's, if it fits
+				local = new HashSet<>(local);
+				local.remove(HealdanConstants.ATTR_DOCSUBCLASS);
+				if (doc.getId() != 0L)
+					if (writeMarks)
+						locals.setLocal(LocalValueDAO.DOCUMENT, doc.getId(), HealdanConstants.ATTR_DOCSUBCLASS, false);
+					else
+						EditMarks.dropLocal(doc.getId(), HealdanConstants.ATTR_DOCSUBCLASS);
+				Attribute from = inherited.get(HealdanConstants.ATTR_DOCSUBCLASS);
+				if (from != null)
+					assign(subclass, from);
+				else
+					clear(subclass);
+			}
+			if (!local.contains(HealdanConstants.ATTR_DOCSUBCLASS) && foreign(doc))
+				clear(subclass);
+		}
 
 		if (writeMarks && doc.getId() != 0L)
 			for (String name : local)

@@ -74,8 +74,11 @@ public class ProfileDocumentListener implements DocumentListener {
 		 * store re-stamps the values that aren't local (plan, R17)
 		 */
 		boolean moved = moved(document, transaction);
-		boolean edit = EditMarks.consume(document.getId())
-				|| (transaction != null && DocumentEvent.CHANGED.toString().equals(transaction.getEvent()));
+		if (moved)
+			for (String dropped : EditMarks.takeDropped(document.getId()))
+				LocalValueDAO.get().setLocal(LocalValueDAO.DOCUMENT, document.getId(), dropped, false);
+		String event = transaction != null ? transaction.getEvent() : null;
+		boolean edit = EditMarks.consume(document.getId(), event) || DocumentEvent.CHANGED.toString().equals(event);
 		if (edit) {
 			if (moved)
 				inheritance.restampDocument(document, folderId, true, true);
@@ -139,15 +142,18 @@ public class ProfileDocumentListener implements DocumentListener {
 
 		boolean unchanged = StoredProfile.unchanged(document.getId(),
 				document.getValue(HealdanConstants.ATTR_DOCCLASS), document.getValue(HealdanConstants.ATTR_DOCSUBCLASS));
+		// Only a check-in that changes the profile is an edit; WebDAV, CMIS and the text editor pass no metadata
+		boolean edit = StoredProfile.changed(document.getId(), document, ProfileSchema.get().inheritable());
 		long folderId = document.getFolder().getId();
 		Vetoes.check(Vetoes.ids(folderId), Vetoes.ids(document.getId()),
 				() -> Inheritance.get().stampValueObject(document, folderId, false, !unchanged));
-		EditMarks.mark(document.getId());
+		if (edit)
+			EditMarks.mark(document.getId());
 	}
 
 	@Override
 	public void afterCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		EditMarks.consume(document.getId());
+		EditMarks.consume(document.getId(), DocumentEvent.CHECKEDIN.toString());
 	}
 
 	@Override

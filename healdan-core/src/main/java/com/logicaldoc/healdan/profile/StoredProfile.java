@@ -40,4 +40,42 @@ public final class StoredProfile {
 				documentId, attribute);
 		return rows.isEmpty() ? null : text(rows.get(0));
 	}
+
+	/**
+	 * @param documentId a document
+	 * @param document the document as a check-in is about to store it
+	 * @param names the attributes to compare
+	 * @return true if any of those attributes holds another value than the
+	 *         database has
+	 */
+	public static boolean changed(long documentId, com.logicaldoc.core.document.Document document,
+			java.util.Collection<String> names) {
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		java.util.Map<String, java.util.Map<String, Object>> stored = new java.util.HashMap<>();
+		jdbc.queryForList(
+				"select ld_name, ld_stringvalue, ld_intvalue, ld_doublevalue, ld_datevalue from ld_document_ext where ld_docid = ?",
+				documentId).forEach(row -> stored.put((String) row.get("LD_NAME"), row));
+		for (String name : names) {
+			com.logicaldoc.core.metadata.Attribute own = document.getAttribute(name);
+			java.util.Map<String, Object> row = stored.get(name);
+			if (own == null && row == null)
+				continue;
+			if (own == null || row == null) {
+				if ((own != null && !Inheritance.isBlank(own.getValue()))
+						|| (row != null && !Inheritance.isBlank(row.get("LD_STRINGVALUE"))))
+					return true;
+				continue;
+			}
+			if (!Objects.equals(text(own.getStringValue()), text(row.get("LD_STRINGVALUE")))
+					|| !Objects.equals(own.getIntValue(), row.get("LD_INTVALUE") != null
+							? ((Number) row.get("LD_INTVALUE")).longValue() : null)
+					|| !Objects.equals(own.getDoubleValue(), row.get("LD_DOUBLEVALUE") != null
+							? ((Number) row.get("LD_DOUBLEVALUE")).doubleValue() : null)
+					|| !Objects.equals(own.getDateValue() != null ? own.getDateValue().getTime() : null,
+							row.get("LD_DATEVALUE") != null ? ((java.util.Date) row.get("LD_DATEVALUE")).getTime()
+									: null))
+				return true;
+		}
+		return false;
+	}
 }
