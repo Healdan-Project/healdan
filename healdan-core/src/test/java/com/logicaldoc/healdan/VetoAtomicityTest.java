@@ -330,8 +330,9 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testFolderUpdateSecurityRef() throws Exception {
+		// From a folder above it: inside a matter a folder inherits from nowhere else (plan, R25)
 		assertVetoLeavesNothing(VetoSwitch.FOLDER_BEFORE_STORE,
-				() -> folderDao.updateSecurityRef(inheriting.getId(), restricted.getId(), folderTransaction(null)));
+				() -> folderDao.updateSecurityRef(restricted.getId(), folderA.getId(), folderTransaction(null)));
 	}
 
 	/**

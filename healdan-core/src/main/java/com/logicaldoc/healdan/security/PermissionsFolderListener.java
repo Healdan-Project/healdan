@@ -23,6 +23,10 @@ import com.logicaldoc.healdan.rules.Vetoes;
  * folder store inside a matter, comparing the folder with its row as stored
  * before (see {@link StoredRows}).
  * <ul>
+ * <li>Inside a matter a folder inherits only from a folder above it (plan,
+ * R25): an ACL save or a security reference change that points elsewhere is
+ * refused; any other store that leaves such a reference (a move, a copy...)
+ * replaces it with an ACL of the folder's own.</li>
  * <li>A matter's workspace is checked against P2 when its ACL is saved
  * (event {@code PERMISSION}), its security reference changes, or it is created
  * or moved to another Store.</li>
@@ -74,7 +78,12 @@ public class PermissionsFolderListener implements FolderListener {
 			return;
 		}
 
+		boolean explicit = !PermissionRules.isCopying() && (permission || refChanged);
 		if (workspace) {
+			if (explicit)
+				Vetoes.check(ids, List.of(), () -> rules.checkInheritsFromAbove(folder));
+			else
+				rules.fitWorkspace(folder);
 			if (permission || refChanged || moved || created) {
 				Matter matter = created ? null : MatterDAO.get().findByFolderId(folder.getId());
 				Long owner = matter != null ? matter.getOwnerId() : null;
@@ -87,8 +96,11 @@ public class PermissionsFolderListener implements FolderListener {
 		}
 
 		boolean ownAcl = folder.getSecurityRef() == null;
-		if (!PermissionRules.isCopying() && (permission || refChanged || (created && ownAcl))) {
-			Vetoes.check(ids, List.of(), () -> rules.checkP1(folder));
+		if (explicit || (!PermissionRules.isCopying() && created && ownAcl)) {
+			Vetoes.check(ids, List.of(), () -> {
+				rules.checkInheritsFromAbove(folder);
+				rules.checkP1(folder);
+			});
 			if (!created)
 				dictionary.put(NARROW, Boolean.TRUE);
 		} else if (rules.fit(folder) || moved) {

@@ -77,6 +77,8 @@ public class PermissionRules {
 
 	static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
 
+	static final String INHERIT_FROM_ABOVE = "A folder can only inherit permissions from a folder above it.";
+
 	/** Narrowing passes over a tree; one is enough unless folders inherit from folders below them */
 	private static final int MAX_PASSES = 5;
 
@@ -277,9 +279,12 @@ public class PermissionRules {
 	 * parent: in a folder with its own ACL, the rows of groups the parent
 	 * lacks are deleted and the flags the parent lacks are cleared. A folder
 	 * that inherits from a folder above its parent, as CE leaves one created
-	 * while its parent inherited, inherits from its parent again; one that
-	 * inherits from elsewhere and grants more than its parent gets an ACL of
-	 * its own with what both grant. The tree is walked top-down; the writes
+	 * while its parent inherited, inherits from its parent again. Inside a
+	 * matter a folder inherits only from a folder above it (plan, R25), so
+	 * one that inherits from anywhere else, as a move, copy or restore leaves
+	 * it, gets an ACL of its own with what that folder and its parent both
+	 * grant (or inherits from its parent, when that is the same). The tree is
+	 * walked top-down; the writes
 	 * are JDBC, with no history, version or listener, and the changed folders
 	 * are evicted from the second-level cache now and when the transaction
 	 * ends. Below a Store, the matters' workspaces are left to P2; the folders
@@ -310,6 +315,29 @@ public class PermissionRules {
 	}
 
 	/**
+	 * Inside a matter a folder inherits permissions only from a folder above it
+	 * (plan, R25): a reference to any other folder would follow that folder's
+	 * changes, which no narrowing below this folder's parent sees
+	 *
+	 * @param folder a folder about to be stored, with its new parent
+	 * @throws HealdanRuleException if it inherits from a folder that isn't
+	 *         above it
+	 */
+	public void checkInheritsFromAbove(Folder folder) throws HealdanRuleException {
+		if (!inheritsFromAbove(folder))
+			throw refuse(INHERIT_FROM_ABOVE, folder.getId(), folder.getParentId());
+	}
+
+	/**
+	 * @param folder a folder about to be stored, with its new parent
+	 * @return true if it has its own ACL, or inherits from a folder above it
+	 */
+	private boolean inheritsFromAbove(Folder folder) {
+		Long ref = folder.getSecurityRef();
+		return ref == null || ref == folder.getId() || ancestors(folder.getParentId()).contains(ref);
+	}
+
+	/**
 	 * Narrows a folder about to be stored to its parent, in the object itself,
 	 * as {@link #narrowDescendants} narrows the folders below
 	 *
@@ -322,11 +350,37 @@ public class PermissionRules {
 		boolean own = ref == null || ref == folder.getId();
 		Outcome outcome = decide(folder.getId(), ref,
 				own ? AclMath.entriesWithEmpty(folder.getAccessControlList()) : Map.of(),
-				own ? Map.of() : AclMath.effective(ref), !own && ancestors(parentId).contains(ref),
-				AclMath.effective(parentId), AclMath.source(parentId));
+				own ? Map.of() : AclMath.effective(ref), ancestors(parentId), AclMath.effective(parentId),
+				AclMath.source(parentId));
 		if (outcome == null)
 			return false;
+		apply(folder, outcome);
+		return true;
+	}
 
+	/**
+	 * A matter's workspace that inherits from a folder that isn't above it, as
+	 * a move to another Store leaves it, gets an ACL of its own with what that
+	 * folder grants, or inherits from its Store when that grants the same
+	 * (plan, R25). Its permissions aren't narrowed: P2 checks them.
+	 *
+	 * @param workspace the workspace about to be stored, with its new parent
+	 * @return true if it changed
+	 */
+	public boolean fitWorkspace(Folder workspace) {
+		if (inheritsFromAbove(workspace))
+			return false;
+		long storeId = workspace.getParentId();
+		Map<Long, Set<Permission>> acl = AclMath.effective(workspace.getSecurityRef());
+		long storeSource = AclMath.source(storeId);
+		if (acl.equals(AclMath.effective(storeId)) && ancestors(storeId).contains(storeSource))
+			apply(workspace, new Outcome(storeSource, Map.of()));
+		else
+			apply(workspace, new Outcome(null, acl));
+		return true;
+	}
+
+	private static void apply(Folder folder, Outcome outcome) {
 		folder.setSecurityRef(outcome.securityRef());
 		folder.getAccessControlList().clear();
 		outcome.rows().forEach((group, flags) -> {
@@ -334,13 +388,15 @@ public class PermissionRules {
 			entry.grantPermissions(flags);
 			folder.addAccessControlEntry(entry);
 		});
-		return true;
 	}
 
 	/**
 	 * "Apply to subfolders" replaces the ACL of every folder below the root
 	 * with the root's, deleted ones included (a restore would bring them back
-	 * re-opened)
+	 * re-opened). Inside the Stores and the templates, a non-admin needs
+	 * SECURITY on every folder with its own ACL it would replace; from the
+	 * root, that means every such folder in every Store and in the Templates
+	 * Store, the Stores included.
 	 *
 	 * @param rootId the root
 	 * @param user who applies it
@@ -348,24 +404,31 @@ public class PermissionRules {
 	 */
 	public void checkApplyToTree(long rootId, User user) throws PersistenceException {
 		FolderPosition position = locator.locate(rootId);
-		if (!position.isUnderAStore() && position.kind() != Kind.TEMPLATES_STORE
-				&& position.kind() != Kind.IN_TEMPLATES)
+		Kind kind = position.kind();
+		if (!position.isUnderAStore() && kind != Kind.TEMPLATES_STORE && kind != Kind.IN_TEMPLATES
+				&& kind != Kind.ROOT)
 			return;
 		if (filingRules.isAdmin(user))
 			return;
+
+		List<FolderRow> level = storedRows.children(List.of(rootId), true);
+		// Below the root, only the Stores and the Templates Store are Healdan's
+		if (kind == Kind.ROOT)
+			level = level.stream()
+					.filter(row -> row.type() == Folder.TYPE_WORKSPACE && row.id() != Folder.DEFAULTWORKSPACEID)
+					.toList();
 		Set<Long> seen = new HashSet<>(List.of(rootId));
-		List<Long> level = List.of(rootId);
 		while (!level.isEmpty()) {
-			List<Long> next = new ArrayList<>();
-			for (FolderRow row : storedRows.children(level, true)) {
+			List<Long> ids = new ArrayList<>();
+			for (FolderRow row : level) {
 				if (!seen.add(row.id()))
 					continue;
-				next.add(row.id());
+				ids.add(row.id());
 				boolean own = row.securityRef() == null || row.securityRef() == row.id();
 				if (!row.alias() && own && (user == null || !hasSecurity(row.id(), user.getId())))
 					throw refuse(APPLY_TO_TREE, rootId);
 			}
-			level = next;
+			level = ids.isEmpty() ? List.of() : storedRows.children(ids, true);
 		}
 	}
 
@@ -377,14 +440,13 @@ public class PermissionRules {
 	 * @param own its own rows, groups granted nothing included (if it has its
 	 *        own ACL)
 	 * @param refAcl what its security reference grants (if it inherits)
-	 * @param refIsAncestor true if the reference is one of the folder's
-	 *        ancestors
+	 * @param ancestors the folders above it: its parent and up
 	 * @param parentAcl what its parent grants
 	 * @param parentSource the folder whose ACL the parent uses
 	 * @return what the folder becomes, null if it may stay as it is
 	 */
 	static Outcome decide(long id, Long ref, Map<Long, Set<Permission>> own, Map<Long, Set<Permission>> refAcl,
-			boolean refIsAncestor, Map<Long, Set<Permission>> parentAcl, long parentSource) {
+			Set<Long> ancestors, Map<Long, Set<Permission>> parentAcl, long parentSource) {
 		if (ref == null || ref == id) {
 			Map<Long, Set<Permission>> narrowed = new TreeMap<>();
 			own.forEach((group, flags) -> {
@@ -399,13 +461,27 @@ public class PermissionRules {
 			return narrowed.equals(own) ? null : new Outcome(null, narrowed);
 		}
 
-		// CE gave it its parent's reference when it was created: it follows its parent
-		if (refIsAncestor && ref != parentSource)
-			return new Outcome(parentSource, Map.of());
-		if (AclMath.within(refAcl, parentAcl))
-			return null;
+		if (ancestors.contains(ref)) {
+			if (ref == parentSource)
+				return null;
+			// CE gave it its parent's reference when it was created: it follows its parent
+			return inheritParent(ancestors, parentAcl, parentSource);
+		}
+
+		// Not above it (R25): what it grants now, within its parent, becomes its own
 		Map<Long, Set<Permission>> both = AclMath.intersect(refAcl, parentAcl);
-		return both.equals(parentAcl) ? new Outcome(parentSource, Map.of()) : new Outcome(null, both);
+		return both.equals(parentAcl) ? inheritParent(ancestors, parentAcl, parentSource) : new Outcome(null, both);
+	}
+
+	/**
+	 * @return the folder inherits what its parent grants: from the parent's
+	 *         source if that is above it, otherwise as an ACL of its own
+	 */
+	private static Outcome inheritParent(Set<Long> ancestors, Map<Long, Set<Permission>> parentAcl,
+			long parentSource) {
+		if (ancestors.contains(parentSource))
+			return new Outcome(parentSource, Map.of());
+		return new Outcome(null, AclMath.granted(parentAcl));
 	}
 
 	/**
@@ -445,8 +521,7 @@ public class PermissionRules {
 
 				boolean own = node.ownAcl();
 				Outcome outcome = decide(node.id, node.ref, own ? node.rows : Map.of(),
-						own ? Map.of() : acl(node.ref, tree), !own && ancestors.contains(node.ref), parentAcl,
-						parentSource);
+						own ? Map.of() : acl(node.ref, tree), ancestors, parentAcl, parentSource);
 				if (outcome != null) {
 					node.ref = outcome.securityRef();
 					node.rows = outcome.rows();

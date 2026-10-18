@@ -865,6 +865,26 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
     }
 
     @Test
+    public void testApplyParentFolderSecurityNeedsSecurity() throws Exception {
+        String documentRows = "select count(*) from ld_document_acl where ld_docid = 1";
+        String folderRows = "select count(*) from ld_folder_acl where ld_folderid = 5";
+
+        // author can read the document but not change its security
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.applyParentFolderSecurity(1L));
+        assertEquals(0, docDao.queryForLong(documentRows));
+
+        // Once the document's own ACL gives author SECURITY, author may
+        Document document = docDao.findById(1L, true);
+        DocumentAccessControlEntry ace = new DocumentAccessControlEntry(2L);
+        ace.grantPermissions(Set.of(Permission.READ, Permission.SECURITY));
+        document.getAccessControlList().add(ace);
+        docDao.store(document);
+        testSubject.applyParentFolderSecurity(1L);
+        assertEquals(docDao.queryForLong(folderRows), docDao.queryForLong(documentRows));
+    }
+
+    @Test
     public void testSave() throws Exception {
         GUIDocument doc = testSubject.getById(1);
 

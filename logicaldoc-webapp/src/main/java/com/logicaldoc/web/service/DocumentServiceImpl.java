@@ -3226,6 +3226,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         DocumentDAO docDao = DocumentDAO.get();
         try {
+            if (!docDao.isPermissionAllowed(Permission.SECURITY, docId, session.getUserId()))
+                throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                        .formatted(session.getUsername(), Permission.SECURITY.name(), docId));
             DocumentHistory transaction = new DocumentHistory();
             transaction.setSession(session);
             docDao.applyParentFolderSecurity(docId, transaction);

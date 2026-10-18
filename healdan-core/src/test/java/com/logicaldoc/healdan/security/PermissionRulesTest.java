@@ -30,6 +30,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.channels.ChannelHarness;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
@@ -54,6 +55,8 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	private static final String P2 = "%s can read this matter but not its Store.";
 
 	private static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
+
+	private static final String INHERIT_FROM_ABOVE = "A folder can only inherit permissions from a folder above it.";
 
 	private static final Permission[] READ_ONLY = { Permission.READ, Permission.DOWNLOAD, Permission.PREVIEW };
 
@@ -149,11 +152,54 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		assertRefused(P1.formatted("group readers: READ"),
 				() -> folderDao.updateSecurityRef(board.getId(), workspace.getId(), folderHistory(admin)));
 
-		// Within the parent: allowed
+		// Only from a folder above it (R25): Sealed is within Secured Documents, but beside Board
 		Folder sealed = createFolder(secured, "Sealed", admin);
 		setAcl(sealed, admin, ace(it, Permission.READ));
-		allowed(() -> folderDao.updateSecurityRef(board.getId(), sealed.getId(), folderHistory(admin)));
-		assertEquals(Long.valueOf(sealed.getId()), reload(board).getSecurityRef());
+		WSFolder toSibling = WSFolder.fromFolder(reload(board));
+		toSibling.setSecurityRef(sealed.getId());
+		assertRefused(INHERIT_FROM_ABOVE, () -> harness.soapFolders().update("sid", toSibling));
+		assertRefused(INHERIT_FROM_ABOVE,
+				() -> folderDao.updateSecurityRef(board.getId(), sealed.getId(), folderHistory(admin)));
+
+		// From a folder above it, within its parent: allowed
+		setAcl(board, admin, ace(it, Permission.READ));
+		allowed(() -> folderDao.updateSecurityRef(board.getId(), secured.getId(), folderHistory(admin)));
+		assertEquals(Long.valueOf(secured.getId()), reload(board).getSecurityRef());
+		assertEquals(Map.of(), acl(board));
+	}
+
+	@Test
+	public void testMovedFolderStopsFollowingItsOldSource() throws Exception {
+		setAcl(documents, admin, ace(it, MODIFY));
+		Folder x = createFolder(reload(documents), "X", admin);
+		assertEquals(Long.valueOf(documents.getId()), reload(x).getSecurityRef());
+
+		// Documents isn't above it in Secured Documents, so it inherits from its new parent
+		allowed(() -> move(x, secured, carol));
+		assertEquals(Long.valueOf(secured.getId()), reload(x).getSecurityRef());
+		assertEquals(Map.of(), acl(x));
+
+		// Widening Documents doesn't reach it
+		allowed(() -> setAcl(documents, admin, ace(it, MODIFY), ace(readers, READ_ONLY)));
+		assertTrue(folderDao.isReadAllowed(documents.getId(), bob.getId()));
+		assertFalse(folderDao.isReadAllowed(x.getId(), bob.getId()));
+		assertEquals(Long.valueOf(secured.getId()), reload(x).getSecurityRef());
+	}
+
+	@Test
+	public void testRestoreElsewhereGivesAnInheritingFolderItsOwnAcl() throws Exception {
+		setAcl(documents, admin, ace(readers, Permission.READ), ace(it, Permission.READ));
+		Folder old = createFolder(reload(documents), "Old", admin);
+		assertEquals(Long.valueOf(documents.getId()), reload(old).getSecurityRef());
+		allowed(() -> folderDao.deleteTree(old.getId(), folderHistory(admin)));
+
+		allowed(() -> folderDao.restore(old.getId(), secured.getId(), folderHistory(admin)));
+
+		// What Documents granted, within Secured Documents, is its own now
+		assertNull(reload(old).getSecurityRef());
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(old));
+		assertFalse(folderDao.isReadAllowed(old.getId(), bob.getId()));
+		assertTrue(folderDao.isReadAllowed(old.getId(), carol.getId()));
 	}
 
 	@Test
@@ -278,11 +324,14 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		Group clients = fx.group("clients");
 		assertRefused(P2.formatted("Group clients"), () -> setAcl(workspace, admin, ace(readers, READ_ONLY),
 				ace(it, MODIFY), ace(alicesGroup, Permission.values()), ace(clients, Permission.READ)));
-		// A workspace that inherits a folder other readers can read
+		// A workspace inherits only from above it (R25): its Store or the root
 		Folder open = fx.store("Open");
 		fx.grant(open, clients, Permission.READ);
-		assertRefused(P2.formatted("Group clients"),
+		assertRefused(INHERIT_FROM_ABOVE,
 				() -> folderDao.updateSecurityRef(workspace.getId(), open.getId(), folderHistory(admin)));
+		// The root's groups can't read the Store
+		assertRefused(P2.formatted("Group publisher"),
+				() -> folderDao.updateSecurityRef(workspace.getId(), root.getId(), folderHistory(admin)));
 
 		// Clients may write if they only read: P2 is about READ
 		fx.grant(store, clients, Permission.READ);
@@ -308,6 +357,33 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		Group davesGroup = GroupDAO.get().findByName(dave.getUserGroupName(), Tenant.DEFAULT_ID);
 		assertRefused(P2.formatted("User dave"), () -> setAcl(workspace, admin, ace(readers, READ_ONLY),
 				ace(davesGroup, Permission.values())));
+	}
+
+	@Test
+	public void testP2OnWorkspaceCreation() throws Exception {
+		// Created without inheriting, CE gives it its creator's own group; there is no owner yet
+		assertRefused(P2.formatted("User alice"), () -> HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE,
+				() -> folderDao.create(reload(store), folderVO("New matter", Folder.TYPE_DEFAULT), false,
+						folderHistory(alice))));
+
+		allowed(() -> HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE, () -> folderDao.create(reload(store),
+				folderVO("New matter", Folder.TYPE_DEFAULT), true, folderHistory(alice))));
+		assertEquals(1, folderDao.findByName(store, "New matter", Tenant.DEFAULT_ID, true).size());
+	}
+
+	@Test
+	public void testP2OnWorkspaceRestoreIntoAnotherStore() throws Exception {
+		Folder personal = fx.store("Personal");
+		fx.grant(personal, lawyers, Permission.READ);
+		allowed(() -> folderDao.deleteTree(workspace.getId(), folderHistory(admin)));
+
+		assertRefused(P2.formatted("Group readers"),
+				() -> folderDao.restore(workspace.getId(), personal.getId(), folderHistory(admin)));
+
+		fx.grant(personal, readers, Permission.READ);
+		fx.grant(personal, it, Permission.READ);
+		allowed(() -> folderDao.restore(workspace.getId(), personal.getId(), folderHistory(admin)));
+		assertEquals(personal.getId(), reload(workspace).getParentId());
 	}
 
 	@Test
@@ -346,6 +422,18 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		setAcl(binned, admin, ace(alicesGroup, Permission.READ));
 		folderDao.deleteTree(binned.getId(), folderHistory(admin));
 		assertRefused(APPLY_TO_TREE, () -> folderDao.applySecurityToTree(mine.getId(), folderHistory(alice)));
+	}
+
+	@Test
+	public void testApplyToTreeFromTheRootIsGated() throws Exception {
+		// Alice may change the root's security, which holds every Store
+		fx.grant(root, lawyers, Permission.values());
+		assertTrue(folderDao.isPermissionAllowed(Permission.SECURITY, root.getId(), alice.getId()));
+
+		assertRefused(APPLY_TO_TREE, () -> folderDao.applySecurityToTree(root.getId(), folderHistory(alice)));
+
+		allowed(() -> folderDao.applySecurityToTree(root.getId(), folderHistory(admin)));
+		assertEquals(Long.valueOf(root.getId()), reload(secured).getSecurityRef());
 	}
 
 	@Test
