@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.matter;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -74,6 +75,17 @@ public class ClientServiceTest extends AbstractHealdanTestCase {
 				() -> service.rename(client.getId(), "\uD83C\uDF89", admin));
 		assertEquals(message, refused.getMessage());
 		assertEquals("Caf\u00e9 \u2013 \u4e2d\u6587", ClientDAO.get().findByNumber(1).getName());
+	}
+
+	@Test
+	public void testAdminLoadedWithoutGroupsIsAnAdmin() throws Exception {
+		// A user's groups are transient: empty until the DAO initializes the user
+		User bare = UserDAO.get().findById(User.USERID_ADMIN);
+		assertFalse(bare.isAdmin());
+
+		Client client = service.create(7, "Seven", bare);
+		service.rename(client.getId(), "Seventh", bare);
+		assertEquals("Seventh", ClientDAO.get().findByNumber(7).getName());
 	}
 
 	@Test

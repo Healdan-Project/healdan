@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
+import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.util.BasicPlane;
 import com.logicaldoc.util.spring.Context;
 
@@ -79,8 +80,12 @@ public class ClientService {
 		return ClientDAO.get().maxNumber() + 1;
 	}
 
-	private static void requireAdmin(User actor) throws HealdanRuleException {
-		if (actor == null || !actor.isAdmin())
+	/*
+	 * FilingRules reloads the user's groups, which are transient, and counts a
+	 * seed as an admin
+	 */
+	private static void requireAdmin(User actor) throws PersistenceException {
+		if (!FilingRules.get().isAdmin(actor))
 			throw new HealdanRuleException("Only an administrator can create or rename clients.");
 	}
 
