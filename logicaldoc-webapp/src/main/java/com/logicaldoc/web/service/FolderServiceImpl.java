@@ -104,17 +104,20 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
                 /*
                  * Just apply the current security settings to the whole subtree
                  */
-                executeLongRunningOperation("Apply Rights to Tree", () -> {
-                    FolderHistory history = new FolderHistory();
-                    history.setSession(session);
-                    history.setEvent(FolderEvent.PERMISSION);
-                    try {
+                // Healdan edit: an error, such as a Healdan refusal, reaches the user instead of only the log
+                try {
+                    executeLongRunningOperation("Apply Rights to Tree", () -> {
+                        FolderHistory history = new FolderHistory();
+                        history.setSession(session);
+                        history.setEvent(FolderEvent.PERMISSION);
                         fdao.applySecurityToTree(guiFolder.getId(), history);
-                    } catch (PersistenceException e) {
-                        log.error(e.getMessage(), e);
-                    }
-                    return null;
-                }, session);
+                        return null;
+                    }, session);
+                } catch (ServerException e) {
+                    if (e.getCause() instanceof PersistenceException cause)
+                        throwServerException(session, log, cause);
+                    throw e;
+                }
             } else {
                 saveACL(session, folder, guiFolder.getAccessControlList());
             }

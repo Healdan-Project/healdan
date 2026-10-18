@@ -19,12 +19,15 @@ import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.metadata.TemplateDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
@@ -642,6 +645,25 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
         folder6.setName("renamed");
         testSubject.save(folder6);
         assertEquals("renamed", folderDao.findById(6L).getName());
+    }
+
+    @Test
+    public void testApplyRightsReportsARefusal() throws Exception {
+        GUIFolder folder = testSubject.getFolder(6, false, false, false);
+        HealdanHooks previous = HealdanHooks.get();
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public void beforeApplySecurityToTree(long rootId, FolderHistory transaction)
+                    throws PersistenceException {
+                throw new HealdanVetoException("Not these subfolders.");
+            }
+        });
+        try {
+            ServerException e = assertThrows(ServerException.class, () -> testSubject.saveACL(folder, true));
+            assertEquals("Not these subfolders.", e.getMessage());
+        } finally {
+            HealdanHooks.register(previous);
+        }
     }
 
     /**
