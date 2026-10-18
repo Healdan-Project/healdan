@@ -35,6 +35,7 @@ import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.util.BasicPlane;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -46,12 +47,13 @@ import com.logicaldoc.util.spring.Context;
  * <p>
  * Creating and editing run inside {@link HealdanOperation.Kind#SEARCH_FOLDER},
  * which lets the folder have type 1001; the filing rules still decide where it
- * may go and who may create or rename it there (a matter's top level and the
- * templates are for admins). That operation also exempts the store from the
- * permission rule on security references (plan, R32), so nothing the caller
- * gives reaches the folder but its name: the value object is built here, and
- * an edit changes the name and the rule, never the type or where the
- * permissions come from.
+ * may go (in a matter or below a template, by any route) and who may create
+ * or rename it there (a matter's top level and the templates are for admins,
+ * and so is changing a template's rule). That operation also exempts the
+ * store from the permission rule on security references (plan, R32), so
+ * nothing the caller gives reaches the folder but its name: the value object
+ * is built here, and an edit changes the name and the rule, never the type or
+ * where the permissions come from.
  * <p>
  * The rule runs each time the folder is opened ({@link #evaluate}): the
  * documents of the search folder's own matter with a change in the window,
@@ -90,6 +92,8 @@ public class SearchFolderService {
 
 	private final SearchFolderRuleDAO rules;
 
+	private final FilingRules filingRules;
+
 	private final MatterLocator locator;
 
 	private final CacheEvictor evictor;
@@ -97,9 +101,10 @@ public class SearchFolderService {
 	private final NamedParameterJdbcTemplate jdbc;
 
 	@Autowired
-	public SearchFolderService(SearchFolderRuleDAO rules, MatterLocator locator, CacheEvictor evictor,
-			DataSource dataSource) {
+	public SearchFolderService(SearchFolderRuleDAO rules, FilingRules filingRules, MatterLocator locator,
+			CacheEvictor evictor, DataSource dataSource) {
 		this.rules = rules;
+		this.filingRules = filingRules;
 		this.locator = locator;
 		this.evictor = evictor;
 		this.jdbc = new NamedParameterJdbcTemplate(dataSource);
@@ -154,7 +159,8 @@ public class SearchFolderService {
 	 * Changes a search folder's name and rule
 	 *
 	 * @param folderId the search folder; the actor needs the write permission
-	 *        on it, and the rename permission when the name changes
+	 *        on it, and the rename permission when the name changes. In the
+	 *        templates only admins may change it
 	 * @param name its name; it is trimmed
 	 * @param rule its rule; the folder id in it is ignored
 	 * @param actor the user who asks
@@ -179,6 +185,8 @@ public class SearchFolderService {
 		SearchFolderRule cleanRule = cleanRule(rule);
 		if (!dao.isWriteAllowed(folderId, actor.getId()))
 			throw new HealdanRuleException(NO_WRITE);
+		// A template's rule is copied by every new matter
+		filingRules.checkFolderEdit(folderId, actor);
 		boolean renamed = !cleanName.equals(folder.getName());
 		if (renamed && !dao.isPermissionAllowed(Permission.RENAME, folderId, actor.getId()))
 			throw new HealdanRuleException(NO_RENAME);

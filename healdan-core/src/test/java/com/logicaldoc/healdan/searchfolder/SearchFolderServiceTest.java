@@ -382,6 +382,19 @@ public class SearchFolderServiceTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testTemplateRuleNeedsAdmin() throws Exception {
+		Folder inTemplate = service.create(fx.storeTemplate(store).getId(), "Search", ANYONE_30, admin);
+		// Alice may write there, as the template grants what the Store grants
+		assertTrue(FolderDAO.get().isWriteAllowed(inTemplate.getId(), alice.getId()));
+
+		// Every new matter copies the rule
+		assertRefused(TEMPLATES,
+				() -> service.update(inTemplate.getId(), "Search", rule(7, false, Kind.ALL, null, null), alice));
+		service.update(inTemplate.getId(), "Search", rule(7, false, Kind.ALL, null, null), admin);
+		assertEquals(7, rules.find(inTemplate.getId()).get().days());
+	}
+
+	@Test
 	public void testUpdateChangesOnlyNameAndRule() throws Exception {
 		assertRefused(BAD_DAYS, () -> service.create(documents.getId(), "Bad", rule(0, false, Kind.ALL, null, null),
 				alice));
