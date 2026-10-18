@@ -12,6 +12,14 @@ public interface SeedStep {
 	String name();
 
 	/**
+	 * @return false to leave the step for a later start: the runner then neither
+	 *         runs it nor writes its marker
+	 */
+	default boolean enabled() {
+		return true;
+	}
+
+	/**
 	 * Does the step's work, as the system user.
 	 * 
 	 * @throws Exception if the work fails; startup then fails

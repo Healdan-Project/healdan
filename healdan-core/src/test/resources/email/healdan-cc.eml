@@ -1,0 +1,13 @@
+Return-Path: <a@b.c>
+Received: from mx.example.com by mail.example.org with ESMTP; Tue, 14 Oct 2025 09:30:05 +0200
+Delivery-Date: Tue, 14 Oct 2025 09:31:00 +0200
+From: "Ann Smith" <ann@example.com>
+To: "Bob Jones" <bob@example.com>, carol@example.com
+Cc: =?UTF-8?Q?Ren=C3=A9e_Dupont?= <renee@example.com>
+Subject: =?UTF-8?Q?Re:_Demo_plan_=E2=80=93_caf=C3=A9?=
+Date: Tue, 14 Oct 2025 09:29:00 +0200
+Message-ID: <1@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Hello Bob.

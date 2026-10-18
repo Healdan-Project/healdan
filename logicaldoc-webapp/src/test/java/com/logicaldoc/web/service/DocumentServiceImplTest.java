@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -21,6 +22,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,6 +37,7 @@ import com.logicaldoc.core.communication.EMailSender;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentAccessControlEntry;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
@@ -57,6 +60,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.core.ticket.TicketDAO;
+import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIAttribute;
@@ -838,6 +842,46 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
 
         document = docDao.findById(1L, true);
         assertFalse(document.getAccessControlList().isEmpty());
+    }
+
+    @Test
+    public void testSaveACLNeedsSecurity() throws Exception {
+        GUIDocument doc = testSubject.getById(1L);
+        doc.getAccessControlList().add(new GUIAccessControlEntry(2, "read,write"));
+
+        // author can read the document but not change its security
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveACL(doc));
+        assertTrue(docDao.findById(1L, true).getAccessControlList().isEmpty());
+
+        // Once the document's own ACL gives author SECURITY, author may
+        Document document = docDao.findById(1L, true);
+        DocumentAccessControlEntry ace = new DocumentAccessControlEntry(2L);
+        ace.grantPermissions(Set.of(Permission.READ, Permission.SECURITY));
+        document.getAccessControlList().add(ace);
+        docDao.store(document);
+        testSubject.saveACL(doc);
+        assertEquals(1, docDao.findById(1L, true).getAccessControlList().size());
+    }
+
+    @Test
+    public void testApplyParentFolderSecurityNeedsSecurity() throws Exception {
+        String documentRows = "select count(*) from ld_document_acl where ld_docid = 1";
+        String folderRows = "select count(*) from ld_folder_acl where ld_folderid = 5";
+
+        // author can read the document but not change its security
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.applyParentFolderSecurity(1L));
+        assertEquals(0, docDao.queryForLong(documentRows));
+
+        // Once the document's own ACL gives author SECURITY, author may
+        Document document = docDao.findById(1L, true);
+        DocumentAccessControlEntry ace = new DocumentAccessControlEntry(2L);
+        ace.grantPermissions(Set.of(Permission.READ, Permission.SECURITY));
+        document.getAccessControlList().add(ace);
+        docDao.store(document);
+        testSubject.applyParentFolderSecurity(1L);
+        assertEquals(docDao.queryForLong(folderRows), docDao.queryForLong(documentRows));
     }
 
     @Test

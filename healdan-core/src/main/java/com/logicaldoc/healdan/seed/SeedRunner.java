@@ -59,6 +59,8 @@ public class SeedRunner {
 			String marker = MARKER_PREFIX + step.name();
 			if (settings.get(marker) != null)
 				continue;
+			if (!step.enabled())
+				continue;
 			try {
 				log.info("Running seed step {}", step.name());
 				HealdanOperation.run(Kind.SEED, step::run);

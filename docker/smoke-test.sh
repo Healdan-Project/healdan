@@ -15,7 +15,8 @@ ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
 PW='sm0ke,p=a\ss $x #1 é:! '
 
-compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml "$@"; }
+# docker/tests/compose.smoke.yaml makes Healdan seed a Store, template, client and matter to upload into.
+compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml "$@"; }
 cleanup() {
   [ "$FAILED" = 0 ] || compose logs --tail 150 app || true
   compose down -v --remove-orphans >/dev/null 2>&1 || true
@@ -70,20 +71,35 @@ check "app healthy" wait_healthy "$(compose ps -q app)" 900
 echo "== 2. login page"
 check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
 
-echo "== 3. REST login and default workspace"
+echo "== 3. REST login, default workspace and the Smoke Matter"
 sid=$(login)
 check "REST login returns a session id" grep -Eq '^[0-9a-f-]{36}$' <<<"$sid"
 ws_id=$(api -H 'Accept: application/json' "$BASE/services/rest/folder/getDefaultWorkspace" | jq -r .id)
 # getPathString answers like "///Default"; squeeze the slashes.
 ws_path=$(api "$BASE/services/rest/folder/getPathString?folderId=$ws_id" | tr -d '"' | tr -s /)
 check "default workspace resolved" test -n "$ws_id" -a -n "$ws_path"
+# Healdan files documents only inside a matter: Smoke Store > "1.1 - Smoke Matter" > Documents (see SmokeFixtureSeed).
+child_id() { # <parent folder id> <jq test applied to the name>
+  api -H 'Accept: application/json' "$BASE/services/rest/folder/listChildren?folderId=$1" \
+    | jq -r "[.[] | select(.name | $2)][0].id // empty"
+}
+store_id=$(child_id 5 '. == "Smoke"')
+matter_id=$(child_id "$store_id" 'startswith("1.1 ")')
+doc_folder=$(child_id "$matter_id" '. == "Documents"')
+check "Smoke Matter's Documents folder resolved" grep -Eq '^[0-9]+$' <<<"$doc_folder"
+[ "$FAILED" = 0 ] || exit 1
+# The matter's folder name has spaces and an en dash, so the path is percent-encoded segment by segment.
+doc_path=$(api "$BASE/services/rest/folder/getPathString?folderId=$doc_folder" | tr -d '"' | tr -s / \
+  | jq -Rr 'split("/") | map(@uri) | join("/")')
 
-echo "== 4. upload a PDF and a PNG; thumbnails are generated"
+echo "== 4. upload a PDF and a PNG into the matter; thumbnails are generated"
+doc_ids=""
 for f in smoke.pdf smoke.png; do
-  doc_id=$(api -H 'Accept: application/json' -F "folderId=$ws_id" -F "filename=$f" \
+  doc_id=$(api -H 'Accept: application/json' -F "folderId=$doc_folder" -F "filename=$f" \
     -F "filedata=@$WORK/$f" "$BASE/services/rest/document/upload")
   check "$f uploaded" grep -Eq '^[0-9]+$' <<<"$doc_id"
-  api -o "$WORK/$f.thumb" "$BASE/services/rest/document/thumbnail/thumb$ws_path/$f" || true
+  doc_ids="$doc_ids $doc_id"
+  api -o "$WORK/$f.thumb" "$BASE/services/rest/document/thumbnail/thumb$doc_path/$f" || true
 done
 check "PNG thumbnail generated (ImageMagick via allowed-commands.txt)" is_png "$WORK/smoke.png.thumb"
 check "Poppler renders the PDF inside the container" compose exec -T app sh -c \
@@ -91,18 +107,83 @@ check "Poppler renders the PDF inside the container" compose exec -T app sh -c \
   < "$WORK/smoke.pdf"
 check "PDF thumbnail generated (Poppler via allowed-commands.txt)" is_png "$WORK/smoke.pdf.thumb"
 
-echo "== 5. webservice schema present"
+echo "== 5. Healdan schema, seeds, doc #s and the filing rule"
+db_query() {
+  compose exec -T db sh -c 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "$1"' sh "$1"
+}
+check "hd_schema_history has version 1, successful" test \
+  "$(db_query "select count(*) from hd_schema_history where version = '1' and success = 1")" = 1
+check "seed.profile and seed.everyone recorded" test \
+  "$(db_query "select count(*) from hd_setting where name in ('seed.profile', 'seed.everyone')")" = 2
+check "smoke-fixture seed recorded" test \
+  "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-fixture'")" = 1
+# doc_ids is "<pdf id> <png id>", uploaded in that order: doc #s 1 and 2
+n=1
+for id in $doc_ids; do
+  custom=$(api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$id" | jq -r .customId)
+  check "document $id has doc # $n" test "$custom" = "$n"
+  n=$((n + 1))
+done
+# The filing rule: no document at the top of a matter's workspace or in the Default workspace. REST answers a
+# refusal with a bare, empty HTTP 500 (the message never reaches the body), and a bare non-2xx would also pass for
+# a 401 or an unrelated 500. So the check needs the answer to be non-2xx AND the rule's own message to be logged
+# in dms.log once more than before the upload.
+dms_log_count() { # <message>
+  compose exec -T app sh -c 'grep -cF -- "$1" /opt/logicaldoc/repository/logs/dms.log || true' sh "$1"
+}
+refused_with() { # <folder id> <message>
+  local before after code tries=0
+  before=$(dms_log_count "$2")
+  code=$(curl -s -o /dev/null -w '%{http_code}' -u admin:admin -H 'Accept: application/json' -F "folderId=$1" \
+    -F "filename=smoke.png" -F "filedata=@$WORK/smoke.png" "$BASE/services/rest/document/upload")
+  [ "$code" -ge 300 ] || { echo "answered HTTP $code, not an error"; return 1; }
+  while :; do
+    after=$(dms_log_count "$2")
+    [ "$after" -gt "$before" ] && return 0
+    tries=$((tries + 1))
+    [ "$tries" -lt 10 ] || break
+    sleep 1
+  done
+  echo "HTTP $code, but dms.log has no new '$2'"
+  return 1
+}
+check "upload to the matter's top level is refused by the filing rule" refused_with "$matter_id" \
+  "Documents can't be saved at the top level of a matter. Choose one of its folders."
+check "upload to the Default workspace is refused by the filing rule" refused_with "$ws_id" \
+  "Documents must be filed in a folder inside a matter."
+# An email with an emoji in its Subject and From (RFC 2047). CE's MariaDB tables are utf8, 3 bytes a character, and
+# strict, so Healdan puts U+FFFD for every character beyond the Basic Multilingual Plane before the insert (R33).
+# Uploaded after the doc # checks above, which expect the first two uploads to be 1 and 2.
+printf '%s\r\n' 'From: =?UTF-8?B?QW5uIPCfjok=?= <ann@example.com>' 'To: bob@example.com' \
+  'Subject: =?UTF-8?B?UmU6IPCfjokgU2FsZQ==?=' 'Date: Tue, 14 Oct 2025 09:29:00 +0200' 'MIME-Version: 1.0' \
+  'Content-Type: text/plain; charset=UTF-8' '' 'Party.' > "$WORK/emoji.eml"
+no_4byte_char() { # <text>: no UTF-8 lead byte of a 4-byte character (0xF0-0xF4)
+  printf '%s' "$1" | python3 -c 'import sys; b = sys.stdin.buffer.read(); sys.exit(0 if b and not any(0xF0 <= x <= 0xF4 for x in b) else 1)'
+}
+email_id=$(api -H 'Accept: application/json' -F "folderId=$doc_folder" -F "filename=emoji.eml" \
+  -F "filedata=@$WORK/emoji.eml" "$BASE/services/rest/document/upload" || true)
+check "email with an emoji in its headers uploaded" grep -Eq '^[0-9]+$' <<<"$email_id"
+email_json=$(api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$email_id" || true)
+check "email named after its subject, with U+FFFD for the emoji" \
+  test "$(jq -r '.fileName // empty' <<<"$email_json")" = $'Re_ \xef\xbf\xbd Sale.eml'
+check "email's subject field stored with U+FFFD for the emoji" \
+  test "$(jq -r '[.attributes[]? | select(.name == "emailsubject") | .stringValue][0] // empty' <<<"$email_json")" \
+  = $'Re: \xef\xbf\xbd Sale'
+check "email's stored file name has no 4-byte character" \
+  no_4byte_char "$(db_query "select ld_filename from ld_document where ld_id = ${email_id:-0}")"
+
+echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
 
-echo "== 6. setup wizard blocked"
+echo "== 7. setup wizard blocked"
 check "GET /setup is 403" test "$(http_code "$BASE/setup")" = 403
 
-echo "== 7. data survives down/up"
+echo "== 8. data survives down/up"
 compose down
 compose up -d
 check "app healthy again" wait_healthy "$(compose ps -q app)" 900
-names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?folderId=$ws_id" | jq -r '.[].fileName')
+names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?folderId=$doc_folder" | jq -r '.[].fileName')
 check "smoke.pdf still listed" grep -qx smoke.pdf <<<"$names"
 check "smoke.png still listed" grep -qx smoke.png <<<"$names"
 check "no re-initialization" app_logs_have 'schema present, skipping'

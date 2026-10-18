@@ -73,6 +73,7 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public GUIFolder inheritACL(long folderId, long rightsFolderId) throws ServerException {
         Session session = validateSession();
+        checkPermission(Permission.SECURITY, session.getUser(), folderId);
 
         /*
          * Just apply the current security settings to the whole subtree
@@ -93,6 +94,7 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void saveACL(GUIFolder guiFolder, boolean subtree) throws ServerException {
         Session session = validateSession();
+        checkPermission(Permission.SECURITY, session.getUser(), guiFolder.getId());
 
         FolderDAO fdao = FolderDAO.get();
         try {
@@ -102,17 +104,20 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
                 /*
                  * Just apply the current security settings to the whole subtree
                  */
-                executeLongRunningOperation("Apply Rights to Tree", () -> {
-                    FolderHistory history = new FolderHistory();
-                    history.setSession(session);
-                    history.setEvent(FolderEvent.PERMISSION);
-                    try {
+                // Healdan edit: an error, such as a Healdan refusal, reaches the user instead of only the log
+                try {
+                    executeLongRunningOperation("Apply Rights to Tree", () -> {
+                        FolderHistory history = new FolderHistory();
+                        history.setSession(session);
+                        history.setEvent(FolderEvent.PERMISSION);
                         fdao.applySecurityToTree(guiFolder.getId(), history);
-                    } catch (PersistenceException e) {
-                        log.error(e.getMessage(), e);
-                    }
-                    return null;
-                }, session);
+                        return null;
+                    }, session);
+                } catch (ServerException e) {
+                    if (e.getCause() instanceof PersistenceException cause)
+                        throwServerException(session, log, cause);
+                    throw e;
+                }
             } else {
                 saveACL(session, folder, guiFolder.getAccessControlList());
             }
@@ -574,6 +579,7 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void rename(long folderId, String name) throws ServerException {
         Session session = validateSession();
+        checkPermission(Permission.RENAME, session.getUser(), folderId);
 
         FolderDAO dao = FolderDAO.get();
 
@@ -608,6 +614,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
 
         try {
             Folder folder = folderDao.findById(guiFolder.getId(), true);
+            if (!folder.getName().trim().equals(guiFolder.getName().replace("/", "")))
+                checkPermission(Permission.RENAME, session.getUser(), folder.getId());
 
             FolderHistory saveTransaction = new FolderHistory();
             saveTransaction.setSession(session);

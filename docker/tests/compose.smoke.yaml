@@ -1,0 +1,5 @@
+# Smoke test only: asks Healdan to seed a Store, template, client and matter to upload into.
+services:
+  app:
+    environment:
+      HEALDAN_SMOKE_FIXTURE: "true"

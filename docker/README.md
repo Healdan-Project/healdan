@@ -337,7 +337,7 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 | `docker/tests/test-init.sh` | init tool against a throwaway MariaDB |
 | `docker/tests/test-image.sh` | image behavior: prompt stop during init, ownership, `/setup` block, Admin > Restart, settings persistence |
 | `docker/tests/test-overlays.sh` | dev and proxy overlays |
-| `docker/smoke-test.sh` | end to end: build, boot, REST login, uploads and thumbnails, data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building |
+| `docker/smoke-test.sh` | end to end: build, boot, REST login, uploads into a seeded matter (`docker/tests/compose.smoke.yaml` sets `HEALDAN_SMOKE_FIXTURE`) and thumbnails, Healdan's schema, doc #s and filing rule, data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building |
 
 ## Continuous integration
 
