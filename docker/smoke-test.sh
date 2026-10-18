@@ -124,12 +124,33 @@ for id in $doc_ids; do
   check "document $id has doc # $n" test "$custom" = "$n"
   n=$((n + 1))
 done
-# The filing rule: no document at the top of a matter's workspace or in the Default workspace
-for target in "$matter_id" "$ws_id"; do
-  code=$(http_code -u admin:admin -H 'Accept: application/json' -F "folderId=$target" -F "filename=smoke.png" \
-    -F "filedata=@$WORK/smoke.png" "$BASE/services/rest/document/upload")
-  check "upload into folder $target is refused (HTTP $code)" test "$code" -ge 300
-done
+# The filing rule: no document at the top of a matter's workspace or in the Default workspace. REST answers a
+# refusal with a bare, empty HTTP 500 (the message never reaches the body), and a bare non-2xx would also pass for
+# a 401 or an unrelated 500. So the check needs the answer to be non-2xx AND the rule's own message to be logged
+# in dms.log once more than before the upload.
+dms_log_count() { # <message>
+  compose exec -T app sh -c 'grep -cF -- "$1" /opt/logicaldoc/repository/logs/dms.log || true' sh "$1"
+}
+refused_with() { # <folder id> <message>
+  local before after code tries=0
+  before=$(dms_log_count "$2")
+  code=$(curl -s -o /dev/null -w '%{http_code}' -u admin:admin -H 'Accept: application/json' -F "folderId=$1" \
+    -F "filename=smoke.png" -F "filedata=@$WORK/smoke.png" "$BASE/services/rest/document/upload")
+  [ "$code" -ge 300 ] || { echo "answered HTTP $code, not an error"; return 1; }
+  while :; do
+    after=$(dms_log_count "$2")
+    [ "$after" -gt "$before" ] && return 0
+    tries=$((tries + 1))
+    [ "$tries" -lt 10 ] || break
+    sleep 1
+  done
+  echo "HTTP $code, but dms.log has no new '$2'"
+  return 1
+}
+check "upload to the matter's top level is refused by the filing rule" refused_with "$matter_id" \
+  "Documents can't be saved at the top level of a matter. Choose one of its folders."
+check "upload to the Default workspace is refused by the filing rule" refused_with "$ws_id" \
+  "Documents must be filed in a folder inside a matter."
 
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
