@@ -73,6 +73,8 @@ public class MatterService {
 
 	static final String LONG_DESCRIPTION = "A %s description can't be longer than %d characters.";
 
+	static final String OUTSIDE_PLANE_DESCRIPTION = "A %s description can't contain emoji or other characters the database can't store.";
+
 	static final String NO_CLIENT = "That client no longer exists.";
 
 	static final String NO_STORE = "That Store no longer exists.";
@@ -346,10 +348,19 @@ public class MatterService {
 		return HTMLSanitizer.sanitizeSimpleText(name).replace("/", "").replace("\\", "");
 	}
 
+	/**
+	 * @return the description, trimmed; null for none
+	 * @throws HealdanRuleException if it is too long for the matter's row and
+	 *         the folder, or holds a character beyond the Basic Multilingual
+	 *         Plane, which would fail the insert on MariaDB as a name's would
+	 *         (R33)
+	 */
 	private String cleanDescription(String description) throws HealdanRuleException {
 		String clean = description == null ? "" : description.strip();
 		if (clean.length() > MAX_DESCRIPTION_LENGTH)
 			throw new HealdanRuleException(LONG_DESCRIPTION.formatted(label(), MAX_DESCRIPTION_LENGTH));
+		if (!BasicPlane.holds(clean))
+			throw new HealdanRuleException(OUTSIDE_PLANE_DESCRIPTION.formatted(label()));
 		return clean.isEmpty() ? null : clean;
 	}
 

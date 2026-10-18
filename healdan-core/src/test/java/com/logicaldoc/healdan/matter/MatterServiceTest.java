@@ -346,6 +346,26 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testRefusesDescriptionsTheDatabaseCannotStore() throws Exception {
+		// The description goes into hd_matter and ld_folder, both utf8 on MariaDB, as names do (R33)
+		String message = "A matter description can't contain emoji or other characters the database can't store.";
+		assertRefused(message, () -> create(2, "Party", alice, demo, "Launch \ud83c\udf89"));
+		assertRefused(message, () -> create(2, "Party", alice, demo, "Half \uD83C"));
+		assertNoMatter(2);
+
+		Matter described = create(2, "Party", alice, demo, "Launch");
+		assertRefused(message,
+				() -> service.update(described.getId(), "Party", "Launch \ud83c\udf89", alice.getId(), admin));
+		assertEquals("Launch", MatterDAO.get().findById(described.getId()).getDescription());
+		assertEquals("Launch", workspace(described).getDescription());
+
+		// Every character of the plane is fine
+		service.update(described.getId(), "Party", "Caf\u00e9 \u4e2d\u6587", alice.getId(), admin);
+		assertEquals("Caf\u00e9 \u4e2d\u6587", MatterDAO.get().findById(described.getId()).getDescription());
+		assertEquals("Caf\u00e9 \u4e2d\u6587", workspace(described).getDescription());
+	}
+
+	@Test
 	public void testTemplateCopyNeedsTheCallersTransaction() throws Exception {
 		// Outside a transaction each folder store would commit on its own, and a refusal halfway would leave a part
 		Exception e = assertThrows(Exception.class, () -> HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE,
