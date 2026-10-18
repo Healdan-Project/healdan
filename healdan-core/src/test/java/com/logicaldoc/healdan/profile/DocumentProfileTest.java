@@ -221,12 +221,107 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 	public void testOrdinaryStoreNeverVetoesTheSubclass() throws Exception {
 		Document stored = reload(doc);
 		stored.setValue(SUBCLASS, "Sub1");
+		// A plain store (as the indexer's) is never refused; the foreign inherited Subclass goes
 		documentDao.store(stored);
-		assertEquals("Sub1", text(doc, SUBCLASS));
+		assertBlank(text(doc, SUBCLASS));
+	}
 
-		// A later ordinary store (as the indexer's) leaves it alone
-		documentDao.store(reload(doc));
-		assertEquals("Sub1", text(doc, SUBCLASS));
+	@Test
+	public void testInheritedSubclassIsClearedNotRefused() throws Exception {
+		setFolderValue(documents, CLASS, "Letters");
+		setFolderValue(documents, SUBCLASS, "Sub1");
+
+		// Inherited together with the Class
+		Document inherits = upload(documents, "inherits.txt", alice);
+		assertEquals("Sub1", text(inherits, SUBCLASS));
+
+		// A Class of its own makes the inherited Subclass foreign: it goes, and stays away
+		Document docs = createWith(documents, "docs.txt", alice, Map.of(CLASS, "Docs"));
+		assertBlank(text(docs, SUBCLASS));
+		documentDao.store(reload(docs));
+		assertBlank(text(docs, SUBCLASS));
+		edit(docs, alice, HealdanConstants.ATTR_TYPIST, alice);
+		assertBlank(text(docs, SUBCLASS));
+
+		// Editing the Class alone, or with the Subclass cleared, is allowed
+		edit(inherits, alice, CLASS, "Docs");
+		assertEquals("Docs", text(inherits, CLASS));
+		assertBlank(text(inherits, SUBCLASS));
+		Document other = upload(documents, "other.txt", alice);
+		edit(other, alice, Map.of(CLASS, "Docs", SUBCLASS, ""));
+		assertBlank(text(other, SUBCLASS));
+		documentDao.store(reload(other));
+		assertBlank(text(other, SUBCLASS));
+
+		// A supplied foreign Subclass is still refused
+		assertRefused("Subclass Sub2 doesn't belong to Class Letters.",
+				() -> createWith(documents, "bad.txt", alice, Map.of(SUBCLASS, "Sub2")));
+	}
+
+	@Test
+	public void testMoveClearsALocalSubclassThatBecomesForeign() throws Exception {
+		Document created = createWith(correspondence, "sub.txt", alice, Map.of(SUBCLASS, "Sub2"));
+		assertEquals(Set.of(SUBCLASS), locals(created));
+		setFolderValue(documents, CLASS, "Letters");
+
+		DocumentManager.get().moveToFolder(reload(created), documents, documentHistory(alice));
+		awaitAsyncWork();
+
+		assertEquals("Letters", text(created, CLASS));
+		assertBlank(text(created, SUBCLASS));
+		assertEquals(Set.of(), locals(created));
+	}
+
+	@Test
+	public void testOnlyAnEditChangesTheLocalMarks() throws Exception {
+		setFolderValue(documents, CLASS, "Letters");
+		Document override = createWith(documents, "override.txt", alice, Map.of(CLASS, "Docs"));
+		setFolderValue(documents, CLASS, "Docs");
+		// The override now equals the folder; a store that isn't an edit keeps its mark
+		documentDao.store(reload(override));
+		assertEquals(Set.of(CLASS), locals(override));
+
+		// A stamped value that differs from the folder's now is restamped, not made local
+		Document inherits = upload(correspondence, "inherits.txt", alice);
+		setFolderValue(correspondence, CLASS, "Financial");
+		documentDao.store(reload(inherits));
+		assertEquals("Financial", text(inherits, CLASS));
+		assertEquals(Set.of(), locals(inherits));
+	}
+
+	@Test
+	public void testVersionsRecordTheStampedProfile() throws Exception {
+		Document created = upload(documents, "versions.txt", alice);
+		edit(created, alice, HealdanConstants.ATTR_CLIENT, "5");
+		edit(created, alice, CLASS, "");
+		assertVersionValues(created, Set.of("998"), "1");
+
+		Matter other = fx.matter(fx.client(5, "Other"), 7, "Other Matter", store, "Documents");
+		Folder target = child(folderDao.findById(other.getFolderId(), true), "Documents");
+		DocumentManager.get().moveToFolder(reload(created), target, documentHistory(alice));
+		awaitAsyncWork();
+		assertVersionValues(created, Set.of("998", "5"), null);
+		assertEquals("5", text(created, HealdanConstants.ATTR_CLIENT));
+	}
+
+	private void assertVersionValues(Document document, Set<String> clients, String matter) {
+		List<Map<String, Object>> rows = jdbc.queryForList(
+				"select e.ld_name, e.ld_stringvalue from ld_version_ext e join ld_version v on v.ld_id = e.ld_versionid where v.ld_documentid = ?",
+				document.getId());
+		assertEquals(clients,
+				rows.stream().filter(r -> "client".equals(r.get("LD_NAME"))).map(r -> (String) r.get("LD_STRINGVALUE"))
+						.collect(java.util.stream.Collectors.toSet()));
+		if (matter != null)
+			rows.stream().filter(r -> "matter".equals(r.get("LD_NAME")))
+					.forEach(r -> assertEquals(matter, r.get("LD_STRINGVALUE")));
+		long classes = rows.stream().filter(r -> CLASS.equals(r.get("LD_NAME"))).count();
+		assertTrue(classes > 0);
+		rows.stream().filter(r -> CLASS.equals(r.get("LD_NAME")))
+				.forEach(r -> assertEquals("Docs", r.get("LD_STRINGVALUE")));
+	}
+
+	private static void assertBlank(String value) {
+		assertTrue("[" + value + "]", value == null || value.isEmpty());
 	}
 
 	@Test
@@ -272,6 +367,8 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 		assertEquals("Letters", text(inherits, CLASS));
 		assertEquals(Set.of(), locals(inherits));
 		assertEquals("Letters", text(overrides, CLASS));
+		// An override that now equals the folder keeps its mark
+		assertEquals(Set.of(CLASS), locals(overrides));
 		assertEquals("Docs", text(local, CLASS));
 		assertEquals(Set.of(CLASS), locals(local));
 	}
@@ -309,11 +406,15 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 
 	/** Edits through CE's update, as the GUI and the web services do */
 	private void edit(Document document, User as, String name, Object value) throws Exception {
+		edit(document, as, Map.of(name, value));
+	}
+
+	private void edit(Document document, User as, Map<String, Object> values) throws Exception {
 		Document current = reload(document);
 		Document vo = new Document(current);
 		// The attribute objects are shared with the stored document
 		vo.getAttributes().replaceAll((n, a) -> new Attribute(a));
-		vo.setValue(name, value);
+		values.forEach(vo::setValue);
 		DocumentManager.get().update(current, vo, documentHistory(as));
 		awaitAsyncWork();
 	}

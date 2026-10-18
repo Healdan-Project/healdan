@@ -1,5 +1,7 @@
 package com.logicaldoc.healdan.profile;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -13,7 +15,6 @@ import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
-import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.StoredRows;
@@ -25,11 +26,11 @@ import com.logicaldoc.healdan.rules.Vetoes;
  * and matter from the workspace, Author and Typist defaulting to the creator.
  * It runs after CE's own folder metadata copy, which only fills blanks.
  * <p>
- * The Subclass must belong to the Class. That is refused here only for a new
- * document; an update is checked by {@code HealdanHooksImpl} before CE writes
- * anything, and a check-in in {@link #beforeCheckin}, before its first store.
- * Any other store of an existing document never vetoes and leaves the stored
- * Subclass alone (plan, D3). CE creates it by reflection, hence the public
+ * The Subclass must belong to the Class: a supplied or local one that doesn't is
+ * refused, an inherited one is cleared ({@link Inheritance}). That is refused
+ * here only for a new document; an update is checked by {@code HealdanHooksImpl}
+ * before CE writes anything, and a check-in in {@link #beforeCheckin}. Any
+ * other store of an existing document never vetoes (plan, D3). CE creates it by reflection, hence the public
  * no-arg constructor.
  */
 public class ProfileDocumentListener implements DocumentListener {
@@ -57,16 +58,30 @@ public class ProfileDocumentListener implements DocumentListener {
 		inheritance.addMissingAttributes(document);
 
 		long folderId = document.getFolder().getId();
-		boolean create = document.getId() == 0L;
-		if (create) {
-			dictionary.put(LOCALS, inheritance.applyOnCreate(document, folderId));
+		if (document.getId() == 0L) {
+			Set<String> locals = new HashSet<>();
+			Vetoes.check(Vetoes.ids(folderId), List.of(),
+					() -> locals.addAll(inheritance.applyOnCreate(document, folderId)));
+			dictionary.put(LOCALS, locals);
 			defaultToCreator(document, HealdanConstants.ATTR_AUTHOR);
 			defaultToCreator(document, HealdanConstants.ATTR_TYPIST);
-			checkSubclass(document, inheritance.inheritedFrom(folderId));
-		} else {
-			if (moved(document, transaction))
-				inheritance.restampDocument(document);
+			return;
+		}
+
+		/*
+		 * The local marks change only on a user's edit: an update or a check-in
+		 * (announced by EditMarks), or a store with the CHANGED event. Every other
+		 * store re-stamps the values that aren't local (plan, R17)
+		 */
+		boolean moved = moved(document, transaction);
+		boolean edit = EditMarks.consume(document.getId())
+				|| (transaction != null && DocumentEvent.CHANGED.toString().equals(transaction.getEvent()));
+		if (edit) {
+			if (moved)
+				inheritance.restampDocument(document, folderId, true, true);
 			inheritance.applyOnUpdate(document, LocalValueDAO.DOCUMENT, document.getId(), folderId);
+		} else {
+			inheritance.restampDocument(document, folderId, moved, true);
 		}
 	}
 
@@ -82,57 +97,16 @@ public class ProfileDocumentListener implements DocumentListener {
 		return stored == null || stored.longValue() != document.getFolder().getId();
 	}
 
-	private static void defaultToCreator(Document document, String attribute) {
+	private static void defaultToCreator(Document document, String attribute) throws PersistenceException {
 		Object value = document.getValue(attribute);
 		if (value != null && !value.toString().isEmpty())
 			return;
 		long creatorId = document.getPublisherId();
 		if (creatorId == 0L)
 			return;
-		try {
-			User creator = UserDAO.get().findById(creatorId);
-			if (creator != null)
-				document.setValue(attribute, creator);
-		} catch (PersistenceException e) {
-			// The value stays empty
-		}
-	}
-
-	/**
-	 * Refuses a new document whose Subclass doesn't belong to its Class. A
-	 * Subclass that only came from the folder, beside a Class the document sets
-	 * itself, was not chosen by anyone and is dropped instead.
-	 */
-	private void checkSubclass(Document document, Map<String, Object> inherited) throws PersistenceException {
-		Object subclass = document.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (Inheritance.isBlank(subclass))
-			return;
-		String docClass = String.valueOf(document.getValue(HealdanConstants.ATTR_DOCCLASS));
-		ProfileSchema schema = ProfileSchema.get();
-		if (schema.subclassBelongs(subclass.toString(), docClass))
-			return;
-
-		if (subclass.equals(inherited.get(HealdanConstants.ATTR_DOCSUBCLASS))) {
-			Inheritance.clear(document.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS));
-			return;
-		}
-		refuse(document, subclass.toString(), docClass);
-	}
-
-	/**
-	 * Refuses a subclass that doesn't belong to its class
-	 *
-	 * @param document the document, new or being changed
-	 * @param subclass the Subclass
-	 * @param docClass the effective Class
-	 * @throws PersistenceException the refusal
-	 */
-	public static void refuse(Document document, String subclass, String docClass) throws PersistenceException {
-		Vetoes.check(Vetoes.ids(document.getFolder() != null ? document.getFolder().getId() : null),
-				Vetoes.ids(document.getId()), () -> {
-					throw new HealdanRuleException(
-							"Subclass %s doesn't belong to Class %s.".formatted(subclass, docClass));
-				});
+		User creator = UserDAO.get().findById(creatorId);
+		if (creator != null)
+			document.setValue(attribute, creator);
 	}
 
 	@Override
@@ -151,32 +125,29 @@ public class ProfileDocumentListener implements DocumentListener {
 	}
 
 	/**
-	 * A check-in's first store has no transaction, so the Subclass is checked
-	 * here, before anything is written. Only a Class or Subclass the check-in
-	 * changed is checked.
+	 * A check-in's first store has no transaction, so the profile is stamped and
+	 * the Subclass checked here, before anything is written. A Class or Subclass
+	 * the check-in didn't change is never refused. The store that follows may
+	 * change the local marks, as a check-in carrying metadata is an edit.
 	 */
 	@Override
 	public void beforeCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		Object subclass = document.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (document.getDocRef() != null || document.getFolder() == null || Inheritance.isBlank(subclass))
-			return;
-		if (!MatterLocator.get().locate(document.getFolder()).isInsideMatter())
+		if (document.getDocRef() != null || document.getFolder() == null
+				|| !MatterLocator.get().locate(document.getFolder()).isInsideMatter())
 			return;
 
-		String docClass = Inheritance.isBlank(document.getValue(HealdanConstants.ATTR_DOCCLASS))
-				? String.valueOf(Inheritance.get().inheritedFrom(document.getFolder().getId())
-						.get(HealdanConstants.ATTR_DOCCLASS))
-				: document.getValue(HealdanConstants.ATTR_DOCCLASS).toString();
-		if (ProfileSchema.get().subclassBelongs(subclass.toString(), docClass)
-				|| StoredProfile.unchanged(document.getId(), docClass, subclass.toString()))
-			return;
-		refuse(document, subclass.toString(), docClass);
+		boolean unchanged = StoredProfile.unchanged(document.getId(),
+				document.getValue(HealdanConstants.ATTR_DOCCLASS), document.getValue(HealdanConstants.ATTR_DOCSUBCLASS));
+		long folderId = document.getFolder().getId();
+		Vetoes.check(Vetoes.ids(folderId), Vetoes.ids(document.getId()),
+				() -> Inheritance.get().stampValueObject(document, folderId, false, !unchanged));
+		EditMarks.mark(document.getId());
 	}
 
 	@Override
 	public void afterCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		// Nothing to do
+		EditMarks.consume(document.getId());
 	}
 
 	@Override

@@ -14,7 +14,7 @@ import com.logicaldoc.util.spring.Context;
  * A document's Class and Subclass as the database holds them, for a rule that
  * mustn't refuse a combination that was already there.
  */
-final class StoredProfile {
+public final class StoredProfile {
 
 	private StoredProfile() {
 	}
@@ -25,15 +25,19 @@ final class StoredProfile {
 	 * @param subclass a Subclass value
 	 * @return true if the document is stored with exactly these
 	 */
-	static boolean unchanged(long documentId, String docClass, String subclass) {
-		return Objects.equals(docClass, stored(documentId, HealdanConstants.ATTR_DOCCLASS))
-				&& Objects.equals(subclass, stored(documentId, HealdanConstants.ATTR_DOCSUBCLASS));
+	public static boolean unchanged(long documentId, Object docClass, Object subclass) {
+		return Objects.equals(text(docClass), stored(documentId, HealdanConstants.ATTR_DOCCLASS))
+				&& Objects.equals(text(subclass), stored(documentId, HealdanConstants.ATTR_DOCSUBCLASS));
+	}
+
+	private static String text(Object value) {
+		return value == null || value.toString().isEmpty() ? null : value.toString();
 	}
 
 	private static String stored(long documentId, String attribute) {
 		List<String> rows = new JdbcTemplate(Context.get(DataSource.class)).queryForList(
 				"select ld_stringvalue from ld_document_ext where ld_docid = ? and ld_name = ?", String.class,
 				documentId, attribute);
-		return rows.isEmpty() ? null : rows.get(0);
+		return rows.isEmpty() ? null : text(rows.get(0));
 	}
 }

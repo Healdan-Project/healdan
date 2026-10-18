@@ -15,7 +15,9 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.ExtensibleObject;
+import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.FolderPosition;
@@ -71,16 +73,60 @@ public class Inheritance {
 
 	/**
 	 * Gives the object every attribute of the Healdan profile it lacks, empty.
-	 * It first replaces the attributes with copies: CE's copy of a document
+	 * A new object first gets copies of its attributes: CE's copy of a document
 	 * shares the attribute objects of its source, and stamping must not change
-	 * the source.
+	 * the source. A stored document is stamped in place, because CE's versions
+	 * share its attribute objects too and must record the stamped values.
 	 *
 	 * @param obj a document or folder
 	 */
 	public void addMissingAttributes(ExtensibleObject obj) {
-		obj.getAttributes().replaceAll((name, attribute) -> new Attribute(attribute));
+		if (obj.getId() == 0L)
+			obj.getAttributes().replaceAll((name, attribute) -> new Attribute(attribute));
 		for (String name : schema.template().getAttributeNames())
 			ensure(obj, name);
+	}
+
+	/**
+	 * Puts the profile on a value object or a document before CE uses it (an
+	 * update's value object, a check-in's document, a document about to move),
+	 * without touching the local marks. Its attributes are replaced with copies
+	 * when {@code copy} is true.
+	 *
+	 * @param obj the object
+	 * @param folderId the folder it is, or is going, in
+	 * @param refuse true to refuse a Subclass that is supplied or local and
+	 *        doesn't belong to the Class; false to clear it
+	 * @throws PersistenceException the refusal, or an error at data layer
+	 */
+	public void stampValueObject(Document obj, long folderId, boolean copy, boolean refuse)
+			throws PersistenceException {
+		Template template = schema.template();
+		obj.setTemplate(template);
+		obj.setTemplateId(template.getId());
+		if (copy)
+			obj.getAttributes().replaceAll((name, attribute) -> new Attribute(attribute));
+		for (String name : template.getAttributeNames())
+			ensure(obj, name);
+		apply(obj, folderId, new HashSet<>(), new HashSet<>(), refuse);
+	}
+
+	/**
+	 * Stamps a stored document for the folder it is about to move to: the
+	 * template, the missing attributes and the values that aren't local, in
+	 * place, so that the version of the move records them. The local marks are
+	 * left to the store that follows.
+	 *
+	 * @param doc the document
+	 * @param folderId the target folder
+	 * @throws PersistenceException error at data layer
+	 */
+	public void stampForMove(Document doc, long folderId) throws PersistenceException {
+		Template template = schema.template();
+		doc.setTemplate(template);
+		doc.setTemplateId(template.getId());
+		addMissingAttributes(doc);
+		restampDocument(doc, folderId, true, false);
 	}
 
 	/**
@@ -95,7 +141,7 @@ public class Inheritance {
 	 */
 	public Set<String> applyOnCreate(ExtensibleObject obj, long parentFolderId) throws PersistenceException {
 		Set<String> result = new HashSet<>();
-		apply(obj, parentFolderId, result, new HashSet<>());
+		apply(obj, parentFolderId, result, new HashSet<>(), true);
 		return result;
 	}
 
@@ -114,7 +160,7 @@ public class Inheritance {
 			throws PersistenceException {
 		Set<String> local = new HashSet<>();
 		Set<String> inheriting = new HashSet<>();
-		apply(obj, parentFolderId, local, inheriting);
+		apply(obj, parentFolderId, local, inheriting, false);
 		for (String name : local)
 			locals.setLocal(type, id, name, true);
 		for (String name : inheriting)
@@ -123,15 +169,29 @@ public class Inheritance {
 
 	/**
 	 * Recalculates every value of a document that isn't local from its folder,
-	 * as on a move or a restore. Client and matter always are. A Subclass that
-	 * no longer belongs to the Class is cleared.
+	 * as on a move, a restore or any store that isn't an edit. Client and matter
+	 * always are. The local marks are left alone, except that a local value
+	 * that is blank goes (a move clears a Subclass that has become foreign, with
+	 * its mark).
 	 *
-	 * @param doc the document, whose folder is the new one
+	 * @param doc the document
 	 * @throws PersistenceException error at data layer
 	 */
 	public void restampDocument(Document doc) throws PersistenceException {
+		restampDocument(doc, doc.getFolder().getId(), true, true);
+	}
+
+	/**
+	 * @param doc the document
+	 * @param folderId the folder it is, or is going, in
+	 * @param moved true if the document changes folder
+	 * @param writeMarks false to leave {@code hd_local_value} alone
+	 * @throws PersistenceException error at data layer
+	 */
+	public void restampDocument(Document doc, long folderId, boolean moved, boolean writeMarks)
+			throws PersistenceException {
 		Set<String> local = doc.getId() != 0L ? locals.locals(LocalValueDAO.DOCUMENT, doc.getId()) : Set.of();
-		Map<String, Attribute> inherited = inheritedAttributes(doc.getFolder().getId());
+		Map<String, Attribute> inherited = inheritedAttributes(folderId);
 		for (String name : schema.inheritable()) {
 			Attribute own = ensure(doc, name);
 			Attribute from = inherited.get(name);
@@ -146,17 +206,28 @@ public class Inheritance {
 			}
 		}
 
-		Object subclass = doc.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (!isBlank(subclass) && !schema.subclassBelongs(subclass.toString(),
-				String.valueOf(doc.getValue(HealdanConstants.ATTR_DOCCLASS)))) {
-			clear(doc.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS));
-			if (doc.getId() != 0L)
-				locals.setLocal(LocalValueDAO.DOCUMENT, doc.getId(), HealdanConstants.ATTR_DOCSUBCLASS, false);
-		}
+		// A Subclass that doesn't belong to the Class is cleared, never refused
+		Attribute subclass = doc.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
+		if (subclass != null && foreign(doc) && (moved || !local.contains(HealdanConstants.ATTR_DOCSUBCLASS)))
+			clear(subclass);
+
+		if (writeMarks && doc.getId() != 0L)
+			for (String name : local)
+				if (isBlank(doc.getValue(name)))
+					locals.setLocal(LocalValueDAO.DOCUMENT, doc.getId(), name, false);
 	}
 
-	private void apply(ExtensibleObject obj, long parentFolderId, Set<String> local, Set<String> inheriting)
-			throws PersistenceException {
+	/**
+	 * @return true if the object has a Subclass that doesn't belong to its Class
+	 */
+	private boolean foreign(ExtensibleObject obj) {
+		Object subclass = obj.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
+		return !isBlank(subclass) && !schema.subclassBelongs(subclass.toString(),
+				String.valueOf(obj.getValue(HealdanConstants.ATTR_DOCCLASS)));
+	}
+
+	private void apply(ExtensibleObject obj, long parentFolderId, Set<String> local, Set<String> inheriting,
+			boolean refuse) throws PersistenceException {
 		Map<String, Attribute> inherited = inheritedAttributes(parentFolderId);
 		for (String name : schema.inheritable()) {
 			Attribute own = ensure(obj, name);
@@ -176,6 +247,21 @@ public class Inheritance {
 			} else {
 				local.add(name);
 			}
+		}
+
+		/*
+		 * One rule for create, update, check-in and re-stamp: a Subclass that is
+		 * supplied or local and doesn't belong to the Class is refused, and an
+		 * inherited one is cleared (spec 6.6, 6.7)
+		 */
+		if (foreign(obj)) {
+			String subclass = obj.getValue(HealdanConstants.ATTR_DOCSUBCLASS).toString();
+			if (refuse && local.contains(HealdanConstants.ATTR_DOCSUBCLASS))
+				throw new HealdanRuleException("Subclass %s doesn't belong to Class %s."
+						.formatted(subclass, obj.getValue(HealdanConstants.ATTR_DOCCLASS)));
+			clear(obj.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS));
+			local.remove(HealdanConstants.ATTR_DOCSUBCLASS);
+			inheriting.add(HealdanConstants.ATTR_DOCSUBCLASS);
 		}
 	}
 

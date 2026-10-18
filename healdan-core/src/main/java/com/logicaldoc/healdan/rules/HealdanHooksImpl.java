@@ -1,8 +1,8 @@
 package com.logicaldoc.healdan.rules;
 
 import java.util.List;
-import java.util.Objects;
 
+import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -15,8 +15,8 @@ import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.Inheritance;
-import com.logicaldoc.healdan.profile.ProfileDocumentListener;
-import com.logicaldoc.healdan.profile.ProfileSchema;
+import com.logicaldoc.healdan.profile.EditMarks;
+import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
 
@@ -67,30 +67,28 @@ public class HealdanHooksImpl implements HealdanHooks {
 		if (document != null)
 			DocNumberListener.protect(document.getId(), docVO);
 		if (document != null && docVO != null)
-			checkSubclass(document, docVO);
+			stampUpdate(document, docVO);
 	}
 
 	/**
-	 * Refuses an update that leaves the Subclass outside its Class (spec 6.6),
-	 * before CE writes anything. An unchanged Class and Subclass are never
-	 * refused, nor is a document outside a matter.
+	 * Puts the profile on the value object, so that the version CE writes before
+	 * the store records the stamped values (client and matter back from the
+	 * workspace, blanks inherited), and refuses an update that leaves a Subclass
+	 * the user supplied outside its Class (spec 6.6), before CE writes anything.
+	 * A Class and Subclass that didn't change are never refused. Announces the
+	 * edit, so that the store that follows may change the local marks.
 	 */
-	private void checkSubclass(Document document, Document docVO) throws PersistenceException {
-		Object subclass = docVO.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (Inheritance.isBlank(subclass) || document.getFolder() == null
+	private void stampUpdate(Document document, Document docVO) throws PersistenceException {
+		if (document.getFolder() == null
 				|| !MatterLocator.get().locate(document.getFolder()).isInsideMatter())
 			return;
 
-		Object docClass = docVO.getValue(HealdanConstants.ATTR_DOCCLASS);
-		String effective = !Inheritance.isBlank(docClass) ? docClass.toString()
-				: String.valueOf(Inheritance.get().inheritedFrom(document.getFolder().getId())
-						.get(HealdanConstants.ATTR_DOCCLASS));
-		if (ProfileSchema.get().subclassBelongs(subclass.toString(), effective))
-			return;
-		if (Objects.equals(subclass, document.getValue(HealdanConstants.ATTR_DOCSUBCLASS))
-				&& Objects.equals(docClass, document.getValue(HealdanConstants.ATTR_DOCCLASS)))
-			return;
-		ProfileDocumentListener.refuse(document, subclass.toString(), effective);
+		boolean unchanged = StoredProfile.unchanged(document.getId(), docVO.getValue(HealdanConstants.ATTR_DOCCLASS),
+				docVO.getValue(HealdanConstants.ATTR_DOCSUBCLASS));
+		long folderId = document.getFolder().getId();
+		Vetoes.check(Vetoes.ids(folderId), Vetoes.ids(document.getId()),
+				() -> Inheritance.get().stampValueObject(docVO, folderId, true, !unchanged));
+		EditMarks.mark(document.getId());
 	}
 
 	@Override
@@ -101,6 +99,18 @@ public class HealdanHooksImpl implements HealdanHooks {
 				rules.checkShortcut(target);
 			rules.checkDocumentTarget(target);
 		});
+		stampMove(document, target);
+	}
+
+	/**
+	 * Re-stamps the document for its new folder before CE creates the version of
+	 * the move, which shares the document's attribute objects
+	 */
+	private void stampMove(Document document, Folder target) throws PersistenceException {
+		if (target == null || document.getDocRef() != null || !Hibernate.isInitialized(document.getAttributes())
+				|| !MatterLocator.get().locate(target).isInsideMatter())
+			return;
+		Inheritance.get().stampForMove(document, target.getId());
 	}
 
 	@Override
