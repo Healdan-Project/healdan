@@ -149,6 +149,31 @@ public class EmailDocumentListenerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testListenerSetsDateFiledOfANewDocumentOnly() throws Exception {
+		Date old = utc("2001-01-01 00:00:00");
+		Document fresh = new Document();
+		fresh.setFileName("a.txt");
+		fresh.setCreation(old);
+		long before = System.currentTimeMillis();
+		new EmailDocumentListener().beforeStore(fresh, fx.documentHistory(admin), new java.util.HashMap<>());
+		assertTrue(fresh.getCreation().getTime() >= before);
+
+		Document existing = new Document();
+		existing.setId(42L);
+		existing.setFileName("a.txt");
+		existing.setCreation(old);
+		new EmailDocumentListener().beforeStore(existing, fx.documentHistory(admin), new java.util.HashMap<>());
+		assertEquals(old, existing.getCreation());
+	}
+
+	@Test
+	public void testUpperCaseExtensionIsKept() throws Exception {
+		Document doc = file("healdan-cc.eml", "UPLOAD.EML");
+		assertEquals("Ann Smith <ann@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILFROM));
+		assertEquals("Re_ Demo plan \u2013 caf\u00e9.EML", doc.getFileName());
+	}
+
+	@Test
 	public void testNoExtraVersion() throws Exception {
 		Document doc = file("healdan-cc.eml", "upload.eml");
 		List<Version> versions = VersionDAO.get().findByDocId(doc.getId());

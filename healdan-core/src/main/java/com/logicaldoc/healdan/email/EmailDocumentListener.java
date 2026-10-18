@@ -13,7 +13,6 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.healdan.HealdanConstants;
-import com.logicaldoc.util.io.FileUtil;
 
 /**
  * Sets the Date filed of every new document to now, whatever came with it, and
@@ -52,8 +51,10 @@ public class EmailDocumentListener implements DocumentListener {
 		String fileName = document.getFileName();
 		if (fileName == null || transaction == null || transaction.getFile() == null)
 			return;
-		String extension = FileUtil.getExtension(fileName).toLowerCase();
-		if (!HealdanConstants.EMAIL_EXTENSIONS.contains(extension))
+		// The name keeps the extension as it came; only the lookup is case-insensitive
+		// (CE's FileUtil.getExtension lower-cases, so take the original case from the name itself)
+		String extension = fileName.substring(fileName.lastIndexOf('.') + 1);
+		if (!fileName.contains(".") || !HealdanConstants.EMAIL_EXTENSIONS.contains(extension.toLowerCase()))
 			return;
 
 		File file = transaction.getFile();

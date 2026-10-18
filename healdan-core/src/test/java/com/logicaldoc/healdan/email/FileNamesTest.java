@@ -35,11 +35,22 @@ public class FileNamesTest {
 
 	@Test
 	public void testLongSubjectNeverCutsASurrogatePair() {
-		String result = name("x".repeat(250) + "\u1f600\u1f600");
+		String emoji = new String(Character.toChars(0x1F600));
+		// 255 - ".eml" = 251, so the cut falls between the high surrogate (index 250) and the low one
+		String result = name("x".repeat(250) + emoji + "yy");
 		assertTrue(result.length() <= 255);
 		assertTrue(result.endsWith(".eml"));
-		for (int i = 0; i < result.length(); i++)
+		assertEquals("x".repeat(250) + ".eml", result);
+		for (int i = 0; i < result.length(); i++) {
 			if (Character.isHighSurrogate(result.charAt(i)))
 				assertTrue(Character.isLowSurrogate(result.charAt(i + 1)));
+			if (Character.isLowSurrogate(result.charAt(i)))
+				assertTrue(i > 0 && Character.isHighSurrogate(result.charAt(i - 1)));
+		}
+	}
+
+	@Test
+	public void testExtensionKeepsItsCase() {
+		assertEquals("Hello.EML", FileNames.fromSubject("Hello", "EML", "x.EML"));
 	}
 }
