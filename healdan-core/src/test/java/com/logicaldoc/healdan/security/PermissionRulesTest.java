@@ -1,0 +1,459 @@
+package com.logicaldoc.healdan.security;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentAccessControlEntry;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.FolderAccessControlEntry;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderEvent;
+import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.channels.ChannelHarness;
+import com.logicaldoc.healdan.matter.MatterDAO;
+import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
+import com.logicaldoc.webservice.model.WSFolder;
+
+/**
+ * Spec §7.3: inside a matter a folder's permissions stay within its parent's
+ * (P1), a matter's readers can read its Store (P2), narrowing a folder narrows
+ * the folders below it, and "apply to subfolders" can't re-open a folder the
+ * user doesn't manage.
+ * <p>
+ * The layout, on top of the rules layout: IT (Carol) can read the Store. The
+ * matter belongs to Alice, who isn't an admin. Its workspace has its own ACL,
+ * as the demo template's: readers read, IT reads and modifies, Alice's own
+ * group has every permission. Secured Documents is IT only, read and modify;
+ * Documents and Correspondence inherit the workspace.
+ */
+public class PermissionRulesTest extends AbstractRulesTestCase {
+
+	private static final String P1 = "A folder can't grant more than its parent (%s).";
+
+	private static final String P2 = "%s can read this matter but not its Store.";
+
+	private static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
+
+	private static final Permission[] READ_ONLY = { Permission.READ, Permission.DOWNLOAD, Permission.PREVIEW };
+
+	private static final Permission[] MODIFY = { Permission.READ, Permission.DOWNLOAD, Permission.PREVIEW,
+			Permission.WRITE, Permission.ADD, Permission.RENAME, Permission.DELETE, Permission.MOVE };
+
+	private final ChannelHarness harness = new ChannelHarness();
+
+	private Group readers;
+
+	private Group it;
+
+	/** Alice's own group */
+	private Group alicesGroup;
+
+	/** In IT, which can read the Store */
+	private User carol;
+
+	/** IT only */
+	private Folder secured;
+
+	@Override
+	protected List<String> getDatabaseScripts() {
+		return List.of("sql/logicaldoc-core.sql", "sql/logicaldoc-webservice.sql", "data.sql");
+	}
+
+	@Before
+	public void createPermissions() throws Exception {
+		readers = GroupDAO.get().findByName("readers", Tenant.DEFAULT_ID);
+		it = fx.group("IT");
+		carol = fx.user("carol", it.getName());
+		alicesGroup = GroupDAO.get().findByName(alice.getUserGroupName(), Tenant.DEFAULT_ID);
+		fx.grant(store, it, Permission.READ);
+
+		matter.setOwnerId(alice.getId());
+		MatterDAO.get().store(matter);
+
+		setAcl(workspace, admin, ace(readers, READ_ONLY), ace(it, MODIFY), ace(alicesGroup, Permission.values()));
+		secured = createFolder(reload(workspace), "Secured Documents", admin);
+		setAcl(secured, admin, ace(it, MODIFY));
+
+		workspace = reload(workspace);
+		documents = reload(documents);
+		correspondence = reload(correspondence);
+		secured = reload(secured);
+		awaitAsyncWork();
+	}
+
+	@Test
+	public void testChildCannotAddGroup() throws Exception {
+		assertRefused(P1.formatted("group lawyers: READ"),
+				() -> setAcl(secured, admin, ace(it, MODIFY), ace(lawyers, Permission.READ)));
+		assertRefused(P1.formatted("group lawyers: READ"),
+				() -> setAcl(documents, alice, ace(readers, READ_ONLY), ace(lawyers, Permission.READ)));
+
+		// A folder created with its own ACL, which CE gives the creator's own group
+		assertRefused(P1.formatted("user carol: READ"), () -> folderDao.create(secured,
+				folderVO("Carol's", Folder.TYPE_DEFAULT), false, folderHistory(carol)));
+
+		allowed(() -> folderDao.create(secured, folderVO("Admin's", Folder.TYPE_DEFAULT), false,
+				folderHistory(admin)));
+	}
+
+	@Test
+	public void testChildCannotAddFlag() throws Exception {
+		assertRefused(P1.formatted("group IT: SECURITY"),
+				() -> setAcl(secured, admin, ace(it, plus(MODIFY, Permission.SECURITY))));
+		assertRefused(P1.formatted("group readers: WRITE"),
+				() -> setAcl(documents, alice, ace(readers, plus(READ_ONLY, Permission.WRITE))));
+	}
+
+	@Test
+	public void testChildMayNarrow() throws Exception {
+		allowed(() -> setAcl(secured, carolWithSecurity(), ace(it, Permission.READ)));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(secured));
+
+		// The owner, who isn't an admin, narrows Documents to IT
+		allowed(() -> setAcl(documents, alice, ace(it, READ_ONLY)));
+		assertEquals(Map.of(it.getId(), set(READ_ONLY)), acl(documents));
+		assertNull(reload(documents).getSecurityRef());
+	}
+
+	@Test
+	public void testSecurityRefToWiderAncestorRefused() throws Exception {
+		Folder board = createFolder(secured, "Board", admin);
+		assertEquals(Long.valueOf(secured.getId()), reload(board).getSecurityRef());
+
+		// SOAP update sets the security reference and checks only RENAME (fromFolder writes the folder)
+		WSFolder ws = WSFolder.fromFolder(reload(board));
+		ws.setSecurityRef(workspace.getId());
+		assertRefused(P1.formatted("group readers: READ"), () -> harness.soapFolders().update("sid", ws));
+		// CE's inheritACL
+		assertRefused(P1.formatted("group readers: READ"),
+				() -> folderDao.updateSecurityRef(board.getId(), workspace.getId(), folderHistory(admin)));
+
+		// Within the parent: allowed
+		Folder sealed = createFolder(secured, "Sealed", admin);
+		setAcl(sealed, admin, ace(it, Permission.READ));
+		allowed(() -> folderDao.updateSecurityRef(board.getId(), sealed.getId(), folderHistory(admin)));
+		assertEquals(Long.valueOf(sealed.getId()), reload(board).getSecurityRef());
+	}
+
+	@Test
+	public void testNarrowingParentNarrowsOwnAclDescendants() throws Exception {
+		setAcl(documents, admin, ace(readers, Permission.READ), ace(it, Permission.READ, Permission.WRITE));
+		Folder drafts = createFolder(reload(documents), "Drafts", admin);
+		setAcl(drafts, admin, ace(readers, Permission.READ), ace(it, Permission.READ, Permission.WRITE));
+		Folder finals = createFolder(reload(drafts), "Final", admin);
+		setAcl(finals, admin, ace(readers, Permission.READ), ace(it, Permission.READ));
+		Folder inheriting = createFolder(reload(drafts), "Inheriting", admin);
+		// Cached, so that a stale cache would show
+		assertEquals(2, reload(drafts).getAccessControlList().size());
+		assertEquals(2, reload(finals).getAccessControlList().size());
+		List<String> historyBefore = history(drafts, finals, inheriting);
+
+		allowed(() -> setAcl(documents, alice, ace(it, Permission.READ)));
+
+		// The readers' rows are gone and IT's WRITE is cleared, through every level
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(drafts));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(finals));
+		assertEquals(Long.valueOf(drafts.getId()), reload(inheriting).getSecurityRef());
+		// The DAOs see it
+		assertEquals(Set.of(it.getId()), groups(reload(drafts)));
+		assertFalse(reload(drafts).getAccessControlList().iterator().next().isWrite());
+		assertEquals(Set.of(it.getId()), groups(reload(finals)));
+		assertFalse(folderDao.isReadAllowed(finals.getId(), bob.getId()));
+		// Neither history nor listeners: the narrowed folders have no new history
+		assertEquals(historyBefore, history(drafts, finals, inheriting));
+	}
+
+	@Test
+	public void testNarrowingParentRepointsInheritingDescendants() throws Exception {
+		// Created while Documents inherited the workspace, so CE points it at the workspace
+		Folder contracts = createFolder(documents, "Contracts", admin);
+		assertEquals(Long.valueOf(workspace.getId()), reload(contracts).getSecurityRef());
+		assertTrue(folderDao.isReadAllowed(contracts.getId(), bob.getId()));
+
+		allowed(() -> setAcl(documents, alice, ace(it, MODIFY)));
+
+		// It inherits Documents now, so the readers lost it too
+		assertEquals(Long.valueOf(documents.getId()), reload(contracts).getSecurityRef());
+		assertFalse(folderDao.isReadAllowed(contracts.getId(), bob.getId()));
+		assertTrue(folderDao.isReadAllowed(contracts.getId(), carol.getId()));
+	}
+
+	@Test
+	public void testNarrowingStoreNarrowsMattersThatInheritIt() throws Exception {
+		// A second matter, whose workspace inherits the Store
+		Folder second = reload(folderDao.findById(
+				fx.matter(fx.client(997, "Other"), 1, "Second", reload(store), "Papers").getFolderId()));
+		Folder papers = child(second, "Papers");
+		setAcl(papers, admin, ace(readers, Permission.READ), ace(lawyers, Permission.READ));
+		Map<Long, Set<Permission>> firstWorkspace = acl(workspace);
+
+		allowed(() -> setAcl(store, admin, ace(lawyers, Permission.values()), ace(it, Permission.READ)));
+
+		assertEquals(Map.of(lawyers.getId(), Set.of(Permission.READ)), acl(papers));
+		// The workspaces are left to P2
+		assertEquals(firstWorkspace, acl(workspace));
+		assertEquals(Long.valueOf(store.getId()), reload(second).getSecurityRef());
+	}
+
+	@Test
+	public void testMoveIntoNarrowerFolderNarrows() throws Exception {
+		Folder contracts = createFolder(documents, "Contracts", admin);
+		Folder notes = createFolder(documents, "Notes", admin);
+		setAcl(notes, admin, ace(readers, Permission.READ), ace(it, Permission.READ, Permission.WRITE));
+		Folder inside = createFolder(reload(notes), "Inside", admin);
+		setAcl(inside, admin, ace(readers, Permission.READ), ace(it, Permission.READ));
+
+		allowed(() -> move(contracts, secured, carol));
+		allowed(() -> move(notes, secured, carol));
+
+		assertEquals(Long.valueOf(secured.getId()), reload(contracts).getSecurityRef());
+		assertFalse(folderDao.isReadAllowed(contracts.getId(), bob.getId()));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ, Permission.WRITE)), acl(notes));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(inside));
+	}
+
+	@Test
+	public void testCopyIntoNarrowerFolderNarrows() throws Exception {
+		// Outside the Stores anything goes
+		setAcl(loose, admin, ace(readers, Permission.READ), ace(lawyers, Permission.values()),
+				ace(it, Permission.READ, Permission.WRITE, Permission.SECURITY));
+		Folder sub = createFolder(reload(loose), "Sub", admin);
+		setAcl(sub, admin, ace(readers, Permission.READ), ace(it, Permission.READ));
+
+		/*
+		 * Replicating the source's permissions mustn't widen the copy, nor fail
+		 * halfway: CE creates each copy with Carol's own group first, and only
+		 * then replicates, with documents created in between
+		 */
+		allowed(() -> folderDao.copy(reload(loose), reload(secured), null, false, "replicate",
+				folderHistory(carol)));
+
+		Folder copy = child(secured, "Loose");
+		assertNull(copy.getSecurityRef());
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ, Permission.WRITE)), acl(copy));
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(child(copy, "Sub")));
+
+		// Outside a copy, a new folder with an ACL wider than its parent is refused (see above)
+		assertRefused(P1.formatted("user carol: READ"), () -> folderDao.create(reload(copy),
+				folderVO("Carol's", Folder.TYPE_DEFAULT), false, folderHistory(carol)));
+	}
+
+	@Test
+	public void testRestoreIntoNarrowerFolderNarrows() throws Exception {
+		Folder old = createFolder(documents, "Old", admin);
+		setAcl(old, admin, ace(readers, Permission.READ), ace(it, Permission.READ));
+		allowed(() -> folderDao.deleteTree(old.getId(), folderHistory(admin)));
+
+		// Narrowed while it is in the trash
+		setAcl(documents, admin, ace(it, MODIFY));
+		allowed(() -> folderDao.restore(old.getId(), documents.getId(), folderHistory(admin)));
+
+		assertEquals(Map.of(it.getId(), Set.of(Permission.READ)), acl(old));
+		assertFalse(folderDao.isReadAllowed(old.getId(), bob.getId()));
+	}
+
+	@Test
+	public void testP2OnWorkspaceAclSave() throws Exception {
+		Group clients = fx.group("clients");
+		assertRefused(P2.formatted("Group clients"), () -> setAcl(workspace, admin, ace(readers, READ_ONLY),
+				ace(it, MODIFY), ace(alicesGroup, Permission.values()), ace(clients, Permission.READ)));
+		// A workspace that inherits a folder other readers can read
+		Folder open = fx.store("Open");
+		fx.grant(open, clients, Permission.READ);
+		assertRefused(P2.formatted("Group clients"),
+				() -> folderDao.updateSecurityRef(workspace.getId(), open.getId(), folderHistory(admin)));
+
+		// Clients may write if they only read: P2 is about READ
+		fx.grant(store, clients, Permission.READ);
+		allowed(() -> setAcl(workspace, admin, ace(readers, READ_ONLY), ace(it, MODIFY),
+				ace(alicesGroup, Permission.values()), ace(clients, MODIFY)));
+	}
+
+	@Test
+	public void testP2OwnerPassesIfOwnerReadsStore() throws Exception {
+		// Alice's own group isn't on the Store, but Alice reads it through lawyers
+		assertFalse(acl(store).containsKey(alicesGroup.getId()));
+		allowed(() -> setAcl(workspace, admin, ace(readers, READ_ONLY), ace(alicesGroup, Permission.values())));
+
+		// Bob reads the Store too, but he isn't the owner
+		Group bobsGroup = GroupDAO.get().findByName(bob.getUserGroupName(), Tenant.DEFAULT_ID);
+		assertRefused(P2.formatted("User bob"), () -> setAcl(workspace, admin, ace(readers, READ_ONLY),
+				ace(alicesGroup, Permission.values()), ace(bobsGroup, Permission.READ)));
+
+		// An owner who can't read the Store gets no exception
+		User dave = fx.user("dave");
+		matter.setOwnerId(dave.getId());
+		MatterDAO.get().store(matter);
+		Group davesGroup = GroupDAO.get().findByName(dave.getUserGroupName(), Tenant.DEFAULT_ID);
+		assertRefused(P2.formatted("User dave"), () -> setAcl(workspace, admin, ace(readers, READ_ONLY),
+				ace(davesGroup, Permission.values())));
+	}
+
+	@Test
+	public void testP2OnMoveToPrivateStore() throws Exception {
+		Folder personal = fx.store("Personal");
+		fx.grant(personal, lawyers, Permission.READ);
+
+		assertRefused(P2.formatted("Group readers"), () -> move(workspace, personal, admin));
+
+		fx.grant(personal, readers, Permission.READ);
+		fx.grant(personal, it, Permission.READ);
+		allowed(() -> move(workspace, personal, admin));
+		assertEquals(personal.getId(), reload(workspace).getParentId());
+	}
+
+	@Test
+	public void testApplyToTreeRefusedForMatterOwner() throws Exception {
+		// Every permission on the workspace, none on Secured Documents
+		assertTrue(folderDao.isPermissionAllowed(Permission.SECURITY, workspace.getId(), alice.getId()));
+		assertFalse(folderDao.isReadAllowed(secured.getId(), alice.getId()));
+
+		assertRefused(APPLY_TO_TREE, () -> folderDao.applySecurityToTree(workspace.getId(), folderHistory(alice)));
+		assertRefused(APPLY_TO_TREE, () -> folderDao.applySecurityToTree(store.getId(), folderHistory(alice)));
+		assertEquals(Map.of(it.getId(), set(MODIFY)), acl(secured));
+
+		// Where every folder with its own ACL is hers to manage, she may
+		Folder mine = createFolder(documents, "Mine", alice);
+		setAcl(mine, alice, ace(alicesGroup, Permission.values()));
+		Folder below = createFolder(reload(mine), "Below", alice);
+		setAcl(below, alice, ace(alicesGroup, Permission.READ, Permission.SECURITY));
+		allowed(() -> folderDao.applySecurityToTree(mine.getId(), folderHistory(alice)));
+		assertEquals(Long.valueOf(mine.getId()), reload(below).getSecurityRef());
+
+		// Not over a folder in the trash she can't manage: a restore would bring it back re-opened
+		Folder binned = createFolder(reload(mine), "Binned", admin);
+		setAcl(binned, admin, ace(alicesGroup, Permission.READ));
+		folderDao.deleteTree(binned.getId(), folderHistory(admin));
+		assertRefused(APPLY_TO_TREE, () -> folderDao.applySecurityToTree(mine.getId(), folderHistory(alice)));
+	}
+
+	@Test
+	public void testApplyToTreeAllowedForAdmin() throws Exception {
+		allowed(() -> folderDao.applySecurityToTree(workspace.getId(), folderHistory(admin)));
+
+		assertEquals(Long.valueOf(workspace.getId()), reload(secured).getSecurityRef());
+		assertEquals(Map.of(), acl(secured));
+		assertTrue(folderDao.isReadAllowed(secured.getId(), alice.getId()));
+	}
+
+	@Test
+	public void testDocumentAclMayGrantBeyondFolder() throws Exception {
+		Document minutes = upload(secured, "minutes.txt", admin);
+		awaitAsyncWork();
+		assertFalse(documentDao.isReadAllowed(minutes.getId(), bob.getId()));
+
+		allowed(() -> {
+			Document document = documentDao.findById(minutes.getId(), true);
+			DocumentAccessControlEntry ace = new DocumentAccessControlEntry(readers.getId());
+			ace.grantPermissions(Set.of(Permission.READ, Permission.DOWNLOAD));
+			document.getAccessControlList().add(ace);
+			DocumentHistory history = documentHistory(admin);
+			history.setEvent(DocumentEvent.PERMISSION);
+			documentDao.store(document, history);
+		});
+
+		assertTrue(documentDao.isReadAllowed(minutes.getId(), bob.getId()));
+		assertFalse(folderDao.isReadAllowed(secured.getId(), bob.getId()));
+	}
+
+	/**
+	 * Saves a folder's ACL as CE's Security tab does
+	 */
+	private void setAcl(Folder folder, User as, FolderAccessControlEntry... entries) throws Exception {
+		Folder current = reload(folder);
+		current.setSecurityRef(null);
+		current.getAccessControlList().clear();
+		for (FolderAccessControlEntry entry : entries)
+			current.addAccessControlEntry(entry);
+		FolderHistory history = folderHistory(as);
+		history.setEvent(FolderEvent.PERMISSION);
+		folderDao.store(current, history);
+	}
+
+	private void move(Folder folder, Folder target, User as) throws Exception {
+		folderDao.move(folderDao.findById(folder.getId()), folderDao.findById(target.getId()), folderHistory(as));
+	}
+
+	/**
+	 * Carol, after IT is given SECURITY on Secured Documents' parent and the
+	 * folder itself
+	 */
+	private User carolWithSecurity() throws Exception {
+		setAcl(workspace, admin, ace(readers, READ_ONLY), ace(it, plus(MODIFY, Permission.SECURITY)),
+				ace(alicesGroup, Permission.values()));
+		setAcl(secured, admin, ace(it, plus(MODIFY, Permission.SECURITY)));
+		return carol;
+	}
+
+	private static FolderAccessControlEntry ace(Group group, Permission... permissions) {
+		FolderAccessControlEntry ace = new FolderAccessControlEntry(group.getId());
+		ace.grantPermissions(set(permissions));
+		return ace;
+	}
+
+	private static Permission[] plus(Permission[] permissions, Permission more) {
+		Permission[] all = Arrays.copyOf(permissions, permissions.length + 1);
+		all[permissions.length] = more;
+		return all;
+	}
+
+	private static Set<Permission> set(Permission... permissions) {
+		return permissions.length == 0 ? EnumSet.noneOf(Permission.class) : EnumSet.copyOf(Arrays.asList(permissions));
+	}
+
+	/**
+	 * @return the folder's own ACL rows, by group, with the permissions each
+	 *         grants, read with JDBC
+	 */
+	private Map<Long, Set<Permission>> acl(Folder folder) {
+		Map<Long, Set<Permission>> acl = new TreeMap<>();
+		jdbc.query("select * from ld_folder_acl where ld_folderid = ?", rs -> {
+			Set<Permission> granted = EnumSet.noneOf(Permission.class);
+			for (Permission permission : Permission.values())
+				if (rs.getInt("ld_" + permission.name().toLowerCase()) == 1)
+					granted.add(permission);
+			acl.put(rs.getLong("ld_groupid"), granted);
+		}, folder.getId());
+		return acl;
+	}
+
+	private static Set<Long> groups(Folder folder) {
+		return folder.getAccessControlList().stream().map(FolderAccessControlEntry::getGroupId)
+				.collect(Collectors.toSet());
+	}
+
+	private List<String> history(Folder... folders) {
+		return Arrays.stream(folders)
+				.flatMap(f -> jdbc.query("select ld_id, ld_event from ld_folder_history where ld_folderid = ? order by ld_id",
+						(rs, i) -> rs.getLong(1) + " " + rs.getString(2), f.getId()).stream())
+				.toList();
+	}
+
+	@Override
+	protected Folder reload(Folder folder) throws Exception {
+		Folder reloaded = super.reload(folder);
+		assertNotNull("folder " + folder.getId() + " is gone", reloaded);
+		return reloaded;
+	}
+}

@@ -3171,6 +3171,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         DocumentDAO docDao = DocumentDAO.get();
         try {
+            if (!docDao.isPermissionAllowed(Permission.SECURITY, guiDocument.getId(), session.getUserId()))
+                throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                        .formatted(session.getUsername(), Permission.SECURITY.name(), guiDocument.getId()));
             Document document = docDao.findById(guiDocument.getId(), true);
 
             log.info("Applying {} security policies to document {}", guiDocument.getAccessControlList().size(),

@@ -20,6 +20,7 @@ import com.logicaldoc.healdan.profile.EditMarks;
 import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.Propagation;
 import com.logicaldoc.healdan.profile.StoredProfile;
+import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
 import jakarta.annotation.PostConstruct;
@@ -158,8 +159,10 @@ public class HealdanHooksImpl implements HealdanHooks {
 	@Override
 	public void beforeFolderRestore(long folderId, long parentId, FolderHistory transaction)
 			throws PersistenceException {
-		Vetoes.check(Vetoes.ids(folderId, parentId), List.of(),
-				() -> rules.checkFolderRestore(folderId, parentId, FilingRules.actor(transaction)));
+		Vetoes.check(Vetoes.ids(folderId, parentId), List.of(), () -> {
+			rules.checkFolderRestore(folderId, parentId, FilingRules.actor(transaction));
+			PermissionRules.get().checkRestore(folderId, parentId);
+		});
 	}
 
 	/**
@@ -167,7 +170,8 @@ public class HealdanHooksImpl implements HealdanHooks {
 	 * what the second-level cache holds of them (deleted, or under the old
 	 * parent) is evicted now and again when the transaction ends (carry-forward:
 	 * an after-restore rule evicts the whole restored tree). Then the restored
-	 * tree is re-stamped from its new place, documents included (spec 7.2).
+	 * tree is re-stamped from its new place, documents included (spec 7.2), and
+	 * narrowed to its new parent's permissions (spec 7.3).
 	 */
 	@Override
 	public void afterFolderRestore(long folderId, long parentId, FolderHistory transaction)
@@ -180,6 +184,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 		evictor.evictFoldersAfterCompletion(folderIds);
 		evictor.evictDocumentsAfterCompletion(documentIds);
 		Propagation.get().restampSubtree(folderId);
+		PermissionRules.get().narrowTree(folderId);
 	}
 
 	@Override
@@ -188,6 +193,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Vetoes.check(Vetoes.ids(source != null ? source.getId() : null, target != null ? target.getId() : null),
 				List.of(),
 				() -> rules.checkFolderCopy(source, target, newName, foldersOnly, FilingRules.actor(transaction)));
+		PermissionRules.copying();
 	}
 
 	@Override
@@ -195,5 +201,15 @@ public class HealdanHooksImpl implements HealdanHooks {
 			throws PersistenceException {
 		Vetoes.check(Vetoes.ids(source != null ? source.getId() : null, target != null ? target.getId() : null),
 				List.of(), () -> rules.checkFolderMerge(source, target, FilingRules.actor(transaction)));
+	}
+
+	/**
+	 * CE's "apply to subfolders" deletes every ACL below the root with JDBC,
+	 * which would re-open a restricted folder (spec 7.3)
+	 */
+	@Override
+	public void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
+		Vetoes.check(Vetoes.ids(rootId), List.of(),
+				() -> PermissionRules.get().checkApplyToTree(rootId, FilingRules.actor(transaction)));
 	}
 }

@@ -22,6 +22,7 @@ import org.junit.Test;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.TemplateDAO;
@@ -587,5 +588,73 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
         Folder folder = folderDao.findById(8L, true);
         assertNotNull(folder);
         assertEquals(1200L, folder.getParentId());
+    }
+
+    @Test
+    public void testSaveACLNeedsSecurity() throws Exception {
+        GUIFolder folder = testSubject.getFolder(6, true, true, true);
+        int aclBefore = folder.getAccessControlList().size();
+        folder.getAccessControlList().add(new GUIAccessControlEntry(10L, Permission.READ.name()));
+
+        // author can rename and delete in folder6, but not change its security
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveACL(folder, false));
+        assertThrows(AccessDeniedException.class, () -> testSubject.saveACL(folder, true));
+        assertEquals(aclBefore, folderDao.findById(6L, true).getAccessControlList().size());
+
+        grantSecurityToAuthors(6L);
+        testSubject.saveACL(folder, false);
+        assertEquals(aclBefore + 1, folderDao.findById(6L, true).getAccessControlList().size());
+    }
+
+    @Test
+    public void testInheritACLNeedsSecurity() throws Exception {
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.inheritACL(6L, 5L));
+        assertNull(folderDao.findById(6L).getSecurityRef());
+
+        grantSecurityToAuthors(6L);
+        testSubject.inheritACL(6L, 5L);
+        assertEquals(Long.valueOf(5L), folderDao.findById(6L).getSecurityRef());
+    }
+
+    @Test
+    public void testRenameNeedsRename() throws Exception {
+        // author has no permission at all on folder1200, and RENAME on folder6
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.rename(1200L, "renamed"));
+        assertEquals("test", folderDao.findById(1200L).getName());
+
+        testSubject.rename(6L, "renamed");
+        assertEquals("renamed", folderDao.findById(6L).getName());
+    }
+
+    @Test
+    public void testSaveRenameNeedsRename() throws Exception {
+        GUIFolder test = testSubject.getFolder(1200, true, true, true);
+        GUIFolder folder6 = testSubject.getFolder(6, true, true, true);
+
+        prepareSession("author", "admin");
+        test.setName("renamed");
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(test));
+        assertEquals("test", folderDao.findById(1200L).getName());
+
+        folder6.setName("renamed");
+        testSubject.save(folder6);
+        assertEquals("renamed", folderDao.findById(6L).getName());
+    }
+
+    /**
+     * Gives the author group SECURITY on the folder, besides what it has
+     */
+    private void grantSecurityToAuthors(long folderId) throws PersistenceException {
+        Folder folder = folderDao.findById(folderId, true);
+        FolderAccessControlEntry authors = folder.getAccessControlList().stream().filter(ace -> ace.getGroupId() == 2L)
+                .findFirst().orElseThrow();
+        FolderAccessControlEntry granted = new FolderAccessControlEntry(authors);
+        granted.setSecurity(true);
+        folder.getAccessControlList().remove(authors);
+        folder.getAccessControlList().add(granted);
+        folderDao.store(folder);
     }
 }

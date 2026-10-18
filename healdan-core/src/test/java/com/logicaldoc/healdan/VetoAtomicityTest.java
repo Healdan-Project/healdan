@@ -38,7 +38,9 @@ import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.searchengine.SearchEngine;
+import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.store.FSStore;
@@ -146,7 +148,12 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		admin = UserDAO.get().findById(User.USERID_ADMIN, true);
 
 		HealdanFixtures fx = new HealdanFixtures();
-		Matter matter = fx.matter(fx.client(998, "Healdan"), 1, "Veto atomicity", fx.store("Main"));
+		Folder mainStore = fx.store("Main");
+		// The groups the ACL routes below grant are on the Store the matter inherits (P1, spec 7.3)
+		for (long group : new long[] { 3L, 4L })
+			fx.grant(mainStore, GroupDAO.get().findById(group), Permission.READ, Permission.DOWNLOAD,
+					Permission.PREVIEW, Permission.PRINT, Permission.EMAIL);
+		Matter matter = fx.matter(fx.client(998, "Healdan"), 1, "Veto atomicity", mainStore);
 		workspace = folderDao.findById(matter.getFolderId());
 		// Top-level folders, which an admin may create
 		folderA = createFolder(workspace, "A", true);

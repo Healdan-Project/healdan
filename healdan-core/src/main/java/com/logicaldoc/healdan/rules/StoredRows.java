@@ -63,8 +63,11 @@ public class StoredRows implements PreUpdateEventListener {
 	 * @param type its type
 	 * @param foldRef the folder it is an alias of, if any
 	 * @param deleted its deletion code, 0 if live
+	 * @param securityRef the folder whose permissions it uses, null if it has
+	 *        its own
 	 */
-	public record FolderRow(long id, long parentId, String name, int type, Long foldRef, int deleted) {
+	public record FolderRow(long id, long parentId, String name, int type, Long foldRef, int deleted,
+			Long securityRef) {
 
 		/**
 		 * @return true if the folder is an alias of another, or carries the
@@ -81,7 +84,7 @@ public class StoredRows implements PreUpdateEventListener {
 		 */
 		public static FolderRow of(Folder folder) {
 			return new FolderRow(folder.getId(), folder.getParentId(), folder.getName(), folder.getType(),
-					folder.getFoldRef(), folder.getDeleted());
+					folder.getFoldRef(), folder.getDeleted(), folder.getSecurityRef());
 		}
 	}
 
@@ -98,7 +101,7 @@ public class StoredRows implements PreUpdateEventListener {
 
 	private static final Logger log = LoggerFactory.getLogger(StoredRows.class);
 
-	private static final String FOLDER_COLUMNS = "ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_deleted";
+	private static final String FOLDER_COLUMNS = "ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_deleted, ld_securityref";
 
 	/** Large id lists are queried in chunks */
 	private static final int CHUNK = 500;
@@ -155,7 +158,8 @@ public class StoredRows implements PreUpdateEventListener {
 			if (entity instanceof Folder) {
 				FolderRow row = new FolderRow(id, (Long) old[names.indexOf("parentId")],
 						(String) old[names.indexOf("name")], (Integer) old[names.indexOf("type")],
-						(Long) old[names.indexOf("foldRef")], (Integer) old[names.indexOf("deleted")]);
+						(Long) old[names.indexOf("foldRef")], (Integer) old[names.indexOf("deleted")],
+						(Long) old[names.indexOf("securityRef")]);
 				sessionMap(folders, event.getSession()).putIfAbsent(id, row);
 			} else {
 				Folder folder = (Folder) old[names.indexOf("folder")];
@@ -405,7 +409,9 @@ public class StoredRows implements PreUpdateEventListener {
 		int type = rs.getInt(4);
 		long foldRef = rs.getLong(5);
 		Long ref = rs.wasNull() ? null : foldRef;
-		return new FolderRow(id, parentId, name, type, ref, rs.getInt(6));
+		int deleted = rs.getInt(6);
+		long securityRef = rs.getLong(7);
+		return new FolderRow(id, parentId, name, type, ref, deleted, rs.wasNull() ? null : securityRef);
 	}
 
 	private static <V> Map<Long, V> sessionMap(Map<Object, Map<Long, V>> maps, Object session) {

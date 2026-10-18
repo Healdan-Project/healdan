@@ -124,6 +124,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.email.EmailDocumentListener" />
 	</extension>
 
+	<!-- After the rules (100), so that it checks only stores the structure rules let through -->
+	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanPermissions">
+		<parameter id="position" value="110" />
+		<parameter id="class" value="com.logicaldoc.healdan.security.PermissionsFolderListener" />
+	</extension>
+
 	<!-- After the rules (100) and the permissions (110) -->
 	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanFolderProfile">
 		<parameter id="position" value="120" />

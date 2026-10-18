@@ -73,6 +73,7 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public GUIFolder inheritACL(long folderId, long rightsFolderId) throws ServerException {
         Session session = validateSession();
+        checkPermission(Permission.SECURITY, session.getUser(), folderId);
 
         /*
          * Just apply the current security settings to the whole subtree
@@ -93,6 +94,7 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void saveACL(GUIFolder guiFolder, boolean subtree) throws ServerException {
         Session session = validateSession();
+        checkPermission(Permission.SECURITY, session.getUser(), guiFolder.getId());
 
         FolderDAO fdao = FolderDAO.get();
         try {
@@ -574,6 +576,7 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void rename(long folderId, String name) throws ServerException {
         Session session = validateSession();
+        checkPermission(Permission.RENAME, session.getUser(), folderId);
 
         FolderDAO dao = FolderDAO.get();
 
@@ -608,6 +611,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
 
         try {
             Folder folder = folderDao.findById(guiFolder.getId(), true);
+            if (!folder.getName().trim().equals(guiFolder.getName().replace("/", "")))
+                checkPermission(Permission.RENAME, session.getUser(), folder.getId());
 
             FolderHistory saveTransaction = new FolderHistory();
             saveTransaction.setSession(session);

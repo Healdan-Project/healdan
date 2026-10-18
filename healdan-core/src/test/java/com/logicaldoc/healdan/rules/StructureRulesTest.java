@@ -14,6 +14,7 @@ import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
@@ -125,6 +126,9 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 	@Test
 	public void testOnlyAdminsDeleteAWorkspaceOrMoveItToAnotherStore() throws Exception {
 		Folder archive = fx.store("Archive");
+		// Whoever reads the matter must read the Store it goes to (P2, spec §7.3)
+		fx.grant(archive, lawyers, Permission.READ);
+		fx.grant(archive, GroupDAO.get().findByName("readers", Tenant.DEFAULT_ID), Permission.READ);
 
 		assertRefused(WORKSPACE_DELETE_MOVE, () -> folderDao.deleteTree(workspace.getId(), folderHistory(alice)));
 		assertRefused(WORKSPACE_DELETE_MOVE, () -> folderDao.delete(workspace.getId(), folderHistory(alice)));
