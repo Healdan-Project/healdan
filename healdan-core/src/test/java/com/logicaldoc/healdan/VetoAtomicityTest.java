@@ -177,15 +177,13 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 		deletedFolder = createFolder(folderA, "Deleted", true);
 		insideDoc = createDocument(deletedFolder, "inside.txt");
+		String profileRows = "select count(*) from ld_document_ext where ld_docid = ?";
+		int profile = jdbc.queryForObject(profileRows, Integer.class, insideDoc.getId());
+		assertTrue(profile > 0);
 		folderDao.deleteTree(deletedFolder.getId(), folderTransaction(null));
-		/*
-		 * deleteTree deletes the documents with JDBC and leaves them in the
-		 * second-level cache, and CE then deletes the attributes (the profile
-		 * the folders give them in a matter) of such a document the first time
-		 * DocumentDAO.findById reads it, as DaoSnapshot does. That has nothing to
-		 * do with vetoes, so the fixture starts from a clean cache.
-		 */
-		Context.get(CacheEvictor.class).evictDocuments(List.of(insideDoc.getId()));
+		// Healdan evicts the deleted tree's documents (R9), so a DAO read, as DaoSnapshot's, keeps their profile
+		assertNull(documentDao.findById(insideDoc.getId()));
+		assertEquals(profile, (int) jdbc.queryForObject(profileRows, Integer.class, insideDoc.getId()));
 
 		awaitAsyncWork();
 	}
