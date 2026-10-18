@@ -213,7 +213,7 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
         Session session = validateSession();
 
         try {
-            SearchOptions opt = converters.get(options.getType()).toSearchOptions(options);
+            SearchOptions opt = converterFor(options.getType()).toSearchOptions(options);
 
             com.logicaldoc.core.searchengine.saved.SavedSearch search = SearchDAO.get()
                     .findByUserIdAndName(session.getUserId(), options.getName());
@@ -260,7 +260,7 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
                     .findByUserIdAndName(session.getUserId(), name);
 
             SearchOptions options = search.readOptions();
-            GUISearchOptions guiOptions = converters.get(options.getType()).toGUISearchOptions(search.readOptions());
+            GUISearchOptions guiOptions = converterFor(options.getType()).toGUISearchOptions(search.readOptions());
             if (guiOptions.getFolder() != null) {
                 Folder fld = FolderDAO.get().findById(guiOptions.getFolder());
                 if (fld != null)

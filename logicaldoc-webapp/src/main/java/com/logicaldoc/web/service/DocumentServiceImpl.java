@@ -1249,8 +1249,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             if (document.getDocRef() != null)
                 checkDocumentPermission(session, Permission.WRITE, document.getDocRef());
             // A new file name renames the document, or the shortcut, which needs RENAME as in rename()
-            String fileName = document.getDocRef() != null ? guiDocument.getFileName()
-                    : HTMLSanitizer.sanitizeSimpleText(guiDocument.getFileName());
+            String fileName = HTMLSanitizer.sanitizeSimpleText(guiDocument.getFileName());
             if (StringUtils.isNotEmpty(fileName) && !fileName.equals(document.getFileName()))
                 checkDocumentPermission(session, Permission.RENAME, guiDocument.getId());
 
@@ -1258,7 +1257,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
                 /*
                  * We are saving an alias
                  */
-                document.setFileName(guiDocument.getFileName());
+                if (StringUtils.isNotEmpty(fileName))
+                    document.setFileName(fileName);
                 document.setColor(guiDocument.getColor());
                 document.setType(FileUtil.getExtension(document.getFileName()).toLowerCase());
                 docDao.store(document);

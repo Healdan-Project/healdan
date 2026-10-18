@@ -1,7 +1,6 @@
 package com.logicaldoc.healdan.searchfolder;
 
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -23,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.DocumentDAO;
-import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderEvent;
@@ -84,11 +82,6 @@ public class SearchFolderService {
 
 	/** Large id lists are queried in chunks */
 	private static final int CHUNK = 500;
-
-	private static final long DAY = Duration.ofDays(1).toMillis();
-
-	private static final List<String> CHANGE_EVENT_KEYS = HealdanConstants.CHANGE_EVENTS.stream()
-			.map(DocumentEvent::toKey).sorted().toList();
 
 	private final SearchFolderRuleDAO rules;
 
@@ -179,12 +172,15 @@ public class SearchFolderService {
 			throws PersistenceException {
 		FolderDAO dao = FolderDAO.get();
 		Folder folder = dao.findById(folderId, true);
-		if (folder == null || folder.getType() != HealdanConstants.FOLDER_TYPE_SEARCH)
+		if (folder == null)
+			throw new HealdanRuleException(NO_SEARCH_FOLDER);
+		// Permission first, so a user who can't write a folder doesn't learn what kind it is
+		if (!dao.isWriteAllowed(folderId, actor.getId()))
+			throw new HealdanRuleException(NO_WRITE);
+		if (folder.getType() != HealdanConstants.FOLDER_TYPE_SEARCH)
 			throw new HealdanRuleException(NO_SEARCH_FOLDER);
 		String cleanName = cleanName(name);
 		SearchFolderRule cleanRule = cleanRule(rule);
-		if (!dao.isWriteAllowed(folderId, actor.getId()))
-			throw new HealdanRuleException(NO_WRITE);
 		// A template's rule is copied by every new matter
 		filingRules.checkFolderEdit(folderId, actor);
 		boolean renamed = !cleanName.equals(folder.getName());
@@ -272,9 +268,9 @@ public class SearchFolderService {
 				   and d.ld_deleted = 0
 				   and d.ld_folderid in (:folders)
 				""");
-		MapSqlParameterSource params = new MapSqlParameterSource("events", CHANGE_EVENT_KEYS)
+		MapSqlParameterSource params = new MapSqlParameterSource("events", HealdanConstants.CHANGE_EVENT_KEYS)
 				// From the start of the epoch at the earliest, whatever the window
-				.addValue("since", new Timestamp(Math.max(0L, System.currentTimeMillis() - rule.days() * DAY)));
+				.addValue("since", new Timestamp(Math.max(0L, System.currentTimeMillis() - rule.days() * HealdanConstants.DAY)));
 		if (rule.onlyMine()) {
 			sql.append(" and h.ld_userid = :viewer");
 			params.addValue("viewer", viewerId);

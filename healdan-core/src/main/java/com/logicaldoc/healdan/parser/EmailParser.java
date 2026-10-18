@@ -4,6 +4,8 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
@@ -38,6 +40,13 @@ import jakarta.mail.internet.MimeUtility;
  * date headers, the body (an HTML body is stripped to text) and the attachment
  * file names. The attachments' contents are not indexed. A file it can't read
  * yields no text and no exception.
+ * <p>
+ * One deliberate exception to "a failing parser appends nothing": when the
+ * headers were read but the body fails, the headers and whatever part of the
+ * body was gathered are still appended, because partial text finds more mail
+ * than none. Only an {@link Exception} is swallowed; an {@link Error} such as
+ * {@code OutOfMemoryError} propagates, and an interruption (the timeout CE puts
+ * on a parser) is put back on the thread.
  */
 public class EmailParser extends AbstractParser {
 
@@ -57,8 +66,9 @@ public class EmailParser extends AbstractParser {
 			EmailFields.extract(temp, extension).ifPresent(f -> appendHeaders(text, f));
 			appendBody(text, temp, extension);
 			output.append(ParsedText.clean(text.toString()));
-		} catch (Throwable t) {
-			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), t.toString());
+		} catch (Exception e) {
+			keepInterrupt(e);
+			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		} finally {
 			if (temp != null)
 				temp.delete();
@@ -104,9 +114,23 @@ public class EmailParser extends AbstractParser {
 				names.add(attachment.getFileName());
 			for (String name : names)
 				line(text, "Attachment", name);
-		} catch (Throwable t) {
-			logger.warn("Cannot read the body of {}: {}", file.getName(), t.toString());
+		} catch (Exception e) {
+			keepInterrupt(e);
+			logger.warn("Cannot read the body of {}: {}", file.getName(), e.toString());
 		}
+	}
+
+	/**
+	 * CE's {@code AbstractParser} stops a parser that runs too long by
+	 * interrupting its thread, so an interruption seen here is put back for it
+	 */
+	private static void keepInterrupt(Throwable t) {
+		for (Throwable cause = t; cause != null; cause = cause.getCause())
+			if (cause instanceof InterruptedException || cause instanceof InterruptedIOException
+					|| cause instanceof ClosedByInterruptException) {
+				Thread.currentThread().interrupt();
+				return;
+			}
 	}
 
 	private static String rtfToText(String rtf) throws Exception {

@@ -199,6 +199,22 @@ public class SearchServiceImplTest extends AbstractFulltextTestCase {
 	}
 
 	@Test
+	public void testSaveAndLoadOfUnregisteredType() throws ServerException, PersistenceException {
+		GUISearchOptions options = new GUISearchOptions();
+		options.setUserId(1L);
+		options.setLanguage("en");
+		options.setExpression("document");
+		options.setType(UNCONVERTED_FULLTEXT_TYPE);
+		options.setName("unconverted");
+
+		testSubject.save(options);
+
+		GUISearchOptions loaded = testSubject.load("unconverted");
+		assertNotNull(loaded);
+		assertEquals("document", loaded.getExpression());
+	}
+
+	@Test
 	public void testCRUD() throws ServerException, PersistenceException {
 		GUISearchOptions options = new GUISearchOptions();
 		options.setUserId(1L);

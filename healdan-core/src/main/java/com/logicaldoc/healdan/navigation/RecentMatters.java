@@ -1,7 +1,6 @@
 package com.logicaldoc.healdan.navigation;
 
 import java.sql.Timestamp;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Date;
@@ -17,7 +16,6 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
@@ -39,11 +37,6 @@ public class RecentMatters {
 
 	/** The most matters listed */
 	static final int MAX_ENTRIES = 20;
-
-	private static final long DAY = Duration.ofDays(1).toMillis();
-
-	private static final List<String> CHANGE_EVENT_KEYS = HealdanConstants.CHANGE_EVENTS.stream()
-			.map(DocumentEvent::toKey).sorted().toList();
 
 	/** The latest change of the user in each folder, inside the window */
 	private static final String QUERY = """
@@ -86,8 +79,8 @@ public class RecentMatters {
 	 */
 	public List<MatterEntry> list(long userId) throws PersistenceException {
 		// From the start of the epoch at the earliest, whatever the window
-		long since = Math.max(0L, System.currentTimeMillis() - settings.recentMattersDays() * DAY);
-		MapSqlParameterSource params = new MapSqlParameterSource("user", userId).addValue("events", CHANGE_EVENT_KEYS)
+		long since = Math.max(0L, System.currentTimeMillis() - settings.recentMattersDays() * HealdanConstants.DAY);
+		MapSqlParameterSource params = new MapSqlParameterSource("user", userId).addValue("events", HealdanConstants.CHANGE_EVENT_KEYS)
 				.addValue("since", new Timestamp(since));
 		List<FolderChange> changes = new ArrayList<>(jdbc.query(QUERY, params,
 				(rs, i) -> new FolderChange(rs.getLong(1), rs.getTimestamp(2).getTime())));

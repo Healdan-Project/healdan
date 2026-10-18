@@ -80,7 +80,7 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 	protected static final String SEARCH_FOLDER_TYPE = "Search folders can only be created with New search folder.";
 
-	protected static final String SEARCH_FOLDER_PLACE = "Search folders can only be created inside a matter or a workspace template.";
+	protected static final String SEARCH_FOLDER_PLACE = "A search folder can only be inside a matter or a workspace template.";
 
 	protected static final String TEMPLATES = "Only administrators can change workspace templates.";
 

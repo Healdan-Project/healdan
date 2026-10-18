@@ -3,6 +3,7 @@ package com.logicaldoc.web.service;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -259,6 +260,39 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         renamed.setFileName("renamed.pdf");
         renamed.setColor("green");
         assertThrows(AccessDeniedException.class, () -> new DocumentServiceImpl().save(renamed));
+        assertUnchanged();
+
+        // A shortcut's name is checked like a document's: Carol has WRITE on the shortcut but not RENAME
+        prepareSession("admin", "admin");
+        DocumentHistory aliasing = new DocumentHistory();
+        aliasing.setSession(session);
+        Document shortcut = DocumentManager.get().createAlias(DocumentDAO.get().findById(doc.getId(), true),
+                FolderDAO.get().findById(Folder.DEFAULTWORKSPACEID), null, aliasing);
+        shortcut = DocumentDAO.get().findById(shortcut.getId(), true);
+        shortcut.getAccessControlList().clear();
+        DocumentAccessControlEntry shortcutGrant = new DocumentAccessControlEntry(
+                UserDAO.get().findByUsername("carol").getUserGroup().getId());
+        shortcutGrant.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE));
+        shortcut.addAccessControlEntry(shortcutGrant);
+        DocumentDAO.get().store(shortcut);
+        long shortcutId = shortcut.getId();
+        String shortcutName = shortcut.getFileName();
+        assertNotNull(shortcut.getDocRef());
+
+        prepareSession("carol", PASSWORD);
+        GUIDocument guiShortcut = new DocumentServiceImpl().getById(shortcutId);
+        guiShortcut.setFileName("");
+        guiShortcut.setColor("green");
+        new DocumentServiceImpl().save(guiShortcut);
+        assertEquals(shortcutName, DocumentDAO.get().findById(shortcutId).getFileName());
+
+        GUIDocument renamedShortcut = new DocumentServiceImpl().getById(shortcutId);
+        renamedShortcut.setFileName("other.pdf");
+        renamedShortcut.setColor("red");
+        assertThrows(AccessDeniedException.class, () -> new DocumentServiceImpl().save(renamedShortcut));
+        Document shortcutNow = DocumentDAO.get().findById(shortcutId);
+        assertEquals(shortcutName, shortcutNow.getFileName());
+        assertNotEquals("red", shortcutNow.getColor());
         assertUnchanged();
     }
 

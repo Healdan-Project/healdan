@@ -72,7 +72,7 @@ import com.logicaldoc.util.spring.Context;
  */
 public class SearchFolderServiceTest extends AbstractHealdanTestCase {
 
-	private static final String PLACE = "Search folders can only be created inside a matter or a workspace template.";
+	private static final String PLACE = "A search folder can only be inside a matter or a workspace template.";
 
 	private static final String TOP_LEVEL = "Only administrators can add, rename, move or delete a matter's top-level folders.";
 
@@ -411,6 +411,8 @@ public class SearchFolderServiceTest extends AbstractHealdanTestCase {
 				() -> service.update(search.getId(), "Search", rule(30, false, Kind.ALL, " ", "Sub1"), alice));
 		assertRefused(NO_SEARCH_FOLDER, () -> service.update(documents.getId(), "Documents", ANYONE_30, admin));
 		assertRefused(NO_WRITE, () -> service.update(search.getId(), "Search", ANYONE_30, bob));
+		// Without write permission, a user isn't told whether an ordinary folder is a search folder
+		assertRefused(NO_WRITE, () -> service.update(documents.getId(), "Documents", ANYONE_30, bob));
 
 		// The folder id in the rule given is ignored
 		Folder before = reload(search);

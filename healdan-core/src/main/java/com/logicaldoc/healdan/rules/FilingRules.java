@@ -81,7 +81,7 @@ public class FilingRules {
 
 	static final String SEARCH_FOLDER_TYPE = "Search folders can only be created with New search folder.";
 
-	static final String SEARCH_FOLDER_PLACE = "Search folders can only be created inside a %s or a workspace template.";
+	static final String SEARCH_FOLDER_PLACE = "A search folder can only be inside a %s or a workspace template.";
 
 	static final String TEMPLATES = "Only administrators can change workspace templates.";
 

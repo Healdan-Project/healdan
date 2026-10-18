@@ -1,5 +1,7 @@
 package com.logicaldoc.healdan;
 
+import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 
 import com.logicaldoc.core.document.DocumentEvent;
@@ -32,6 +34,13 @@ public final class HealdanConstants {
 	 */
 	public static final Set<DocumentEvent> CHANGE_EVENTS = Set.of(DocumentEvent.STORED, DocumentEvent.CHECKEDIN,
 			DocumentEvent.CHANGED, DocumentEvent.RENAMED, DocumentEvent.MOVED);
+
+	/** The {@link #CHANGE_EVENTS} as CE stores them in the history, sorted */
+	public static final List<String> CHANGE_EVENT_KEYS = CHANGE_EVENTS.stream().map(DocumentEvent::toKey).sorted()
+			.toList();
+
+	/** A day in milliseconds */
+	public static final long DAY = Duration.ofDays(1).toMillis();
 
 	public static final String ATTR_CLIENT = "client";
 
