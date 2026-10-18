@@ -172,4 +172,50 @@
 		<parameter id="class" value="com.logicaldoc.healdan.search.EmailsOnlySearch" />
 		<parameter id="options" value="com.logicaldoc.core.searchengine.FulltextSearchOptions" />
 	</extension>
+
+	<!-- CE has no extractor for these formats; Healdan's Parser extensions add them (M1 spec §9) -->
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserDocx">
+		<parameter id="extension" value="docx" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.WordParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserDocm">
+		<parameter id="extension" value="docm" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.WordParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserDotx">
+		<parameter id="extension" value="dotx" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.WordParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserXlsx">
+		<parameter id="extension" value="xlsx" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.ExcelParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserXlsm">
+		<parameter id="extension" value="xlsm" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.ExcelParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserPptx">
+		<parameter id="extension" value="pptx" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.PowerPointParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserPpsx">
+		<parameter id="extension" value="ppsx" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.PowerPointParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserEml">
+		<parameter id="extension" value="eml" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.EmailParser" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserMsg">
+		<parameter id="extension" value="msg" />
+		<parameter id="class" value="com.logicaldoc.healdan.parser.EmailParser" />
+	</extension>
 </plugin>

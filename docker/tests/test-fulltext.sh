@@ -62,11 +62,12 @@ indexed_state() {
   api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$1" | jq -r .indexed
 }
 
-# hit_ids <token>: prints the ids of the documents a full-text search for the token finds.
+# hit_ids <token>: prints the ids of the documents a full-text search for the token finds. The REST JSON renders a
+# single hit as an object and several as an array, and no hit as no "hits" at all.
 hit_ids() {
   api -H 'Content-Type: application/json' -H 'Accept: application/json' \
     -d "{\"expression\":\"$1\",\"type\":0,\"maxHits\":50,\"expressionLanguage\":\"en\"}" \
-    "$BASE/services/rest/search/find" | jq -r '.hits[]?.id'
+    "$BASE/services/rest/search/find" | jq -r '.hits // empty | if type == "array" then .[] else . end | .id'
 }
 
 # found <token> <doc id>: polls the search until the token finds the document or the timeout ends.

@@ -134,10 +134,10 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testReindexIsNotABeanUntilTheParsersExist() {
-		// Task 21 makes it a bean; until then startup must not flag anything
-		assertTrue(Context.get().getBeansOfType(ReindexOfficeSeed.class).isEmpty());
-		assertNull(HealdanSettings.get().get("seed.reindex-office"));
+	public void testReindexIsABeanAndDoneAfterStartup() {
+		// The parsers exist, so the step runs once, on the first start
+		assertFalse(Context.get().getBeansOfType(ReindexOfficeSeed.class).isEmpty());
+		assertEquals("done", HealdanSettings.get().get("seed.reindex-office"));
 	}
 
 	@Test
