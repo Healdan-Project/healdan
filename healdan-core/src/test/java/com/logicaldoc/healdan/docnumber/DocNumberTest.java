@@ -8,6 +8,9 @@ import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -16,6 +19,8 @@ import javax.sql.DataSource;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.zaxxer.hikari.HikariDataSource;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -269,5 +274,37 @@ public class DocNumberTest extends AbstractHealdanTestCase {
 		counter.raiseNext(1001);
 		HealdanRuleException e = assertThrows(HealdanRuleException.class, () -> counter.raiseNext(999));
 		assertEquals("The next doc # can only be raised.", e.getMessage());
+		// The refusal rolled back, so the counter takes numbers as before
+		assertEquals("1001", customId(upload("b.txt").getId()));
+	}
+
+	/**
+	 * Each create holds a pooled connection for its own transaction, so taking a
+	 * number mustn't need another one: with every connection taken, a number is
+	 * still issued
+	 */
+	@Test
+	public void testANumberNeedsNoConnectionFromThePool() throws Exception {
+		DocNumberCounter counter = Context.get(DocNumberCounter.class);
+		long expected = counter.peekNext();
+		HikariDataSource pool = (HikariDataSource) Context.get(DataSource.class);
+		long timeout = pool.getConnectionTimeout();
+		pool.getHikariConfigMXBean().setConnectionTimeout(250L);
+		List<Connection> taken = new ArrayList<>();
+		try {
+			try {
+				for (int i = 0; i < 1000; i++)
+					taken.add(pool.getConnection());
+				fail("The pool never ran out");
+			} catch (SQLException exhausted) {
+				// Every connection is taken
+			}
+			assertEquals(expected, counter.next());
+		} finally {
+			for (Connection connection : taken)
+				connection.close();
+			pool.getHikariConfigMXBean().setConnectionTimeout(timeout);
+		}
+		assertEquals(expected + 1, counter.peekNext());
 	}
 }
