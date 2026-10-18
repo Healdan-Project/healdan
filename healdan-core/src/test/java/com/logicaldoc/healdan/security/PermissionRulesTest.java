@@ -329,8 +329,8 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		fx.grant(open, clients, Permission.READ);
 		assertRefused(INHERIT_FROM_ABOVE,
 				() -> folderDao.updateSecurityRef(workspace.getId(), open.getId(), folderHistory(admin)));
-		// The root's groups can't read the Store
-		assertRefused(P2.formatted("Group publisher"),
+		// Nor from the root (R28)
+		assertRefused(INHERIT_FROM_ABOVE,
 				() -> folderDao.updateSecurityRef(workspace.getId(), root.getId(), folderHistory(admin)));
 
 		// Clients may write if they only read: P2 is about READ
@@ -433,7 +433,87 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		assertRefused(APPLY_TO_TREE, () -> folderDao.applySecurityToTree(root.getId(), folderHistory(alice)));
 
 		allowed(() -> folderDao.applySecurityToTree(root.getId(), folderHistory(admin)));
-		assertEquals(Long.valueOf(root.getId()), reload(secured).getSecurityRef());
+		// CE points everything at the root; the matter takes a copy of the root's ACL instead (R28)
+		assertEquals(acl(root), acl(workspace));
+		assertEquals(Long.valueOf(workspace.getId()), reload(secured).getSecurityRef());
+		assertNoReferenceTo(root, workspace);
+	}
+
+	@Test
+	public void testInheritingMatterMovedToAnotherStore() throws Exception {
+		Folder second = inheritingMatter(997, "Second");
+		Folder docs = child(second, "Docs");
+		assertEquals(Long.valueOf(store.getId()), reload(second).getSecurityRef());
+		assertEquals(Long.valueOf(store.getId()), reload(docs).getSecurityRef());
+		Folder other = readableStore("Other");
+
+		allowed(() -> move(second, other, admin));
+
+		// Neither the workspace nor its folders follow the old Store any longer
+		assertNoReferenceTo(store, second);
+		assertEquals(Long.valueOf(second.getId()), reload(docs).getSecurityRef());
+		User dan = widenStoreForDan();
+		assertFalse(folderDao.isReadAllowed(second.getId(), dan.getId()));
+		assertFalse(folderDao.isReadAllowed(docs.getId(), dan.getId()));
+	}
+
+	@Test
+	public void testInheritingMatterRestoredIntoAnotherStore() throws Exception {
+		Folder second = inheritingMatter(997, "Second");
+		Folder docs = child(second, "Docs");
+		Folder other = readableStore("Other");
+		allowed(() -> folderDao.deleteTree(second.getId(), folderHistory(admin)));
+
+		allowed(() -> folderDao.restore(second.getId(), other.getId(), folderHistory(admin)));
+
+		assertEquals(other.getId(), reload(second).getParentId());
+		assertNoReferenceTo(store, second);
+		assertEquals(Long.valueOf(second.getId()), reload(docs).getSecurityRef());
+		User dan = widenStoreForDan();
+		assertFalse(folderDao.isReadAllowed(second.getId(), dan.getId()));
+		assertFalse(folderDao.isReadAllowed(docs.getId(), dan.getId()));
+	}
+
+	@Test
+	public void testRootIsNeverAboveAMatterFolder() throws Exception {
+		setAcl(documents, admin, ace(it, Permission.READ));
+		Folder f = createFolder(reload(documents), "F", admin);
+		// The root grants no more than Documents, but a change to it narrows no matter
+		setAcl(root, admin, ace(it, Permission.READ));
+
+		assertRefused(INHERIT_FROM_ABOVE,
+				() -> folderDao.updateSecurityRef(f.getId(), root.getId(), folderHistory(admin)));
+	}
+
+	@Test
+	public void testMatterInAStoreThatInheritsTheRoot() throws Exception {
+		Folder inherited = folderDao.create(root, folderVO("Inherited", Folder.TYPE_WORKSPACE), true,
+				folderHistory(admin));
+		assertEquals(Long.valueOf(root.getId()), reload(inherited).getSecurityRef());
+
+		Folder third = reload(folderDao.findById(
+				fx.matter(fx.client(996, "Third"), 1, "Inherits", reload(inherited), "Docs").getFolderId()));
+
+		// CE would point the workspace at the root; it gets a copy of the root's ACL
+		assertNull(third.getSecurityRef());
+		assertEquals(acl(root), acl(third));
+		assertEquals(Long.valueOf(third.getId()), reload(child(third, "Docs")).getSecurityRef());
+		assertNoReferenceTo(root, third);
+	}
+
+	@Test
+	public void testStoreMadeToInheritTheRootNarrowsItsMatters() throws Exception {
+		Folder second = inheritingMatter(997, "Second");
+		Folder docs = child(second, "Docs");
+
+		// CE then points the Store's heirs at the root, after the store the listeners see
+		allowed(() -> folderDao.updateSecurityRef(store.getId(), root.getId(), folderHistory(admin)));
+
+		assertEquals(Long.valueOf(root.getId()), reload(store).getSecurityRef());
+		assertNoReferenceTo(root, second);
+		assertNoReferenceTo(root, workspace);
+		assertEquals(acl(root), acl(second));
+		assertEquals(Long.valueOf(second.getId()), reload(docs).getSecurityRef());
 	}
 
 	@Test
@@ -477,6 +557,55 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		FolderHistory history = folderHistory(as);
 		history.setEvent(FolderEvent.PERMISSION);
 		folderDao.store(current, history);
+	}
+
+	/**
+	 * @return the workspace of a new matter in the Store, which inherits the
+	 *         Store as CE's create makes it, with a folder Docs
+	 */
+	private Folder inheritingMatter(long clientNumber, String name) throws Exception {
+		return reload(folderDao.findById(
+				fx.matter(fx.client(clientNumber, name), 1, name, reload(store), "Docs").getFolderId()));
+	}
+
+	/**
+	 * @return a new Store the groups of the layout can read
+	 */
+	private Folder readableStore(String name) throws Exception {
+		Folder other = fx.store(name);
+		for (Group group : List.of(lawyers, readers, it))
+			fx.grant(other, group, Permission.READ);
+		return other;
+	}
+
+	/**
+	 * Lets a new group, Dan's, read the layout's Store
+	 *
+	 * @return Dan
+	 */
+	private User widenStoreForDan() throws Exception {
+		Group clients = fx.group("clients");
+		User dan = fx.user("dan", clients.getName());
+		fx.grant(store, clients, Permission.READ);
+		assertTrue(folderDao.isReadAllowed(store.getId(), dan.getId()));
+		return dan;
+	}
+
+	/**
+	 * Fails if the folder or a live folder below it inherits from the target
+	 */
+	private void assertNoReferenceTo(Folder target, Folder top) {
+		List<Long> level = List.of(top.getId());
+		while (!level.isEmpty()) {
+			for (Long id : level)
+				assertFalse("folder " + id + " inherits from " + target.getId(), Long.valueOf(target.getId())
+						.equals(jdbc.queryForObject("select ld_securityref from ld_folder where ld_id = ?", Long.class, id)));
+			String ids = level.stream().map(String::valueOf).collect(Collectors.joining(","));
+			level = jdbc.queryForList(
+					"select ld_id from ld_folder where ld_deleted = 0 and not ld_id = ld_parentid and ld_parentid in (" + ids
+							+ ")",
+					Long.class);
+		}
 	}
 
 	private void move(Folder folder, Folder target, User as) throws Exception {

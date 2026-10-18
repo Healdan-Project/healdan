@@ -35,8 +35,11 @@ import com.logicaldoc.healdan.rules.Vetoes;
  * own. Any other store (a move, the stores of a folder copy, a rename...)
  * narrows the folder to its new parent instead of refusing it.</li>
  * <li>After a store that changed a folder's permissions, or moved it, the
- * folders below it are narrowed; after a Store's permissions change, the
- * folders inside its matters are (the workspaces are left to P2).</li>
+ * folders below it are narrowed; so are those of a workspace that moved.
+ * After a Store's permissions change, the folders inside its matters are,
+ * once the transaction is about to commit (the workspaces are left to P2,
+ * except that one inheriting from anything but its Store gets its own
+ * ACL).</li>
  * </ul>
  * Folder stores are top-level, so a refusal here is safe (plan, D3); every
  * refusal goes through {@link Vetoes}. CE creates it by reflection, hence the
@@ -46,6 +49,9 @@ public class PermissionsFolderListener implements FolderListener {
 
 	/** Key in the dictionary: narrow the folders below once the folder is stored */
 	static final String NARROW = "healdan.narrowDescendants";
+
+	/** Key in the dictionary: narrow the Store's matters before the transaction commits */
+	static final String NARROW_STORE = "healdan.narrowStore";
 
 	public PermissionsFolderListener() {
 		// Instantiated by CE
@@ -74,23 +80,25 @@ public class PermissionsFolderListener implements FolderListener {
 		if (underRoot) {
 			// A Store's permissions reach the matters that inherit them
 			if (!created && (permission || refChanged) && locator.locate(folder.getId()).kind() == Kind.STORE)
-				dictionary.put(NARROW, Boolean.TRUE);
+				dictionary.put(NARROW_STORE, Boolean.TRUE);
 			return;
 		}
 
 		boolean explicit = !PermissionRules.isCopying() && (permission || refChanged);
 		if (workspace) {
+			boolean fitted = false;
 			if (explicit)
 				Vetoes.check(ids, List.of(), () -> rules.checkInheritsFromAbove(folder));
 			else
-				rules.fitWorkspace(folder);
+				fitted = rules.fitWorkspace(folder);
 			if (permission || refChanged || moved || created) {
 				Matter matter = created ? null : MatterDAO.get().findByFolderId(folder.getId());
 				Long owner = matter != null ? matter.getOwnerId() : null;
 				Vetoes.check(ids, List.of(),
 						() -> rules.checkP2(rules.prospective(folder), folder.getParentId(), owner, folder.getId()));
 			}
-			if (permission || refChanged)
+			// After a move to another Store its folders may still inherit from the old one
+			if (!created && (permission || refChanged || moved || fitted))
 				dictionary.put(NARROW, Boolean.TRUE);
 			return;
 		}
@@ -114,5 +122,8 @@ public class PermissionsFolderListener implements FolderListener {
 			throws PersistenceException {
 		if (dictionary.remove(NARROW) != null && folder.getId() != 0L)
 			PermissionRules.get().narrowDescendants(folder.getId());
+		// After the store: CE's updateSecurityRef re-points the Store's heirs only then
+		if (dictionary.remove(NARROW_STORE) != null)
+			PermissionRules.get().narrowBeforeCommit(folder.getId());
 	}
 }

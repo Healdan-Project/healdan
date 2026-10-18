@@ -205,11 +205,14 @@ public class HealdanHooksImpl implements HealdanHooks {
 
 	/**
 	 * CE's "apply to subfolders" deletes every ACL below the root with JDBC,
-	 * which would re-open a restricted folder (spec 7.3)
+	 * which would re-open a restricted folder (spec 7.3); from the root or a
+	 * Store it can point matter folders at the root, which the matters'
+	 * narrowing replaces before the transaction commits (R28)
 	 */
 	@Override
 	public void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
 		Vetoes.check(Vetoes.ids(rootId), List.of(),
 				() -> PermissionRules.get().checkApplyToTree(rootId, FilingRules.actor(transaction)));
+		PermissionRules.get().afterApplySecurityToTree(rootId);
 	}
 }

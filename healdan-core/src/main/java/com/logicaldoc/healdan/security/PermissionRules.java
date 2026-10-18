@@ -85,6 +85,9 @@ public class PermissionRules {
 	/** Large id lists are queried in chunks */
 	private static final int CHUNK = 500;
 
+	/** Key of the Stores the current transaction narrows before it commits */
+	private static final String PENDING_STORES = PermissionRules.class.getName() + ".pendingStores";
+
 	/** Set while the current transaction copies a folder tree */
 	private static final ThreadLocal<Boolean> COPYING = new ThreadLocal<>();
 
@@ -298,26 +301,86 @@ public class PermissionRules {
 	}
 
 	/**
+	 * Narrows the matters below a Store, as {@link #narrowDescendants} does,
+	 * just before the current transaction commits: after the JDBC CE runs
+	 * once its store is over, such as {@code updateSecurityRef}'s update of the
+	 * folders that inherited from the Store, or {@code applySecurityToTree}.
+	 * Outside a transaction it narrows at once.
+	 *
+	 * @param storeId the Store
+	 * @throws PersistenceException error at data layer
+	 */
+	public void narrowBeforeCommit(long storeId) throws PersistenceException {
+		if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+			narrowDescendants(storeId);
+			return;
+		}
+		@SuppressWarnings("unchecked")
+		Set<Long> pending = (Set<Long>) TransactionSynchronizationManager.getResource(PENDING_STORES);
+		if (pending == null) {
+			Set<Long> stores = new LinkedHashSet<>();
+			TransactionSynchronizationManager.bindResource(PENDING_STORES, stores);
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void beforeCommit(boolean readOnly) {
+					try {
+						for (Long store : List.copyOf(stores))
+							narrowDescendants(store);
+					} catch (PersistenceException e) {
+						throw new IllegalStateException(e.getMessage(), e);
+					}
+				}
+
+				@Override
+				public void afterCompletion(int status) {
+					TransactionSynchronizationManager.unbindResourceIfPossible(PENDING_STORES);
+				}
+			});
+			pending = stores;
+		}
+		pending.add(storeId);
+	}
+
+	/**
+	 * "Apply to subfolders" from the root or a Store points the folders below
+	 * at the root's or the Store's source, which may be the root (R28): the
+	 * matters below are narrowed once CE's JDBC is done
+	 *
+	 * @param rootId where it is applied from
+	 * @throws PersistenceException error at data layer
+	 */
+	public void afterApplySecurityToTree(long rootId) throws PersistenceException {
+		Kind kind = locator.locate(rootId).kind();
+		if (kind == Kind.STORE) {
+			narrowBeforeCommit(rootId);
+		} else if (kind == Kind.ROOT) {
+			for (FolderRow row : storedRows.children(rootId))
+				if (locator.locate(row.id()).kind() == Kind.STORE)
+					narrowBeforeCommit(row.id());
+		}
+	}
+
+	/**
 	 * Narrows a folder inside a matter to its parent, and the folders below it
 	 * to theirs, as {@link #narrowDescendants} does: for a folder restored
-	 * with JDBC. A matter's workspace is left to P2; only the folders below it
-	 * are narrowed.
+	 * with JDBC. A matter's workspace isn't narrowed (P2 checked it before the
+	 * restore), but a reference to anything but its Store is replaced, as
+	 * {@link #fitWorkspace} does on a move.
 	 *
 	 * @param folderId the folder
 	 * @throws PersistenceException error at data layer
 	 */
 	public void narrowTree(long folderId) throws PersistenceException {
 		Kind kind = locator.locate(folderId).kind();
-		if (kind == Kind.IN_MATTER)
+		if (kind == Kind.IN_MATTER || kind == Kind.MATTER_WORKSPACE)
 			normalize(folderId, true, false);
-		else if (kind == Kind.MATTER_WORKSPACE)
-			normalize(folderId, false, false);
 	}
 
 	/**
 	 * Inside a matter a folder inherits permissions only from a folder above it
-	 * (plan, R25): a reference to any other folder would follow that folder's
-	 * changes, which no narrowing below this folder's parent sees
+	 * (plan, R25), up to its Store and never from the root (R28): a reference
+	 * to any other folder would follow that folder's changes, which no
+	 * narrowing below this folder's parent sees
 	 *
 	 * @param folder a folder about to be stored, with its new parent
 	 * @throws HealdanRuleException if it inherits from a folder that isn't
@@ -359,25 +422,47 @@ public class PermissionRules {
 	}
 
 	/**
-	 * A matter's workspace that inherits from a folder that isn't above it, as
-	 * a move to another Store leaves it, gets an ACL of its own with what that
-	 * folder grants, or inherits from its Store when that grants the same
-	 * (plan, R25). Its permissions aren't narrowed: P2 checks them.
+	 * A matter's workspace that inherits from anything but its Store, as a
+	 * move to another Store or CE's create under a Store that inherits from
+	 * the root leaves it, gets an ACL of its own with what that folder grants,
+	 * or inherits from its Store when that grants the same and has an ACL of
+	 * its own (plan, R25, R28). Its permissions aren't narrowed: P2 checks
+	 * them.
 	 *
 	 * @param workspace the workspace about to be stored, with its new parent
 	 * @return true if it changed
 	 */
 	public boolean fitWorkspace(Folder workspace) {
-		if (inheritsFromAbove(workspace))
-			return false;
+		Long ref = workspace.getSecurityRef();
 		long storeId = workspace.getParentId();
-		Map<Long, Set<Permission>> acl = AclMath.effective(workspace.getSecurityRef());
-		long storeSource = AclMath.source(storeId);
-		if (acl.equals(AclMath.effective(storeId)) && ancestors(storeId).contains(storeSource))
-			apply(workspace, new Outcome(storeSource, Map.of()));
-		else
-			apply(workspace, new Outcome(null, acl));
+		Outcome outcome = decideWorkspace(workspace.getId(), ref,
+				ref != null && ref != workspace.getId() ? AclMath.effective(ref) : Map.of(), ancestors(storeId),
+				AclMath.effective(storeId), AclMath.source(storeId));
+		if (outcome == null)
+			return false;
+		apply(workspace, outcome);
 		return true;
+	}
+
+	/**
+	 * What a matter's workspace becomes so that it inherits only from its
+	 * Store
+	 *
+	 * @param id the workspace
+	 * @param ref its security reference, null if it has its own ACL
+	 * @param refAcl what its reference grants (if it inherits)
+	 * @param allowed what it may inherit from: its Store
+	 * @param storeAcl what its Store grants
+	 * @param storeSource the folder whose ACL its Store uses
+	 * @return what it becomes, null if it may stay as it is
+	 */
+	static Outcome decideWorkspace(long id, Long ref, Map<Long, Set<Permission>> refAcl, Set<Long> allowed,
+			Map<Long, Set<Permission>> storeAcl, long storeSource) {
+		if (ref == null || ref == id || allowed.contains(ref))
+			return null;
+		if (refAcl.equals(storeAcl) && allowed.contains(storeSource))
+			return new Outcome(storeSource, Map.of());
+		return new Outcome(null, AclMath.granted(refAcl));
 	}
 
 	private static void apply(Folder folder, Outcome outcome) {
@@ -487,22 +572,23 @@ public class PermissionRules {
 	/**
 	 * @param rootId the top of the tree
 	 * @param includeRoot true to narrow the top to its parent too
-	 * @param skipChildren true to leave the top's children as they are (the
-	 *        workspaces of a Store) and narrow only below them
+	 * @param storeChildren true if the top is a Store, whose children are the
+	 *        matters' workspaces: those aren't narrowed (P2 is theirs), but a
+	 *        reference to anything but the Store is replaced
 	 */
-	private void normalize(long rootId, boolean includeRoot, boolean skipChildren) {
+	private void normalize(long rootId, boolean includeRoot, boolean storeChildren) throws PersistenceException {
 		Map<Long, Node> tree = loadTree(rootId);
 		Node root = tree.get(rootId);
 		if (root == null)
 			return;
 		Set<Long> aboveRoot = ancestors(root.parentId);
+		boolean rootWorkspace = includeRoot && locator.locate(rootId).kind() == Kind.MATTER_WORKSPACE;
 
 		Set<Long> changed = new LinkedHashSet<>();
 		for (int pass = 0; pass < MAX_PASSES; pass++) {
 			boolean any = false;
 			for (Node node : tree.values()) {
-				if (node.alias || (node == root && !includeRoot) || node.parentId == node.id
-						|| (skipChildren && node.parentId == rootId))
+				if (node.alias || (node == root && !includeRoot) || node.parentId == node.id)
 					continue;
 
 				Map<Long, Set<Permission>> parentAcl;
@@ -520,8 +606,12 @@ public class PermissionRules {
 				}
 
 				boolean own = node.ownAcl();
-				Outcome outcome = decide(node.id, node.ref, own ? node.rows : Map.of(),
-						own ? Map.of() : acl(node.ref, tree), ancestors, parentAcl, parentSource);
+				boolean workspace = (storeChildren && node.parentId == rootId) || (node == root && rootWorkspace);
+				Outcome outcome = workspace
+						? decideWorkspace(node.id, node.ref, own ? Map.of() : acl(node.ref, tree), ancestors,
+								parentAcl, parentSource)
+						: decide(node.id, node.ref, own ? node.rows : Map.of(), own ? Map.of() : acl(node.ref, tree),
+								ancestors, parentAcl, parentSource);
 				if (outcome != null) {
 					node.ref = outcome.securityRef();
 					node.rows = outcome.rows();
@@ -636,15 +726,18 @@ public class PermissionRules {
 
 	/**
 	 * @param folderId a folder
-	 * @return the folder and every folder above it, up to the root
+	 * @return the folder and every folder above it that a folder inside a
+	 *         matter may inherit from: up to its Store, never the root (plan,
+	 *         R28), whose permission changes narrow no matter
 	 */
 	private Set<Long> ancestors(long folderId) {
 		Set<Long> ancestors = new LinkedHashSet<>();
 		long current = folderId;
-		while (ancestors.add(current)) {
+		while (true) {
 			List<Long> parents = jdbc.queryForList("select ld_parentid from ld_folder where ld_id = ?", Long.class,
 					current);
-			if (parents.isEmpty())
+			// The root is its own parent
+			if (parents.isEmpty() || parents.get(0) == current || !ancestors.add(current))
 				break;
 			current = parents.get(0);
 		}
