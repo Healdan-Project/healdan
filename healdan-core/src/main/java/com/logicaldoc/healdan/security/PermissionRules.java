@@ -19,6 +19,8 @@ import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -84,8 +86,7 @@ public class PermissionRules {
 
 	static final String SECURITY_REF = "You need the security permission on this folder to change where it takes its permissions from.";
 
-	/** Narrowing passes over a tree; one is enough unless folders inherit from folders below them */
-	private static final int MAX_PASSES = 5;
+	private static final Logger log = LoggerFactory.getLogger(PermissionRules.class);
 
 	/** Large id lists are queried in chunks */
 	private static final int CHUNK = 500;
@@ -625,9 +626,16 @@ public class PermissionRules {
 		Set<Long> aboveRoot = ancestors(root.parentId);
 		boolean rootWorkspace = includeRoot && locator.locate(rootId).kind() == Kind.MATTER_WORKSPACE;
 
+		/*
+		 * A pass changes a folder only by narrowing it or pointing it higher up,
+		 * so the passes settle; each one settles at least one more step of the
+		 * chains of folders inheriting from folders that come later in the walk
+		 */
 		Set<Long> changed = new LinkedHashSet<>();
-		for (int pass = 0; pass < MAX_PASSES; pass++) {
-			boolean any = false;
+		int maxPasses = tree.size() + 1;
+		boolean any = true;
+		for (int pass = 0; any && pass < maxPasses; pass++) {
+			any = false;
 			for (Node node : tree.values()) {
 				if (node.alias || (node == root && !includeRoot) || node.parentId == node.id)
 					continue;
@@ -660,9 +668,10 @@ public class PermissionRules {
 					any = true;
 				}
 			}
-			if (!any)
-				break;
 		}
+		if (any)
+			log.warn("The permissions below folder {} didn't settle in {} passes; some folders may still grant more "
+					+ "than their parents", rootId, maxPasses);
 		write(tree, changed);
 	}
 
