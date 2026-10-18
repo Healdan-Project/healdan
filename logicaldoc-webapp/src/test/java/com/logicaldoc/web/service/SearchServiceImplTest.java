@@ -1,14 +1,25 @@
 package com.logicaldoc.web.service;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.jar.JarEntry;
+import java.util.jar.JarInputStream;
+import java.util.jar.JarOutputStream;
 
 import org.junit.Test;
 
@@ -20,14 +31,79 @@ import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUICriterion;
+import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIResult;
 import com.logicaldoc.gui.common.client.beans.GUISearchOptions;
+import com.logicaldoc.util.io.ResourceUtil;
 import com.logicaldoc.web.AbstractFulltextTestCase;
 
 public class SearchServiceImplTest extends AbstractFulltextTestCase {
 
+	/** A search type that registers no options converter: CE's tag search under another number */
+	private static final int UNCONVERTED_TYPE = 4242;
+
 	// Instance under test
 	private SearchServiceImpl testSubject = new SearchServiceImpl();
+
+	@Override
+	protected List<String> getPluginArchives() {
+		List<String> archives = new ArrayList<>(super.getPluginArchives());
+		archives.add(unconvertedSearchPlugin());
+		return archives;
+	}
+
+	@Test
+	public void testUnregisteredTypeUsesDefaultConverter() throws ServerException {
+		assertEquals(SearchOptionsConverter.class, SearchServiceImpl.converterFor(UNCONVERTED_TYPE).getClass());
+		assertSame(SearchServiceImpl.converterFor(UNCONVERTED_TYPE), SearchServiceImpl.converterFor(-7));
+		assertEquals(FulltextOptionsConverter.class,
+				SearchServiceImpl.converterFor(SearchOptions.TYPE_FULLTEXT).getClass());
+
+		// The search runs, with the expression and the user carried over
+		GUISearchOptions options = new GUISearchOptions();
+		options.setExpression("abc");
+		options.setType(SearchOptions.TYPE_TAG);
+		List<Long> tagged = testSubject.search(options).getHits().stream().map(GUIDocument::getId).toList();
+		assertFalse(tagged.isEmpty());
+		options.setType(UNCONVERTED_TYPE);
+		assertEquals(tagged, testSubject.search(options).getHits().stream().map(GUIDocument::getId).toList());
+	}
+
+	/**
+	 * Builds, in the test classpath, a plugin that registers CE's tag search as
+	 * {@link #UNCONVERTED_TYPE}
+	 *
+	 * @return the jar's classpath path
+	 */
+	private static String unconvertedSearchPlugin() {
+		try {
+			String dummyXml;
+			try (JarInputStream in = new JarInputStream(ResourceUtil.getInputStream("logicaldoc-dummy-plugin.jar"))) {
+				while (!"plugin.xml".equals(in.getNextJarEntry().getName()))
+					in.closeEntry();
+				dummyXml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			}
+			// The manifest parser validates against the DTD at the top
+			String xml = dummyXml.substring(0, dummyXml.indexOf("<plugin id=")) + """
+					<plugin id="unconverted-search" version="9.3.1">
+					  <requires><import plugin-id="logicaldoc-core" /></requires>
+					  <extension plugin-id="logicaldoc-core" point-id="Search" id="unconvertedSearch">
+					    <parameter id="type" value="%d" />
+					    <parameter id="class" value="com.logicaldoc.core.searchengine.TagSearch" />
+					    <parameter id="options" value="com.logicaldoc.core.searchengine.TagSearchOptions" />
+					  </extension>
+					</plugin>
+					""".formatted(UNCONVERTED_TYPE);
+			try (JarOutputStream out = new JarOutputStream(
+					new FileOutputStream(new File("target/test-classes/unconverted-search-plugin.jar")))) {
+				out.putNextEntry(new JarEntry("plugin.xml"));
+				out.write(xml.getBytes(StandardCharsets.UTF_8));
+			}
+			return "/unconverted-search-plugin.jar";
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
 
 	@Test
 	public void testSearch() throws ServerException {

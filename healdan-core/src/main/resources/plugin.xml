@@ -141,4 +141,35 @@
 		<parameter id="position" value="140" />
 		<parameter id="class" value="com.logicaldoc.healdan.docnumber.DocNumberListener" />
 	</extension>
+
+	<!-- The search types are HealdanConstants.SEARCH_* -->
+	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanDocNumberSearch">
+		<parameter id="type" value="101" />
+		<parameter id="class" value="com.logicaldoc.healdan.search.DocNumberSearch" />
+		<parameter id="options" value="com.logicaldoc.healdan.search.HealdanSearchOptions" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanMatterSearch">
+		<parameter id="type" value="102" />
+		<parameter id="class" value="com.logicaldoc.healdan.search.MatterSearch" />
+		<parameter id="options" value="com.logicaldoc.healdan.search.HealdanSearchOptions" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanClientSearch">
+		<parameter id="type" value="103" />
+		<parameter id="class" value="com.logicaldoc.healdan.search.ClientSearch" />
+		<parameter id="options" value="com.logicaldoc.healdan.search.HealdanSearchOptions" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanDocumentsOnlySearch">
+		<parameter id="type" value="104" />
+		<parameter id="class" value="com.logicaldoc.healdan.search.DocumentsOnlySearch" />
+		<parameter id="options" value="com.logicaldoc.core.searchengine.FulltextSearchOptions" />
+	</extension>
+
+	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanEmailsOnlySearch">
+		<parameter id="type" value="105" />
+		<parameter id="class" value="com.logicaldoc.healdan.search.EmailsOnlySearch" />
+		<parameter id="options" value="com.logicaldoc.core.searchengine.FulltextSearchOptions" />
+	</extension>
 </plugin>

@@ -59,8 +59,18 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
      */
     private static final Map<Integer, SearchOptionsConverter> converters = new HashMap<>();
 
+    /**
+     * Healdan: the converter of the search types that register none, which
+     * copies the common options
+     */
+    private static final SearchOptionsConverter DEFAULT = new SearchOptionsConverter();
+
     public static void registerConverter(Integer type, SearchOptionsConverter converter) {
         converters.put(type, converter);
+    }
+
+    static SearchOptionsConverter converterFor(int type) {
+        return converters.getOrDefault(type, DEFAULT);
     }
 
     static {
@@ -178,7 +188,7 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
     }
 
     private SearchOptions prepareSearchOptions(GUISearchOptions options, Session session) {
-        SearchOptions searchOptions = converters.get(options.getType()).toSearchOptions(options);
+        SearchOptions searchOptions = converterFor(options.getType()).toSearchOptions(options);
         searchOptions.setTenantId(session.getTenantId());
         searchOptions.setTransaction(new UserHistory(session));
 
