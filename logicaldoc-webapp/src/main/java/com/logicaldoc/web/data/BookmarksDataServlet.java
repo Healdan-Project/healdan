@@ -54,7 +54,7 @@ public class BookmarksDataServlet extends AbstractDataServlet {
 		 */
 		query = """
                 select A.id, A.fileType, A.title, A.description, A.position, A.userId, A.targetId, A.type, A.targetId, B.color
-                  from Bookmark A, Folder B where A.targetId = B.id and A.type = %d and A.deleted = 0 and B.deleted = 0
+                  from Bookmark A, Folder B where A.targetId = B.id and A.type = %d and A.deleted = 0 
                    and A.userId = %d
                 """.formatted(Bookmark.Type.FOLDER.ordinal(), session.getUserId());
 		records.addAll(dao.findByQuery(query, (Map<String, Object>) null, null));

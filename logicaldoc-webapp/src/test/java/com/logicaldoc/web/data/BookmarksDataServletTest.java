@@ -20,10 +20,11 @@ import jakarta.servlet.ServletResponse;
 
 /**
  * Healdan (spec 8.2): CE's Bookmarks section lists no bookmark of a deleted
- * folder, as it lists none of a deleted document. {@code PersistentObject}'s
- * {@code @SQLRestriction("ld_deleted=0")} already keeps deleted folders out of
- * the servlet's join; its folder query also says {@code B.deleted = 0}, as its
- * document query does, so the listing doesn't depend on that annotation.
+ * folder, as it lists none of a deleted document.
+ * <p>
+ * CE needs no edit for it: {@code PersistentObject}'s
+ * {@code @SQLRestriction("ld_deleted=0")} keeps deleted folders out of the
+ * servlet's join (plan, D8). This test guards that.
  */
 public class BookmarksDataServletTest extends AbstractWPTestCase {
 
