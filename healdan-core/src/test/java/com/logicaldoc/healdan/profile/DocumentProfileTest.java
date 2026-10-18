@@ -3,6 +3,7 @@ package com.logicaldoc.healdan.profile;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
@@ -273,6 +275,34 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 		assertEquals("Letters", text(created, CLASS));
 		assertBlank(text(created, SUBCLASS));
 		assertEquals(Set.of(), locals(created));
+	}
+
+	@Test
+	public void testFailedMoveLeavesALaterMoveAlone() throws Exception {
+		Document created = createWith(correspondence, "sub.txt", alice, Map.of(SUBCLASS, "Sub2"));
+		setFolderValue(documents, CLASS, "Letters");
+		Document immutable = reload(created);
+		immutable.setImmutable(true);
+		documentDao.store(immutable);
+
+		// The hook drops the local Subclass, which doesn't belong to Letters; then CE refuses the move
+		try {
+			DocumentManager.get().moveToFolder(reload(created), documents, documentHistory(alice));
+			fail("An immutable document was moved");
+		} catch (PersistenceException e) {
+			assertEquals("Document is immutable", e.getMessage());
+		}
+		Document mutable = reload(created);
+		mutable.setImmutable(false);
+		documentDao.store(mutable);
+
+		// A later move, where the Subclass still belongs, keeps it and its mark
+		Folder drafts = createFolder(correspondence, "Drafts", admin);
+		DocumentManager.get().moveToFolder(reload(created), drafts, documentHistory(alice));
+		awaitAsyncWork();
+
+		assertEquals("Sub2", text(created, SUBCLASS));
+		assertEquals(Set.of(SUBCLASS), locals(created));
 	}
 
 	@Test

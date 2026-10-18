@@ -97,6 +97,8 @@ public class HealdanHooksImpl implements HealdanHooks {
 	@Override
 	public void beforeDocumentMove(Document document, Folder target, DocumentHistory transaction)
 			throws PersistenceException {
+		// A drop an earlier, failed move of the document recorded is not this move's
+		EditMarks.clearDropped(document.getId());
 		Vetoes.check(Vetoes.ids(target != null ? target.getId() : null), Vetoes.ids(document.getId()), () -> {
 			if (document.getDocRef() != null)
 				rules.checkShortcut(target);

@@ -14,7 +14,8 @@ import com.logicaldoc.core.document.DocumentEvent;
  * profile), and the local marks a move has dropped. Only the store that
  * follows may change the local marks (plan, R17); every other store re-stamps
  * non-local values alone. A note that is never consumed (the operation failed
- * first) expires, is not taken by a store of another kind, and is purged.
+ * first) expires, is not taken by a store of another kind, and is purged; the
+ * next move of the document clears the marks a failed move dropped.
  */
 public final class EditMarks {
 
@@ -65,6 +66,16 @@ public final class EditMarks {
 		dropped.values().removeIf(d -> System.nanoTime() - d.since() > EXPIRY_NANOS);
 		dropped.computeIfAbsent(documentId, id -> new Dropped(new HashSet<>(), System.nanoTime())).attributes()
 				.add(attribute);
+	}
+
+	/**
+	 * Forgets the local marks an earlier move of the document dropped that no
+	 * store took, because that move failed after its hook
+	 *
+	 * @param documentId the document that is about to move
+	 */
+	public static void clearDropped(long documentId) {
+		DROPPED.get().remove(documentId);
 	}
 
 	/**
