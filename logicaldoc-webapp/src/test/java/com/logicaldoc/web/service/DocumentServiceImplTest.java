@@ -898,10 +898,15 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         doc = testSubject.save(doc);
         assertNotNull(doc);
 
-        // Make it an alias
-        doc.setDocRef(3L);
-        doc = testSubject.save(doc);
-        assertNotNull(doc);
+        // A docRef the stored document doesn't have is refused: save takes a shortcut's target from the stored row
+        GUIDocument forged = doc;
+        forged.setDocRef(3L);
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(forged));
+
+        // Save a real alias: document 2 refers to document 1
+        GUIDocument alias = testSubject.getById(2);
+        assertEquals(Long.valueOf(1L), alias.getDocRef());
+        assertNotNull(testSubject.save(alias));
 
         // Add attributes
         doc.setDocRef(null);

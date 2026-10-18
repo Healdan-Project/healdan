@@ -45,6 +45,7 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
+import com.logicaldoc.gui.common.client.beans.GUIFolder;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.util.io.ResourceUtil;
 import com.logicaldoc.util.plugin.PluginException;
@@ -68,13 +69,15 @@ import jakarta.servlet.WriteListener;
  * stays out of their reach.
  * <p>
  * Alice isn't in IT. A PDF in Secured Documents, a folder only IT can read,
- * gives Alice READ, DOWNLOAD and PREVIEW in its own ACL, and IT READ, WRITE,
- * DOWNLOAD and PREVIEW. Carol is in IT. Bob has no grant at all. The doc #
- * lookup itself is Healdan's, so healdan-core's
+ * gives Alice READ, DOWNLOAD and PREVIEW in its own ACL, Carol (not in IT
+ * either) READ and WRITE, and IT READ, WRITE, DOWNLOAD and PREVIEW. Bob has no
+ * grant at all. The doc # lookup itself is Healdan's, so healdan-core's
  * {@code DocumentOnlyGrantLookupTest} covers it.
  * <p>
  * Reading the document, listing its versions and saving its properties need
- * READ, READ and WRITE on the document (T19-c): CE checked none of them.
+ * READ, READ and WRITE on the document (T19-c), and a new file name RENAME
+ * (T19-f): CE checked none of them. A grantee who can't read the folder sees
+ * only its id and name (T19-e).
  * <p>
  * Two tests, because each test builds its database and its document again,
  * which takes seconds.
@@ -83,6 +86,9 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
 
     /** The password of the users this test creates */
     private static final String PASSWORD = "Kx7!Rmq-Tz8vW";
+
+    /** A fixture document, in a folder Bob can't read, that Bob is given WRITE on */
+    private static final long OWN_DOC = 4L;
 
     private Folder secured;
 
@@ -109,15 +115,21 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
     }
 
     @Test
-    public void testAliceReachesTheDocument() throws Exception {
+    public void testGranteesReachTheDocument() throws Exception {
         long alice = UserDAO.get().findByUsername("alice").getId();
+        long carol = UserDAO.get().findByUsername("carol").getId();
         assertFalse(FolderDAO.get().isReadAllowed(secured.getId(), alice));
         assertEquals(EnumSet.of(Permission.READ, Permission.DOWNLOAD, Permission.PREVIEW),
                 DocumentDAO.get().getAllowedPermissions(doc.getId(), alice));
-        // The admin, whose session setUp opened, gets the folder
+        assertFalse(FolderDAO.get().isReadAllowed(secured.getId(), carol));
+        assertEquals(EnumSet.of(Permission.READ, Permission.WRITE),
+                DocumentDAO.get().getAllowedPermissions(doc.getId(), carol));
+        // The admin, whose session setUp opened, gets the folder, and the whole of it with the document
         assertNotNull(new FolderServiceImpl().getFolder(secured.getId(), false, false, false));
-        GUIDocument edited = new DocumentServiceImpl().getById(doc.getId());
-        edited.setColor("red");
+        GUIFolder whole = new DocumentServiceImpl().getById(doc.getId()).getFolder();
+        assertEquals("For IT only", whole.getDescription());
+        assertEquals(List.of("it@example.com"), whole.getQuotaAlertRecipients());
+        assertNotNull(whole.getCreator());
 
         prepareSession("alice", PASSWORD);
 
@@ -135,10 +147,18 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         GUIDocument opened = documents.getById(doc.getId());
         assertEquals(doc.getId(), opened.getId());
         assertEquals("secured.pdf", opened.getFileName());
-        assertEquals(secured.getId(), opened.getFolder().getId());
         assertEquals(Set.of("READ", "DOWNLOAD", "PREVIEW"), allowed(opened.getAllowedPermissions()));
         assertEquals(Set.of("READ", "DOWNLOAD", "PREVIEW"),
                 allowed(documents.getAllowedPermissions(List.of(doc.getId()))));
+        // Of the folder, only its id and name (T19-e)
+        GUIFolder stub = opened.getFolder();
+        assertEquals(secured.getId(), stub.getId());
+        assertEquals("Secured Documents", stub.getName());
+        assertNull(stub.getDescription());
+        assertNull(stub.getCreator());
+        assertNull(stub.getCreatorId());
+        assertTrue(stub.getQuotaAlertRecipients().isEmpty());
+        assertTrue(allowed(stub.getAllowedPermissions()).isEmpty());
 
         // The Versions tab lists /data/versions.xml?docId=, and comparing two versions calls getVersionsById
         MemoryResponse versionsXml = versionsXml();
@@ -168,22 +188,24 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         // or right-clicked (D7).
         assertNull(new FolderServiceImpl().getFolder(secured.getId(), false, false, false));
 
-        // Saving the properties needs WRITE, which Alice hasn't got and Carol has through IT
-        assertThrows(AccessDeniedException.class, () -> documents.save(edited));
-        assertNull(DocumentDAO.get().findById(doc.getId()).getColor());
+        // Amending the properties (spec 8.1): Carol's WRITE comes only from the document's own ACL
         prepareSession("carol", PASSWORD);
+        GUIDocument edited = new DocumentServiceImpl().getById(doc.getId());
+        assertTrue(allowed(edited.getFolder().getAllowedPermissions()).isEmpty());
+        edited.setColor("red");
         assertEquals("red", new DocumentServiceImpl().save(edited).getColor());
         assertEquals("red", DocumentDAO.get().findById(doc.getId()).getColor());
     }
 
     @Test
-    public void testBobIsRefused() throws Exception {
+    public void testOthersAreRefused() throws Exception {
         long bob = UserDAO.get().findByUsername("bob").getId();
         assertFalse(FolderDAO.get().isReadAllowed(secured.getId(), bob));
         assertTrue(DocumentDAO.get().getAllowedPermissions(doc.getId(), bob).isEmpty());
         GUIDocument edited = new DocumentServiceImpl().getById(doc.getId());
         edited.setColor("red");
 
+        // Bob, who has no grant
         prepareSession("bob", PASSWORD);
 
         DocumentServiceImpl documents = new DocumentServiceImpl();
@@ -194,10 +216,11 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         assertEquals(500, versionsXml.getStatus());
         assertEquals("Document %d is not accessible by user bob".formatted(doc.getId()), versionsXml.error);
         assertEquals("", versionsXml.text());
-        assertThrows(AccessDeniedException.class, () -> documents.getVersionsById(version.getId(), version.getId()));
+        assertThrows(AccessDeniedException.class,
+                () -> documents.getVersionsById(version.getId(), version.getId()));
 
         assertThrows(AccessDeniedException.class, () -> documents.save(edited));
-        assertNull(DocumentDAO.get().findById(doc.getId()).getColor());
+        assertUnchanged();
 
         MemoryResponse download = download();
         assertEquals(500, download.getStatus());
@@ -211,6 +234,49 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         }
 
         assertNull(new FolderServiceImpl().getFolder(secured.getId(), false, false, false));
+
+        // Bob, with WRITE on another document, can't pass it off as a shortcut to the secured one
+        Document own = DocumentDAO.get().findById(OWN_DOC, true);
+        DocumentAccessControlEntry ownGrant = new DocumentAccessControlEntry(
+                UserDAO.get().findByUsername("bob").getUserGroup().getId());
+        ownGrant.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE));
+        own.addAccessControlEntry(ownGrant);
+        DocumentDAO.get().store(own);
+        GUIDocument forged = documents.getById(OWN_DOC);
+        forged.setDocRef(doc.getId());
+        // With the target's own custom id, which CE's uniqueness check wants (a doc # is easy to guess)
+        forged.setCustomId(doc.getCustomId());
+        forged.setTags(List.of("forged"));
+        forged.setColor("blue");
+        assertThrows(AccessDeniedException.class, () -> documents.save(forged));
+        assertUnchanged();
+        Document ownNow = DocumentDAO.get().findById(OWN_DOC, true);
+        assertNull(ownNow.getDocRef());
+        assertNull(ownNow.getColor());
+        assertTrue(ownNow.getTagsAsWords().isEmpty());
+
+        // Alice, who may read but not write
+        prepareSession("alice", PASSWORD);
+        assertThrows(AccessDeniedException.class, () -> new DocumentServiceImpl().save(edited));
+        assertUnchanged();
+
+        // Carol, who may write but not rename (T19-f)
+        prepareSession("carol", PASSWORD);
+        GUIDocument renamed = new DocumentServiceImpl().getById(doc.getId());
+        renamed.setFileName("renamed.pdf");
+        renamed.setColor("green");
+        assertThrows(AccessDeniedException.class, () -> new DocumentServiceImpl().save(renamed));
+        assertUnchanged();
+    }
+
+    /**
+     * Asserts that no refused save changed the secured document
+     */
+    private void assertUnchanged() throws PersistenceException {
+        Document current = DocumentDAO.get().findById(doc.getId(), true);
+        assertEquals("secured.pdf", current.getFileName());
+        assertNull(current.getColor());
+        assertTrue(current.getTagsAsWords().isEmpty());
     }
 
     private void createCase() throws Exception {
@@ -220,7 +286,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         GroupDAO.get().store(it);
         User alice = user("alice");
         user("bob");
-        user("carol", it);
+        User carol = user("carol");
 
         // A folder only IT can read
         Folder vo = new Folder("Secured Documents");
@@ -228,6 +294,8 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         secured = FolderDAO.get().create(FolderDAO.get().findById(Folder.DEFAULTWORKSPACEID), vo, false,
                 folderHistory());
         secured = FolderDAO.get().findById(secured.getId(), true);
+        secured.setDescription("For IT only");
+        secured.setQuotaAlertRecipients("it@example.com");
         secured.setSecurityRef(null);
         secured.getAccessControlList().clear();
         FolderAccessControlEntry itFolder = new FolderAccessControlEntry(it.getId());
@@ -251,7 +319,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
                 .getDocument();
         version = awaitFirstVersion(doc.getId());
 
-        // Its own ACL, as its Security tab saves it: what the folder grants, and Alice
+        // Its own ACL, as its Security tab saves it: what the folder grants, Alice and Carol
         Document current = DocumentDAO.get().findById(doc.getId(), true);
         DocumentAccessControlEntry itDocument = new DocumentAccessControlEntry(it.getId());
         itDocument.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE, Permission.DOWNLOAD,
@@ -260,6 +328,9 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         DocumentAccessControlEntry grant = new DocumentAccessControlEntry(alice.getUserGroup().getId());
         grant.grantPermissions(EnumSet.of(Permission.READ, Permission.DOWNLOAD, Permission.PREVIEW));
         current.addAccessControlEntry(grant);
+        DocumentAccessControlEntry writer = new DocumentAccessControlEntry(carol.getUserGroup().getId());
+        writer.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE));
+        current.addAccessControlEntry(writer);
         DocumentHistory permission = new DocumentHistory();
         permission.setSession(session);
         permission.setEvent(DocumentEvent.PERMISSION);
@@ -305,7 +376,7 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         return Set.copyOf(ace.getAllowedPermissions());
     }
 
-    private static User user(String username, Group... groups) throws Exception {
+    private static User user(String username) throws Exception {
         User user = new User();
         user.setUsername(username);
         user.setName(username);
@@ -314,8 +385,6 @@ public class DocumentOnlyGrantTest extends AbstractWPTestCase {
         user.setDecodedPassword(PASSWORD);
         user.setTenantId(Tenant.DEFAULT_ID);
         user.setType(User.Type.DEFAULT);
-        for (Group group : groups)
-            user.addGroup(group);
         UserDAO.get().store(user);
         return UserDAO.get().findByUsername(username);
     }
