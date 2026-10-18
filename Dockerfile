@@ -12,8 +12,11 @@ WORKDIR /src
 COPY docker/maven-settings.xml /root/.m2/settings.xml
 # Container files, the Dockerfile itself and top-level docs are excluded so editing them does not re-run Maven.
 COPY --exclude=docker --exclude=Dockerfile --exclude=.dockerignore --exclude=.gitignore --exclude=*.md . .
+# The cache mount keeps only third-party dependencies: the reactor's own artifacts (com/logicaldoc, about half its
+# size) are rebuilt every time. Docker CI saves the mount between runs (.github/workflows/docker-image.yml).
 RUN --mount=type=cache,target=/root/.m2/repository \
-    mvn -B -ntp -DskipTests install
+    mvn -B -ntp -DskipTests install \
+ && rm -rf /root/.m2/repository/com/logicaldoc
 RUN mkdir -p /build/ROOT \
  && cd /build/ROOT \
  && jar xf /src/logicaldoc-webapp/target/logicaldoc-webapp-*.war

@@ -3,15 +3,20 @@ package com.logicaldoc.healdan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.LongStream;
@@ -20,6 +25,7 @@ import javax.sql.DataSource;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,13 +53,18 @@ import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.profile.EditMarks;
+import com.logicaldoc.healdan.rules.HealdanHooksImpl;
+import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.support.DaoSnapshot;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.FixtureBackup;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.IndexSnapshot;
 import com.logicaldoc.healdan.support.VetoSwitch;
 import com.logicaldoc.healdan.support.VetoingHooks;
 import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -71,6 +82,39 @@ import com.logicaldoc.util.spring.Context;
 public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	private static final String CONTENT = "Healdan veto atomicity";
+
+	private static final String VERSION_SAVE = "VersionSave";
+
+	/**
+	 * What Healdan keeps for the thread, mostly between a hook and the store
+	 * that follows it. A route refused in between can leave some behind, which
+	 * would carry into the next test on this thread.
+	 */
+	private static final List<ThreadLocal<?>> HEALDAN_THREAD_STATE = List.of(HealdanOperation.STACK,
+			threadLocal(EditMarks.class, "EDITS"), threadLocal(EditMarks.class, "DROPPED"),
+			threadLocal(PermissionRules.class, "COPYING"));
+
+	/**
+	 * The test that built the context, the schema and the fixture, which every
+	 * test shares and which are closed after the last one. Building them takes
+	 * seconds, mostly waiting for CE's version saves, so the tests after the
+	 * first restore the fixture instead.
+	 */
+	private static VetoAtomicityTest owner;
+
+	/** The fixture as built, restored before each test */
+	private static FixtureBackup fixture;
+
+	/** The fixture and the merge source, once {@link #createMergeSource()} made it */
+	private static FixtureBackup fixtureWithMergeSource;
+
+	private static FixtureIds ids;
+
+	/** Folder to merge, made by {@link #createMergeSource()} */
+	private static long mergeSource;
+
+	/** The merge source's two documents */
+	private static long[] mergeSourceDocs;
 
 	private JdbcTemplate jdbc;
 
@@ -92,28 +136,30 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	/** Child of A with its own ACL */
 	private Folder restricted;
 
-	/** Deleted child of A, holding a document */
-	private Folder deletedFolder;
-
-	/** The deleted document in {@link #deletedFolder} */
-	private Document insideDoc;
-
 	/** An indexed document in A */
 	private Document doc;
 
 	/** An indexed alias of {@link #doc} in B */
 	private Document alias;
 
-	/** A deleted document in A */
-	private Document deletedDoc;
-
-	/** Folder to merge, made by {@link #createMergeSource()} */
-	private long mergeSource;
+	/**
+	 * The ids of the fixture's folders and documents, which each test loads
+	 *
+	 * @param deletedDoc a deleted document in A
+	 * @param deletedFolder deleted child of A, holding {@code insideDoc}
+	 * @param insideDoc the deleted document in {@code deletedFolder}
+	 */
+	private record FixtureIds(long workspace, long folderA, long folderB, long inheriting, long restricted, long doc,
+			long alias, long deletedDoc, long deletedFolder, long insideDoc) {
+	}
 
 	/** The matter workspace everything happens in */
 	private Folder workspace;
 
-	/** The hooks registered before the test's, put back afterwards */
+	/**
+	 * The hooks registered before the test's, put back afterwards: Healdan's
+	 * own rules
+	 */
 	private HealdanHooks healdanHooks;
 
 	@Override
@@ -132,20 +178,55 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	}
 
 	/**
-	 * Runs after the base class has built the context and the schema
+	 * Builds the context and the schema for the first test only
+	 */
+	@Override
+	public void setUp() throws IOException, SQLException, PluginException {
+		if (owner == null) {
+			super.setUp();
+			return;
+		}
+		// As the base class does for each test
+		updateUserHome();
+		context = owner.context;
+	}
+
+	/**
+	 * Runs after the base class has built or reused the context: the first
+	 * test builds the fixture, the others restore it
 	 */
 	@Before
-	public void createFixture() throws Exception {
+	public void prepareFixture() throws Exception {
 		VetoSwitch.off();
+		// As a fresh thread has it, and as the fixture leaves it (see below)
+		clearHealdanThreadState();
 		healdanHooks = HealdanHooks.get();
+		// As a fresh context registers them: the last test put them back
+		assertSame("Healdan's rules aren't the registered hooks", Context.get(HealdanHooksImpl.class), healdanHooks);
 		HealdanHooks.register(new VetoingHooks(healdanHooks));
-		// Ids restart with each test's database, so files of earlier tests would be overwritten unseen
-		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
+		if (owner != null) {
+			stopVersionSaves();
+			fixture.restore();
+		}
 
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		documentDao = DocumentDAO.get();
 		folderDao = FolderDAO.get();
 		admin = UserDAO.get().findById(User.USERID_ADMIN, true);
+
+		if (owner == null) {
+			ids = createFixture();
+			// So the restored tests, which start with none, start as this one does
+			assertNoHealdanThreadState();
+			fixture = FixtureBackup.take(jdbc, CONTENT);
+			owner = this;
+		}
+		loadFixture();
+	}
+
+	private FixtureIds createFixture() throws Exception {
+		// Ids restart with each context's database, so files of earlier test classes would be overwritten unseen
+		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
 
 		HealdanFixtures fx = new HealdanFixtures();
 		Folder mainStore = fx.store("Main");
@@ -172,11 +253,11 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		alias.setIndexingStatus(IndexingStatus.INDEXED);
 		documentDao.store(alias);
 
-		deletedDoc = createDocument(folderA, "deleted.txt");
+		Document deletedDoc = createDocument(folderA, "deleted.txt");
 		documentDao.delete(deletedDoc.getId(), documentTransaction());
 
-		deletedFolder = createFolder(folderA, "Deleted", true);
-		insideDoc = createDocument(deletedFolder, "inside.txt");
+		Folder deletedFolder = createFolder(folderA, "Deleted", true);
+		Document insideDoc = createDocument(deletedFolder, "inside.txt");
 		String profileRows = "select count(*) from ld_document_ext where ld_docid = ?";
 		int profile = jdbc.queryForObject(profileRows, Integer.class, insideDoc.getId());
 		assertTrue(profile > 0);
@@ -186,17 +267,106 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 		assertEquals(profile, (int) jdbc.queryForObject(profileRows, Integer.class, insideDoc.getId()));
 
 		awaitAsyncWork();
+		return new FixtureIds(workspace.getId(), folderA.getId(), folderB.getId(), inheriting.getId(),
+				restricted.getId(), doc.getId(), alias.getId(), deletedDoc.getId(), deletedFolder.getId(),
+				insideDoc.getId());
 	}
 
+	/**
+	 * Loads the fixture's folders and documents for this test
+	 */
+	private void loadFixture() throws PersistenceException {
+		workspace = folderDao.findById(ids.workspace(), true);
+		folderA = folderDao.findById(ids.folderA(), true);
+		folderB = folderDao.findById(ids.folderB(), true);
+		inheriting = folderDao.findById(ids.inheriting(), true);
+		restricted = folderDao.findById(ids.restricted(), true);
+		doc = documentDao.findById(ids.doc(), true);
+		alias = documentDao.findById(ids.alias(), true);
+	}
+
+	/**
+	 * Keeps the context for the next test, unless the fixture couldn't be built
+	 */
 	@After
 	@Override
 	public void tearDown() throws IOException {
 		VetoSwitch.off();
 		// Never register(null): that would turn Healdan's rules off
 		HealdanHooks.register(healdanHooks);
-		SearchEngine.get().unlock();
-		SearchEngine.get().close();
+		if (owner == null)
+			closeContext();
+		else
+			// As the base class does after each test
+			System.setProperty(USER_HOME, originalUserHome);
+	}
+
+	@AfterClass
+	public static void closeSharedContext() throws IOException {
+		if (owner != null)
+			owner.closeContext();
+		owner = null;
+		fixture = null;
+		fixtureWithMergeSource = null;
+		ids = null;
+		// Nor does the next test class on this thread get what the last test left
+		clearHealdanThreadState();
+	}
+
+	private void closeContext() throws IOException {
+		if (context != null) {
+			SearchEngine.get().unlock();
+			SearchEngine.get().close();
+		}
 		super.tearDown();
+	}
+
+	/**
+	 * Forgets what Healdan keeps for this thread
+	 */
+	private static void clearHealdanThreadState() {
+		HEALDAN_THREAD_STATE.forEach(ThreadLocal::remove);
+	}
+
+	/**
+	 * Asserts that Healdan keeps nothing for this thread
+	 */
+	private static void assertNoHealdanThreadState() {
+		for (ThreadLocal<?> state : HEALDAN_THREAD_STATE) {
+			Object value = state.get();
+			boolean empty = value == null || value instanceof Map<?, ?> map && map.isEmpty()
+					|| value instanceof Collection<?> collection && collection.isEmpty();
+			assertTrue("Healdan keeps %s for the thread".formatted(value), empty);
+		}
+	}
+
+	private static ThreadLocal<?> threadLocal(Class<?> holder, String name) {
+		try {
+			Field field = holder.getDeclaredField(name);
+			field.setAccessible(true);
+			return (ThreadLocal<?>) field.get(null);
+		} catch (ReflectiveOperationException e) {
+			throw new IllegalStateException("No thread-local %s.%s".formatted(holder.getSimpleName(), name), e);
+		}
+	}
+
+	/**
+	 * Stops the version saves the last test left, as closing its context did
+	 * when each test had its own: a refused copy leaves some polling for a
+	 * document that never appears, and none may write into this test's fixture
+	 */
+	private static void stopVersionSaves() throws Exception {
+		ThreadPoolExecutor pool = ThreadPools.get().getPool(VERSION_SAVE);
+		pool.getQueue().clear();
+		for (Thread thread : Thread.getAllStackTraces().keySet())
+			if (thread.getName().startsWith(VERSION_SAVE + "-"))
+				thread.interrupt();
+		long deadline = System.currentTimeMillis() + 5000L;
+		while (pool.getActiveCount() > 0) {
+			if (System.currentTimeMillis() > deadline)
+				fail("The last test's version saves didn't stop");
+			Thread.sleep(10L);
+		}
 	}
 
 	@Test
@@ -280,15 +450,15 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	@Test
 	public void testDocumentRestore() throws Exception {
 		assertVetoLeavesNothing(VetoSwitch.BEFORE_DOCUMENT_RESTORE,
-				() -> documentDao.restore(deletedDoc.getId(), folderB.getId(), documentTransaction()));
+				() -> documentDao.restore(ids.deletedDoc(), folderB.getId(), documentTransaction()));
 	}
 
 	@Test
 	public void testDocumentRestoreVetoedAtStore() throws Exception {
 		// The DAO undeletes the rows with JDBC, then loads the document, then stores it in the same transaction
 		assertVetoLeavesNothing(VetoSwitch.DOCUMENT_BEFORE_STORE,
-				() -> documentDao.restore(deletedDoc.getId(), folderB.getId(), documentTransaction()),
-				() -> assertDocumentsDeleted(deletedDoc.getId()));
+				() -> documentDao.restore(ids.deletedDoc(), folderB.getId(), documentTransaction()),
+				() -> assertDocumentsDeleted(ids.deletedDoc()));
 	}
 
 	@Test
@@ -353,7 +523,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	@Test
 	public void testFolderRestore() throws Exception {
 		assertVetoLeavesNothing(VetoSwitch.BEFORE_FOLDER_RESTORE,
-				() -> folderDao.restore(deletedFolder.getId(), folderB.getId(), folderTransaction(null)));
+				() -> folderDao.restore(ids.deletedFolder(), folderB.getId(), folderTransaction(null)));
 	}
 
 	@Test
@@ -371,15 +541,15 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 			}
 		});
 		try {
-			folderDao.restore(deletedFolder.getId(), folderB.getId(), folderTransaction(null));
+			folderDao.restore(ids.deletedFolder(), folderB.getId(), folderTransaction(null));
 			fail("The after-hook's exception was swallowed");
 		} catch (PersistenceException e) {
 			assertEquals(VetoSwitch.MESSAGE, e.getMessage());
 		}
 		db.assertUnchanged();
 		// restore loaded the undeleted folder before the after-hook threw
-		assertFoldersDeleted(deletedFolder.getId());
-		assertDocumentsDeleted(insideDoc.getId());
+		assertFoldersDeleted(ids.deletedFolder());
+		assertDocumentsDeleted(ids.insideDoc());
 		dao.assertUnchanged();
 	}
 
@@ -480,7 +650,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 		// Give a real version save time to finish: these never will
 		Thread.sleep(3000L);
-		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		ThreadPoolExecutor pool = ThreadPools.get().getPool(VERSION_SAVE);
 		assertEquals("version saves still waiting for their document", copiedDocuments,
 				pool.getActiveCount() + pool.getQueue().size());
 		assertEquals("files left in the Store", copiedDocuments * (long) CONTENT.length(),
@@ -521,7 +691,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 			throws Exception {
 		assertNotNull("the indexed document must be in the index", SearchEngine.get().getHit(doc.getId()));
 		DbSnapshot db = DbSnapshot.take(jdbc);
-		long[] docIds = LongStream.concat(LongStream.of(doc.getId(), alias.getId(), deletedDoc.getId()),
+		long[] docIds = LongStream.concat(LongStream.of(doc.getId(), alias.getId(), ids.deletedDoc()),
 				LongStream.of(moreDocIds)).toArray();
 		IndexSnapshot index = IndexSnapshot.of(docIds);
 		DaoSnapshot dao = DaoSnapshot.take(jdbc);
@@ -597,7 +767,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 	 * Waits for the versions CE saves in the background
 	 */
 	private static void awaitAsyncWork() throws Exception {
-		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		ThreadPoolExecutor pool = ThreadPools.get().getPool(VERSION_SAVE);
 		long deadline = System.currentTimeMillis() + 20000L;
 		while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
 			if (System.currentTimeMillis() > deadline)
@@ -608,17 +778,26 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 
 	/**
 	 * Creates the folder to merge into B: two indexed documents and a
-	 * subfolder
+	 * subfolder. The first test to ask makes it, the others restore it.
 	 * 
 	 * @return the ids of the two documents
 	 */
 	private long[] createMergeSource() throws Exception {
+		if (fixtureWithMergeSource != null) {
+			fixtureWithMergeSource.restore();
+			loadFixture();
+			return mergeSourceDocs.clone();
+		}
 		Folder source = createFolder(workspace, "Merge", true);
 		mergeSource = source.getId();
-		long[] docIds = { createIndexedDocument(source, "m1.txt").getId(), createIndexedDocument(source, "m2.txt").getId() };
+		mergeSourceDocs = new long[] { createIndexedDocument(source, "m1.txt").getId(),
+				createIndexedDocument(source, "m2.txt").getId() };
 		createFolder(source, "Sub", true);
 		awaitAsyncWork();
-		return docIds;
+		// As for the fixture: the tests that restore this start with none
+		assertNoHealdanThreadState();
+		fixtureWithMergeSource = FixtureBackup.take(jdbc, CONTENT);
+		return mergeSourceDocs.clone();
 	}
 
 	/**
