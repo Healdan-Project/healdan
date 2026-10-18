@@ -1,7 +1,9 @@
 package com.logicaldoc.healdan.docnumber;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -20,6 +22,8 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.threading.ThreadPools;
@@ -29,6 +33,7 @@ import com.logicaldoc.healdan.channels.ChannelHarness;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.webservice.model.WSDocument;
+import com.logicaldoc.webservice.soap.endpoint.SoapDocumentService;
 
 /**
  * Spec §6.1–§6.3: every new document gets the next doc # from Healdan's
@@ -122,16 +127,104 @@ public class DocNumberTest extends AbstractHealdanTestCase {
 		assertEquals("1", customId(doc.getId()));
 	}
 
+	private void update(Document doc, String customId) throws Exception {
+		Document vo = new Document(reload(doc));
+		vo.setCustomId(customId);
+		DocumentManager.get().update(reload(doc), vo, fx.documentHistory(admin));
+		awaitAsyncWork();
+	}
+
+	private void assertVersionsHave(Document doc, String customId) {
+		List<String> ids = jdbc.queryForList("select ld_customid from ld_version where ld_documentid = ?",
+				String.class, doc.getId());
+		assertTrue("no version rows", ids.size() >= 2);
+		for (String id : ids)
+			assertEquals(customId, id);
+	}
+
 	@Test
 	public void testUpdateCannotChangeNumber() throws Exception {
 		Document doc = upload("a.txt");
-		Document vo = reload(doc);
-		documentDao.initialize(vo);
-		vo = new Document(vo);
-		vo.setCustomId("77");
-		DocumentManager.get().update(reload(doc), vo, fx.documentHistory(admin));
+		update(doc, "77");
 		assertEquals("1", customId(doc.getId()));
 		assertEquals("1", reload(doc).getCustomId());
+		assertVersionsHave(doc, "1");
+	}
+
+	@Test
+	public void testUpdateWithAnotherDocumentsNumberChangesNothing() throws Exception {
+		Document doc = upload("a.txt");
+		Document other = upload("b.txt");
+		update(doc, "2");
+		assertEquals("1", customId(doc.getId()));
+		assertEquals("2", customId(other.getId()));
+		assertVersionsHave(doc, "1");
+		for (String id : jdbc.queryForList("select ld_customid from ld_version where ld_documentid = ?",
+				String.class, other.getId()))
+			assertEquals("2", id);
+	}
+
+	@Test
+	public void testCheckinWithAnUnusedNumberKeepsNumberInVersions() throws Exception {
+		Document doc = upload("a.txt");
+		Document vo = new Document();
+		vo.setCustomId("77");
+		vo.setFileName("a.txt");
+		DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream("v2".getBytes(StandardCharsets.UTF_8)),
+				"a.txt", false, vo, fx.documentHistory(admin));
+		awaitAsyncWork();
+		assertEquals("1", customId(doc.getId()));
+		assertVersionsHave(doc, "1");
+	}
+
+	/**
+	 * Characterises a known gap: check-in has no Healdan hook, so a value object
+	 * carrying another document's doc # (SOAP/REST checkin and the GUI can send
+	 * one) is refused by CE's own uniqueness check, not ignored. Nothing changes.
+	 */
+	@Test
+	public void testCheckinWithAnotherDocumentsNumberIsRefusedByCe() throws Exception {
+		Document doc = upload("a.txt");
+		Document other = upload("b.txt");
+		Session session = SessionManager.get().newSession("admin", "admin", (com.logicaldoc.core.security.Client) null);
+		try {
+			SoapDocumentService soap = new ChannelHarness().soapDocuments();
+			soap.checkout(session.getSid(), doc.getId());
+			WSDocument vo = new WSDocument();
+			vo.setCustomId("2");
+			vo.setFolderId(documents.getId());
+			vo.setFileName("a.txt");
+			Exception e = assertThrows(Exception.class, () -> soap.checkin(session.getSid(), doc.getId(), "c",
+					"a.txt", false, vo, new ByteArrayInputStream("v2".getBytes(StandardCharsets.UTF_8))));
+			assertTrue(e.getMessage(), e.getMessage().contains("Duplicated CustomID"));
+			awaitAsyncWork();
+		} finally {
+			SessionManager.get().kill(session.getSid());
+		}
+		assertEquals("1", customId(doc.getId()));
+		assertEquals("2", customId(other.getId()));
+	}
+
+	@Test
+	public void testStoredNullStaysNull() throws Exception {
+		Document doc = upload("a.txt");
+		DocNumberListener listener = new DocNumberListener();
+		jdbc.update("update ld_document set ld_customid = null where ld_id = ?", doc.getId());
+		Document incoming = new Document();
+		incoming.setId(doc.getId());
+		incoming.setCustomId("55");
+		listener.beforeStore(incoming, null, new java.util.HashMap<>());
+		assertNull(incoming.getCustomId());
+		assertEquals(2L, Context.get(DocNumberCounter.class).peekNext());
+	}
+
+	@Test
+	public void testPresetIdWithoutRowTakesANumber() throws Exception {
+		Document incoming = new Document();
+		incoming.setId(987654L);
+		incoming.setCustomId("55");
+		new DocNumberListener().beforeStore(incoming, null, new java.util.HashMap<>());
+		assertEquals("1", incoming.getCustomId());
 	}
 
 	@Test

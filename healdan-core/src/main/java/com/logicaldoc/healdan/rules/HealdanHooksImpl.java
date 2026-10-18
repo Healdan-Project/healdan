@@ -10,6 +10,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
 
@@ -47,6 +48,17 @@ public class HealdanHooksImpl implements HealdanHooks {
 		// Only if nothing else has replaced it since
 		if (HealdanHooks.get() == this)
 			HealdanHooks.register(null);
+	}
+
+	/**
+	 * Not a rule: puts the document's own doc # in the value object, so that the
+	 * update writes no other number into its version and a doc # that belongs to
+	 * another document raises no duplicate error (spec 6.3: a change is ignored).
+	 */
+	@Override
+	public void beforeDocumentUpdate(Document document, Document docVO, DocumentHistory transaction) {
+		if (document != null)
+			DocNumberListener.protect(document.getId(), docVO);
 	}
 
 	@Override
