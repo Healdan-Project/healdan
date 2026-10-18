@@ -1,12 +1,19 @@
 package com.logicaldoc.healdan.profile;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.util.spring.Context;
@@ -23,11 +30,17 @@ public class LocalValueDAO {
 
 	public static final char FOLDER = 'F';
 
+	/** Large id lists are queried in chunks */
+	private static final int CHUNK = 500;
+
 	private final JdbcTemplate jdbc;
+
+	private final NamedParameterJdbcTemplate named;
 
 	@Autowired
 	public LocalValueDAO(DataSource dataSource) {
 		this.jdbc = new JdbcTemplate(dataSource);
+		this.named = new NamedParameterJdbcTemplate(jdbc);
 	}
 
 	public static LocalValueDAO get() {
@@ -43,6 +56,26 @@ public class LocalValueDAO {
 		return new HashSet<>(jdbc.queryForList(
 				"select hd_attribute from hd_local_value where hd_objecttype = ? and hd_objectid = ?", String.class,
 				String.valueOf(type), id));
+	}
+
+	/**
+	 * @param type {@code 'D'} or {@code 'F'}
+	 * @param ids the objects
+	 * @return the names of their local attributes, for each object that has
+	 *         some
+	 */
+	public Map<Long, Set<String>> locals(char type, Collection<Long> ids) {
+		Map<Long, Set<String>> result = new HashMap<>();
+		List<Long> all = new ArrayList<>(ids);
+		for (int i = 0; i < all.size(); i += CHUNK)
+			named.query(
+					"select hd_objectid, hd_attribute from hd_local_value where hd_objecttype = :type and hd_objectid in (:ids)",
+					new MapSqlParameterSource("type", String.valueOf(type)).addValue("ids",
+							all.subList(i, Math.min(all.size(), i + CHUNK))),
+					rs -> {
+						result.computeIfAbsent(rs.getLong(1), id -> new HashSet<>()).add(rs.getString(2));
+					});
+		return result;
 	}
 
 	/**

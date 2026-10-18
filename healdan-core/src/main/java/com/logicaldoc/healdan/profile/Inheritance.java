@@ -158,9 +158,26 @@ public class Inheritance {
 	 */
 	public void applyOnUpdate(ExtensibleObject obj, char type, long id, long parentFolderId)
 			throws PersistenceException {
+		applyOnUpdate(obj, type, id, parentFolderId, false);
+	}
+
+	/**
+	 * As {@link #applyOnUpdate(ExtensibleObject, char, long, long)}, for an
+	 * edit that may be refused before anything is written
+	 *
+	 * @param obj the document or folder
+	 * @param type {@code 'D'} or {@code 'F'}
+	 * @param id its id
+	 * @param parentFolderId the folder above it
+	 * @param refuse true to refuse a Subclass that is supplied or local and
+	 *        doesn't belong to the Class; false to clear it
+	 * @throws PersistenceException the refusal, or an error at data layer
+	 */
+	public void applyOnUpdate(ExtensibleObject obj, char type, long id, long parentFolderId, boolean refuse)
+			throws PersistenceException {
 		Set<String> local = new HashSet<>();
 		Set<String> inheriting = new HashSet<>();
-		apply(obj, parentFolderId, local, inheriting, false);
+		apply(obj, parentFolderId, local, inheriting, refuse);
 		for (String name : local)
 			locals.setLocal(type, id, name, true);
 		for (String name : inheriting)
@@ -190,10 +207,30 @@ public class Inheritance {
 	 */
 	public void restampDocument(Document doc, long folderId, boolean moved, boolean writeMarks)
 			throws PersistenceException {
-		Set<String> local = doc.getId() != 0L ? locals.locals(LocalValueDAO.DOCUMENT, doc.getId()) : Set.of();
+		restamp(doc, LocalValueDAO.DOCUMENT, folderId, moved, writeMarks);
+	}
+
+	/**
+	 * Recalculates every value of a folder that isn't local from the folder
+	 * above, as on a move or any store that isn't an edit, the same way as
+	 * {@link #restampDocument(Document)}. Client and matter are left to the
+	 * caller: a workspace's come from its matter.
+	 *
+	 * @param folder the folder
+	 * @param parentFolderId the folder it is, or is going, in
+	 * @param moved true if the folder changes parent
+	 * @throws PersistenceException error at data layer
+	 */
+	public void restampFolder(Folder folder, long parentFolderId, boolean moved) throws PersistenceException {
+		restamp(folder, LocalValueDAO.FOLDER, parentFolderId, moved, true);
+	}
+
+	private void restamp(ExtensibleObject obj, char type, long folderId, boolean moved, boolean writeMarks)
+			throws PersistenceException {
+		Set<String> local = obj.getId() != 0L ? locals.locals(type, obj.getId()) : Set.of();
 		Map<String, Attribute> inherited = inheritedAttributes(folderId);
 		for (String name : schema.inheritable()) {
-			Attribute own = ensure(doc, name);
+			Attribute own = ensure(obj, name);
 			Attribute from = inherited.get(name);
 			if (schema.fixed().contains(name)) {
 				if (from != null)
@@ -207,31 +244,66 @@ public class Inheritance {
 		}
 
 		// A Subclass that doesn't belong to the Class is cleared, never refused
-		Attribute subclass = doc.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (subclass != null && foreign(doc)) {
+		Attribute subclass = obj.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
+		if (subclass != null && foreign(obj)) {
 			if (moved && local.contains(HealdanConstants.ATTR_DOCSUBCLASS)) {
 				// The move takes the override away: the Subclass is the target's, if it fits
 				local = new HashSet<>(local);
 				local.remove(HealdanConstants.ATTR_DOCSUBCLASS);
-				if (doc.getId() != 0L)
+				if (obj.getId() != 0L)
 					if (writeMarks)
-						locals.setLocal(LocalValueDAO.DOCUMENT, doc.getId(), HealdanConstants.ATTR_DOCSUBCLASS, false);
+						locals.setLocal(type, obj.getId(), HealdanConstants.ATTR_DOCSUBCLASS, false);
 					else
-						EditMarks.dropLocal(doc.getId(), HealdanConstants.ATTR_DOCSUBCLASS);
+						EditMarks.dropLocal(obj.getId(), HealdanConstants.ATTR_DOCSUBCLASS);
 				Attribute from = inherited.get(HealdanConstants.ATTR_DOCSUBCLASS);
 				if (from != null)
 					assign(subclass, from);
 				else
 					clear(subclass);
 			}
-			if (!local.contains(HealdanConstants.ATTR_DOCSUBCLASS) && foreign(doc))
+			if (!local.contains(HealdanConstants.ATTR_DOCSUBCLASS) && foreign(obj))
 				clear(subclass);
 		}
 
-		if (writeMarks && doc.getId() != 0L)
+		if (writeMarks && obj.getId() != 0L)
 			for (String name : local)
-				if (isBlank(doc.getValue(name)))
-					locals.setLocal(LocalValueDAO.DOCUMENT, doc.getId(), name, false);
+				if (isBlank(obj.getValue(name)))
+					locals.setLocal(type, obj.getId(), name, false);
+	}
+
+	/**
+	 * Puts client and matter on an object
+	 *
+	 * @param obj a document or folder
+	 * @param fixed the values by attribute name, blank to clear them; null to
+	 *        leave them as they are
+	 */
+	public void stampFixed(ExtensibleObject obj, Map<String, String> fixed) {
+		if (fixed == null)
+			return;
+		for (Map.Entry<String, String> value : fixed.entrySet()) {
+			Attribute attribute = ensure(obj, value.getKey());
+			clear(attribute);
+			if (!isBlank(value.getValue()))
+				attribute.setStringValue(value.getValue());
+		}
+	}
+
+	/**
+	 * @param matter a matter, possibly null
+	 * @return its client and matter numbers by attribute name; empty if there
+	 *         is no matter
+	 * @throws PersistenceException error at data layer
+	 */
+	public Map<String, String> fixedValues(Matter matter) throws PersistenceException {
+		Map<String, String> values = new LinkedHashMap<>();
+		if (matter == null)
+			return values;
+		Client client = ClientDAO.get().findById(matter.getClientId());
+		if (client != null)
+			values.put(HealdanConstants.ATTR_CLIENT, Long.toString(client.getNumber()));
+		values.put(HealdanConstants.ATTR_MATTER, Long.toString(matter.getNumber()));
+		return values;
 	}
 
 	/**
@@ -299,13 +371,8 @@ public class Inheritance {
 				}
 		}
 
-		Matter matter = position.isInsideMatter() ? position.matter() : null;
-		if (matter != null) {
-			Client client = ClientDAO.get().findById(matter.getClientId());
-			if (client != null)
-				result.put(HealdanConstants.ATTR_CLIENT, text(Long.toString(client.getNumber())));
-			result.put(HealdanConstants.ATTR_MATTER, text(Long.toString(matter.getNumber())));
-		}
+		fixedValues(position.isInsideMatter() ? position.matter() : null)
+				.forEach((name, value) -> result.put(name, text(value)));
 
 		if (!result.containsKey(HealdanConstants.ATTR_DOCCLASS))
 			result.put(HealdanConstants.ATTR_DOCCLASS, text(settings.defaultClass()));

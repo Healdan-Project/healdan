@@ -198,6 +198,22 @@ public class StoredRows implements PreUpdateEventListener {
 	}
 
 	/**
+	 * @param entity a folder or document being stored
+	 * @return true if the current session manages that very object, so that a
+	 *         query may already have flushed its changes and a JDBC read can't
+	 *         tell what it held before; false outside a transaction or for an
+	 *         object the session doesn't hold (CE merges it at the store)
+	 */
+	public boolean inSession(Object entity) {
+		try {
+			return sessionFactory.getCurrentSession().contains(entity);
+		} catch (RuntimeException e) {
+			// Outside a transaction, or not an entity
+			return false;
+		}
+	}
+
+	/**
 	 * Records the folder as stored, once the listeners have let the store
 	 * through
 	 *

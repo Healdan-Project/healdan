@@ -15,6 +15,8 @@ import org.junit.Test;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderEvent;
+import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.AttributeOption;
 import com.logicaldoc.core.metadata.AttributeOptionDAO;
@@ -33,7 +35,8 @@ import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
 /**
  * Spec §6.6 and §6.7: every document in a matter carries the Healdan profile,
  * inherited from its folder unless a value was set on the document itself.
- * The folder values here are set directly; Task 12 stamps folders.
+ * The folder values are set with folder edits, which pass them down
+ * ({@link PropagationTest}).
  */
 public class DocumentProfileTest extends AbstractRulesTestCase {
 
@@ -474,11 +477,13 @@ public class DocumentProfileTest extends AbstractRulesTestCase {
 		}
 	}
 
+	/** Edits the folder's value as CE's folder save does, which passes it down */
 	private void setFolderValue(Folder folder, String name, String value) throws Exception {
 		Folder current = reload(folder);
-		current.setTemplate(ProfileSchema.get().template());
 		current.setValue(name, value);
-		folderDao.store(current);
+		FolderHistory transaction = folderHistory(admin);
+		transaction.setEvent(FolderEvent.CHANGED);
+		folderDao.store(current, transaction);
 	}
 
 	private String text(Document document, String name) throws Exception {

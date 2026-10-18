@@ -18,6 +18,7 @@ import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.EditMarks;
 import com.logicaldoc.healdan.profile.Inheritance;
+import com.logicaldoc.healdan.profile.Propagation;
 import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
@@ -165,7 +166,8 @@ public class HealdanHooksImpl implements HealdanHooks {
 	 * CE restores the folder, its subtree and their documents with JDBC, so
 	 * what the second-level cache holds of them (deleted, or under the old
 	 * parent) is evicted now and again when the transaction ends (carry-forward:
-	 * an after-restore rule evicts the whole restored tree).
+	 * an after-restore rule evicts the whole restored tree). Then the restored
+	 * tree is re-stamped from its new place, documents included (spec 7.2).
 	 */
 	@Override
 	public void afterFolderRestore(long folderId, long parentId, FolderHistory transaction)
@@ -177,6 +179,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 		evictor.evictDocuments(documentIds);
 		evictor.evictFoldersAfterCompletion(folderIds);
 		evictor.evictDocumentsAfterCompletion(documentIds);
+		Propagation.get().restampSubtree(folderId);
 	}
 
 	@Override

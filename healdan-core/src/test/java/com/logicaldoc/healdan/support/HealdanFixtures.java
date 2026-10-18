@@ -30,6 +30,7 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.profile.ProfileSchema;
+import com.logicaldoc.healdan.profile.Propagation;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -140,6 +141,8 @@ public class HealdanFixtures {
 			workspace.setValue(HealdanConstants.ATTR_CLIENT, Long.toString(client.getNumber()));
 			workspace.setValue(HealdanConstants.ATTR_MATTER, Long.toString(number));
 			FolderDAO.get().store(workspace, folderHistory());
+			// As MatterService will: the folders made before the row get client and matter
+			Propagation.get().restampSubtree(workspace.getId());
 			return matter;
 		});
 	}
@@ -164,7 +167,9 @@ public class HealdanFixtures {
 	public Folder folder(Folder parent, String name, User as) throws Exception {
 		Folder vo = new Folder(name);
 		vo.setTenantId(Tenant.DEFAULT_ID);
-		return FolderDAO.get().create(parent, vo, true, folderHistory(as));
+		// CE copies the parent's values from the object it is given, so give it the parent as stored
+		Folder current = FolderDAO.get().findById(parent.getId());
+		return FolderDAO.get().create(current != null ? current : parent, vo, true, folderHistory(as));
 	}
 
 	/**
