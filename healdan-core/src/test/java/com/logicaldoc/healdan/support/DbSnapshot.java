@@ -68,12 +68,25 @@ public final class DbSnapshot {
 	 * matches this snapshot
 	 */
 	public void assertUnchanged() {
+		assertUnchangedExcept();
+	}
+
+	/**
+	 * As {@link #assertUnchanged()}, but leaves out some tables. For the rare
+	 * change that a rollback can't take back, such as the doc # counter, which
+	 * commits in its own transaction (numbers are never reused).
+	 *
+	 * @param ignored the lower-case names of the tables to leave out
+	 */
+	public void assertUnchangedExcept(String... ignored) {
+		Set<String> skip = Set.of(ignored);
 		DbSnapshot now = take(jdbc);
 		StringBuilder diff = new StringBuilder();
 		for (String table : tables.keySet())
-			appendDiff(diff, table, tables.get(table), now.tables.getOrDefault(table, List.of()));
+			if (!skip.contains(table))
+				appendDiff(diff, table, tables.get(table), now.tables.getOrDefault(table, List.of()));
 		for (String table : now.tables.keySet())
-			if (!tables.containsKey(table))
+			if (!tables.containsKey(table) && !skip.contains(table))
 				appendDiff(diff, table, List.of(), now.tables.get(table));
 		if (!diff.isEmpty())
 			fail("The database changed:\n" + diff);

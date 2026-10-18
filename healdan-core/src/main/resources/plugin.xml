@@ -111,4 +111,10 @@
 		<parameter id="position" value="100" />
 		<parameter id="class" value="com.logicaldoc.healdan.rules.RulesFolderListener" />
 	</extension>
+
+	<!-- After the rules (100) and the later profile (120) and email (130) listeners, so that a veto never burns a number -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanDocNumber">
+		<parameter id="position" value="140" />
+		<parameter id="class" value="com.logicaldoc.healdan.docnumber.DocNumberListener" />
+	</extension>
 </plugin>

@@ -463,8 +463,14 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 				.toArray());
 		DaoSnapshot dao = DaoSnapshot.take(jdbc);
 		long storeSize = Store.get().getTotalSize();
+		long nextDocNumber = jdbc.queryForObject("select next_value from hd_counter where name = 'docnumber'",
+				Long.class);
 
 		runVetoed(route, 1, false, this::copyMergeSource);
+
+		// The doc #s the copied documents took stay taken: the counter commits on its own
+		assertEquals(nextDocNumber + copiedDocuments,
+				(long) jdbc.queryForObject("select next_value from hd_counter where name = 'docnumber'", Long.class));
 
 		// Give a real version save time to finish: these never will
 		Thread.sleep(3000L);
@@ -473,7 +479,7 @@ public class VetoAtomicityTest extends AbstractHealdanTestCase {
 				pool.getActiveCount() + pool.getQueue().size());
 		assertEquals("files left in the Store", copiedDocuments * (long) CONTENT.length(),
 				Store.get().getTotalSize() - storeSize);
-		db.assertUnchanged();
+		db.assertUnchangedExcept("hd_counter");
 		index.assertUnchanged();
 		dao.assertUnchanged();
 	}
