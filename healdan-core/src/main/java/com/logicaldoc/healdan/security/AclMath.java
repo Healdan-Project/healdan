@@ -23,10 +23,13 @@ import com.logicaldoc.util.spring.Context;
 /**
  * Arithmetic on folder ACLs. An ACL here is the permissions each group is
  * granted, by group id; a group granted nothing is left out, since it grants
- * nothing. So is a deleted group: CE keeps its rows when it deletes a group
- * (or a user, with the user's own group), but it has no members and grants
- * nobody anything (plan, R30), so the permission rules and narrowing neither
- * count nor touch its rows. The ACLs are read from {@code ld_folder_acl} with
+ * nothing. So is a dead group: one deleted that has no members left. CE keeps
+ * its rows when it deletes a group (or a user, with the user's own group), but
+ * then it grants nobody anything (plan, R30), so the permission rules and
+ * narrowing neither count nor touch its rows. A deleted group that still has
+ * members, as {@code GroupDAO.delete} leaves one (SOAP's {@code deleteGroup}
+ * calls it), still lets them in, so it counts as live (R31). The ACLs are read
+ * from {@code ld_folder_acl} with
  * JDBC on CE's data source, so the reads join the caller's transaction and see
  * what it has flushed.
  */
@@ -38,8 +41,9 @@ public final class AclMath {
 	/** A chain of security references longer than this is a cycle */
 	private static final int MAX_CHAIN = 50;
 
-	/** Keeps the {@code ld_folder_acl} rows of live groups only */
-	static final String LIVE_GROUPS = "ld_groupid not in (select ld_id from ld_group where not ld_deleted = 0)";
+	/** Keeps the {@code ld_folder_acl} rows of live groups only: not deleted, or deleted with members (R31) */
+	static final String LIVE_GROUPS = "ld_groupid not in (select G.ld_id from ld_group G where not G.ld_deleted = 0 "
+			+ "and not exists (select 1 from ld_usergroup UG where UG.ld_groupid = G.ld_id))";
 
 	private AclMath() {
 	}
@@ -78,7 +82,7 @@ public final class AclMath {
 	/**
 	 * @param folderId a folder
 	 * @return the folder's own rows, by group, each with the permissions it
-	 *         grants, groups granted nothing included, deleted groups left out
+	 *         grants, groups granted nothing included, dead groups left out
 	 */
 	public static Map<Long, Set<Permission>> rows(long folderId) {
 		Map<Long, Set<Permission>> rows = new TreeMap<>();
@@ -102,7 +106,7 @@ public final class AclMath {
 
 	/**
 	 * @param entries a folder's entries, as the folder object holds them
-	 * @return their rows, groups granted nothing included, deleted groups left
+	 * @return their rows, groups granted nothing included, dead groups left
 	 *         out
 	 */
 	static Map<Long, Set<Permission>> entriesWithEmpty(Collection<FolderAccessControlEntry> entries) {
@@ -116,19 +120,21 @@ public final class AclMath {
 					return a;
 				});
 			}
-		rows.keySet().removeAll(deletedGroups(rows.keySet()));
+		rows.keySet().removeAll(deadGroups(rows.keySet()));
 		return rows;
 	}
 
 	/**
 	 * @param groupIds some groups
-	 * @return those of them that are deleted
+	 * @return those of them that are dead: deleted, with no members left
+	 *         (R31)
 	 */
-	static Set<Long> deletedGroups(Collection<Long> groupIds) {
+	static Set<Long> deadGroups(Collection<Long> groupIds) {
 		if (groupIds.isEmpty())
 			return Set.of();
 		return new HashSet<>(new NamedParameterJdbcTemplate(jdbc()).queryForList(
-				"select ld_id from ld_group where not ld_deleted = 0 and ld_id in (:ids)",
+				"select G.ld_id from ld_group G where not G.ld_deleted = 0 and G.ld_id in (:ids) "
+						+ "and not exists (select 1 from ld_usergroup UG where UG.ld_groupid = G.ld_id)",
 				new MapSqlParameterSource("ids", groupIds), Long.class));
 	}
 

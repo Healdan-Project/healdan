@@ -504,11 +504,11 @@ public class PermissionRules {
 	}
 
 	private static void apply(Folder folder, Outcome outcome) {
-		// An ACL of its own keeps the deleted groups' entries, which grant nothing (R30)
-		Set<Long> deleted = outcome.securityRef() == null ? AclMath.deletedGroups(folder.getAccessControlList()
+		// An ACL of its own keeps the dead groups' entries, which grant nothing (R30, R31)
+		Set<Long> dead = outcome.securityRef() == null ? AclMath.deadGroups(folder.getAccessControlList()
 				.stream().map(FolderAccessControlEntry::getGroupId).toList()) : Set.of();
 		folder.setSecurityRef(outcome.securityRef());
-		folder.getAccessControlList().removeIf(entry -> !deleted.contains(entry.getGroupId()));
+		folder.getAccessControlList().removeIf(entry -> !dead.contains(entry.getGroupId()));
 		outcome.rows().forEach((group, flags) -> {
 			FolderAccessControlEntry entry = new FolderAccessControlEntry(group);
 			entry.grantPermissions(flags);
@@ -690,7 +690,7 @@ public class PermissionRules {
 			level = next;
 		}
 
-		// A deleted group's rows grant nothing, and narrowing leaves them as they are (R30)
+		// A dead group's rows grant nothing, and narrowing leaves them as they are (R30, R31)
 		for (List<Long> chunk : chunks(tree.keySet()))
 			named.query("select * from ld_folder_acl where ld_folderid in (:ids) and " + AclMath.LIVE_GROUPS,
 					new MapSqlParameterSource("ids", chunk), rs -> {

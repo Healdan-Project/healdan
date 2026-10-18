@@ -143,6 +143,16 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testDeletedGroupWithMembersStillGrants() throws Exception {
+		// CE's GroupDAO.delete, which SOAP's deleteGroup calls, keeps the members, and CE still lets them in (R31)
+		Group former = fx.group("Former");
+		fx.user("frank", former.getName());
+		GroupDAO.get().delete(former.getId());
+		assertRefused(P1.formatted("a deleted group: READ"),
+				() -> setAcl(secured, admin, ace(it, MODIFY), ace(former, Permission.READ)));
+	}
+
+	@Test
 	public void testDescribeADeletedUsersGroup() throws Exception {
 		User erin = fx.user("erin");
 		long erinsGroup = GroupDAO.get().findByName(erin.getUserGroupName(), Tenant.DEFAULT_ID).getId();
