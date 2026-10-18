@@ -24,6 +24,7 @@ import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.profile.SubclassRule.Outcome;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.util.spring.Context;
 
@@ -243,11 +244,13 @@ public class Inheritance {
 			}
 		}
 
-		// A Subclass that doesn't belong to the Class is cleared, never refused
+		// A Subclass that doesn't belong to the Class is cleared, never refused; a move takes a local one away
 		Attribute subclass = obj.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
-		if (subclass != null && foreign(obj)) {
-			if (moved && local.contains(HealdanConstants.ATTR_DOCSUBCLASS)) {
-				// The move takes the override away: the Subclass is the target's, if it fits
+		if (subclass != null) {
+			boolean localSubclass = local.contains(HealdanConstants.ATTR_DOCSUBCLASS);
+			Attribute from = inherited.get(HealdanConstants.ATTR_DOCSUBCLASS);
+			Outcome outcome = settleSubclass(obj, localSubclass, from, moved);
+			if (outcome != Outcome.KEEP && localSubclass) {
 				local = new HashSet<>(local);
 				local.remove(HealdanConstants.ATTR_DOCSUBCLASS);
 				if (obj.getId() != 0L)
@@ -255,13 +258,10 @@ public class Inheritance {
 						locals.setLocal(type, obj.getId(), HealdanConstants.ATTR_DOCSUBCLASS, false);
 					else
 						EditMarks.dropLocal(obj.getId(), HealdanConstants.ATTR_DOCSUBCLASS);
-				Attribute from = inherited.get(HealdanConstants.ATTR_DOCSUBCLASS);
-				if (from != null)
-					assign(subclass, from);
-				else
-					clear(subclass);
 			}
-			if (!local.contains(HealdanConstants.ATTR_DOCSUBCLASS) && foreign(obj))
+			if (outcome == Outcome.INHERIT)
+				assign(subclass, from);
+			else if (outcome == Outcome.CLEAR)
 				clear(subclass);
 		}
 
@@ -306,15 +306,6 @@ public class Inheritance {
 		return values;
 	}
 
-	/**
-	 * @return true if the object has a Subclass that doesn't belong to its Class
-	 */
-	private boolean foreign(ExtensibleObject obj) {
-		Object subclass = obj.getValue(HealdanConstants.ATTR_DOCSUBCLASS);
-		return !isBlank(subclass) && !schema.subclassBelongs(subclass.toString(),
-				String.valueOf(obj.getValue(HealdanConstants.ATTR_DOCCLASS)));
-	}
-
 	private void apply(ExtensibleObject obj, long parentFolderId, Set<String> local, Set<String> inheriting,
 			boolean refuse) throws PersistenceException {
 		Map<String, Attribute> inherited = inheritedAttributes(parentFolderId);
@@ -339,19 +330,32 @@ public class Inheritance {
 		}
 
 		/*
-		 * One rule for create, update, check-in and re-stamp: a Subclass that is
-		 * supplied or local and doesn't belong to the Class is refused, and an
-		 * inherited one is cleared (spec 6.6, 6.7)
+		 * A Subclass that is supplied (local) and doesn't belong to the Class is
+		 * refused; otherwise SubclassRule: an inherited one is cleared, and a
+		 * local one an edit leaves as it was goes with its mark (spec 6.6, 6.7)
 		 */
-		if (foreign(obj)) {
-			String subclass = obj.getValue(HealdanConstants.ATTR_DOCSUBCLASS).toString();
-			if (refuse && local.contains(HealdanConstants.ATTR_DOCSUBCLASS))
-				throw new HealdanRuleException("Subclass %s doesn't belong to Class %s."
-						.formatted(subclass, obj.getValue(HealdanConstants.ATTR_DOCCLASS)));
-			clear(obj.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS));
+		Attribute subclass = obj.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
+		boolean localSubclass = local.contains(HealdanConstants.ATTR_DOCSUBCLASS);
+		Attribute from = inherited.get(HealdanConstants.ATTR_DOCSUBCLASS);
+		Outcome outcome = settleSubclass(obj, localSubclass, from, true);
+		if (outcome != Outcome.KEEP) {
+			if (refuse && localSubclass)
+				throw new HealdanRuleException("Subclass %s doesn't belong to Class %s.".formatted(
+						subclass.getValue(), obj.getValue(HealdanConstants.ATTR_DOCCLASS)));
+			if (outcome == Outcome.INHERIT)
+				assign(subclass, from);
+			else
+				clear(subclass);
 			local.remove(HealdanConstants.ATTR_DOCSUBCLASS);
 			inheriting.add(HealdanConstants.ATTR_DOCSUBCLASS);
 		}
+	}
+
+	private Outcome settleSubclass(ExtensibleObject obj, boolean local, Attribute inherited, boolean dropLocal) {
+		return SubclassRule.settle(SubclassRule.text(obj.getValue(HealdanConstants.ATTR_DOCSUBCLASS)), local,
+				SubclassRule.text(obj.getValue(HealdanConstants.ATTR_DOCCLASS)),
+				inherited != null ? SubclassRule.text(inherited.getValue()) : null, dropLocal,
+				schema::subclassBelongs);
 	}
 
 	/**

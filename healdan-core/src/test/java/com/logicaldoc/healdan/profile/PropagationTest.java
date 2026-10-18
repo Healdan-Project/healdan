@@ -2,14 +2,20 @@ package com.logicaldoc.healdan.profile;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentManager;
@@ -33,6 +39,8 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
+import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Spec §6.7: folders carry the Healdan profile too, a folder's local value
@@ -363,9 +371,23 @@ public class PropagationTest extends AbstractRulesTestCase {
 		// A document's own Class and Subclass stay
 		assertEquals("Letters", text(override, CLASS));
 		assertEquals("Sub1", text(override, SUBCLASS));
-		// Documents' own Subclass is its own: only a value that isn't local is cleared (plan, R20)
+		assertEquals(Set.of(CLASS, SUBCLASS), locals(override));
+		// Documents' own Subclass, made foreign from above, goes with its mark (plan, R21)
 		assertEquals("Docs", text(documents, CLASS));
+		assertBlank(text(documents, SUBCLASS));
+		assertEquals(Set.of(), locals(documents));
+
+		// ...and the Subclass from above takes its place, as an inherited value, when it fits
+		edit(workspace, admin, CLASS, "Letters");
+		edit(documents, alice, SUBCLASS, "Sub1");
 		assertEquals(Set.of(SUBCLASS), locals(documents));
+		edit(workspace, admin, Map.of(CLASS, "Docs", SUBCLASS, "Sub2"));
+		assertEquals("Sub2", text(documents, SUBCLASS));
+		assertEquals(Set.of(), locals(documents));
+		assertEquals("Sub2", text(sub, SUBCLASS));
+		assertEquals("Docs", text(inSub, CLASS));
+		assertEquals("Sub2", text(inSub, SUBCLASS));
+		assertEquals("Sub1", text(override, SUBCLASS));
 	}
 
 	@Test
@@ -465,6 +487,120 @@ public class PropagationTest extends AbstractRulesTestCase {
 		assertEquals("998", text(inside[0], CLIENT));
 		assertEquals("2", text(inside[0], MATTER));
 		assertFalse(locals(inside[0]).contains(CLIENT));
+	}
+
+	@Test
+	public void testTreeMovedInFromOutsideTakesTheProfile() throws Exception {
+		Template contract = otherTemplate();
+		Folder tree = fx.folder(loose, "Tree");
+		Folder inner = fx.folder(tree, "Inner");
+		Document withOther = legacyDocument(inner, "contract.txt", contract);
+		Document withNone = legacyDocument(inner, "plain.txt", null);
+		assertFalse(reload(inner).isTemplateLocked());
+
+		folderDao.move(reload(tree), documents, folderHistory(admin));
+		awaitAsyncWork();
+
+		assertTakesTheProfile(List.of(tree, inner), List.of(withOther, withNone));
+		// Another template's values stay: they are the user's
+		assertEquals(Integer.valueOf(1), jdbc.queryForObject(
+				"select count(*) from ld_document_ext where ld_docid = ? and ld_name = 'contract'", Integer.class,
+				withOther.getId()));
+	}
+
+	@Test
+	public void testTreeRestoredIntoAMatterTakesTheProfile() throws Exception {
+		Folder tree = fx.folder(loose, "Tree");
+		Folder inner = fx.folder(tree, "Inner");
+		Document withOther = legacyDocument(inner, "contract.txt", otherTemplate());
+		Document withNone = legacyDocument(tree, "plain.txt", null);
+		allowed(() -> folderDao.deleteTree(tree.getId(), folderHistory(admin)));
+
+		allowed(() -> folderDao.restore(tree.getId(), documents.getId(), folderHistory(admin)));
+
+		assertTakesTheProfile(List.of(tree, inner), List.of(withOther, withNone));
+	}
+
+	private void assertTakesTheProfile(List<Folder> folders, List<Document> documents) throws Exception {
+		long profile = ProfileSchema.get().template().getId();
+		for (Folder folder : folders) {
+			Folder stored = reload(folder);
+			assertEquals(folder.getName(), profile, stored.getTemplate().getId());
+			assertTrue(folder.getName(), stored.isTemplateLocked());
+			assertEquals(folder.getName(), "998", text(folder, CLIENT));
+			assertEquals(folder.getName(), "1", text(folder, MATTER));
+			assertEquals(folder.getName(), "Docs", text(folder, CLASS));
+		}
+		for (Document document : documents) {
+			assertEquals(document.getFileName(), profile, reload(document).getTemplate().getId());
+			assertEquals(document.getFileName(), "998", text(document, CLIENT));
+			assertEquals(document.getFileName(), "1", text(document, MATTER));
+			assertEquals(document.getFileName(), "Docs", text(document, CLASS));
+		}
+	}
+
+	/**
+	 * @return a CE template of another kind, with one attribute
+	 */
+	private Template otherTemplate() throws Exception {
+		Template contract = new Template();
+		contract.setName("Contract");
+		contract.setLabel("Contract");
+		contract.setTenantId(Tenant.DEFAULT_ID);
+		Attribute attribute = new Attribute();
+		attribute.setLabel("Contract");
+		attribute.setType(Attribute.TYPE_STRING);
+		contract.getTemplateAttributes().put("contract", attribute);
+		TemplateDAO.get().store(contract);
+		return contract;
+	}
+
+	/**
+	 * Puts a document from before Healdan in a folder outside the matters, with
+	 * JDBC: Healdan files documents only inside matters. It has the given
+	 * template, or none, and none of the profile's rows.
+	 */
+	private Document legacyDocument(Folder folder, String fileName, Template template) throws Exception {
+		Document document = upload(correspondence, fileName, admin);
+		awaitAsyncWork();
+		jdbc.update("update ld_document set ld_folderid = ?, ld_templateid = ? where ld_id = ?", folder.getId(),
+				template != null ? template.getId() : null, document.getId());
+		jdbc.update("delete from ld_document_ext where ld_docid = ?", document.getId());
+		jdbc.update("delete from hd_local_value where hd_objecttype = 'D' and hd_objectid = ?", document.getId());
+		if (template != null)
+			jdbc.update(
+					"insert into ld_document_ext (ld_docid, ld_mandatory, ld_type, ld_editor, ld_position, ld_stringvalue, ld_name, ld_hidden, ld_readonly, ld_multiple) values (?, 0, 0, 0, 0, 'C-1', 'contract', 0, 0, 0)",
+					document.getId());
+		CacheEvictor.get().evictDocuments(List.of(document.getId()));
+		return documentDao.findById(document.getId(), true);
+	}
+
+	@Test
+	public void testRestampIsEvictedAfterTheCommit() throws Exception {
+		Folder tree = fx.folder(loose, "Tree");
+		Folder inner = fx.folder(tree, "Inner");
+		assertNull(reload(inner).getTemplate());
+		// Readers see what is committed while the move's transaction is open, as on MariaDB
+		jdbc.execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ExecutorService other = Executors.newSingleThreadExecutor();
+		try {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				try {
+					folderDao.move(reload(tree), documents, folderHistory(admin));
+					// Someone else reads Inner before the commit, and the second-level cache keeps that
+					assertNull(other.submit(() -> reload(inner).getTemplate()).get(30, TimeUnit.SECONDS));
+				} catch (Exception e) {
+					throw new IllegalStateException(e);
+				}
+			});
+		} finally {
+			other.shutdownNow();
+		}
+
+		Folder stored = reload(inner);
+		assertEquals(ProfileSchema.get().template().getId(), stored.getTemplate().getId());
+		assertTrue(stored.isTemplateLocked());
+		assertEquals("998", text(inner, CLIENT));
 	}
 
 	private long count(String table) {

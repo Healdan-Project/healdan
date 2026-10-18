@@ -31,6 +31,7 @@ import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.profile.SubclassRule.Outcome;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
@@ -159,8 +160,9 @@ public class Propagation {
 	 * Stamps the folder's effective values of the given attributes on every
 	 * folder and document below it that has no local value for them. A folder
 	 * with a local value stops that attribute's branch. Where the Class passes
-	 * down, a Subclass that isn't local and no longer belongs to it is
-	 * cleared. Client and matter never pass down this way.
+	 * down, a Subclass that no longer belongs to it goes, a local one with its
+	 * mark, and the parent's is taken if it fits ({@link SubclassRule}). Client
+	 * and matter never pass down this way.
 	 *
 	 * @param folderId the folder whose values changed, as stored
 	 * @param attributes the attributes whose effective value changed
@@ -182,16 +184,19 @@ public class Propagation {
 	/**
 	 * Re-stamps a folder and everything below it from where it is now, as
 	 * after a move or a restore: every value that isn't local, and client and
-	 * matter from the matter's row (left alone while it doesn't exist). A local
-	 * Subclass that no longer belongs to the Class goes, with its mark. A Store,
-	 * the Templates Store or the root re-stamps each folder in it.
+	 * matter from the matter's row (left alone while it doesn't exist), and the
+	 * profile template on every folder (locked) and document that hasn't got
+	 * it, as a tree moved in from outside a matter. A local Subclass that no
+	 * longer belongs to the Class goes, with its mark. A Store, the Templates
+	 * Store or the root re-stamps each folder in it.
 	 *
 	 * @param folderId the folder
 	 * @throws PersistenceException error at data layer
 	 */
 	public void restampSubtree(long folderId) throws PersistenceException {
 		List<Map<String, Object>> rows = jdbc.queryForList(
-				"select ld_parentid, ld_type, ld_foldref, ld_deleted from ld_folder where ld_id = ?", folderId);
+				"select ld_parentid, ld_type, ld_foldref, ld_deleted, ld_templateid, ld_templocked from ld_folder where ld_id = ?",
+				folderId);
 		if (rows.isEmpty())
 			return;
 		Map<String, Object> row = rows.get(0);
@@ -217,6 +222,9 @@ public class Propagation {
 		Map<String, Value> effective = run.stamp(LocalValueDAO.FOLDER, folderId, inherited(parentId), names,
 				locals.locals(LocalValueDAO.FOLDER, List.of(folderId)),
 				stamped(LocalValueDAO.FOLDER, List.of(folderId)));
+		Number template = (Number) row.get("LD_TEMPLATEID");
+		run.adoptTemplate(LocalValueDAO.FOLDER, folderId, template != null ? template.longValue() : null,
+				((Number) row.get("LD_TEMPLOCKED")).intValue() != 0);
 		run.walk(List.of(new Node(folderId, effective, names)));
 		run.finish();
 	}
@@ -321,9 +329,25 @@ public class Propagation {
 	 *
 	 * @param id the folder
 	 * @param values its effective values
-	 * @param names the attributes passing into its contents
+	 * @param names the attributes in play on it, whose value may have changed
 	 */
 	private record Node(long id, Map<String, Value> values, Set<String> names) {
+	}
+
+	/**
+	 * A folder or document found by the walk
+	 *
+	 * @param id the object
+	 * @param folderId its folder or parent
+	 * @param templateId its template, null if none
+	 * @param locked true if it is a folder with its template locked
+	 */
+	private record Row(long id, long folderId, Long templateId, boolean locked) {
+	}
+
+	private static Long templateId(ResultSet rs, int column) throws SQLException {
+		long id = rs.getLong(column);
+		return rs.wasNull() ? null : id;
 	}
 
 	/**
@@ -331,7 +355,10 @@ public class Propagation {
 	 */
 	private final class Run {
 
-		/** True for a move or restore, false for a folder value passing down */
+		/**
+		 * True for a move or restore (every value, and the profile template),
+		 * false for a folder value passing down
+		 */
 		private final boolean restamp;
 
 		/** Client and matter for everything walked; null to leave them alone */
@@ -365,50 +392,81 @@ public class Propagation {
 		}
 
 		private void stampDocuments(Map<Long, Node> nodes) {
-			Map<Long, Long> folderOf = new HashMap<>();
+			List<Row> documentRows = new ArrayList<>();
 			for (List<Long> chunk : chunks(nodes.keySet()))
 				named.query(
-						"select ld_id, ld_folderid from ld_document where ld_deleted = 0 and ld_docref is null and ld_folderid in (:ids)",
+						"select ld_id, ld_folderid, ld_templateid from ld_document where ld_deleted = 0 and ld_docref is null and ld_folderid in (:ids)",
 						new MapSqlParameterSource("ids", chunk), rs -> {
-							folderOf.put(rs.getLong(1), rs.getLong(2));
+							documentRows.add(new Row(rs.getLong(1), rs.getLong(2), templateId(rs, 3), false));
 						});
-			if (folderOf.isEmpty())
+			if (documentRows.isEmpty())
 				return;
 
-			Map<Long, Set<String>> local = locals.locals(LocalValueDAO.DOCUMENT, folderOf.keySet());
-			Map<Long, Map<String, Value>> values = stamped(LocalValueDAO.DOCUMENT, folderOf.keySet());
-			folderOf.forEach((documentId, folderId) -> {
-				Node folder = nodes.get(folderId);
-				stamp(LocalValueDAO.DOCUMENT, documentId, folder.values(), folder.names(), local, values);
-			});
+			List<Long> ids = documentRows.stream().map(Row::id).toList();
+			Map<Long, Set<String>> local = locals.locals(LocalValueDAO.DOCUMENT, ids);
+			Map<Long, Map<String, Value>> values = stamped(LocalValueDAO.DOCUMENT, ids);
+			for (Row document : documentRows) {
+				Node folder = nodes.get(document.folderId());
+				Set<String> names = restamp ? folder.names() : passing(folder.names(), Set.of());
+				stamp(LocalValueDAO.DOCUMENT, document.id(), folder.values(), names, local, values);
+				adoptTemplate(LocalValueDAO.DOCUMENT, document.id(), document.templateId(), false);
+			}
 		}
 
 		private List<Node> stampChildren(Map<Long, Node> nodes) {
-			List<long[]> children = new ArrayList<>();
+			List<Row> children = new ArrayList<>();
 			for (List<Long> chunk : chunks(nodes.keySet()))
 				named.query(
-						"select ld_id, ld_parentid from ld_folder where ld_deleted = 0 and ld_parentid in (:ids) and not ld_id = ld_parentid and not ld_type = %d and ld_foldref is null"
+						"select ld_id, ld_parentid, ld_templateid, ld_templocked from ld_folder where ld_deleted = 0 and ld_parentid in (:ids) and not ld_id = ld_parentid and not ld_type = %d and ld_foldref is null"
 								.formatted(Folder.TYPE_ALIAS),
 						new MapSqlParameterSource("ids", chunk), rs -> {
-							children.add(new long[] { rs.getLong(1), rs.getLong(2) });
+							children.add(new Row(rs.getLong(1), rs.getLong(2), templateId(rs, 3), rs.getInt(4) != 0));
 						});
 			if (children.isEmpty())
 				return List.of();
 
-			List<Long> ids = children.stream().map(child -> child[0]).toList();
+			List<Long> ids = children.stream().map(Row::id).toList();
 			Map<Long, Set<String>> local = locals.locals(LocalValueDAO.FOLDER, ids);
 			Map<Long, Map<String, Value>> values = stamped(LocalValueDAO.FOLDER, ids);
 			List<Node> next = new ArrayList<>();
-			for (long[] child : children) {
-				Node parent = nodes.get(child[1]);
+			for (Row child : children) {
+				Node parent = nodes.get(child.folderId());
 				Set<String> names = restamp ? parent.names()
-						: passing(parent.names(), ownLocals(local.get(child[0]), values.get(child[0])));
+						: passing(parent.names(), ownLocals(local.get(child.id()), values.get(child.id())));
 				if (names.isEmpty())
 					continue;
-				next.add(new Node(child[0], stamp(LocalValueDAO.FOLDER, child[0], parent.values(), names, local, values),
+				next.add(new Node(child.id(), stamp(LocalValueDAO.FOLDER, child.id(), parent.values(), names, local, values),
 						names));
+				adoptTemplate(LocalValueDAO.FOLDER, child.id(), child.templateId(), child.locked());
 			}
 			return next;
+		}
+
+		/**
+		 * On a move or restore, gives an object the profile template (locked, on
+		 * a folder) if it hasn't got it: a tree brought into a matter from
+		 * outside passes the listeners only at its root. The rows of another
+		 * template's attributes stay; they are the user's data.
+		 *
+		 * @param type {@code 'D'} or {@code 'F'}
+		 * @param id the object
+		 * @param current its template, null if none
+		 * @param locked true if it is a folder with its template locked
+		 */
+		private void adoptTemplate(char type, long id, Long current, boolean locked) {
+			if (!restamp || templateId == 0L)
+				return;
+			boolean other = current == null || current.longValue() != templateId;
+			if (type == LocalValueDAO.FOLDER) {
+				if (other || !locked) {
+					jdbc.update("update ld_folder set ld_templateid = ?, ld_templocked = 1 where ld_id = ?", templateId,
+							id);
+					folders.add(id);
+				}
+			} else if (other) {
+				jdbc.update("update ld_document set ld_templateid = ? where ld_id = ?", templateId, id);
+				documents.add(id);
+			}
 		}
 
 		/**
@@ -452,21 +510,23 @@ public class Propagation {
 				effective.put(name, inherited.getOrDefault(name, Value.BLANK));
 			}
 
+			/*
+			 * SubclassRule: a Subclass the Class no longer takes goes, a local one
+			 * with its mark, whether a move or a Class passed down made it foreign
+			 * (plan, R16a, R21)
+			 */
 			if (names.contains(HealdanConstants.ATTR_DOCCLASS) || names.contains(HealdanConstants.ATTR_DOCSUBCLASS)) {
 				written.add(HealdanConstants.ATTR_DOCSUBCLASS);
-				Value docClass = effective.getOrDefault(HealdanConstants.ATTR_DOCCLASS, Value.BLANK);
-				Value subclass = effective.getOrDefault(HealdanConstants.ATTR_DOCSUBCLASS, Value.BLANK);
-				if (!subclass.blank() && !belongs(subclass, docClass)) {
-					boolean localSubclass = local.contains(HealdanConstants.ATTR_DOCSUBCLASS);
-					if (localSubclass && restamp) {
-						// The move takes the override away: the Subclass is the new parent's, if it fits
+				boolean localSubclass = local.contains(HealdanConstants.ATTR_DOCSUBCLASS);
+				Value from = inherited.getOrDefault(HealdanConstants.ATTR_DOCSUBCLASS, Value.BLANK);
+				Outcome outcome = SubclassRule.settle(
+						effective.getOrDefault(HealdanConstants.ATTR_DOCSUBCLASS, Value.BLANK).string(), localSubclass,
+						effective.getOrDefault(HealdanConstants.ATTR_DOCCLASS, Value.BLANK).string(), from.string(), true,
+						this::belongs);
+				if (outcome != Outcome.KEEP) {
+					if (localSubclass)
 						locals.setLocal(type, id, HealdanConstants.ATTR_DOCSUBCLASS, false);
-						Value from = inherited.getOrDefault(HealdanConstants.ATTR_DOCSUBCLASS, Value.BLANK);
-						effective.put(HealdanConstants.ATTR_DOCSUBCLASS,
-								!from.blank() && belongs(from, docClass) ? from : Value.BLANK);
-					} else if (!localSubclass) {
-						effective.put(HealdanConstants.ATTR_DOCSUBCLASS, Value.BLANK);
-					}
+					effective.put(HealdanConstants.ATTR_DOCSUBCLASS, outcome == Outcome.INHERIT ? from : Value.BLANK);
 				}
 			}
 
@@ -483,9 +543,8 @@ public class Propagation {
 			return effective;
 		}
 
-		private boolean belongs(Value subclass, Value docClass) {
-			String key = subclass.string() + "\u0000" + docClass.string();
-			return belongs.computeIfAbsent(key, k -> schema.subclassBelongs(subclass.string(), docClass.string()));
+		private boolean belongs(String subclass, String docClass) {
+			return belongs.computeIfAbsent(subclass + "\u0000" + docClass, k -> schema.subclassBelongs(subclass, docClass));
 		}
 
 		private void write(char type, long id, String name, Value value) {
@@ -516,7 +575,9 @@ public class Propagation {
 
 		/**
 		 * Flags the changed documents for indexing and evicts everything
-		 * written, now and again if the transaction rolls back
+		 * written: now, for reads later in the transaction, and again when it
+		 * ends, for a read elsewhere that cached the committed rows meanwhile
+		 * (or for a rollback)
 		 */
 		private void finish() {
 			for (List<Long> chunk : chunks(documents))
@@ -525,8 +586,8 @@ public class Propagation {
 								.addValue("indexed", IndexingStatus.INDEXED.ordinal()).addValue("ids", chunk));
 			evictor.evictFolders(folders);
 			evictor.evictDocuments(documents);
-			evictor.evictFoldersOnRollback(folders);
-			evictor.evictDocumentsOnRollback(documents);
+			evictor.evictFoldersAfterCompletion(folders);
+			evictor.evictDocumentsAfterCompletion(documents);
 		}
 	}
 }
