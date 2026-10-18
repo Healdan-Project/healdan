@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.email;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -34,19 +35,21 @@ public class FileNamesTest {
 	}
 
 	@Test
-	public void testLongSubjectNeverCutsASurrogatePair() {
+	public void testCharactersBeyondTheBasicPlaneBecomeReplacementCharacters() {
+		// MariaDB's utf8 tables hold none of them (R33): an emoji, and a lone surrogate
+		assertEquals("Re_ \ufffd Sale.eml", name("Re: " + new String(Character.toChars(0x1F389)) + " Sale"));
+		assertEquals("a\ufffdb.eml", name("a\uD83Cb"));
+		assertEquals("\ufffd.eml", name(new String(Character.toChars(0x1F600))));
+	}
+
+	@Test
+	public void testLongSubjectCutAfterTheReplacement() {
 		String emoji = new String(Character.toChars(0x1F600));
-		// 255 - ".eml" = 251, so the cut falls between the high surrogate (index 250) and the low one
+		// 255 - ".eml" = 251: one character for the emoji, so the cut falls after it
 		String result = name("x".repeat(250) + emoji + "yy");
-		assertTrue(result.length() <= 255);
-		assertTrue(result.endsWith(".eml"));
-		assertEquals("x".repeat(250) + ".eml", result);
-		for (int i = 0; i < result.length(); i++) {
-			if (Character.isHighSurrogate(result.charAt(i)))
-				assertTrue(Character.isLowSurrogate(result.charAt(i + 1)));
-			if (Character.isLowSurrogate(result.charAt(i)))
-				assertTrue(i > 0 && Character.isHighSurrogate(result.charAt(i - 1)));
-		}
+		assertEquals("x".repeat(250) + "\ufffd.eml", result);
+		for (int i = 0; i < result.length(); i++)
+			assertFalse(Character.isSurrogate(result.charAt(i)));
 	}
 
 	@Test

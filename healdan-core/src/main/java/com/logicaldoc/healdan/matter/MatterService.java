@@ -36,6 +36,7 @@ import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.security.AclMath;
 import com.logicaldoc.healdan.security.PermissionRules;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.util.BasicPlane;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
@@ -67,6 +68,8 @@ public class MatterService {
 	static final String BAD_NAME = "A %s name can't be empty, contain '/' or be longer than %d characters.";
 
 	static final String UNSAFE_NAME = "A %s name can't contain '\\' or HTML tags.";
+
+	static final String OUTSIDE_PLANE_NAME = "A %s name can't contain emoji or other characters the database can't store.";
 
 	static final String LONG_DESCRIPTION = "A %s description can't be longer than %d characters.";
 
@@ -317,14 +320,18 @@ public class MatterService {
 	/**
 	 * @return the name, trimmed
 	 * @throws HealdanRuleException if it is empty, holds '/', or makes the
-	 *         display name, the workspace folder's name, too long; or if CE
-	 *         would store the display name as another folder name
+	 *         display name, the workspace folder's name, too long; if it holds
+	 *         a character beyond the Basic Multilingual Plane, which would fail
+	 *         the insert on MariaDB (R33); or if CE would store the display name
+	 *         as another folder name
 	 */
 	private String cleanName(String name, long clientNumber, long matterNumber) throws HealdanRuleException {
 		String clean = name == null ? "" : name.strip();
 		int max = MAX_DISPLAY_LENGTH - MatterDisplay.format(clientNumber, matterNumber, "").length();
 		if (clean.isEmpty() || clean.contains("/") || clean.length() > max)
 			throw new HealdanRuleException(BAD_NAME.formatted(label(), max));
+		if (!BasicPlane.holds(clean))
+			throw new HealdanRuleException(OUTSIDE_PLANE_NAME.formatted(label()));
 		String display = MatterDisplay.format(clientNumber, matterNumber, clean);
 		if (!display.equals(asFolderName(display)))
 			throw new HealdanRuleException(UNSAFE_NAME.formatted(label()));

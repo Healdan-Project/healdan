@@ -328,6 +328,22 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testRefusesNamesTheDatabaseCannotStore() throws Exception {
+		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane, such as an emoji (R33)
+		String message = "A matter name can't contain emoji or other characters the database can't store.";
+		assertRefused(message, () -> create(2, "Party \uD83C\uDF89", alice, demo));
+		assertRefused(message, () -> create(2, "Half \uD83C", alice, demo));
+		assertNoMatter(2);
+		assertRefused(message,
+				() -> service.update(matter.getId(), "Demo \uD83C\uDF89", null, matter.getOwnerId(), admin));
+		assertEquals("Healdan Demo", MatterDAO.get().findById(matter.getId()).getName());
+
+		// Every character of the plane is fine
+		Matter fine = create(2, "Caf\u00e9 \u4e2d\u6587", alice, demo);
+		assertEquals("998.2 \u2013 Caf\u00e9 \u4e2d\u6587", workspace(fine).getName());
+	}
+
+	@Test
 	public void testDanglingSettings() throws Exception {
 		Folder gone = fx.store("Gone");
 		fx.grant(gone, everyone, Permission.READ);

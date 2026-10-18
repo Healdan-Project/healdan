@@ -151,6 +151,26 @@ check "upload to the matter's top level is refused by the filing rule" refused_w
   "Documents can't be saved at the top level of a matter. Choose one of its folders."
 check "upload to the Default workspace is refused by the filing rule" refused_with "$ws_id" \
   "Documents must be filed in a folder inside a matter."
+# An email with an emoji in its Subject and From (RFC 2047). CE's MariaDB tables are utf8, 3 bytes a character, and
+# strict, so Healdan puts U+FFFD for every character beyond the Basic Multilingual Plane before the insert (R33).
+# Uploaded after the doc # checks above, which expect the first two uploads to be 1 and 2.
+printf '%s\r\n' 'From: =?UTF-8?B?QW5uIPCfjok=?= <ann@example.com>' 'To: bob@example.com' \
+  'Subject: =?UTF-8?B?UmU6IPCfjokgU2FsZQ==?=' 'Date: Tue, 14 Oct 2025 09:29:00 +0200' 'MIME-Version: 1.0' \
+  'Content-Type: text/plain; charset=UTF-8' '' 'Party.' > "$WORK/emoji.eml"
+no_4byte_char() { # <text>: no UTF-8 lead byte of a 4-byte character (0xF0-0xF4)
+  printf '%s' "$1" | python3 -c 'import sys; b = sys.stdin.buffer.read(); sys.exit(0 if b and not any(0xF0 <= x <= 0xF4 for x in b) else 1)'
+}
+email_id=$(api -H 'Accept: application/json' -F "folderId=$doc_folder" -F "filename=emoji.eml" \
+  -F "filedata=@$WORK/emoji.eml" "$BASE/services/rest/document/upload" || true)
+check "email with an emoji in its headers uploaded" grep -Eq '^[0-9]+$' <<<"$email_id"
+email_json=$(api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$email_id" || true)
+check "email named after its subject, with U+FFFD for the emoji" \
+  test "$(jq -r '.fileName // empty' <<<"$email_json")" = $'Re_ \xef\xbf\xbd Sale.eml'
+check "email's subject field stored with U+FFFD for the emoji" \
+  test "$(jq -r '[.attributes[]? | select(.name == "emailsubject") | .stringValue][0] // empty' <<<"$email_json")" \
+  = $'Re: \xef\xbf\xbd Sale'
+check "email's stored file name has no 4-byte character" \
+  no_4byte_char "$(db_query "select ld_filename from ld_document where ld_id = ${email_id:-0}")"
 
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \

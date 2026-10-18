@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.email;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -203,6 +204,26 @@ public class EmailDocumentListenerTest extends AbstractHealdanTestCase {
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILFROM));
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
 		assertNull(corrupt.getValue(HealdanConstants.ATTR_EMAILSENT));
+	}
+
+	@Test
+	public void testEmojiInHeadersBecomesReplacementCharacter() throws Exception {
+		// MariaDB's utf8 tables hold no character beyond the Basic Multilingual Plane (R33); HSQLDB would
+		Document doc = file("healdan-emoji.eml", "emoji.eml");
+		assertEquals("Ann \ufffd <ann@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILFROM));
+		assertEquals("Bob \ufffd <bob@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILTO));
+		assertEquals("Ren\u00e9e \ufffd <renee@example.com>", doc.getValue(HealdanConstants.ATTR_EMAILCC));
+		assertEquals("Re: \ufffd Sale", doc.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
+		assertEquals("Re_ \ufffd Sale.eml", doc.getFileName());
+		for (String attribute : List.of(HealdanConstants.ATTR_EMAILFROM, HealdanConstants.ATTR_EMAILTO,
+				HealdanConstants.ATTR_EMAILCC, HealdanConstants.ATTR_EMAILSUBJECT))
+			assertNoSurrogate(doc.getValue(attribute).toString());
+		assertNoSurrogate(doc.getFileName());
+	}
+
+	private static void assertNoSurrogate(String text) {
+		for (int i = 0; i < text.length(); i++)
+			assertFalse(text, Character.isSurrogate(text.charAt(i)));
 	}
 
 	@Test
