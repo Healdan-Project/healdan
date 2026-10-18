@@ -64,6 +64,8 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 	protected static final String SHORTCUT = "Shortcuts aren't allowed inside Stores.";
 
+	protected static final String STORE_SHORTCUT = "A Store can't become a shortcut.";
+
 	protected static final String FOLDER_IN_SEARCH_FOLDER = "Search folders can't hold folders.";
 
 	protected static final String FOLDER_IN_STORE = "Folders can't be created directly in a Store. Use New matter.";

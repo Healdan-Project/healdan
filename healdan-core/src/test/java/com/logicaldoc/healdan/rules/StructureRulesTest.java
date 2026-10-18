@@ -56,6 +56,23 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testAStoreNeverBecomesAnAlias() throws Exception {
+		// Made into an alias where it is, as SOAP update can, or by a change of type: admins too (R34)
+		assertRefused(STORE_SHORTCUT, () -> makeAlias(store, loose, admin));
+		assertRefused(STORE_SHORTCUT, () -> makeAlias(templates, loose, admin));
+		assertRefused(STORE_SHORTCUT, () -> changeType(store, Folder.TYPE_ALIAS, admin));
+		assertRefused(STORE_SHORTCUT, () -> changeType(templates, Folder.TYPE_ALIAS, admin));
+		assertRefused(STORE_SHORTCUT, () -> makeAlias(store, loose, alice));
+		assertNull(reload(store).getFoldRef());
+		assertEquals(Folder.TYPE_WORKSPACE, reload(templates).getType());
+
+		// The root's other folders aren't Healdan's
+		Folder plain = folderDao.create(root, folderVO("Plain", Folder.TYPE_DEFAULT), false, folderHistory(admin));
+		allowed(() -> makeAlias(plain, loose, admin));
+		assertEquals(Long.valueOf(loose.getId()), reload(plain).getFoldRef());
+	}
+
+	@Test
 	public void testSearchFoldersHoldNoFolders() throws Exception {
 		assertRefused(FOLDER_IN_SEARCH_FOLDER, () -> createFolder(search, "Sub", admin));
 		assertRefused(FOLDER_IN_SEARCH_FOLDER, () -> HealdanOperation.run(Kind.SEARCH_FOLDER,
@@ -404,6 +421,12 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 	private void changeType(Folder folder, int type, User as) throws Exception {
 		Folder current = reload(folder);
 		current.setType(type);
+		folderDao.store(current, folderHistory(as));
+	}
+
+	private void makeAlias(Folder folder, Folder target, User as) throws Exception {
+		Folder current = reload(folder);
+		current.setFoldRef(target.getId());
 		folderDao.store(current, folderHistory(as));
 	}
 

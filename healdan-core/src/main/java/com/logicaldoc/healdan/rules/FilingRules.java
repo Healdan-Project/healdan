@@ -60,6 +60,8 @@ public class FilingRules {
 
 	static final String SHORTCUT = "Shortcuts aren't allowed inside Stores.";
 
+	static final String STORE_SHORTCUT = "A Store can't become a shortcut.";
+
 	static final String FOLDER_IN_SEARCH_FOLDER = "Search folders can't hold folders.";
 
 	static final String FOLDER_IN_STORE = "Folders can't be created directly in a Store. Use New %s.";
@@ -165,12 +167,19 @@ public class FilingRules {
 	}
 
 	/**
-	 * A folder becomes an alias of another, where it is
+	 * A folder becomes an alias of another, where it is. Neither a Store nor
+	 * the Templates Store may, whoever asks: under the root the shortcut rule
+	 * doesn't reach them, and SOAP's {@code update} sets the alias reference
+	 * it is given (plan, R34).
 	 *
+	 * @param folder the folder
 	 * @param parent its parent
 	 * @throws PersistenceException the refusal, or an error at data layer
 	 */
-	public void checkFolderAlias(Folder parent) throws PersistenceException {
+	public void checkFolderAlias(Folder folder, Folder parent) throws PersistenceException {
+		Kind kind = currentPosition(folder.getId()).kind();
+		if (kind == Kind.STORE || kind == Kind.TEMPLATES_STORE)
+			throw refuse(STORE_SHORTCUT, ids(folder.getId()));
 		if (noShortcuts(locator.locate(parent)))
 			throw refuse(SHORTCUT, ids(parent));
 	}

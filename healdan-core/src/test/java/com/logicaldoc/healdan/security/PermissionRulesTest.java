@@ -302,6 +302,66 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testSoapUpdateCannotTurnAStoreIntoAnAlias() throws Exception {
+		// IT may rename the Store and the Templates Store, but manages the security of neither
+		fx.grant(store, it, Permission.READ, Permission.RENAME);
+		fx.grant(templates, it, Permission.READ, Permission.RENAME);
+		Session carols = SessionManager.get().newSession(carol.getUsername(), HealdanFixtures.PASSWORD,
+				(Client) null);
+		try {
+			// The review's probe: with a folder reference, the Store would inherit the root's ACL (R32, R34)
+			WSFolder storeToRoot = WSFolder.fromFolder(reload(store));
+			storeToRoot.setSecurityRef(root.getId());
+			storeToRoot.setFoldRef(defaultWorkspace.getId());
+			assertRefused(STORE_SHORTCUT,
+					() -> harness.soapFoldersWithSessions().update(carols.getSid(), storeToRoot));
+
+			WSFolder templatesToRoot = WSFolder.fromFolder(reload(templates));
+			templatesToRoot.setSecurityRef(root.getId());
+			templatesToRoot.setFoldRef(defaultWorkspace.getId());
+			assertRefused(STORE_SHORTCUT,
+					() -> harness.soapFoldersWithSessions().update(carols.getSid(), templatesToRoot));
+		} finally {
+			SessionManager.get().kill(carols.getSid());
+		}
+
+		// Nor may an admin, who may change the reference alone
+		WSFolder storeAlias = WSFolder.fromFolder(reload(store));
+		storeAlias.setFoldRef(defaultWorkspace.getId());
+		assertRefused(STORE_SHORTCUT, () -> harness.soapFolders().update("sid", storeAlias));
+		assertNull(reload(store).getFoldRef());
+		assertNull(reload(store).getSecurityRef());
+		assertNull(reload(templates).getFoldRef());
+		assertNull(reload(templates).getSecurityRef());
+	}
+
+	@Test
+	public void testSoapUpdateNeedsSecurityOnAnAliasInAMatter() throws Exception {
+		// A shortcut from before Healdan, in Secured Documents: Carol may rename it but not manage its security
+		Folder alias = fx.legacyAlias(secured, "Shortcut", correspondence);
+		assertEquals(Long.valueOf(secured.getId()), reload(alias).getSecurityRef());
+		assertTrue(folderDao.isPermissionAllowed(Permission.RENAME, alias.getId(), carol.getId()));
+		assertFalse(folderDao.isPermissionAllowed(Permission.SECURITY, alias.getId(), carol.getId()));
+		Session carols = SessionManager.get().newSession(carol.getUsername(), HealdanFixtures.PASSWORD,
+				(Client) null);
+		try {
+			// The alias is no reason to skip R32
+			WSFolder inherit = WSFolder.fromFolder(reload(alias));
+			inherit.setSecurityRef(workspace.getId());
+			assertRefused(SECURITY_REF, () -> harness.soapFoldersWithSessions().update(carols.getSid(), inherit));
+			assertFalse(folderDao.isReadAllowed(alias.getId(), bob.getId()));
+		} finally {
+			SessionManager.get().kill(carols.getSid());
+		}
+
+		// An admin may
+		WSFolder inherit = WSFolder.fromFolder(reload(alias));
+		inherit.setSecurityRef(workspace.getId());
+		allowed(() -> harness.soapFolders().update("sid", inherit));
+		assertEquals(Long.valueOf(workspace.getId()), reload(alias).getSecurityRef());
+	}
+
+	@Test
 	public void testMovedFolderStopsFollowingItsOldSource() throws Exception {
 		setAcl(documents, admin, ace(it, MODIFY));
 		Folder x = createFolder(reload(documents), "X", admin);

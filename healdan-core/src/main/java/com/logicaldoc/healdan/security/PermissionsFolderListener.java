@@ -26,8 +26,8 @@ import com.logicaldoc.healdan.rules.Vetoes;
  * <ul>
  * <li>In a Store, a matter and the templates, a store that changes where a
  * folder takes its permissions from without the event {@code PERMISSION}, as
- * SOAP's {@code update} does, needs SECURITY on the folder as stored (plan,
- * R32).</li>
+ * SOAP's {@code update} does, needs SECURITY on the folder as stored, an
+ * alias included (plan, R32). The rules below leave aliases alone.</li>
  * <li>Inside a matter a folder inherits only from a folder above it (plan,
  * R25): an ACL save or a security reference change that points elsewhere is
  * refused; any other store that leaves such a reference (a move, a copy...)
@@ -65,7 +65,7 @@ public class PermissionsFolderListener implements FolderListener {
 	@Override
 	public void beforeStore(Folder folder, FolderHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		if (folder.getDeleted() != 0 || folder.getFoldRef() != null || folder.getType() == Folder.TYPE_ALIAS)
+		if (folder.getDeleted() != 0)
 			return;
 		MatterLocator locator = MatterLocator.get();
 		FolderPosition parent = locator.locate(folder.getParentId());
@@ -85,12 +85,13 @@ public class PermissionsFolderListener implements FolderListener {
 		// Under the root, only the Stores and the Templates Store are Healdan's
 		Kind kind = underRoot && (permission || refChanged) ? locator.locate(folder.getId()).kind() : null;
 
-		// Making a folder inherit, or giving it its own ACL, needs SECURITY on it (R32)
+		// Making a folder inherit, or giving it its own ACL, needs SECURITY on it, an alias too (R32)
 		if (refChanged && !permission && (!underRoot || kind == Kind.STORE || kind == Kind.TEMPLATES_STORE))
 			Vetoes.check(ids, List.of(),
 					() -> rules.checkSecurityRefChange(folder, stored, FilingRules.actor(transaction)));
 
-		if (inTemplates)
+		// CE gives an alias its target's permissions, which the rules below leave alone
+		if (inTemplates || folder.getFoldRef() != null || folder.getType() == Folder.TYPE_ALIAS)
 			return;
 		if (underRoot) {
 			// A Store's permissions reach the matters that inherit them

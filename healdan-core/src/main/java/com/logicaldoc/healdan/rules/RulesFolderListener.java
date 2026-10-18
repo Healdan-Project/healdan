@@ -61,8 +61,9 @@ public class RulesFolderListener implements FolderListener {
 			rules.checkFolderRename(folder, actor);
 		if (stored.type() != folder.getType())
 			rules.checkTypeChange(stored.type(), folder, actor);
-		else if (!stored.alias() && FilingRules.isAlias(folder))
-			rules.checkFolderAlias(parentOf(folder));
+		// A type change can make it an alias too
+		if (!stored.alias() && FilingRules.isAlias(folder))
+			rules.checkFolderAlias(folder, parentOf(folder));
 	}
 
 	/**
