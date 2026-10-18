@@ -86,6 +86,10 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 	protected static final String RESTORE_PERMISSION = "You need the delete permission on this folder to restore it.";
 
+	protected static final String RESTORE_DOCUMENT_PERMISSION = "You need the delete permission on this document to restore it.";
+
+	protected static final String RESTORE_LIVE_DOCUMENT = "Only a deleted document can be restored.";
+
 	protected final HealdanFixtures fx = new HealdanFixtures();
 
 	protected JdbcTemplate jdbc;

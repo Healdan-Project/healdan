@@ -129,6 +129,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void applyMetadata(long parentId) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on every folder of the tree
+        HealdanRpcChecks.tree(session, Permission.WRITE, parentId);
 
         executeLongRunningOperation("Apply Metadata to Tree", () -> {
             FolderDAO fdao = FolderDAO.get();
@@ -231,6 +233,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public List<Long> computeStats(long folderId) throws ServerException {
         Session session = validateSession();
+        // Healdan: READ on the folder
+        checkPermission(Permission.READ, session.getUser(), folderId);
         try {
             long[] docs = countDocsInTree(folderId);
             return Arrays.asList(docs[0], countSubfoldersInTree(folderId), docs[1]);
@@ -1108,8 +1112,10 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
             return;
 
         try {
-            FolderDAO.get().jdbcUpdate(
-                    "update ld_folder set ld_deleted = 2 where ld_id in (%s)".formatted(CollectionUtil.join(ids)));
+            // Healdan: what is in the trash, and for all but admins what the user deleted, as emptyTrash takes
+            HealdanRpcChecks.trash(session, "ld_folder", ids);
+            FolderDAO.get().jdbcUpdate("update ld_folder set ld_deleted = 2 where ld_deleted = 1 and ld_id in (%s)"
+                    .formatted(CollectionUtil.join(ids)));
         } catch (PersistenceException e) {
             throwServerException(session, log, e);
         }
@@ -1118,6 +1124,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void applyTags(long parentId) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on every folder of the tree
+        HealdanRpcChecks.tree(session, Permission.WRITE, parentId);
 
         executeLongRunningOperation("Apply Tags", () -> {
             FolderDAO fdao = FolderDAO.get();
@@ -1148,6 +1156,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void applyGridLayout(long folderId) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on every folder of the tree
+        HealdanRpcChecks.tree(session, Permission.WRITE, folderId);
 
         /*
          * Just apply the current security settings to the whole subtree
@@ -1168,6 +1178,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void applyCapture(long parentId) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on every folder of the tree
+        HealdanRpcChecks.tree(session, Permission.WRITE, parentId);
 
         executeLongRunningOperation("Apply Capture", () -> {
             FolderDAO fdao = FolderDAO.get();

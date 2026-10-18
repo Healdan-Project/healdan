@@ -390,6 +390,42 @@ public class StoredRows implements PreUpdateEventListener {
 		return count != null && count > 0;
 	}
 
+	/**
+	 * @param documentId a document
+	 * @return its {@code ld_deleted} code, null if there is no row
+	 */
+	public Integer documentDeleted(long documentId) {
+		List<Integer> found = jdbc.queryForList("select ld_deleted from ld_document where ld_id = ?", Integer.class,
+				documentId);
+		return found.isEmpty() ? null : found.get(0);
+	}
+
+	/**
+	 * Reads the delete permission on a document, deleted or not, as CE's
+	 * {@code DocumentDAO.getAllowedPermissions} reads it on a live one: the
+	 * entries of the document's own ACL for the user's groups, else its
+	 * folder's
+	 *
+	 * @param documentId the document
+	 * @param userId the user
+	 * @return true if the user has DELETE on the document
+	 */
+	public boolean mayDeleteDocument(long documentId, long userId) {
+		List<Map<String, Object>> entries = jdbc.queryForList(
+				"select * from ld_document_acl where ld_docid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)",
+				documentId, userId);
+		boolean ownPermissions = entries.stream().anyMatch(entry -> entry.entrySet().stream()
+				.anyMatch(column -> !column.getKey().equalsIgnoreCase("ld_docid")
+						&& !column.getKey().equalsIgnoreCase("ld_groupid")
+						&& ((Number) column.getValue()).intValue() == 1));
+		if (ownPermissions)
+			return entries.stream().anyMatch(entry -> entry.entrySet().stream()
+					.anyMatch(column -> column.getKey().equalsIgnoreCase("ld_delete")
+							&& ((Number) column.getValue()).intValue() == 1));
+		Long folderId = documentFolder(documentId);
+		return folderId != null && mayDelete(folderId, userId);
+	}
+
 	private static String deleted(boolean withDeleted) {
 		return withDeleted ? "ld_deleted in (0, 1)" : "ld_deleted = 0";
 	}

@@ -15,6 +15,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.util.IconSelector;
 import com.logicaldoc.i18n.I18N;
 import com.logicaldoc.util.io.FileUtil;
@@ -110,6 +111,10 @@ select A.id, A.username, A.event, A.version, A.fileVersion, A.versionDate, A.com
             query.append(" from Version A where A.deleted = 0 and A.docId = :docId ");
             params.put(DOC_ID, docId);
         } else {
+            // Healdan: an archive's versions need the Import/Export menu, as the archives' panel does
+            if (!MenuDAO.get().isReadAllowed(com.logicaldoc.gui.common.client.Menu.IMPEX, session.getUserId()))
+                throw new IOException("User %s cannot access the menu %d".formatted(session.getUsername(),
+                        com.logicaldoc.gui.common.client.Menu.IMPEX));
             query.append(
                     " from Version A, Archive B where A.deleted = 0 and A in elements(B.entries) and B.id = :archiveId ");
             params.put("archiveId", Long.parseLong(request.getParameter("archiveId")));

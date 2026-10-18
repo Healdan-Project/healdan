@@ -124,6 +124,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Folder target = FolderDAO.get().findById(folderId);
 		Long docRef = rows.documentRef(docId);
 		Vetoes.check(Vetoes.ids(folderId), Vetoes.ids(docId), () -> {
+			rules.checkDocumentRestore(docId, folderId, FilingRules.actor(transaction));
 			if (docRef != null)
 				rules.checkShortcut(target);
 			rules.checkDocumentTarget(target);

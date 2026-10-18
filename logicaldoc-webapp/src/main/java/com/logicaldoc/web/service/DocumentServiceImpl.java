@@ -165,6 +165,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void addBookmarks(List<Long> ids, int type) throws ServerException {
         Session session = validateSession();
+        // Healdan: READ on each document or folder bookmarked
+        HealdanRpcChecks.bookmarkTargets(session, ids, type);
 
         BookmarkDAO bookmarkDao = BookmarkDAO.get();
         FolderDAO fdao = FolderDAO.get();
@@ -226,6 +228,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void indexDocuments(List<Long> docIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on each document
+        HealdanRpcChecks.documents(session, Permission.WRITE, docIds);
         executeLongRunningOperation("Index Documents", () -> {
             try {
                 index(docIds.toArray(new Long[0]), session);
@@ -449,6 +453,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         } catch (PersistenceException e1) {
             return throwServerException(session, log, e1);
         }
+        // Healdan: WRITE on the document, and the user's own checkout of it
+        HealdanRpcChecks.checkin(session, doc != null ? doc.getId() : document.getId());
 
         // checkin the document; throws an exception if
         // something goes wrong
@@ -655,6 +661,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         // goes wrong
         DocumentManager documentManager = DocumentManager.get();
         DocumentDAO dao = DocumentDAO.get();
+        // Healdan: WRITE on each document, a shortcut's target, before any is checked out
+        HealdanRpcChecks.targets(session, Permission.WRITE, docIds);
 
         try {
             // Create the document history event
@@ -685,6 +693,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         transaction.setSession(session);
         transaction.setEvent(DocumentEvent.LOCKED);
         transaction.setComment(HTMLSanitizer.sanitizeSimpleText(comment));
+        // Healdan: WRITE on each document, a shortcut's target, before any is locked
+        HealdanRpcChecks.targets(session, Permission.WRITE, docIds);
 
         try {
             for (long id : docIds) {
@@ -753,7 +763,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
     @Override
     public void deleteBookmarks(List<Long> bookmarkIds) throws ServerException {
-        validateSession();
+        // Healdan: only the owner's
+        HealdanRpcChecks.bookmarks(validateSession(), bookmarkIds);
         BookmarkDAO dao = BookmarkDAO.get();
         for (long id : bookmarkIds) {
             try {
@@ -766,7 +777,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
     @Override
     public void deleteLinks(List<Long> ids) throws ServerException {
-        validateSession();
+        // Healdan: WRITE on one of each link's documents, READ on the other
+        HealdanRpcChecks.links(validateSession(), ids);
 
         DocumentLinkDAO dao = DocumentLinkDAO.get();
         for (long id : ids) {
@@ -797,6 +809,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Session session = validateSession();
 
         try {
+            // Healdan: READ on the document
+            checkDocumentPermission(session, Permission.READ, docId);
             return DocumentDAO.get().queryForInt(
                     "select count(ld_id) from ld_document where ld_deleted = 0 and ld_password is not null and ld_id = %d"
                             .formatted(docId)) > 0;
@@ -1061,9 +1075,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
     private static void checkDocumentPermission(Session session, Permission permission, long docId)
             throws PersistenceException, AccessDeniedException {
-        if (!DocumentDAO.get().isPermissionAllowed(permission, docId, session.getUserId()))
-            throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
-                    .formatted(session.getUsername(), permission.name(), docId));
+        HealdanRpcChecks.document(session, permission, docId);
     }
 
     private void setGUIExtendedAttributes(Version docVersion, GUIVersion guiVersion) throws ServerException {
@@ -1104,6 +1116,10 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void linkDocuments(List<Long> inDocIds, List<Long> outDocIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: for each link, WRITE on one of its documents and READ on the other
+        for (Long inDocId : inDocIds)
+            for (Long outDocId : outDocIds)
+                HealdanRpcChecks.link(session, inDocId, outDocId);
 
         DocumentLinkDAO linkDao = DocumentLinkDAO.get();
         DocumentDAO docDao = DocumentDAO.get();
@@ -1131,6 +1147,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void makeImmutable(List<Long> docIds, String comment) throws ServerException {
         Session session = validateSession();
+        // Healdan: IMMUTABLE on each document
+        HealdanRpcChecks.documents(session, Permission.IMMUTABLE, docIds);
 
         DocumentDAO docDao = DocumentDAO.get();
         DocumentManager manager = DocumentManager.get();
@@ -1171,6 +1189,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void markIndexable(List<Long> docIds, int policy) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on each document
+        HealdanRpcChecks.documents(session, Permission.WRITE, docIds);
 
         DocumentManager manager = DocumentManager.get();
         DocumentDAO docDao = DocumentDAO.get();
@@ -1186,6 +1206,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void markUnindexable(List<Long> docIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on each document
+        HealdanRpcChecks.documents(session, Permission.WRITE, docIds);
 
         DocumentDAO docDao = DocumentDAO.get();
         for (long id : docIds)
@@ -1805,6 +1827,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Bookmark bk;
         try {
             if (bookmark.getId() != 0) {
+                // Healdan: only the owner's
+                HealdanRpcChecks.bookmarks(session, List.of(bookmark.getId()));
                 bk = bookmarkDao.findById(bookmark.getId(), true);
             } else
                 return;
@@ -1823,6 +1847,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void updateLink(long id, String type) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on one of the link's documents, READ on the other
+        HealdanRpcChecks.links(session, List.of(id));
 
         DocumentLinkDAO dao = DocumentLinkDAO.get();
         try {
@@ -1846,6 +1872,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         RatingDAO ratingDao = RatingDAO.get();
         try {
+            // Healdan: READ on the document
+            checkDocumentPermission(session, Permission.READ, docId);
             GUIRating guiRating = new GUIRating();
             Rating rating = ratingDao.findVotesByDocId(docId);
             if (rating != null) {
@@ -1875,7 +1903,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         RatingDAO ratingDao = RatingDAO.get();
         try {
-            Rating rat = ratingDao.findByDocIdAndUserId(rating.getDocId(), rating.getUserId());
+            // Healdan: READ on the document, and the vote is the caller's own, whatever user the client names
+            checkDocumentPermission(session, Permission.READ, rating.getDocId());
+            Rating rat = ratingDao.findByDocIdAndUserId(rating.getDocId(), session.getUserId());
             if (rat == null) {
                 rat = new Rating();
                 rat.setTenantId(session.getTenantId());
@@ -2003,6 +2033,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             document = DocumentDAO.get().findDocument(docId);
             if (document == null)
                 throw new UnexistingResourceException(DOCUMENT_D.formatted(docId));
+            // Healdan: READ on the document and each note's own check, before any note is deleted or saved
+            HealdanRpcChecks.notes(session, document, notes);
 
             /*
              * Check for deletions
@@ -2038,6 +2070,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         DocumentNoteDAO dao = DocumentNoteDAO.get();
 
         DocumentNote note = dao.findById(guiNote.getId(), true);
+        // Healdan: WRITE on the document for a new note; READ and the note's own permissions for an existing one
+        HealdanRpcChecks.note(session, document, guiNote, note);
         if (note == null) {
             note = new DocumentNote();
             note.setTenantId(session.getTenantId());
@@ -2134,7 +2168,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
     @Override
     public void deleteNotes(List<Long> ids) throws ServerException {
-        validateSession();
+        // Healdan: READ on each note's document and the note's own DELETE
+        HealdanRpcChecks.deletedNotes(validateSession(), ids);
 
         DocumentNoteDAO dao = DocumentNoteDAO.get();
         for (long id : ids)
@@ -2177,8 +2212,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         }
 
         try {
-            checkPermission(Permission.WRITE, session.getUser(), document.getFolder().getId());
-        } catch (AccessDeniedException e) {
+            // Healdan: the document's WRITE, not its folder's (D7)
+            checkDocumentPermission(session, Permission.WRITE, docId);
+        } catch (AccessDeniedException | PersistenceException e) {
             log.warn("Skip document {} because  user {} does not have write permission", docId, session.getUsername());
             return null;
         }
@@ -2230,6 +2266,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public GUIDocument deleteVersions(List<Long> ids) throws ServerException {
         Session session = validateSession();
+        // Healdan: DELETE on each version's document, before any version is deleted
+        HealdanRpcChecks.versions(session, Permission.DELETE, ids);
 
         long docId = 0;
         DocumentManager manager = DocumentManager.get();
@@ -2293,8 +2331,10 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             return;
 
         try {
-            DocumentDAO.get().jdbcUpdate(
-                    "update ld_document set ld_deleted = 2 where ld_id in (%s)".formatted(CollectionUtil.join(ids)));
+            // Healdan: what is in the trash, and for all but admins what the user deleted, as emptyTrash takes
+            HealdanRpcChecks.trash(session, "ld_document", ids);
+            DocumentDAO.get().jdbcUpdate("update ld_document set ld_deleted = 2 where ld_deleted = 1 and ld_id in (%s)"
+                    .formatted(CollectionUtil.join(ids)));
         } catch (PersistenceException e) {
             throwServerException(session, log, e);
         }
@@ -2350,6 +2390,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void unarchiveDocuments(List<Long> docIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: ARCHIVE on each document
+        HealdanRpcChecks.documents(session, Permission.ARCHIVE, docIds);
 
         DocumentDAO dao = DocumentDAO.get();
 
@@ -2368,7 +2410,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
     @Override
     public long countDocuments(List<Long> folderIds, int status) throws ServerException {
-        validateSession();
+        // Healdan: READ on each folder
+        HealdanRpcChecks.folders(validateSession(), Permission.READ, folderIds);
         long count = 0;
         for (long folderId : folderIds)
             count += countDocuments(folderId, status);
@@ -2404,6 +2447,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             DocumentHistory transaction = new DocumentHistory();
             transaction.setSession(session);
 
+            // Healdan: the ticket's creator or an admin
+            HealdanRpcChecks.tickets(session, List.of(ticketId));
             TicketDAO tDao = TicketDAO.get();
             Ticket ticket = tDao.findById(ticketId);
             ticket.setDecodedPassword(password);
@@ -2495,8 +2540,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         transaction.setComment("");
 
         try {
-            Document doc = dao.findById(docId);
-            checkPermission(Permission.PASSWORD, session.getUser(), doc.getFolder().getId());
+            // Healdan: the document's PASSWORD, not its folder's (D7)
+            checkDocumentPermission(session, Permission.PASSWORD, docId);
 
             dao.setPassword(docId, password, transaction);
         } catch (AccessDeniedException | PersistenceException e) {
@@ -2542,9 +2587,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             if (doc == null)
                 throw new ServerException(UNEXISTING_DOCUMENT);
 
-            FolderDAO fDao = FolderDAO.get();
-            if (!fDao.isDownloadAllowed(doc.getFolder().getId(), session.getUserId()))
-                throw new IOException("You don't have the DOWNLOAD permission");
+            // Healdan: the document's DOWNLOAD, not its folder's (D7)
+            checkDocumentPermission(session, Permission.DOWNLOAD, docId);
 
             /*
              * In case of alias we have to work on the real document
@@ -2554,7 +2598,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
             // Obtain the document's file stream
             return Store.get().getString(StoreResource.builder().document(doc).build());
-        } catch (PersistenceException | ServerException | IOException e) {
+        } catch (PersistenceException | ServerException e) {
             return throwServerException(session, log, e);
         }
 
@@ -2650,6 +2694,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         RatingDAO rDao = RatingDAO.get();
         try {
+            // Healdan: READ on the document
+            checkDocumentPermission(session, Permission.READ, docId);
             GUIRating rating = null;
             Rating rat = rDao.findByDocIdAndUserId(docId, session.getUserId());
             if (rat != null) {
@@ -2988,6 +3034,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void deleteTickets(List<Long> ticketIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: each ticket's creator or an admin
+        HealdanRpcChecks.tickets(session, ticketIds);
 
         TicketDAO dao = TicketDAO.get();
         try {
@@ -3001,6 +3049,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void enableTickets(List<Long> ticketIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: each ticket's creator or an admin
+        HealdanRpcChecks.tickets(session, ticketIds);
 
         TicketDAO dao = TicketDAO.get();
         try {
@@ -3017,6 +3067,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void disableTickets(List<Long> ticketIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: each ticket's creator or an admin
+        HealdanRpcChecks.tickets(session, ticketIds);
 
         TicketDAO dao = TicketDAO.get();
         try {
@@ -3033,6 +3085,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void enforceFilesIntoFolderStore(long folderId) throws ServerException {
         Session session = validateSession();
+        // Healdan: it moves a whole tree's files between Stores
+        HealdanRpcChecks.admin(session);
         executeLongRunningOperation("Enforce Files Into Folder Store", () -> {
             User user = session.getUser();
             int movedFiles = 0;
@@ -3141,6 +3195,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public int updatePages(long docId) throws ServerException {
         final Session session = validateSession();
+        // Healdan: READ on the document
+        HealdanRpcChecks.targets(session, Permission.READ, List.of(docId));
 
         DocumentDAO docDao = DocumentDAO.get();
         try {
@@ -3165,7 +3221,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         DocumentDAO docDao = DocumentDAO.get();
         try {
             Document doc = docDao.findById(documentId);
-            checkPermission(Permission.RENAME, user, doc.getFolder().getId());
+            // Healdan: the document's RENAME, not its folder's (D7)
+            checkDocumentPermission(session, Permission.RENAME, documentId);
             checkPublished(user, doc);
 
             DocumentHistory transaction = new DocumentHistory();
@@ -3303,6 +3360,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public String getSummary(long docId, String fileVersion) throws ServerException {
         Session session = validateSession();
+        // Healdan: READ on the document
+        HealdanRpcChecks.documents(session, Permission.READ, List.of(docId));
 
         try {
             Document document = DocumentDAO.get().findById(docId);
@@ -3331,6 +3390,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     public void saveSummary(long docId, String fileVersion, String summary) throws ServerException {
 
         Session session = validateSession();
+        // Healdan: WRITE on the document
+        HealdanRpcChecks.documents(session, Permission.WRITE, List.of(docId));
 
         try {
             Document document = DocumentDAO.get().findById(docId);
