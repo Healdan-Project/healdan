@@ -35,6 +35,7 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.FolderPosition.Kind;
@@ -61,6 +62,8 @@ import com.logicaldoc.util.spring.Context;
  * every ACL below a folder, which can re-open a restricted folder. Inside the
  * Stores and the templates only an admin, or someone who manages every folder
  * below with its own ACL, may do it.</li>
+ * <li><b>Security reference</b>: in the same places, changing where a folder
+ * takes its permissions from needs SECURITY on it, whatever the route.</li>
  * </ul>
  * A user's explicit permission change that breaks P1 or P2 is refused. A move,
  * a copy or a restore that would leave a folder granting more than its new
@@ -78,6 +81,8 @@ public class PermissionRules {
 	static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
 
 	static final String INHERIT_FROM_ABOVE = "A folder can only inherit permissions from a folder above it.";
+
+	static final String SECURITY_REF = "You need the security permission on this folder to change where it takes its permissions from.";
 
 	/** Narrowing passes over a tree; one is enough unless folders inherit from folders below them */
 	private static final int MAX_PASSES = 5;
@@ -389,6 +394,39 @@ public class PermissionRules {
 	public void checkInheritsFromAbove(Folder folder) throws HealdanRuleException {
 		if (!inheritsFromAbove(folder))
 			throw refuse(INHERIT_FROM_ABOVE, folder.getId(), folder.getParentId());
+	}
+
+	/**
+	 * Changing where a folder takes its permissions from, to inherit or to its
+	 * own ACL, needs SECURITY on the folder (spec 7.3) on every route. CE's
+	 * Security tab and SOAP's {@code setAccessControlList} check it and store
+	 * with the event {@code PERMISSION}; SOAP's (and REST's) {@code update}
+	 * checks only RENAME, and stores the reference it is given with the event
+	 * {@code CHANGED} (plan, R32). So a store that changes the reference
+	 * without the event {@code PERMISSION} needs SECURITY on the folder as it
+	 * is stored: its own rows, or those of the folder its stored reference
+	 * leads to, read with JDBC. CE's own work (no actor), an admin, Healdan's
+	 * operations and the stores of a folder copy pass.
+	 *
+	 * @param folder the folder about to be stored
+	 * @param stored its row as stored before
+	 * @param actor who stores it, null for nobody
+	 * @throws PersistenceException the refusal, or an error at data layer
+	 */
+	public void checkSecurityRefChange(Folder folder, FolderRow stored, User actor) throws PersistenceException {
+		if (actor == null || isCopying() || healdanOperation() || filingRules.isAdmin(actor))
+			return;
+		Long ref = stored.securityRef();
+		long source = ref == null || ref == stored.id() ? stored.id() : AclMath.source(ref);
+		if (!hasSecurity(source, actor.getId()))
+			throw refuse(SECURITY_REF, folder.getId());
+	}
+
+	private static boolean healdanOperation() {
+		for (HealdanOperation.Kind kind : HealdanOperation.Kind.values())
+			if (HealdanOperation.active(kind))
+				return true;
+		return false;
 	}
 
 	/**

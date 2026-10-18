@@ -55,6 +55,14 @@ public class ChannelHarness {
 	}
 
 	/**
+	 * @return a SOAP folder service that validates the session id, so that each
+	 *         call runs as the user of a session {@code SessionManager} opened
+	 */
+	public SoapFolderService soapFoldersWithSessions() {
+		return new SoapFolderService();
+	}
+
+	/**
 	 * @return the WebDAV resource service bean
 	 */
 	public ResourceService webdav() {

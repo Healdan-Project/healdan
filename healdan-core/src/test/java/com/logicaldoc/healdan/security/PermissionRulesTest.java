@@ -25,7 +25,10 @@ import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
@@ -35,6 +38,7 @@ import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.channels.ChannelHarness;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.webservice.model.WSFolder;
 
 /**
@@ -58,6 +62,8 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 	private static final String APPLY_TO_TREE = "You can't apply these permissions to subfolders that you can't manage.";
 
 	private static final String INHERIT_FROM_ABOVE = "A folder can only inherit permissions from a folder above it.";
+
+	private static final String SECURITY_REF = "You need the security permission on this folder to change where it takes its permissions from.";
 
 	private static final Permission[] READ_ONLY = { Permission.READ, Permission.DOWNLOAD, Permission.PREVIEW };
 
@@ -196,6 +202,93 @@ public class PermissionRulesTest extends AbstractRulesTestCase {
 		allowed(() -> folderDao.updateSecurityRef(board.getId(), secured.getId(), folderHistory(admin)));
 		assertEquals(Long.valueOf(secured.getId()), reload(board).getSecurityRef());
 		assertEquals(Map.of(), acl(board));
+	}
+
+	@Test
+	public void testSoapUpdateCannotChangeInheritanceWithoutSecurity() throws Exception {
+		// Carol may rename Secured Documents (IT modifies it), but she can't manage its security
+		assertTrue(folderDao.isPermissionAllowed(Permission.RENAME, secured.getId(), carol.getId()));
+		assertFalse(folderDao.isPermissionAllowed(Permission.SECURITY, secured.getId(), carol.getId()));
+		Folder board = createFolder(secured, "Board", admin);
+		assertEquals(Long.valueOf(secured.getId()), reload(board).getSecurityRef());
+		Session carols = SessionManager.get().newSession(carol.getUsername(), HealdanFixtures.PASSWORD,
+				(Client) null);
+		try {
+			// SOAP's update checks only RENAME and stores the security reference it is given (R32)
+			WSFolder inherit = WSFolder.fromFolder(reload(secured));
+			inherit.setSecurityRef(workspace.getId());
+			assertRefused(SECURITY_REF, () -> harness.soapFoldersWithSessions().update(carols.getSid(), inherit));
+			assertFalse(folderDao.isReadAllowed(secured.getId(), bob.getId()));
+
+			// Nor may she give a folder that inherits an ACL of its own: its stored entries, here none
+			WSFolder own = WSFolder.fromFolder(reload(board));
+			own.setSecurityRef(null);
+			assertRefused(SECURITY_REF, () -> harness.soapFoldersWithSessions().update(carols.getSid(), own));
+			assertTrue(folderDao.isReadAllowed(board.getId(), carol.getId()));
+
+			// An update that leaves the reference as it is stays hers to make
+			WSFolder renamed = WSFolder.fromFolder(reload(board));
+			renamed.setName("Minutes");
+			allowed(() -> harness.soapFoldersWithSessions().update(carols.getSid(), renamed));
+			assertEquals("Minutes", reload(board).getName());
+			assertEquals(Long.valueOf(secured.getId()), reload(board).getSecurityRef());
+		} finally {
+			SessionManager.get().kill(carols.getSid());
+		}
+	}
+
+	@Test
+	public void testSoapUpdateChangesInheritanceWithSecurity() throws Exception {
+		User manager = carolWithSecurity();
+		Session session = SessionManager.get().newSession(manager.getUsername(), HealdanFixtures.PASSWORD,
+				(Client) null);
+		try {
+			WSFolder inherit = WSFolder.fromFolder(reload(secured));
+			inherit.setSecurityRef(workspace.getId());
+			allowed(() -> harness.soapFoldersWithSessions().update(session.getSid(), inherit));
+		} finally {
+			SessionManager.get().kill(session.getSid());
+		}
+		assertEquals(Long.valueOf(workspace.getId()), reload(secured).getSecurityRef());
+		assertTrue(folderDao.isReadAllowed(secured.getId(), bob.getId()));
+	}
+
+	@Test
+	public void testSoapUpdateChangesInheritanceForAdmin() throws Exception {
+		// The harness's validation-free service runs as the admin
+		WSFolder inherit = WSFolder.fromFolder(reload(secured));
+		inherit.setSecurityRef(workspace.getId());
+		allowed(() -> harness.soapFolders().update("sid", inherit));
+		assertEquals(Long.valueOf(workspace.getId()), reload(secured).getSecurityRef());
+
+		WSFolder own = WSFolder.fromFolder(reload(secured));
+		own.setSecurityRef(null);
+		allowed(() -> harness.soapFolders().update("sid", own));
+		assertNull(reload(secured).getSecurityRef());
+	}
+
+	@Test
+	public void testSoapUpdateNeedsSecurityOnStoresAndTemplates() throws Exception {
+		// IT may rename the Store and a template, but manages the security of neither
+		fx.grant(store, it, Permission.READ, Permission.RENAME);
+		setAcl(template, admin, ace(it, MODIFY));
+		Session carols = SessionManager.get().newSession(carol.getUsername(), HealdanFixtures.PASSWORD,
+				(Client) null);
+		try {
+			WSFolder storeToRoot = WSFolder.fromFolder(reload(store));
+			storeToRoot.setSecurityRef(root.getId());
+			assertRefused(SECURITY_REF,
+					() -> harness.soapFoldersWithSessions().update(carols.getSid(), storeToRoot));
+
+			WSFolder templateInherits = WSFolder.fromFolder(reload(template));
+			templateInherits.setSecurityRef(templates.getId());
+			assertRefused(SECURITY_REF,
+					() -> harness.soapFoldersWithSessions().update(carols.getSid(), templateInherits));
+		} finally {
+			SessionManager.get().kill(carols.getSid());
+		}
+		assertNull(reload(store).getSecurityRef());
+		assertNull(reload(template).getSecurityRef());
 	}
 
 	@Test

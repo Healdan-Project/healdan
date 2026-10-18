@@ -14,6 +14,7 @@ import com.logicaldoc.healdan.matter.FolderPosition.Kind;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.rules.Vetoes;
@@ -23,6 +24,10 @@ import com.logicaldoc.healdan.rules.Vetoes;
  * folder store inside a matter, comparing the folder with its row as stored
  * before (see {@link StoredRows}).
  * <ul>
+ * <li>In a Store, a matter and the templates, a store that changes where a
+ * folder takes its permissions from without the event {@code PERMISSION}, as
+ * SOAP's {@code update} does, needs SECURITY on the folder as stored (plan,
+ * R32).</li>
  * <li>Inside a matter a folder inherits only from a folder above it (plan,
  * R25): an ACL save or a security reference change that points elsewhere is
  * refused; any other store that leaves such a reference (a move, a copy...)
@@ -66,7 +71,8 @@ public class PermissionsFolderListener implements FolderListener {
 		FolderPosition parent = locator.locate(folder.getParentId());
 		boolean workspace = parent.kind() == Kind.STORE;
 		boolean underRoot = parent.kind() == Kind.ROOT && folder.getId() != 0L;
-		if (!workspace && !underRoot && !parent.isInsideMatter())
+		boolean inTemplates = parent.kind() == Kind.TEMPLATES_STORE || parent.kind() == Kind.IN_TEMPLATES;
+		if (!workspace && !underRoot && !inTemplates && !parent.isInsideMatter())
 			return;
 
 		FolderRow stored = folder.getId() != 0L ? StoredRows.get().folder(folder.getId()) : null;
@@ -76,10 +82,19 @@ public class PermissionsFolderListener implements FolderListener {
 		boolean permission = transaction != null && FolderEvent.PERMISSION.toString().equals(transaction.getEvent());
 		List<Long> ids = Vetoes.ids(folder.getId(), folder.getParentId(), stored != null ? stored.parentId() : null);
 		PermissionRules rules = PermissionRules.get();
+		// Under the root, only the Stores and the Templates Store are Healdan's
+		Kind kind = underRoot && (permission || refChanged) ? locator.locate(folder.getId()).kind() : null;
 
+		// Making a folder inherit, or giving it its own ACL, needs SECURITY on it (R32)
+		if (refChanged && !permission && (!underRoot || kind == Kind.STORE || kind == Kind.TEMPLATES_STORE))
+			Vetoes.check(ids, List.of(),
+					() -> rules.checkSecurityRefChange(folder, stored, FilingRules.actor(transaction)));
+
+		if (inTemplates)
+			return;
 		if (underRoot) {
 			// A Store's permissions reach the matters that inherit them
-			if (!created && (permission || refChanged) && locator.locate(folder.getId()).kind() == Kind.STORE)
+			if (!created && (permission || refChanged) && kind == Kind.STORE)
 				dictionary.put(NARROW_STORE, Boolean.TRUE);
 			return;
 		}
