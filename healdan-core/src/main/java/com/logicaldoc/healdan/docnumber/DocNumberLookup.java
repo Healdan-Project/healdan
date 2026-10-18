@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.docnumber;
 
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
@@ -11,11 +12,15 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 
 /**
  * Finds a document, and optionally one of its versions, by the doc # a user
  * types (spec 6.5). It reads the database, never the full-text index, so a
- * document filed a second ago is found. A document the user can't read is
+ * document filed a second ago is found. A document the user can't read, or
+ * that CE's searches would hide from the user because it isn't published, is
  * reported exactly as one that doesn't exist, and the doc # is never matched
  * against a legacy doc #.
  */
@@ -26,6 +31,9 @@ public final class DocNumberLookup {
 	static final String NO_VERSION = "Document #%s has no version %s";
 
 	static final String NOT_A_NUMBER = "'%s' isn't a document number. Type # and the number, e.g. #1234.";
+
+	/** The group whose members CE's searches show unpublished documents to, as in {@code Search} */
+	private static final String PUBLISHER_GROUP = "publisher";
 
 	private DocNumberLookup() {
 	}
@@ -49,7 +57,7 @@ public final class DocNumberLookup {
 		DocumentDAO documents = DocumentDAO.get();
 		// The DAO skips deleted documents
 		Document document = documents.findByCustomId(Long.toString(query.number()), Tenant.DEFAULT_ID);
-		if (document == null || !documents.isReadAllowed(document.getId(), userId))
+		if (document == null || !documents.isReadAllowed(document.getId(), userId) || !shown(document, userId))
 			return LookupResult.notFound(NO_DOCUMENT.formatted(query.number()));
 		long folderId = document.getFolder().getId();
 		if (query.major() == null)
@@ -62,6 +70,24 @@ public final class DocNumberLookup {
 					query.minor() == null ? query.major() : query.major() + "." + query.minor()));
 		return new LookupResult(document.getId(), folderId, version.getId(), version.getVersion(),
 				version.getFileVersion(), null);
+	}
+
+	/**
+	 * @return false if CE's searches would hide the document from the user: it
+	 *         isn't published now (not published, or outside its publishing
+	 *         dates, as in {@code Search.enrichAndPopulateHits}) and the user
+	 *         is neither an administrator nor a publisher
+	 */
+	private static boolean shown(Document document, long userId) throws PersistenceException {
+		User user = UserDAO.get().findById(userId, true);
+		if (user == null)
+			return false;
+		if (user.isMemberOf(Group.GROUP_ADMIN) || user.isMemberOf(PUBLISHER_GROUP))
+			return true;
+		Date now = new Date();
+		Date start = document.getStartPublishing();
+		Date stop = document.getStopPublishing();
+		return document.isPublished() && start != null && !start.after(now) && (stop == null || stop.after(now));
 	}
 
 	/**

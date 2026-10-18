@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -53,6 +54,8 @@ public class DocNumberLookupTest extends AbstractHealdanTestCase {
 
 	/** A word that only this test's document contains */
 	private static final String WORD = "quokkanumber";
+
+	private static final long DAY = 24L * 60 * 60 * 1000;
 
 	private final HealdanFixtures fx = new HealdanFixtures();
 
@@ -184,6 +187,33 @@ public class DocNumberLookupTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testUnpublishedIsHiddenFromNonPublishers() throws Exception {
+		User carol = fx.user("carol", "readers", "publisher");
+		Date yesterday = new Date(System.currentTimeMillis() - DAY);
+		Date tomorrow = new Date(System.currentTimeMillis() + DAY);
+
+		setPublishing(false, yesterday, null);
+		assertNotFound("No document #" + n, "#" + n, alice);
+		assertNotFound("No document #" + n, "#" + n + ".1", alice);
+		assertEquals(List.of(), hitIds(HealdanConstants.SEARCH_DOC_NUMBER, "#" + n, alice));
+		// Administrators and publishers see what CE's searches show them
+		assertEquals(Long.valueOf(doc.getId()), DocNumberLookup.lookup("#" + n, admin.getId()).docId());
+		assertEquals(Long.valueOf(doc.getId()), DocNumberLookup.lookup("#" + n, carol.getId()).docId());
+		assertEquals(List.of(doc.getId()), hitIds(HealdanConstants.SEARCH_DOC_NUMBER, "#" + n, admin));
+
+		// Not published yet
+		setPublishing(true, tomorrow, null);
+		assertNotFound("No document #" + n, "#" + n, alice);
+		// No longer published
+		setPublishing(true, new Date(System.currentTimeMillis() - 2 * DAY), yesterday);
+		assertNotFound("No document #" + n, "#" + n, alice);
+		// Published until tomorrow
+		setPublishing(true, yesterday, tomorrow);
+		assertEquals(Long.valueOf(doc.getId()), DocNumberLookup.lookup("#" + n, alice.getId()).docId());
+		assertEquals(List.of(doc.getId()), hitIds(HealdanConstants.SEARCH_DOC_NUMBER, "#" + n, alice));
+	}
+
+	@Test
 	public void testSearchListsWhatTheLookupFinds() throws Exception {
 		addVersion("2.1", "2.0");
 		SearchEngine.get().unlock();
@@ -226,6 +256,14 @@ public class DocNumberLookupTest extends AbstractHealdanTestCase {
 
 	private static List<Long> hitIds(int type, String expression, User user) throws Exception {
 		return search(type, expression, user).getHits().stream().map(Hit::getId).collect(Collectors.toList());
+	}
+
+	private void setPublishing(boolean published, Date start, Date stop) throws Exception {
+		Document current = DocumentDAO.get().findById(doc.getId(), true);
+		current.setPublished(published);
+		current.setStartPublishing(start);
+		current.setStopPublishing(stop);
+		DocumentDAO.get().store(current, fx.documentHistory(admin));
 	}
 
 	/**

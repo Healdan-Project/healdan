@@ -60,10 +60,11 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
     private static final Map<Integer, SearchOptionsConverter> converters = new HashMap<>();
 
     /**
-     * Healdan: the converter of the search types that register none, which
-     * copies the common options
+     * Healdan: the converter of the search types that register none. It copies
+     * the common options, plus the full-text ones when the type's options are
+     * {@link FulltextSearchOptions}
      */
-    private static final SearchOptionsConverter DEFAULT = new SearchOptionsConverter();
+    private static final SearchOptionsConverter DEFAULT = new FulltextOptionsConverter();
 
     public static void registerConverter(Integer type, SearchOptionsConverter converter) {
         converters.put(type, converter);
