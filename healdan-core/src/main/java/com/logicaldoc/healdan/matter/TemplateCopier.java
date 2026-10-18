@@ -12,6 +12,8 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
@@ -59,6 +61,8 @@ import com.logicaldoc.util.spring.Context;
  * It runs inside {@link HealdanOperation.Kind#MATTER_CREATE}, which lets it
  * create the workspace in the Store, its top-level folders and the search
  * folders, and inside the caller's transaction, which a refusal rolls back.
+ * Outside a transaction it refuses to run: each folder store would commit on
+ * its own, and a refusal halfway would leave part of a copy.
  */
 @Component
 public class TemplateCopier {
@@ -95,7 +99,10 @@ public class TemplateCopier {
 	 * @return the copy of each template folder, by the template folder's id;
 	 *         the template's own copy is the workspace
 	 * @throws PersistenceException a refusal, or an error at data layer
+	 * @throws org.springframework.transaction.IllegalTransactionStateException
+	 *         outside a transaction
 	 */
+	@Transactional(propagation = Propagation.MANDATORY, rollbackFor = Exception.class)
 	public Map<Long, Long> copy(Folder template, Folder store, String workspaceName, FolderHistory tx)
 			throws PersistenceException {
 		Objects.requireNonNull(tx, "tx");

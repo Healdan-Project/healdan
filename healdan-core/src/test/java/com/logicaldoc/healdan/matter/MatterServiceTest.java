@@ -20,6 +20,7 @@ import java.util.stream.Collectors;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.transaction.IllegalTransactionStateException;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
@@ -34,6 +35,7 @@ import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
@@ -341,6 +343,15 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 		// Every character of the plane is fine
 		Matter fine = create(2, "Caf\u00e9 \u4e2d\u6587", alice, demo);
 		assertEquals("998.2 \u2013 Caf\u00e9 \u4e2d\u6587", workspace(fine).getName());
+	}
+
+	@Test
+	public void testTemplateCopyNeedsTheCallersTransaction() throws Exception {
+		// Outside a transaction each folder store would commit on its own, and a refusal halfway would leave a part
+		Exception e = assertThrows(Exception.class, () -> HealdanOperation.run(HealdanOperation.Kind.MATTER_CREATE,
+				() -> TemplateCopier.get().copy(reload(demo), reload(store), "998.9 \u2013 Loose", folderHistory(admin))));
+		assertTrue(e.toString(), e instanceof IllegalTransactionStateException);
+		assertNoMatter(9);
 	}
 
 	@Test
