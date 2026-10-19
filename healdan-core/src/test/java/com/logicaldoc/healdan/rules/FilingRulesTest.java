@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.junit.Test;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -17,6 +18,7 @@ import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.spring.Context;
 
@@ -81,8 +83,55 @@ public class FilingRulesTest extends AbstractRulesTestCase {
 			assertRefused(target.getValue(),
 					() -> documentDao.restore(deletedDoc.getId(), target.getKey().getId(), documentHistory(admin)));
 
-		allowed(() -> documentDao.restore(deletedDoc.getId(), documents.getId(), documentHistory(admin)));
+		// Restoring needs DELETE on the document, as a folder's restore does (R22): Bob only reads it
+		assertRefused(RESTORE_DOCUMENT_PERMISSION, () -> restore(bob));
+		// The document's own ACL holds where it is narrower: Alice's group has DELETE on the folder, only READ on it
+		ownEntry(lawyers.getId(), 0);
+		assertRefused(RESTORE_DOCUMENT_PERMISSION, () -> restore(alice));
+		jdbc.update("delete from ld_document_acl where ld_docid = ?", deletedDoc.getId());
+
+		// Alice's DELETE comes from the folder
+		allowed(() -> restore(alice));
 		assertEquals(documents.getId(), reload(deletedDoc).getFolder().getId());
+		// Restoring a live document would move it, with no MOVE asked
+		assertRefused(RESTORE_NOT_IN_TRASH, () -> restore(alice));
+
+		// Bob's DELETE comes from the deleted document's own ACL (D7)...
+		documentDao.delete(deletedDoc.getId(), documentHistory(admin));
+		awaitAsyncWork();
+		ownEntry(bob.getUserGroup().getId(), 1);
+		// ...but the document lands in Documents, where he can't add one
+		assertRefused(RESTORE_TARGET_PERMISSION, () -> restore(bob));
+		Folder acl = folderDao.findById(documents.getId());
+		jdbc.update(
+				"update ld_folder_acl set ld_write = 1 where ld_folderid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)",
+				acl.getSecurityRef() != null ? acl.getSecurityRef() : acl.getId(), bob.getId());
+		allowed(() -> restore(bob));
+		assertEquals(documents.getId(), reload(deletedDoc).getFolder().getId());
+
+		// A purged document stays purged
+		jdbc.update("update ld_document set ld_deleted = 2 where ld_id = ?", deletedDoc.getId());
+		Context.get(CacheEvictor.class).evictDocuments(List.of(deletedDoc.getId()));
+		assertRefused(RESTORE_NOT_IN_TRASH, () -> restore(alice));
+		assertEquals(Integer.valueOf(2), jdbc.queryForObject("select ld_deleted from ld_document where ld_id = ?",
+				Integer.class, deletedDoc.getId()));
+	}
+
+	private void restore(User as) throws PersistenceException {
+		documentDao.restore(deletedDoc.getId(), documents.getId(), documentHistory(as));
+	}
+
+	/**
+	 * Adds an entry with READ to the deleted document's own ACL, with JDBC
+	 * because CE's DAO doesn't load a deleted document
+	 */
+	private void ownEntry(long groupId, int delete) {
+		jdbc.update("""
+				insert into ld_document_acl (ld_docid, ld_groupid, ld_read, ld_write, ld_security, ld_immutable, ld_delete,
+				  ld_customid, ld_rename, ld_sign, ld_preview, ld_archive, ld_workflow, ld_download, ld_calendar,
+				  ld_subscription, ld_print, ld_password, ld_move, ld_email, ld_automation, ld_readingreq, ld_revision)
+				values (?, ?, 1, 0, 0, 0, ?, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+				""", deletedDoc.getId(), groupId, delete);
 	}
 
 	@Test

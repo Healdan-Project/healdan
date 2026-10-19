@@ -1144,6 +1144,8 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         }
 
         testSubject.unsetPassword(1L, "password");
+        // Healdan: boss can't read the document, so the admin looks
+        prepareSession("admin", "admin");
         assertFalse(testSubject.isPasswordProtected(1L));
     }
 

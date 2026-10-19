@@ -390,6 +390,43 @@ public class StoredRows implements PreUpdateEventListener {
 		return count != null && count > 0;
 	}
 
+	/**
+	 * @param documentId a document
+	 * @return its {@code ld_deleted} code, null if there is no row
+	 */
+	public Integer documentDeleted(long documentId) {
+		List<Integer> found = jdbc.queryForList("select ld_deleted from ld_document where ld_id = ?", Integer.class,
+				documentId);
+		return found.isEmpty() ? null : found.get(0);
+	}
+
+	/**
+	 * Reads the delete permission on a document, deleted or not, as CE's
+	 * {@code DocumentDAO.getAllowedPermissions} reads it on a live one: the
+	 * entries of the document's own ACL for the user's groups, else its
+	 * folder's
+	 *
+	 * @param documentId the document
+	 * @param userId the user
+	 * @return true if the user has DELETE on the document
+	 */
+	public boolean mayDeleteDocument(long documentId, long userId) {
+		// The entries that grant something, on the permission columns CE reads
+		List<Integer> entries = jdbc.queryForList("""
+				select ld_delete from ld_document_acl
+				 where ld_docid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)
+				   and (ld_read = 1 or ld_write = 1 or ld_security = 1 or ld_immutable = 1 or ld_delete = 1
+				        or ld_rename = 1 or ld_sign = 1 or ld_archive = 1 or ld_workflow = 1 or ld_download = 1
+				        or ld_calendar = 1 or ld_subscription = 1 or ld_print = 1 or ld_password = 1 or ld_move = 1
+				        or ld_email = 1 or ld_automation = 1 or ld_readingreq = 1 or ld_preview = 1
+				        or ld_customid = 1 or ld_revision = 1)
+				""", Integer.class, documentId, userId);
+		if (!entries.isEmpty())
+			return entries.contains(1);
+		Long folderId = documentFolder(documentId);
+		return folderId != null && mayDelete(folderId, userId);
+	}
+
 	private static String deleted(boolean withDeleted) {
 		return withDeleted ? "ld_deleted in (0, 1)" : "ld_deleted = 0";
 	}
