@@ -1117,9 +1117,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     public void linkDocuments(List<Long> inDocIds, List<Long> outDocIds) throws ServerException {
         Session session = validateSession();
         // Healdan: for each link, WRITE on one of its documents and READ on the other
-        for (Long inDocId : inDocIds)
-            for (Long outDocId : outDocIds)
-                HealdanRpcChecks.link(session, inDocId, outDocId);
+        HealdanRpcChecks.links(session, inDocIds, outDocIds);
 
         DocumentLinkDAO linkDao = DocumentLinkDAO.get();
         DocumentDAO docDao = DocumentDAO.get();
@@ -2033,8 +2031,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             document = DocumentDAO.get().findDocument(docId);
             if (document == null)
                 throw new UnexistingResourceException(DOCUMENT_D.formatted(docId));
-            // Healdan: READ on the document and each note's own check, before any note is deleted or saved
-            HealdanRpcChecks.notes(session, document, notes);
+            // Healdan: READ on the document and each note's own check, before any note is deleted or saved;
+            // only the notes the user may change are saved
+            List<GUIDocumentNote> changeable = HealdanRpcChecks.notes(session, document, notes);
 
             /*
              * Check for deletions
@@ -2057,7 +2056,7 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             /*
              * Do the updates / inserts
              */
-            for (GUIDocumentNote guiNote : notes)
+            for (GUIDocumentNote guiNote : changeable)
                 saveNote(session, document, guiNote);
         } catch (UnexistingResourceException | PersistenceException e) {
             throwServerException(session, log, e);
@@ -2214,9 +2213,11 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         try {
             // Healdan: the document's WRITE, not its folder's (D7)
             checkDocumentPermission(session, Permission.WRITE, docId);
-        } catch (AccessDeniedException | PersistenceException e) {
+        } catch (AccessDeniedException e) {
             log.warn("Skip document {} because  user {} does not have write permission", docId, session.getUsername());
             return null;
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
         }
 
         document.setComment(HTMLSanitizer.sanitizeSimpleText(model.getComment() != null ? model.getComment() : ""));
@@ -2587,14 +2588,16 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             if (doc == null)
                 throw new ServerException(UNEXISTING_DOCUMENT);
 
-            // Healdan: the document's DOWNLOAD, not its folder's (D7)
-            checkDocumentPermission(session, Permission.DOWNLOAD, docId);
-
             /*
              * In case of alias we have to work on the real document
              */
             if (doc.getDocRef() != null)
                 doc = docDao.findById(doc.getDocRef());
+
+            // Healdan: DOWNLOAD on the document read, a shortcut's target, not on its folder (D7)
+            if (doc == null)
+                throw new ServerException(UNEXISTING_DOCUMENT);
+            checkDocumentPermission(session, Permission.DOWNLOAD, doc.getId());
 
             // Obtain the document's file stream
             return Store.get().getString(StoreResource.builder().document(doc).build());
