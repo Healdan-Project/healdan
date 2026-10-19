@@ -59,8 +59,19 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
      */
     private static final Map<Integer, SearchOptionsConverter> converters = new HashMap<>();
 
+    /**
+     * Healdan: the converter of the search types that register none. It copies
+     * the common options, plus the full-text ones when the type's options are
+     * {@link FulltextSearchOptions}
+     */
+    private static final SearchOptionsConverter DEFAULT = new FulltextOptionsConverter();
+
     public static void registerConverter(Integer type, SearchOptionsConverter converter) {
         converters.put(type, converter);
+    }
+
+    static SearchOptionsConverter converterFor(int type) {
+        return converters.getOrDefault(type, DEFAULT);
     }
 
     static {
@@ -178,7 +189,7 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
     }
 
     private SearchOptions prepareSearchOptions(GUISearchOptions options, Session session) {
-        SearchOptions searchOptions = converters.get(options.getType()).toSearchOptions(options);
+        SearchOptions searchOptions = converterFor(options.getType()).toSearchOptions(options);
         searchOptions.setTenantId(session.getTenantId());
         searchOptions.setTransaction(new UserHistory(session));
 
@@ -202,7 +213,7 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
         Session session = validateSession();
 
         try {
-            SearchOptions opt = converters.get(options.getType()).toSearchOptions(options);
+            SearchOptions opt = converterFor(options.getType()).toSearchOptions(options);
 
             com.logicaldoc.core.searchengine.saved.SavedSearch search = SearchDAO.get()
                     .findByUserIdAndName(session.getUserId(), options.getName());
@@ -249,7 +260,7 @@ public class SearchServiceImpl extends AbstractRemoteService implements SearchSe
                     .findByUserIdAndName(session.getUserId(), name);
 
             SearchOptions options = search.readOptions();
-            GUISearchOptions guiOptions = converters.get(options.getType()).toGUISearchOptions(search.readOptions());
+            GUISearchOptions guiOptions = converterFor(options.getType()).toGUISearchOptions(search.readOptions());
             if (guiOptions.getFolder() != null) {
                 Folder fld = FolderDAO.get().findById(guiOptions.getFolder());
                 if (fld != null)

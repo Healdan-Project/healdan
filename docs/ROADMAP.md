@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building (PR A: Tasks 1–7, merged 2026-10-17; PR B: Tasks 8–16) |
+| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building (PR A: Tasks 1–7, merged 2026-10-17; PR B: Tasks 8–16, merged 2026-10-18; PR C: Tasks 17–21) |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
@@ -191,7 +191,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 - **Configurable label.** The user-facing label "Matter" can be set per install, for example to "Project".
 - **Light rebrand of the old UI.** The name, logo, login page and browser title become Healdan. Full branding comes with M6.
 - **Fix full-text indexing.** CE has no text extractor for `.docx`, `.xlsx`, `.pptx`, `.eml` or `.msg`, so their contents aren't searchable today. Check it on a running server, then fix it. The capability map has the evidence.
-- **Fix the upstream security bugs the recon found.** They're listed in the capability map. The four it listed first were fixed in PR [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15), and the map tracks the rest. The design session found more: CE's RPCs don't check who may change permissions or rename. The M1 spec fixes those (§7.3).
+- **Fix the upstream security bugs the recon found.** They're listed in the capability map. The four it listed first were fixed in PR [Healdan-Project/healdan#15](https://github.com/Healdan-Project/healdan/pull/15), and the map tracks the rest. The design session found more: CE's RPCs don't check who may change permissions or rename. The M1 spec fixes those (§7.3). PR C found CE RPCs that check no permission at all. It fixed the four a `#` result uses and listed the rest under the M1 plan's "Follow-ups from PR C".
 - **Turn on cheap gated features where they help.** M1 turns on multiple LogicalDOC workspaces, which are Healdan's Stores. Saved searches stay off, because search folders cover the need.
 
 **Non-goals.**

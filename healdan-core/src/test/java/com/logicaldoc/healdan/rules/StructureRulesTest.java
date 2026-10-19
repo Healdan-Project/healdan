@@ -228,6 +228,9 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 				folderVO("Recent Work", HealdanConstants.FOLDER_TYPE_SEARCH), true, folderHistory(admin))));
 		assertRefused(SEARCH_FOLDER_TYPE, () -> changeType(sub, HealdanConstants.FOLDER_TYPE_SEARCH, admin));
 		assertRefused(SEARCH_FOLDER_TYPE, () -> changeType(search, Folder.TYPE_DEFAULT, admin));
+		// Inside a matter or a template only, even for those operations
+		assertRefused(SEARCH_FOLDER_PLACE, () -> HealdanOperation.run(Kind.SEARCH_FOLDER, () -> folderDao.create(loose,
+				folderVO("Recent Work", HealdanConstants.FOLDER_TYPE_SEARCH), true, folderHistory(admin))));
 
 		allowed(() -> HealdanOperation.run(Kind.SEARCH_FOLDER, () -> folderDao.create(documents,
 				folderVO("Recent Work", HealdanConstants.FOLDER_TYPE_SEARCH), true, folderHistory(alice))));
@@ -236,6 +239,46 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 		allowed(() -> HealdanOperation.run(Kind.SEARCH_FOLDER,
 				() -> changeType(sub, HealdanConstants.FOLDER_TYPE_SEARCH, admin)));
 		assertEquals(HealdanConstants.FOLDER_TYPE_SEARCH, reload(sub).getType());
+	}
+
+	@Test
+	public void testSearchFoldersStayInMattersAndTemplates() throws Exception {
+		Folder carrier = fx.folder(correspondence, "Carrier");
+		Folder holder = fx.folder(carrier, "Holder");
+		Folder inside = fx.searchFolder(holder, "Inside");
+
+		// Moved out of the matter: the search folder itself, or a folder holding one
+		assertRefused(SEARCH_FOLDER_PLACE, () -> move(search, defaultWorkspace, admin));
+		assertRefused(SEARCH_FOLDER_PLACE, () -> move(holder, loose, admin));
+		// Directly in the Templates Store it would be a template
+		assertRefused(SEARCH_FOLDER_PLACE, () -> move(search, templates, admin));
+		// Made one by a type change, even inside the search-folder service
+		assertRefused(SEARCH_FOLDER_PLACE, () -> HealdanOperation.run(Kind.SEARCH_FOLDER,
+				() -> changeType(loose, HealdanConstants.FOLDER_TYPE_SEARCH, admin)));
+
+		// Merged out: it moves into the target, or with the folder holding it, or into a namesake there
+		assertRefused(SEARCH_FOLDER_PLACE, () -> merge(holder, loose, admin));
+		assertRefused(SEARCH_FOLDER_PLACE, () -> merge(carrier, loose, admin));
+		fx.folder(loose, "Holder");
+		assertRefused(SEARCH_FOLDER_PLACE, () -> merge(carrier, loose, admin));
+
+		// Copied out: already refused, as only the search-folder service makes search folders
+		assertRefused(SEARCH_FOLDER_TYPE, () -> copy(carrier, loose, true, admin));
+
+		// Restored into a parent outside the matter, with the folder holding it or alone
+		allowed(() -> folderDao.deleteTree(carrier.getId(), folderHistory(admin)));
+		assertRefused(SEARCH_FOLDER_PLACE,
+				() -> folderDao.restore(holder.getId(), loose.getId(), folderHistory(admin)));
+		assertRefused(SEARCH_FOLDER_PLACE,
+				() -> folderDao.restore(inside.getId(), loose.getId(), folderHistory(admin)));
+
+		// In the matter and below a template they may go
+		allowed(() -> folderDao.restore(carrier.getId(), correspondence.getId(), folderHistory(admin)));
+		assertEquals(Integer.valueOf(0),
+				jdbc.queryForObject("select ld_deleted from ld_folder where ld_id = ?", Integer.class, inside.getId()));
+		allowed(() -> move(search, template, admin));
+		allowed(() -> move(search, correspondence, admin));
+		assertEquals(correspondence.getId(), reload(search).getParentId());
 	}
 
 	@Test

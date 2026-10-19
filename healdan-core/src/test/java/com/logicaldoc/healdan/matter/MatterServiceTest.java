@@ -39,6 +39,8 @@ import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
+import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
+import com.logicaldoc.healdan.searchfolder.SearchFolderRuleDAO;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 
 /**
@@ -694,13 +696,11 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	/**
-	 * Gives a search folder of the template its rule, as Task 17's service
-	 * will
+	 * Gives a search folder of the template its rule
 	 */
 	private void rule(Folder searchFolder, int days, boolean onlyMine) {
-		jdbc.update(
-				"insert into hd_searchfolder (hd_folderid, hd_days, hd_onlymine, hd_kind, hd_docclass, hd_docsubclass) values (?, ?, ?, 'ALL', null, null)",
-				searchFolder.getId(), days, onlyMine ? 1 : 0);
+		SearchFolderRuleDAO.get()
+				.save(new SearchFolderRule(searchFolder.getId(), days, onlyMine, SearchFolderRule.Kind.ALL, null, null));
 	}
 
 	private String rule(Folder searchFolder) {

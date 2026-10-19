@@ -172,6 +172,10 @@ check "email's subject field stored with U+FFFD for the emoji" \
 check "email's stored file name has no 4-byte character" \
   no_4byte_char "$(db_query "select ld_filename from ld_document where ld_id = ${email_id:-0}")"
 
+echo "== 5a. full text in Office and email files (spec §9)"
+# Uploads a .docx and an .eml into the Smoke Matter and searches for a token in each; their output carries its own PASS/FAIL lines
+check "full-text tokens found in the .docx and the .eml" env BASE="$BASE" FOLDER_ID="$doc_folder" bash docker/tests/test-fulltext.sh
+
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'

@@ -6,6 +6,7 @@ import javax.sql.DataSource;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.healdan.util.CacheEvictor;
@@ -15,10 +16,11 @@ import com.logicaldoc.healdan.util.CacheEvictor;
  * Healdan's parsers can read their content. Documents an admin set to skip
  * indexing stay skipped.
  * <p>
- * Not a bean until Task 21 adds Healdan's parsers; see the plan. Run before
- * the parsers exist, CE would re-index these documents with its own parsers,
- * extract nothing, and the marker would stop the step from ever running again.
+ * It is a bean only now that Healdan's parsers exist: run before them, CE would
+ * have re-indexed these documents with nothing to extract, and the marker would
+ * have stopped the step from ever running again.
  */
+@Component
 public class ReindexOfficeSeed implements SeedStep {
 
 	private static final String WHERE = "ld_deleted = 0 and ld_indexed <> " + IndexingStatus.SKIP.ordinal()

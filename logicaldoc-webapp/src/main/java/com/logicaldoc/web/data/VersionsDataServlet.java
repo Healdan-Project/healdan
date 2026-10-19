@@ -39,7 +39,7 @@ public class VersionsDataServlet extends AbstractDataServlet {
     protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
             Locale locale) throws PersistenceException, IOException {
 
-        List<?> records = executeQuery(request, max);
+        List<?> records = executeQuery(request, session, max);
 
         /*
          * Iterate over records composing the response XML document
@@ -87,7 +87,8 @@ public class VersionsDataServlet extends AbstractDataServlet {
         writer.write("</list>");
     }
 
-    private List<?> executeQuery(HttpServletRequest request, Integer max) throws PersistenceException {
+    private List<?> executeQuery(HttpServletRequest request, Session session, Integer max)
+            throws PersistenceException, IOException {
         VersionDAO dao = VersionDAO.get();
 
         Map<String, Object> params = new HashMap<>();
@@ -99,9 +100,14 @@ select A.id, A.username, A.event, A.version, A.fileVersion, A.versionDate, A.com
         if (request.getParameter(DOC_ID) != null) {
             long docId = Long.parseLong(request.getParameter(DOC_ID));
             DocumentDAO ddao = DocumentDAO.get();
+            // A shortcut lists its target's versions, so the target is the one that must be readable
             Document doc = ddao.findDocument(docId);
-            if (doc != null)
-                docId = doc.getId();
+            if (doc == null)
+                return List.of();
+            if (!ddao.isReadAllowed(doc.getId(), session.getUserId()))
+                throw new IOException(
+                        "Document %s is not accessible by user %s".formatted(doc.getId(), session.getUsername()));
+            docId = doc.getId();
 
             query.append(" from Version A where A.deleted = 0 and A.docId = :docId ");
             params.put(DOC_ID, docId);

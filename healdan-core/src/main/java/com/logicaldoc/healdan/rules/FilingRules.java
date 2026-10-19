@@ -81,6 +81,8 @@ public class FilingRules {
 
 	static final String SEARCH_FOLDER_TYPE = "Search folders can only be created with New search folder.";
 
+	static final String SEARCH_FOLDER_PLACE = "A search folder can only be inside a %s or a workspace template.";
+
 	static final String TEMPLATES = "Only administrators can change workspace templates.";
 
 	static final String RESTORE_PERMISSION = "You need the delete permission on this folder to restore it.";
@@ -237,6 +239,7 @@ public class FilingRules {
 				into != null ? into.getId() : null);
 		FolderPosition parent = locator.locate(into);
 		checkMoveAt(currentPosition(folder.getId(), row), parent, isAlias(folder), isAdmin(user), ids);
+		checkSearchFolderAt(parent, folder.getType(), ids);
 		checkPlacement(folder.getId(), childOf(parent, folder.getId(), folder.getType()), false, ids);
 	}
 
@@ -259,6 +262,19 @@ public class FilingRules {
 			if (inTemplates(current) && !admin)
 				throw refuse(TEMPLATES, ids);
 		}
+	}
+
+	/**
+	 * A folder's own settings change, such as a search folder's rule. In the
+	 * templates that is for admins, as every new matter copies them.
+	 *
+	 * @param folderId the folder
+	 * @param user who changes them
+	 * @throws PersistenceException the refusal, or an error at data layer
+	 */
+	public void checkFolderEdit(long folderId, User user) throws PersistenceException {
+		if (inTemplates(currentPosition(folderId)) && !isAdmin(user))
+			throw refuse(TEMPLATES, ids(folderId));
 	}
 
 	/**
@@ -327,6 +343,7 @@ public class FilingRules {
 		if ((storedType == HealdanConstants.FOLDER_TYPE_SEARCH || type == HealdanConstants.FOLDER_TYPE_SEARCH)
 				&& !searchFolderService())
 			throw refuse(SEARCH_FOLDER_TYPE, ids);
+		checkSearchFolderAt(parent, type, ids);
 		if (type == Folder.TYPE_ALIAS && noShortcuts(parent))
 			throw refuse(SHORTCUT, ids);
 	}
@@ -420,6 +437,7 @@ public class FilingRules {
 			// Moved into the target...
 			FolderPosition current = tree.position(folder.id());
 			checkMoveAt(current, place.position(), folder.alias(), admin, ids);
+			checkSearchFolderAt(place.position(), folder.type(), ids);
 			checkPlacement(tree, folder.id(), childOf(place.position(), folder.id(), folder.type()), ids);
 
 			// ...or merged into a namesake that was moved there first
@@ -450,6 +468,7 @@ public class FilingRules {
 				FolderPosition parent = level.get(child.parentId());
 				if (child.alias() && noShortcuts(parent))
 					throw refuse(SHORTCUT, ids);
+				checkSearchFolderAt(parent, child.type(), ids);
 				next.put(child.id(), childOf(parent, child.id(), child.type()));
 			}
 			level = next;
@@ -509,6 +528,7 @@ public class FilingRules {
 				FolderPosition parent = level.get(child.parentId());
 				if (child.alias() && noShortcuts(parent))
 					throw refuse(SHORTCUT, ids);
+				checkSearchFolderAt(parent, child.type(), ids);
 				next.put(child.id(), childOf(parent, child.id(), child.type()));
 			}
 			level = next;
@@ -538,6 +558,18 @@ public class FilingRules {
 	}
 
 	/**
+	 * A folder of the given type lands under the parent, by whatever route:
+	 * a search folder may only be in a matter or below a template. Directly in
+	 * the Templates Store it would be a template itself.
+	 */
+	private void checkSearchFolderAt(FolderPosition parent, int type, Collection<Long> ids)
+			throws HealdanRuleException {
+		if (type == HealdanConstants.FOLDER_TYPE_SEARCH
+				&& !(parent.isInsideMatter() || parent.kind() == Kind.IN_TEMPLATES))
+			throw refuse(label(SEARCH_FOLDER_PLACE), ids);
+	}
+
+	/**
 	 * @param restore true if the folder comes back from the trash, which
 	 *        doesn't create its type anew
 	 */
@@ -549,6 +581,7 @@ public class FilingRules {
 			throw refuse(STORE_TYPE, ids);
 		if (!restore && type == HealdanConstants.FOLDER_TYPE_SEARCH && !searchFolderService())
 			throw refuse(SEARCH_FOLDER_TYPE, ids);
+		checkSearchFolderAt(parent, type, ids);
 		if (alias && noShortcuts(parent))
 			throw refuse(SHORTCUT, ids);
 		if (parent.kind() == Kind.STORE && !HealdanOperation.active(HealdanOperation.Kind.MATTER_CREATE))

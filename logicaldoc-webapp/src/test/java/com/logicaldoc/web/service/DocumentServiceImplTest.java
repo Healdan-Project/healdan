@@ -898,10 +898,15 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         doc = testSubject.save(doc);
         assertNotNull(doc);
 
-        // Make it an alias
-        doc.setDocRef(3L);
-        doc = testSubject.save(doc);
-        assertNotNull(doc);
+        // A docRef the stored document doesn't have is refused: save takes a shortcut's target from the stored row
+        GUIDocument forged = doc;
+        forged.setDocRef(3L);
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(forged));
+
+        // Save a real alias: document 2 refers to document 1
+        GUIDocument alias = testSubject.getById(2);
+        assertEquals(Long.valueOf(1L), alias.getDocRef());
+        assertNotNull(testSubject.save(alias));
 
         // Add attributes
         doc.setDocRef(null);
@@ -1325,6 +1330,30 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
             exceptionHappened = true;
         }
         assertTrue(exceptionHappened);
+    }
+
+    /**
+     * Healdan (spec 8.2): a folder bookmark is looked up by folder, not by
+     * document, and a folder that is missing or deleted is skipped
+     */
+    @Test
+    public void testFolderBookmarkNotDuplicated() throws ServerException, PersistenceException {
+        // A bookmark on document 6 doesn't stand for one on folder 6
+        testSubject.addBookmarks(List.of(6L), Bookmark.Type.DOCUMENT.ordinal());
+        testSubject.addBookmarks(List.of(6L, 6L), Bookmark.Type.FOLDER.ordinal());
+        testSubject.addBookmarks(List.of(6L), Bookmark.Type.FOLDER.ordinal());
+
+        List<Bookmark> folder6 = bookDao.findByUserId(session.getUserId()).stream()
+                .filter(b -> b.getType() == Bookmark.Type.FOLDER && b.getTargetId() == 6L).toList();
+        assertEquals(1, folder6.size());
+        assertEquals("folder6", folder6.get(0).getTitle());
+        assertNotNull(bookDao.findByUserIdAndDocId(session.getUserId(), 6L));
+
+        // Folder 8 is deleted, the other doesn't exist
+        testSubject.addBookmarks(List.of(987654321L, 8L, 7L), Bookmark.Type.FOLDER.ordinal());
+        assertNull(bookDao.findByUserIdAndFolderId(session.getUserId(), 987654321L));
+        assertNull(bookDao.findByUserIdAndFolderId(session.getUserId(), 8L));
+        assertNotNull(bookDao.findByUserIdAndFolderId(session.getUserId(), 7L));
     }
 
     @Test

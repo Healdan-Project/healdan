@@ -1,33 +1,161 @@
 package com.logicaldoc.web.service;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarInputStream;
+import java.util.jar.JarOutputStream;
 
 import org.junit.Test;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.searchengine.FulltextSearchOptions;
 import com.logicaldoc.core.searchengine.SearchOptions;
+import com.logicaldoc.core.searchengine.TagSearchOptions;
 import com.logicaldoc.core.searchengine.folder.FolderCriterion;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUICriterion;
+import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIResult;
 import com.logicaldoc.gui.common.client.beans.GUISearchOptions;
+import com.logicaldoc.util.io.ResourceUtil;
 import com.logicaldoc.web.AbstractFulltextTestCase;
 
 public class SearchServiceImplTest extends AbstractFulltextTestCase {
 
+	/** A search type that registers no options converter: CE's tag search under another number */
+	private static final int UNCONVERTED_TYPE = 4242;
+
+	/**
+	 * A full-text type that registers no options converter: CE's full-text
+	 * search under the number of Healdan's documents-only search
+	 */
+	private static final int UNCONVERTED_FULLTEXT_TYPE = 104;
+
 	// Instance under test
 	private SearchServiceImpl testSubject = new SearchServiceImpl();
+
+	@Override
+	protected List<String> getPluginArchives() {
+		List<String> archives = new ArrayList<>(super.getPluginArchives());
+		archives.add(unconvertedSearchPlugin());
+		return archives;
+	}
+
+	@Test
+	public void testUnregisteredTypeUsesDefaultConverter() throws ServerException {
+		// One default for every unregistered type
+		assertSame(SearchServiceImpl.converterFor(UNCONVERTED_TYPE), SearchServiceImpl.converterFor(-7));
+		assertSame(SearchServiceImpl.converterFor(UNCONVERTED_TYPE),
+				SearchServiceImpl.converterFor(UNCONVERTED_FULLTEXT_TYPE));
+
+		GUISearchOptions options = new GUISearchOptions();
+		options.setExpression("abc");
+		options.setType(UNCONVERTED_TYPE);
+		SearchOptions converted = SearchServiceImpl.converterFor(UNCONVERTED_TYPE).toSearchOptions(options);
+		assertEquals(TagSearchOptions.class, converted.getClass());
+		assertEquals(UNCONVERTED_TYPE, converted.getType());
+		assertEquals("abc", converted.getExpression());
+
+		// The search runs, with the expression and the user carried over
+		options.setType(SearchOptions.TYPE_TAG);
+		List<Long> tagged = hitIds(testSubject.search(options));
+		assertFalse(tagged.isEmpty());
+		options.setType(UNCONVERTED_TYPE);
+		assertEquals(tagged, hitIds(testSubject.search(options)));
+	}
+
+	@Test
+	public void testUnregisteredFulltextTypeKeepsTheFulltextOptions() throws ServerException {
+		GUISearchOptions options = new GUISearchOptions();
+		options.setType(UNCONVERTED_FULLTEXT_TYPE);
+		options.setExpression("document");
+		options.setFields(List.of("content", "fileName"));
+		options.setExpressionLanguage("it");
+		options.setDateFrom(new Date(1));
+
+		SearchOptions converted = SearchServiceImpl.converterFor(UNCONVERTED_FULLTEXT_TYPE).toSearchOptions(options);
+		assertEquals(FulltextSearchOptions.class, converted.getClass());
+		FulltextSearchOptions fulltext = (FulltextSearchOptions) converted;
+		assertEquals(UNCONVERTED_FULLTEXT_TYPE, fulltext.getType());
+		assertEquals("document", fulltext.getExpression());
+		assertEquals(Set.of("content", "fileName"), fulltext.getFields());
+		assertEquals("it", fulltext.getExpressionLanguage());
+		assertEquals(new Date(1), fulltext.getDateFrom());
+
+		// The search finds what CE's full-text search finds with the same options
+		options.setExpressionLanguage("en");
+		options.setType(SearchOptions.TYPE_FULLTEXT);
+		List<Long> found = hitIds(testSubject.search(options));
+		assertFalse(found.isEmpty());
+		options.setType(UNCONVERTED_FULLTEXT_TYPE);
+		assertEquals(found, hitIds(testSubject.search(options)));
+	}
+
+	private static List<Long> hitIds(GUIResult result) {
+		return result.getHits().stream().map(GUIDocument::getId).toList();
+	}
+
+	/**
+	 * Builds, in the test classpath, a plugin that registers CE's tag search as
+	 * {@link #UNCONVERTED_TYPE} and CE's full-text search as
+	 * {@link #UNCONVERTED_FULLTEXT_TYPE}
+	 *
+	 * @return the jar's classpath path
+	 */
+	private static String unconvertedSearchPlugin() {
+		try {
+			String dummyXml;
+			try (JarInputStream in = new JarInputStream(ResourceUtil.getInputStream("logicaldoc-dummy-plugin.jar"))) {
+				while (!"plugin.xml".equals(in.getNextJarEntry().getName()))
+					in.closeEntry();
+				dummyXml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+			}
+			// The manifest parser validates against the DTD at the top
+			String xml = dummyXml.substring(0, dummyXml.indexOf("<plugin id=")) + """
+					<plugin id="unconverted-search" version="9.3.1">
+					  <requires><import plugin-id="logicaldoc-core" /></requires>
+					  <extension plugin-id="logicaldoc-core" point-id="Search" id="unconvertedSearch">
+					    <parameter id="type" value="%d" />
+					    <parameter id="class" value="com.logicaldoc.core.searchengine.TagSearch" />
+					    <parameter id="options" value="com.logicaldoc.core.searchengine.TagSearchOptions" />
+					  </extension>
+					  <extension plugin-id="logicaldoc-core" point-id="Search" id="unconvertedFulltextSearch">
+					    <parameter id="type" value="%d" />
+					    <parameter id="class" value="com.logicaldoc.core.searchengine.FulltextSearch" />
+					    <parameter id="options" value="com.logicaldoc.core.searchengine.FulltextSearchOptions" />
+					  </extension>
+					</plugin>
+					""".formatted(UNCONVERTED_TYPE, UNCONVERTED_FULLTEXT_TYPE);
+			try (JarOutputStream out = new JarOutputStream(
+					new FileOutputStream(new File("target/test-classes/unconverted-search-plugin.jar")))) {
+				out.putNextEntry(new JarEntry("plugin.xml"));
+				out.write(xml.getBytes(StandardCharsets.UTF_8));
+			}
+			return "/unconverted-search-plugin.jar";
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
 
 	@Test
 	public void testSearch() throws ServerException {
@@ -68,6 +196,22 @@ public class SearchServiceImplTest extends AbstractFulltextTestCase {
 		
 		result = testSubject.search(options);
 		assertEquals(3, result.getHits().size());
+	}
+
+	@Test
+	public void testSaveAndLoadOfUnregisteredType() throws ServerException, PersistenceException {
+		GUISearchOptions options = new GUISearchOptions();
+		options.setUserId(1L);
+		options.setLanguage("en");
+		options.setExpression("document");
+		options.setType(UNCONVERTED_FULLTEXT_TYPE);
+		options.setName("unconverted");
+
+		testSubject.save(options);
+
+		GUISearchOptions loaded = testSubject.load("unconverted");
+		assertNotNull(loaded);
+		assertEquals("document", loaded.getExpression());
 	}
 
 	@Test

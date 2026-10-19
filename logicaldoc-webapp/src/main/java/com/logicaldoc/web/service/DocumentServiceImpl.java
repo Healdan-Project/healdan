@@ -172,7 +172,10 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         for (Long id : ids) {
             try {
                 Bookmark bookmark = null;
-                if (bookmarkDao.findByUserIdAndDocId(session.getUserId(), id) != null) {
+                // Healdan: a folder bookmark is looked up by folder, not by document (spec 8.2)
+                boolean folderBookmark = type == Bookmark.Type.FOLDER.ordinal();
+                if ((folderBookmark ? bookmarkDao.findByUserIdAndFolderId(session.getUserId(), id)
+                        : bookmarkDao.findByUserIdAndDocId(session.getUserId(), id)) != null) {
                     // The bookmark already exists
                 } else {
                     bookmark = new Bookmark();
@@ -189,6 +192,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
                         bookmark.setFileType(doc.getType());
                     } else {
                         Folder f = fdao.findById(id);
+                        // Healdan: skip a folder that is missing or deleted, or that the user can't read
+                        if (f == null || !fdao.isReadAllowed(id, session.getUserId()))
+                            continue;
                         bookmark.setTitle(f.getName());
                     }
 
@@ -777,8 +783,16 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Session session = validateSession();
 
         try {
-            return getDocument(session, docId);
-        } catch (InvalidSessionServerException | PermissionException | PersistenceException e) {
+            // A document that doesn't exist still gives null
+            Document document = DocumentDAO.get().findById(docId, true);
+            if (document == null)
+                return null;
+            checkDocumentPermission(session, Permission.READ, docId);
+            // A shortcut shows its target's details, so the target must be readable too
+            if (document.getDocRef() != null)
+                checkDocumentPermission(session, Permission.READ, document.getDocRef());
+            return getDocument(session, document);
+        } catch (PermissionException | PersistenceException e) {
             return throwServerException(session, log, e);
         }
     }
@@ -802,25 +816,36 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             validateSession(session.getSid());
 
         Document document = DocumentDAO.get().findById(docId, true);
+        return document != null ? getDocument(session, document) : null;
+    }
 
+    private GUIDocument getDocument(Session session, Document document)
+            throws PersistenceException, PermissionException {
         GUIDocument guiDocument = null;
         GUIFolder folder = null;
 
         if (document != null) {
-            folder = new FolderServiceImpl().fromFolder(document.getFolder(), false);
+            // Someone who reads the document only through its own ACL sees the folder's id and name, nothing more
+            Set<Permission> folderPermissions = session != null
+                    ? FolderDAO.get().getAllowedPermissions(document.getFolder().getId(), session.getUserId())
+                    : Set.of();
+            boolean folderHidden = session != null && !folderPermissions.contains(Permission.READ);
+            if (folderHidden) {
+                folder = new GUIFolder(document.getFolder().getId());
+                folder.setName(document.getFolder().getName());
+            } else
+                folder = new FolderServiceImpl().fromFolder(document.getFolder(), false);
 
             if (session != null)
                 checkPublished(session.getUser(), document);
 
             guiDocument = fromDocument(document, folder, session != null ? session.getUser() : null);
 
-            setAllowedPermissions(session, docId, guiDocument);
+            setAllowedPermissions(session, document.getId(), guiDocument);
 
-            if (session != null && folder != null) {
-                Set<Permission> permissions = FolderDAO.get().getAllowedPermissions(document.getFolder().getId(),
-                        session.getUserId());
+            if (session != null && folder != null && !folderHidden) {
                 List<String> permissionsList = new ArrayList<>();
-                for (Permission permission : permissions)
+                for (Permission permission : folderPermissions)
                     permissionsList.add(permission.name().toLowerCase());
                 folder.setAllowedPermissions(new GUIAccessControlEntry(permissionsList.toArray(new String[0])));
             }
@@ -944,6 +969,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         Version docVersion;
         try {
             docVersion = versDao.findById(id1, true);
+            if (docVersion != null)
+                checkDocumentPermission(session, Permission.READ, docVersion.getDocId());
         } catch (Exception e) {
             return super.<List<GUIVersion>> throwServerException(session, log, e);
         }
@@ -987,6 +1014,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         try {
             docVersion = versDao.findById(id2, true);
+            if (docVersion != null)
+                checkDocumentPermission(session, Permission.READ, docVersion.getDocId());
         } catch (Exception e) {
             return super.<List<GUIVersion>> throwServerException(session, log, e);
         }
@@ -1037,6 +1066,13 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         }
 
         return versions;
+    }
+
+    private static void checkDocumentPermission(Session session, Permission permission, long docId)
+            throws PersistenceException, AccessDeniedException {
+        if (!DocumentDAO.get().isPermissionAllowed(permission, docId, session.getUserId()))
+            throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                    .formatted(session.getUsername(), permission.name(), docId));
     }
 
     private void setGUIExtendedAttributes(Version docVersion, GUIVersion guiVersion) throws ServerException {
@@ -1213,13 +1249,25 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
         try {
             DocumentDAO docDao = DocumentDAO.get();
+            checkDocumentPermission(session, Permission.WRITE, guiDocument.getId());
             Document document = docDao.findById(guiDocument.getId(), true);
+            // A shortcut's target is the stored one, and it needs WRITE too, since its properties are updated
+            if (!Objects.equals(guiDocument.getDocRef(), document.getDocRef()))
+                throw new AccessDeniedException("Document %s doesn't refer to document %s"
+                        .formatted(guiDocument.getId(), guiDocument.getDocRef()));
+            if (document.getDocRef() != null)
+                checkDocumentPermission(session, Permission.WRITE, document.getDocRef());
+            // A new file name renames the document, or the shortcut, which needs RENAME as in rename()
+            String fileName = HTMLSanitizer.sanitizeSimpleText(guiDocument.getFileName());
+            if (StringUtils.isNotEmpty(fileName) && !fileName.equals(document.getFileName()))
+                checkDocumentPermission(session, Permission.RENAME, guiDocument.getId());
 
             if (guiDocument.getDocRef() != null) {
                 /*
                  * We are saving an alias
                  */
-                document.setFileName(guiDocument.getFileName());
+                if (StringUtils.isNotEmpty(fileName))
+                    document.setFileName(fileName);
                 document.setColor(guiDocument.getColor());
                 document.setType(FileUtil.getExtension(document.getFileName()).toLowerCase());
                 docDao.store(document);
