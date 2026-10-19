@@ -61,6 +61,7 @@ import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.io.FileUtil;
 import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.webservice.AbstractService;
+import com.logicaldoc.webservice.HealdanWsChecks;
 import com.logicaldoc.webservice.WebserviceException;
 import com.logicaldoc.webservice.model.WSAccessControlEntry;
 import com.logicaldoc.webservice.model.WSDocument;
@@ -230,7 +231,8 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
         DocumentDAO docDao = DocumentDAO.get();
         Document doc = docDao.findById(docId);
         checkUnlocked(user, doc);
-        checkFolderPermission(Permission.DELETE, user, doc.getFolder().getId());
+        // Healdan: the document's DELETE, not its folder's (D7)
+        checkDocumentPermission(Permission.DELETE, user, docId);
         checkPublished(user, doc);
 
         // Create the document history event
@@ -469,6 +471,8 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
             throw new PermissionException("Cannot create documents in the root");
 
         checkFolderPermission(Permission.WRITE, user, folderId);
+        // Healdan: DOWNLOAD on the document copied, since the copy can be downloaded (R73)
+        checkDocumentPermission(Permission.DOWNLOAD, user, docId);
 
         DocumentDAO docDao = DocumentDAO.get();
         Document doc = docDao.findDocument(docId);
@@ -681,6 +685,8 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
     public void sendEmail(String sid, List<Long> docIds, String recipients, String subject, String message)
             throws AuthenticationException, WebserviceException, PersistenceException, IOException, MessagingException {
         User user = validateSession(sid);
+        // Healdan: DOWNLOAD and EMAIL on each document, before anything is sent (R72, R79)
+        HealdanWsChecks.documents(user, docIds, Permission.DOWNLOAD, Permission.EMAIL);
 
         DocumentDAO docDao = DocumentDAO.get();
         FolderDAO folderDao = FolderDAO.get();
@@ -709,7 +715,8 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
         List<Document> docs = new ArrayList<>();
         for (long id : docIds) {
             Document doc = docDao.findById(id);
-            if (doc != null && folderDao.isReadAllowed(doc.getFolder().getId(), user.getId())) {
+            // Healdan: checked above on the document, instead of its folder's READ (D7)
+            if (doc != null) {
                 doc = docDao.findDocument(id);
                 createAttachment(mail, doc);
                 docs.add(doc);
@@ -1086,7 +1093,9 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
     @Override
     public boolean unprotect(String sid, long docId, String password)
             throws PersistenceException, AuthenticationException, WebserviceException {
-        validateSession(sid);
+        User user = validateSession(sid);
+        // Healdan: READ on the document, so no one tries passwords on one they can't read (R75, R79)
+        HealdanWsChecks.documents(user, List.of(docId), Permission.READ);
         Document doc = DocumentDAO.get().findDocument(docId);
         return DocumentManager.get().unprotect(sid, doc.getId(), password);
     }

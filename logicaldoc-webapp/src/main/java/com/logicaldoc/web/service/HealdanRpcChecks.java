@@ -1,14 +1,12 @@
 package com.logicaldoc.web.service;
 
 import java.io.IOException;
-import java.util.ArrayDeque;
 import java.util.Collection;
-import java.util.Deque;
-import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.logicaldoc.core.HealdanTreeChecks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.BookmarkDAO;
@@ -25,6 +23,7 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.core.ticket.TicketDAO;
@@ -43,6 +42,10 @@ import com.logicaldoc.util.CollectionUtil;
  * for the user's groups, else its folder's. A document-only grant is enough
  * (D7), and a document's narrower ACL holds where its folder grants more.
  * Admins keep CE's bypass, which the DAOs give them.
+ * <p>
+ * The checks on a whole folder tree live in core's {@link HealdanTreeChecks},
+ * which the web services call too (R78); these give their refusals as the
+ * GUI's {@link AccessDeniedException}.
  */
 public final class HealdanRpcChecks {
 
@@ -489,16 +492,7 @@ public final class HealdanRpcChecks {
      * @throws ServerException the refusal, or an error at data layer
      */
     public static void tree(Session session, Permission permission, long rootId) throws ServerException {
-        try {
-            FolderDAO dao = FolderDAO.get();
-            if (dao.findById(rootId) == null
-                    || !dao.findFolderIdByUserIdAndPermission(session.getUserId(), permission, rootId, true)
-                            .containsAll(dao.findFolderIdInTree(rootId, false)))
-                throw new AccessDeniedException("User %s doesn't have permission %s on every folder of tree %d"
-                        .formatted(session.getUsername(), permission.name(), rootId));
-        } catch (PersistenceException e) {
-            throw new ServerException(e.getMessage(), e);
-        }
+        treeCheck(() -> HealdanTreeChecks.tree(session.getUser(), permission, rootId));
     }
 
     /**
@@ -513,10 +507,7 @@ public final class HealdanRpcChecks {
      */
     public static void trees(Session session, Collection<Long> rootIds, Permission... permissions)
             throws ServerException {
-        for (Long rootId : rootIds)
-            if (rootId != null)
-                for (Permission permission : permissions)
-                    tree(session, permission, rootId);
+        treeCheck(() -> HealdanTreeChecks.trees(session.getUser(), rootIds, permissions));
     }
 
     /**
@@ -529,26 +520,13 @@ public final class HealdanRpcChecks {
      * @throws ServerException the refusal, or an error at data layer
      */
     public static void deletedTrees(Session session, Collection<Long> folderIds) throws ServerException {
-        if (session.getUser().isAdmin())
-            return;
-        try {
-            for (Long folderId : folderIds) {
-                if (folderId == null)
-                    continue;
-                tree(session, Permission.DELETE, folderId);
-                documentsIn(session, Permission.DELETE, FolderDAO.get().findFolderIdInTree(folderId, false));
-            }
-        } catch (PersistenceException e) {
-            throw new ServerException(e.getMessage(), e);
-        }
+        treeCheck(() -> HealdanTreeChecks.deletedTrees(session.getUser(), folderIds));
     }
 
     /**
      * Copying a folder needs READ on every folder the copy walks and, unless
-     * only folders are copied, DOWNLOAD on every document it copies, since the
-     * copies can be downloaded. CE's copy walks the folder and then, level by
-     * level, the children {@code FolderDAO.findChildren(parentId, userId)}
-     * gives the user.
+     * only folders are copied, DOWNLOAD on every document it copies
+     * ({@link HealdanTreeChecks#folderCopies})
      *
      * @param session the user's session
      * @param folderIds the folders to copy
@@ -558,32 +536,7 @@ public final class HealdanRpcChecks {
      */
     public static void folderCopies(Session session, Collection<Long> folderIds, boolean foldersOnly)
             throws ServerException {
-        if (session.getUser().isAdmin())
-            return;
-        try {
-            FolderDAO dao = FolderDAO.get();
-            for (Long folderId : folderIds) {
-                if (folderId == null)
-                    continue;
-                // First: findChildren fails on a missing folder
-                folder(session, Permission.READ, folderId);
-                Set<Long> walked = new LinkedHashSet<>();
-                Deque<Long> next = new ArrayDeque<>();
-                next.push(folderId);
-                while (!next.isEmpty()) {
-                    long id = next.pop();
-                    if (walked.add(id))
-                        for (Folder child : dao.findChildren(id, session.getUserId()))
-                            next.push(child.getId());
-                }
-                for (Long id : walked)
-                    folder(session, Permission.READ, id);
-                if (!foldersOnly)
-                    documentsIn(session, Permission.DOWNLOAD, walked);
-            }
-        } catch (PersistenceException e) {
-            throw new ServerException(e.getMessage(), e);
-        }
+        treeCheck(() -> HealdanTreeChecks.folderCopies(session.getUser(), folderIds, foldersOnly));
     }
 
     /**
@@ -650,30 +603,22 @@ public final class HealdanRpcChecks {
     }
 
     /**
-     * Refuses unless the user has the permission on every live document in the
-     * folders. As CE's {@code DocumentDAO.getAllowedPermissions} reads it, a
-     * document whose own ACL has no entry for the user's groups has its
-     * folder's permissions, so its folder is checked once; any other document
-     * is checked by itself.
+     * Runs a check of {@link HealdanTreeChecks}, shared with the web services,
+     * and gives its refusal as the GUI's {@link AccessDeniedException}
      */
-    private static void documentsIn(Session session, Permission permission, Collection<Long> folderIds)
-            throws PersistenceException, AccessDeniedException {
-        if (folderIds.isEmpty())
-            return;
-        DocumentDAO dao = DocumentDAO.get();
-        String folders = CollectionUtil.join(folderIds);
-        String groups = "select ld_groupid from ld_usergroup where ld_userid = %d".formatted(session.getUserId());
-        for (Long folderId : dao.queryForList("""
-                select distinct D.ld_folderid from ld_document D
-                 where D.ld_deleted = 0 and D.ld_folderid in (%s)
-                   and not exists (select A.ld_docid from ld_document_acl A where A.ld_docid = D.ld_id and A.ld_groupid in (%s))
-                """.formatted(folders, groups), Long.class))
-            folder(session, permission, folderId);
-        for (Long docId : dao.queryForList("""
-                select distinct D.ld_id from ld_document D, ld_document_acl A
-                 where A.ld_docid = D.ld_id and D.ld_deleted = 0 and D.ld_folderid in (%s) and A.ld_groupid in (%s)
-                """.formatted(folders, groups), Long.class))
-            document(session, permission, docId);
+    private static void treeCheck(TreeCheck check) throws ServerException {
+        try {
+            check.run();
+        } catch (PermissionException e) {
+            throw new AccessDeniedException(e.getMessage());
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
+    }
+
+    @FunctionalInterface
+    private interface TreeCheck {
+        void run() throws PersistenceException, PermissionException;
     }
 
     private static void notePermission(Session session, Set<Permission> allowed, Permission permission, long noteId)
