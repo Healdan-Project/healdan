@@ -634,9 +634,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             if (doc == null)
                 throw new ServerException(UNEXISTING_DOCUMENT);
 
-            FolderDAO fDao = FolderDAO.get();
-            if (!fDao.isWriteAllowed(doc.getFolder().getId(), session.getUserId()))
-                throw new PermissionException(session.getUsername(), DOCUMENT_D.formatted(docId), Permission.WRITE);
+            // Healdan: the document's WRITE, not its folder's (D7)
+            checkDocumentPermission(session, Permission.WRITE, doc.getId());
 
             if (doc.getStatus() != DocumentStatus.UNLOCKED)
                 throw new PermissionException("The document %d is locked".formatted(docId));
@@ -710,6 +709,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void delete(List<Long> ids) throws ServerException {
         Session session = validateSession();
+        // Healdan: DELETE on each document, a shortcut on itself, before any is deleted
+        HealdanRpcChecks.existingDocuments(session, Permission.DELETE, ids);
 
         for (long docId : ids) {
             try {
@@ -1229,7 +1230,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             try {
                 DocumentDAO.get().restore(docId, folderId, transaction);
             } catch (PersistenceException e) {
-                log.error(e.getMessage(), e);
+                // Healdan: the refusal reaches the user
+                throwServerException(session, log, e);
             }
         }
     }
@@ -1530,6 +1532,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public String sendAsEmail(GUIEmail guiMail, String locale) throws ServerException {
         Session session = validateSession();
+        // Healdan: DOWNLOAD and EMAIL on each document, before a ticket or an attachment is made
+        HealdanRpcChecks.documents(session, guiMail.getDocIds(), Permission.DOWNLOAD, Permission.EMAIL);
         DocumentDAO documentDao = DocumentDAO.get();
 
         EMail mail = new EMail();
@@ -1944,6 +1948,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public GUIDocumentNote getNote(long noteId) throws ServerException {
         Session session = validateSession();
+        // Healdan: READ on the note's document and the note's own READ
+        HealdanRpcChecks.readNote(session, noteId);
 
         try {
             return toGUINote(DocumentNoteDAO.get().findById(noteId, true), session);
@@ -2008,6 +2014,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
 
             if (document == null)
                 throw new ServerException("Unexisting document %d".formatted(docId));
+            // Healdan: READ on the document
+            checkDocumentPermission(session, Permission.READ, docId);
 
             List<GUIDocumentNote> guiNotes = new ArrayList<>();
             DocumentNoteDAO dao = DocumentNoteDAO.get();
@@ -2362,6 +2370,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void archiveDocuments(List<Long> docIds, String comment) throws ServerException {
         Session session = validateSession();
+        // Healdan: ARCHIVE on each document, not only on its folder
+        HealdanRpcChecks.documents(session, Permission.ARCHIVE, docIds);
 
         DocumentHistory transaction = new DocumentHistory();
         transaction.setSession(session);
@@ -2561,6 +2571,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
         DocumentDAO dao = DocumentDAO.get();
 
         try {
+            // Healdan: the document's PASSWORD, as setPassword asks
+            checkDocumentPermission(session, Permission.PASSWORD, docId);
             Document doc = dao.findDocument(docId);
             if (session.getUser().isMemberOf(Group.GROUP_ADMIN) || doc.isGranted(currentPassword))
                 dao.unsetPassword(docId, transaction);
@@ -2574,6 +2586,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public boolean unprotect(long docId, String password) throws ServerException {
         Session session = validateSession();
+        // Healdan: READ on the document, so no one tries passwords on one they can't read
+        HealdanRpcChecks.documents(session, Permission.READ, List.of(docId));
         return DocumentManager.get().unprotect(session.getSid(), docId, password);
     }
 
@@ -2614,7 +2628,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             if (doc == null)
                 throw new ServerException(UNEXISTING_DOCUMENT);
 
-            docDao.isWriteAllowed(docId, session.getUserId());
+            // Healdan: WRITE on the document, and the user's own checkout of it (CE ignored the WRITE it read)
+            HealdanRpcChecks.checkin(session, doc.getId());
 
             if (doc.getStatus() != DocumentStatus.CHECKEDOUT || doc.getLockUserId() != session.getUserId())
                 throw new PermissionException("You have not checked out the file %d".formatted(docId));
@@ -2648,7 +2663,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             if (doc == null)
                 throw new ServerException(UNEXISTING_DOCUMENT);
 
-            docDao.isWriteAllowed(docId, session.getUserId());
+            // Healdan: WRITE on the document (CE ignored the WRITE it read)
+            HealdanRpcChecks.document(session, Permission.WRITE, doc.getId());
 
             if (doc.getStatus() != DocumentStatus.UNLOCKED)
                 throw new IOException("The document is locked");
@@ -2746,6 +2762,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
             Document doc = docDao.findById(docId);
             if (doc == null)
                 throw new ServerException(UNEXISTING_DOCUMENT);
+            // Healdan: DOWNLOAD on the document converted; the folder's WRITE is for the new document
+            checkDocumentPermission(session, Permission.DOWNLOAD, docId);
 
             FolderDAO fDao = FolderDAO.get();
             if (!fDao.isWriteAllowed(doc.getFolder().getId(), session.getUserId()))
@@ -2912,6 +2930,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public GUIDocument replaceAlias(long aliasId) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on the shortcut replaced, as CE's GUI asks, and DOWNLOAD, since the copy carries its content
+        HealdanRpcChecks.documents(session, List.of(aliasId), Permission.WRITE, Permission.DOWNLOAD);
 
         DocumentHistory transaction = new DocumentHistory();
         transaction.setSession(session);
@@ -3173,6 +3193,9 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public GUIDocument merge(List<Long> docIds, long targetFolderId, String fileName) throws ServerException {
         final Session session = validateSession();
+        // Healdan: DOWNLOAD on each document merged, and WRITE on the folder the merged PDF goes in
+        HealdanRpcChecks.documents(session, Permission.DOWNLOAD, docIds);
+        HealdanRpcChecks.folders(session, Permission.WRITE, List.of(targetFolderId));
 
         DocumentHistory transaction = new DocumentHistory();
         transaction.setSession(session);

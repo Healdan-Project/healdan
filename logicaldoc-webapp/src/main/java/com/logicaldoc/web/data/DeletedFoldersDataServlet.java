@@ -40,6 +40,8 @@ public class DeletedFoldersDataServlet extends AbstractDataServlet {
 		Long deleteUserId = StringUtils.isNotEmpty(request.getParameter("userId"))
 				? Long.parseLong(request.getParameter("userId"))
 				: null;
+		// Healdan: the report's menu, else only what the user deleted
+		deleteUserId = com.logicaldoc.web.service.HealdanRpcChecks.trashUser(session, com.logicaldoc.gui.common.client.Menu.DELETED_FOLDERS, deleteUserId);
 
 		FolderDAO fldDao = FolderDAO.get();
 		DateFormat df = getDateFormat();

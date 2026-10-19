@@ -24,6 +24,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.history.History;
+import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
@@ -90,6 +91,10 @@ public class FilingRules {
 	static final String RESTORE_DOCUMENT_PERMISSION = "You need the delete permission on this document to restore it.";
 
 	static final String RESTORE_LIVE_DOCUMENT = "Only a deleted document can be restored.";
+
+	static final String RESTORE_TARGET = "You need the add permission on a folder to restore a folder into it.";
+
+	static final String RESTORE_DOCUMENT_TARGET = "You need the write permission on a folder to restore a document into it.";
 
 	/** Key of what the current transaction found of who is an admin */
 	private static final String ADMINS = FilingRules.class.getName() + ".admins";
@@ -325,6 +330,10 @@ public class FilingRules {
 			checkCreateAt(parent, row.type(), row.alias(), admin, true, ids);
 		}
 		checkPlacement(folderId, childOf(parent, folderId, row.type()), true, ids);
+		// Anywhere but back where it was, the folder is added to a parent: ADD there, as creating one asks
+		if (!admin && into != null && into.getId() != row.parentId()
+				&& !FolderDAO.get().isPermissionAllowed(Permission.ADD, into.getId(), user.getId()))
+			throw refuse(RESTORE_TARGET, ids);
 	}
 
 	/**
@@ -332,6 +341,8 @@ public class FilingRules {
 	 * folder they restore (R22). CE's own check sees nothing on a deleted
 	 * document. CE doesn't check that the document is deleted, and restoring a
 	 * live one would move it with no MOVE asked, so only an admin may.
+	 * Restored anywhere but the folder it was deleted from, it is filed there
+	 * anew, which needs WRITE on that folder, as CE's SOAP restore asks.
 	 *
 	 * @param documentId the document
 	 * @param folderId the folder it is restored into
@@ -345,6 +356,9 @@ public class FilingRules {
 			throw refuse(RESTORE_DOCUMENT_PERMISSION, ids(folderId));
 		if (Integer.valueOf(0).equals(rows.documentDeleted(documentId)))
 			throw refuse(RESTORE_LIVE_DOCUMENT, ids(folderId));
+		if (!Long.valueOf(folderId).equals(rows.documentFolder(documentId))
+				&& !FolderDAO.get().isPermissionAllowed(Permission.WRITE, folderId, user.getId()))
+			throw refuse(RESTORE_DOCUMENT_TARGET, ids(folderId));
 	}
 
 	/**

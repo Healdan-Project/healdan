@@ -100,6 +100,9 @@ public class FilingRulesTest extends AbstractRulesTestCase {
 		documentDao.delete(deletedDoc.getId(), documentHistory(admin));
 		awaitAsyncWork();
 		ownEntry(bob.getUserGroup().getId(), 1);
+		// Anywhere but the folder it was deleted from, now Documents, he needs WRITE there
+		assertRefused(RESTORE_DOCUMENT_TARGET,
+				() -> documentDao.restore(deletedDoc.getId(), correspondence.getId(), documentHistory(bob)));
 		allowed(() -> restore(bob));
 		assertEquals(documents.getId(), reload(deletedDoc).getFolder().getId());
 	}

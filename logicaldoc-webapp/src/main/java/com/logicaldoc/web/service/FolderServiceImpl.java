@@ -149,6 +149,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void delete(List<Long> folderIds) throws ServerException {
         Session session = validateSession();
+        // Healdan: DELETE on everything each tree holds, folders and documents, before any is deleted
+        HealdanRpcChecks.deletedTrees(session, folderIds);
         for (long folderId : folderIds)
             try {
                 delete(session, folderId);
@@ -468,6 +470,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
             String securityOption,
             GUIFolder model) throws ServerException {
         Session session = validateSession();
+        // Healdan: READ on each folder the copy walks and DOWNLOAD on each document it copies, before any is copied
+        HealdanRpcChecks.folderCopies(session, folderIds, foldersOnly);
 
         try {
             for (long folderId : folderIds)
@@ -908,6 +912,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
         FolderDAO folderDao = FolderDAO.get();
         DocumentManager docManager = DocumentManager.get();
         DocumentDAO docDao = DocumentDAO.get();
+        // Healdan: DOWNLOAD on each document, since the copies can be downloaded, before any is copied
+        HealdanRpcChecks.documents(session, Permission.DOWNLOAD, docIds);
 
         try {
             Folder selectedFolderFolder = folderDao.findById(folderId);
@@ -937,6 +943,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
     @Override
     public void pasteAsAlias(List<Long> docIds, long folderId, String type) throws ServerException {
         Session session = validateSession();
+        // Healdan: WRITE on the folder and DOWNLOAD on each document, as CE's SOAP createAlias asks
+        HealdanRpcChecks.shortcuts(session, docIds, folderId);
 
         FolderDAO folderDao = FolderDAO.get();
         DocumentManager docManager = DocumentManager.get();
@@ -1219,6 +1227,8 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
         checkPermission(Permission.ADD, session.getUser(), targetId);
         checkPermission(Permission.WRITE, session.getUser(), targetId);
         checkPermission(Permission.DELETE, session.getUser(), targetId);
+        // Healdan: MOVE and DELETE on every folder of each source tree, which the merge empties and deletes
+        HealdanRpcChecks.trees(session, folderIds, Permission.MOVE, Permission.DELETE);
 
         executeLongRunningOperation("Merge", () -> {
             try {

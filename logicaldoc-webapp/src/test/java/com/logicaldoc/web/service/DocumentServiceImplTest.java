@@ -1136,6 +1136,12 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         assertTrue(testSubject.isPasswordProtected(1L));
 
         prepareSession("boss", "admin");
+        // Healdan: boss, who has no grant, needs PASSWORD on the document besides its password
+        Document granted = docDao.findById(1L, true);
+        DocumentAccessControlEntry ace = new DocumentAccessControlEntry(-2L);
+        ace.grantPermissions(Set.of(Permission.PASSWORD));
+        granted.addAccessControlEntry(ace);
+        docDao.store(granted);
         try {
             testSubject.unsetPassword(1L, "xxx");
             fail("No exception in case of wrong password?");
@@ -1181,6 +1187,14 @@ public class DocumentServiceImplTest extends AbstractWPTestCase {
         doc = docDao.findById(1L);
         assertNotNull(doc);
 
+        // Healdan: boss, who has no grant, needs DELETE on each document deleted
+        for (long docId : List.of(1L, 2L, 3L, 6L)) {
+            Document granted = docDao.findById(docId, true);
+            DocumentAccessControlEntry ace = new DocumentAccessControlEntry(-2L);
+            ace.grantPermissions(Set.of(Permission.DELETE));
+            granted.addAccessControlEntry(ace);
+            docDao.store(granted);
+        }
         testSubject.delete(List.of(1L, 2L, 3L, 6L));
 
         doc = docDao.findById(1L);
