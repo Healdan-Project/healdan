@@ -29,12 +29,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import com.logicaldoc.core.HealdanTreeChecks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanOperation;
@@ -85,6 +87,8 @@ public class PermissionRules {
 	static final String INHERIT_FROM_ABOVE = "A folder can only inherit permissions from a folder above it.";
 
 	static final String SECURITY_REF = "You need the security permission on this folder to change where it takes its permissions from.";
+
+	static final String DELETE_TREE = "You need the delete permission on everything in this folder to delete it.";
 
 	private static final Logger log = LoggerFactory.getLogger(PermissionRules.class);
 
@@ -281,6 +285,30 @@ public class PermissionRules {
 			return;
 		Matter matter = MatterDAO.get().findByFolderId(folderId);
 		checkP2(AclMath.effective(folderId), target.getId(), matter != null ? matter.getOwnerId() : null, folderId);
+	}
+
+	/**
+	 * Deleting a folder deletes everything in it, so it needs DELETE on every
+	 * live folder of its tree and on every live document in them (plan, R74).
+	 * The GUI and the web services check this themselves first, a list of
+	 * folders whole; this covers the routes that don't, WebDAV and CMIS, and
+	 * any route added later. Without a user CE refuses the delete itself, so
+	 * there's nothing to check; {@code _system} is checked as any user.
+	 *
+	 * @param folderId the folder to delete
+	 * @param user who deletes it, possibly null
+	 * @throws PersistenceException the refusal, or an error at data layer
+	 */
+	public void checkDeleteTree(long folderId, User user) throws PersistenceException {
+		// The DAO's user may lack its groups, which User.isAdmin() reads
+		if (user == null || filingRules.isAdmin(user))
+			return;
+		try {
+			HealdanTreeChecks.deletedTrees(user, List.of(folderId));
+		} catch (PermissionException e) {
+			log.info(e.getMessage());
+			throw refuse(DELETE_TREE, folderId);
+		}
 	}
 
 	/**

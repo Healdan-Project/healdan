@@ -726,6 +726,8 @@ public class ResourceServiceImpl implements ResourceService {
 				Resource parent = getParentResource(resource);
 				if (!parent.isDeleteEnabled())
 					throw new DavException(HttpServletResponse.SC_FORBIDDEN, "No rights to delete on parent resource.");
+				// Healdan addition: the document's own DELETE too (R70)
+				HealdanDavChecks.deletable(user, Long.parseLong(resource.getID()));
 
 				DocumentHistory transaction = new DocumentHistory();
 				transaction.setUser(user);
@@ -779,6 +781,8 @@ public class ResourceServiceImpl implements ResourceService {
 				boolean writeEnabled = destination.isWriteEnabled();
 				if (!writeEnabled)
 					throw new DavException(HttpServletResponse.SC_FORBIDDEN, "No rights to write resource.");
+				// Healdan addition: DOWNLOAD on the document copied (R73)
+				HealdanDavChecks.downloadable(ldSession.getUser(), Long.parseLong(source.getID()));
 
 				Document document = documentDAO.findById(Long.parseLong(source.getID()));
 				Folder folder = folderDAO.findById(Long.parseLong(destination.getID()));

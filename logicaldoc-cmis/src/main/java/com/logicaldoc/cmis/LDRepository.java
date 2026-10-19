@@ -484,6 +484,8 @@ public class LDRepository {
             Folder target = getFolder(folderId);
 
             Document doc = (Document) getDocument(sourceId);
+            // Healdan addition: DOWNLOAD on the document copied (R73)
+            HealdanCmisChecks.downloadable(doc, getSessionUser(context));
 
             DocumentHistory transaction = new DocumentHistory();
             transaction.setSessionId(sid);
@@ -840,6 +842,8 @@ public class LDRepository {
         try {
             // get the file or folder
             PersistentObject object = getObject(objectId);
+            // Healdan addition: a document's own DELETE too (R70)
+            HealdanCmisChecks.deletable(object, getSessionUser(context));
 
             if (object instanceof Folder folder) {
                 List<Document> docs = documentDao.findByFolder(folder.getId(), 2);
@@ -875,6 +879,8 @@ public class LDRepository {
 
         // get the document or folder
         PersistentObject object = getObject(folderId);
+        // Healdan addition: a document's own DELETE too (R70)
+        HealdanCmisChecks.deletable(object, getSessionUser(context));
 
         FailedToDeleteDataImpl result = new FailedToDeleteDataImpl();
         result.setIds(new ArrayList<>());

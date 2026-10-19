@@ -13,6 +13,7 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.matter.MatterLocator;
@@ -32,7 +33,8 @@ import jakarta.annotation.PreDestroy;
  * anything: a document move removes the index hit and a restore undeletes the
  * rows with JDBC; a folder delete or restore is JDBC throughout; a merge moves
  * documents one by one, and a copy writes files and schedules versions, before
- * the store a listener could veto.
+ * the store a listener could veto. A folder delete also checks R74's
+ * permissions here, as every route deletes a tree through this hook.
  */
 @Component
 public class HealdanHooksImpl implements HealdanHooks {
@@ -138,8 +140,11 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Folder folder = FolderDAO.get().findById(folderId);
 		if (folder == null)
 			return;
-		Vetoes.check(Vetoes.ids(folderId), List.of(),
-				() -> rules.checkFolderDelete(folder, FilingRules.actor(transaction)));
+		User actor = FilingRules.actor(transaction);
+		Vetoes.check(Vetoes.ids(folderId), List.of(), () -> {
+			rules.checkFolderDelete(folder, actor);
+			PermissionRules.get().checkDeleteTree(folderId, actor);
+		});
 		evictTreeAfterCompletion(folderId);
 	}
 
