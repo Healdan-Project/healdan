@@ -3,6 +3,7 @@ package com.logicaldoc.healdan.searchfolder;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -223,12 +224,44 @@ public class SearchFolderService {
 		if (rule.isEmpty() || !position.isInsideMatter())
 			return List.of();
 
+		List<Change> changes = changed(rule.get(), subtree(position.workspaceId()), viewer.getId());
+		// As DocumentDAO.getAllowedPermissions decides: a document with its own ACL rows for the viewer's
+		// groups is asked one by one, any other takes its folder's permissions, asked once per folder
+		Set<Long> ownAcl = withOwnAcl(changes, viewer.getId());
 		DocumentDAO documents = DocumentDAO.get();
+		Map<Long, Boolean> readableFolders = new HashMap<>();
 		List<Long> readable = new ArrayList<>();
-		for (long docId : changed(rule.get(), subtree(position.workspaceId()), viewer.getId()))
-			if (documents.isReadAllowed(docId, viewer.getId()))
-				readable.add(docId);
+		for (Change change : changes) {
+			boolean read;
+			if (ownAcl.contains(change.docId()))
+				read = documents.isReadAllowed(change.docId(), viewer.getId());
+			else {
+				Boolean folderRead = readableFolders.get(change.folderId());
+				if (folderRead == null) {
+					folderRead = folders.isReadAllowed(change.folderId(), viewer.getId());
+					readableFolders.put(change.folderId(), folderRead);
+				}
+				read = folderRead;
+			}
+			if (read)
+				readable.add(change.docId());
+		}
 		return readable;
+	}
+
+	/**
+	 * @return the documents among the changes that have ACL rows of their own
+	 *         for one of the user's groups
+	 */
+	private Set<Long> withOwnAcl(List<Change> changes, long userId) {
+		Set<Long> ids = new HashSet<>();
+		for (List<Long> chunk : chunks(changes.stream().map(Change::docId).toList()))
+			ids.addAll(jdbc.queryForList("""
+					select distinct ld_docid from ld_document_acl
+					 where ld_docid in (:ids)
+					   and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = :user)
+					""", Map.of("ids", chunk, "user", userId), Long.class));
+		return ids;
 	}
 
 	/**
@@ -253,13 +286,13 @@ public class SearchFolderService {
 	}
 
 	/**
-	 * @return the live documents in the folders with a change in the rule's
-	 *         window that match the rule, newest change first (and the higher
-	 *         id first between equals)
+	 * @return the latest changes of the live documents in the folders with a
+	 *         change in the rule's window that match the rule, newest change
+	 *         first (and the higher id first between equals)
 	 */
-	private List<Long> changed(SearchFolderRule rule, List<Long> folderIds, long viewerId) {
+	private List<Change> changed(SearchFolderRule rule, List<Long> folderIds, long viewerId) {
 		StringBuilder sql = new StringBuilder("""
-				select h.ld_docid, max(h.ld_date)
+				select h.ld_docid, d.ld_folderid, max(h.ld_date)
 				  from ld_history h
 				  join ld_document d on d.ld_id = h.ld_docid
 				 where h.ld_deleted = 0
@@ -282,17 +315,17 @@ public class SearchFolderService {
 		}
 		appendValue(sql, params, "docclass", HealdanConstants.ATTR_DOCCLASS, rule.docClass());
 		appendValue(sql, params, "docsubclass", HealdanConstants.ATTR_DOCSUBCLASS, rule.docSubclass());
-		sql.append(" group by h.ld_docid");
+		sql.append(" group by h.ld_docid, d.ld_folderid");
 
 		// A document is in one folder, so each chunk finds other documents
 		List<Change> changes = new ArrayList<>();
 		for (List<Long> chunk : chunks(folderIds)) {
 			params.addValue("folders", chunk);
 			changes.addAll(jdbc.query(sql.toString(), params,
-					(rs, i) -> new Change(rs.getLong(1), rs.getTimestamp(2).getTime())));
+					(rs, i) -> new Change(rs.getLong(1), rs.getLong(2), rs.getTimestamp(3).getTime())));
 		}
 		changes.sort(Comparator.comparingLong(Change::last).thenComparingLong(Change::docId).reversed());
-		return changes.stream().map(Change::docId).toList();
+		return changes;
 	}
 
 	/**
@@ -314,9 +347,10 @@ public class SearchFolderService {
 	 * A document's latest change
 	 *
 	 * @param docId the document
+	 * @param folderId the folder it is in
 	 * @param last when, in milliseconds
 	 */
-	private record Change(long docId, long last) {
+	private record Change(long docId, long folderId, long last) {
 	}
 
 	private static List<List<Long>> chunks(List<Long> ids) {

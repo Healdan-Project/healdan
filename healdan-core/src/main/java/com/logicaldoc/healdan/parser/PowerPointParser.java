@@ -23,6 +23,7 @@ public class PowerPointParser extends AbstractParser {
 		try (XMLSlideShow show = new XMLSlideShow(is); XSLFPowerPointExtractor extractor = new XSLFPowerPointExtractor(show)) {
 			output.append(ParsedText.clean(extractor.getText()));
 		} catch (Exception e) {
+			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		}
 	}

@@ -24,6 +24,7 @@ public class WordParser extends AbstractParser {
 		try (XWPFDocument document = new XWPFDocument(is); XWPFWordExtractor extractor = new XWPFWordExtractor(document)) {
 			output.append(ParsedText.clean(extractor.getText()));
 		} catch (Exception e) {
+			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		}
 	}

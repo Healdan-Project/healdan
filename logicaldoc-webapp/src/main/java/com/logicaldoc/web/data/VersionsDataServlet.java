@@ -101,12 +101,14 @@ select A.id, A.username, A.event, A.version, A.fileVersion, A.versionDate, A.com
         if (request.getParameter(DOC_ID) != null) {
             long docId = Long.parseLong(request.getParameter(DOC_ID));
             DocumentDAO ddao = DocumentDAO.get();
-            if (!ddao.isReadAllowed(docId, session.getUserId()))
-                throw new IOException(
-                        "Document %s is not accessible by user %s".formatted(docId, session.getUsername()));
+            // A shortcut lists its target's versions, so the target is the one that must be readable
             Document doc = ddao.findDocument(docId);
-            if (doc != null)
-                docId = doc.getId();
+            if (doc == null)
+                return List.of();
+            if (!ddao.isReadAllowed(doc.getId(), session.getUserId()))
+                throw new IOException(
+                        "Document %s is not accessible by user %s".formatted(doc.getId(), session.getUsername()));
+            docId = doc.getId();
 
             query.append(" from Version A where A.deleted = 0 and A.docId = :docId ");
             params.put(DOC_ID, docId);

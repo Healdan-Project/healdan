@@ -5,11 +5,14 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
@@ -249,15 +252,38 @@ public final class HealdanRpcChecks {
      * @throws ServerException the refusal, or an error at data layer
      */
     public static void link(Session session, long docId1, long docId2) throws ServerException {
+        links(session, List.of(docId1), List.of(docId2));
+    }
+
+    /**
+     * Each link between a document of one list and a document of the other
+     * needs what {@link #link} needs; each document's permissions are read
+     * once
+     *
+     * @param session the user's session
+     * @param docIds1 the documents on one end
+     * @param docIds2 the documents on the other
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void links(Session session, Collection<Long> docIds1, Collection<Long> docIds2)
+            throws ServerException {
         try {
             DocumentDAO dao = DocumentDAO.get();
-            Set<Permission> first = dao.getAllowedPermissions(docId1, session.getUserId());
-            Set<Permission> second = dao.getAllowedPermissions(docId2, session.getUserId());
-            if (!(first.contains(Permission.WRITE) && second.contains(Permission.READ))
-                    && !(second.contains(Permission.WRITE) && first.contains(Permission.READ)))
-                throw new AccessDeniedException(
-                        "User %s doesn't have permission WRITE on document %d or %d and READ on the other"
-                                .formatted(session.getUsername(), docId1, docId2));
+            Map<Long, Set<Permission>> allowed = new HashMap<>();
+            for (Long docId : Stream.concat(docIds1.stream(), docIds2.stream()).filter(Objects::nonNull).toList())
+                if (!allowed.containsKey(docId))
+                    allowed.put(docId, dao.getAllowedPermissions(docId, session.getUserId()));
+            for (Long docId1 : docIds1)
+                for (Long docId2 : docIds2) {
+                    Set<Permission> first = allowed.getOrDefault(docId1, Set.of());
+                    Set<Permission> second = allowed.getOrDefault(docId2, Set.of());
+                    if (!(first.contains(Permission.WRITE) && second.contains(Permission.READ))
+                            && !(second.contains(Permission.WRITE) && first.contains(Permission.READ)))
+                        throw new AccessDeniedException(
+                                "User %s doesn't have permission WRITE on document %d or %d and READ on the other"
+                                        .formatted(session.getUsername(), docId1, docId2));
+                }
         } catch (PersistenceException e) {
             throw new ServerException(e.getMessage(), e);
         }
@@ -373,24 +399,36 @@ public final class HealdanRpcChecks {
 
     /**
      * Saving a document's notes in one go, as the annotations window does,
-     * needs READ on the document and what {@link #note} needs for each note.
-     * The call also deletes the caller's notes left out of the list; they are
-     * the caller's own, or an admin's call, so READ on the document is what
-     * deleting them needs.
+     * needs READ on the document and what {@link #note} needs for each note
+     * the user may change. The window sends back every note it shows, so a
+     * note of the document without the user's WRITE is left out of what is
+     * saved, as it is stored. The call also deletes the caller's notes left
+     * out of the list; they are the caller's own, or an admin's call, so READ
+     * on the document is what deleting them needs.
      *
      * @param session the user's session
      * @param document the document
      * @param guiNotes the notes as the client sends them
      *
+     * @return the notes to save
+     *
      * @throws ServerException the refusal, or an error at data layer
      */
-    public static void notes(Session session, Document document, Collection<GUIDocumentNote> guiNotes)
-            throws ServerException {
+    public static List<GUIDocumentNote> notes(Session session, Document document,
+            Collection<GUIDocumentNote> guiNotes) throws ServerException {
         try {
             document(session, Permission.READ, document.getId());
             DocumentNoteDAO dao = DocumentNoteDAO.get();
-            for (GUIDocumentNote guiNote : guiNotes)
-                note(session, document, guiNote, dao.findById(guiNote.getId(), true));
+            List<GUIDocumentNote> changeable = new ArrayList<>();
+            for (GUIDocumentNote guiNote : guiNotes) {
+                DocumentNote note = dao.findById(guiNote.getId(), true);
+                if (note != null && note.getDocId() == document.getId()
+                        && !dao.getAllowedPermissions(note.getId(), session.getUserId()).contains(Permission.WRITE))
+                    continue;
+                note(session, document, guiNote, note);
+                changeable.add(guiNote);
+            }
+            return changeable;
         } catch (PersistenceException e) {
             throw new ServerException(e.getMessage(), e);
         }
@@ -495,7 +533,9 @@ public final class HealdanRpcChecks {
     /**
      * Refuses unless the user has the permission on the folder and on every
      * live folder below it, before a call hands the folder's settings down the
-     * tree
+     * tree. An alias in the tree takes its target's permissions, but what the
+     * call hands down is written on the alias, not on its target, so an alias
+     * needs nothing.
      *
      * @param session the user's session
      * @param permission the permission needed
@@ -509,7 +549,8 @@ public final class HealdanRpcChecks {
 
     /**
      * Refuses unless the user has each permission on every live folder of each
-     * tree
+     * tree, as {@link #tree} reads it: admins and the aliases in a tree need
+     * nothing, since a call writes an alias itself, not its target
      *
      * @param session the user's session
      * @param rootIds the trees' roots
@@ -519,19 +560,36 @@ public final class HealdanRpcChecks {
      */
     public static void trees(Session session, Collection<Long> rootIds, Permission... permissions)
             throws ServerException {
+        if (permissions.length == 0)
+            return;
         try {
             FolderDAO dao = FolderDAO.get();
+            // Every folder with each permission, read once for all the trees
+            Map<Permission, Collection<Long>> allowed = new HashMap<>();
             for (Long rootId : rootIds) {
                 if (rootId == null)
                     continue;
-                // The tree is read once for all the permissions
-                Collection<Long> tree = dao.findById(rootId) != null ? dao.findFolderIdInTree(rootId, false) : null;
-                for (Permission permission : permissions)
-                    if (tree == null || !dao
-                            .findFolderIdByUserIdAndPermission(session.getUserId(), permission, rootId, true)
-                            .containsAll(tree))
-                        throw new AccessDeniedException("User %s doesn't have permission %s on every folder of tree %d"
-                                .formatted(session.getUsername(), permission.name(), rootId));
+                if (dao.findById(rootId) == null)
+                    throw treeRefused(session, permissions[0], rootId);
+                if (session.getUser().isAdmin())
+                    continue;
+                // The tree is walked once for all the permissions
+                Collection<Long> tree = dao.findFolderIdInTree(rootId, false);
+                for (Permission permission : permissions) {
+                    Collection<Long> withPermission = allowed.get(permission);
+                    if (withPermission == null) {
+                        withPermission = dao.findFolderIdByUserIdAndPermission(session.getUserId(), permission, null,
+                                false);
+                        allowed.put(permission, withPermission);
+                    }
+                    for (long folderId : tree) {
+                        if (withPermission.contains(folderId))
+                            continue;
+                        Folder folder = dao.findById(folderId);
+                        if (folder == null || folder.getType() != Folder.TYPE_ALIAS)
+                            throw treeRefused(session, permission, rootId);
+                    }
+                }
             }
         } catch (PersistenceException e) {
             throw new ServerException(e.getMessage(), e);
@@ -731,6 +789,11 @@ public final class HealdanRpcChecks {
     private static AccessDeniedException documentRefusal(Session session, Permission permission, long docId) {
         return new AccessDeniedException("User %s doesn't have permission %s on document %s"
                 .formatted(session.getUsername(), permission.name(), docId));
+    }
+
+    private static AccessDeniedException treeRefused(Session session, Permission permission, long rootId) {
+        return new AccessDeniedException("User %s doesn't have permission %s on every folder of tree %d"
+                .formatted(session.getUsername(), permission.name(), rootId));
     }
 
     private static void notePermission(Session session, Set<Permission> allowed, Permission permission, long noteId)

@@ -94,17 +94,25 @@ public class FilingRulesTest extends AbstractRulesTestCase {
 		allowed(() -> restore(alice));
 		assertEquals(documents.getId(), reload(deletedDoc).getFolder().getId());
 		// Restoring a live document would move it, with no MOVE asked
-		assertRefused(RESTORE_LIVE_DOCUMENT, () -> restore(alice));
+		assertRefused(RESTORE_NOT_IN_TRASH, () -> restore(alice));
 
-		// Bob's DELETE comes from the deleted document's own ACL (D7)
+		// Bob's DELETE comes from the deleted document's own ACL (D7)...
 		documentDao.delete(deletedDoc.getId(), documentHistory(admin));
 		awaitAsyncWork();
 		ownEntry(bob.getUserGroup().getId(), 1);
-		// Anywhere but the folder it was deleted from, now Documents, he needs WRITE there
-		assertRefused(RESTORE_DOCUMENT_TARGET,
+		// ...but anywhere other than the folder it was deleted from, now Documents, he needs WRITE there
+		assertRefused(RESTORE_TARGET_PERMISSION,
 				() -> documentDao.restore(deletedDoc.getId(), correspondence.getId(), documentHistory(bob)));
+		// Back where it was, he doesn't, though he can't add a document to Documents (R76)
 		allowed(() -> restore(bob));
 		assertEquals(documents.getId(), reload(deletedDoc).getFolder().getId());
+
+		// A purged document stays purged
+		jdbc.update("update ld_document set ld_deleted = 2 where ld_id = ?", deletedDoc.getId());
+		Context.get(CacheEvictor.class).evictDocuments(List.of(deletedDoc.getId()));
+		assertRefused(RESTORE_NOT_IN_TRASH, () -> restore(alice));
+		assertEquals(Integer.valueOf(2), jdbc.queryForObject("select ld_deleted from ld_document where ld_id = ?",
+				Integer.class, deletedDoc.getId()));
 	}
 
 	private void restore(User as) throws PersistenceException {

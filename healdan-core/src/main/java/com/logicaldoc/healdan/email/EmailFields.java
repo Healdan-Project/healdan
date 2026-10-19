@@ -70,14 +70,21 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 			log.warn("Cannot read the email {}: not a MIME message", file.getName());
 			return Optional.empty();
 		}
+		return Optional.of(fromEml(message));
+	}
 
+	/**
+	 * @param message an {@code eml} already read
+	 * @return its fields
+	 */
+	public static EmailFields fromEml(MimeMessage message) {
 		String subject = safe("subject", message::getSubject);
 		Date sent = safe("sent date", message::getSentDate);
 		Date received = safe("received date", () -> receivedDate(message));
 		String from = safe("from", () -> join(message.getFrom() == null ? null : List.of(message.getFrom())));
 		String to = safe("to", () -> join(recipients(message, Message.RecipientType.TO)));
 		String cc = safe("cc", () -> join(recipients(message, Message.RecipientType.CC)));
-		return Optional.of(of(from, to, cc, subject, sent, received));
+		return of(from, to, cc, subject, sent, received);
 	}
 
 	private static Collection<Address> recipients(MimeMessage message, Message.RecipientType type) throws Exception {
@@ -115,8 +122,16 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 	}
 
 	private static EmailFields fromMsg(File file) throws Exception {
+		return fromMsg(MailUtil.msgToMail(file, false));
+	}
+
+	/**
+	 * @param mail an {@code msg} already read by CE's
+	 *        {@code MailUtil.msgToMail}
+	 * @return its fields
+	 */
+	public static EmailFields fromMsg(EMail mail) {
 		// CE's msg reader keeps one date: the sent time, which it reports as the received time too
-		EMail mail = MailUtil.msgToMail(file, false);
 		String subject = MailUtil.NO_SUBJECT.equals(mail.getSubject()) ? null : mail.getSubject();
 		Date sent = mail.getSentDate();
 		Date received = mail.getReceivedDate() != null ? mail.getReceivedDate() : sent;

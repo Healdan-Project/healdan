@@ -1,19 +1,14 @@
 package com.logicaldoc.healdan.parser;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.InputStream;
-import java.io.InterruptedIOException;
-import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.Callable;
 
 import javax.swing.text.Document;
 import javax.swing.text.rtf.RTFEditorKit;
@@ -31,8 +26,10 @@ import com.logicaldoc.core.parser.AbstractParser;
 import com.logicaldoc.core.parser.ParseParameters;
 import com.logicaldoc.healdan.email.EmailFields;
 
+import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
+import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeUtility;
 
 /**
@@ -54,24 +51,27 @@ public class EmailParser extends AbstractParser {
 
 	@Override
 	protected void internalParse(InputStream is, ParseParameters parameters, StringBuilder output) {
-		File temp = null;
 		try {
 			String extension = FilenameUtils.getExtension(StringUtils.defaultString(parameters.getFileName()))
 					.toLowerCase(Locale.ROOT);
-			// EmailFields and CE's msg reader want a file
-			temp = Files.createTempFile("healdan-parse", "." + extension).toFile();
-			Files.copy(is, temp.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
+			// The email is read once, for its headers, its body and its attachments' names
 			StringBuilder text = new StringBuilder();
-			EmailFields.extract(temp, extension).ifPresent(f -> appendHeaders(text, f));
-			appendBody(text, temp, extension);
+			if ("msg".equals(extension)) {
+				EMail mail = MailUtil.msgToMail(is, false);
+				appendHeaders(text, EmailFields.fromMsg(mail));
+				appendBody(text, parameters.getFileName(), () -> mail, null);
+			} else {
+				MimeMessage message = MailUtil.readMime(is);
+				if (message == null)
+					throw new MessagingException("not a MIME message");
+				appendHeaders(text, EmailFields.fromEml(message));
+				appendBody(text, parameters.getFileName(), () -> MailUtil.messageToMail(message, false), message);
+			}
 			output.append(ParsedText.clean(text.toString()));
 		} catch (Exception e) {
-			keepInterrupt(e);
+			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
-		} finally {
-			if (temp != null)
-				temp.delete();
 		}
 	}
 
@@ -86,21 +86,17 @@ public class EmailParser extends AbstractParser {
 			line(text, "Received", date(f.received()));
 	}
 
-	private void appendBody(StringBuilder text, File file, String extension) {
+	/**
+	 * @param fileName the email's file name, for the log
+	 * @param reader gives the email as CE reads it
+	 * @param mime the {@code eml}'s MIME message; null for an {@code msg}
+	 */
+	private void appendBody(StringBuilder text, String fileName, Callable<EMail> reader, Part mime) {
 		try {
-			EMail mail;
+			EMail mail = reader.call();
 			Set<String> names = new LinkedHashSet<>();
-			if ("msg".equals(extension))
-				mail = MailUtil.msgToMail(file, false);
-			else {
-				try (InputStream in = new FileInputStream(file)) {
-					mail = MailUtil.messageToMail(in, false);
-				}
-				// CE lists an .eml's attachments only when it also loads their bytes, which we don't need
-				try (InputStream in = new FileInputStream(file)) {
-					collectNames(MailUtil.readMime(in), names);
-				}
-			}
+			// CE lists an .eml's attachments only when it also loads their bytes, which we don't need
+			collectNames(mime, names);
 
 			String body = mail.getMessageText();
 			if (StringUtils.isNotBlank(body) && !MailUtil.NO_BODY.equals(body)) {
@@ -115,22 +111,9 @@ public class EmailParser extends AbstractParser {
 			for (String name : names)
 				line(text, "Attachment", name);
 		} catch (Exception e) {
-			keepInterrupt(e);
-			logger.warn("Cannot read the body of {}: {}", file.getName(), e.toString());
+			Interrupts.keep(e);
+			logger.warn("Cannot read the body of {}: {}", fileName, e.toString());
 		}
-	}
-
-	/**
-	 * CE's {@code AbstractParser} stops a parser that runs too long by
-	 * interrupting its thread, so an interruption seen here is put back for it
-	 */
-	private static void keepInterrupt(Throwable t) {
-		for (Throwable cause = t; cause != null; cause = cause.getCause())
-			if (cause instanceof InterruptedException || cause instanceof InterruptedIOException
-					|| cause instanceof ClosedByInterruptException) {
-				Thread.currentThread().interrupt();
-				return;
-			}
 	}
 
 	private static String rtfToText(String rtf) throws Exception {
