@@ -2,18 +2,22 @@ package com.logicaldoc.web.service;
 
 import java.io.IOException;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentLink;
 import com.logicaldoc.core.document.DocumentLinkDAO;
 import com.logicaldoc.core.document.DocumentNote;
@@ -63,8 +67,7 @@ public final class HealdanRpcChecks {
     public static void document(Session session, Permission permission, long docId)
             throws PersistenceException, AccessDeniedException {
         if (!DocumentDAO.get().isPermissionAllowed(permission, docId, session.getUserId()))
-            throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
-                    .formatted(session.getUsername(), permission.name(), docId));
+            throw documentRefusal(session, permission, docId);
     }
 
     /**
@@ -99,8 +102,20 @@ public final class HealdanRpcChecks {
      */
     public static void documents(Session session, Collection<Long> docIds, Permission... permissions)
             throws ServerException {
-        for (Permission permission : permissions)
-            documents(session, permission, docIds);
+        try {
+            DocumentDAO dao = DocumentDAO.get();
+            for (Long docId : docIds) {
+                if (docId == null)
+                    continue;
+                // One read of the document's permissions for all of them
+                Set<Permission> allowed = dao.getAllowedPermissions(docId, session.getUserId());
+                for (Permission permission : permissions)
+                    if (!allowed.contains(permission))
+                        throw documentRefusal(session, permission, docId);
+            }
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
     }
 
     /**
@@ -420,14 +435,14 @@ public final class HealdanRpcChecks {
     public static void readNote(Session session, long noteId) throws ServerException {
         try {
             DocumentNoteDAO dao = DocumentNoteDAO.get();
-            DocumentNote note = dao.findById(noteId);
+            DocumentNote note = dao.findById(noteId, true);
             if (note == null)
                 return;
             document(session, Permission.READ, note.getDocId());
-            if (dao.findByDocIdAndTypes(note.getDocId(), session.getUserId(), null, null).stream()
-                    .noneMatch(listed -> listed.getId() == noteId))
-                throw new AccessDeniedException("User %s doesn't have permission READ on note %d"
-                        .formatted(session.getUsername(), noteId));
+            // The listing's rule on this note alone: its permissions give an admin and the note's author everything
+            if (!note.getAccessControlList().isEmpty())
+                notePermission(session, dao.getAllowedPermissions(noteId, session.getUserId()), Permission.READ,
+                        noteId);
         } catch (PersistenceException e) {
             throw new ServerException(e.getMessage(), e);
         }
@@ -489,16 +504,7 @@ public final class HealdanRpcChecks {
      * @throws ServerException the refusal, or an error at data layer
      */
     public static void tree(Session session, Permission permission, long rootId) throws ServerException {
-        try {
-            FolderDAO dao = FolderDAO.get();
-            if (dao.findById(rootId) == null
-                    || !dao.findFolderIdByUserIdAndPermission(session.getUserId(), permission, rootId, true)
-                            .containsAll(dao.findFolderIdInTree(rootId, false)))
-                throw new AccessDeniedException("User %s doesn't have permission %s on every folder of tree %d"
-                        .formatted(session.getUsername(), permission.name(), rootId));
-        } catch (PersistenceException e) {
-            throw new ServerException(e.getMessage(), e);
-        }
+        trees(session, List.of(rootId), permission);
     }
 
     /**
@@ -513,10 +519,23 @@ public final class HealdanRpcChecks {
      */
     public static void trees(Session session, Collection<Long> rootIds, Permission... permissions)
             throws ServerException {
-        for (Long rootId : rootIds)
-            if (rootId != null)
+        try {
+            FolderDAO dao = FolderDAO.get();
+            for (Long rootId : rootIds) {
+                if (rootId == null)
+                    continue;
+                // The tree is read once for all the permissions
+                Collection<Long> tree = dao.findById(rootId) != null ? dao.findFolderIdInTree(rootId, false) : null;
                 for (Permission permission : permissions)
-                    tree(session, permission, rootId);
+                    if (tree == null || !dao
+                            .findFolderIdByUserIdAndPermission(session.getUserId(), permission, rootId, true)
+                            .containsAll(tree))
+                        throw new AccessDeniedException("User %s doesn't have permission %s on every folder of tree %d"
+                                .formatted(session.getUsername(), permission.name(), rootId));
+            }
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
     }
 
     /**
@@ -576,8 +595,13 @@ public final class HealdanRpcChecks {
                         for (Folder child : dao.findChildren(id, session.getUserId()))
                             next.push(child.getId());
                 }
+                // One query for the readable folders of the tree. The root was checked above; a folder the walk
+                // reached outside the tree, through an alias, is checked by itself.
+                Collection<Long> readable = dao.findFolderIdByUserIdAndPermission(session.getUserId(),
+                        Permission.READ, folderId, true);
                 for (Long id : walked)
-                    folder(session, Permission.READ, id);
+                    if (!folderId.equals(id) && !readable.contains(id))
+                        folder(session, Permission.READ, id);
                 if (!foldersOnly)
                     documentsIn(session, Permission.DOWNLOAD, walked);
             }
@@ -607,6 +631,28 @@ public final class HealdanRpcChecks {
             throw new ServerException(e.getMessage(), e);
         }
         documents(session, Permission.DOWNLOAD, docIds);
+    }
+
+    /**
+     * Runs each document's restore check, as the restore itself runs it,
+     * before any document is restored, so a refusal restores none
+     *
+     * @param session the user's session
+     * @param docIds the documents to restore
+     * @param folderId the folder they are restored into
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void restores(Session session, Collection<Long> docIds, long folderId) throws ServerException {
+        DocumentHistory transaction = new DocumentHistory();
+        transaction.setSession(session);
+        try {
+            for (Long docId : docIds)
+                if (docId != null)
+                    HealdanHooks.get().beforeDocumentRestore(docId, folderId, transaction);
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
     }
 
     /**
@@ -653,27 +699,38 @@ public final class HealdanRpcChecks {
      * Refuses unless the user has the permission on every live document in the
      * folders. As CE's {@code DocumentDAO.getAllowedPermissions} reads it, a
      * document whose own ACL has no entry for the user's groups has its
-     * folder's permissions, so its folder is checked once; any other document
-     * is checked by itself.
+     * folder's permissions, so its folder is checked once. A document whose
+     * entries grant the permission has it; any other is checked by itself,
+     * since entries that grant nothing at all leave it its folder's.
+     * <p>
+     * The permission must be one a document's ACL has a column for. The
+     * folders go in lists of at most 1000, as Oracle takes no more.
      */
     private static void documentsIn(Session session, Permission permission, Collection<Long> folderIds)
             throws PersistenceException, AccessDeniedException {
-        if (folderIds.isEmpty())
-            return;
         DocumentDAO dao = DocumentDAO.get();
-        String folders = CollectionUtil.join(folderIds);
         String groups = "select ld_groupid from ld_usergroup where ld_userid = %d".formatted(session.getUserId());
-        for (Long folderId : dao.queryForList("""
-                select distinct D.ld_folderid from ld_document D
-                 where D.ld_deleted = 0 and D.ld_folderid in (%s)
-                   and not exists (select A.ld_docid from ld_document_acl A where A.ld_docid = D.ld_id and A.ld_groupid in (%s))
-                """.formatted(folders, groups), Long.class))
-            folder(session, permission, folderId);
-        for (Long docId : dao.queryForList("""
-                select distinct D.ld_id from ld_document D, ld_document_acl A
-                 where A.ld_docid = D.ld_id and D.ld_deleted = 0 and D.ld_folderid in (%s) and A.ld_groupid in (%s)
-                """.formatted(folders, groups), Long.class))
-            document(session, permission, docId);
+        for (List<Long> chunk : CollectionUtil.partition(new ArrayList<>(folderIds), 1000)) {
+            String folders = CollectionUtil.join(chunk);
+            for (Long folderId : dao.queryForList("""
+                    select distinct D.ld_folderid from ld_document D
+                     where D.ld_deleted = 0 and D.ld_folderid in (%s)
+                       and not exists (select A.ld_docid from ld_document_acl A where A.ld_docid = D.ld_id and A.ld_groupid in (%s))
+                    """.formatted(folders, groups), Long.class))
+                folder(session, permission, folderId);
+            for (Long docId : dao.queryForList("""
+                    select distinct D.ld_id from ld_document D, ld_document_acl A
+                     where A.ld_docid = D.ld_id and D.ld_deleted = 0 and D.ld_folderid in (%s) and A.ld_groupid in (%s)
+                       and not exists (select B.ld_docid from ld_document_acl B
+                                        where B.ld_docid = D.ld_id and B.ld_groupid in (%s) and B.ld_%s = 1)
+                    """.formatted(folders, groups, groups, permission.name().toLowerCase()), Long.class))
+                document(session, permission, docId);
+        }
+    }
+
+    private static AccessDeniedException documentRefusal(Session session, Permission permission, long docId) {
+        return new AccessDeniedException("User %s doesn't have permission %s on document %s"
+                .formatted(session.getUsername(), permission.name(), docId));
     }
 
     private static void notePermission(Session session, Set<Permission> allowed, Permission permission, long noteId)

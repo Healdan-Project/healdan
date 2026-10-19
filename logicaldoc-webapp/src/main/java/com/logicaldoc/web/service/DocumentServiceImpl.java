@@ -1222,6 +1222,8 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public void restore(List<Long> docIds, long folderId) throws ServerException {
         Session session = validateSession();
+        // Healdan: every document's restore checks before any is restored, so a refusal restores none
+        HealdanRpcChecks.restores(session, docIds, folderId);
 
         for (Long docId : docIds.stream().filter(Objects::nonNull).toList()) {
             DocumentHistory transaction = new DocumentHistory();
