@@ -8,6 +8,8 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 
 - Upstream is `https://github.com/logicaldoc/community.git`. A fresh clone needs `git remote add upstream <that url>`.
 - Sync upstream by merging `upstream/master` into a dedicated branch and opening a PR to `master`. Merge, never squash or rebase, so the shared history stays intact. Keep sync PRs free of feature work.
+- Healdan's own modules (`healdan-*`) follow upstream's version: their POM parent and `plugin.xml` version match the root POM's. A module left behind makes Maven fetch stock LogicalDOC jars, which lack the fork's classes.
+  - When a clean sync merge brings a LogicalDOC release bump, `.github/scripts/upstream-sync.sh` adds a "Follow upstream to <version>" commit. After a conflicted merge it doesn't, so whoever resolves the conflicts bumps them too.
 - Upstream changes `logicaldoc-core` and `logicaldoc-gui` the most. To keep syncs cheap, put new work in new plugin modules and avoid editing upstream files where possible.
 - Upstream sometimes ships POMs that fail Maven validation (for example, a duplicate dependency). If CI fails within a minute, check POM errors and the icon check (next bullet) first.
 - The GUI bundles Font Awesome Free 6, but upstream writes the GUI against Font Awesome Pro. Pro styles (`fal`, `fa-light`, `fa-thin`, …) and Pro-only icon names compile fine and only show up at runtime, as blinking missing-icon placeholders.
