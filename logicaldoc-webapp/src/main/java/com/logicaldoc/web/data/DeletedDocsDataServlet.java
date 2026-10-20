@@ -45,6 +45,8 @@ public class DeletedDocsDataServlet extends AbstractDataServlet {
 		Long deleteUserId = StringUtils.isNotEmpty(request.getParameter("userId"))
 				? Long.parseLong(request.getParameter("userId"))
 				: null;
+		// Healdan: the report's menu, else only what the user deleted
+		deleteUserId = com.logicaldoc.web.service.HealdanRpcChecks.trashUser(session, com.logicaldoc.gui.common.client.Menu.DELETED_DOCS, deleteUserId);
 
 		response.setContentType("text/xml");
 		response.setCharacterEncoding("UTF-8");

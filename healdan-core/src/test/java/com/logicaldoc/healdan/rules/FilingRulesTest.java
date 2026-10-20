@@ -100,12 +100,10 @@ public class FilingRulesTest extends AbstractRulesTestCase {
 		documentDao.delete(deletedDoc.getId(), documentHistory(admin));
 		awaitAsyncWork();
 		ownEntry(bob.getUserGroup().getId(), 1);
-		// ...but the document lands in Documents, where he can't add one
-		assertRefused(RESTORE_TARGET_PERMISSION, () -> restore(bob));
-		Folder acl = folderDao.findById(documents.getId());
-		jdbc.update(
-				"update ld_folder_acl set ld_write = 1 where ld_folderid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)",
-				acl.getSecurityRef() != null ? acl.getSecurityRef() : acl.getId(), bob.getId());
+		// ...but anywhere other than the folder it was deleted from, now Documents, he needs WRITE there
+		assertRefused(RESTORE_TARGET_PERMISSION,
+				() -> documentDao.restore(deletedDoc.getId(), correspondence.getId(), documentHistory(bob)));
+		// Back where it was, he doesn't, though he can't add a document to Documents (R76)
 		allowed(() -> restore(bob));
 		assertEquals(documents.getId(), reload(deletedDoc).getFolder().getId());
 

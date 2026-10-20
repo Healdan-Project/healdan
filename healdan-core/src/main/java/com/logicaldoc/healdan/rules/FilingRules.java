@@ -25,6 +25,7 @@ import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.history.History;
+import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.HealdanConstants;
@@ -93,6 +94,8 @@ public class FilingRules {
 	static final String RESTORE_NOT_IN_TRASH = "Only a document in the trash can be restored.";
 
 	static final String RESTORE_TARGET_PERMISSION = "You need the write permission on the folder to restore a document into it.";
+
+	static final String RESTORE_TARGET = "You need the add permission on a folder to restore a folder into it.";
 
 	/** Key of what the current transaction found of who is an admin */
 	private static final String ADMINS = FilingRules.class.getName() + ".admins";
@@ -328,6 +331,10 @@ public class FilingRules {
 			checkCreateAt(parent, row.type(), row.alias(), admin, true, ids);
 		}
 		checkPlacement(folderId, childOf(parent, folderId, row.type()), true, ids);
+		// Anywhere but back where it was, the folder is added to a parent: ADD there, as creating one asks
+		if (!admin && into != null && into.getId() != row.parentId()
+				&& !FolderDAO.get().isPermissionAllowed(Permission.ADD, into.getId(), user.getId()))
+			throw refuse(RESTORE_TARGET, ids);
 	}
 
 	/**
@@ -335,8 +342,9 @@ public class FilingRules {
 	 * folder they restore (R22). CE's own check sees nothing on a deleted
 	 * document. CE doesn't check that the document is in the trash: restoring a
 	 * live one would move it with no MOVE asked, and a purged one would undo
-	 * the purge, so only an admin may. The document lands in the folder named,
-	 * so the user needs WRITE there, as for adding a document.
+	 * the purge, so only an admin may. Restored anywhere but the folder it was
+	 * deleted from, it is filed there anew, which needs WRITE on that folder, as
+	 * for adding a document and as CE's SOAP restore asks.
 	 *
 	 * @param documentId the document
 	 * @param folderId the folder it is restored into
@@ -350,7 +358,8 @@ public class FilingRules {
 			throw refuse(RESTORE_DOCUMENT_PERMISSION, ids(folderId));
 		if (!Integer.valueOf(PersistentObject.DELETED_CODE_DEFAULT).equals(rows.documentDeleted(documentId)))
 			throw refuse(RESTORE_NOT_IN_TRASH, ids(folderId));
-		if (!FolderDAO.get().isWriteAllowed(folderId, user.getId()))
+		if (!Long.valueOf(folderId).equals(rows.documentFolder(documentId))
+				&& !FolderDAO.get().isPermissionAllowed(Permission.WRITE, folderId, user.getId()))
 			throw refuse(RESTORE_TARGET_PERMISSION, ids(folderId));
 	}
 

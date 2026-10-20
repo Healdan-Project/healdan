@@ -92,6 +92,8 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 	protected static final String RESTORE_TARGET_PERMISSION = "You need the write permission on the folder to restore a document into it.";
 
+	protected static final String RESTORE_TARGET = "You need the add permission on a folder to restore a folder into it.";
+
 	protected final HealdanFixtures fx = new HealdanFixtures();
 
 	protected JdbcTemplate jdbc;

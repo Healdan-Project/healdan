@@ -6,9 +6,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Set;
+
 import org.junit.Test;
 
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
@@ -317,6 +320,17 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 		// A plain folder can't go directly into a Store, for admins too
 		assertRefused(FOLDER_IN_STORE, () -> folderDao.restore(letters.getId(), store.getId(), folderHistory(alice)));
 		assertRefused(FOLDER_IN_STORE, () -> folderDao.restore(letters.getId(), store.getId(), folderHistory(admin)));
+		// Anywhere but back where it was, ADD on the new parent: Alice's group may only read and write Closed
+		Folder closed = reload(fx.folder(correspondence, "Closed"));
+		closed.setSecurityRef(null);
+		closed.getAccessControlList().clear();
+		FolderAccessControlEntry readWrite = new FolderAccessControlEntry(lawyers.getId());
+		readWrite.grantPermissions(Set.of(Permission.READ, Permission.WRITE));
+		closed.addAccessControlEntry(readWrite);
+		FolderHistory history = folderHistory(admin);
+		history.setEvent(FolderEvent.PERMISSION);
+		folderDao.store(closed, history);
+		assertRefused(RESTORE_TARGET, () -> folderDao.restore(letters.getId(), closed.getId(), folderHistory(alice)));
 
 		allowed(() -> folderDao.restore(letters.getId(), correspondence.getId(), folderHistory(alice)));
 		assertNotNull(folderDao.findById(letters.getId()));
