@@ -300,11 +300,11 @@ public class DocumentAccessControlEntry extends ExtendedAccessControlEntry {
 
 	@Override
 	public boolean equals(Object obj) {
-		return ace.equals(obj);
+		return obj instanceof DocumentAccessControlEntry other && getGroupId() == other.getGroupId();
 	}
 
 	@Override
 	public int hashCode() {
-		return ace.hashCode();
+		return Long.hashCode(getGroupId());
 	}
 }
