@@ -11,12 +11,13 @@ import com.logicaldoc.core.searchengine.SearchException;
 /**
  * CE's full-text search, keeping only the hits whose file extension a subclass
  * accepts (spec 8.1). CE's search stops at the maximum number of hits, so it
- * runs with a wider window of {@link #FILTER_WINDOW} hits, and the filtered
- * hits are then cut to the maximum asked for.
+ * runs with a window of at least {@link #FILTER_WINDOW} hits (or none, when no
+ * maximum is asked for), and the filtered hits are then cut to the maximum
+ * asked for.
  */
 public abstract class ExtensionFilteredSearch extends FulltextSearch {
 
-	/** How many full-text hits are filtered, at most */
+	/** How many full-text hits are filtered at least, when there is a maximum */
 	static final int FILTER_WINDOW = 5000;
 
 	/** Public, as CE creates the searches by reflection; FulltextSearch's own is protected */
@@ -33,7 +34,8 @@ public abstract class ExtensionFilteredSearch extends FulltextSearch {
 	@Override
 	public void internalSearch() throws SearchException {
 		int maxHits = options.getMaxHits();
-		options.setMaxHits(FILTER_WINDOW);
+		// Wider, never narrower: 0 asks for every hit
+		options.setMaxHits(maxHits > 0 ? Math.max(maxHits, FILTER_WINDOW) : 0);
 		try {
 			super.internalSearch();
 		} finally {

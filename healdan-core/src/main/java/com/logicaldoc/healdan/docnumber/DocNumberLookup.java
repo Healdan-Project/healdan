@@ -11,7 +11,6 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
-import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -54,10 +53,13 @@ public final class DocNumberLookup {
 			return LookupResult.notFound(NO_DOCUMENT.formatted(input.strip().substring(1).strip()));
 		DocNumberQuery query = parsed.get();
 
+		User user = UserDAO.get().findById(userId, true);
+		if (user == null)
+			return LookupResult.notFound(NO_DOCUMENT.formatted(query.number()));
 		DocumentDAO documents = DocumentDAO.get();
-		// The DAO skips deleted documents
-		Document document = documents.findByCustomId(Long.toString(query.number()), Tenant.DEFAULT_ID);
-		if (document == null || !documents.isReadAllowed(document.getId(), userId) || !shown(document, userId))
+		// The DAO skips deleted documents. A number is looked up in the user's own tenant only
+		Document document = documents.findByCustomId(Long.toString(query.number()), user.getTenantId());
+		if (document == null || !documents.isReadAllowed(document.getId(), userId) || !shown(document, user))
 			return LookupResult.notFound(NO_DOCUMENT.formatted(query.number()));
 		long folderId = document.getFolder().getId();
 		if (query.major() == null)
@@ -78,10 +80,7 @@ public final class DocNumberLookup {
 	 *         dates, as in {@code Search.enrichAndPopulateHits}) and the user
 	 *         is neither an administrator nor a publisher
 	 */
-	private static boolean shown(Document document, long userId) throws PersistenceException {
-		User user = UserDAO.get().findById(userId, true);
-		if (user == null)
-			return false;
+	private static boolean shown(Document document, User user) {
 		if (user.isMemberOf(Group.GROUP_ADMIN) || user.isMemberOf(PUBLISHER_GROUP))
 			return true;
 		Date now = new Date();

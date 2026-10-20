@@ -23,6 +23,7 @@ public class ExcelParser extends AbstractParser {
 		try (XSSFWorkbook workbook = new XSSFWorkbook(is); XSSFExcelExtractor extractor = new XSSFExcelExtractor(workbook)) {
 			output.append(ParsedText.clean(extractor.getText()));
 		} catch (Exception e) {
+			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		}
 	}

@@ -4,8 +4,10 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import com.logicaldoc.core.document.DocumentDAO;
@@ -71,6 +73,22 @@ public final class HealdanTreeChecks {
 
     /**
      * Refuses unless the user has every one of the permissions on every
+     * document; a missing or deleted document is refused
+     *
+     * @param user the user
+     * @param docIds the documents, each checked as it is, a shortcut on itself
+     * @param permissions the permissions needed
+     *
+     * @throws PersistenceException error at data layer
+     * @throws PermissionException the refusal
+     */
+    public static void documents(User user, Collection<Long> docIds, Permission... permissions)
+            throws PersistenceException, PermissionException {
+        documents(user, docIds, false, permissions);
+    }
+
+    /**
+     * Refuses unless the user has every one of the permissions on every
      * document that exists; missing or deleted documents are left to the call,
      * which skips them
      *
@@ -83,10 +101,16 @@ public final class HealdanTreeChecks {
      */
     public static void existingDocuments(User user, Collection<Long> docIds, Permission... permissions)
             throws PersistenceException, PermissionException {
+        documents(user, docIds, true, permissions);
+    }
+
+    private static void documents(User user, Collection<Long> docIds, boolean existingOnly,
+            Permission... permissions) throws PersistenceException, PermissionException {
         DocumentDAO dao = DocumentDAO.get();
         for (Long docId : docIds) {
-            if (docId == null || dao.findById(docId) == null)
+            if (docId == null || existingOnly && dao.findById(docId) == null)
                 continue;
+            // One read of the document's permissions for all of them
             Set<Permission> allowed = dao.getAllowedPermissions(docId, user.getId());
             for (Permission permission : permissions)
                 if (!allowed.contains(permission))
@@ -97,7 +121,9 @@ public final class HealdanTreeChecks {
 
     /**
      * Refuses unless the user has the permission on the folder and on every
-     * live folder below it
+     * live folder below it, before a call writes the tree. An alias in the
+     * tree takes its target's permissions, but what the call writes is the
+     * alias, not its target, so an alias needs nothing.
      *
      * @param user the user
      * @param permission the permission needed
@@ -108,26 +134,13 @@ public final class HealdanTreeChecks {
      */
     public static void tree(User user, Permission permission, long rootId)
             throws PersistenceException, PermissionException {
-        tree(user, permission, rootId, null);
-    }
-
-    /**
-     * {@link #tree(User, Permission, long)} on the tree's folders, null to look
-     * them up
-     */
-    private static void tree(User user, Permission permission, long rootId, Collection<Long> treeIds)
-            throws PersistenceException, PermissionException {
-        FolderDAO dao = FolderDAO.get();
-        if (dao.findById(rootId) == null || !user.isAdmin()
-                && !dao.findFolderIdByUserIdAndPermission(user.getId(), permission, rootId, true)
-                        .containsAll(treeIds != null ? treeIds : dao.findFolderIdInTree(rootId, false)))
-            throw new PermissionException("User %s doesn't have permission %s on every folder of tree %d"
-                    .formatted(user.getUsername(), permission.name(), rootId));
+        trees(user, List.of(rootId), permission);
     }
 
     /**
      * Refuses unless the user has each permission on every live folder of each
-     * tree
+     * tree, as {@link #tree} reads it: admins and the aliases in a tree need
+     * nothing, since a call writes an alias itself, not its target
      *
      * @param user the user
      * @param rootIds the trees' roots
@@ -138,10 +151,42 @@ public final class HealdanTreeChecks {
      */
     public static void trees(User user, Collection<Long> rootIds, Permission... permissions)
             throws PersistenceException, PermissionException {
+        if (permissions.length == 0)
+            return;
+        // Every folder with each permission, read once for all the trees
+        Map<Permission, Collection<Long>> allowed = new EnumMap<>(Permission.class);
         for (Long rootId : rootIds)
             if (rootId != null)
-                for (Permission permission : permissions)
-                    tree(user, permission, rootId);
+                tree(user, rootId, null, allowed, permissions);
+    }
+
+    /**
+     * {@link #trees} on one tree, whose folders are given or, if null, looked
+     * up; the tree is walked once for all the permissions
+     */
+    private static void tree(User user, long rootId, Collection<Long> treeIds,
+            Map<Permission, Collection<Long>> allowed, Permission... permissions)
+            throws PersistenceException, PermissionException {
+        FolderDAO dao = FolderDAO.get();
+        if (dao.findById(rootId) == null)
+            throw treeRefusal(user, permissions[0], rootId);
+        if (user.isAdmin())
+            return;
+        Collection<Long> tree = treeIds != null ? treeIds : dao.findFolderIdInTree(rootId, false);
+        for (Permission permission : permissions) {
+            Collection<Long> withPermission = allowed.get(permission);
+            if (withPermission == null) {
+                withPermission = dao.findFolderIdByUserIdAndPermission(user.getId(), permission, null, false);
+                allowed.put(permission, withPermission);
+            }
+            for (long folderId : tree) {
+                if (withPermission.contains(folderId))
+                    continue;
+                Folder folder = dao.findById(folderId);
+                if (folder == null || folder.getType() != Folder.TYPE_ALIAS)
+                    throw treeRefusal(user, permission, rootId);
+            }
+        }
     }
 
     /**
@@ -158,11 +203,13 @@ public final class HealdanTreeChecks {
             throws PersistenceException, PermissionException {
         if (user.isAdmin())
             return;
+        Map<Permission, Collection<Long>> allowed = new EnumMap<>(Permission.class);
         for (Long folderId : folderIds) {
             if (folderId == null)
                 continue;
+            // The tree is walked once for its folders and its documents
             Collection<Long> treeIds = FolderDAO.get().findFolderIdInTree(folderId, false);
-            tree(user, Permission.DELETE, folderId, treeIds);
+            tree(user, folderId, treeIds, allowed, Permission.DELETE);
             documentsIn(user, Permission.DELETE, treeIds);
         }
     }
@@ -200,8 +247,13 @@ public final class HealdanTreeChecks {
                     for (Folder child : dao.findChildren(id, user.getId()))
                         next.push(child.getId());
             }
+            // One query for the readable folders of the tree. The root was checked above; a folder the walk
+            // reached outside the tree, through an alias, is checked by itself.
+            Collection<Long> readable = dao.findFolderIdByUserIdAndPermission(user.getId(), Permission.READ,
+                    folderId, true);
             for (Long id : walked)
-                folder(user, Permission.READ, id);
+                if (!folderId.equals(id) && !readable.contains(id))
+                    folder(user, Permission.READ, id);
             if (!foldersOnly)
                 documentsIn(user, Permission.DOWNLOAD, walked);
         }
@@ -211,8 +263,12 @@ public final class HealdanTreeChecks {
      * Refuses unless the user has the permission on every live document in the
      * folders. As CE's {@code DocumentDAO.getAllowedPermissions} reads it, a
      * document whose own ACL has no entry for the user's groups has its
-     * folder's permissions, so its folder is checked once; any other document
-     * is checked by itself. The folders are queried a thousand at a time.
+     * folder's permissions, so its folder is checked once. A document whose
+     * entries grant the permission has it; any other is checked by itself,
+     * since entries that grant nothing at all leave it its folder's.
+     * <p>
+     * The permission must be one a document's ACL has a column for. The
+     * folders go in lists of at most 1000, as Oracle takes no more.
      */
     private static void documentsIn(User user, Permission permission, Collection<Long> folderIds)
             throws PersistenceException, PermissionException {
@@ -229,8 +285,15 @@ public final class HealdanTreeChecks {
             for (Long docId : dao.queryForList("""
                     select distinct D.ld_id from ld_document D, ld_document_acl A
                      where A.ld_docid = D.ld_id and D.ld_deleted = 0 and D.ld_folderid in (%s) and A.ld_groupid in (%s)
-                    """.formatted(folders, groups), Long.class))
+                       and not exists (select B.ld_docid from ld_document_acl B
+                                        where B.ld_docid = D.ld_id and B.ld_groupid in (%s) and B.ld_%s = 1)
+                    """.formatted(folders, groups, groups, permission.name().toLowerCase()), Long.class))
                 document(user, permission, docId);
         }
+    }
+
+    private static PermissionException treeRefusal(User user, Permission permission, long rootId) {
+        return new PermissionException("User %s doesn't have permission %s on every folder of tree %d"
+                .formatted(user.getUsername(), permission.name(), rootId));
     }
 }

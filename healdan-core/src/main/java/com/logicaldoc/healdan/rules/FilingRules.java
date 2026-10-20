@@ -21,6 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.history.History;
@@ -90,11 +91,11 @@ public class FilingRules {
 
 	static final String RESTORE_DOCUMENT_PERMISSION = "You need the delete permission on this document to restore it.";
 
-	static final String RESTORE_LIVE_DOCUMENT = "Only a deleted document can be restored.";
+	static final String RESTORE_NOT_IN_TRASH = "Only a document in the trash can be restored.";
+
+	static final String RESTORE_TARGET_PERMISSION = "You need the write permission on the folder to restore a document into it.";
 
 	static final String RESTORE_TARGET = "You need the add permission on a folder to restore a folder into it.";
-
-	static final String RESTORE_DOCUMENT_TARGET = "You need the write permission on a folder to restore a document into it.";
 
 	/** Key of what the current transaction found of who is an admin */
 	private static final String ADMINS = FilingRules.class.getName() + ".admins";
@@ -339,10 +340,11 @@ public class FilingRules {
 	/**
 	 * A deleted document is restored: the user needs DELETE on it, as on a
 	 * folder they restore (R22). CE's own check sees nothing on a deleted
-	 * document. CE doesn't check that the document is deleted, and restoring a
-	 * live one would move it with no MOVE asked, so only an admin may.
-	 * Restored anywhere but the folder it was deleted from, it is filed there
-	 * anew, which needs WRITE on that folder, as CE's SOAP restore asks.
+	 * document. CE doesn't check that the document is in the trash: restoring a
+	 * live one would move it with no MOVE asked, and a purged one would undo
+	 * the purge, so only an admin may. Restored anywhere but the folder it was
+	 * deleted from, it is filed there anew, which needs WRITE on that folder, as
+	 * for adding a document and as CE's SOAP restore asks.
 	 *
 	 * @param documentId the document
 	 * @param folderId the folder it is restored into
@@ -354,11 +356,11 @@ public class FilingRules {
 			return;
 		if (user == null || !rows.mayDeleteDocument(documentId, user.getId()))
 			throw refuse(RESTORE_DOCUMENT_PERMISSION, ids(folderId));
-		if (Integer.valueOf(0).equals(rows.documentDeleted(documentId)))
-			throw refuse(RESTORE_LIVE_DOCUMENT, ids(folderId));
+		if (!Integer.valueOf(PersistentObject.DELETED_CODE_DEFAULT).equals(rows.documentDeleted(documentId)))
+			throw refuse(RESTORE_NOT_IN_TRASH, ids(folderId));
 		if (!Long.valueOf(folderId).equals(rows.documentFolder(documentId))
 				&& !FolderDAO.get().isPermissionAllowed(Permission.WRITE, folderId, user.getId()))
-			throw refuse(RESTORE_DOCUMENT_TARGET, ids(folderId));
+			throw refuse(RESTORE_TARGET_PERMISSION, ids(folderId));
 	}
 
 	/**
