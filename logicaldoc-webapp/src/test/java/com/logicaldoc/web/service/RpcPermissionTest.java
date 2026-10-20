@@ -229,6 +229,12 @@ public class RpcPermissionTest extends AbstractWPTestCase {
         refused(() -> new DocumentServiceImpl().rename(5L, "renamed.eml"));
         refused(() -> new DocumentServiceImpl().getContentAsString(5L));
         assertNotEquals("renamed.eml", docDao.findById(5L).getFileName());
+
+        // A shortcut's content is its target's, so DOWNLOAD on the shortcut isn't enough
+        as("admin");
+        grant(SHORTCUT, Permission.READ, Permission.DOWNLOAD);
+        as("author");
+        refused(() -> new DocumentServiceImpl().getContentAsString(SHORTCUT));
     }
 
     @Test
@@ -353,6 +359,12 @@ public class RpcPermissionTest extends AbstractWPTestCase {
             note.addAccessControlEntry(noteGrant);
             noteDao.store(note);
         }
+        // and on note 2 only READ
+        DocumentNote readOnly = noteDao.findById(2L, true);
+        NoteAccessControlEntry readGrant = new NoteAccessControlEntry(AUTHOR_GROUP);
+        readGrant.grantPermissions(EnumSet.of(Permission.READ));
+        readOnly.addAccessControlEntry(readGrant);
+        noteDao.store(readOnly);
 
         as("author");
         DocumentServiceImpl writer = new DocumentServiceImpl();
@@ -361,10 +373,14 @@ public class RpcPermissionTest extends AbstractWPTestCase {
         mine.setMessage("mine, edited");
         writer.saveNote(mine);
         assertEquals("mine, edited", noteDao.findById(mine.getId()).getMessage());
-        // The annotations window saves through saveNotes
+        // The annotations window saves through saveNotes, and sends back every note it shows: note 2, which the
+        // author only reads, is left as it is stored
         mine.setMessage("mine, annotated");
-        writer.saveNotes(DOC, null, List.of(mine), null);
+        GUIDocumentNote theirs = writer.getNote(2L);
+        theirs.setMessage("changed by author");
+        writer.saveNotes(DOC, null, List.of(mine, theirs), null);
         assertEquals("mine, annotated", noteDao.findById(mine.getId()).getMessage());
+        assertEquals("message for note 2", message(2L));
 
         GUIDocumentNote edited = writer.getNote(1L);
         edited.setMessage("edited by author");
@@ -439,12 +455,17 @@ public class RpcPermissionTest extends AbstractWPTestCase {
 
         as("admin");
         grantFolder(GRANDCHILD, Permission.READ, Permission.WRITE);
+        // An alias in the tree takes its target's permissions; what the tree hands down stays on the alias
+        long alias = new FolderServiceImpl().createAlias(CHILD, 7L).getId();
+        assertFalse(folderDao.isPermissionAllowed(Permission.WRITE, 7L, AUTHOR));
         as("author");
         FolderServiceImpl folders = new FolderServiceImpl();
         folders.applyGridLayout(TREE);
         folders.applyTags(TREE);
         folders.applyMetadata(TREE);
         folders.applyCapture(TREE);
+        assertEquals("grid", folderDao.findById(alias, true).getGrid());
+        assertUnapplied(7L);
         for (long folderId : List.of(CHILD, GRANDCHILD)) {
             Folder folder = folderDao.findById(folderId, true);
             assertEquals("grid", folder.getGrid());

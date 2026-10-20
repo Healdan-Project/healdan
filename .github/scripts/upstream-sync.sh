@@ -4,7 +4,12 @@
 # master. Run by .github/workflows/upstream-sync.yml, which documents the token.
 #
 # Requires git (with user.name/user.email set, run from a full clone of this
-# repo with push access to origin), gh (GH_TOKEN and GH_REPO set) and jq.
+# repo with push access to origin), gh (GH_TOKEN and GH_REPO set), jq and
+# python3.
+#
+# Healdan's own modules (healdan-*) follow upstream's version. When a clean
+# merge moves the root POM to a new LogicalDOC release, a follow-up commit
+# sets their POM parent and plugin.xml versions to match.
 #
 # Exit status: 0 when there is nothing to do or a PR was opened or updated;
 # 1 when the merge conflicted (a draft PR listing the conflicts is still
@@ -43,6 +48,56 @@ notice() {
 warning() {
   echo "::warning::$*"
   summary "**Warning:** $*"
+}
+
+# Prints the project version of the root pom.xml at revision $1.
+pom_version() {
+  git show "$1:pom.xml" | python3 -c '
+import sys, xml.etree.ElementTree as ET
+version = ET.parse(sys.stdin).getroot().findtext("{http://maven.apache.org/POM/4.0.0}version", "").strip()
+if not version:
+    sys.exit("pom.xml has no project <version>")
+print(version)
+'
+}
+
+# Healdan's modules name the root POM as their <parent>. If that version falls
+# behind the root's, Maven resolves the stock LogicalDOC release of the old
+# version instead of this repo's build, and the fork's own classes go missing.
+# Sets the parent version of each healdan-*/pom.xml whose parent is the root,
+# and the version of each healdan-* plugin.xml, to $1 in the working tree.
+# Prints each file it changed.
+follow_version() {
+  python3 - "$1" <<'PY'
+import glob, re, sys, xml.etree.ElementTree as ET
+
+version = sys.argv[1]
+M = "{http://maven.apache.org/POM/4.0.0}"
+root = ET.parse("pom.xml").getroot()
+coords = (root.findtext(M + "groupId"), root.findtext(M + "artifactId"))
+
+def rewrite(path, pattern):
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    text, n = re.subn(pattern, lambda m: m.group(1) + version + m.group(2), text, count=1, flags=re.S)
+    if n != 1:
+        sys.exit(f"{path}: found no version to set")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    print(path)
+
+for pom in sorted(glob.glob("healdan-*/pom.xml")):
+    parent = ET.parse(pom).getroot().find(M + "parent")
+    if parent is None or (parent.findtext(M + "groupId"), parent.findtext(M + "artifactId")) != coords:
+        continue
+    if parent.findtext(M + "version") != version:
+        rewrite(pom, r"(<parent>(?:(?!</parent>).)*?<version>)[^<]*(</version>)")
+
+for xml in sorted(glob.glob("healdan-*/src/main/resources/plugin.xml")):
+    plugin = ET.parse(xml).getroot()
+    if plugin.tag == "plugin" and plugin.get("version") != version:
+        rewrite(xml, r'(<plugin\s[^>]*?\sversion=")[^"]*(")')
+PY
 }
 
 main() {
@@ -112,6 +167,21 @@ main() {
       -m "Conflicted files:" -m "  ${conflicts//$nl/$nl  }"
   fi
 
+  # On a clean merge, keep Healdan's own modules on upstream's version. After
+  # conflicts the tree isn't trustworthy yet; whoever resolves them does this.
+  local version="" base_version="" followed=""
+  if [[ -z $conflicts ]]; then
+    version=$(pom_version HEAD)
+    base_version=$(pom_version "$base")
+    followed=$(follow_version "$version")
+    if [[ -n $followed ]]; then
+      git add --pathspec-from-file=- <<<"$followed"
+      git commit -m "Follow upstream to $version" \
+        -m "Healdan's own modules inherit from the root POM, which upstream moved to $version."
+      notice "Upstream moved to $version; set Healdan's own modules to match."
+    fi
+  fi
+
   git push origin "HEAD:refs/heads/$branch"
 
   local count commits title
@@ -125,6 +195,10 @@ main() {
   body_file=$(mktemp)
   {
     echo "Merges **$commits** from [$upstream_name]($upstream_web) \`$UPSTREAM_BRANCH\` (up to [\`$upstream_short\`]($upstream_web/commit/$upstream_sha)) into \`$BASE_BRANCH\`."
+    if [[ $version != "$base_version" ]]; then
+      echo
+      echo "Upstream moves from \`$base_version\` to \`$version\`. Healdan's own modules (\`healdan-*\`) follow upstream's version, so a \"Follow upstream to $version\" commit after the merge sets their POM parent and \`plugin.xml\` versions to \`$version\` too."
+    fi
     echo
     echo "> [!IMPORTANT]"
     echo "> Merge this PR with **Create a merge commit**. Squash or rebase would cut the link to upstream history, and the next sync would try to merge every upstream commit again."
