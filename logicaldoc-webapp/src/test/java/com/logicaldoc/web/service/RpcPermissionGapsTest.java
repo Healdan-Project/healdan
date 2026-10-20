@@ -381,23 +381,25 @@ public class RpcPermissionGapsTest extends AbstractWPTestCase {
         assertTrue(ownDocuments.contains("<id>4</id>"));
         assertFalse(ownDocuments.contains("<id>3</id>"));
 
-        // A refused restore reaches the user; CE logged it and returned
+        // A refused restore reaches the user, and restores none of the list; CE logged it and returned
         as("admin");
         HealdanHooks previous = HealdanHooks.get();
         HealdanHooks.register(new HealdanHooks() {
             @Override
             public void beforeDocumentRestore(long docId, long folderId, DocumentHistory transaction)
                     throws PersistenceException {
-                throw new HealdanVetoException("Not into this folder.");
+                if (docId == LINKED)
+                    throw new HealdanVetoException("Not into this folder.");
             }
         });
         try {
             ServerException e = assertThrows(ServerException.class,
-                    () -> new DocumentServiceImpl().restore(List.of(LINKED), Folder.DEFAULTWORKSPACEID));
+                    () -> new DocumentServiceImpl().restore(List.of(OTHER, LINKED), Folder.DEFAULTWORKSPACEID));
             assertEquals("Not into this folder.", e.getMessage());
         } finally {
             HealdanHooks.register(previous);
         }
+        assertEquals(1, deleted("ld_document", OTHER));
         assertEquals(1, deleted("ld_document", LINKED));
     }
 

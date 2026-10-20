@@ -9,15 +9,15 @@ import java.util.Optional;
 import javax.sql.DataSource;
 
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
-import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
-import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.Search;
 import com.logicaldoc.core.searchengine.SearchException;
+import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.matter.ClientMatterRef;
 import com.logicaldoc.healdan.matter.MatterDisplay;
@@ -34,9 +34,10 @@ import com.logicaldoc.util.spring.Context;
  * <li>anything else: the matters whose name or description contains it,
  * ignoring case.</li>
  * </ul>
- * The hits are the live matters' workspaces the user can read, lowest client
- * and matter number first, as folder hits whose folder is the workspace
- * itself, so that opening a hit's folder opens the matter.
+ * The hits are the live matters of the user's tenant whose workspaces the
+ * user can read, lowest client and matter number first, as folder hits whose
+ * folder is the workspace itself, so that opening a hit's folder opens the
+ * matter.
  */
 public class MatterSearch extends Search {
 
@@ -48,9 +49,21 @@ public class MatterSearch extends Search {
 			  join ld_folder f on f.ld_id = m.hd_folderid
 			 where m.ld_deleted = 0
 			   and f.ld_deleted = 0
-			   and (%s)
+			   and m.ld_tenantid = :tenant
+			   and (%s)%s
 			 order by c.hd_number, m.hd_number
 			""";
+
+	/**
+	 * The workspace is readable, as in {@code FolderDAO.isReadAllowed}: one of
+	 * the user's groups may read the folder its permissions come from
+	 */
+	private static final String READABLE = """
+
+			   and exists (select 1 from ld_folder_acl a
+			                where a.ld_folderid = coalesce(f.ld_securityref, f.ld_id)
+			                  and a.ld_read = 1
+			                  and a.ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = :user))""";
 
 	@Override
 	protected void internalSearch() throws SearchException {
@@ -58,24 +71,24 @@ public class MatterSearch extends Search {
 		if (StringUtils.isEmpty(input))
 			return;
 
-		MapSqlParameterSource params = new MapSqlParameterSource();
+		MapSqlParameterSource params = new MapSqlParameterSource("tenant", searchUser.getTenantId())
+				.addValue("user", searchUser.getId());
 		String condition = condition(input, params);
-		List<Hit> found = new NamedParameterJdbcTemplate(Context.get(DataSource.class))
-				.query(QUERY.formatted(condition), params, MatterSearch::toHit);
+		// Administrators read every folder
+		String readable = searchUser.isMemberOf(Group.GROUP_ADMIN) ? "" : READABLE;
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		// One row more than the maximum tells there are more
+		if (options.getMaxHits() > 0)
+			jdbc.setMaxRows(options.getMaxHits() + 1);
+		List<Hit> found = new NamedParameterJdbcTemplate(jdbc).query(QUERY.formatted(condition, readable), params,
+				MatterSearch::toHit);
 
-		FolderDAO folders = FolderDAO.get();
-		try {
-			for (Hit hit : found) {
-				if (!folders.isReadAllowed(hit.getId(), options.getUserId()))
-					continue;
-				if (options.getMaxHits() > 0 && hits.size() >= options.getMaxHits()) {
-					moreHitsPresent = true;
-					break;
-				}
-				hits.add(hit);
+		for (Hit hit : found) {
+			if (options.getMaxHits() > 0 && hits.size() >= options.getMaxHits()) {
+				moreHitsPresent = true;
+				break;
 			}
-		} catch (PersistenceException e) {
-			throw new SearchException(e);
+			hits.add(hit);
 		}
 		estimatedHitsNumber = moreHitsPresent ? hits.size() + 1L : hits.size();
 	}

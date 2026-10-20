@@ -411,17 +411,18 @@ public class StoredRows implements PreUpdateEventListener {
 	 * @return true if the user has DELETE on the document
 	 */
 	public boolean mayDeleteDocument(long documentId, long userId) {
-		List<Map<String, Object>> entries = jdbc.queryForList(
-				"select * from ld_document_acl where ld_docid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)",
-				documentId, userId);
-		boolean ownPermissions = entries.stream().anyMatch(entry -> entry.entrySet().stream()
-				.anyMatch(column -> !column.getKey().equalsIgnoreCase("ld_docid")
-						&& !column.getKey().equalsIgnoreCase("ld_groupid")
-						&& ((Number) column.getValue()).intValue() == 1));
-		if (ownPermissions)
-			return entries.stream().anyMatch(entry -> entry.entrySet().stream()
-					.anyMatch(column -> column.getKey().equalsIgnoreCase("ld_delete")
-							&& ((Number) column.getValue()).intValue() == 1));
+		// The entries that grant something, on the permission columns CE reads
+		List<Integer> entries = jdbc.queryForList("""
+				select ld_delete from ld_document_acl
+				 where ld_docid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)
+				   and (ld_read = 1 or ld_write = 1 or ld_security = 1 or ld_immutable = 1 or ld_delete = 1
+				        or ld_rename = 1 or ld_sign = 1 or ld_archive = 1 or ld_workflow = 1 or ld_download = 1
+				        or ld_calendar = 1 or ld_subscription = 1 or ld_print = 1 or ld_password = 1 or ld_move = 1
+				        or ld_email = 1 or ld_automation = 1 or ld_readingreq = 1 or ld_preview = 1
+				        or ld_customid = 1 or ld_revision = 1)
+				""", Integer.class, documentId, userId);
+		if (!entries.isEmpty())
+			return entries.contains(1);
 		Long folderId = documentFolder(documentId);
 		return folderId != null && mayDelete(folderId, userId);
 	}
