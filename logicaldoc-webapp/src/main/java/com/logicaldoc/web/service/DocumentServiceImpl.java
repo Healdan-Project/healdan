@@ -2586,8 +2586,10 @@ public class DocumentServiceImpl extends AbstractRemoteService implements Docume
     @Override
     public boolean unprotect(long docId, String password) throws ServerException {
         Session session = validateSession();
-        // Healdan: READ on the document, so no one tries passwords on one they can't read
+        // Healdan: READ on the document and on a shortcut's target, whose password is tried, so no one tries
+        // passwords on one they can't read
         HealdanRpcChecks.documents(session, Permission.READ, List.of(docId));
+        HealdanRpcChecks.targets(session, Permission.READ, List.of(docId));
         return DocumentManager.get().unprotect(session.getSid(), docId, password);
     }
 

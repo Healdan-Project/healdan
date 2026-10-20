@@ -114,6 +114,11 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         long open = create("open.txt", AUTHORS_FOLDER);
         long narrow = create("narrow.txt", AUTHORS_FOLDER);
         long granted = create("granted.txt", TREE);
+        // A document locked by the admin, and a shortcut in the author's folder to a document they can't read
+        long locked = create("locked.txt", TREE);
+        documents.lock(session.getSid(), locked);
+        long hidden = create("hidden.txt", TREE);
+        long shortcut = documents.createAlias(session.getSid(), hidden, AUTHORS_FOLDER, null).getId();
         grant(narrow, Permission.READ);
         grantFolder(AUTHORS_FOLDER, Permission.READ, Permission.WRITE, Permission.ADD, Permission.DOWNLOAD,
                 Permission.MOVE, Permission.EMAIL, Permission.DELETE);
@@ -125,6 +130,11 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
             refused(() -> documents.copy(sid, narrow, AUTHORS_FOLDER, false, false, false));
             refused(() -> documents.delete(sid, narrow));
             refused(() -> documents.delete(sid, granted));
+            // The permission comes first, so the refusal says nothing of the document, and a missing one is refused
+            PermissionException lockedRefusal = assertThrows(PermissionException.class,
+                    () -> documents.delete(sid, locked));
+            assertFalse(lockedRefusal.getMessage(), lockedRefusal.getMessage().contains("locked.txt"));
+            refused(() -> documents.delete(sid, 999999L));
             refusedWs(() -> documents.sendEmail(sid, List.of(narrow), "ken@acme.com", "Documents", "Here"));
             refusedWs(() -> documents.sendEmail(sid, List.of(open, narrow), "ken@acme.com", "Documents", "Here"));
             refusedWs(() -> documents.sendEmail(sid, List.of(granted), "ken@acme.com", "Documents", "Here"));
@@ -158,6 +168,31 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         assertEquals(1L, sent(granted));
         documents.delete(author, granted);
         assertNull(docDao.findById(granted));
+
+        // A shortcut is checked on itself and sends its target (R72): its own ACL holds over its folder's
+        grant(shortcut, Permission.READ);
+        refused(() -> documents.copy(author, shortcut, AUTHORS_FOLDER, false, false, false));
+        refusedWs(() -> documents.sendEmail(author, List.of(shortcut), "ken@acme.com", "Documents", "Here"));
+        assertEquals(0L, sent(hidden));
+        grant(shortcut, Permission.READ, Permission.DOWNLOAD, Permission.EMAIL);
+        documents.sendEmail(author, List.of(shortcut), "ken@acme.com", "Documents", "Here");
+        assertEquals(1L, sent(hidden));
+
+        // Unprotecting a shortcut tries its target's password, so it needs READ on the target too (R75)
+        documents.setPassword(session.getSid(), hidden, DOC_PASSWORD);
+        refusedWs(() -> documents.unprotect(author, shortcut, DOC_PASSWORD));
+        assertFalse(SessionManager.get().get(author).getUnprotectedDocs().containsKey(hidden));
+
+        // Admins keep CE's bypass
+        String admin = session.getSid();
+        documents.copy(admin, narrow, TREE, false, false, false);
+        documents.sendEmail(admin, List.of(narrow), "ken@acme.com", "Documents", "Here");
+        assertEquals(1L, sent(narrow));
+        assertTrue(documents.unprotect(admin, shortcut, DOC_PASSWORD));
+        documents.delete(admin, narrow);
+        documents.delete(admin, locked);
+        assertNull(docDao.findById(narrow));
+        assertNull(docDao.findById(locked));
     }
 
     @Test
@@ -191,6 +226,15 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         grant(inChild, Permission.READ, Permission.DOWNLOAD);
         folders.copy(author, TREE, AUTHORS_FOLDER, 0, "inherit");
         assertEquals(2, docDao.queryForInt(copies));
+
+        // Admins keep CE's bypass, on a folder whose own ACL leaves them out
+        String admin = session.getSid();
+        long closed = folders.createFolder(admin, TREE, "closed");
+        create("closed.txt", closed);
+        authorOnly(closed, Permission.READ);
+        folders.copy(admin, closed, AUTHORS_FOLDER, 0, "inherit");
+        assertEquals(2,
+                docDao.queryForInt("select count(*) from ld_document where ld_deleted = 0 and ld_filename = 'closed.txt'"));
     }
 
     @Test
@@ -236,6 +280,20 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         folders.delete(author, MERGE_TARGET);
         assertEquals(1, deleted("ld_folder", MERGE_TARGET));
         assertEquals(1, deleted("ld_document", inChild));
+
+        // Admins keep CE's bypass, on folders whose own ACLs leave them out
+        String admin = session.getSid();
+        long source = folders.createFolder(admin, TREE, "source");
+        long target = folders.createFolder(admin, TREE, "target");
+        long inSource = create("source.txt", source);
+        authorOnly(source, Permission.READ);
+        authorOnly(target, Permission.READ);
+        folders.merge(admin, source, target);
+        assertEquals(target, docDao.findById(inSource).getFolder().getId());
+        assertEquals(1, deleted("ld_folder", source));
+        folders.delete(admin, TREE);
+        assertEquals(1, deleted("ld_folder", TREE));
+        assertEquals(1, deleted("ld_document", inSource));
     }
 
     /**
@@ -284,6 +342,19 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         entry.grantPermissions(EnumSet.copyOf(List.of(permissions)));
         folder.addAccessControlEntry(entry);
         folderDao.store(folder);
+    }
+
+    /**
+     * Gives the folder an ACL of its own, in place of the one it inherits, with
+     * these permissions for the author's own group and no entry for anyone
+     * else
+     */
+    private void authorOnly(long folderId, Permission... permissions) throws PersistenceException {
+        Folder folder = folderDao.findById(folderId, true);
+        folder.setSecurityRef(null);
+        folder.getAccessControlList().clear();
+        folderDao.store(folder);
+        grantFolder(folderId, permissions);
     }
 
     private long sent(long docId) throws PersistenceException {

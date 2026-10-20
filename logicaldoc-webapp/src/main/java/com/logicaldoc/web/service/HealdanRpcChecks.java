@@ -43,9 +43,9 @@ import com.logicaldoc.util.CollectionUtil;
  * (D7), and a document's narrower ACL holds where its folder grants more.
  * Admins keep CE's bypass, which the DAOs give them.
  * <p>
- * The checks on a whole folder tree live in core's {@link HealdanTreeChecks},
- * which the web services call too (R78); these give their refusals as the
- * GUI's {@link AccessDeniedException}.
+ * The checks on a whole folder tree, and on one folder or document, live in
+ * core's {@link HealdanTreeChecks}, which the web services call too (R78);
+ * these give their refusals as the GUI's {@link AccessDeniedException}.
  */
 public final class HealdanRpcChecks {
 
@@ -65,9 +65,7 @@ public final class HealdanRpcChecks {
      */
     public static void document(Session session, Permission permission, long docId)
             throws PersistenceException, AccessDeniedException {
-        if (!DocumentDAO.get().isPermissionAllowed(permission, docId, session.getUserId()))
-            throw new AccessDeniedException("User %s doesn't have permission %s on document %s"
-                    .formatted(session.getUsername(), permission.name(), docId));
+        refusal(() -> HealdanTreeChecks.document(session.getUser(), permission, docId));
     }
 
     /**
@@ -119,13 +117,7 @@ public final class HealdanRpcChecks {
      */
     public static void existingDocuments(Session session, Permission permission, Collection<Long> docIds)
             throws ServerException {
-        try {
-            for (Long docId : docIds)
-                if (docId != null && DocumentDAO.get().findById(docId) != null)
-                    document(session, permission, docId);
-        } catch (PersistenceException e) {
-            throw new ServerException(e.getMessage(), e);
-        }
+        treeCheck(() -> HealdanTreeChecks.existingDocuments(session.getUser(), docIds, permission));
     }
 
     /**
@@ -597,20 +589,28 @@ public final class HealdanRpcChecks {
 
     private static void folder(Session session, Permission permission, long folderId)
             throws PersistenceException, AccessDeniedException {
-        if (!FolderDAO.get().isPermissionAllowed(permission, folderId, session.getUserId()))
-            throw new AccessDeniedException("User %s doesn't have permission %s on folder %s"
-                    .formatted(session.getUsername(), permission.name(), folderId));
+        refusal(() -> HealdanTreeChecks.folder(session.getUser(), permission, folderId));
     }
 
     /**
      * Runs a check of {@link HealdanTreeChecks}, shared with the web services,
      * and gives its refusal as the GUI's {@link AccessDeniedException}
      */
-    private static void treeCheck(TreeCheck check) throws ServerException {
+    private static void refusal(TreeCheck check) throws PersistenceException, AccessDeniedException {
         try {
             check.run();
         } catch (PermissionException e) {
             throw new AccessDeniedException(e.getMessage());
+        }
+    }
+
+    /**
+     * {@link #refusal}, with an error at data layer given as a
+     * {@link ServerException}
+     */
+    private static void treeCheck(TreeCheck check) throws ServerException {
+        try {
+            refusal(check);
         } catch (PersistenceException e) {
             throw new ServerException(e.getMessage(), e);
         }

@@ -230,9 +230,9 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
         User user = validateSession(sid);
         DocumentDAO docDao = DocumentDAO.get();
         Document doc = docDao.findById(docId);
-        checkUnlocked(user, doc);
-        // Healdan: the document's DELETE, not its folder's (D7)
+        // Healdan: the document's DELETE, not its folder's (D7), first so a refusal says nothing of the document
         checkDocumentPermission(Permission.DELETE, user, docId);
+        checkUnlocked(user, doc);
         checkPublished(user, doc);
 
         // Create the document history event
@@ -713,9 +713,9 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
          * Only readable documents can be sent
          */
         List<Document> docs = new ArrayList<>();
-        for (long id : docIds) {
-            Document doc = docDao.findById(id);
-            // Healdan: checked above on the document, instead of its folder's READ (D7)
+        for (Long id : docIds) {
+            // Healdan: permissions checked above on the document, instead of its folder's READ (D7); null ids skipped
+            Document doc = id != null ? docDao.findById(id) : null;
             if (doc != null) {
                 doc = docDao.findDocument(id);
                 createAttachment(mail, doc);
@@ -1094,9 +1094,10 @@ public class SoapDocumentService extends AbstractService implements DocumentServ
     public boolean unprotect(String sid, long docId, String password)
             throws PersistenceException, AuthenticationException, WebserviceException {
         User user = validateSession(sid);
-        // Healdan: READ on the document, so no one tries passwords on one they can't read (R75, R79)
-        HealdanWsChecks.documents(user, List.of(docId), Permission.READ);
         Document doc = DocumentDAO.get().findDocument(docId);
+        // Healdan: READ on the document and on a shortcut's target, whose password is tried (R75, R79)
+        HealdanWsChecks.documents(user,
+                doc != null && doc.getId() != docId ? List.of(docId, doc.getId()) : List.of(docId), Permission.READ);
         return DocumentManager.get().unprotect(sid, doc.getId(), password);
     }
 
