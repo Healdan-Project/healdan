@@ -5,10 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.apache.chemistry.opencmis.commons.exceptions.CmisPermissionDeniedException;
@@ -33,8 +31,6 @@ import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.channels.ChannelHarness;
-import com.logicaldoc.core.store.Store;
-import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.webdav.resource.model.Resource;
@@ -185,10 +181,10 @@ public class ChannelTreePermissionsTest extends AbstractRulesTestCase {
 
 	@Test
 	public void testCmisDocumentDeleteNeedsItsDelete() throws Exception {
-		assertCmisReadRefused(cmisDenied("DELETE", keptDoc),
+		assertRefused("R70", cmisDenied("DELETE", keptDoc),
 				() -> harness.cmisFor(kept.getId(), aliceSession).deleteObject(null, "doc." + keptDoc.getId()));
 		// CMIS deleteTree also deletes a document given
-		assertCmisReadRefused(cmisDenied("DELETE", keptDoc),
+		assertRefused("R70", cmisDenied("DELETE", keptDoc),
 				() -> harness.cmisFor(kept.getId(), aliceSession).deleteTree(null, "doc." + keptDoc.getId(), false));
 
 		setKeptDocAcl(Permission.READ, Permission.DELETE);
@@ -270,41 +266,6 @@ public class ChannelTreePermissionsTest extends AbstractRulesTestCase {
 
 	private void cmisDeleteTree(Folder folder) throws Exception {
 		harness.cmisFor(folder.getId(), aliceSession).deleteTree(null, "fld." + folder.getId(), false);
-	}
-
-	/**
-	 * As {@code assertRefused}, for a refusal that comes after CMIS has read a
-	 * document with an ACL of its own. CE rewrites such a row whenever it reads
-	 * it initialized ({@code DocumentAccessControlEntry.equals} is never true,
-	 * so Hibernate always finds the ACL changed), so the row's record version
-	 * and last-modified date are left out.
-	 */
-	private void assertCmisReadRefused(Refusal refusal, Route route) throws Exception {
-		awaitAsyncWork();
-		DbSnapshot db = DbSnapshot.take(jdbc);
-		List<Map<String, Object>> documents = documentRows();
-		long storeSize = Store.get().getTotalSize();
-
-		try {
-			route.run();
-			fail("Not refused");
-		} catch (Exception e) {
-			refusal.check(e);
-		}
-
-		awaitAsyncWork();
-		db.assertUnchangedExcept("ld_document");
-		assertEquals(documents, documentRows());
-		assertEquals("files left in the Store", storeSize, Store.get().getTotalSize());
-	}
-
-	private List<Map<String, Object>> documentRows() {
-		List<Map<String, Object>> rows = jdbc.queryForList("select * from ld_document order by ld_id");
-		for (Map<String, Object> row : rows) {
-			row.remove("LD_RECORDVERSION");
-			row.remove("LD_LASTMODIFIED");
-		}
-		return rows;
 	}
 
 	/**

@@ -1,0 +1,151 @@
+package com.logicaldoc.core.document;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Timestamp;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.logicaldoc.core.AbstractCoreTestCase;
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.util.plugin.PluginException;
+
+/**
+ * Two entries of a document's ACL are equal when they're for the same group.
+ * CE's {@code DocumentAccessControlEntry.equals} was never true, so Hibernate
+ * found an initialized document ACL changed at every flush, and reading a
+ * document rewrote it.
+ */
+public class DocumentAclEqualityTest extends AbstractCoreTestCase {
+
+    /**
+     * The fixture's document 7 has an ACL of its own: one entry, for group -2,
+     * that grants READ and WRITE among others
+     */
+    private static final long DOC_ID = 7L;
+
+    private static final long GROUP_ID = -2L;
+
+    private DocumentDAO documentDao;
+
+    @Before
+    @Override
+    public void setUp() throws IOException, SQLException, PluginException {
+        super.setUp();
+        documentDao = DocumentDAO.get();
+    }
+
+    @Test
+    public void testReadingLeavesTheDocumentRowAlone() throws PersistenceException {
+        long recordVersion = recordVersion();
+        Timestamp lastModified = lastModified();
+
+        readTwice();
+
+        assertEquals(recordVersion, recordVersion());
+        assertEquals(lastModified, lastModified());
+    }
+
+    @Test
+    public void testReadingLeavesTheAclRowsAlone() throws Exception {
+        logAclWrites();
+
+        readTwice();
+
+        assertEquals(List.of(), aclWrites());
+    }
+
+    @Test
+    public void testEntriesForTheSameGroupAreEqual() {
+        DocumentAccessControlEntry reader = entry(GROUP_ID, Permission.READ);
+        DocumentAccessControlEntry writer = entry(GROUP_ID, Permission.READ, Permission.WRITE);
+
+        assertEquals(reader, reader);
+        assertEquals(reader, writer);
+        assertEquals(reader.hashCode(), writer.hashCode());
+        assertNotEquals(reader, entry(3L, Permission.READ));
+        assertNotEquals(reader, new FolderAccessControlEntry(GROUP_ID));
+        assertNotEquals(new FolderAccessControlEntry(GROUP_ID), reader);
+        assertNotEquals(reader, null);
+    }
+
+    @Test
+    public void testAddingAnEntryReplacesTheGroupsEntry() throws PersistenceException {
+        Document doc = documentDao.findById(DOC_ID, true);
+        doc.addAccessControlEntry(entry(GROUP_ID, Permission.READ));
+        assertEquals(1, doc.getAccessControlList().size());
+
+        documentDao.store(doc);
+
+        Document stored = documentDao.findById(DOC_ID, true);
+        assertEquals(1, stored.getAccessControlList().size());
+        assertEquals(Set.of(Permission.READ), stored.getAccessControlEntry(GROUP_ID).grantedPermissions());
+    }
+
+    /**
+     * Equality ignores the permissions, so this proves Hibernate still saves a
+     * change to them
+     */
+    @Test
+    public void testChangingAnEntrysPermissionsIsSaved() throws PersistenceException {
+        Document doc = documentDao.findById(DOC_ID, true);
+        doc.getAccessControlEntry(GROUP_ID).setWrite(false);
+
+        documentDao.store(doc);
+
+        assertFalse(documentDao.findById(DOC_ID, true).getAccessControlEntry(GROUP_ID).isWrite());
+        assertEquals(0, documentDao.queryForInt("select ld_write from ld_document_acl where ld_docid=" + DOC_ID));
+    }
+
+    /**
+     * Reads the document as CMIS's {@code getObject} does
+     */
+    private void readTwice() throws PersistenceException {
+        assertEquals(1, documentDao.findById(DOC_ID, true).getAccessControlList().size());
+        assertEquals(1, documentDao.findDocument(DOC_ID, true).getAccessControlList().size());
+    }
+
+    private static DocumentAccessControlEntry entry(long groupId, Permission... permissions) {
+        DocumentAccessControlEntry entry = new DocumentAccessControlEntry(groupId);
+        entry.grantPermissions(Set.of(permissions));
+        return entry;
+    }
+
+    private long recordVersion() throws PersistenceException {
+        return documentDao.queryForLong("select ld_recordversion from ld_document where ld_id=" + DOC_ID);
+    }
+
+    private Timestamp lastModified() throws PersistenceException {
+        return documentDao.queryForObject("select ld_lastmodified from ld_document where ld_id=" + DOC_ID,
+                Timestamp.class);
+    }
+
+    /**
+     * Records every row written to {@code ld_document_acl}, in
+     * {@code acl_writes}
+     */
+    private void logAclWrites() throws SQLException {
+        try (Connection con = getConnection(); Statement statement = con.createStatement()) {
+            statement.execute("create table acl_writes (ld_id bigint generated by default as identity primary key, "
+                    + "ld_operation varchar(10) not null)");
+            for (String operation : List.of("insert", "update", "delete"))
+                statement.execute("create trigger acl_%s after %s on ld_document_acl for each row "
+                        .formatted(operation, operation) + "insert into acl_writes (ld_operation) values ('%s')"
+                                .formatted(operation));
+        }
+    }
+
+    private List<String> aclWrites() throws PersistenceException {
+        return documentDao.queryForList("select ld_operation from acl_writes order by ld_id", String.class);
+    }
+}
