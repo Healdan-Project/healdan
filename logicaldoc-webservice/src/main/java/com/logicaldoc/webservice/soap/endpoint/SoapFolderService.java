@@ -12,6 +12,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.logicaldoc.core.HealdanTreeChecks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.filler.Fillable.FillMode;
 import com.logicaldoc.core.folder.Folder;
@@ -146,6 +147,8 @@ public class SoapFolderService extends AbstractService implements FolderService 
             throw new WebserviceException("Cannot delete root folder or Default workspace");
 
         checkFolderPermission(Permission.DELETE, user, folderId);
+        // Healdan: DELETE on everything the tree holds, folders and documents (R74)
+        HealdanTreeChecks.deletedTrees(user, List.of(folderId));
 
         // Add a folder history entry
         FolderHistory transaction = new FolderHistory();
@@ -301,6 +304,8 @@ public class SoapFolderService extends AbstractService implements FolderService 
 
         // Check add permission on destParentFolder
         checkFolderPermission(Permission.ADD, user, destTargetFolder.getId());
+        // Healdan: READ on each folder the copy walks and DOWNLOAD on each document it copies (R73)
+        HealdanTreeChecks.folderCopies(user, List.of(folderId), 1 == foldersOnly);
 
         // Add a folder history entry
         FolderHistory transaction = new FolderHistory();
@@ -603,6 +608,8 @@ public class SoapFolderService extends AbstractService implements FolderService 
         checkFolderPermission(Permission.WRITE, user, destTargetFolder.getId());
 
         checkFolderPermission(Permission.DELETE, user, sourceId);
+        // Healdan: MOVE and DELETE on every folder of the source tree, which the merge empties and deletes (R74)
+        HealdanTreeChecks.trees(user, List.of(sourceId), Permission.MOVE, Permission.DELETE);
 
         // Add a folder history entry
         FolderHistory transaction = new FolderHistory();
