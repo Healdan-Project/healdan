@@ -24,6 +24,7 @@ import com.logicaldoc.gui.frontend.client.search.Search;
 import com.logicaldoc.gui.frontend.client.search.SearchObserver;
 import com.logicaldoc.gui.frontend.client.search.SearchPanel;
 import com.smartgwt.client.util.SC;
+import com.smartgwt.client.widgets.grid.ListGridField;
 
 /**
  * What the search box does for each scope of the {@link ScopePicker} (spec 8)
@@ -178,7 +179,8 @@ public final class HealdanQuickSearch {
 				HitsListPanel panel = SearchPanel.get().getListingPanel();
 				if (panel == null || !(panel.getGrid() instanceof DocumentsListGrid grid))
 					return;
-				if (grid.getFieldNum(CLIENT_FIELD) < 0)
+				// getFieldNum only counts the visible fields, so a column hidden by an earlier search needs getAllFields
+				if (!hasField(grid))
 					return;
 
 				int type = Search.get().getOptions().getType();
@@ -188,6 +190,15 @@ public final class HealdanQuickSearch {
 				} else
 					grid.hideField(CLIENT_FIELD);
 			});
+		}
+
+		private static boolean hasField(DocumentsListGrid grid) {
+			ListGridField[] all = grid.getAllFields();
+			if (all != null)
+				for (ListGridField field : all)
+					if (CLIENT_FIELD.equals(field.getName()))
+						return true;
+			return false;
 		}
 
 		@Override
