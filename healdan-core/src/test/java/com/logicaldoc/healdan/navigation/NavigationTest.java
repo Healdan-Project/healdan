@@ -197,11 +197,16 @@ public class NavigationTest extends AbstractHealdanTestCase {
 		// Removing takes away that user's bookmark only, and does nothing when there is none
 		myMatters.remove(alice.getId(), second.getFolderId());
 		myMatters.remove(alice.getId(), second.getFolderId());
-		myMatters.remove(alice.getId(), documents.getId());
 		assertNull(BookmarkDAO.get().findByUserIdAndFolderId(alice.getId(), second.getFolderId()));
 		assertEquals(List.of("998.1 \u2013 Healdan Demo", "998.10 \u2013 Tenth"),
 				displays(myMatters.list(alice.getId())));
 		assertEquals(List.of("998.2 \u2013 Second"), displays(myMatters.list(bob.getId())));
+
+		// A folder that isn't a matter's workspace was never in My Matters: its CE bookmark stays
+		myMatters.remove(bob.getId(), documents.getId());
+		myMatters.remove(bob.getId(), store.getId());
+		assertNotNull(BookmarkDAO.get().findByUserIdAndFolderId(bob.getId(), documents.getId()));
+		assertNotNull(BookmarkDAO.get().findByUserIdAndFolderId(bob.getId(), store.getId()));
 	}
 
 	@Test

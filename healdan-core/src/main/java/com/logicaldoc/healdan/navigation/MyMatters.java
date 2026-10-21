@@ -93,8 +93,7 @@ public class MyMatters {
 		// Before telling whether it's a matter, so an unreadable folder says nothing of that
 		if (!folders.isReadAllowed(folderId, userId))
 			throw refusal(NO_READ);
-		FolderPosition position = locator.locate(folder);
-		if (position.kind() != FolderPosition.Kind.MATTER_WORKSPACE || position.matter() == null)
+		if (!isMatter(locator.locate(folder)))
 			throw refusal(NOT_A_MATTER);
 
 		BookmarkDAO bookmarks = BookmarkDAO.get();
@@ -112,7 +111,9 @@ public class MyMatters {
 
 	/**
 	 * Removes the user's folder bookmarks on that folder, if there are any;
-	 * other users' bookmarks stay
+	 * other users' bookmarks stay. A folder that isn't the workspace of a live
+	 * matter is never in My Matters, so its bookmarks stay too: they are only
+	 * CE's.
 	 *
 	 * @param userId the user
 	 * @param folderId the matter's workspace
@@ -120,11 +121,18 @@ public class MyMatters {
 	 */
 	@Transactional(rollbackFor = Exception.class)
 	public void remove(long userId, long folderId) throws PersistenceException {
+		if (!isMatter(locator.locate(folderId)))
+			return;
 		BookmarkDAO bookmarks = BookmarkDAO.get();
 		// All of them: CE could bookmark a folder twice before its fix
 		for (Bookmark bookmark : bookmarks.findByUserId(userId))
 			if (bookmark.getType() == Bookmark.Type.FOLDER && bookmark.getTargetId() == folderId)
 				bookmarks.delete(bookmark.getId());
+	}
+
+	/** Whether the folder is the workspace of a live matter, which has its row */
+	private static boolean isMatter(FolderPosition position) {
+		return position.kind() == FolderPosition.Kind.MATTER_WORKSPACE && position.matter() != null;
 	}
 
 	private HealdanRuleException refusal(String message) {

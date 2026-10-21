@@ -12,7 +12,6 @@ import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.frontend.client.folder.FolderNavigator;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIFolderRole;
 import com.logicaldoc.gui.frontend.client.healdan.matter.MatterDialog;
-import com.logicaldoc.gui.frontend.client.healdan.navigation.HealdanDocumentsMenu;
 import com.logicaldoc.gui.frontend.client.healdan.searchfolder.SearchFolderDialog;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanMatterService;
 import com.smartgwt.client.widgets.menu.Menu;
@@ -75,15 +74,18 @@ public final class HealdanFolderMenu {
 		if (admin && "STORE".equals(role.getKind()))
 			items.add(item("New " + label + "\u2026", () -> MatterDialog.create(folder.getId())));
 
-		// Anyone who can read a matter may keep it in My Matters
+		/*
+		 * Anyone who can read a matter may keep it in My Matters. Its section
+		 * is shut while the Browser is open, and reloads when opened
+		 */
 		if ("MATTER_WORKSPACE".equals(role.getKind()) && role.getMatterId() != null) {
 			String myMatters = "My " + HealdanLabels.plural();
 			if (role.isInMyMatters())
 				items.add(item("Remove from " + myMatters, () -> HealdanMatterService.Instance.get()
-						.removeFromMyMatters(folder.getId(), myMattersChanged("Removed from " + myMatters))));
+						.removeFromMyMatters(folder.getId(), saying("Removed from " + myMatters))));
 			else
 				items.add(item("Add to " + myMatters, () -> HealdanMatterService.Instance.get()
-						.addToMyMatters(folder.getId(), myMattersChanged("Added to " + myMatters))));
+						.addToMyMatters(folder.getId(), saying("Added to " + myMatters))));
 		}
 
 		if (admin && "MATTER_WORKSPACE".equals(role.getKind()))
@@ -111,14 +113,13 @@ public final class HealdanFolderMenu {
 
 	/**
 	 * @param message what to tell the user once it's done
-	 * @return a callback that says so and reloads My Matters
+	 * @return a callback that says so
 	 */
-	private static AsyncCallback<Void> myMattersChanged(String message) {
+	private static AsyncCallback<Void> saying(String message) {
 		return new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(Void result) {
 				GuiLog.info(message, null);
-				HealdanDocumentsMenu.refreshMyMatters();
 			}
 		};
 	}

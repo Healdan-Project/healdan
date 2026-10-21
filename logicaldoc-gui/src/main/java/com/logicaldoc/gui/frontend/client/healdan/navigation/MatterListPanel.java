@@ -7,7 +7,6 @@ import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.frontend.client.document.DocumentsPanel;
-import com.logicaldoc.gui.frontend.client.folder.FolderNavigator;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIMatter;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.widgets.grid.HoverCustomizer;
@@ -40,8 +39,6 @@ public class MatterListPanel extends VLayout {
 
 	private final ListGrid list = new ListGrid();
 
-	private boolean loaded = false;
-
 	/**
 	 * @param source where the matters come from
 	 */
@@ -68,30 +65,15 @@ public class MatterListPanel extends VLayout {
 		list.setCanEdit(false);
 		list.setEmptyMessage(I18N.message("notitemstoshow"));
 		list.setFields(display);
-		list.addRecordClickHandler(click -> {
-			/*
-			 * CE's openFolder adds the matter to the tree's selection, so the
-			 * folder selected before would stay selected, and the folder menu
-			 * would act on both
-			 */
-			FolderNavigator.get().deselectAllRecords();
-			DocumentsPanel.get().openInFolder(click.getRecord().getAttributeAsLong(FOLDER_ID), null);
-		});
+		list.addRecordClickHandler(click -> DocumentsPanel.get()
+				.openInFolder(click.getRecord().getAttributeAsLong(FOLDER_ID), null));
 		addMember(list);
-	}
-
-	@Override
-	protected void onDraw() {
-		// The section's header click loads it; this covers a section shown open
-		if (!loaded)
-			refresh();
 	}
 
 	/**
 	 * Loads the matters again
 	 */
 	public void refresh() {
-		loaded = true;
 		source.load(new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(List<GUIMatter> matters) {

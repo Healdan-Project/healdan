@@ -8,7 +8,7 @@ import com.smartgwt.client.widgets.layout.SectionStackSection;
 /**
  * My Matters and Recent Matters, the two sections above the Browser in the
  * Documents tab's left pane (spec 8.2). Each list loads when its header is
- * clicked.
+ * clicked to open it.
  */
 public final class HealdanDocumentsMenu {
 
@@ -19,8 +19,6 @@ public final class HealdanDocumentsMenu {
 	/** The name CE's {@code DocumentsMenu} gives its Browser section */
 	private static final String BROWSER = "browser";
 
-	private static MatterListPanel myMatters;
-
 	private HealdanDocumentsMenu() {
 	}
 
@@ -30,7 +28,7 @@ public final class HealdanDocumentsMenu {
 	 * @param menu the Documents tab's left pane
 	 */
 	public static void addSections(SectionStack menu) {
-		myMatters = new MatterListPanel(HealdanMatterService.Instance.get()::myMatters);
+		MatterListPanel myMatters = new MatterListPanel(HealdanMatterService.Instance.get()::myMatters);
 		MatterListPanel recentMatters = new MatterListPanel(HealdanMatterService.Instance.get()::recentMatters);
 		SectionStackSection mySection = section(MY_MATTERS, myMatters);
 		SectionStackSection recentSection = section(RECENT_MATTERS, recentMatters);
@@ -47,8 +45,11 @@ public final class HealdanDocumentsMenu {
 				menu.expandSection(BROWSER);
 		});
 
+		// The handler runs before the click opens or shuts the section: load only on opening
 		menu.addSectionHeaderClickHandler(click -> {
 			String name = click.getSection() != null ? click.getSection().getAttributeAsString("name") : null;
+			if (name == null || menu.sectionIsExpanded(name))
+				return;
 			if (MY_MATTERS.equals(name))
 				myMatters.refresh();
 			else if (RECENT_MATTERS.equals(name))
@@ -60,14 +61,6 @@ public final class HealdanDocumentsMenu {
 			mySection.setTitle(myTitle());
 			recentSection.setTitle(recentTitle());
 		});
-	}
-
-	/**
-	 * Loads My Matters again, after a matter was added or removed
-	 */
-	public static void refreshMyMatters() {
-		if (myMatters != null)
-			myMatters.refresh();
 	}
 
 	private static SectionStackSection section(String name, MatterListPanel panel) {

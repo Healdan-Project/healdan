@@ -124,7 +124,9 @@ public interface HealdanMatterService extends RemoteService {
 	public void addToMyMatters(long folderId) throws ServerException;
 
 	/**
-	 * Removes a matter from the user's My Matters, if it's there
+	 * Removes a matter from the user's My Matters, if it's there. A folder
+	 * that isn't a matter's workspace is left alone, with any CE bookmark on
+	 * it
 	 *
 	 * @param folderId a matter's workspace
 	 *
