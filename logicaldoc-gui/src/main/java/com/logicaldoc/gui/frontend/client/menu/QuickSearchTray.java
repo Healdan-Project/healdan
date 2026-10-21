@@ -13,6 +13,8 @@ import com.logicaldoc.gui.common.client.util.AwesomeFactory;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
 import com.logicaldoc.gui.frontend.client.ai.embedding.EmbeddingSchemesDS;
 import com.logicaldoc.gui.frontend.client.document.grid.DocumentGridUtil;
+import com.logicaldoc.gui.frontend.client.healdan.search.HealdanQuickSearch;
+import com.logicaldoc.gui.frontend.client.healdan.search.ScopePicker;
 import com.logicaldoc.gui.frontend.client.search.ParametricForm;
 import com.logicaldoc.gui.frontend.client.search.Search;
 import com.logicaldoc.gui.frontend.client.search.SearchPanel;
@@ -41,6 +43,8 @@ public class QuickSearchTray extends MenuTray {
 	private TextItem searchBox = new TextItem();
 
 	private SelectItem searchType = new SelectItem("type");
+
+	private ScopePicker scope = new ScopePicker();
 	
 	private SelectItem embeddingScheme = ItemFactory.newSelectItem("scheme");
 
@@ -100,10 +104,15 @@ public class QuickSearchTray extends MenuTray {
 		if (Feature.enabled(Feature.PARAMETRIC_SEARCHES) || Feature.enabled(Feature.SEMANTIC_SEARCHES))
 			setItems(searchBox, embeddingScheme, searchType);
 		else
-			setItems(searchBox);
+			setItems(scope, searchBox);
+
+		HealdanQuickSearch.init(scope::refreshTitles);
 	}
 
 	private void onSearch() {
+		if (HealdanQuickSearch.handle(scope.getScope(), searchBox.getValueAsString()))
+			return;
+
 		GUISearchOptions options = new GUISearchOptions();
 
 		Integer pageSize = DocumentGridUtil.getPageSizeFromSpec(Session.get().getUser().getHitsGrid());

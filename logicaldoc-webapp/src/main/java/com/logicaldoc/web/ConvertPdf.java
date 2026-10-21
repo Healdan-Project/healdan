@@ -101,16 +101,20 @@ public class ConvertPdf extends HttpServlet {
             if (document.isPasswordProtected() && !session.getUnprotectedDocs().containsKey(document.getId()))
                 throw new IOException("The document is protected by a password");
 
-            if (!document.getFileName().toLowerCase().endsWith(".pdf"))
-                throw new IOException("Unsupported format");
-
             String ver = document.getVersion();
             if (StringUtils.isNotEmpty(request.getParameter(VERSION)))
                 ver = request.getParameter(VERSION);
-            Version version = versionDao.findByVersion(document.getId(), ver);
+            // A fileVersion asks for that file of this document, as the version dialog and the Versions tab do
+            Version version = StringUtils.isNotEmpty(request.getParameter("fileVersion"))
+                    ? versionDao.findByFileVersion(document.getId(), request.getParameter("fileVersion"))
+                    : versionDao.findByVersion(document.getId(), ver);
 
             if (version == null)
                 throw new IOException("Document version not available");
+
+            // The file served is that version's, which may not be the current one's type
+            if (!version.getFileName().toLowerCase().endsWith(".pdf"))
+                throw new IOException("Unsupported format");
 
             // Download the already stored resource
             ServletUtil.downloadDocument(request, response, session.getSid(),

@@ -5,10 +5,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
+import org.apache.commons.lang3.StringUtils;
+
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.searchengine.Hit;
+import com.logicaldoc.core.searchengine.Search;
+import com.logicaldoc.core.searchengine.SearchException;
+import com.logicaldoc.core.searchengine.SearchOptions;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
@@ -17,9 +23,11 @@ import com.logicaldoc.gui.common.client.beans.GUIValue;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIFolderRole;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIMatter;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanMatterService;
+import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
+import com.logicaldoc.healdan.matter.ClientMatterRef;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
@@ -42,6 +50,9 @@ import jakarta.servlet.annotation.WebServlet;
 public class HealdanMatterServiceImpl extends HealdanRemoteService implements HealdanMatterService {
 
 	private static final long serialVersionUID = 1L;
+
+	/** The most matters {@link #resolve} lists */
+	static final int MAX_RESOLVED = 100;
 
 	private User matterAdmin() throws ServerException {
 		return admin("create or edit "
@@ -141,10 +152,33 @@ public class HealdanMatterServiceImpl extends HealdanRemoteService implements He
 
 	@Override
 	public List<GUIMatter> resolve(String input) throws ServerException {
-		throw notYet();
+		User user = session().getUser();
+		return call("find the matters", () -> {
+			if (ClientMatterRef.parse(StringUtils.defaultString(input).strip()).isEmpty())
+				return new ArrayList<>();
+			// The Matters search reads the input and the user's rights: the same matters it would list
+			SearchOptions options = Search.newOptions(HealdanConstants.SEARCH_MATTERS);
+			options.setExpression(input);
+			options.setUserId(user.getId());
+			options.setMaxHits(MAX_RESOLVED);
+			Search search = Search.get(options);
+			try {
+				search.search();
+			} catch (SearchException e) {
+				throw failure("search the matters", e);
+			}
+
+			List<GUIMatter> matters = new ArrayList<>();
+			for (Hit hit : search.getHits()) {
+				Matter matter = MatterDAO.get().findByFolderId(hit.getId());
+				if (matter != null)
+					matters.add(toGUI(matter));
+			}
+			return matters;
+		});
 	}
 
-	/** Declared for Tasks 25 and 26, which implement them */
+	/** Declared for Task 26, which implements them */
 	private static ServerException notYet() {
 		return new ServerException("Not available yet.");
 	}

@@ -1,5 +1,6 @@
 package com.logicaldoc.gui.frontend.client.search;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.google.gwt.i18n.client.NumberFormat;
@@ -87,14 +88,21 @@ public class HitsListPanel extends VLayout implements SearchObserver, DocumentOb
 
 	private void setDoubleClickHandler() {
 		grid.registerDoubleClickHandler(event -> {
+			GUIDocument hit = grid.getSelectedDocument();
+			if (hit != null && hit.getType() != null && hit.getType().startsWith(FOLDER)) {
+				DocumentsPanel.get().openInFolder(hit.getId(), null);
+				event.cancel();
+				return;
+			}
 			if (Search.get().getOptions().getType() != GUISearchOptions.TYPE_FOLDERS) {
 				final GUIDocument doc = grid.getSelectedDocument();
 
-				FolderService.Instance.get().getFolder(doc.getFolder().getId(), false, false, false,
+				// The document's own DOWNLOAD, since its folder may not be readable (a document-only grant)
+				DocumentService.Instance.get().getAllowedPermissions(Arrays.asList(doc.getId()),
 						new DefaultAsyncCallback<>() {
 							@Override
-							public void handleSuccess(GUIFolder folder) {
-								if (folder.isDownload()
+							public void handleSuccess(GUIAccessControlEntry permissions) {
+								if (permissions.isDownload()
 										&& "download".equals(Session.get().getInfo().getConfig("gui.doubleclick")))
 									DocUtil.download(doc.getId(), null);
 								else {
@@ -121,6 +129,9 @@ public class HitsListPanel extends VLayout implements SearchObserver, DocumentOb
 				if (type == null || (!type.contains(FOLDER) && DocumentController.get().getCurrentDocument() != null
 						&& DocumentController.get().getCurrentDocument().getId() == id)) {
 					showContextMenu(DocumentController.get().getCurrentDocument().getFolder(), true);
+				} else if (!type.contains(FOLDER)) {
+					// The menu only needs the folder's id, and the folder may not be readable (a document-only grant)
+					showContextMenu(doc.getFolder(), true);
 				} else {
 					/*
 					 * We need to retrieve the folder from the server
