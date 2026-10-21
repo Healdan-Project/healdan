@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.profile;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.apache.commons.lang3.StringUtils;
@@ -66,6 +67,22 @@ public class ProfileSchema {
 	 */
 	public Set<String> fixed() {
 		return FIXED;
+	}
+
+	/**
+	 * @return the Class options admins maintain, in their order; empty when
+	 *         the Class attribute has none
+	 */
+	public List<String> classOptions() {
+		Attribute attribute = template().getAttribute(HealdanConstants.ATTR_DOCCLASS);
+		if (attribute == null || attribute.getSetId() == null)
+			return List.of();
+		try {
+			return AttributeOptionDAO.get().findByAttribute(attribute.getSetId(), HealdanConstants.ATTR_DOCCLASS)
+					.stream().map(AttributeOption::getValue).toList();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Cannot read the Class options", e);
+		}
 	}
 
 	/**
