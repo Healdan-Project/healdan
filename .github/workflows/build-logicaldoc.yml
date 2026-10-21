@@ -37,12 +37,25 @@ jobs:
       - name: Check GUI icons against Font Awesome Free
         run: python3 .github/scripts/check-fontawesome-icons.py
 
+      # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
+      - name: JDK version (from the Dockerfile)
+        id: jdk
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          build=$(sed -n 's/^ARG MAVEN_IMAGE=maven:.*-eclipse-temurin-\([0-9]*\)$/\1/p' Dockerfile)
+          runtime=$(sed -n 's/^ARG TOMCAT_IMAGE=tomcat:.*-jre\([0-9]*\)-temurin$/\1/p' Dockerfile)
+          if [ -z "$build" ] || [ "$build" != "$runtime" ]; then
+            echo "::error file=Dockerfile::MAVEN_IMAGE and TOMCAT_IMAGE must name the same Temurin JDK (found '$build' and '$runtime')"
+            exit 1
+          fi
+          echo "version=$build" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK
         if: steps.changes.outputs.code == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '25'
+          java-version: ${{ steps.jdk.outputs.version }}
           cache: 'maven'
       - name: Configure Maven settings (LogicalDOC & Terracotta repos)
         if: steps.changes.outputs.code == 'true'
