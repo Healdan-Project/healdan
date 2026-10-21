@@ -1,5 +1,7 @@
 package com.logicaldoc.healdan.docnumber;
 
+import java.util.Date;
+
 /**
  * What a doc # lookup found.
  *
@@ -9,17 +11,21 @@ package com.logicaldoc.healdan.docnumber;
  * @param versionId the version row asked for, null for the current version
  * @param version the version found, such as {@code 2.10}
  * @param fileVersion the file version of that version
+ * @param versionDate when that version was made, null for the current version
+ * @param user who made that version, null for the current version
  * @param message why nothing was found, for the user; null when found
  */
 public record LookupResult(Long docId, Long docNumber, Long folderId, Long versionId, String version, String fileVersion,
-		String message) {
+		Date versionDate, String user, String message) {
 
 	/**
-	 * @param message why nothing was found
+	 * @param versionDate when that version was made, null for the current version
+ * @param user who made that version, null for the current version
+ * @param message why nothing was found
 	 * @return a result that found nothing
 	 */
 	static LookupResult notFound(String message) {
-		return new LookupResult(null, null, null, null, null, null, message);
+		return new LookupResult(null, null, null, null, null, null, null, null, message);
 	}
 
 	/**

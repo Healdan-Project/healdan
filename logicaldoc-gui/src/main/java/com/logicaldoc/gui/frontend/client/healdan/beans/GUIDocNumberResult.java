@@ -1,6 +1,7 @@
 package com.logicaldoc.gui.frontend.client.healdan.beans;
 
 import java.io.Serializable;
+import java.util.Date;
 
 /**
  * What a doc # lookup found (spec 6.5), as the server's {@code LookupResult}
@@ -26,6 +27,12 @@ public class GUIDocNumberResult implements Serializable {
 
 	/** The file version of that version */
 	private String fileVersion;
+
+	/** When the version was made, null for the current version */
+	private Date versionDate;
+
+	/** Who made the version, null for the current version */
+	private String user;
 
 	/** Why nothing was found, for the user; null when found */
 	private String message;
@@ -76,6 +83,22 @@ public class GUIDocNumberResult implements Serializable {
 
 	public void setFileVersion(String fileVersion) {
 		this.fileVersion = fileVersion;
+	}
+
+	public Date getVersionDate() {
+		return versionDate;
+	}
+
+	public void setVersionDate(Date versionDate) {
+		this.versionDate = versionDate;
+	}
+
+	public String getUser() {
+		return user;
+	}
+
+	public void setUser(String user) {
+		this.user = user;
 	}
 
 	public String getMessage() {

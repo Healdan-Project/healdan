@@ -32,6 +32,8 @@ public class HealdanLookupServiceImpl extends HealdanRemoteService implements He
 		gui.setVersionId(result.versionId());
 		gui.setVersion(result.version());
 		gui.setFileVersion(result.fileVersion());
+		gui.setVersionDate(result.versionDate());
+		gui.setUser(result.user());
 		gui.setMessage(result.message());
 		return gui;
 	}

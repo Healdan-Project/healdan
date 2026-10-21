@@ -64,14 +64,16 @@ public final class DocNumberLookup {
 		long folderId = document.getFolder().getId();
 		if (query.major() == null)
 			return new LookupResult(document.getId(), query.number(), folderId, null, document.getVersion(),
-					document.getFileVersion(), null);
+					document.getFileVersion(), null, null, null);
 
 		Version version = pick(VersionDAO.get().findByDocId(document.getId()), query.major(), query.minor());
 		if (version == null)
 			return LookupResult.notFound(NO_VERSION.formatted(query.number(),
 					query.minor() == null ? query.major() : query.major() + "." + query.minor()));
 		return new LookupResult(document.getId(), query.number(), folderId, version.getId(), version.getVersion(),
-				version.getFileVersion(), null);
+				version.getFileVersion(),
+				version.getVersionDate() == null ? null : new Date(version.getVersionDate().getTime()),
+				version.getUsername(), null);
 	}
 
 	/**

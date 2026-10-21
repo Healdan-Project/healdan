@@ -7,6 +7,8 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.sql.Timestamp;
+import java.util.Date;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
@@ -21,6 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.searchengine.SearchEngine;
@@ -130,8 +133,8 @@ public class HealdanLookupServiceImplTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testLookupVersion() throws Exception {
-		long v21 = addVersion("2.1", "2.0");
-		long v210 = addVersion("2.10", "2.1");
+		long v21 = addVersion("2.1", "2.0", new Date(1700000000000L), "carol");
+		long v210 = addVersion("2.10", "2.1", new Date(1710000000000L), "dave");
 
 		GUIDocNumberResult exact = as(alices).lookup("#" + n + ".2.1");
 		assertEquals(Long.valueOf(doc.getId()), exact.getDocId());
@@ -139,12 +142,17 @@ public class HealdanLookupServiceImplTest extends AbstractHealdanTestCase {
 		assertEquals(Long.valueOf(n), exact.getDocNumber());
 		assertEquals("2.1", exact.getVersion());
 		assertEquals("2.0", exact.getFileVersion());
+		assertEquals(storedDate(v21), exact.getVersionDate());
+		assertFalse(storedDate(v21).equals(storedDate(v210)));
+		assertEquals("carol", exact.getUser());
 
 		// The highest 2.x
 		GUIDocNumberResult major = as(alices).lookup("#" + n + ".2");
 		assertEquals(Long.valueOf(v210), major.getVersionId());
 		assertEquals("2.10", major.getVersion());
 		assertEquals("2.1", major.getFileVersion());
+		assertEquals(storedDate(v210), major.getVersionDate());
+		assertEquals("dave", major.getUser());
 
 		assertNotFound("Document #%s has no version 2.2".formatted(n), as(alices).lookup("#" + n + ".2.2"));
 	}
@@ -152,12 +160,20 @@ public class HealdanLookupServiceImplTest extends AbstractHealdanTestCase {
 	private static void assertNotFound(String message, GUIDocNumberResult result) {
 		assertFalse(result.isFound());
 		assertNull(result.getDocId());
+		assertNull(result.getDocNumber());
+		assertNull(result.getVersionDate());
+		assertNull(result.getUser());
 		assertNull(result.getFolderId());
 		assertNull(result.getVersionId());
 		assertEquals(message, result.getMessage());
 	}
 
-	private long addVersion(String version, String fileVersion) {
+	/** The version's date as CE reads it, whatever time zone the database applies */
+	private static Date storedDate(long versionId) throws Exception {
+		return new Date(VersionDAO.get().findById(versionId).getVersionDate().getTime());
+	}
+
+	private long addVersion(String version, String fileVersion, Date date, String user) {
 		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		Map<String, Object> row = jdbc.queryForMap(
 				"select * from ld_version where ld_documentid = ? and ld_version = '1.0'", doc.getId());
@@ -165,6 +181,8 @@ public class HealdanLookupServiceImplTest extends AbstractHealdanTestCase {
 		row.put("ld_id", id);
 		row.put("ld_version", version);
 		row.put("ld_fileversion", fileVersion);
+		row.put("ld_versiondate", new Timestamp(date.getTime()));
+		row.put("ld_username", user);
 		jdbc.update("insert into ld_version (%s) values (%s)".formatted(String.join(", ", row.keySet()),
 				row.keySet().stream().map(k -> "?").collect(Collectors.joining(", "))), row.values().toArray());
 		return id;

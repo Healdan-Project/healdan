@@ -17,7 +17,9 @@ import com.smartgwt.client.widgets.layout.HLayout;
 
 /**
  * What a doc # lookup of a version shows (spec 6.5): "#n version v", its date
- * and its user, with Preview and Download
+ * and its user, with Preview and Download. The date and user come from the
+ * lookup; the file's name, size and type, which the preview needs, from the
+ * version's row.
  */
 public class VersionResultDialog extends Window {
 
@@ -26,7 +28,7 @@ public class VersionResultDialog extends Window {
 	private final GUIDocNumberResult result;
 
 	/**
-	 * Loads the version's date and user, then opens the dialog
+	 * Loads the version's file name, size and type, then opens the dialog
 	 *
 	 * @param result the lookup result; must have a docId and a versionId
 	 */
@@ -53,15 +55,16 @@ public class VersionResultDialog extends Window {
 		setWidth(340);
 		setPadding(10);
 
-		String when = version != null && version.getVersionDate() != null ? DATE.format(version.getVersionDate())
-				: "";
-		String who = version != null && version.getUsername() != null ? version.getUsername() : "";
+		String when = result.getVersionDate() != null ? DATE.format(result.getVersionDate()) : "";
+		String who = result.getUser() != null ? result.getUser() : "";
 
 		Label details = new Label(when + (when.isEmpty() || who.isEmpty() ? "" : " &middot; ") + who);
 		details.setHeight(22);
 
 		Button preview = new Button("Preview");
 		preview.addClickHandler(event -> preview(version));
+		// The preview needs the file's name, which only the version's row has
+		preview.setDisabled(version == null || version.getFileName() == null);
 		Button download = new Button("Download");
 		download.addClickHandler(event -> download());
 
@@ -75,11 +78,9 @@ public class VersionResultDialog extends Window {
 
 	private void preview(GUIVersion loaded) {
 		GUIVersion version = new GUIVersion();
-		if (loaded != null) {
-			version.setFileName(loaded.getFileName());
-			version.setFileSize(loaded.getFileSize());
-			version.setType(loaded.getType());
-		}
+		version.setFileName(loaded.getFileName());
+		version.setFileSize(loaded.getFileSize());
+		version.setType(loaded.getType());
 		// The preview takes the document's id from the id, as VersionsPanel does
 		version.setId(result.getDocId());
 		version.setDocId(result.getDocId());
