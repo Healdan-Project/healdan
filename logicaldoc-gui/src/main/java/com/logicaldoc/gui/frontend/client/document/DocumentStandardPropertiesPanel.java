@@ -87,7 +87,8 @@ public class DocumentStandardPropertiesPanel extends DocumentDetailTab {
 
 		StaticTextItem id = prepareIdItem();
 
-		StaticTextItem creation = ItemFactory.newStaticTextItem("creation", "createdon",
+		// Healdan: titled "created", which reads "Date filed"
+		StaticTextItem creation = ItemFactory.newStaticTextItem("creation", "created",
 				Util.textWithAvatar(document.getCreatorId(), Util.padLeft(I18N.formatDate(document.getCreation()) + " "
 						+ I18N.message("by") + " " + document.getCreator(), 40)));
 		creation.setTooltip(
