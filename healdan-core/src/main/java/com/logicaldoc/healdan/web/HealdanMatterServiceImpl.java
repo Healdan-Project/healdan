@@ -43,25 +43,6 @@ public class HealdanMatterServiceImpl extends HealdanRemoteService implements He
 
 	private static final long serialVersionUID = 1L;
 
-	/** Work that may refuse with a {@link HealdanRuleException} */
-	@FunctionalInterface
-	private interface Work<T> {
-		T run() throws PersistenceException, ServerException;
-	}
-
-	/**
-	 * Runs the work, passing a refusal's message on to the GUI as it is
-	 */
-	private static <T> T call(String what, Work<T> work) throws ServerException {
-		try {
-			return work.run();
-		} catch (HealdanRuleException e) {
-			throw new ServerException(e.getMessage());
-		} catch (PersistenceException | RuntimeException e) {
-			throw failure(what, e);
-		}
-	}
-
 	private User matterAdmin() throws ServerException {
 		return admin("create or edit "
 				+ HealdanSettings.get().matterLabelPlural().toLowerCase(Locale.ROOT));

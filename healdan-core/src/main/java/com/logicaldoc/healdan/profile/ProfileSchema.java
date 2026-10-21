@@ -86,6 +86,26 @@ public class ProfileSchema {
 	}
 
 	/**
+	 * @param docClass a Class value
+	 * @return the Subclass options that belong to that Class, in their order;
+	 *         empty for no Class
+	 */
+	public List<String> subclassOptions(String docClass) {
+		if (StringUtils.isEmpty(docClass))
+			return List.of();
+		Attribute attribute = template().getAttribute(HealdanConstants.ATTR_DOCSUBCLASS);
+		if (attribute == null || attribute.getSetId() == null)
+			return List.of();
+		try {
+			return AttributeOptionDAO.get()
+					.findByAttributeAndCategory(attribute.getSetId(), HealdanConstants.ATTR_DOCSUBCLASS, docClass)
+					.stream().map(AttributeOption::getValue).toList();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Cannot read the Subclass options", e);
+		}
+	}
+
+	/**
 	 * @param subclass a Subclass value
 	 * @param docClass a Class value
 	 * @return true if the Subclass has an option whose category is that Class

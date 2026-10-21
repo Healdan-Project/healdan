@@ -10,6 +10,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.InvalidSessionServerException;
 import com.logicaldoc.gui.common.client.ServerException;
+import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.rules.FilingRules;
 
 /**
@@ -47,6 +48,31 @@ public abstract class HealdanRemoteService extends RemoteServiceServlet {
 			throw failure("check the user's groups", e);
 		}
 		return user;
+	}
+
+	/** Work that may refuse with a {@link HealdanRuleException} */
+	@FunctionalInterface
+	protected interface Work<T> {
+		T run() throws PersistenceException, ServerException;
+	}
+
+	/**
+	 * Runs the work, passing a refusal's message on to the GUI as it is
+	 * 
+	 * @param what what the work does, for the log, such as "save the matter"
+	 * @param work the work
+	 * @return what the work returns
+	 * @throws ServerException a refusal, with its message, or an unexpected
+	 *         error
+	 */
+	protected static <T> T call(String what, Work<T> work) throws ServerException {
+		try {
+			return work.run();
+		} catch (HealdanRuleException e) {
+			throw new ServerException(e.getMessage());
+		} catch (PersistenceException | RuntimeException e) {
+			throw failure(what, e);
+		}
 	}
 
 	/**
