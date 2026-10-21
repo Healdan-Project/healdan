@@ -5,8 +5,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.List;
 
@@ -101,5 +103,23 @@ public class ConvertPdfTest extends AbstractWPTestCase {
 		assertNotEquals(first.length, refused.length);
 		assertNotEquals(second.length, refused.length);
 		assertEquals(preview("fileVersion", "8.8").bytes().length, refused.length);
+	}
+
+	@Test
+	public void testFileTypeIsTheVersions() throws Exception {
+		// The current file is now text, but version 1.0 is still a PDF
+		DocumentHistory checkin = new DocumentHistory();
+		checkin.setSession(session);
+		doc = DocumentManager.get().checkin(doc.getId(),
+				new ByteArrayInputStream("not a PDF".getBytes(StandardCharsets.UTF_8)), "two.txt", false, null,
+				checkin).getDocument();
+		assertEquals("two.txt", doc.getFileName());
+
+		assertArrayEquals(first, preview("fileVersion", "1.0").bytes());
+
+		// The current, text file is refused: the "not available" PDF
+		byte[] refused = preview("fileVersion", "9.9").bytes();
+		assertEquals(refused.length, preview().bytes().length);
+		assertEquals(refused.length, preview("fileVersion", doc.getFileVersion()).bytes().length);
 	}
 }

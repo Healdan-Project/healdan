@@ -10,7 +10,7 @@ import com.logicaldoc.gui.common.client.Menu;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.gui.common.client.preview.PreviewPopup;
-import com.logicaldoc.gui.common.client.util.Util;
+import com.logicaldoc.gui.common.client.util.DocUtil;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIDocNumberResult;
 import com.logicaldoc.gui.frontend.client.services.DocumentService;
 import com.smartgwt.client.types.HeaderControls;
@@ -109,6 +109,7 @@ public class VersionResultDialog extends Window {
 	}
 
 	private void download() {
-		Util.download(Util.downloadURL(result.getDocId(), result.getFileVersion()));
+		// As the Versions tab does: a password-protected document asks for its password first
+		DocUtil.download(result.getDocId(), result.getFileVersion());
 	}
 }

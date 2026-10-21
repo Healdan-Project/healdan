@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.google.gwt.core.client.Scheduler;
+import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.logicaldoc.gui.common.client.Constants;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.Session;
@@ -99,7 +100,8 @@ public final class HealdanQuickSearch {
 			@Override
 			public void handleSuccess(GUIDocNumberResult result) {
 				if (!result.isFound()) {
-					SC.warn(result.getMessage());
+					// SC.warn renders HTML, and the message can repeat what was typed
+					SC.warn(SafeHtmlUtils.htmlEscape(result.getMessage()));
 					return;
 				}
 				search(HealdanGuiConstants.SEARCH_DOC_NUMBER, value);
