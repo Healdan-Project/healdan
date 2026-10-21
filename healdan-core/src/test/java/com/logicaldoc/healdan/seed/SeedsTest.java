@@ -39,6 +39,7 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
 public class SeedsTest extends AbstractHealdanTestCase {
@@ -136,7 +137,8 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	@Test
 	public void testSearchAttributesDefault() {
 		// The default columns' Author and Class need the grids to ask for these attributes
-		assertEquals("author,docclass", Context.get().getConfig().getProperty("default.search.extattr"));
+		// (and the Client column's, which the next seed adds)
+		assertEquals("author,docclass,clientname", Context.get().getConfig().getProperty("default.search.extattr"));
 		assertEquals("done", HealdanSettings.get().get("seed.search-attributes"));
 	}
 
@@ -156,6 +158,47 @@ public class SeedsTest extends AbstractHealdanTestCase {
 		Context.get().getConfig().setProperty(SearchAttributesSeed.PROPERTY, " ");
 		new SearchAttributesSeed().run();
 		assertEquals(SearchAttributesSeed.ATTRIBUTES, Context.get().getConfig().getProperty(SearchAttributesSeed.PROPERTY));
+	}
+
+	@Test
+	public void testSearchClientColumnDefault() {
+		// The Search tab's Client column for Matters and Clients results
+		assertEquals("author,docclass,clientname", Context.get().getConfig().getProperty(SearchClientColumnSeed.EXTATTR));
+		assertEquals("done", HealdanSettings.get().get("seed.search-client-column"));
+		assertTrue(Context.get().getConfig().getProperty(SearchClientColumnSeed.COLUMNS).contains("ext_clientname"));
+	}
+
+	@Test
+	public void testSearchClientColumnKeepsAdminLists() throws Exception {
+		ContextProperties config = Context.get().getConfig();
+		String attributes = config.getProperty(SearchClientColumnSeed.EXTATTR);
+		String columns = config.getProperty(SearchClientColumnSeed.COLUMNS);
+		try {
+			config.setProperty(SearchClientColumnSeed.EXTATTR, "source");
+			config.setProperty(SearchClientColumnSeed.COLUMNS, "filename,size");
+			new SearchClientColumnSeed().run();
+			assertEquals("source,clientname", config.getProperty(SearchClientColumnSeed.EXTATTR));
+			assertEquals("filename,size,ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
+
+			// Each already there: nothing changes
+			config.setProperty(SearchClientColumnSeed.EXTATTR, "clientname,source");
+			config.setProperty(SearchClientColumnSeed.COLUMNS, "ext_clientname");
+			new SearchClientColumnSeed().run();
+			assertEquals("clientname,source", config.getProperty(SearchClientColumnSeed.EXTATTR));
+			assertEquals("ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
+
+			// Blank lists get just the one
+			config.setProperty(SearchClientColumnSeed.EXTATTR, " ");
+			config.setProperty(SearchClientColumnSeed.COLUMNS, "");
+			new SearchClientColumnSeed().run();
+			assertEquals("clientname", config.getProperty(SearchClientColumnSeed.EXTATTR));
+			assertEquals("ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
+		} finally {
+			config.setProperty(SearchClientColumnSeed.EXTATTR, attributes);
+			config.setProperty(SearchClientColumnSeed.COLUMNS, columns);
+			// The seed wrote the file, which the next test's startup reads
+			config.write();
+		}
 	}
 
 	@Test

@@ -30,12 +30,15 @@ import com.logicaldoc.healdan.matter.MatterNumbering;
 import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Spec §5.1 and §8.1: the Matters and Clients scopes list live matter
  * workspaces the user can read, as folder hits.
  */
 public class MatterSearchTest extends AbstractHealdanTestCase {
+
+	private static final String EXTATTR = "default.search.extattr";
 
 	private final HealdanFixtures fx = new HealdanFixtures();
 
@@ -191,6 +194,32 @@ public class MatterSearchTest extends AbstractHealdanTestCase {
 		Search limited = search(HealdanConstants.SEARCH_CLIENTS, "heal", admin, 1);
 		assertEquals(List.of(h1.getFolderId()), ids(limited));
 		assertTrue(limited.isMoreHitsPresent());
+	}
+
+	@Test
+	public void testHitsCarryClientName() throws Exception {
+		Matter h = fx.matter(healdan, 1, "Leases", store);
+		fx.matter(acme, 1, "Leases", store);
+		String before = Context.get().getConfig().getProperty(EXTATTR);
+		try {
+			// As an admin has set them: the hit's own attribute must survive the stored ones CE copies over it
+			Context.get().getConfig().setProperty(EXTATTR,
+					HealdanConstants.ATTR_CLIENT + "," + MatterSearch.CLIENT_NAME);
+			for (int type : new int[] { HealdanConstants.SEARCH_MATTERS, HealdanConstants.SEARCH_CLIENTS }) {
+				List<Hit> hits = search(type, type == HealdanConstants.SEARCH_MATTERS ? "leases" : "a", admin, 40)
+						.getHits();
+				assertEquals(2, hits.size());
+				for (Hit hit : hits) {
+					String expected = hit.getId() == h.getFolderId() ? "Healdan" : "Acme Healthcare";
+					assertEquals(expected, hit.getValue(MatterSearch.CLIENT_NAME));
+					// The workspace's stored client attribute is the client's number, and stays under its own name
+					assertEquals(hit.getId() == h.getFolderId() ? "998" : "999",
+							String.valueOf(hit.getValue(HealdanConstants.ATTR_CLIENT)));
+				}
+			}
+		} finally {
+			Context.get().getConfig().setProperty(EXTATTR, before);
+		}
 	}
 
 	private static Search search(int type, String expression, User user, int maxHits) throws Exception {

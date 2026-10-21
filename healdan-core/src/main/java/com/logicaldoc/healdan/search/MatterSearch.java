@@ -37,13 +37,21 @@ import com.logicaldoc.util.spring.Context;
  * The hits are the live matters of the user's tenant whose workspaces the
  * user can read, lowest client and matter number first, as folder hits whose
  * folder is the workspace itself, so that opening a hit's folder opens the
- * matter.
+ * matter. Each hit also carries its client's name, in {@link #CLIENT_NAME}.
  */
 public class MatterSearch extends Search {
 
+	/**
+	 * The hit attribute that holds the client's name. It is not {@code client}:
+	 * CE copies the stored attributes named in {@code search.extattr} over a
+	 * folder hit's own, and a matter workspace stores {@code client} as the
+	 * client's number.
+	 */
+	public static final String CLIENT_NAME = "clientname";
+
 	private static final String QUERY = """
 			select m.hd_folderid, c.hd_number, m.hd_number, m.hd_name, f.ld_name, f.ld_type, f.ld_description,
-			       f.ld_creation, f.ld_lastmodified, f.ld_color
+			       f.ld_creation, f.ld_lastmodified, f.ld_color, c.hd_name
 			  from hd_matter m
 			  join hd_client c on c.ld_id = m.hd_clientid
 			  join ld_folder f on f.ld_id = m.hd_folderid
@@ -142,6 +150,7 @@ public class MatterSearch extends Search {
 		hit.setDate(rs.getTimestamp(9));
 		hit.setColor(rs.getString(10));
 		hit.setPublished(true);
+		hit.setValue(CLIENT_NAME, rs.getString(11));
 		return hit;
 	}
 }

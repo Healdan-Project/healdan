@@ -21,7 +21,7 @@ public class SeedRunner {
 
 	/** The order of the steps; a step with no bean yet is skipped */
 	static final List<String> ORDER = List.of("settings", "everyone", "profile", "templates-store", "columns",
-			"search-attributes", "reindex-office", "smoke-fixture");
+			"search-attributes", "search-client-column", "reindex-office", "smoke-fixture");
 
 	private static final String MARKER_PREFIX = "seed.";
 
