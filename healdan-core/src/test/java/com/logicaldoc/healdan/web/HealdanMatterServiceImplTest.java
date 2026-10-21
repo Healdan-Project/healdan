@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.junit.After;
@@ -14,8 +15,11 @@ import org.junit.Test;
 
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.searchengine.SearchEngine;
+import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
@@ -26,6 +30,8 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
+import com.logicaldoc.healdan.matter.MatterNumbering;
+import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.HealdanFixtures;
@@ -62,9 +68,14 @@ public class HealdanMatterServiceImplTest extends AbstractHealdanTestCase {
 	}
 
 	@After
-	public void closeSessions() {
+	@Override
+	public void tearDown() throws IOException {
 		SessionManager.get().kill(boss.getSid());
 		SessionManager.get().kill(clerk.getSid());
+		// The resolve tests search
+		SearchEngine.get().unlock();
+		SearchEngine.get().close();
+		super.tearDown();
 	}
 
 	private static Session open(User user) {
@@ -208,6 +219,70 @@ public class HealdanMatterServiceImplTest extends AbstractHealdanTestCase {
 		// The clerk can't read the workspace, so learns nothing about it
 		assertThrows(AccessDeniedException.class, () -> as(clerk).describeFolder(matter.getFolderId()));
 		assertThrows(AccessDeniedException.class, () -> as(clerk).describeFolder(987654L));
+	}
+
+	@Test
+	public void testResolveExactAndAmbiguous() throws Exception {
+		Client acme = fx.client(999, "Acme Healthcare");
+		Matter h1 = fx.matter(healdan, 1, "Healdan Demo", store);
+		Matter a1 = fx.matter(acme, 1, "Acme Demo", store);
+		fx.matter(acme, 2, "Acme Two", store);
+
+		// Per client, a bare number is every client's matter with it
+		List<GUIMatter> ones = as(boss).resolve("1");
+		assertEquals(List.of(h1.getFolderId(), a1.getFolderId()), ones.stream().map(GUIMatter::getFolderId).toList());
+		assertEquals(List.of("Healdan", "Acme Healthcare"), ones.stream().map(GUIMatter::getClientName).toList());
+		assertEquals(List.of("998.1 \u2013 Healdan Demo", "999.1 \u2013 Acme Demo"),
+				ones.stream().map(GUIMatter::getDisplay).toList());
+
+		// client.matter is that one matter
+		List<GUIMatter> exact = as(boss).resolve(" 998.1 ");
+		assertEquals(1, exact.size());
+		assertEquals(h1.getFolderId(), exact.get(0).getFolderId());
+		assertEquals(h1.getId(), exact.get(0).getId());
+		assertEquals(998L, exact.get(0).getClientNumber());
+		assertEquals(0, as(boss).resolve("998.9").size());
+
+		// Anything but a number is for the Matters search to read
+		assertEquals(0, as(boss).resolve("demo").size());
+		assertEquals(0, as(boss).resolve("").size());
+		assertEquals(0, as(boss).resolve(null).size());
+	}
+
+	@Test
+	public void testResolveSystemWide() throws Exception {
+		MatterNumbering.get().setMode(NumberingMode.SYSTEM_WIDE);
+		Client acme = fx.client(999, "Acme Healthcare");
+		fx.matter(healdan, 1, "Healdan One", store);
+		Matter a2 = fx.matter(acme, 2, "Acme Two", store);
+
+		List<GUIMatter> two = as(boss).resolve("2");
+		assertEquals(1, two.size());
+		assertEquals(a2.getFolderId(), two.get(0).getFolderId());
+		assertEquals("Acme Healthcare", two.get(0).getClientName());
+	}
+
+	@Test
+	public void testResolveOnlyReadableMatters() throws Exception {
+		Folder secret = fx.store("Secret");
+		Group readers = fx.group("readers");
+		User reader = fx.user("reader", readers.getName());
+		Session readers1 = open(reader);
+		try {
+			fx.grant(store, readers, Permission.READ);
+			Matter visible = fx.matter(healdan, 1, "Open", store);
+			Matter hidden = fx.matter(fx.client(999, "Acme Healthcare"), 1, "Hidden", secret);
+
+			// The administrator reads both, the reader only the first; the clerk, with no grant, none
+			assertEquals(List.of(visible.getFolderId(), hidden.getFolderId()),
+					as(boss).resolve("1").stream().map(GUIMatter::getFolderId).toList());
+			assertEquals(List.of(visible.getFolderId()),
+					as(readers1).resolve("1").stream().map(GUIMatter::getFolderId).toList());
+			assertEquals(0, as(readers1).resolve("999.1").size());
+			assertEquals(0, as(clerk).resolve("1").size());
+		} finally {
+			SessionManager.get().kill(readers1.getSid());
+		}
 	}
 
 	private static void assertRole(String kind, Long matterId, boolean topLevel, boolean searchFolder,
