@@ -5,21 +5,15 @@ import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.google.gwt.user.server.rpc.jakarta.RemoteServiceServlet;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.metadata.TemplateDAO;
-import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.gui.common.client.AccessDeniedException;
-import com.logicaldoc.gui.common.client.InvalidSessionServerException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIValue;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIClient;
@@ -36,7 +30,6 @@ import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.matter.MatterNumbering;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.profile.ProfileSchema;
-import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.util.BasicPlane;
 
@@ -47,11 +40,9 @@ import jakarta.servlet.annotation.WebServlet;
  * {@link #labels()} is for administrators only.
  */
 @WebServlet("/frontend/healdansettings")
-public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements HealdanSettingsService {
+public class HealdanSettingsServiceImpl extends HealdanRemoteService implements HealdanSettingsService {
 
 	private static final long serialVersionUID = 1L;
-
-	private static final Logger log = LoggerFactory.getLogger(HealdanSettingsServiceImpl.class);
 
 	/** The longest matter label */
 	static final int MAX_LABEL_LENGTH = 50;
@@ -64,15 +55,6 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 	 * counter's overflow and the 2^53 a browser's number keeps exactly
 	 */
 	static final long MAX_NEXT_DOC_NUMBER = 999_999_999_999L;
-
-	/**
-	 * @return the session of the current request
-	 * @throws InvalidSessionServerException the session is missing, invalid or
-	 *         expired
-	 */
-	protected Session session() throws InvalidSessionServerException {
-		return HealdanSessions.validate(getThreadLocalRequest());
-	}
 
 	@Override
 	public GUIHealdanSettings load() throws ServerException {
@@ -142,26 +124,6 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 		} catch (PersistenceException e) {
 			throw failure("suggest a client number", e);
 		}
-	}
-
-	/**
-	 * @param what what only an administrator may do, for the refusal
-	 * @return the session's user, an administrator
-	 */
-	private User admin(String what) throws ServerException {
-		User user = session().getUser();
-		try {
-			if (!FilingRules.get().isAdmin(user))
-				throw new AccessDeniedException("Only an administrator can %s.".formatted(what));
-		} catch (PersistenceException e) {
-			throw failure("check the user's groups", e);
-		}
-		return user;
-	}
-
-	private static ServerException failure(String what, Exception e) {
-		log.error("Cannot {}", what, e);
-		return new ServerException("Cannot %s: %s".formatted(what, e.getMessage()));
 	}
 
 	private static GUIHealdanSettings current() throws PersistenceException {
