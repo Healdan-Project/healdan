@@ -187,12 +187,13 @@ public class SeedsTest extends AbstractHealdanTestCase {
 			assertEquals("clientname,source", config.getProperty(SearchClientColumnSeed.EXTATTR));
 			assertEquals("ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
 
-			// Blank lists get just the one
+			// A blank attribute list gets just the one; blank columns get CE's, then the one
 			config.setProperty(SearchClientColumnSeed.EXTATTR, " ");
 			config.setProperty(SearchClientColumnSeed.COLUMNS, "");
 			new SearchClientColumnSeed().run();
 			assertEquals("clientname", config.getProperty(SearchClientColumnSeed.EXTATTR));
-			assertEquals("ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
+			assertEquals(SearchClientColumnSeed.CE_COLUMNS + ",ext_clientname",
+					config.getProperty(SearchClientColumnSeed.COLUMNS));
 		} finally {
 			config.setProperty(SearchClientColumnSeed.EXTATTR, attributes);
 			config.setProperty(SearchClientColumnSeed.COLUMNS, columns);

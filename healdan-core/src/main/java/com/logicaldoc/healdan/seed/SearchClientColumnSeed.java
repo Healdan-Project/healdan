@@ -27,6 +27,13 @@ public class SearchClientColumnSeed implements SeedStep {
 
 	static final String COLUMN = "ext_" + MatterSearch.CLIENT_NAME;
 
+	/**
+	 * The columns CE ships in the webapp's context.properties
+	 * ({@code default.gui.search.columns}), for a list that is blank: the grid
+	 * shows only the columns listed
+	 */
+	static final String CE_COLUMNS = "filename,size,score,fileVersion,published,publisher";
+
 	@Override
 	public String name() {
 		return "search-client-column";
@@ -36,6 +43,8 @@ public class SearchClientColumnSeed implements SeedStep {
 	public void run() throws Exception {
 		ContextProperties config = Context.get().getConfig();
 		boolean changed = append(config, EXTATTR, MatterSearch.CLIENT_NAME);
+		if (StringUtils.isBlank(config.getProperty(COLUMNS)))
+			config.setProperty(COLUMNS, CE_COLUMNS);
 		changed |= append(config, COLUMNS, COLUMN);
 		if (changed)
 			config.write();
