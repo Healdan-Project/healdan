@@ -107,6 +107,18 @@ public class MatterNumbering {
 	 *         clients share a matter number; the message lists them
 	 */
 	public void setMode(NumberingMode mode) throws HealdanRuleException {
+		checkMode(mode);
+		settings.set(HealdanSettings.MATTER_NUMBERING, mode.name());
+	}
+
+	/**
+	 * Checks a mode change without making it.
+	 *
+	 * @param mode the new mode
+	 * @throws HealdanRuleException if the mode is system-wide while two clients
+	 *         share a matter number; the message lists them
+	 */
+	public void checkMode(NumberingMode mode) throws HealdanRuleException {
 		if (mode == NumberingMode.SYSTEM_WIDE) {
 			List<String> clashes = systemWideClashes();
 			if (!clashes.isEmpty())
@@ -114,6 +126,5 @@ public class MatterNumbering {
 						"Numbers must be unique across all clients, but these are shared: %s. Renumber them first."
 								.formatted(String.join("; ", clashes)));
 		}
-		settings.set(HealdanSettings.MATTER_NUMBERING, mode.name());
 	}
 }

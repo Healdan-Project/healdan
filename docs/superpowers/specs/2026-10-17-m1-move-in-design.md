@@ -2,7 +2,7 @@
 
 - **Milestone:** M1 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-17
-- **Status:** approved by the owner on 2026-10-17. Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). The plan lists the corrections to §13 it proposes.
+- **Status:** approved by the owner on 2026-10-17, and amended after the owner reviewed mockups of the PR D screens on 2026-10-21 (client names in matter lists, §8.1 and §8.2). Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). The plan lists the corrections to §13 it proposes.
 - **Inputs:**
   - the roadmap's M1 section and glossary;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md);
@@ -605,6 +605,7 @@ The owner saw and accepted a mockup of these changes on 2026-10-17: the existing
 - They appear in CE's existing **Search** tab.
 - Document hits get CE's full document context menu and details panel: properties, Profile, versions, history, security and preview.
 - Matter hits are folder hits, and double-clicking one opens the folder.
+- **Matter hits show their client (owner, 2026-10-21).** In the Matters and Clients scopes the results have a **Client** column with the client's name, next to the matter. The display `1001.1 – Leases` names only the client's number, so without it a search for "leases" can't tell Acme, Inc.'s matter from ABC Burgers'. The column holds the name alone, because the display already starts with the number.
 
 **`#n.N` and `#n.N.M` results.** The result shows the document. Previewing or downloading **that version or snapshot** takes one click, for example by opening the Versions tab with that row selected. The builder chooses how.
 
@@ -630,7 +631,7 @@ The owner saw and accepted a mockup of these changes on 2026-10-17: the existing
 - The 30 days is a Healdan setting.
 
 **Both lists:**
-- Each entry reads `998.1 – Healdan Demo`.
+- Each entry reads `998.1 – Healdan Demo (Healdan)`: the matter's display, then its client's name in brackets, in slightly smaller, muted text (owner, 2026-10-21). The client name is there for reference, and the matter stays the focus. An entry too long for the pane is cut off at the end, so the client name goes first, and hovering shows the whole entry.
 - Clicking it opens the matter in the **Browser** tree below, which shows its folders.
 - They don't expand into trees in M1.
 
@@ -936,6 +937,7 @@ These choices don't change what gets built, so the builder decides them:
 | Folder permissions | P1 per group within a matter, auto-narrowing; P2 matter vs Store for READ | roadmap call, call (mechanics) |
 | Emails | From, To, CC, Subject, Sent, Received; named after the subject | owner (CC is a call) |
 | My Matters / Recent Matters | lists in the left pane that jump to the tree; recent = changed in 30 days | owner |
+| Client in matter lists | matter search results get a Client column; My/Recent Matters entries read `998.1 – Healdan Demo (Healdan)`, the client smaller and muted (mockup review, 2026-10-21) | owner |
 | UI scope | the existing GUI, changed minimally | owner |
 | Values supplied at creation | different from inherited → local; same or blank → inherited (covers upload, API, copy) | call |
 | Owner change | the new owner gets full rights; the old owner's entry is removed | call |
