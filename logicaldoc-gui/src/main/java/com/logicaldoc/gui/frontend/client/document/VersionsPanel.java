@@ -8,7 +8,6 @@ import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.gui.common.client.controllers.DocumentController;
-import com.logicaldoc.gui.common.client.controllers.FolderController;
 import com.logicaldoc.gui.common.client.data.VersionsDS;
 import com.logicaldoc.gui.common.client.grid.ColoredListGridField;
 import com.logicaldoc.gui.common.client.grid.DateListGridField;
@@ -87,7 +86,7 @@ public class VersionsPanel extends DocumentDetailTab {
         list.setEmptyMessage(I18N.message("notitemstoshow"));
         list.setCanFreezeFields(true);
         list.setAutoFetchData(true);
-        if (document.getFolder().isDownload())
+        if (document.isDownload())
             list.setFields(id, user, event, fileName, type, fileVersion, version, revision, date, permalink, wfStatus,
                     comment);
         else
@@ -134,7 +133,7 @@ public class VersionsPanel extends DocumentDetailTab {
     private void addListHandlers() {
         list.addCellDoubleClickHandler(clickEvent -> {
             ListGridRecord rec = clickEvent.getRecord();
-            if (FolderController.get().getCurrentFolder().isDownload()
+            if (document.isDownload()
                     && DOWNLOAD.equals(Session.get().getInfo().getConfig("gui.doubleclick")))
                 onDownload(document, rec);
             else
@@ -179,7 +178,7 @@ public class VersionsPanel extends DocumentDetailTab {
     }
 
     protected void onDownload(final GUIDocument document, ListGridRecord rec) {
-        if (document.getFolder().isDownload())
+        if (document.isDownload())
             DocUtil.download(document.getDocRef() != null ? document.getDocRef() : document.getId(),
                     rec.getAttribute(FILE_VERSION));
     }
@@ -216,7 +215,7 @@ public class VersionsPanel extends DocumentDetailTab {
         MenuItem download = new MenuItem();
         download.setTitle(I18N.message(DOWNLOAD));
         download.addClickHandler((MenuItemClickEvent downloadEvent) -> onDownload(document, selection[0]));
-        download.setEnabled(document.getFolder().isDownload());
+        download.setEnabled(document.isDownload());
 
         MenuItem preview = new MenuItem();
         preview.setTitle(I18N.message("preview"));
