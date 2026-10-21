@@ -178,7 +178,16 @@ public class SeedsTest extends AbstractHealdanTestCase {
 			config.setProperty(SearchClientColumnSeed.COLUMNS, "filename,size");
 			new SearchClientColumnSeed().run();
 			assertEquals("source,clientname", config.getProperty(SearchClientColumnSeed.EXTATTR));
-			assertEquals("filename,size,ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
+			assertEquals("filename,ext_clientname,size", config.getProperty(SearchClientColumnSeed.COLUMNS));
+			// Right after filename wherever it is; at the end when filename isn't listed
+			config.setProperty(SearchClientColumnSeed.COLUMNS, "size,filename,score");
+			config.setProperty(SearchClientColumnSeed.EXTATTR, "source");
+			new SearchClientColumnSeed().run();
+			assertEquals("size,filename,ext_clientname,score", config.getProperty(SearchClientColumnSeed.COLUMNS));
+			config.setProperty(SearchClientColumnSeed.COLUMNS, "size,score");
+			config.setProperty(SearchClientColumnSeed.EXTATTR, "source");
+			new SearchClientColumnSeed().run();
+			assertEquals("size,score,ext_clientname", config.getProperty(SearchClientColumnSeed.COLUMNS));
 
 			// Each already there: nothing changes
 			config.setProperty(SearchClientColumnSeed.EXTATTR, "clientname,source");
@@ -192,7 +201,7 @@ public class SeedsTest extends AbstractHealdanTestCase {
 			config.setProperty(SearchClientColumnSeed.COLUMNS, "");
 			new SearchClientColumnSeed().run();
 			assertEquals("clientname", config.getProperty(SearchClientColumnSeed.EXTATTR));
-			assertEquals(SearchClientColumnSeed.CE_COLUMNS + ",ext_clientname",
+			assertEquals("filename,ext_clientname,size,score,fileVersion,published,publisher",
 					config.getProperty(SearchClientColumnSeed.COLUMNS));
 		} finally {
 			config.setProperty(SearchClientColumnSeed.EXTATTR, attributes);

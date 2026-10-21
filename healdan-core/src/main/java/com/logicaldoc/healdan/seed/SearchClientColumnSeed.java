@@ -15,8 +15,9 @@ import com.logicaldoc.util.spring.Context;
  * Gives the Search tab's grid the client's name of Matters and Clients hits
  * (spec 8.1): the hit's {@link MatterSearch#CLIENT_NAME} attribute is asked
  * for ({@code search.extattr}) and its column is one of those the grid shows
- * ({@code gui.search.columns}). Each is added to the lists as they are, so an
- * admin's own lists stay.
+ * ({@code gui.search.columns}), right after the file name where that is
+ * listed. Each is added to the lists as they are, so an admin's own lists
+ * stay.
  */
 @Component
 public class SearchClientColumnSeed implements SeedStep {
@@ -42,24 +43,30 @@ public class SearchClientColumnSeed implements SeedStep {
 	@Override
 	public void run() throws Exception {
 		ContextProperties config = Context.get().getConfig();
-		boolean changed = append(config, EXTATTR, MatterSearch.CLIENT_NAME);
+		boolean changed = append(config, EXTATTR, MatterSearch.CLIENT_NAME, null);
 		if (StringUtils.isBlank(config.getProperty(COLUMNS)))
 			config.setProperty(COLUMNS, CE_COLUMNS);
-		changed |= append(config, COLUMNS, COLUMN);
+		changed |= append(config, COLUMNS, COLUMN, "filename");
 		if (changed)
 			config.write();
 	}
 
 	/**
 	 * @return true if the item was missing from the comma-separated list in
-	 *         the property, and is now at its end
+	 *         the property, and is now right after {@code after} when that is
+	 *         listed, otherwise at the end
 	 */
-	private static boolean append(ContextProperties config, String property, String item) {
+	private static boolean append(ContextProperties config, String property, String item, String after) {
 		String current = StringUtils.trimToEmpty(config.getProperty(property));
 		List<String> items = new ArrayList<>(Arrays.asList(StringUtils.split(current, ',')));
-		if (items.stream().anyMatch(i -> i.trim().equals(item)))
+		items.replaceAll(String::trim);
+		if (items.contains(item))
 			return false;
-		items.add(item);
+		int at = after == null ? -1 : items.indexOf(after);
+		if (at < 0)
+			items.add(item);
+		else
+			items.add(at + 1, item);
 		config.setProperty(property, String.join(",", items));
 		return true;
 	}
