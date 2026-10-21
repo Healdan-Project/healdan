@@ -3,6 +3,7 @@ package com.logicaldoc.gui.frontend.client.healdan.search;
 import java.util.List;
 
 import com.google.gwt.i18n.client.DateTimeFormat;
+import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.gui.common.client.preview.PreviewPopup;
@@ -47,7 +48,8 @@ public class VersionResultDialog extends Window {
 		this.result = result;
 
 		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		setTitle("#" + result.getDocNumber() + " version " + result.getVersion());
+		// Window titles and Labels render HTML
+		setTitle(SafeHtmlUtils.htmlEscape("#" + result.getDocNumber() + " version " + result.getVersion()));
 		setIsModal(true);
 		setShowModalMask(true);
 		centerInPage();
@@ -56,7 +58,8 @@ public class VersionResultDialog extends Window {
 		setPadding(10);
 
 		String when = result.getVersionDate() != null ? DATE.format(result.getVersionDate()) : "";
-		String who = result.getUser() != null ? result.getUser() : "";
+		// The user's name is the user's own to edit
+		String who = result.getUser() != null ? SafeHtmlUtils.htmlEscape(result.getUser()) : "";
 
 		Label details = new Label(when + (when.isEmpty() || who.isEmpty() ? "" : " &middot; ") + who);
 		details.setHeight(22);
