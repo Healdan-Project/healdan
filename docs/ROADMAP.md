@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building (PR A: Tasks 1–7, merged 2026-10-17; PR B: Tasks 8–16, merged 2026-10-18; PR C: Tasks 17–21) |
+| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building. Server side done: PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18, PR C (Tasks 17–21) 2026-10-19, and five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) is in progress in parts, after the owner reviewed its mockups on 2026-10-21 |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
@@ -147,6 +147,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - Only admins add, rename, move or delete a matter's top-level folders.
   - A document can be granted to people who can't see its folder. This is a one-off or temporary exception, as in iManage.
   - My Matters and Recent Matters are lists in the old UI's left pane; trees wait for M6.
+- **Mockup review, 2026-10-21.** Matter lists show the client's name: matter search results get a Client column, and My Matters and Recent Matters entries read `998.1 – Healdan Demo (Healdan)`, with the client smaller and muted. The spec's §8.1 and §8.2 carry it.
 
 **Calls.**
 
