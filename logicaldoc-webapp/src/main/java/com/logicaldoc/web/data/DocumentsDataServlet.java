@@ -7,7 +7,6 @@ import java.sql.SQLException;
 import java.text.DateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -22,7 +21,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.RowMapper;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentComparator;
@@ -706,21 +704,22 @@ public class DocumentsDataServlet extends AbstractDataServlet {
         if (StringUtils.isNotEmpty(sort)) {
             // make the sorting to be case insensitive (add lower
             // function)
-            List<Comparator<AbstractDocument>> comparators = new ArrayList<>();
+            StringBuilder ciSort = new StringBuilder();
             StringTokenizer st = new StringTokenizer(sort, ",", false);
             while (st.hasMoreElements()) {
                 String token = (String) st.nextElement();
                 String field = token.split(" ")[0].trim();
                 String direction = token.split(" ")[1].trim();
 
-                // Healdan: a doc # sorts as a number
-                if (HealdanDocNumberSort.FIELD.equals(field))
-                    comparators.add(HealdanDocNumberSort.comparator("asc".equals(direction)));
-                else
-                    comparators.add(DocumentComparator.getComparator("lower(" + field + ") " + direction));
+                if (!ciSort.isEmpty())
+                    ciSort.append(",");
+                ciSort.append("lower(");
+                ciSort.append(field);
+                ciSort.append(") ");
+                ciSort.append(direction);
             }
 
-            Collections.sort(documents, comparators.stream().reduce((d1, d2) -> 0, Comparator::thenComparing));
+            Collections.sort(documents, DocumentComparator.getComparator(ciSort.toString()));
         }
     }
 

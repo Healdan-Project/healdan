@@ -125,11 +125,8 @@ public class DocumentStandardPropertiesPanel extends DocumentDetailTab {
 		StaticTextItem permaLink = preparePermaLink();
 
 		TextItem customId = ItemFactory.newTextItem("customid", document.getCustomId());
-		if (changedHandler != null)
-			customId.addChangedHandler(changedHandler);
 		// Healdan: the doc # always shows, and only the server sets it
 		customId.setDisabled(true);
-		customId.setVisible(true);
 
 		TextItem revision = ItemFactory.newTextItem("revision", document.getRevision());
 		if (changedHandler != null)
@@ -477,7 +474,7 @@ public class DocumentStandardPropertiesPanel extends DocumentDetailTab {
 			document.setColor((String) values.get(COLOR));
 			document.setTags(Arrays.asList(tagItem.getValues()));
 			document.setRevision((String) values.get("revision"));
-			document.setCustomId((String) values.get("customid"));
+			// Healdan: the doc # isn't read back, only the server sets it
 		}
 		return !vm.hasErrors();
 	}

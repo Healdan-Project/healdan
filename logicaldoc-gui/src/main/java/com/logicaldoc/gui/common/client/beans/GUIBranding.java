@@ -46,27 +46,28 @@ public class GUIBranding implements Serializable {
 
 	private String help = "https://docs.logicaldoc.com";
 
-	private String bugs = "https://bugs.logicaldoc.com";
+	// Healdan: the defaults below match HealdanSystemInfo's
+	private String bugs = "https://github.com/Healdan-Project/healdan/issues";
 
-	private String url = "https://www.logicaldoc.com";
+	private String url = "https://github.com/Healdan-Project/healdan";
 
-	private String forum = "https://github.com/logicaldoc/community/discussions";
+	private String forum = "-";
 
 	private String evaluation = "";
 
-	private String vendor = "LogicalDOC";
+	private String vendor = "Healdan Project";
 
-	private String vendorAddress = "via Aldo Moro interna, 3";
+	private String vendorAddress = "";
 
-	private String vendorCap = "41012";
+	private String vendorCap = "";
 
-	private String vendorCountry = "Italy";
+	private String vendorCountry = "";
 
-	private String vendorCity = "Carpi";
+	private String vendorCity = "";
 
-	private String support = "support@logicaldoc.com";
+	private String support = "";
 
-	private String sales = "sales@logicaldoc.com";
+	private String sales = "";
 
 	private String skin = "Tahoe";
 

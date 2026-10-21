@@ -972,15 +972,28 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
     }
 
     /**
-     * Healdan: the sort key of a custom id. A number is padded with zeros to
-     * the width of a long, so 2 sorts before 10; any other id gets a leading
-     * tilde, so it sorts after the numbers, without case as the server sorts
-     * it ({@code HealdanDocNumberSort})
+     * Healdan: the sort key of a custom id. A number, 1 to 18 digits, is
+     * padded with zeros to 18, so 2 sorts before 10; any other id gets a
+     * leading tilde, so it sorts after the numbers, without case. The server
+     * sorts the same way ({@code HealdanDocNumberSort} in logicaldoc-core).
      */
     private static String numericKey(String customId) {
-        if (customId != null && customId.matches("\\d{1,19}"))
-            return "0000000000000000000".substring(customId.length()) + customId;
-        return "~" + (customId != null ? customId.toLowerCase() : "");
+        if (customId == null)
+            return "~";
+        if (isDocNumber(customId))
+            return "000000000000000000".substring(customId.length()) + customId;
+        return "~" + customId.toLowerCase();
+    }
+
+    private static boolean isDocNumber(String customId) {
+        if (customId.isEmpty() || customId.length() > 18)
+            return false;
+        for (int i = 0; i < customId.length(); i++) {
+            char c = customId.charAt(i);
+            if (c < '0' || c > '9')
+                return false;
+        }
+        return true;
     }
 
     @Override

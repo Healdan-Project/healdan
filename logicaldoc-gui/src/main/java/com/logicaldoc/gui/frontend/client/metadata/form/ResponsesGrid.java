@@ -76,7 +76,8 @@ public class ResponsesGrid extends RefreshableListGrid {
 		ListGridField size = new FileSizeListGridField("size", I18N.getAttributeLabel("size"));
 		size.setHidden(true);
 
-		ListGridField created = new DateListGridField("created", "created");
+		// Healdan: "created" reads "Date filed", which fits documents only
+		ListGridField created = new DateListGridField("created", "createdon");
 
 		final Map<String, String> languages = I18N.getSupportedLanguages(false);
 
