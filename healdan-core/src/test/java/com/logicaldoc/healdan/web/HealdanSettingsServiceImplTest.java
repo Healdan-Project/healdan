@@ -206,6 +206,24 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testNextDocNumberHasACeiling() throws Exception {
+		long next = DocNumberCounter.get().peekNext();
+
+		GUIHealdanSettings settings = as(boss).load();
+		settings.setNextDocNumber(1_000_000_000_000L);
+		ServerException refused = assertThrows(ServerException.class, () -> as(boss).save(settings));
+		assertEquals("The next doc # can't be higher than 999999999999.", refused.getMessage());
+		settings.setNextDocNumber(Long.MAX_VALUE);
+		assertThrows(ServerException.class, () -> as(boss).save(settings));
+		assertEquals(next, DocNumberCounter.get().peekNext());
+
+		settings.setNextDocNumber(999_999_999_999L);
+		as(boss).save(settings);
+		assertEquals(999_999_999_999L, DocNumberCounter.get().peekNext());
+		assertEquals(999_999_999_999L, DocNumberCounter.get().next());
+	}
+
+	@Test
 	public void testSaveRefusesBadValues() throws Exception {
 		Folder defaultWorkspace = FolderDAO.get().findDefaultWorkspace(1L);
 		Matter matter = fx.matter(fx.client(998, "Healdan"), 1, "Demo", store);

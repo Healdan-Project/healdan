@@ -17,6 +17,7 @@ import com.logicaldoc.gui.frontend.client.healdan.services.HealdanSettingsServic
 import com.smartgwt.client.types.ListGridFieldType;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.types.TitleOrientation;
+import com.smartgwt.client.util.SC;
 import com.smartgwt.client.widgets.IButton;
 import com.smartgwt.client.widgets.Label;
 import com.smartgwt.client.widgets.form.DynamicForm;
@@ -218,10 +219,31 @@ public class HealdanSettingsPanel extends AdminPanel {
 		settings.setDefaultStoreId(store == null || store.isEmpty() ? null : Long.valueOf(store));
 		settings.setDefaultClass(form.getValueAsString(CLASS));
 		settings.setRecentMattersDays(Integer.parseInt(form.getValueAsString(RECENT)));
-		// Sent only when changed, so documents filed meanwhile don't make it "lower"
-		Long next = Long.valueOf(form.getValueAsString(NEXT));
-		settings.setNextDocNumber(next.equals(current.getNextDocNumber()) ? null : next);
 
+		Long next;
+		try {
+			next = Long.valueOf(form.getValueAsString(NEXT));
+		} catch (NumberFormatException e) {
+			SC.warn("The next doc # must be a whole number.");
+			return;
+		}
+		// Sent only when changed, so documents filed meanwhile don't make it "lower"
+		if (next.equals(current.getNextDocNumber())) {
+			send(settings);
+			return;
+		}
+
+		settings.setNextDocNumber(next);
+		LD.ask("Raise the next doc #",
+				"Raise the next doc # from " + current.getNextDocNumber() + " to " + next
+						+ "? It can't be lowered again.",
+				yes -> {
+					if (Boolean.TRUE.equals(yes))
+						send(settings);
+				});
+	}
+
+	private void send(GUIHealdanSettings settings) {
 		LD.contactingServer();
 		HealdanSettingsService.Instance.get().save(settings, new DefaultAsyncCallback<>() {
 			@Override

@@ -60,6 +60,12 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 	static final int MAX_RECENT_DAYS = 3650;
 
 	/**
+	 * The highest next doc #: far above the spec's 999,999,999, well below the
+	 * counter's overflow and the 2^53 a browser's number keeps exactly
+	 */
+	static final long MAX_NEXT_DOC_NUMBER = 999_999_999_999L;
+
+	/**
 	 * @return the session of the current request
 	 * @throws InvalidSessionServerException the session is missing, invalid or
 	 *         expired
@@ -235,6 +241,8 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 		if (next != null && next < currentNext)
 			throw new HealdanRuleException(
 					"The next doc # can only be raised. The next document gets #%d.".formatted(currentNext));
+		if (next != null && next > MAX_NEXT_DOC_NUMBER)
+			throw new HealdanRuleException("The next doc # can't be higher than %d.".formatted(MAX_NEXT_DOC_NUMBER));
 
 		return new Values(label, plural, mode, storeId, docClass, days, next);
 	}
