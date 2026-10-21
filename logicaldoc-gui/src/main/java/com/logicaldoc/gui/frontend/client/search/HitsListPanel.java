@@ -87,6 +87,12 @@ public class HitsListPanel extends VLayout implements SearchObserver, DocumentOb
 
 	private void setDoubleClickHandler() {
 		grid.registerDoubleClickHandler(event -> {
+			GUIDocument hit = grid.getSelectedDocument();
+			if (hit != null && hit.getType() != null && hit.getType().startsWith(FOLDER)) {
+				DocumentsPanel.get().openInFolder(hit.getId(), null);
+				event.cancel();
+				return;
+			}
 			if (Search.get().getOptions().getType() != GUISearchOptions.TYPE_FOLDERS) {
 				final GUIDocument doc = grid.getSelectedDocument();
 
