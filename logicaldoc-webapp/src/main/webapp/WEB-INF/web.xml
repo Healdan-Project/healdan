@@ -6,7 +6,7 @@
          version="6.1">
            
   <description>LogicalDOC - Document Management System</description>
-  <display-name>LogicalDOC</display-name>
+  <display-name>Healdan</display-name>
  
   <context-param>
     <param-name>org.apache.chemistry.opencmis.REPOSITORY_CONFIG_FILE</param-name>
