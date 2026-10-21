@@ -97,6 +97,11 @@
 		<parameter id="name" value="Feature_71" />
 	</extension>
 
+	<!-- CE uses the first SystemInfo extension it finds, so no other plugin may declare one (HealdanSystemInfoTest checks) -->
+	<extension plugin-id="logicaldoc-core" point-id="SystemInfo" id="healdanSystemInfo">
+		<parameter id="class" value="com.logicaldoc.healdan.branding.HealdanSystemInfo" />
+	</extension>
+
 	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanEveryone">
 		<parameter id="position" value="100" />
 		<parameter id="class" value="com.logicaldoc.healdan.security.EveryoneUserListener" />

@@ -90,7 +90,7 @@
 	<head>
     <!--meta http-equiv="X-UA-Compatible" content="IE=EmulateIE10" /-->
     <meta name="robots" content="noindex">
-		<title></title>
+		<title>Healdan</title>
 		<!--CSS for loading message at application Startup-->
 		<style type="text/css">
 body {

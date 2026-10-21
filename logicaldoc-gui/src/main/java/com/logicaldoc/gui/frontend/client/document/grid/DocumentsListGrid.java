@@ -253,6 +253,8 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
 
         ListGridField customId = new ColoredListGridField(CUSTOM_ID, I18N.message("customid"), 110);
         customId.setType(ListGridFieldType.TEXT);
+        // Healdan: a doc # sorts as a number
+        customId.setSortNormalizer((rec, field) -> numericKey(rec.getAttribute(CUSTOM_ID)));
         fieldsMap.put(customId.getName(), customId);
 
         ListGridField type = new ColoredListGridField("type", 55);
@@ -967,6 +969,31 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
 
     public Map<String, ListGridField> getFieldsMap() {
         return fieldsMap;
+    }
+
+    /**
+     * Healdan: the sort key of a custom id. A number, 1 to 18 digits, is
+     * padded with zeros to 18, so 2 sorts before 10; any other id gets a
+     * leading tilde, so it sorts after the numbers, without case. The server
+     * sorts the same way ({@code HealdanDocNumberSort} in logicaldoc-core).
+     */
+    private static String numericKey(String customId) {
+        if (customId == null)
+            return "~";
+        if (isDocNumber(customId))
+            return "000000000000000000".substring(customId.length()) + customId;
+        return "~" + customId.toLowerCase();
+    }
+
+    private static boolean isDocNumber(String customId) {
+        if (customId.isEmpty() || customId.length() > 18)
+            return false;
+        for (int i = 0; i < customId.length(); i++) {
+            char c = customId.charAt(i);
+            if (c < '0' || c > '9')
+                return false;
+        }
+        return true;
     }
 
     @Override

@@ -85,7 +85,8 @@ public abstract class DocumentComparator implements Comparator<AbstractDocument>
 	private static final DocumentComparator CUSTOMID_SORT = new DocumentComparator() {
 		@Override
 		public int compare(AbstractDocument d1, AbstractDocument d2) {
-			return d1.getCustomId().compareTo(d2.getCustomId());
+			// Healdan: a doc # sorts as a number
+			return HealdanDocNumberSort.compare(d1.getCustomId(), d2.getCustomId());
 		}
 	};
 

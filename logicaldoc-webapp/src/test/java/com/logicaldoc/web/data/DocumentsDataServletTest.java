@@ -6,6 +6,10 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.junit.Test;
 
@@ -160,5 +164,48 @@ public class DocumentsDataServletTest extends AbstractDataServletTestCase {
 		assertTrue(output, output.contains("<id>1</id>"));
 		assertTrue(output, output.contains("<ext_source><![CDATA[the source of one]]></ext_source>"));
 		assertFalse(output, output.contains("<ext_coverage>"));
+	}
+
+	/**
+	 * Healdan's doc #s live in customId and sort as numbers, with any
+	 * non-numeric custom id after them
+	 */
+	@Test
+	public void testCustomIdSortsNumerically() throws Exception {
+		// Not document 1: document 2 is a shortcut to it and lists with its custom id
+		DocumentDAO dao = DocumentDAO.get();
+		setCustomId(dao, 5L, "2");
+		setCustomId(dao, 3L, "10");
+		setCustomId(dao, 4L, "1");
+
+		List<Long> ascending = listedIds("customId asc");
+		assertEquals(ascending.toString(), List.of(4L, 5L, 3L), ascending.subList(0, 3));
+
+		List<Long> descending = listedIds("customId desc");
+		assertEquals(descending.toString(), List.of(3L, 5L, 4L),
+				descending.subList(descending.size() - 3, descending.size()));
+	}
+
+	private void setCustomId(DocumentDAO dao, long docId, String customId) throws Exception {
+		Document doc = dao.findById(docId, true);
+		doc.setCustomId(customId);
+		dao.store(doc);
+	}
+
+	private List<Long> listedIds(String sort) throws IOException {
+		MockServletRequest mockRequest = new MockServletRequest(servletSession);
+		mockRequest.setParameter("page", "1");
+		mockRequest.setParameter("folderId", "5");
+		mockRequest.setParameter("sort", sort);
+
+		MockServletResponse response = new MockServletResponse(responseFile);
+		testSubject.service(mockRequest, response);
+		response.flushBuffer();
+
+		List<Long> ids = new ArrayList<>();
+		Matcher matcher = Pattern.compile("<id>(\\d+)</id>").matcher(response.getOutputString());
+		while (matcher.find())
+			ids.add(Long.parseLong(matcher.group(1)));
+		return ids;
 	}
 }
