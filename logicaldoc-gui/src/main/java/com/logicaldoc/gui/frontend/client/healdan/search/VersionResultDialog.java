@@ -1,10 +1,13 @@
 package com.logicaldoc.gui.frontend.client.healdan.search;
 
+import java.util.Arrays;
 import java.util.List;
 
 import com.google.gwt.i18n.client.DateTimeFormat;
 import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
+import com.logicaldoc.gui.common.client.Menu;
+import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.gui.common.client.preview.PreviewPopup;
 import com.logicaldoc.gui.common.client.util.Util;
@@ -18,7 +21,8 @@ import com.smartgwt.client.widgets.layout.HLayout;
 
 /**
  * What a doc # lookup of a version shows (spec 6.5): "#n version v", its date
- * and its user, with Preview and Download. The date and user come from the
+ * and its user, with Preview and Download, each enabled by the
+ * document's own permissions. The date and user come from the
  * lookup; the file's name, size and type, which the preview needs, from the
  * version's row.
  */
@@ -34,17 +38,26 @@ public class VersionResultDialog extends Window {
 	 * @param result the lookup result; must have a docId and a versionId
 	 */
 	public static void open(GUIDocNumberResult result) {
-		DocumentService.Instance.get().getVersionsById(result.getVersionId(), result.getVersionId(),
+		// The document's own permissions, since its folder may not be readable (a document-only grant)
+		DocumentService.Instance.get().getAllowedPermissions(Arrays.asList(result.getDocId()),
 				new DefaultAsyncCallback<>() {
 					@Override
-					public void handleSuccess(List<GUIVersion> versions) {
-						GUIVersion version = versions == null || versions.isEmpty() ? null : versions.get(0);
-						new VersionResultDialog(result, version).show();
+					public void handleSuccess(GUIAccessControlEntry permissions) {
+						DocumentService.Instance.get().getVersionsById(result.getVersionId(), result.getVersionId(),
+								new DefaultAsyncCallback<>() {
+									@Override
+									public void handleSuccess(List<GUIVersion> versions) {
+										GUIVersion version = versions == null || versions.isEmpty() ? null
+												: versions.get(0);
+										new VersionResultDialog(result, version, permissions).show();
+									}
+								});
 					}
 				});
 	}
 
-	private VersionResultDialog(GUIDocNumberResult result, GUIVersion version) {
+	private VersionResultDialog(GUIDocNumberResult result, GUIVersion version,
+			GUIAccessControlEntry permissions) {
 		this.result = result;
 
 		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
@@ -67,9 +80,12 @@ public class VersionResultDialog extends Window {
 		Button preview = new Button("Preview");
 		preview.addClickHandler(event -> preview(version));
 		// The preview needs the file's name, which only the version's row has
-		preview.setDisabled(version == null || version.getFileName() == null);
+		// and, as CE's document menu does, the preview feature and the document's PREVIEW
+		preview.setDisabled(version == null || version.getFileName() == null || !Menu.enabled(Menu.PREVIEW)
+				|| !permissions.isPreview());
 		Button download = new Button("Download");
 		download.addClickHandler(event -> download());
+		download.setDisabled(!permissions.isDownload());
 
 		HLayout buttons = new HLayout(8);
 		buttons.setHeight(30);
