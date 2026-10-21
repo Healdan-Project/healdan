@@ -135,4 +135,30 @@ public class DocumentsDataServletTest extends AbstractDataServletTestCase {
 		assertTrue(output, output.contains("<ext_source><![CDATA[the source of one]]></ext_source>"));
 		assertFalse(output, output.contains("<ext_coverage>"));
 	}
+
+	/**
+	 * A folder listing prints the extended attributes extattr names, now that
+	 * its query binds the names
+	 */
+	@Test
+	public void testFolderModePrintsExtendedAttributes() throws Exception {
+		DocumentDAO dao = DocumentDAO.get();
+		Document doc = dao.findById(1L, true);
+		doc.setValue("source", "the source of one");
+		dao.store(doc);
+
+		MockServletRequest mockRequest = new MockServletRequest(servletSession);
+		mockRequest.setParameter("page", "1");
+		mockRequest.setParameter("folderId", String.valueOf(doc.getFolder().getId()));
+		mockRequest.setParameter("extattr", "source,coverage");
+
+		MockServletResponse response = new MockServletResponse(responseFile);
+		testSubject.service(mockRequest, response);
+		response.flushBuffer();
+
+		String output = response.getOutputString();
+		assertTrue(output, output.contains("<id>1</id>"));
+		assertTrue(output, output.contains("<ext_source><![CDATA[the source of one]]></ext_source>"));
+		assertFalse(output, output.contains("<ext_coverage>"));
+	}
 }
