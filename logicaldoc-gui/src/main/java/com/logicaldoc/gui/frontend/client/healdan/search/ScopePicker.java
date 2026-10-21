@@ -58,7 +58,7 @@ public class ScopePicker extends SelectItem {
 		} catch (Exception e) {
 			// Cookies unavailable: use the default
 		}
-		if (DOCUMENTS.equals(value) || EMAILS.equals(value) || FOLDERS.equals(value) || MATTERS.equals(value)
+		if (DOCUMENTS.equals(value) || DOCS_EMAILS.equals(value) || EMAILS.equals(value) || FOLDERS.equals(value) || MATTERS.equals(value)
 				|| CLIENTS.equals(value))
 			return value;
 		return DOCUMENTS;
