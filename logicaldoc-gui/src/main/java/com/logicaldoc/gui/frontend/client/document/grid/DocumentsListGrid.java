@@ -253,6 +253,8 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
 
         ListGridField customId = new ColoredListGridField(CUSTOM_ID, I18N.message("customid"), 110);
         customId.setType(ListGridFieldType.TEXT);
+        // Healdan: a doc # sorts as a number
+        customId.setSortNormalizer((rec, field) -> numericKey(rec.getAttribute(CUSTOM_ID)));
         fieldsMap.put(customId.getName(), customId);
 
         ListGridField type = new ColoredListGridField("type", 55);
@@ -967,6 +969,18 @@ public class DocumentsListGrid extends RefreshableListGrid implements DocumentsG
 
     public Map<String, ListGridField> getFieldsMap() {
         return fieldsMap;
+    }
+
+    /**
+     * Healdan: the sort key of a custom id. A number is padded with zeros to
+     * the width of a long, so 2 sorts before 10; any other id gets a leading
+     * tilde, so it sorts after the numbers, without case as the server sorts
+     * it ({@code HealdanDocNumberSort})
+     */
+    private static String numericKey(String customId) {
+        if (customId != null && customId.matches("\\d{1,19}"))
+            return "0000000000000000000".substring(customId.length()) + customId;
+        return "~" + (customId != null ? customId.toLowerCase() : "");
     }
 
     @Override

@@ -126,8 +126,9 @@ public class DocumentStandardPropertiesPanel extends DocumentDetailTab {
 		TextItem customId = ItemFactory.newTextItem("customid", document.getCustomId());
 		if (changedHandler != null)
 			customId.addChangedHandler(changedHandler);
-		customId.setDisabled(!updateEnabled || !document.isCustomid());
-		customId.setVisible(Feature.enabled(Feature.CUSTOMID));
+		// Healdan: the doc # always shows, and only the server sets it
+		customId.setDisabled(true);
+		customId.setVisible(true);
 
 		TextItem revision = ItemFactory.newTextItem("revision", document.getRevision());
 		if (changedHandler != null)
