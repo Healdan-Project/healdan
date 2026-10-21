@@ -134,6 +134,31 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testSearchAttributesDefault() {
+		// The default columns' Author and Class need the grids to ask for these attributes
+		assertEquals("author,docclass", Context.get().getConfig().getProperty("default.search.extattr"));
+		assertEquals("done", HealdanSettings.get().get("seed.search-attributes"));
+	}
+
+	@Test
+	public void testSearchAttributesKeepAdminChoice() throws Exception {
+		Context.get().getConfig().setProperty(SearchAttributesSeed.PROPERTY, "source");
+		try {
+			new SearchAttributesSeed().run();
+			assertEquals("source", Context.get().getConfig().getProperty(SearchAttributesSeed.PROPERTY));
+		} finally {
+			Context.get().getConfig().setProperty(SearchAttributesSeed.PROPERTY, SearchAttributesSeed.ATTRIBUTES);
+		}
+	}
+
+	@Test
+	public void testSearchAttributesFillBlank() throws Exception {
+		Context.get().getConfig().setProperty(SearchAttributesSeed.PROPERTY, " ");
+		new SearchAttributesSeed().run();
+		assertEquals(SearchAttributesSeed.ATTRIBUTES, Context.get().getConfig().getProperty(SearchAttributesSeed.PROPERTY));
+	}
+
+	@Test
 	public void testReindexIsABeanAndDoneAfterStartup() {
 		// The parsers exist, so the step runs once, on the first start
 		assertFalse(Context.get().getBeansOfType(ReindexOfficeSeed.class).isEmpty());
