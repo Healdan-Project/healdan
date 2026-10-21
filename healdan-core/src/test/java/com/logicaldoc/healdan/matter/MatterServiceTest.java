@@ -41,7 +41,6 @@ import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRule;
 import com.logicaldoc.healdan.searchfolder.SearchFolderRuleDAO;
-import com.logicaldoc.healdan.setting.HealdanSettings;
 
 /**
  * Spec §5.3: an admin creates a matter from a workspace template, and edits,
@@ -381,17 +380,15 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 		Folder gone = fx.store("Gone");
 		fx.grant(gone, everyone, Permission.READ);
 		fx.grant(gone, it, Permission.READ);
-		HealdanSettings.get().set(HealdanSettings.STORE_DEFAULT, Long.toString(gone.getId()));
 		assertTrue(ids(service.stores()).contains(gone.getId()));
 		folderDao.deleteTree(gone.getId(), folderHistory(admin));
 
-		// The deleted Store is neither offered nor pre-selected, and can't be used
+		// The deleted Store is neither offered nor usable
 		List<Long> stores = ids(service.stores());
 		assertFalse(stores.contains(gone.getId()));
 		assertTrue(stores.contains(store.getId()));
 		assertFalse(stores.contains(defaultWorkspace.getId()));
 		assertFalse(stores.contains(templates.getId()));
-		assertNull(HealdanSettings.get().defaultStoreId());
 		assertRefused("That Store no longer exists.",
 				() -> service.create(request(healdan, 2, "Gone", alice, demo, gone), admin));
 		// Nor can a folder that isn't a Store

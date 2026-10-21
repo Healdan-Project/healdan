@@ -28,6 +28,7 @@ import com.logicaldoc.gui.frontend.client.document.DocumentsPanel;
 import com.logicaldoc.gui.frontend.client.document.SendToArchiveDialog;
 import com.logicaldoc.gui.frontend.client.document.grid.FillRoutineParams;
 import com.logicaldoc.gui.frontend.client.folder.copy.FolderCopyDialog;
+import com.logicaldoc.gui.frontend.client.healdan.HealdanFolderMenu;
 import com.logicaldoc.gui.frontend.client.panels.MainPanel;
 import com.logicaldoc.gui.frontend.client.search.Search;
 import com.logicaldoc.gui.frontend.client.services.AutomationService;
@@ -127,6 +128,8 @@ public class ContextMenu extends Menu {
 		addAutomationMenuItem();
 
 		addCustomActionsMenuItem();
+
+		HealdanFolderMenu.contribute(this, tree, acl);
 
 		addItem(new MenuItemSeparator());
 		addItem(delete);

@@ -11,9 +11,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.folder.Folder;
-import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.util.spring.Context;
 
@@ -30,8 +27,6 @@ public class HealdanSettings {
 	public static final String MATTER_LABEL_PLURAL = "matter.label.plural";
 
 	public static final String MATTER_NUMBERING = "matter.numbering";
-
-	public static final String STORE_DEFAULT = "store.default";
 
 	public static final String STORE_TEMPLATES = "store.templates";
 
@@ -125,23 +120,6 @@ public class HealdanSettings {
 		} catch (IllegalArgumentException e) {
 			log.warn("Unknown numbering mode '{}', using {}", value, DEFAULT_NUMBERING);
 			return DEFAULT_NUMBERING;
-		}
-	}
-
-	/**
-	 * @return the id of the default Store, or null if none is set or that
-	 *         folder is gone or deleted
-	 */
-	public Long defaultStoreId() {
-		Long id = longValue(STORE_DEFAULT);
-		if (id == null)
-			return null;
-		try {
-			Folder store = FolderDAO.get().findById(id);
-			return store != null ? id : null;
-		} catch (PersistenceException e) {
-			log.warn("Cannot read the default Store {}", id, e);
-			return null;
 		}
 	}
 

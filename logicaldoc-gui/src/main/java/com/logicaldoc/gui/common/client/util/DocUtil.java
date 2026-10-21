@@ -157,6 +157,9 @@ public class DocUtil {
 
 		if (type == GUIFolder.TYPE_WORKSPACE)
 			html = AwesomeFactory.getColoredIconHtmlWithoutI18N("cube", name, color);
+		else if (type == 1001)
+			// Healdan's search folders (HealdanGuiConstants is in the frontend module)
+			html = AwesomeFactory.getColoredIconHtmlWithoutI18N("magnifying-glass", name, color);
 		else if (type == GUIFolder.TYPE_ALIAS) {
 			html = "<div><span class='fa-layers fa-fw'>";
 			// Outline (regular) folder, so the alias arrow drawn inside it stays visible

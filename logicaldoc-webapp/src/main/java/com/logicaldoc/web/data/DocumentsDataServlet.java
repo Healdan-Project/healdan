@@ -152,6 +152,7 @@ public class DocumentsDataServlet extends AbstractDataServlet {
             hiliteDoc = null;
         } else if (StringUtils.isNotEmpty(request.getParameter("docIds"))) {
             findDocumentsByIds(request, session, documentsInCurrentPage);
+            putExtendedAttributesValues(locale, extendedAttributes, extendedAttributesValues, documentsInCurrentPage);
             hiliteDoc = null;
         } else {
             hiliteDoc = findDocumentsByFilters(request, session, locale, maxRecords, page, documentsInCurrentPage,
@@ -341,6 +342,43 @@ public class DocumentsDataServlet extends AbstractDataServlet {
             if (doc == null || doc.getDeleted() == 1 || !dao.isReadAllowed(Long.parseLong(id), session.getUserId()))
                 continue;
             documentsInCurrentPage.add(doc);
+        }
+    }
+
+    /**
+     * Healdan: gives the documents of a docIds listing (a search folder) the
+     * extended attributes the grid asks for, as a folder listing does. The
+     * names are bound, not spliced into the query.
+     */
+    private void putExtendedAttributesValues(
+            Locale locale,
+            List<String> extendedAttributes,
+            final Map<String, Object> extendedAttributesValues,
+            List<Document> documents) throws PersistenceException {
+        if (extendedAttributes.isEmpty() || documents.isEmpty())
+            return;
+
+        Map<String, Object> names = new HashMap<>();
+        for (int i = 0; i < extendedAttributes.size(); i++)
+            names.put("name" + i, extendedAttributes.get(i));
+        String query = """
+                select ld_docid, ld_name, ld_type, ld_stringvalue, ld_intvalue,
+                       ld_doublevalue, ld_datevalue, ld_stringvalues
+                  from ld_document_ext where ld_docid in (%s) and ld_name in (%s)
+                """.formatted(documents.stream().map(d -> Long.toString(d.getId())).collect(Collectors.joining(",")),
+                names.keySet().stream().sorted().map(":%s"::formatted).collect(Collectors.joining(",")));
+        DocumentDAO dao = DocumentDAO.get();
+        dao.query(query, names, new ExtendedAttributeRowMapper(extendedAttributesValues, locale), null);
+
+        for (int i = 0; i < documents.size(); i++) {
+            // initialize gives back an initialized copy, which the listing prints
+            Document doc = dao.initialize(documents.get(i));
+            documents.set(i, doc);
+            for (String name : extendedAttributes) {
+                Object val = extendedAttributesValues.get(D_S.formatted(doc.getId(), name));
+                if (val != null)
+                    doc.setValue(name, val);
+            }
         }
     }
 

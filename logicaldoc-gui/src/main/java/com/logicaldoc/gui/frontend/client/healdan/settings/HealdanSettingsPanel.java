@@ -4,7 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
-import com.logicaldoc.gui.common.client.beans.GUIValue;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
@@ -40,8 +39,6 @@ public class HealdanSettingsPanel extends AdminPanel {
 	private static final String PLURAL = "matterlabelplural";
 
 	private static final String NUMBERING = "numbering";
-
-	private static final String STORE = "defaultstore";
 
 	private static final String CLASS = "defaultclass";
 
@@ -103,16 +100,6 @@ public class HealdanSettingsPanel extends AdminPanel {
 		numbering.setWidth(340);
 		numbering.setRequired(true);
 
-		SelectItem store = ItemFactory.newSelectItem(STORE, "Default Store");
-		LinkedHashMap<String, String> stores = new LinkedHashMap<>();
-		for (GUIValue value : settings.getStores())
-			stores.put(value.getCode(), value.getValue());
-		store.setValueMap(stores);
-		store.setAllowEmptyValue(true);
-		if (settings.getDefaultStoreId() != null)
-			store.setValue(settings.getDefaultStoreId().toString());
-		store.setWidth(220);
-
 		SelectItem docClass = ItemFactory.newSelectItem(CLASS, "Default Class");
 		LinkedHashMap<String, String> classes = new LinkedHashMap<>();
 		for (String value : settings.getClasses())
@@ -133,7 +120,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 		next.setWidth(120);
 		next.setHint("Can only be raised. Lowest allowed: " + settings.getNextDocNumber());
 
-		form.setItems(label, plural, numbering, store, docClass, recent, next);
+		form.setItems(label, plural, numbering, docClass, recent, next);
 
 		Label clientsTitle = new Label("<b>Clients</b>");
 		clientsTitle.setHeight(20);
@@ -215,8 +202,6 @@ public class HealdanSettingsPanel extends AdminPanel {
 		settings.setMatterLabel(form.getValueAsString(LABEL));
 		settings.setMatterLabelPlural(form.getValueAsString(PLURAL));
 		settings.setNumberingMode(form.getValueAsString(NUMBERING));
-		String store = form.getValueAsString(STORE);
-		settings.setDefaultStoreId(store == null || store.isEmpty() ? null : Long.valueOf(store));
 		settings.setDefaultClass(form.getValueAsString(CLASS));
 		settings.setRecentMattersDays(Integer.parseInt(form.getValueAsString(RECENT)));
 

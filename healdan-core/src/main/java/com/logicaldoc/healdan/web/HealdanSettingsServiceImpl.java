@@ -1,27 +1,16 @@
 package com.logicaldoc.healdan.web;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import com.google.gwt.user.server.rpc.jakarta.RemoteServiceServlet;
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.folder.Folder;
-import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.metadata.TemplateDAO;
-import com.logicaldoc.core.security.Session;
-import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.gui.common.client.AccessDeniedException;
-import com.logicaldoc.gui.common.client.InvalidSessionServerException;
 import com.logicaldoc.gui.common.client.ServerException;
-import com.logicaldoc.gui.common.client.beans.GUIValue;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIClient;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIHealdanSettings;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanSettingsService;
@@ -31,12 +20,9 @@ import com.logicaldoc.healdan.docnumber.DocNumberCounter;
 import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.ClientService;
-import com.logicaldoc.healdan.matter.FolderPosition;
-import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.matter.MatterNumbering;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.profile.ProfileSchema;
-import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.util.BasicPlane;
 
@@ -47,11 +33,9 @@ import jakarta.servlet.annotation.WebServlet;
  * {@link #labels()} is for administrators only.
  */
 @WebServlet("/frontend/healdansettings")
-public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements HealdanSettingsService {
+public class HealdanSettingsServiceImpl extends HealdanRemoteService implements HealdanSettingsService {
 
 	private static final long serialVersionUID = 1L;
-
-	private static final Logger log = LoggerFactory.getLogger(HealdanSettingsServiceImpl.class);
 
 	/** The longest matter label */
 	static final int MAX_LABEL_LENGTH = 50;
@@ -64,15 +48,6 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 	 * counter's overflow and the 2^53 a browser's number keeps exactly
 	 */
 	static final long MAX_NEXT_DOC_NUMBER = 999_999_999_999L;
-
-	/**
-	 * @return the session of the current request
-	 * @throws InvalidSessionServerException the session is missing, invalid or
-	 *         expired
-	 */
-	protected Session session() throws InvalidSessionServerException {
-		return HealdanSessions.validate(getThreadLocalRequest());
-	}
 
 	@Override
 	public GUIHealdanSettings load() throws ServerException {
@@ -144,53 +119,17 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 		}
 	}
 
-	/**
-	 * @param what what only an administrator may do, for the refusal
-	 * @return the session's user, an administrator
-	 */
-	private User admin(String what) throws ServerException {
-		User user = session().getUser();
-		try {
-			if (!FilingRules.get().isAdmin(user))
-				throw new AccessDeniedException("Only an administrator can %s.".formatted(what));
-		} catch (PersistenceException e) {
-			throw failure("check the user's groups", e);
-		}
-		return user;
-	}
-
-	private static ServerException failure(String what, Exception e) {
-		log.error("Cannot {}", what, e);
-		return new ServerException("Cannot %s: %s".formatted(what, e.getMessage()));
-	}
-
 	private static GUIHealdanSettings current() throws PersistenceException {
 		HealdanSettings settings = HealdanSettings.get();
 		GUIHealdanSettings gui = new GUIHealdanSettings();
 		gui.setMatterLabel(settings.matterLabel());
 		gui.setMatterLabelPlural(settings.matterLabelPlural());
 		gui.setNumberingMode(settings.numberingMode().name());
-		gui.setDefaultStoreId(settings.defaultStoreId());
-		gui.setStores(stores());
 		gui.setDefaultClass(settings.defaultClass());
 		gui.setClasses(new ArrayList<>(ProfileSchema.get().classOptions()));
 		gui.setRecentMattersDays(settings.recentMattersDays());
 		gui.setNextDocNumber(DocNumberCounter.get().peekNext());
 		return gui;
-	}
-
-	/** The Stores, by name: every workspace but Default and Templates */
-	private static List<GUIValue> stores() throws PersistenceException {
-		List<Folder> stores = new ArrayList<>();
-		for (Folder workspace : FolderDAO.get().findWorkspaces(Tenant.DEFAULT_ID))
-			if (MatterLocator.get().locate(workspace).kind() == FolderPosition.Kind.STORE)
-				stores.add(workspace);
-		stores.sort(Comparator.comparing(Folder::getName, String.CASE_INSENSITIVE_ORDER));
-
-		List<GUIValue> values = new ArrayList<>();
-		for (Folder store : stores)
-			values.add(new GUIValue(Long.toString(store.getId()), store.getName()));
-		return values;
 	}
 
 	private static GUIClient toGUI(Client client) {
@@ -202,8 +141,8 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 	}
 
 	/** The settings to save, each one checked */
-	private record Values(String label, String plural, NumberingMode mode, Long storeId, String docClass,
-			int recentDays, Long nextDocNumber) {
+	private record Values(String label, String plural, NumberingMode mode, String docClass, int recentDays,
+			Long nextDocNumber) {
 	}
 
 	/*
@@ -216,13 +155,6 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 
 		NumberingMode mode = mode(settings.getNumberingMode());
 		MatterNumbering.get().checkMode(mode);
-
-		Long storeId = settings.getDefaultStoreId();
-		if (storeId != null) {
-			Folder store = FolderDAO.get().findById(storeId);
-			if (store == null || MatterLocator.get().locate(store).kind() != FolderPosition.Kind.STORE)
-				throw new HealdanRuleException("The default Store must be a Store.");
-		}
 
 		String docClass = StringUtils.strip(settings.getDefaultClass());
 		if (StringUtils.isEmpty(docClass))
@@ -244,7 +176,7 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 		if (next != null && next > MAX_NEXT_DOC_NUMBER)
 			throw new HealdanRuleException("The next doc # can't be higher than %d.".formatted(MAX_NEXT_DOC_NUMBER));
 
-		return new Values(label, plural, mode, storeId, docClass, days, next);
+		return new Values(label, plural, mode, docClass, days, next);
 	}
 
 	private static String label(String value, String which) throws HealdanRuleException {
@@ -277,7 +209,6 @@ public class HealdanSettingsServiceImpl extends RemoteServiceServlet implements 
 		settings.set(HealdanSettings.MATTER_LABEL_PLURAL, values.plural());
 		renameMatterAttribute(values.label());
 		MatterNumbering.get().setMode(values.mode());
-		settings.set(HealdanSettings.STORE_DEFAULT, values.storeId() != null ? values.storeId().toString() : null);
 		settings.set(HealdanSettings.CLASS_DEFAULT, values.docClass());
 		settings.set(HealdanSettings.RECENT_MATTERS_DAYS, Integer.toString(values.recentDays()));
 		if (values.nextDocNumber() != null && values.nextDocNumber() > DocNumberCounter.get().peekNext())

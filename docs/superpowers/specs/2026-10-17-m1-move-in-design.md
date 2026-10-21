@@ -2,7 +2,7 @@
 
 - **Milestone:** M1 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-17
-- **Status:** approved by the owner on 2026-10-17, and amended after the owner reviewed mockups of the PR D screens on 2026-10-21 (client names in matter lists, §8.1 and §8.2). Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). The plan lists the corrections to §13 it proposes.
+- **Status:** approved by the owner on 2026-10-17, and amended after the owner reviewed mockups of the PR D screens on 2026-10-21 (client names in matter lists, §8.1 and §8.2) and decided the New Matter dialog pre-selects the clicked Store, with no default Store setting (§4, §5.3, §8.6). Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). The plan lists the corrections to §13 it proposes.
 - **Inputs:**
   - the roadmap's M1 section and glossary;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md);
@@ -27,7 +27,7 @@ The old UI is interim. M6 replaces it, so M1 changes it only as much as it needs
 
 On a fresh Docker install, the owner, signed in as an ordinary **non-admin** user except where a step says admin, can do all of the following.
 
-1. **Set up (admin).** Create Stores, choose the default Store, create client 998 "Healdan", build a workspace template, and create matter 998.1 "Healdan Demo" from it. The template has:
+1. **Set up (admin).** Create Stores, create client 998 "Healdan", build a workspace template, and create matter 998.1 "Healdan Demo" from it. The template has:
    - three folders with different permissions (§5.3);
    - the two search folders (§5.4).
 2. **File.** Upload documents and `.eml`/`.msg` files into the matter's folders through the browser. Each document gets the next doc #, inherits client, matter and Class, and shows its Date filed. Each email shows From, To, CC, Subject, Sent and Received.
@@ -146,7 +146,7 @@ On a fresh Docker install, the owner, signed in as an ordinary **non-admin** use
 - **"Default"** is CE's built-in workspace. CE won't let it be renamed or deleted. It holds nothing in Healdan: the filing rule (§7.1) already keeps documents out of it.
 - **"Templates"** is created by Healdan on first start (§12.3). It holds workspace templates (§5.2), and only admins can see it.
 
-**Default Store.** One Store is the default for new matters. Admins set it in Healdan Settings (§8.6), and the New Matter dialog pre-selects it. (owner)
+**The Store for a new matter.** New Matter opens from a Store's context menu and pre-selects that Store; any Store can be chosen. There is no default Store setting. (owner, 2026-10-21; this replaces the default Store decided on 2026-10-17, because every way into the dialog already names a Store)
 
 **Storage.**
 - All Stores share CE's single storage backend.
@@ -233,7 +233,7 @@ Admins only. The entry point is **New matter…** on a Store's context menu in t
 1. **Client.** Picked from the client list, with a **New client…** shortcut.
 2. **Matter number.** Pre-filled with the suggestion (§5.1). It can be changed. The server rejects a duplicate under the current numbering mode, and the dialog shows the error.
 3. **Name**, and an optional **description**.
-4. **Store.** The default Store is pre-selected, and any Store can be chosen.
+4. **Store.** The Store whose menu opened the dialog is pre-selected, and any Store can be chosen (owner, 2026-10-21; §4).
 5. **Workspace owner.** A user.
 6. **Template.** Any folder directly under the Templates Store.
 
@@ -671,7 +671,6 @@ These are new Healdan GWT code:
 One new panel under CE's **Administration** tab. It holds:
 - the matter label, singular and plural;
 - the numbering mode;
-- the default Store;
 - the default Class;
 - the Recent Matters window, in days;
 - the next doc #, which can only be raised;
@@ -763,7 +762,7 @@ Tables are prefixed `hd_`. Entities that extend `PersistentObject` carry its sta
 
 | Table | Columns (beyond the standard ones) | Notes |
 |---|---|---|
-| `hd_setting` | `name` (PK), `value` | Healdan settings (§8.6), the default Store id, the Templates Store id, and seed markers (§12.3). Kept in the database, not `context.properties`, so they stay consistent with the rows they refer to. |
+| `hd_setting` | `name` (PK), `value` | Healdan settings (§8.6), the Templates Store id, and seed markers (§12.3). Kept in the database, not `context.properties`, so they stay consistent with the rows they refer to. |
 | `hd_counter` | `name` (PK), `next_value` bigint | `docnumber` (§6.2) |
 | `hd_client` | `hd_number` bigint unique, `hd_name` | |
 | `hd_matter` | `hd_clientid`, `hd_number` bigint, `hd_name`, `hd_description`, `hd_folderid` (workspace, unique), `hd_ownerid`, `hd_templateid` (the template folder's id, informational) | unique (`hd_clientid`, `hd_number`); the system-wide mode is checked in code |
@@ -928,7 +927,7 @@ These choices don't change what gets built, so the builder decides them:
 | Legacy doc # | a string attribute; found by advanced search | owner |
 | Client/matter numbers | whole numbers; per-client or system-wide mode per install; suggested and overridable, duplicates refused | owner |
 | Display | `998.1 – Healdan Demo` | owner ("C/M 998.1"), call (en dash) |
-| Matter creation | admins only; client → number → name → Store (default pre-selected) → owner → template | owner |
+| Matter creation | admins only; client → number → name → Store (the clicked Store pre-selected; no default Store setting, 2026-10-21) → owner → template | owner |
 | Templates | real folder trees in an admin-only Templates Store, copied on creation | call |
 | Search folders | Recent Work and My Recent Work, rule-based, workspace-scoped | owner (folders), call (rule model) |
 | Profile | Author, Typist, Class (required, default "Docs"), Subclass (optional, belongs to a Class), legacy doc #, email fields | owner |

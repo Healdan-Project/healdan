@@ -18,6 +18,7 @@ import com.logicaldoc.gui.frontend.client.document.grid.DocumentsGrid;
 import com.logicaldoc.gui.frontend.client.document.grid.DocumentsListGrid;
 import com.logicaldoc.gui.frontend.client.document.grid.DocumentsTileGrid;
 import com.logicaldoc.gui.frontend.client.document.grid.NavigatorDocumentsGrid;
+import com.logicaldoc.gui.frontend.client.healdan.searchfolder.SearchFolderListing;
 import com.logicaldoc.gui.frontend.client.services.DocumentService;
 import com.smartgwt.client.widgets.Canvas;
 import com.smartgwt.client.widgets.layout.VLayout;
@@ -48,6 +49,7 @@ public class DocumentsListPanel extends VLayout {
 
 		addMember((Canvas) documentsGrid);
 		documentsGrid.setGridCursor(cursor);
+		SearchFolderListing.load(documentsGrid, folder);
 
 		registerGridHandlers();
 	}
@@ -140,6 +142,9 @@ public class DocumentsListPanel extends VLayout {
 	 * @param folder the folder being opened
 	 */
 	public void updateData(GUIFolder folder) {
+		if (SearchFolderListing.load(documentsGrid, folder))
+			return;
+
 		if (documentsGrid.getFolder() == null
 				|| (documentsGrid.getFolder() != null && documentsGrid.getFolder().getId() != folder.getId()))
 			documentsGrid.loadGridLayout(folder);
