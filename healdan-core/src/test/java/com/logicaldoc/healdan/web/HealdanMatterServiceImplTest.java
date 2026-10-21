@@ -159,7 +159,6 @@ public class HealdanMatterServiceImplTest extends AbstractHealdanTestCase {
 		assertThrows(AccessDeniedException.class, () -> as(clerk).suggestMatterNumber(healdan.getId()));
 		assertThrows(AccessDeniedException.class, () -> as(clerk).listStores());
 		assertThrows(AccessDeniedException.class, () -> as(clerk).listTemplates());
-		assertThrows(AccessDeniedException.class, () -> as(clerk).defaultStoreId());
 		assertNull(MatterDAO.get().findByClientAndNumber(healdan.getId(), 2));
 		assertEquals("Demo", MatterDAO.get().findById(matter.getId()).getName());
 	}
@@ -176,17 +175,6 @@ public class HealdanMatterServiceImplTest extends AbstractHealdanTestCase {
 		assertEquals(1, templates.size());
 		assertEquals(Long.toString(template.getId()), templates.get(0).getCode());
 		assertEquals(template.getName(), templates.get(0).getValue());
-	}
-
-	@Test
-	public void testDefaultStoreNullWhenDeleted() throws Exception {
-		assertNull(as(boss).defaultStoreId());
-		HealdanSettings.get().set(HealdanSettings.STORE_DEFAULT, Long.toString(store.getId()));
-		assertEquals(Long.valueOf(store.getId()), as(boss).defaultStoreId());
-
-		FolderDAO.get().delete(store.getId(), fx.folderHistory(fx.admin()));
-
-		assertNull(as(boss).defaultStoreId());
 	}
 
 	@Test

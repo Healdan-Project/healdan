@@ -17,8 +17,6 @@ public interface HealdanMatterServiceAsync {
 
 	void listTemplates(AsyncCallback<List<GUIValue>> callback);
 
-	void defaultStoreId(AsyncCallback<Long> callback);
-
 	void create(GUIMatter matter, AsyncCallback<GUIMatter> callback);
 
 	void getByFolder(long folderId, AsyncCallback<GUIMatter> callback);

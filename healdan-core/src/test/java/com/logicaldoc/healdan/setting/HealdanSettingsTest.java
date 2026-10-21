@@ -9,9 +9,6 @@ import javax.sql.DataSource;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-import com.logicaldoc.core.folder.FolderDAO;
-import com.logicaldoc.core.folder.FolderHistory;
-import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.util.spring.Context;
@@ -26,7 +23,6 @@ public class HealdanSettingsTest extends AbstractHealdanTestCase {
 		assertEquals(NumberingMode.PER_CLIENT, settings.numberingMode());
 		assertEquals("Docs", settings.defaultClass());
 		assertEquals(30, settings.recentMattersDays());
-		assertNull(settings.defaultStoreId());
 		assertNotNull(settings.profileTemplateId());
 	}
 
@@ -41,7 +37,6 @@ public class HealdanSettingsTest extends AbstractHealdanTestCase {
 		assertEquals(NumberingMode.PER_CLIENT, settings.numberingMode());
 		assertEquals("Docs", settings.defaultClass());
 		assertEquals(30, settings.recentMattersDays());
-		assertNull(settings.defaultStoreId());
 		assertNull(settings.templatesStoreId());
 		assertNull(settings.profileTemplateId());
 
@@ -61,20 +56,4 @@ public class HealdanSettingsTest extends AbstractHealdanTestCase {
 		assertEquals(7, settings.recentMattersDays());
 	}
 
-	@Test
-	public void testDefaultStoreIdIsNullWhenTheStoreIsGone() throws Exception {
-		HealdanSettings settings = HealdanSettings.get();
-		Long storeId = settings.templatesStoreId();
-
-		settings.set(HealdanSettings.STORE_DEFAULT, storeId.toString());
-		assertEquals(storeId, settings.defaultStoreId());
-
-		FolderHistory history = new FolderHistory();
-		history.setUser(UserDAO.get().findByUsername("admin"));
-		FolderDAO.get().delete(storeId, history);
-		assertNull(settings.defaultStoreId());
-
-		settings.set(HealdanSettings.STORE_DEFAULT, "987654");
-		assertNull(settings.defaultStoreId());
-	}
 }

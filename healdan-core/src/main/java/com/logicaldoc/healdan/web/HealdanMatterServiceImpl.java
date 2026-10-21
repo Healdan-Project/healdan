@@ -88,12 +88,6 @@ public class HealdanMatterServiceImpl extends HealdanRemoteService implements He
 	}
 
 	@Override
-	public Long defaultStoreId() throws ServerException {
-		matterAdmin();
-		return call("read the default Store", () -> HealdanSettings.get().defaultStoreId());
-	}
-
-	@Override
 	public GUIMatter create(GUIMatter matter) throws ServerException {
 		User user = matterAdmin();
 		return call("create the matter", () -> {

@@ -13,7 +13,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.logicaldoc.core.folder.Folder;
-import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.metadata.TemplateDAO;
 import com.logicaldoc.core.security.Session;
@@ -21,7 +20,6 @@ import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
-import com.logicaldoc.gui.common.client.beans.GUIValue;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIClient;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIHealdanSettings;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
@@ -126,39 +124,27 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testLoadShowsTheSettings() throws Exception {
-		HealdanSettings.get().set(HealdanSettings.STORE_DEFAULT, Long.toString(store.getId()));
-
 		GUIHealdanSettings settings = as(boss).load();
 
 		assertEquals("Matter", settings.getMatterLabel());
 		assertEquals("Matters", settings.getMatterLabelPlural());
 		assertEquals(NumberingMode.PER_CLIENT.name(), settings.getNumberingMode());
-		assertEquals(Long.valueOf(store.getId()), settings.getDefaultStoreId());
 		assertEquals("Docs", settings.getDefaultClass());
 		assertTrue(settings.getClasses().toString(), settings.getClasses().contains("Docs"));
 		assertEquals(30, settings.getRecentMattersDays());
 		assertEquals(Long.valueOf(DocNumberCounter.get().peekNext()), settings.getNextDocNumber());
-		// Only Stores: not the Default workspace, not Templates
-		List<String> stores = settings.getStores().stream().map(GUIValue::getValue).toList();
-		assertEquals(List.of("Client Work"), stores);
-		assertEquals(Long.toString(store.getId()), settings.getStores().get(0).getCode());
 	}
 
 	@Test
 	public void testSaveStoresEveryValue() throws Exception {
-		Folder personal = fx.store("Personal");
-
 		GUIHealdanSettings settings = as(boss).load();
-		settings.setDefaultStoreId(personal.getId());
 		settings.setRecentMattersDays(14);
 		settings.setNumberingMode(NumberingMode.SYSTEM_WIDE.name());
 		GUIHealdanSettings saved = as(boss).save(settings);
 
 		HealdanSettings stored = HealdanSettings.get();
-		assertEquals(Long.valueOf(personal.getId()), stored.defaultStoreId());
 		assertEquals(14, stored.recentMattersDays());
 		assertEquals(NumberingMode.SYSTEM_WIDE, stored.numberingMode());
-		assertEquals(Long.valueOf(personal.getId()), saved.getDefaultStoreId());
 		assertEquals(14, saved.getRecentMattersDays());
 	}
 
@@ -225,9 +211,6 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testSaveRefusesBadValues() throws Exception {
-		Folder defaultWorkspace = FolderDAO.get().findDefaultWorkspace(1L);
-		Matter matter = fx.matter(fx.client(998, "Healdan"), 1, "Demo", store);
-
 		assertRefused("The singular label cannot be empty.", s -> s.setMatterLabel("  "));
 		assertRefused("The plural label cannot be empty.", s -> s.setMatterLabelPlural(null));
 		assertRefused("The singular label cannot be longer than 50 characters.",
@@ -235,9 +218,6 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertRefused("The plural label cannot contain emoji or other characters the database can't store.",
 				s -> s.setMatterLabelPlural("Matters \uD83C\uDF89"));
 		assertRefused("Unknown numbering mode: SOMETIMES", s -> s.setNumberingMode("SOMETIMES"));
-		assertRefused("The default Store must be a Store.", s -> s.setDefaultStoreId(defaultWorkspace.getId()));
-		assertRefused("The default Store must be a Store.", s -> s.setDefaultStoreId(matter.getFolderId()));
-		assertRefused("The default Store must be a Store.", s -> s.setDefaultStoreId(987654L));
 		assertRefused("The default Class must be one of the Class options.", s -> s.setDefaultClass("Nonsense"));
 		assertRefused("The Recent Matters window must be between 1 and 3650 days.",
 				s -> s.setRecentMattersDays(0));
@@ -258,7 +238,6 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertEquals("Matter", after.getMatterLabel());
 		assertEquals("Matters", after.getMatterLabelPlural());
 		assertEquals(NumberingMode.PER_CLIENT.name(), after.getNumberingMode());
-		assertNull(after.getDefaultStoreId());
 		assertEquals("Docs", after.getDefaultClass());
 		assertEquals(30, after.getRecentMattersDays());
 	}

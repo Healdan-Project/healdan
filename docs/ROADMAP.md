@@ -141,7 +141,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - Doc #s are unpadded whole numbers with room for at least 999,999,999.
   - Versions use LogicalDOC's numbering: the major number is the version and minors are snapshots on its timeline. The footer shows `# 1234.2.1`.
   - Matter numbers are either per client (`998.1`) or system-wide, chosen per install.
-  - Admins create matters. The dialog picks client, number, name, Store (the default Store is pre-selected), owner and template.
+  - Admins create matters. The dialog picks client, number, name, Store, owner and template. It opens from a Store's menu and pre-selects that Store; on 2026-10-21 the owner dropped the default Store setting this line first had.
   - Every document carries Author, Typist, Class (required, default "Docs") and an optional Subclass.
   - Emails also capture From, To, CC and Subject, and are named after their subject.
   - Only admins add, rename, move or delete a matter's top-level folders.

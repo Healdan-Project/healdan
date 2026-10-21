@@ -4,8 +4,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.logicaldoc.gui.common.client.beans.GUIValue;
-
 /**
  * What the Healdan Settings panel shows and saves (spec 8.6)
  */
@@ -19,12 +17,6 @@ public class GUIHealdanSettings implements Serializable {
 
 	/** The name of a numbering mode: PER_CLIENT or SYSTEM_WIDE */
 	private String numberingMode;
-
-	/** Null when no Store is the default */
-	private Long defaultStoreId;
-
-	/** The Stores to choose from: the folder id as code, the name as value */
-	private List<GUIValue> stores = new ArrayList<>();
 
 	private String defaultClass;
 
@@ -61,22 +53,6 @@ public class GUIHealdanSettings implements Serializable {
 
 	public void setNumberingMode(String numberingMode) {
 		this.numberingMode = numberingMode;
-	}
-
-	public Long getDefaultStoreId() {
-		return defaultStoreId;
-	}
-
-	public void setDefaultStoreId(Long defaultStoreId) {
-		this.defaultStoreId = defaultStoreId;
-	}
-
-	public List<GUIValue> getStores() {
-		return stores;
-	}
-
-	public void setStores(List<GUIValue> stores) {
-		this.stores = stores;
 	}
 
 	public String getDefaultClass() {

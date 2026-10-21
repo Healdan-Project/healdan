@@ -58,14 +58,6 @@ public interface HealdanMatterService extends RemoteService {
 	public List<GUIValue> listTemplates() throws ServerException;
 
 	/**
-	 * @return the default Store's id, null if none is set or it's deleted
-	 *
-	 * @throws ServerException the user isn't an administrator, or an error
-	 *         happened in the server application
-	 */
-	public Long defaultStoreId() throws ServerException;
-
-	/**
 	 * Creates a matter and its workspace from a template, all or nothing.
 	 *
 	 * @param matter the client, number, name, description, Store, owner and
