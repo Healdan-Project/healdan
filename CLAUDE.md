@@ -26,7 +26,7 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 
 ## Build and test
 
-You need JDK 21 (`source.level` in `logicaldoc-parent/pom.xml`; the GWT client compiles at source level 17) and Maven 3.9+. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `.github/workflows/build-logicaldoc.yml` writes into `~/.m2/settings.xml`. Copy that block for local builds.
+You need JDK 25 (`source.level` in `logicaldoc-parent/pom.xml`; the GWT client compiles at source level 17) and Maven 3.9+. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `.github/workflows/build-logicaldoc.yml` writes into `~/.m2/settings.xml`. Copy that block for local builds.
 
 ```bash
 mvn -B -ntp -DskipTests install                          # full reactor build (what the Docker image runs)

@@ -3,8 +3,8 @@
 # Healdan (LogicalDOC Community fork): build from source, run on Tomcat 11.
 # See docker/README.md for usage and docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md for the design.
 
-ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-21
-ARG TOMCAT_IMAGE=tomcat:11.0-jre21-temurin
+ARG MAVEN_IMAGE=maven:3.9-eclipse-temurin-25
+ARG TOMCAT_IMAGE=tomcat:11.0-jre25-temurin
 
 # ---- build: the same Maven build CI runs, producing the exploded WAR in /build/ROOT ----
 FROM ${MAVEN_IMAGE} AS build
