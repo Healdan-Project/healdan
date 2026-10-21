@@ -107,7 +107,10 @@ public class ConvertPdf extends HttpServlet {
             String ver = document.getVersion();
             if (StringUtils.isNotEmpty(request.getParameter(VERSION)))
                 ver = request.getParameter(VERSION);
-            Version version = versionDao.findByVersion(document.getId(), ver);
+            // A fileVersion asks for that file of this document, as the version dialog and the Versions tab do
+            Version version = StringUtils.isNotEmpty(request.getParameter("fileVersion"))
+                    ? versionDao.findByFileVersion(document.getId(), request.getParameter("fileVersion"))
+                    : versionDao.findByVersion(document.getId(), ver);
 
             if (version == null)
                 throw new IOException("Document version not available");
