@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building. Server side done: PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18, PR C (Tasks 17–21) 2026-10-19, and five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) is in progress in parts, after the owner reviewed its mockups on 2026-10-21: parts 1 and 2 (Tasks 22–24) merged on 2026-10-21, and parts 3 (Task 25) and 4 (Tasks 27–28) are in review |
+| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building. Server side done: PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18, PR C (Tasks 17–21) 2026-10-19, and five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) is in progress in parts, after the owner reviewed its mockups on 2026-10-21: parts 1 to 4 (Tasks 22–25, 27 and 28) merged on 2026-10-21, and part 5 (Task 26) is in review |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
