@@ -19,6 +19,7 @@ import com.logicaldoc.gui.frontend.client.healdan.services.HealdanSettingsServic
 import com.logicaldoc.gui.frontend.client.healdan.settings.ClientDialog;
 import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.TitleOrientation;
+import com.smartgwt.client.util.SC;
 import com.smartgwt.client.widgets.Window;
 import com.smartgwt.client.widgets.form.DynamicForm;
 import com.smartgwt.client.widgets.form.fields.ButtonItem;
@@ -205,6 +206,8 @@ public class MatterDialog extends Window {
 
 	private static SelectItem ownerItem() {
 		SelectItem owner = ItemFactory.newUserSelector(OWNER, "Owner", null, true, true);
+		// The factory's "required" only hides the empty entry; the clear icon can still empty it
+		owner.setRequired(true);
 		owner.setWidth(260);
 		owner.setEndRow(true);
 		return owner;
@@ -265,6 +268,11 @@ public class MatterDialog extends Window {
 		LD.contactingServer();
 		HealdanMatterService.Instance.get().create(matter, new DefaultAsyncCallback<>() {
 			@Override
+			public void onFailure(Throwable caught) {
+				refused(caught);
+			}
+
+			@Override
 			public void handleSuccess(GUIMatter created) {
 				destroy();
 				reloadStore(created.getStoreId());
@@ -301,11 +309,22 @@ public class MatterDialog extends Window {
 		LD.contactingServer();
 		HealdanMatterService.Instance.get().update(matter, new DefaultAsyncCallback<>() {
 			@Override
+			public void onFailure(Throwable caught) {
+				refused(caught);
+			}
+
+			@Override
 			public void handleSuccess(GUIMatter saved) {
 				destroy();
 				reloadStore(saved.getStoreId());
 			}
 		});
+	}
+
+	/** The dialog shows why the server refused, such as a duplicate number (spec 5.3) */
+	private static void refused(Throwable caught) {
+		LD.clearPrompt();
+		SC.warn(caught.getMessage());
 	}
 
 	/** The Store's children again, so a new or renamed workspace shows */

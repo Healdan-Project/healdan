@@ -32,11 +32,15 @@ public class HealdanSearchFolderServiceImpl extends HealdanRemoteService impleme
 
 	private static final long serialVersionUID = 1L;
 
-	/**
-	 * The most documents a listing asks for. The grid loads them in one
-	 * request, and an id list much longer would pass Tomcat's header limit.
-	 */
+	/** The most documents a listing asks for */
 	static final int MAX_LISTED = 1000;
+
+	/**
+	 * The longest id list a listing asks for, in characters. The grid loads
+	 * the documents in one GET, whose request line Tomcat refuses past 8 KB,
+	 * and ids grow to 7 digits on a large install.
+	 */
+	static final int MAX_ID_CHARS = 4000;
 
 	@Override
 	public GUISearchFolderRule get(long folderId) throws ServerException {
@@ -74,11 +78,26 @@ public class HealdanSearchFolderServiceImpl extends HealdanRemoteService impleme
 	@Override
 	public List<Long> evaluate(long folderId) throws ServerException {
 		User user = session().getUser();
-		return call("list the search folder", () -> {
-			List<Long> ids = SearchFolderService.get().evaluate(folderId, user);
-			// Newest first, so the cap keeps the most recent
-			return new ArrayList<>(ids.subList(0, Math.min(ids.size(), MAX_LISTED)));
-		});
+		return call("list the search folder", () -> capped(SearchFolderService.get().evaluate(folderId, user)));
+	}
+
+	/**
+	 * @param ids the documents, newest first
+	 * @return the first of them, as many as fit both caps: at most
+	 *         {@link #MAX_LISTED}, joined with commas into at most
+	 *         {@link #MAX_ID_CHARS} characters
+	 */
+	static List<Long> capped(List<Long> ids) {
+		List<Long> kept = new ArrayList<>();
+		int length = 0;
+		for (Long id : ids) {
+			int more = Long.toString(id).length() + (kept.isEmpty() ? 0 : 1);
+			if (kept.size() == MAX_LISTED || length + more > MAX_ID_CHARS)
+				break;
+			kept.add(id);
+			length += more;
+		}
+		return kept;
 	}
 
 	@Override

@@ -208,6 +208,27 @@ public class HealdanSearchFolderServiceImplTest extends AbstractHealdanTestCase 
 	}
 
 	@Test
+	public void testListingFitsInARequest() {
+		// A thousand 7-digit ids would need 7,999 characters, past Tomcat's 8 KB request header
+		List<Long> ids = new java.util.ArrayList<>();
+		for (long id = 9_999_000L; id > 9_998_000L; id--)
+			ids.add(id);
+
+		List<Long> kept = HealdanSearchFolderServiceImpl.capped(ids);
+
+		String joined = kept.stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(","));
+		assertTrue(joined.length() + " characters", joined.length() <= HealdanSearchFolderServiceImpl.MAX_ID_CHARS);
+		assertEquals(500, kept.size());
+		// The newest first, as evaluate gives them
+		assertEquals(ids.subList(0, 500), kept);
+		// Short ids stop at the count cap: the first thousand, 0 to 999, take 3,889 characters
+		List<Long> small = new java.util.ArrayList<>();
+		for (long id = 0; id < 1500; id++)
+			small.add(id);
+		assertEquals(HealdanSearchFolderServiceImpl.MAX_LISTED, HealdanSearchFolderServiceImpl.capped(small).size());
+	}
+
+	@Test
 	public void testSubclassesFilteredByClass() throws Exception {
 		long setId = AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID, true)
 				.getId();

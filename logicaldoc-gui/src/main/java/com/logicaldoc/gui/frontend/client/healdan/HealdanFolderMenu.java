@@ -40,6 +40,11 @@ public final class HealdanFolderMenu {
 
 		GUIFolder folder = selected.get(0);
 		int position = menu.getItems().length;
+		// The items and dialogs say the configured label, such as "Project"
+		HealdanLabels.load(() -> describe(menu, folder, position, acl));
+	}
+
+	private static void describe(Menu menu, GUIFolder folder, int position, GUIAccessControlEntry acl) {
 		HealdanMatterService.Instance.get().describeFolder(folder.getId(), new AsyncCallback<GUIFolderRole>() {
 			@Override
 			public void onFailure(Throwable caught) {

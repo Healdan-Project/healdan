@@ -31,6 +31,11 @@ public final class SearchFolderListing {
 		if (folder == null || folder.getType() != HealdanGuiConstants.FOLDER_TYPE_SEARCH)
 			return false;
 
+		/*
+		 * The grid now belongs to the search folder, as updateData does for any
+		 * other folder, so a sort never refetches the previous folder's documents
+		 */
+		grid.loadGridLayout(folder);
 		HealdanSearchFolderService.Instance.get().evaluate(folder.getId(), new DefaultAsyncCallback<>() {
 			@Override
 			public void handleSuccess(List<Long> ids) {
@@ -42,8 +47,13 @@ public final class SearchFolderListing {
 				}
 				// An empty docIds would list nothing at all, as wanted, but the servlet needs a value
 				grid.fetchNewData(new DocumentsDS(ids.isEmpty() ? "empty" : joined.toString()));
+				/*
+				 * Every id is in the grid already, so the cursor shows one page: with
+				 * more, a sort would refetch the folder's own (empty) listing
+				 */
 				if (grid.getGridCursor() != null)
-					grid.getGridCursor().setTotalRecords(ids.size());
+					grid.getGridCursor()
+							.setTotalRecords(Math.min(ids.size(), grid.getGridCursor().getPageSize()));
 			}
 		});
 		grid.setCanDrag(false);

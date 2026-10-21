@@ -147,12 +147,19 @@ public class SearchFolderDialog extends Window {
 		loadSubclasses(rule.getDocSubclass());
 	}
 
-	/** The Subclasses of the chosen Class, keeping the given one selected */
+	/**
+	 * The Subclasses of the chosen Class. A given Subclass stays selected, even
+	 * before the list arrives and even if it's no longer an option, so saving
+	 * never drops it silently; the server checks it belongs to the Class.
+	 */
 	private void loadSubclasses(String selected) {
 		String docClass = form.getValueAsString(CLASS);
 		SelectItem docSubclass = (SelectItem) form.getItem(SUBCLASS);
-		docSubclass.clearValue();
-		docSubclass.setValueMap(new LinkedHashMap<String, String>());
+		docSubclass.setValueMap(withSelected(new LinkedHashMap<>(), selected));
+		if (selected != null)
+			docSubclass.setValue(selected);
+		else
+			docSubclass.clearValue();
 		if (docClass == null || docClass.isEmpty())
 			return;
 
@@ -162,11 +169,17 @@ public class SearchFolderDialog extends Window {
 				LinkedHashMap<String, String> map = new LinkedHashMap<>();
 				for (String value : subclasses)
 					map.put(value, value);
-				docSubclass.setValueMap(map);
-				if (selected != null && map.containsKey(selected))
+				docSubclass.setValueMap(withSelected(map, selected));
+				if (selected != null)
 					docSubclass.setValue(selected);
 			}
 		});
+	}
+
+	private static LinkedHashMap<String, String> withSelected(LinkedHashMap<String, String> map, String selected) {
+		if (selected != null)
+			map.put(selected, selected);
+		return map;
 	}
 
 	private void onSave() {
