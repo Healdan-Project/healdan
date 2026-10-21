@@ -110,7 +110,7 @@ public class QuickSearchTray extends MenuTray {
 	}
 
 	private void onSearch() {
-		if (HealdanQuickSearch.handle(scope.getValueAsString(), searchBox.getValueAsString()))
+		if (HealdanQuickSearch.handle(scope.getScope(), searchBox.getValueAsString()))
 			return;
 
 		GUISearchOptions options = new GUISearchOptions();

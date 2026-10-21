@@ -61,7 +61,15 @@ public class ScopePicker extends SelectItem {
 		if (DOCUMENTS.equals(value) || EMAILS.equals(value) || FOLDERS.equals(value) || MATTERS.equals(value)
 				|| CLIENTS.equals(value))
 			return value;
-		return DOCS_EMAILS;
+		return DOCUMENTS;
+	}
+
+	/**
+	 * @return the chosen scope, or null when the picker isn't in a form (the
+	 *         tray's CE-only branch), so CE's own search runs
+	 */
+	public String getScope() {
+		return getForm() == null ? null : getValueAsString();
 	}
 
 	private static void remember(String value) {
