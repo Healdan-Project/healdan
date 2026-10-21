@@ -747,10 +747,14 @@ public class DocumentsDataServlet extends AbstractDataServlet {
             query.append(" and D.ld_folderid = %d".formatted(folderId));
         if (formId != null)
             query.append(" and D.ld_formid = %d".formatted(formId));
+        // Healdan: bind the names, which come from the request, rather than splicing them in
+        Map<String, Object> names = new HashMap<>();
+        for (int i = 0; i < extendedAttributes.size(); i++)
+            names.put("name" + i, extendedAttributes.get(i));
         query.append(") and ld_name in (%s)"
-                .formatted(extendedAttributes.stream().map("'%s'"::formatted).collect(Collectors.joining(","))));
+                .formatted(names.keySet().stream().sorted().map(":%s"::formatted).collect(Collectors.joining(","))));
 
-        dao.query(query.toString(), new ExtendedAttributeRowMapper(extAttributesValues, locale), null);
+        dao.query(query.toString(), names, new ExtendedAttributeRowMapper(extAttributesValues, locale), null);
     }
 
     private String getFilename(HttpServletRequest request) {
