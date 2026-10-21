@@ -12,6 +12,9 @@ public class GUIDocNumberResult implements Serializable {
 	/** The document, null if nothing was found */
 	private Long docId;
 
+	/** The document's doc #, as typed after the # */
+	private Long docNumber;
+
 	/** The document's folder */
 	private Long folderId;
 
@@ -33,6 +36,14 @@ public class GUIDocNumberResult implements Serializable {
 
 	public void setDocId(Long docId) {
 		this.docId = docId;
+	}
+
+	public Long getDocNumber() {
+		return docNumber;
+	}
+
+	public void setDocNumber(Long docNumber) {
+		this.docNumber = docNumber;
 	}
 
 	public Long getFolderId() {

@@ -45,7 +45,7 @@ public class VersionResultDialog extends Window {
 		this.result = result;
 
 		setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
-		setTitle("#" + result.getDocId() + " version " + result.getVersion());
+		setTitle("#" + result.getDocNumber() + " version " + result.getVersion());
 		setIsModal(true);
 		setShowModalMask(true);
 		centerInPage();
@@ -57,8 +57,6 @@ public class VersionResultDialog extends Window {
 				: "";
 		String who = version != null && version.getUsername() != null ? version.getUsername() : "";
 
-		Label title = new Label("<b>#" + result.getDocId() + " version " + result.getVersion() + "</b>");
-		title.setHeight(22);
 		Label details = new Label(when + (when.isEmpty() || who.isEmpty() ? "" : " &middot; ") + who);
 		details.setHeight(22);
 
@@ -71,7 +69,6 @@ public class VersionResultDialog extends Window {
 		buttons.setHeight(30);
 		buttons.setMembers(preview, download);
 
-		addItem(title);
 		addItem(details);
 		addItem(buttons);
 	}

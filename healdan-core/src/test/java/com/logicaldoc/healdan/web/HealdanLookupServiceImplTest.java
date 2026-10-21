@@ -115,6 +115,7 @@ public class HealdanLookupServiceImplTest extends AbstractHealdanTestCase {
 		GUIDocNumberResult found = as(alices).lookup("#" + n);
 		assertTrue(found.isFound());
 		assertEquals(Long.valueOf(doc.getId()), found.getDocId());
+		assertEquals(Long.valueOf(n), found.getDocNumber());
 		assertEquals(Long.valueOf(doc.getFolder().getId()), found.getFolderId());
 		assertNull(found.getVersionId());
 		assertEquals(doc.getVersion(), found.getVersion());
@@ -135,6 +136,7 @@ public class HealdanLookupServiceImplTest extends AbstractHealdanTestCase {
 		GUIDocNumberResult exact = as(alices).lookup("#" + n + ".2.1");
 		assertEquals(Long.valueOf(doc.getId()), exact.getDocId());
 		assertEquals(Long.valueOf(v21), exact.getVersionId());
+		assertEquals(Long.valueOf(n), exact.getDocNumber());
 		assertEquals("2.1", exact.getVersion());
 		assertEquals("2.0", exact.getFileVersion());
 

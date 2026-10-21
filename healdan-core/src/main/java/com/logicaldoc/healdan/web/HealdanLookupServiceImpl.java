@@ -27,6 +27,7 @@ public class HealdanLookupServiceImpl extends HealdanRemoteService implements He
 	private static GUIDocNumberResult toGUI(LookupResult result) {
 		GUIDocNumberResult gui = new GUIDocNumberResult();
 		gui.setDocId(result.docId());
+		gui.setDocNumber(result.docNumber());
 		gui.setFolderId(result.folderId());
 		gui.setVersionId(result.versionId());
 		gui.setVersion(result.version());
