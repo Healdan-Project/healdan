@@ -10,6 +10,7 @@ import com.logicaldoc.gui.common.client.beans.GUIFolder;
 import com.logicaldoc.gui.frontend.client.folder.FolderNavigator;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIFolderRole;
 import com.logicaldoc.gui.frontend.client.healdan.matter.MatterDialog;
+import com.logicaldoc.gui.frontend.client.healdan.searchfolder.SearchFolderDialog;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanMatterService;
 import com.smartgwt.client.widgets.menu.Menu;
 import com.smartgwt.client.widgets.menu.MenuItem;
@@ -47,7 +48,7 @@ public final class HealdanFolderMenu {
 
 			@Override
 			public void onSuccess(GUIFolderRole role) {
-				List<MenuItem> items = items(folder, role);
+				List<MenuItem> items = items(folder, role, acl);
 				if (items.isEmpty())
 					return;
 				int index = position;
@@ -58,7 +59,7 @@ public final class HealdanFolderMenu {
 		});
 	}
 
-	private static List<MenuItem> items(GUIFolder folder, GUIFolderRole role) {
+	private static List<MenuItem> items(GUIFolder folder, GUIFolderRole role, GUIAccessControlEntry acl) {
 		List<MenuItem> items = new ArrayList<>();
 		boolean admin = Session.get().isAdmin();
 		String label = HealdanLabels.singular();
@@ -68,6 +69,23 @@ public final class HealdanFolderMenu {
 
 		if (admin && "MATTER_WORKSPACE".equals(role.getKind()))
 			items.add(item("Edit " + label + "\u2026", () -> MatterDialog.edit(folder.getId())));
+
+		/*
+		 * Search folders go inside a matter or a template, not inside another
+		 * search folder; a matter's top level and the templates are for admins
+		 * (the server checks this and the add permission whatever the menu shows)
+		 */
+		boolean insideMatter = "IN_MATTER".equals(role.getKind()) && !role.isSearchFolder();
+		boolean adminPlace = "MATTER_WORKSPACE".equals(role.getKind())
+				|| "IN_TEMPLATES".equals(role.getKind()) && !role.isSearchFolder();
+		if (insideMatter || admin && adminPlace) {
+			MenuItem newSearchFolder = item("New search folder\u2026", () -> SearchFolderDialog.create(folder.getId()));
+			newSearchFolder.setEnabled(admin || acl.isAdd());
+			items.add(newSearchFolder);
+		}
+
+		if (role.isSearchFolder())
+			items.add(item("Edit search folder\u2026", () -> SearchFolderDialog.edit(folder.getId())));
 
 		return items;
 	}
