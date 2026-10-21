@@ -143,7 +143,7 @@ public class DocumentsPanel extends HLayout implements FolderObserver, DocumentO
 
         MainPanel.get().selectDocumentsTab();
         FolderNavigator.get().openFolder(folderId, docId);
-        documentsMenu.expandSection(0);
+        documentsMenu.expandSection("browser");
         if (detailPanel instanceof DocumentDetailsPanel docDetails)
             docDetails.selectDefaultTab();
     }

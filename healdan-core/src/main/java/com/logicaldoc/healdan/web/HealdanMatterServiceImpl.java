@@ -36,15 +36,20 @@ import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.matter.MatterNumbering;
 import com.logicaldoc.healdan.matter.MatterService;
 import com.logicaldoc.healdan.matter.NewMatter;
+import com.logicaldoc.healdan.navigation.MatterEntry;
+import com.logicaldoc.healdan.navigation.MyMatters;
+import com.logicaldoc.healdan.navigation.RecentMatters;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 
 import jakarta.servlet.annotation.WebServlet;
 
 /**
- * The New and Edit Matter dialogs' server side (spec 5.3), and what the folder
- * menu needs to know about a folder. Creating and editing matters, and the
- * lists the dialogs pick from, are for administrators only: the refusal comes
- * before {@link MatterService} is asked, so it is an access-denied error.
+ * The New and Edit Matter dialogs' server side (spec 5.3), what the folder
+ * menu needs to know about a folder, and My Matters and Recent Matters for the
+ * left pane (spec 8.2). Creating and editing matters, and the lists the
+ * dialogs pick from, are for administrators only: the refusal comes before
+ * {@link MatterService} is asked, so it is an access-denied error. The
+ * left-pane lists are each user's own.
  */
 @WebServlet("/frontend/healdanmatter")
 public class HealdanMatterServiceImpl extends HealdanRemoteService implements HealdanMatterService {
@@ -132,22 +137,32 @@ public class HealdanMatterServiceImpl extends HealdanRemoteService implements He
 
 	@Override
 	public List<GUIMatter> myMatters() throws ServerException {
-		throw notYet();
+		User user = session().getUser();
+		return call("list My Matters", () -> toGUI(MyMatters.get().list(user.getId())));
 	}
 
 	@Override
 	public List<GUIMatter> recentMatters() throws ServerException {
-		throw notYet();
+		User user = session().getUser();
+		return call("list Recent Matters", () -> toGUI(RecentMatters.get().list(user.getId())));
 	}
 
 	@Override
 	public void addToMyMatters(long folderId) throws ServerException {
-		throw notYet();
+		User user = session().getUser();
+		call("add to My Matters", () -> {
+			MyMatters.get().add(user.getId(), folderId);
+			return null;
+		});
 	}
 
 	@Override
 	public void removeFromMyMatters(long folderId) throws ServerException {
-		throw notYet();
+		User user = session().getUser();
+		call("remove from My Matters", () -> {
+			MyMatters.get().remove(user.getId(), folderId);
+			return null;
+		});
 	}
 
 	@Override
@@ -178,9 +193,18 @@ public class HealdanMatterServiceImpl extends HealdanRemoteService implements He
 		});
 	}
 
-	/** Declared for Task 26, which implements them */
-	private static ServerException notYet() {
-		return new ServerException("Not available yet.");
+	/** A left-pane list's entries, with what a click and the entry need */
+	private static List<GUIMatter> toGUI(List<MatterEntry> entries) {
+		List<GUIMatter> matters = new ArrayList<>();
+		for (MatterEntry entry : entries) {
+			GUIMatter matter = new GUIMatter();
+			matter.setId(entry.matterId());
+			matter.setFolderId(entry.folderId());
+			matter.setDisplay(entry.display());
+			matter.setClientName(entry.clientName());
+			matters.add(matter);
+		}
+		return matters;
 	}
 
 	/** The folders by name: the id as code, the name as value */

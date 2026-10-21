@@ -159,7 +159,7 @@ public class NavigationTest extends AbstractHealdanTestCase {
 		List<MatterEntry> entries = myMatters.list(alice.getId());
 		assertEquals(List.of("998.1 \u2013 Healdan Demo", "998.2 \u2013 Second", "998.10 \u2013 Tenth"),
 				displays(entries));
-		assertEquals(new MatterEntry(demo.getId(), demo.getFolderId(), "998.1 \u2013 Healdan Demo", null),
+		assertEquals(new MatterEntry(demo.getId(), demo.getFolderId(), "998.1 \u2013 Healdan Demo", "Healdan", null),
 				entries.get(0));
 
 		// Each is a CE folder bookmark, which CE's Bookmarks section lists too (plan, call 9)
@@ -299,7 +299,7 @@ public class NavigationTest extends AbstractHealdanTestCase {
 		for (int n = 1; n <= 19; n++)
 			expected.add("998.%d \u2013 Matter %d".formatted(n, n));
 		assertEquals(expected, displays(recent));
-		assertEquals(new MatterEntry(newest.getId(), newest.getFolderId(), "998.25 \u2013 Matter 25",
+		assertEquals(new MatterEntry(newest.getId(), newest.getFolderId(), "998.25 \u2013 Matter 25", "Healdan",
 				Date.from(halfHourAgo)), recent.get(0));
 		assertEquals(Date.from(now.minus(Duration.ofHours(1))), recent.get(1).lastChange());
 		assertEquals(Date.from(now.minus(Duration.ofHours(19))), recent.get(19).lastChange());

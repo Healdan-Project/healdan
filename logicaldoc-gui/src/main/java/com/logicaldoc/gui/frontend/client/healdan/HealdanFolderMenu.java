@@ -4,12 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.google.gwt.user.client.rpc.AsyncCallback;
+import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIFolder;
+import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.frontend.client.folder.FolderNavigator;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIFolderRole;
 import com.logicaldoc.gui.frontend.client.healdan.matter.MatterDialog;
+import com.logicaldoc.gui.frontend.client.healdan.navigation.HealdanDocumentsMenu;
 import com.logicaldoc.gui.frontend.client.healdan.searchfolder.SearchFolderDialog;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanMatterService;
 import com.smartgwt.client.widgets.menu.Menu;
@@ -72,6 +75,17 @@ public final class HealdanFolderMenu {
 		if (admin && "STORE".equals(role.getKind()))
 			items.add(item("New " + label + "\u2026", () -> MatterDialog.create(folder.getId())));
 
+		// Anyone who can read a matter may keep it in My Matters
+		if ("MATTER_WORKSPACE".equals(role.getKind()) && role.getMatterId() != null) {
+			String myMatters = "My " + HealdanLabels.plural();
+			if (role.isInMyMatters())
+				items.add(item("Remove from " + myMatters, () -> HealdanMatterService.Instance.get()
+						.removeFromMyMatters(folder.getId(), myMattersChanged("Removed from " + myMatters))));
+			else
+				items.add(item("Add to " + myMatters, () -> HealdanMatterService.Instance.get()
+						.addToMyMatters(folder.getId(), myMattersChanged("Added to " + myMatters))));
+		}
+
 		if (admin && "MATTER_WORKSPACE".equals(role.getKind()))
 			items.add(item("Edit " + label + "\u2026", () -> MatterDialog.edit(folder.getId())));
 
@@ -93,6 +107,20 @@ public final class HealdanFolderMenu {
 			items.add(item("Edit search folder\u2026", () -> SearchFolderDialog.edit(folder.getId())));
 
 		return items;
+	}
+
+	/**
+	 * @param message what to tell the user once it's done
+	 * @return a callback that says so and reloads My Matters
+	 */
+	private static AsyncCallback<Void> myMattersChanged(String message) {
+		return new DefaultAsyncCallback<>() {
+			@Override
+			public void handleSuccess(Void result) {
+				GuiLog.info(message, null);
+				HealdanDocumentsMenu.refreshMyMatters();
+			}
+		};
 	}
 
 	private static MenuItem item(String title, Runnable action) {
