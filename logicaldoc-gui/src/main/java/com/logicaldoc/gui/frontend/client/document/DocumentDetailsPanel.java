@@ -706,17 +706,10 @@ public class DocumentDetailsPanel extends VLayout implements DocumentObserver {
                 result.setLockUser(null);
                 result.setLockUserId(null);
 
+                // A shortcut comes back with its own id and its stored docRef, and its own file name
                 setDocument(result);
 
                 DocumentController.get().modified(result);
-
-                // If the document is an alias we should alter the file name
-                if (document.getDocRef() != null) {
-                    result.setId(document.getDocRef());
-                    result.setDocRef(document.getId());
-                    result.setFileName(document.getFileName());
-                    DocumentController.get().modified(result);
-                }
 
                 hideSave();
             }
