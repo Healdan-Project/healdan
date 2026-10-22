@@ -137,4 +137,4 @@ jobs:
 
       - name: Test Healdan hooks in upstream modules
         if: steps.changes.outputs.code == 'true'
-        run: mvn -B -ntp -pl logicaldoc-core,logicaldoc-webservice,logicaldoc-webapp test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest='HealdanHooksTest,DocumentAclEqualityTest,FolderServiceImplTest,DocumentServiceImplTest,SearchServiceImplTest,DocumentOnlyGrantTest,BookmarksDataServletTest,RpcPermissionTest,RpcPermissionGapsTest,SoapPermissionGapsTest,DocumentsDataServletTest,ConvertPdfTest,HealdanDocNumberSortTest'
+        run: mvn -B -ntp -pl logicaldoc-core,logicaldoc-webservice,logicaldoc-webapp test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest='HealdanHooksTest,DocumentAclEqualityTest,HibernateFolderDAOTest#testMerge,StatsCollectorTest,FolderServiceImplTest,DocumentServiceImplTest,SearchServiceImplTest,DocumentOnlyGrantTest,BookmarksDataServletTest,RpcPermissionTest,RpcPermissionGapsTest,SoapPermissionGapsTest,DocumentsDataServletTest,ConvertPdfTest,HealdanDocNumberSortTest'
