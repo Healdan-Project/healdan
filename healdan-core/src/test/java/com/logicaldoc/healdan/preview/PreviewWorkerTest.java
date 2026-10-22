@@ -82,6 +82,24 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testOlderVersionOfAnotherTypeConverts() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		DocumentManager.get().checkout(a.getId(), fx.documentHistory(fx.admin()));
+		Document current = DocumentManager.get()
+				.checkin(a.getId(), new ByteArrayInputStream("%PDF-1.4".getBytes(StandardCharsets.US_ASCII)), "a.pdf",
+						false, null, fx.documentHistory(fx.admin()))
+				.getDocument();
+		assertEquals("a.pdf", current.getFileName());
+		assertTrue(queued(a, "1.0"));
+
+		assertEquals(1, worker.runOnce(T));
+
+		assertFalse(queued(a, "1.0"));
+		byte[] converted = Store.get().getBytes(pdfOf(a, "1.0"));
+		assertEquals("%PDF", new String(converted, 0, 4, StandardCharsets.US_ASCII));
+	}
+
+	@Test
 	public void testDeletedDocumentDropped() throws Exception {
 		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
 		DocumentDAO.get().delete(a.getId());

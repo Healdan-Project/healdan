@@ -122,7 +122,7 @@ public class ConvertPdf extends HttpServlet {
                 if (FormatConversionManager.get().getConverter(version.getFileName(),
                         "preview.pdf") instanceof NotAvailableConverter)
                     throw new IOException("Unsupported format");
-                FormatConversionManager.get().convertToPdf(document, version.getFileVersion(), session.getSid());
+                FormatConversionManager.get().convertToPdf(version, version.getFileVersion(), session.getSid());
                 resource.suffixPdfConversion();
             }
 

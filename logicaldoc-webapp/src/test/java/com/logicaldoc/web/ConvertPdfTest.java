@@ -22,7 +22,9 @@ import com.logicaldoc.core.conversion.FormatConverter;
 import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.Tenant;
@@ -90,7 +92,8 @@ public class ConvertPdfTest extends AbstractWPTestCase {
 	}
 
 	/**
-	 * A stand-in for Healdan's converter, which these tests don't load
+	 * A stand-in for Healdan's converter, which these tests don't load. Like
+	 * it, the stub goes by the extension of the file it is given.
 	 */
 	private static class StubConverter implements FormatConverter {
 
@@ -100,6 +103,8 @@ public class ConvertPdfTest extends AbstractWPTestCase {
 		public void convert(File src, File dest) throws IOException {
 			if (failing)
 				throw new IOException("The stub fails on demand");
+			if (!src.getName().endsWith(".abc"))
+				throw new IOException("Not an abc file: " + src.getName());
 			Files.write(dest.toPath(), STUB_PDF);
 		}
 
@@ -224,6 +229,27 @@ public class ConvertPdfTest extends AbstractWPTestCase {
 
 		assertArrayEquals(STUB_PDF, preview("fileVersion", fileVersion).bytes());
 		assertTrue(Store.get().exists(conversion(doc.getId(), fileVersion)));
+		assertTrue(DocumentHistoryDAO.get().findByDocIdAndEvent(doc.getId(), DocumentEvent.CONVERTED).isEmpty());
+	}
+
+	@Test
+	public void testOlderVersionOfAnotherTypeServesItsConversion() throws Exception {
+		checkinAbc();
+		String abcVersion = doc.getFileVersion();
+		forgetConversion(doc.getId(), abcVersion);
+		// The current file is now text, but the requested version is still the abc one
+		DocumentHistory checkin = new DocumentHistory();
+		checkin.setSession(session);
+		doc = DocumentManager.get().checkin(doc.getId(),
+				new ByteArrayInputStream("text".getBytes(StandardCharsets.UTF_8)), "four.txt", false, null, checkin)
+				.getDocument();
+		assertEquals("four.txt", doc.getFileName());
+		assertNotEquals(abcVersion, doc.getFileVersion());
+
+		assertArrayEquals(STUB_PDF, preview("fileVersion", abcVersion).bytes());
+		assertTrue(Store.get().exists(conversion(doc.getId(), abcVersion)));
+		// Converting a version neither re-saves the document nor records a conversion in its history
+		assertTrue(DocumentHistoryDAO.get().findByDocIdAndEvent(doc.getId(), DocumentEvent.CONVERTED).isEmpty());
 	}
 
 	@Test

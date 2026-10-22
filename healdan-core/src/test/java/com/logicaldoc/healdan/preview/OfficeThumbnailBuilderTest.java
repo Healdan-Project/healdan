@@ -5,8 +5,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -15,6 +17,7 @@ import java.util.List;
 import org.junit.Test;
 
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.thumbnail.ThumbnailManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -86,6 +89,48 @@ public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
 		assertEquals(2, builder.pdfs.size());
 		assertArrayEquals(stored, builder.pdfs.get(0));
 		assertArrayEquals(stored, builder.pdfs.get(1));
+		dest.delete();
+	}
+
+	private static Document checkin(Document doc, String name, byte[] content) throws Exception {
+		HealdanFixtures fx = new HealdanFixtures();
+		DocumentManager.get().checkout(doc.getId(), fx.documentHistory(fx.admin()));
+		return DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream(content), name, false, null,
+				fx.documentHistory(fx.admin())).getDocument();
+	}
+
+	@Test
+	public void testOlderVersionOfAnotherTypeUsesItsConversion() throws Exception {
+		Context.get().getConfig().setProperty("converter.OfficeConverter.path", FakeSoffice.ok().getPath());
+		Document doc = upload("a.docx");
+		doc = checkin(doc, "a.pdf", "%PDF-1.4 current".getBytes(StandardCharsets.US_ASCII));
+		assertEquals("a.pdf", doc.getFileName());
+		Recording builder = new Recording();
+		File dest = File.createTempFile("thumb", ".png");
+
+		builder.buildThumbnail(null, doc, "1.0", null, dest, 100, 80);
+
+		byte[] stored = Store.get().getBytes(
+				StoreResource.builder().docId(doc.getId()).fileVersion("1.0").suffixPdfConversion().build());
+		assertEquals(1, builder.pdfs.size());
+		assertArrayEquals(stored, builder.pdfs.get(0));
+		dest.delete();
+	}
+
+	@Test
+	public void testOlderPdfVersionUsedAsItIs() throws Exception {
+		Document doc = upload("a.pdf");
+		byte[] older = Store.get().getBytes(StoreResource.builder().docId(doc.getId()).fileVersion("1.0").build());
+		doc = checkin(doc, "a.docx", "docx".getBytes(StandardCharsets.US_ASCII));
+		assertEquals("a.docx", doc.getFileName());
+		Context.get().getConfig().setProperty("converter.OfficeConverter.path", FakeSoffice.fail().getPath());
+		Recording builder = new Recording();
+		File dest = File.createTempFile("thumb", ".png");
+
+		builder.buildThumbnail(null, doc, "1.0", null, dest, 100, 80);
+
+		assertEquals(1, builder.pdfs.size());
+		assertArrayEquals(older, builder.pdfs.get(0));
 		dest.delete();
 	}
 

@@ -7,10 +7,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.conversion.AbstractFormatConverter;
 import com.logicaldoc.core.conversion.FormatConversionManager;
+import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.Version;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.document.thumbnail.PdfThumbnailBuilder;
 import com.logicaldoc.core.document.thumbnail.ThumbnailBuilder;
+import com.logicaldoc.core.store.Store;
+import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.util.io.FileUtil;
 
 /**
@@ -32,9 +38,13 @@ public class OfficeThumbnailBuilder implements ThumbnailBuilder {
 			int quality) throws IOException {
 		File pdf = FileUtil.createTempFile("officethumb", ".pdf");
 		try {
-			FormatConversionManager manager = FormatConversionManager.get();
-			manager.convertToPdf(document, fileVersion, sid);
-			manager.writePdfToFile(document, fileVersion, pdf, sid);
+			AbstractDocument source = sourceOf(document, fileVersion);
+			FormatConversionManager.get().convertToPdf(source, fileVersion, sid);
+			/*
+			 * Not FormatConversionManager.writePdfToFile: it takes only a Document
+			 * and picks the file by the current file's type, not the version's
+			 */
+			Store.get().writeToFile(pdfOf(source, fileVersion), pdf);
 			renderFirstPage(sid, document, fileVersion, pdf, dest, size, quality);
 		} catch (PersistenceException e) {
 			throw new IOException("Cannot build the thumbnail of document %d: %s".formatted(document.getId(),
@@ -43,6 +53,28 @@ public class OfficeThumbnailBuilder implements ThumbnailBuilder {
 			if (!FileUtil.delete(pdf))
 				log.warn("Cannot delete the temporary file {}", pdf);
 		}
+	}
+
+	/**
+	 * @return the version that holds the file, so that a file of another type
+	 *         than the current one is converted as what it is; the document
+	 *         when there's no such version
+	 */
+	private static AbstractDocument sourceOf(Document document, String fileVersion) throws PersistenceException {
+		if (fileVersion == null)
+			return document;
+		Version version = VersionDAO.get().findByFileVersion(document.getId(), fileVersion);
+		return version != null ? version : document;
+	}
+
+	/**
+	 * @return the file itself when it is a PDF, otherwise its PDF conversion
+	 */
+	private static StoreResource pdfOf(AbstractDocument source, String fileVersion) throws PersistenceException {
+		StoreResource.Builder resource = StoreResource.builder().document(source).fileVersion(fileVersion);
+		if (!"pdf".equals(AbstractFormatConverter.getExtension(source.getFileName())))
+			resource.suffixPdfConversion();
+		return resource.build();
 	}
 
 	/**

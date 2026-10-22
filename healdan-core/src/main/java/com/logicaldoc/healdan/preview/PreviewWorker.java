@@ -186,9 +186,13 @@ public class PreviewWorker {
 
 	/**
 	 * Converts one file version and builds its thumbnails; a seam for tests.
+	 * The conversion is given the version that holds the file, when it has a
+	 * row yet, so that a file of another type than the current one is
+	 * converted as what it is.
 	 */
 	void convert(Document doc, String fileVersion) throws Exception {
-		FormatConversionManager.get().convertToPdf(doc, fileVersion, null);
+		Version version = VersionDAO.get().findByFileVersion(doc.getId(), fileVersion);
+		FormatConversionManager.get().convertToPdf(version != null ? version : doc, fileVersion, null);
 		ThumbnailManager.get().createTumbnail(doc, fileVersion, null);
 		ThumbnailManager.get().createTile(doc, fileVersion, null);
 	}
