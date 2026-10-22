@@ -223,4 +223,11 @@
 		<parameter id="extension" value="msg" />
 		<parameter id="class" value="com.logicaldoc.healdan.parser.EmailParser" />
 	</extension>
+
+	<!-- Office files become PDFs through a headless LibreOffice (M1.5 spec section 5) -->
+	<extension plugin-id="logicaldoc-core" point-id="FormatConverter" id="healdanOfficeConverter">
+		<parameter id="in" value="doc,docx,docm,dot,dotx,dotm,rtf,odt,ott,xls,xlsx,xlsm,xlt,xltx,xltm,csv,ods,ots,ppt,pptx,pptm,pps,ppsx,pot,potx,odp,otp" />
+		<parameter id="out" value="pdf" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeConverter" />
+	</extension>
 </plugin>
