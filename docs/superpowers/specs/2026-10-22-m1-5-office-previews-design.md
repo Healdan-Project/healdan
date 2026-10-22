@@ -2,7 +2,7 @@
 
 - **Milestone:** M1.5 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-22
-- **Status:** built on 2026-10-22, following [`docs/superpowers/plans/2026-10-22-m1-5-office-previews.md`](../plans/2026-10-22-m1-5-office-previews.md): the server side in [Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and the image, smoke checks and docs in PR B. The owner's acceptance walkthrough (§11.2) is still to come. Approved by the owner on 2026-10-22. A builder check by a reviewer who hadn't seen the conversation found that `ConvertPdf` never converts (§5.6) and raised the two questions the owner answered in §4.1 and §10.
+- **Status:** built on 2026-10-22, following [`docs/superpowers/plans/2026-10-22-m1-5-office-previews.md`](../plans/2026-10-22-m1-5-office-previews.md): the server side in [Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and the image, smoke checks and docs in [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49). The owner's acceptance walkthrough (§11.2) is still to come. Approved by the owner on 2026-10-22. A builder check by a reviewer who hadn't seen the conversation found that `ConvertPdf` never converts (§5.6) and raised the two questions the owner answered in §4.1 and §10.
 - **Inputs:**
   - the roadmap's M1.5 section;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md);
