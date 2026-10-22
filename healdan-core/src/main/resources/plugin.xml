@@ -147,6 +147,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.docnumber.DocNumberListener" />
 	</extension>
 
+	<!-- Queues new Office file versions for conversion (spec 7.1); never refuses a save -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanPreview">
+		<parameter id="position" value="150" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.PreviewDocumentListener" />
+	</extension>
+
 	<!-- The search types are HealdanConstants.SEARCH_* -->
 	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanDocNumberSearch">
 		<parameter id="type" value="101" />
