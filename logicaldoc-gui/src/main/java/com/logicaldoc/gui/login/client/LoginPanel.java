@@ -20,6 +20,7 @@ import com.logicaldoc.gui.common.client.beans.GUIMessage;
 import com.logicaldoc.gui.common.client.beans.GUIParameter;
 import com.logicaldoc.gui.common.client.beans.GUISession;
 import com.logicaldoc.gui.common.client.beans.GUIUser;
+import com.logicaldoc.gui.common.client.healdan.HealdanCredits;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.services.SecurityService;
 import com.logicaldoc.gui.common.client.util.AwesomeFactory;
@@ -247,7 +248,8 @@ public class LoginPanel extends VLayout {
         /*
          * Prepare the licensing canvas
          */
-        String copyrightHtml = "<div>\u00A9 " + info.getYear() + " " + info.getBranding().getVendor();
+        // Healdan: its own year, then the credit to LogicalDOC
+        String copyrightHtml = "<div>\u00A9 " + HealdanCredits.YEAR + " " + info.getBranding().getVendor();
         if (info.getBranding().getUrl() != null && !"-".equals(info.getBranding().getUrl()))
             copyrightHtml = A_HREF + info.getBranding().getUrl() + "' target='_blank' class='login-copyright-link'>"
                     + copyrightHtml + "</a></div>";
@@ -255,7 +257,7 @@ public class LoginPanel extends VLayout {
         if (info.getLicensee() != null && !"".equals(info.getLicensee().trim()))
             licenseeHtml += "<div>" + I18N.message("licensedto") + " <b>" + info.getLicensee() + "</b></div>";
 
-        HTMLFlow licensing = new HTMLFlow(copyrightHtml + licenseeHtml);
+        HTMLFlow licensing = new HTMLFlow(copyrightHtml + HealdanCredits.BASED_ON + licenseeHtml);
         licensing.setStyleName("login-copyright");
 
         if ("true".equals(info.getConfig("gui.lostpassword.show")))

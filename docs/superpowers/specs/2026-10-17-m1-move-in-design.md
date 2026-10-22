@@ -814,11 +814,11 @@ The demo template and matter aren't seeded. The owner creates them through the U
 
 ## 13. Upstream files M1 edits
 
-This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it. It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
+This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it, plus the credits PR ([#43](https://github.com/Healdan-Project/healdan/pull/43)) that closed one of the plan's leftovers. It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
 - R and D numbers point to the plan's rulings and decision log.
 - The Task column names the plan task, or the PR, that made the edit (key below the table).
 - Paths are relative to the repository root. Line numbers are approximate, from the code at `1c1507d86`.
-- Every edit is a hook or a small fix. New logic lives in new files: `healdan-core`, `com.logicaldoc.gui.frontend.client.healdan`, and the fork-owned files marked **new file** below.
+- Every edit is a hook or a small fix. New logic lives in new files: `healdan-core`, `com.logicaldoc.gui.frontend.client.healdan` (`common.client.healdan` for what the login page needs too), and the fork-owned files marked **new file** below.
 - Many of these files have CRLF line endings. Keep them when editing.
 
 | File | Change | Task |
@@ -871,6 +871,10 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 | `logicaldoc-gui/.../frontend/client/metadata/form/ResponsesGrid.java` (~80) | the date column titled `createdon` (R123) | 27 |
 | `logicaldoc-i18n/.../messages.properties`, `messages_en.properties`, `messages_en_US.properties` | `customid`, `customId` → "Doc #"; `created` → "Date filed"; `majorversion` → "New version (otherwise a snapshot)"; `task.description.GoogleCalendar` and `askexecutepackage`: "LogicalDOC" → "Healdan" (R109) | 27, 28 |
 | `logicaldoc-gui/.../common/client/beans/GUIBranding.java`, `logicaldoc-gui/war/favicon.ico`, `logicaldoc-gui/war/header.jsp` | the owner's logo redrawn as SVG data URIs (correction 5, R107; the banner stays CE's, R108), `productName`, `product`, and the link and vendor defaults (R121); the favicon; `<title>` | 28 |
+| `logicaldoc-gui/.../login/client/LoginPanel.java` (~252, ~260), `logicaldoc-gui/.../frontend/client/menu/AboutDialog.java` (~74–82, ~120) | the copyright line shows Healdan's year (`HealdanCredits.YEAR`) instead of CE's `product.year`, LogicalDOC's range, and the credit to LogicalDOC follows it. About's trademark line was CE's `copyrights` message, which called Healdan a registered trademark of Healdan Project. `HealdanCredits.aboutCredits` replaces it with the credit to LogicalDOC, both trademarks and the license | credits |
+| `logicaldoc-gui/.../common/client/healdan/HealdanCredits.java` | **new file**: the credit lines, in the common module because the login module can't see the frontend's | credits |
+| `logicaldoc-gui/war/skin/style-login.css` (~90–112) | the Sign in button in the logo's dark blue (`#0b5dab`, `#084a88` on hover and press) instead of CE's orange, and its text stays white when pressed. Tahoe, the only skin `header.jsp` serves, takes this file | credits |
+| `README.md` (top) | Healdan's notice that it's a modified version of LogicalDOC CE, under the LGPL, above upstream's README | credits |
 | `logicaldoc-webapp/src/main/webapp/WEB-INF/web.xml` (~9) | `display-name`. No servlet entries: D1 found that Tomcat 11 scans `@WebServlet` in the plugin jar | 28 |
 | `docker/smoke-test.sh`, `docker/tests/compose.smoke.yaml` (fork-owned) | the smoke overlay, uploads into the smoke matter, Healdan checks | 16, 21 |
 
@@ -881,7 +885,8 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 - WebDAV/CMIS: [#32](https://github.com/Healdan-Project/healdan/pull/32);
 - ACL equality: [#33](https://github.com/Healdan-Project/healdan/pull/33);
 - extattr: [#37](https://github.com/Healdan-Project/healdan/pull/37);
-- JDK 25: [#40](https://github.com/Healdan-Project/healdan/pull/40), which moved CI and the Docker image to JDK 25 ahead of upstream's Java 25 switch (the plan's call 11).
+- JDK 25: [#40](https://github.com/Healdan-Project/healdan/pull/40), which moved CI and the Docker image to JDK 25 ahead of upstream's Java 25 switch (the plan's call 11);
+- credits: [#43](https://github.com/Healdan-Project/healdan/pull/43), which credits LogicalDOC on the login page and in About, and makes the Sign in button blue.
 
 **Planned, but not edited:**
 - `logicaldoc-webapp/.../web/data/FoldersDataServlet.java`: the tree draws a search folder's magnifying glass through `DocUtil.getFolderIcon` (`FolderListGridField`), found in Task 24.

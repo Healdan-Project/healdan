@@ -1,3 +1,11 @@
+# Healdan
+
+Healdan is a modified version of [LogicalDOC Community Edition](https://github.com/logicaldoc/community), © 2006-2027 LOGICALDOC Srl. The Healdan Project has been changing it since 2026, and the commit history records each change and its date. Like LogicalDOC Community Edition, Healdan is free software under the GNU Lesser General Public License, version 3 (see [LICENSE](LICENSE)). LogicalDOC is a trademark of LOGICALDOC Srl, which doesn't endorse Healdan.
+
+To run Healdan, see [docker/README.md](docker/README.md). The rest of this file is LogicalDOC's README. It describes LogicalDOC Community Edition, not Healdan, and parts of it are out of date.
+
+---
+
 # Open Source Document Management Software
 LogicalDOC Community Edition is an [Open Source Document Management Software](https://www.logicaldoc.com/download-logicaldoc-community). If you are looking for a free cost then "Community" is your best option. LogicalDOC [document management system (DMS)](https://www.logicaldoc.com/solutions/document-management) allows businesses to control the production, storage, management and distribution of electronic documents, yielding greater effectiveness and the ability to reuse information and to control the flow of the documents.
 

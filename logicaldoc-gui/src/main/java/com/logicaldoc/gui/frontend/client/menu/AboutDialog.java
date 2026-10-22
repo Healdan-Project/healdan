@@ -3,6 +3,7 @@ package com.logicaldoc.gui.frontend.client.menu;
 import com.logicaldoc.gui.common.client.Feature;
 import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.grid.DateListGridField;
+import com.logicaldoc.gui.common.client.healdan.HealdanCredits;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
 import com.logicaldoc.gui.common.client.util.Util;
@@ -12,6 +13,7 @@ import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.Overflow;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.types.TitleOrientation;
+import com.smartgwt.client.widgets.Canvas;
 import com.smartgwt.client.widgets.HTMLPane;
 import com.smartgwt.client.widgets.Img;
 import com.smartgwt.client.widgets.Label;
@@ -69,16 +71,15 @@ public class AboutDialog extends Window {
 		version.setHeight(10);
 		version.setAlign(Alignment.CENTER);
 
-		Label copyright = new Label("&copy; " + Session.get().getInfo().getYear() + " "
+		// Healdan: its own year, then the credit to LogicalDOC, the trademarks and the license
+		Label copyright = new Label("&copy; " + HealdanCredits.YEAR + " "
 				+ Session.get().getInfo().getBranding().getVendor());
 		copyright.setWrap(false);
 		copyright.setHeight(20);
 		copyright.setAlign(Alignment.CENTER);
 
-		Label trademark = new Label(I18N.message("copyrights", Session.get().getInfo().getBranding().getProduct(),
-				Session.get().getInfo().getBranding().getProduct(), Session.get().getInfo().getBranding().getVendor()));
-		trademark.setHeight(40);
-		trademark.setAlign(Alignment.CENTER);
+		Canvas credits = HealdanCredits.aboutCredits(Session.get().getInfo().getBranding().getProduct(),
+				Session.get().getInfo().getBranding().getVendor());
 
 		// Prepare the website link
 		String wsurl = Session.get().getInfo().getBranding().getUrl();
@@ -116,7 +117,7 @@ public class AboutDialog extends Window {
 		about.setAlign(Alignment.CENTER);
 		about.setDefaultLayoutAlign(Alignment.CENTER);
 		about.setBackgroundColor("#ffffff");
-		about.setMembers(vspacer1, logoImage, productName, version, copyright, trademark, sitelink, maillink, vspacer2);
+		about.setMembers(vspacer1, logoImage, productName, version, copyright, credits, sitelink, maillink, vspacer2);
 
 		Tab aboutTab = new Tab(I18N.message("about"));
 		aboutTab.setPane(about);
