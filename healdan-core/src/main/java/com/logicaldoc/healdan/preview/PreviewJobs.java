@@ -71,11 +71,12 @@ public class PreviewJobs {
 	/**
 	 * @param now the current time
 	 * @param limit the most jobs to return
-	 * @return the jobs that may be tried now, oldest first
+	 * @return the jobs that may be tried now, newest first, so that a new
+	 *         upload's preview doesn't wait behind a backfill of thousands
 	 */
 	public List<PreviewJob> due(Instant now, int limit) {
 		return jdbc.query("select " + COLUMNS
-				+ " from hd_preview_job where hd_attempts < ? and hd_nexttry <= ? order by hd_created, hd_docid limit ?",
+				+ " from hd_preview_job where hd_attempts < ? and hd_nexttry <= ? order by hd_created desc, hd_docid desc limit ?",
 				(rs, i) -> job(rs), MAX_ATTEMPTS, Timestamp.from(now), limit);
 	}
 

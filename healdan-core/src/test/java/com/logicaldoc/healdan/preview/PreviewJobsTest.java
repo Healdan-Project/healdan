@@ -35,7 +35,8 @@ public class PreviewJobsTest extends AbstractHealdanTestCase {
 		jobs.add(1, "1.0", T.plusSeconds(1));
 		jobs.add(2, "1.0", T.plusSeconds(2));
 		List<PreviewJob> due = jobs.due(T.plusSeconds(3), 2);
-		assertEquals(List.of(3L, 1L), due.stream().map(PreviewJob::docId).toList());
+		// Newest first, so that a new upload doesn't wait behind a backfill
+		assertEquals(List.of(2L, 1L), due.stream().map(PreviewJob::docId).toList());
 		assertTrue(jobs.due(T.minusSeconds(1), 10).isEmpty());
 	}
 
