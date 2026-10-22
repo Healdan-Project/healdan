@@ -358,7 +358,7 @@ The rows from the M1 build (2026-10-18 to 2026-10-21) come last. They name the M
 - [#30](https://github.com/Healdan-Project/healdan/pull/30), the web-services PR;
 - [#32](https://github.com/Healdan-Project/healdan/pull/32), the WebDAV and CMIS PR;
 - [#33](https://github.com/Healdan-Project/healdan/pull/33), the ACL equality PR;
-- the pre-acceptance PR, which fixed four gaps before the owner's acceptance walkthrough.
+- [#44](https://github.com/Healdan-Project/healdan/pull/44), the pre-acceptance PR, which fixed four gaps before the owner's acceptance walkthrough.
 
 Every upstream edit those fixes make is listed in the [M1 spec](../superpowers/specs/2026-10-17-m1-move-in-design.md)'s §13.
 

@@ -814,7 +814,7 @@ The demo template and matter aren't seeded. The owner creates them through the U
 
 ## 13. Upstream files M1 edits
 
-This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it, plus the credits PR ([#43](https://github.com/Healdan-Project/healdan/pull/43)) and the pre-acceptance PR, which closed some of the plan's leftovers. It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
+This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it, plus the credits PR ([#43](https://github.com/Healdan-Project/healdan/pull/43)) and the pre-acceptance PR ([#44](https://github.com/Healdan-Project/healdan/pull/44)), which closed some of the plan's leftovers. It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
 - R and D numbers point to the plan's rulings and decision log.
 - The Task column names the plan task, or the PR, that made the edit (key below the table).
 - Paths are relative to the repository root. Line numbers are approximate, from the code at `1c1507d86`.
@@ -889,7 +889,7 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 - extattr: [#37](https://github.com/Healdan-Project/healdan/pull/37);
 - JDK 25: [#40](https://github.com/Healdan-Project/healdan/pull/40), which moved CI and the Docker image to JDK 25 ahead of upstream's Java 25 switch (the plan's call 11);
 - credits: [#43](https://github.com/Healdan-Project/healdan/pull/43), which credits LogicalDOC on the login page and in About, and makes the Sign in button blue;
-- pre-acceptance: the PR that fixed four gaps found before the owner's acceptance walkthrough (R132–R137).
+- pre-acceptance: [#44](https://github.com/Healdan-Project/healdan/pull/44), which fixed four gaps found before the owner's acceptance walkthrough (R132–R137).
 
 **Planned, but not edited:**
 - `logicaldoc-webapp/.../web/data/FoldersDataServlet.java`: the tree draws a search folder's magnifying glass through `DocUtil.getFolderIcon` (`FolderListGridField`), found in Task 24.
