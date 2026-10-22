@@ -224,34 +224,68 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		assertFalse(queued(a, "1.0"));
 	}
 
+	private static java.time.Instant nextTry(Document doc) {
+		return new org.springframework.jdbc.core.JdbcTemplate(Context.get(javax.sql.DataSource.class))
+				.queryForObject("select hd_nexttry from hd_preview_job where hd_docid = ?", java.sql.Timestamp.class,
+						doc.getId())
+				.toInstant();
+	}
+
 	@Test
-	public void testUnavailableLibreOfficePostpones() throws Exception {
+	public void testUnavailableLibreOfficePausesTheWorker() throws Exception {
 		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
 		Document b = fx.upload(folder, "b.docx", "b", fx.admin());
 		Context.get().getConfig().setProperty(PATH, "/nonexistent/soffice");
+		java.time.Duration tenMinutes = java.time.Duration.ofMinutes(10);
+		Instant aBefore = nextTry(a);
+		Instant bBefore = nextTry(b);
 
 		try (LogCapture capture = LogCapture.of(PreviewWorker.class)) {
-			assertEquals(2, worker.runOnce(T));
-			// Once a round, not once a job
+			// One probe: the first job is postponed and the round stops
+			assertEquals(1, worker.runOnce(T));
+			assertEquals(1, capture.lines().stream()
+					.filter(l -> l.startsWith("WARN LibreOffice isn't available, Office previews are paused")).count());
+			// While paused, no job is touched and nothing is logged
+			assertEquals(0, worker.runOnce(T.plus(java.time.Duration.ofMinutes(1))));
 			assertEquals(1, capture.lines().stream()
 					.filter(l -> l.startsWith("WARN LibreOffice isn't available, Office previews are paused")).count());
 		}
 
-		assertEquals(0, PreviewJobs.get().find(b.getId(), "1.0").orElseThrow().attempts());
-		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
-		assertEquals(0, job.attempts());
-		java.sql.Timestamp next = new org.springframework.jdbc.core.JdbcTemplate(
-				Context.get(javax.sql.DataSource.class)).queryForObject(
-						"select hd_nexttry from hd_preview_job where hd_docid = ?", java.sql.Timestamp.class, a.getId());
-		assertTrue(next.toInstant() + " vs " + T, !next.toInstant().isBefore(T.plus(java.time.Duration.ofMinutes(10))));
-		assertTrue(next.toInstant() + " vs " + T, next.toInstant().isBefore(T.plus(java.time.Duration.ofMinutes(11))));
-		assertEquals(0, worker.runOnce(T.plus(java.time.Duration.ofMinutes(9))));
+		// The probe takes the newest due job; the other keeps its try and its next try
+		Document probed = nextTry(b).isAfter(bBefore) ? b : a;
+		Document other = probed == b ? a : b;
+		Instant otherBefore = probed == b ? aBefore : bBefore;
+		assertEquals(0, PreviewJobs.get().find(probed.getId(), "1.0").orElseThrow().attempts());
+		assertEquals(0, PreviewJobs.get().find(other.getId(), "1.0").orElseThrow().attempts());
+		assertEquals(otherBefore, nextTry(other));
+		Instant next = nextTry(probed);
+		assertTrue(next + " vs " + T, !next.isBefore(T.plus(tenMinutes)));
+		assertTrue(next + " vs " + T, next.isBefore(T.plus(java.time.Duration.ofMinutes(11))));
 
-		// Once LibreOffice is there, a later round converts it
+		// Once LibreOffice is there, a round after the pause converts them
 		Context.get().getConfig().setProperty(PATH, FakeSoffice.ok().getPath());
 		assertEquals(2, worker.runOnce(T.plus(java.time.Duration.ofMinutes(11))));
 		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
+		assertTrue(Store.get().exists(pdfOf(b, "1.0")));
 		assertFalse(queued(a, "1.0"));
+		assertFalse(queued(b, "1.0"));
+	}
+
+	@Test
+	public void testStillUnavailableAfterThePausePausesAgain() throws Exception {
+		fx.upload(folder, "a.docx", "a", fx.admin());
+		fx.upload(folder, "b.docx", "b", fx.admin());
+		Context.get().getConfig().setProperty(PATH, "/nonexistent/soffice");
+
+		try (LogCapture capture = LogCapture.of(PreviewWorker.class)) {
+			assertEquals(1, worker.runOnce(T));
+			assertEquals(0, worker.runOnce(T.plus(java.time.Duration.ofMinutes(9))));
+			// One probe and one warning per pause
+			assertEquals(1, worker.runOnce(T.plus(java.time.Duration.ofMinutes(11))));
+			assertEquals(0, worker.runOnce(T.plus(java.time.Duration.ofMinutes(12))));
+			assertEquals(2, capture.lines().stream()
+					.filter(l -> l.startsWith("WARN LibreOffice isn't available, Office previews are paused")).count());
+		}
 	}
 
 	@Test

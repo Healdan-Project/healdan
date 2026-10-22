@@ -60,6 +60,9 @@ public class PreviewWorker {
 
 	private Thread thread;
 
+	/** While the clock is before this, LibreOffice is taken to be unavailable and no job is tried */
+	private volatile Instant pausedUntil = Instant.MIN;
+
 	private static byte[] loadPlaceholder() {
 		try (InputStream in = PreviewWorker.class.getResourceAsStream("/pdf/notavailable.pdf")) {
 			return in != null ? in.readAllBytes() : new byte[0];
@@ -133,25 +136,24 @@ public class PreviewWorker {
 	 * Processes the jobs that are due.
 	 * 
 	 * @param now the current time
-	 * @return how many jobs were processed, at most 10
+	 * @return how many jobs were processed, at most 10; 0 while the worker is paused
+	 *         because LibreOffice is unavailable
 	 */
 	int runOnce(Instant now) {
+		if (now.isBefore(pausedUntil))
+			return 0;
 		Instant roundStart = Instant.now();
 		List<PreviewJob> jobs = jobs().due(now, BATCH);
-		Round round = new Round();
+		int processed = 0;
 		for (PreviewJob job : jobs) {
 			if (Thread.currentThread().isInterrupted())
 				break;
 			// A failure's retry delay counts from the failure, not from the start of the round
-			process(job, () -> now.plus(Duration.between(roundStart, Instant.now())), round);
+			processed++;
+			if (process(job, () -> now.plus(Duration.between(roundStart, Instant.now()))))
+				break;
 		}
-		return jobs.size();
-	}
-
-	/** What a round of jobs has logged so far */
-	private static final class Round {
-
-		boolean unavailableLogged;
+		return processed;
 	}
 
 	/**
@@ -161,14 +163,15 @@ public class PreviewWorker {
 	 * @param now the current time
 	 */
 	void process(PreviewJob job, Instant now) {
-		process(job, () -> now, new Round());
+		process(job, () -> now);
 	}
 
 	/**
 	 * @param clock the time of a failure, read when it happens
-	 * @param round the round the job is part of
+	 * @return true if LibreOffice was unavailable, so that the worker is paused
+	 *         and the round should stop
 	 */
-	private void process(PreviewJob job, Supplier<Instant> clock, Round round) {
+	private boolean process(PreviewJob job, Supplier<Instant> clock) {
 		PreviewJobs jobs = jobs();
 		try {
 			Document doc = DocumentDAO.get().findById(job.docId());
@@ -178,11 +181,11 @@ public class PreviewWorker {
 					jobs.done(job.docId(), job.fileVersion());
 				else
 					fail(jobs, job, "document not found", clock.get());
-				return;
+				return false;
 			}
 			if (doc.getDeleted() != 0 || !isWanted(doc, job.fileVersion())) {
 				jobs.done(job.docId(), job.fileVersion());
-				return;
+				return false;
 			}
 
 			clearPlaceholders(doc, job.fileVersion());
@@ -195,18 +198,20 @@ public class PreviewWorker {
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 		} catch (LibreOfficeUnavailableException e) {
-			// Says nothing about the file, so it costs the job no try; logged once a round, not once a job
-			if (!round.unavailableLogged) {
-				log.warn("LibreOffice isn't available, Office previews are paused: {}", e.getMessage());
-				round.unavailableLogged = true;
-			}
-			postpone(jobs, job, e.getMessage(), clock.get().plus(UNAVAILABLE_WAIT));
+			// Says nothing about the file, so it costs the job no try. The other jobs wait
+			// out the pause untouched; one probe and one warning per pause
+			Instant resume = clock.get().plus(UNAVAILABLE_WAIT);
+			pausedUntil = resume;
+			log.warn("LibreOffice isn't available, Office previews are paused: {}", e.getMessage());
+			postpone(jobs, job, e.getMessage(), resume);
+			return true;
 		} catch (Throwable e) {
 			// Also an Error: a job that ends neither done nor failed would block the queue behind it for good
 			String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
 			log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);
 			fail(jobs, job, message, clock.get());
 		}
+		return false;
 	}
 
 	/**
