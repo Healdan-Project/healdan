@@ -10,6 +10,7 @@ import java.util.Set;
 
 import org.junit.Test;
 
+import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
@@ -475,6 +476,51 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 		assertEquals(archive.getId(), reload(letter).getFolder().getId());
 		assertFalse(folderDao.findById(year.getId()) == null);
 		assertNull(folderDao.findById(letters.getId()));
+	}
+
+	@Test
+	public void testMergeKeepsSubfoldersNested() throws Exception {
+		// Letters/2026/Q1 merged into Archive, which already has a 2026 (owner's call, 2026-10-22)
+		Folder letters = fx.folder(correspondence, "Letters");
+		Folder year = fx.folder(letters, "2026");
+		Folder quarter = fx.folder(year, "Q1");
+		Document invoice = indexedDocument(quarter, "invoice.txt");
+		Folder archive = fx.folder(documents, "Archive");
+		Folder archiveYear = fx.folder(archive, "2026");
+
+		allowed(() -> merge(letters, archive, alice));
+		assertEquals(archiveYear.getId(), reload(quarter).getParentId());
+		assertEquals(quarter.getId(), reload(invoice).getFolder().getId());
+		assertNull(folderDao.findById(year.getId()));
+		assertTrue(folderDao.findByName(archive, "Q1", Tenant.DEFAULT_ID, true).isEmpty());
+	}
+
+	@Test
+	public void testMergeChecksSubfoldersWhereTheyLand() throws Exception {
+		// Q1 stays below 2026, so the target's search folder of that name takes nothing
+		Folder letters = fx.folder(correspondence, "Letters");
+		Folder quarter = fx.folder(fx.folder(letters, "2026"), "Q1");
+		Document invoice = indexedDocument(quarter, "invoice.txt");
+		Folder target = fx.folder(documents, "Target");
+		fx.searchFolder(target, "Q1");
+
+		allowed(() -> merge(letters, target, alice));
+		assertEquals(quarter.getId(), reload(invoice).getFolder().getId());
+		assertEquals(child(target, "2026").getId(), reload(quarter).getParentId());
+	}
+
+	@Test
+	public void testMergeChecksASubfolderMeetingASiblingOfItsName() throws Exception {
+		// Two subfolders named Docs, which a rename allows: CE may move one into the target, then merge the other into it
+		Folder source = fx.folder(correspondence, "Source");
+		fx.searchFolder(fx.folder(source, "Docs"), "X");
+		Folder other = fx.folder(source, "Other");
+		rename(other, "Docs", admin);
+		Document letter = indexedDocument(fx.folder(other, "X"), "letter.txt");
+
+		// The second Docs' X would then be merged into the first's search folder X: refused before anything moves
+		assertRefused(DOCUMENT_IN_SEARCH_FOLDER, () -> HealdanHooks.get().beforeFolderMerge(reload(source),
+				reload(documents), folderHistory(admin)), letter.getId());
 	}
 
 	/**
