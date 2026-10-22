@@ -80,9 +80,34 @@ Ghostscript is deliberately not listed, because ImageMagick calls it directly.
 On every start the container also adds any setting that's in the image's default `context.properties` but
 missing from yours, such as one introduced by an upstream update. It never changes a value you already have.
 
+### Healdan's first start
+
+Healdan's plugin (`healdan-core`) sets up its own data each time the app starts, once LogicalDOC's schema exists.
+
+1. **Migrations.** Flyway creates or upgrades Healdan's own tables (`hd_…`) and records each script it runs in
+   `hd_schema_history`. This runs on every start, so a new Healdan release upgrades its tables by itself. It never
+   touches LogicalDOC's tables.
+2. **Seeds.** One-time steps create what Healdan needs inside LogicalDOC:
+   - the **Everyone** group, with every user in it;
+   - the **Healdan profile**: the template every document and folder uses (Class, Subclass, Author, Typist, the
+     email fields and more), with the Class "Docs";
+   - the **Templates** Store, a LogicalDOC workspace only admins can see, which holds the folder trees new
+     matters are copied from;
+   - Healdan's default settings, and default columns for the document lists;
+   - re-indexing of existing Word, Excel, PowerPoint and email files, whose text Healdan can read.
+
+   Each step records `seed.<name>` in the `hd_setting` table when it finishes and never runs again. If an admin
+   later deletes or changes something a step made, that change stays.
+3. **A failure stops the app.** If a migration or a seed step fails, the app doesn't start.
+   `docker compose logs app` shows the cause and how to recover (see "Troubleshooting").
+
+No Stores, clients or matters are seeded. An admin creates Stores, clients, templates (folder trees inside the
+Templates Store) and matters in the UI. Healdan only accepts documents inside a matter.
+
 ## Known limitations
 
-- **The container never migrates the database schema** (see "Upgrading").
+- **The container never migrates LogicalDOC's database schema** (see "Upgrading"). Healdan's own tables are the
+  exception: they're upgraded on every start.
 
 ## Configuration
 
@@ -247,6 +272,24 @@ The dev overlay does three things:
 - Maven dependencies are cached between builds, but every source change re-runs the reactor build, including the GWT compile. Changes only under `docker/`, to the `Dockerfile` or to top-level docs skip the Maven step.
 - Start over with an empty database and repository with `docker compose down -v`.
 
+**A matter to upload into (the smoke overlay).** A fresh stack has no matter, and Healdan refuses documents
+anywhere else. For a stack you'll throw away, add the smoke overlay. To keep it apart from a stack you already
+run, give it its own project name, image tag and port, and remove it with `down -v` and the same `-p`:
+
+```bash
+LOGICALDOC_IMAGE=healdan-test:local LOGICALDOC_PORT=8090 docker compose -p healdan-test -f compose.yaml -f docker/tests/compose.smoke.yaml up -d --build
+```
+
+The overlay sets `HEALDAN_SMOKE_FIXTURE=true`, so Healdan's first start also creates:
+- the Store "Smoke";
+- a template, "Smoke template", with a Documents folder;
+- client 1, "Smoke Client";
+- matter "1.1 – Smoke Matter", owned by `admin`, with that Documents folder. The Everyone group can read it,
+  upload into it and download from it.
+
+`docker/smoke-test.sh` uses the same overlay. Without the variable the step does nothing, so it runs on a later
+start if you add the overlay then. Never use it on a server with real data.
+
 ## Backup and restore
 
 Back up the database and both app volumes together. `conf` holds the encryption key and node id, so documents
@@ -295,8 +338,9 @@ To update MariaDB when you build from source, run `docker compose pull --ignore-
 `docker compose pull` fails, because the local image can't be pulled).
 
 Volumes are kept, and settings new in the image's defaults are added to your `context.properties` on start.
-**The container never migrates the database schema.** If an upstream merge changes the schema (look for changes
-under `*/src/main/resources/sql/`), apply that SQL by hand. Back up first.
+Healdan's own tables are upgraded on start (see "Healdan's first start"). **The container never migrates
+LogicalDOC's database schema.** If an upstream merge changes it (look for changes under
+`*/src/main/resources/sql/`), apply that SQL by hand. Back up first.
 
 ## Host folders instead of volumes
 
@@ -329,6 +373,9 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 | `context.properties was just created, but the database already has a schema` | the `conf` volume was lost. Restore it from backup |
 | `Command … is not allowed. Add it to allowed-commands.txt` (in `repository/logs/dms.log`) | add the program to `conf/allowed-commands.txt` in the conf volume. It's re-read on every call, so no restart is needed |
 | `sun.misc.Unsafe::invokeCleaner has been called by org.apache.lucene.store.MMapDirectory` (once, at startup) | harmless on JDK 25. Lucene 8.11 unmaps index files through an API that JDK 25 warns about and a later JDK removes, so check it before moving past JDK 25 |
+| `Healdan's database migration failed: …` | a script for Healdan's tables failed, and the app stopped. Fix the cause, drop the `hd_` tables that script created, delete its failed row (`delete from hd_schema_history where success = 0`), and start again. Back up first |
+| `Seed step '…' failed: …` | one of Healdan's first-start steps failed, and the app stopped. Fix the cause and start again. The message also gives the SQL that skips the step instead |
+| `Healdan's tables support MariaDB and HSQLDB only` | Healdan's tables need MariaDB. MySQL isn't supported |
 
 ## Tests
 
