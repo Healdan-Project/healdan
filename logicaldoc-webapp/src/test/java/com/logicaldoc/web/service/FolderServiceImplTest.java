@@ -2,6 +2,7 @@ package com.logicaldoc.web.service;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
@@ -686,16 +687,67 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
     }
 
     @Test
-    public void testSaveNeedsWriteOnTheFolderItsFoldRefNames() throws Exception {
-        // CE writes everything but the name, position and colour to the folder foldRef names, which the client sends
+    public void testSaveNeedsWriteOnTheFolderAnAliasPointsTo() throws Exception {
+        // CE writes everything but the name, position and colour to the folder an alias points to
+        readOnlyForAuthor(1200L);
+        Folder alias = folderDao.createAlias(6L, 1200L, null);
+        // The alias gets its own ACL, which lets author write it but not the folder it points to
+        alias = folderDao.findById(alias.getId(), true);
+        alias.setSecurityRef(null);
+        FolderAccessControlEntry ace = new FolderAccessControlEntry();
+        ace.setGroupId(-4L);
+        ace.setRead(true);
+        ace.setWrite(true);
+        alias.addAccessControlEntry(ace);
+        folderDao.store(alias);
+        GUIFolder guiAlias = testSubject.getFolder(alias.getId(), true, true, true);
+
+        prepareSession("author", "admin");
+        guiAlias.setDescription("overwritten");
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(guiAlias));
+        // Sent without its foldRef, it is still saved as the alias it is
+        guiAlias.setFoldRef(null);
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(guiAlias));
+        assertNull(folderDao.findById(1200L).getDescription());
+        assertNull(folderDao.findById(alias.getId()).getDescription());
+    }
+
+    @Test
+    public void testSaveIgnoresAFoldRefTheClientAdds() throws Exception {
+        // A real folder's save writes to that folder, whatever foldRef the client sends
         readOnlyForAuthor(1200L);
         GUIFolder folder6 = testSubject.getFolder(6, true, true, true);
 
         prepareSession("author", "admin");
         folder6.setFoldRef(1200L);
-        folder6.setDescription("overwritten");
-        assertThrows(AccessDeniedException.class, () -> testSubject.save(folder6));
+        folder6.setDescription("written");
+        testSubject.save(folder6);
+        assertEquals("written", folderDao.findById(6L).getDescription());
         assertNull(folderDao.findById(1200L).getDescription());
+    }
+
+    @Test
+    public void testSaveNeedsStoreToChangeTheStorage() throws Exception {
+        // author can write folder6, but has no STORE on it; the stores load with the folder
+        GUIFolder folder6 = testSubject.getFolder(6, true, true, true);
+        Integer store = folderDao.findById(6L, true).getStore();
+        assertNotEquals(Integer.valueOf(2), store);
+
+        prepareSession("author", "admin");
+        folder6.setStore(2);
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(folder6));
+        assertEquals(store, folderDao.findById(6L, true).getStore());
+
+        // Saved with the storage it has, it needs no STORE
+        folder6.setStore(store);
+        folder6.setDescription("written");
+        testSubject.save(folder6);
+        assertEquals("written", folderDao.findById(6L).getDescription());
+
+        prepareSession("admin", "admin");
+        folder6.setStore(2);
+        testSubject.save(folder6);
+        assertEquals(Integer.valueOf(2), folderDao.findById(6L, true).getStore());
     }
 
     /**

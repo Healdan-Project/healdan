@@ -115,6 +115,12 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         }
 
         @Override
+        public void beforeGroupStore(Group group) throws PersistenceException {
+            calls.add("beforeGroupStore:%d,%s".formatted(group.getId(), group.getName()));
+            throw new HealdanVetoException(VETO);
+        }
+
+        @Override
         public void beforeGroupDelete(Group group) throws PersistenceException {
             calls.add("beforeGroupDelete:%d".formatted(group.getId()));
             throw new HealdanVetoException(VETO);
@@ -355,6 +361,30 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertEquals(List.of("beforeGroupDelete:2"), calls);
         assertEquals(0, column("ld_group", "ld_deleted", 2L));
         assertEquals("author", GroupDAO.get().findById(2L).getName());
+    }
+
+    @Test
+    public void testGroupStore() throws Exception {
+        HealdanHooks.register(vetoing);
+        GroupDAO groupDao = GroupDAO.get();
+        Group group = groupDao.findById(2L);
+        group.setName("renamed");
+        try {
+            groupDao.store(group);
+            fail("The hook should have vetoed the store");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+        // SecurityServiceImpl.saveGroup stores through insert when the group inherits another's ACLs
+        try {
+            groupDao.insert(group, 3L);
+            fail("The hook should have vetoed the insert");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+
+        assertEquals(List.of("beforeGroupStore:2,renamed", "beforeGroupStore:2,renamed"), calls);
+        assertEquals("author", groupDao.findById(2L).getName());
     }
 
     @Test

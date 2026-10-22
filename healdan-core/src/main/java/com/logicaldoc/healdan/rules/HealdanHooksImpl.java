@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.rules;
 
 import java.util.List;
+import java.util.Map;
 
 import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,7 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanRuleException;
@@ -42,6 +44,8 @@ import jakarta.annotation.PreDestroy;
 public class HealdanHooksImpl implements HealdanHooks {
 
 	static final String EVERYONE_DELETE = "The Everyone group can't be deleted.";
+
+	static final String EVERYONE_RENAME = "The Everyone group can't be renamed.";
 
 	private final FilingRules rules;
 
@@ -216,13 +220,29 @@ public class HealdanHooksImpl implements HealdanHooks {
 	}
 
 	/**
+	 * Healdan finds Everyone by its name, which CE's GUI never lets anyone
+	 * change, but a hand-made saveGroup call or SOAP's storeGroup could (R138).
+	 * The name is read with JDBC: the group being stored already carries the
+	 * new one.
+	 */
+	@Override
+	public void beforeGroupStore(Group group) throws PersistenceException {
+		if (group == null || group.getId() == 0 || HealdanConstants.EVERYONE_GROUP.equals(group.getName()))
+			return;
+		String stored = GroupDAO.get().queryForString("select ld_name from ld_group where ld_id = :id",
+				Map.of("id", group.getId()));
+		if (HealdanConstants.EVERYONE_GROUP.equals(stored))
+			throw new HealdanRuleException(EVERYONE_RENAME);
+	}
+
+	/**
 	 * Every user but read-only ones stays in Everyone (plan, R132), so deleting
 	 * the group would leave their memberships behind, which CE's permission
 	 * checks still count
 	 */
 	@Override
 	public void beforeGroupDelete(Group group) throws PersistenceException {
-		if (HealdanConstants.EVERYONE_GROUP.equals(group.getName()))
+		if (group != null && HealdanConstants.EVERYONE_GROUP.equals(group.getName()))
 			throw new HealdanRuleException(EVERYONE_DELETE);
 	}
 

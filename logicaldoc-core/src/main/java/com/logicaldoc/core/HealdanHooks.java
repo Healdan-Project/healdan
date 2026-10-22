@@ -177,9 +177,22 @@ public interface HealdanHooks {
     }
 
     /**
+     * Called first in {@code HibernateGroupDAO.store} and {@code insert},
+     * before the group is written, so the database still holds its old name
+     *
+     * @param group the group to store
+     *
+     * @throws PersistenceException to refuse the store
+     */
+    default void beforeGroupStore(Group group) throws PersistenceException {
+        // No check by default
+    }
+
+    /**
      * Called first in {@code HibernateGroupDAO.delete}, before the group is
-     * renamed and marked deleted. CE leaves the deleted group's memberships in
-     * place, and its permission checks still count them.
+     * renamed and marked deleted, and in {@code SecurityServiceImpl.deleteGroup}
+     * before it takes the members out. CE leaves the deleted group's
+     * memberships in place, and its permission checks still count them.
      *
      * @param group the group to delete
      *

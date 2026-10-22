@@ -88,6 +88,7 @@ public class HibernateGroupDAO extends HibernatePersistentObjectDAO<Group> imple
 
     @Override
     public void insert(Group group, long parentGroupId) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeGroupStore(group);
         if (!checkStoringAspect())
             return;
 
@@ -159,6 +160,7 @@ public class HibernateGroupDAO extends HibernatePersistentObjectDAO<Group> imple
 
     @Override
     public void store(Group group) throws PersistenceException {
+        com.logicaldoc.core.HealdanHooks.get().beforeGroupStore(group);
         super.store(group);
         fixGuestPermissions(group);
     }

@@ -83,6 +83,29 @@ public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testEveryoneCantBeRenamed() throws Exception {
+		// Healdan finds the group by its name: renamed, it would lose both rules above (R138)
+		GroupDAO groupDao = GroupDAO.get();
+		Group everyone = groupDao.findByName(HealdanConstants.EVERYONE_GROUP, Tenant.DEFAULT_ID);
+		everyone.setName("Staff");
+		HealdanRuleException refusal = assertThrows(HealdanRuleException.class, () -> groupDao.store(everyone));
+		assertEquals("The Everyone group can't be renamed.", refusal.getMessage());
+		// The GUI's group save goes through insert when it changes the inherited group
+		assertThrows(HealdanRuleException.class, () -> groupDao.insert(everyone, 2L));
+		assertEquals(HealdanConstants.EVERYONE_GROUP, groupDao.findById(everyone.getId()).getName());
+
+		// Its description can change, and so can another group's name
+		Group stored = groupDao.findById(everyone.getId());
+		stored.setDescription("Every user");
+		groupDao.store(stored);
+		assertEquals("Every user", groupDao.findById(everyone.getId()).getDescription());
+		Group author = groupDao.findByName("author", Tenant.DEFAULT_ID);
+		author.setName("writers");
+		groupDao.store(author);
+		assertEquals("writers", groupDao.findById(author.getId()).getName());
+	}
+
+	@Test
 	public void testReplacingAUsersGroupsKeepsEveryone() throws Exception {
 		// What the GUI's user form and SOAP's storeUser do right after creating the user
 		UserDAO.get().store(newUser("picked", User.Type.DEFAULT));
