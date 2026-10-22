@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
@@ -56,13 +57,27 @@ public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testExistingUserIsNotAddedAgainByAnEdit() throws Exception {
+	public void testAnEditCantTakeAUserOutOfEveryone() throws Exception {
 		User admin = UserDAO.get().findByUsername("admin", true);
 		admin.removeGroup(
 				admin.getGroups().stream().filter(g -> HealdanConstants.EVERYONE_GROUP.equals(g.getName())).findFirst()
 						.orElseThrow().getId());
 		UserDAO.get().store(admin);
 
-		assertFalse(UserDAO.get().findByUsername("admin", true).isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(UserDAO.get().findByUsername("admin", true).isMemberOf(HealdanConstants.EVERYONE_GROUP));
+	}
+
+	@Test
+	public void testReplacingAUsersGroupsKeepsEveryone() throws Exception {
+		// What the GUI's user form and SOAP's storeUser do right after creating the user
+		UserDAO.get().store(newUser("picked", User.Type.DEFAULT));
+		User user = UserDAO.get().findByUsername("picked", true);
+		user.removeGroupMemberships(null);
+		user.addGroup(GroupDAO.get().findByName("author", Tenant.DEFAULT_ID));
+		UserDAO.get().store(user);
+
+		User stored = UserDAO.get().findByUsername("picked", true);
+		assertTrue(stored.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(stored.isMemberOf("author"));
 	}
 }

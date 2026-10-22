@@ -11,8 +11,11 @@ import com.logicaldoc.core.security.user.UserListener;
 import com.logicaldoc.healdan.HealdanConstants;
 
 /**
- * Puts each new user, except read-only users, into the Everyone group. CE
- * creates it by reflection, hence the public no-arg constructor.
+ * Keeps every user, except read-only users, in the Everyone group, on every
+ * save, the way CE keeps a user in their own group. CE's user form and SOAP's
+ * storeUser replace a new user's groups with the ones picked, and a later edit
+ * can drop Everyone, so adding it only on creation isn't enough. CE creates it
+ * by reflection, hence the public no-arg constructor.
  */
 public class EveryoneUserListener implements UserListener {
 
@@ -35,7 +38,7 @@ public class EveryoneUserListener implements UserListener {
 		 * undo that. No SYSTEM check: store() has already turned SYSTEM into
 		 * DEFAULT by now.
 		 */
-		if (user.getId() != 0 || user.isReadonly())
+		if (user.isReadonly())
 			return;
 
 		Group everyone = GroupDAO.get().findByName(HealdanConstants.EVERYONE_GROUP, user.getTenantId());
