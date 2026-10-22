@@ -11,6 +11,11 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import javax.sql.DataSource;
 
 import org.junit.Test;
 
@@ -25,6 +30,7 @@ import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -181,10 +187,17 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 	@Test
 	public void testUnavailableLibreOfficePostpones() throws Exception {
 		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		Document b = fx.upload(folder, "b.docx", "b", fx.admin());
 		Context.get().getConfig().setProperty(PATH, "/nonexistent/soffice");
 
-		assertEquals(1, worker.runOnce(T));
+		try (LogCapture capture = LogCapture.of(PreviewWorker.class)) {
+			assertEquals(2, worker.runOnce(T));
+			// Once a round, not once a job
+			assertEquals(1, capture.lines().stream()
+					.filter(l -> l.startsWith("WARN LibreOffice isn't available, Office previews are paused")).count());
+		}
 
+		assertEquals(0, PreviewJobs.get().find(b.getId(), "1.0").orElseThrow().attempts());
 		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
 		assertEquals(0, job.attempts());
 		java.sql.Timestamp next = new org.springframework.jdbc.core.JdbcTemplate(
@@ -196,7 +209,7 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 
 		// Once LibreOffice is there, a later round converts it
 		Context.get().getConfig().setProperty(PATH, FakeSoffice.ok().getPath());
-		assertEquals(1, worker.runOnce(T.plus(java.time.Duration.ofMinutes(11))));
+		assertEquals(2, worker.runOnce(T.plus(java.time.Duration.ofMinutes(11))));
 		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
 		assertFalse(queued(a, "1.0"));
 	}
@@ -210,6 +223,48 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		PreviewJob job = PreviewJobs.get().find(999999, "1.0").orElseThrow();
 		assertEquals(1, job.attempts());
 		assertEquals("document not found", job.lastError());
+	}
+
+	@Test
+	public void testGivingUpIsLogged() {
+		PreviewJobs jobs = PreviewJobs.get();
+		jobs.add(999999, "1.0", T);
+		for (int i = 1; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			jobs.failed(999999, "1.0", "document not found", T);
+
+		try (LogCapture capture = LogCapture.of(PreviewWorker.class)) {
+			assertEquals(1, worker.runOnce(T.plus(java.time.Duration.ofHours(2))));
+
+			List<String> warnings = capture.lines().stream().filter(l -> l.startsWith("WARN Giving up")).toList();
+			assertEquals(1, warnings.size());
+			assertTrue(warnings.get(0), warnings.get(0).contains("999999"));
+			assertTrue(warnings.get(0), warnings.get(0).contains("document not found"));
+		}
+		assertEquals(PreviewJobs.MAX_ATTEMPTS, jobs.find(999999, "1.0").orElseThrow().attempts());
+	}
+
+	@Test
+	public void testFailureToRecordAFailureMovesOn() {
+		PreviewJobs.get().add(999998, "1.0", T);
+		PreviewJobs.get().add(999999, "1.0", T);
+		Set<Long> tried = new HashSet<>();
+		PreviewJobs broken = new PreviewJobs(Context.get(DataSource.class)) {
+			@Override
+			public void failed(long docId, String fileVersion, String error, Instant now) {
+				tried.add(docId);
+				throw new IllegalStateException("cannot write");
+			}
+		};
+		PreviewWorker worker = new PreviewWorker() {
+			@Override
+			PreviewJobs jobs() {
+				return broken;
+			}
+		};
+
+		assertEquals(2, worker.runOnce(T));
+
+		assertEquals(Set.of(999998L, 999999L), tried);
 	}
 
 	@Test

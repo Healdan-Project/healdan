@@ -123,6 +123,13 @@ public class PreviewWorker {
 	}
 
 	/**
+	 * @return the queue; a seam for tests
+	 */
+	PreviewJobs jobs() {
+		return PreviewJobs.get();
+	}
+
+	/**
 	 * Processes the jobs that are due.
 	 * 
 	 * @param now the current time
@@ -130,7 +137,7 @@ public class PreviewWorker {
 	 */
 	int runOnce(Instant now) {
 		Instant roundStart = Instant.now();
-		List<PreviewJob> jobs = PreviewJobs.get().due(now, BATCH);
+		List<PreviewJob> jobs = jobs().due(now, BATCH);
 		Round round = new Round();
 		for (PreviewJob job : jobs) {
 			if (Thread.currentThread().isInterrupted())
@@ -162,7 +169,7 @@ public class PreviewWorker {
 	 * @param round the round the job is part of
 	 */
 	private void process(PreviewJob job, Supplier<Instant> clock, Round round) {
-		PreviewJobs jobs = PreviewJobs.get();
+		PreviewJobs jobs = jobs();
 		try {
 			Document doc = DocumentDAO.get().findById(job.docId());
 			if (doc == null) {
@@ -170,7 +177,7 @@ public class PreviewWorker {
 				if (isDeleted(job.docId()))
 					jobs.done(job.docId(), job.fileVersion());
 				else
-					jobs.failed(job.docId(), job.fileVersion(), "document not found", clock.get());
+					fail(jobs, job, "document not found", clock.get());
 				return;
 			}
 			if (doc.getDeleted() != 0 || !isWanted(doc, job.fileVersion())) {
@@ -193,12 +200,42 @@ public class PreviewWorker {
 				log.warn("LibreOffice isn't available, Office previews are paused: {}", e.getMessage());
 				round.unavailableLogged = true;
 			}
-			jobs.postpone(job.docId(), job.fileVersion(), e.getMessage(), clock.get().plus(UNAVAILABLE_WAIT));
+			postpone(jobs, job, e.getMessage(), clock.get().plus(UNAVAILABLE_WAIT));
 		} catch (Throwable e) {
 			// Also an Error: a job that ends neither done nor failed would block the queue behind it for good
 			String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
 			log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);
-			jobs.failed(job.docId(), job.fileVersion(), message, clock.get());
+			fail(jobs, job, message, clock.get());
+		}
+	}
+
+	/**
+	 * Records a failed try, and warns when it was the last one. Never throws,
+	 * so that the round moves on to the next job.
+	 */
+	private static void fail(PreviewJobs jobs, PreviewJob job, String error, Instant now) {
+		try {
+			jobs.failed(job.docId(), job.fileVersion(), error, now);
+		} catch (RuntimeException e) {
+			log.error("Cannot record the failed preview of document {} version {}: {}", job.docId(),
+					job.fileVersion(), e.getMessage(), e);
+			return;
+		}
+		if (job.attempts() + 1 >= PreviewJobs.MAX_ATTEMPTS)
+			log.warn("Giving up on the preview of document {} version {} after {} failed tries; the last: {}",
+					job.docId(), job.fileVersion(), PreviewJobs.MAX_ATTEMPTS, error);
+	}
+
+	/**
+	 * Puts a job off without counting a try. Never throws, so that the round
+	 * moves on to the next job.
+	 */
+	private static void postpone(PreviewJobs jobs, PreviewJob job, String error, Instant nextTry) {
+		try {
+			jobs.postpone(job.docId(), job.fileVersion(), error, nextTry);
+		} catch (RuntimeException e) {
+			log.error("Cannot postpone the preview of document {} version {}: {}", job.docId(), job.fileVersion(),
+					e.getMessage(), e);
 		}
 	}
 

@@ -17,8 +17,13 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * The queue of file versions waiting for their PDF conversion (spec section 7.1),
- * kept in {@code hd_preview_job}. It works through its own connection, so a
- * job is never part of the transaction of the document that queued it.
+ * kept in {@code hd_preview_job}. It works through a {@code JdbcTemplate} on
+ * the shared {@code DataSource}, which joins a Spring or Hibernate
+ * transaction that is open on the calling thread. So the listener's insert
+ * can join the transaction of the document that queues it, and commit or roll
+ * back with it, or run on its own when there is none. The worker copes with
+ * both: a job whose document it can't see yet, or never will, fails as
+ * "document not found" and is retried like any other failure.
  * <p>
  * After a failure the next try comes 1 minute, then 10 minutes, then 1 hour
  * later; after the fourth failure a job is never tried again (spec section 7.2).
