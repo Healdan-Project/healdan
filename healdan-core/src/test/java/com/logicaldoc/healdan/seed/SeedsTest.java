@@ -212,6 +212,44 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testSearchDocNumberColumnDefault() {
+		// Doc # in the Search tab, right after the file name; it runs after the Client column's step
+		assertEquals("done", HealdanSettings.get().get("seed.search-docnumber-column"));
+		assertEquals("filename,customId,ext_clientname,size,score,fileVersion,published,publisher",
+				Context.get().getConfig().getProperty(SearchDocNumberColumnSeed.COLUMNS));
+	}
+
+	@Test
+	public void testSearchDocNumberColumnKeepsAdminLists() throws Exception {
+		ContextProperties config = Context.get().getConfig();
+		String columns = config.getProperty(SearchDocNumberColumnSeed.COLUMNS);
+		try {
+			// Right after filename wherever it is; at the end when filename isn't listed
+			config.setProperty(SearchDocNumberColumnSeed.COLUMNS, "size,filename,score");
+			new SearchDocNumberColumnSeed().run();
+			assertEquals("size,filename,customId,score", config.getProperty(SearchDocNumberColumnSeed.COLUMNS));
+			config.setProperty(SearchDocNumberColumnSeed.COLUMNS, "size,score");
+			new SearchDocNumberColumnSeed().run();
+			assertEquals("size,score,customId", config.getProperty(SearchDocNumberColumnSeed.COLUMNS));
+
+			// Already there, wherever an admin put it: nothing changes
+			config.setProperty(SearchDocNumberColumnSeed.COLUMNS, "customId,filename");
+			new SearchDocNumberColumnSeed().run();
+			assertEquals("customId,filename", config.getProperty(SearchDocNumberColumnSeed.COLUMNS));
+
+			// Blank columns get CE's, then the one
+			config.setProperty(SearchDocNumberColumnSeed.COLUMNS, "");
+			new SearchDocNumberColumnSeed().run();
+			assertEquals("filename,customId,size,score,fileVersion,published,publisher",
+					config.getProperty(SearchDocNumberColumnSeed.COLUMNS));
+		} finally {
+			config.setProperty(SearchDocNumberColumnSeed.COLUMNS, columns);
+			// The seed wrote the file, which the next test's startup reads
+			config.write();
+		}
+	}
+
+	@Test
 	public void testReindexIsABeanAndDoneAfterStartup() {
 		// The parsers exist, so the step runs once, on the first start
 		assertFalse(Context.get().getBeansOfType(ReindexOfficeSeed.class).isEmpty());
