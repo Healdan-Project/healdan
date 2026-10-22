@@ -148,8 +148,8 @@ docx("markup.docx",
      '<w:p><w:commentRangeStart w:id="0"/><w:r><w:t>zqxcommented</w:t></w:r><w:commentRangeEnd w:id="0"/>'
      '<w:r><w:commentReference w:id="0"/></w:r></w:p>',
      settings='<w:revisionView w:markup="false" w:insDel="false"/>', comment="zqxcomment")
-# A picture linked, not embedded, from the probe
-docx("link.docx", para("Healdan link fixture") +
+# A picture linked, not embedded, from the probe. Its text shows it was converted even though the picture can't load.
+docx("link.docx", para("Healdan link fixture zqxlink") +
      '<w:p><w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
      '<wp:extent cx="914400" cy="914400"/><wp:docPr id="1" name="p"/>'
      '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
@@ -160,8 +160,9 @@ docx("link.docx", para("Healdan link fixture") +
      '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>',
      extra_rels=[("rId9", "image", "http://127.0.0.1:%s/zqxprobe-image.png" % port, True)])
 # WEBSERVICE with no cached value, so that loading must compute it. Excel stores it as _xlfn.WEBSERVICE; plain
-# WEBSERVICE comes out of LibreOffice's import as #NAME? and would never fetch anything.
-xlsx("webservice.xlsx", '<c r="A1"><f>_xlfn.WEBSERVICE("http://127.0.0.1:%s/zqxprobe-calc")</f></c>' % port)
+# WEBSERVICE comes out of LibreOffice's import as #NAME? and would never fetch anything. B1 shows it was converted.
+xlsx("webservice.xlsx", '<c r="A1"><f>_xlfn.WEBSERVICE("http://127.0.0.1:%s/zqxprobe-calc")</f></c>'
+     '<c r="B1" t="inlineStr"><is><t>zqxsheet</t></is></c>' % port)
 # An OpenDocument text whose Basic macro, bound to the open event, leaves a marker file. The ooo: and dom:
 # prefixes must be declared, or LibreOffice drops the binding.
 ODF = "urn:oasis:names:tc:opendocument:xmlns:"
@@ -199,11 +200,11 @@ echo "target: $BASE, folder $FOLDER_ID, timeout ${TIMEOUT}s"
 
 # The probe: a web server as uid 1000, LibreOffice's user, on the loopback interface LibreOffice would fetch from.
 # Its log must show a request it was sent on purpose, or "no request logged" would prove nothing.
-probe_ready() {
-  local tries=0
+probe_ready() { # [path]: the request to send, healdan-probe-ready by default
+  local tries=0 path=${1:-healdan-probe-ready}
   while [ "$tries" -lt 20 ]; do
-    if app curl -s -o /dev/null "http://127.0.0.1:$PROBE_PORT/healdan-probe-ready" 2>/dev/null \
-      && app grep -q healdan-probe-ready /tmp/probe.log 2>/dev/null; then
+    if app curl -s -o /dev/null "http://127.0.0.1:$PROBE_PORT/$path" 2>/dev/null \
+      && app grep -q "$path" /tmp/probe.log 2>/dev/null; then
       return 0
     fi
     tries=$((tries + 1))
@@ -277,42 +278,70 @@ check "the five readable files converted ahead of time, within ${TIMEOUT}s" drai
 for id in $READABLE; do
   check "document $id's PDF stored before any preview was asked for" stored "$id"
 done
+# The hardening checks below mean something only if LibreOffice really opened these three: a dropped job also leaves
+# no row.
 check "link.docx, webservice.xlsx and macro.odt converted too" drained "$link_id" "$webservice_id" "$macro_id"
+for id in "$link_id" "$webservice_id" "$macro_id"; do
+  check "document $id's PDF stored before any preview was asked for" stored "$id"
+done
 
-# failed_once: bad.docx's job has failed at least once (it's kept, with a retry 1 minute later).
+# failed_once: bad.docx's job has failed at least once. The worker records the try, its error and the retry 1 minute
+# later in one update, after the run has ended and its processes were swept, so the check below starts after the run
+# and well before the retry (whose delay is printed). A retry coinciding with a process check would be over in under
+# a second, well inside that check's 10 seconds.
 failed_once() {
-  local row
+  local row attempts retry error
   while :; do
-    row=$(db_query "select hd_attempts, hd_lasterror from hd_preview_job where hd_docid = $bad_id" || true)
+    row=$(db_query "select hd_attempts, timestampdiff(second, now(), hd_nexttry), coalesce(hd_lasterror, '')
+      from hd_preview_job where hd_docid = $bad_id") || { echo "  can't read bad.docx's job"; return 1; }
     if [ -z "$row" ]; then
       echo "  bad.docx has no job: it was converted, or never queued"
       return 1
     fi
-    if [ "$(cut -f1 <<<"$row")" -ge 1 ]; then
-      echo "  bad.docx's job: attempts $(cut -f1 <<<"$row"), error: $(cut -f2- <<<"$row")"
+    attempts=$(cut -f1 <<<"$row")
+    retry=$(cut -f2 <<<"$row")
+    error=$(cut -f3- <<<"$row")
+    if [ "$attempts" -ge 1 ] && [ -n "$error" ]; then
+      echo "  bad.docx's job: attempts $attempts, retry in ${retry}s, error: $error"
       return 0
     fi
     if [ "$SECONDS" -ge $((uploaded + TIMEOUT)) ]; then
-      echo "  bad.docx's job not tried after ${TIMEOUT}s"
+      echo "  bad.docx's job not tried after ${TIMEOUT}s (attempts $attempts)"
       return 1
     fi
     sleep 2
   done
 }
-# soffice_gone: no process in the app container has soffice on its command line.
+# processes: prints "<pid> <command line>" for each process in the app container. Fails if it can't read the process
+# table, which always holds PID 1, tini; a process that ends during the scan is skipped.
+processes() {
+  local list
+  list=$(app sh -c 'for d in /proc/[0-9]*; do
+      printf "%s " "${d#/proc/}"; tr "\0" " " 2>/dev/null < "$d/cmdline"; echo
+    done; true') || return 1
+  grep -q '^1 .*tini' <<<"$list" || return 1
+  printf '%s\n' "$list"
+}
+# soffice_gone: within 10 seconds, no process in the app container has soffice on its command line. The runner
+# sweeps a slot's processes after every run, but a killed process takes a moment to go.
 soffice_gone() {
-  local left
-  left=$(app sh -c 'for f in /proc/[0-9]*/cmdline; do tr "\0" " " < "$f" 2>/dev/null; echo; done' | grep soffice || true)
-  [ -z "$left" ] || { echo "  still running: $left"; return 1; }
+  local deadline=$((SECONDS + 10)) list left
+  while :; do
+    list=$(processes) || { echo "  can't read the app container's process table"; return 1; }
+    left=$(grep soffice <<<"$list" || true)
+    [ -z "$left" ] && return 0
+    [ "$SECONDS" -lt "$deadline" ] || { echo "  still running after 10s: $left"; return 1; }
+    sleep 1
+  done
 }
 check "bad.docx's conversion failed (at least 1 attempt)" failed_once
 check "no soffice process left once it failed" soffice_gone
 
 # pdf_text <id> <file>: fetches the document's preview PDF the way the viewer does, with the session cookie (the
-# server ignores a sid parameter unless security.acceptsid is on), and prints its text, extracted inside the app
+# server ignores a sid parameter unless security.acceptsid is on), once, and prints its text, extracted inside the app
 # container (Poppler is there).
 pdf_text() {
-  curl -fsS -b "ldoc-sid=$SID" -o "$WORK/$2" "$BASE/convertpdf?docId=$1" || return 1
+  [ -s "$WORK/$2" ] || curl -fsS -b "ldoc-sid=$SID" -o "$WORK/$2" "$BASE/convertpdf?docId=$1" || return 1
   docker exec -i "$APP_CONTAINER" sh -c \
     'f=$(mktemp) && cat > "$f" && pdftotext "$f" - ; rc=$?; rm -f "$f"; exit $rc' < "$WORK/$2"
 }
@@ -346,10 +375,16 @@ for type in thumb tile; do
   check "preview.docx's $type is a PNG" is_png "$WORK/$type.png"
 done
 
-# Hardening (spec §5.3). The worker has converted link.docx and webservice.xlsx by now.
+# Hardening (spec §5.3). LibreOffice opened the three files: their PDFs hold their text.
+check "link.docx's PDF holds zqxlink" has_token "$link_id" zqxlink
+check "webservice.xlsx's PDF holds zqxsheet" has_token "$webservice_id" zqxsheet
+check "macro.odt's PDF holds zqxmacro" has_token "$macro_id" zqxmacro
+# no_fetch: the probe, still listening and logging, was never asked for anything the fixtures link to.
 no_fetch() {
-  local hits
-  hits=$(app cat /tmp/probe.log | grep -a zqxprobe || true)
+  local log hits
+  probe_ready healdan-probe-still-there || return 1
+  log=$(app cat /tmp/probe.log) || { echo "  can't read the probe's log"; return 1; }
+  hits=$(grep -a zqxprobe <<<"$log" || true)
   [ -z "$hits" ] || { echo "  the probe was asked for: $hits"; return 1; }
 }
 check "no linked image or WEBSERVICE fetched while converting" no_fetch
@@ -369,10 +404,13 @@ check "no soffice process left after its preview was asked for" soffice_gone
 
 # tini reaps: an orphan's parent becomes PID 1, which must collect it once it exits.
 no_zombie() {
-  local zombies
-  app sh -c '(sleep 1 &)'
+  local stats zombies
+  app sh -c '(sleep 1 &)' || { echo "  can't start a process in the app container"; return 1; }
   sleep 3
-  zombies=$(app sh -c 'cat /proc/[0-9]*/stat 2>/dev/null' | sed -n 's/^\([0-9]*\) (\(.*\)) Z .*/\1 \2/p')
+  stats=$(app sh -c 'for f in /proc/[0-9]*/stat; do cat "$f" 2>/dev/null; done; true') \
+    || { echo "  can't read the app container's process table"; return 1; }
+  grep -q '^1 (tini) ' <<<"$stats" || { echo "  no PID 1 (tini) in the process table"; return 1; }
+  zombies=$(sed -n 's/^\([0-9]*\) (\(.*\)) Z .*/\1 \2/p' <<<"$stats")
   [ -z "$zombies" ] || { echo "  zombies: $zombies"; return 1; }
 }
 check "no zombie process: PID 1 reaps orphans" no_zombie
