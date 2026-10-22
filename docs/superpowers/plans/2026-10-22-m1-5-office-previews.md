@@ -507,7 +507,7 @@ Then: `docker run --rm --user 1000:1000 --entrypoint bash healdan-m15:test -c 'c
 
 Expected: exit 0 and a count of at least 3.
 
-Record the image size from `docker image ls` before and after. The plan's decision log keeps both numbers. CI's compressed sizes for both architectures go in PR B.
+Record the image size from `docker image ls` before and after. The plan's decision log keeps both numbers. CI's compressed sizes for both architectures go in PR B. (changed in the build: not measurable from the `Test` jobs, which `load` the image instead of pushing it. The compressed size is only visible once master publishes.)
 
 - [ ] **Step 3: Document it**
 
@@ -648,12 +648,13 @@ Record each row's result, and any punch-list items, in this plan's decision log.
 | 2026-10-22 | 6 | `findById` hides deleted documents, so the worker queries `ld_deleted` directly. Placeholder clearing includes the job's own file version. |
 | 2026-10-22 | final review | F1: `ConvertPdf`, the worker and the thumbnail builder pass the `Version`. F2: `MarkupPreparer` is bounded. F3: interactive conversions fail fast after a recorded timeout, and slot waits are capped at 30 s. F4: the worker pauses for 10 minutes without counting an attempt when LibreOffice is unavailable. F5: the worker takes newest jobs first. F6: smaller fixes (the seed skips a null file version, a timeout of 0 or less falls back to 120 s, a WARN on give-up, a slot rebuilt after a timeout, a test that the worker uses `inBackground`). |
 | 2026-10-22 | 6b | A bounded `revisionView` match, so a crafted settings part can't pin a thread, and the worker pause from F4. |
-| 2026-10-22 | 7 | `tini` is PID 1 in the image, in place of the compose `init: true` the plan first called for, so `docker run` deployments reap killed `soffice.bin` too. The runtime image is 1.43 GB on arm64; the apt layer is 552 MB, including packages that were already there. |
+| 2026-10-22 | 7 | `tini` is PID 1 in the image, in place of the compose `init: true` the plan first called for, so `docker run` deployments reap killed `soffice.bin` too. Uncompressed, on arm64, the runtime image is 1.01 GB before (`logicaldoc-community:local`, without LibreOffice) and 1.43 GB after; the apt layer grew from 134 MB to 552 MB, matching the spike's +407 MB. |
 | 2026-10-22 | 8 | Negative controls: unhardened, the linked image was fetched twice; hardened, 0 times. The `WEBSERVICE` cell and the `.odt` macro never fire under `--convert-to`, even unhardened (`Err:540`), so those two checks guard nothing today and stay as tripwires. |
 | 2026-10-22 | 8 | `bad.docx` is a zip signature plus seeded random bytes, because bare random bytes import as text. |
 | 2026-10-22 | 8 | `/convertpdf` authenticates with the `ldoc-sid` cookie, because the `sid` parameter is ignored unless `security.acceptsid` is set. |
 | 2026-10-22 | 8 | Step 5b of the smoke test takes about 26 s locally. |
 | 2026-10-22 | CI | PR A's `build` took 24 min, the same as recent code PRs (24–26 min), so no measurable increase. |
+| 2026-10-22 | PR B final review | B1: with `tini` as the image's `ENTRYPOINT`, PID 1 ran as root, so `restart.sh` (uid 1000) couldn't signal it and Admin > Restart did nothing. The `ENTRYPOINT` is the entrypoint script again, which ends with `setpriv … /usr/bin/tini -- "$@"` after the privilege drop: tini is PID 1 as uid 1000, reaps orphans and forwards signals to Tomcat. During init, bash is PID 1 again, as before M1.5. `test-image.sh` checks that PID 1 is tini as uid 1000 and that Tomcat runs as uid 1000. |
 
 ## Follow-ups
 

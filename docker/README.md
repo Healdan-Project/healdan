@@ -88,12 +88,16 @@ Liberation), so Word, Excel and PowerPoint style files get a PDF preview. Nothin
 - **When it runs.** Conversions run in the background after upload. Office documents already in Healdan are
   converted in the background after the upgrade, newest first, alongside new uploads.
 - **Allowed command.** `soffice` is in `allowed-commands.txt` for this, and the container keeps it there on every start.
-- **Failures.** A failed conversion logs `OfficeConverter` / `PreviewWorker` lines in `dms.log`, and the preview says
-  "not available".
-- **Versions that can't be converted.** A version that keeps timing out is given up after four tries, and interactive
-  previews of it say "not available". To retry it, raise `converter.OfficeConverter.timeout` (seconds, default 120)
-  in the conf volume's `context.properties`, restart, then delete its row:
-  `delete from hd_preview_job where hd_docid = <id> and hd_fileversion = '<file version>'`.
+- **Failures.** A failed conversion makes the preview say "not available". `OfficeConverter` logs nothing itself
+  when it fails, so to find out why, grep `dms.log` for `LibreOffice` or `com.logicaldoc.healdan.preview`.
+- **Versions that can't be converted.** From the first timeout the worker records for a version, interactive
+  previews of it fail fast and say "not available", so a file that keeps timing out doesn't hold a LibreOffice slot
+  for the whole timeout on every view. The worker gives it up after four tries. To retry it, raise
+  `converter.OfficeConverter.timeout` (seconds, default 120) in the conf volume's `context.properties`, restart,
+  then queue it again in the background:
+  `update hd_preview_job set hd_attempts = 1, hd_nexttry = now() where hd_docid = <id>`.
+  Previews keep failing fast while the worker gets three more tries. Deleting the row instead would move the retry
+  onto the next user who views the document, and hold that request for up to the raised timeout.
 - **Debugging.** LibreOffice's own output reaches the log only at DEBUG, on the logger `com.logicaldoc.util.exec`.
   The default `log.xml` already sets that logger to `debug`; if your copy in the conf volume (`conf/log.xml`) sets it
   higher, change its `<Logger name="com.logicaldoc.util.exec" ...>` line back to `level="debug"` and restart.
@@ -403,6 +407,8 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 | `docker/tests/test-init.sh` | init tool against a throwaway MariaDB |
 | `docker/tests/test-image.sh` | image behavior: prompt stop during init, ownership, `/setup` block, Admin > Restart, settings persistence |
 | `docker/tests/test-overlays.sh` | dev and proxy overlays |
+| `docker/tests/test-fulltext.sh` | full text: a `.docx` and an `.eml` are indexed and found by their tokens (smoke step 5a) |
+| `docker/tests/test-previews.sh` | Office previews: converted ahead of time, text, markup and thumbnails, no fetch or macro while converting, a broken file failing cleanly, orphans reaped (smoke step 5b) |
 | `docker/smoke-test.sh` | end to end: build, boot, REST login, uploads into a seeded matter (`docker/tests/compose.smoke.yaml` sets `HEALDAN_SMOKE_FIXTURE`) and thumbnails, Healdan's schema, doc #s and filing rule, data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building |
 
 ## Continuous integration

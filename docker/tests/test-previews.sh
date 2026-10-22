@@ -402,7 +402,9 @@ placeholder() {
 check "bad.docx's preview is the placeholder, with no token" placeholder "$bad_id"
 check "no soffice process left after its preview was asked for" soffice_gone
 
-# tini reaps: an orphan's parent becomes PID 1, which must collect it once it exits.
+# tini reaps: an orphan's parent becomes PID 1, which must collect it once it exits. Only zombies whose parent is
+# PID 1 count (field 4 of the stat line): a docker exec helper, whose parent is outside the container, can be a
+# zombie for a moment.
 no_zombie() {
   local stats zombies
   app sh -c '(sleep 1 &)' || { echo "  can't start a process in the app container"; return 1; }
@@ -410,7 +412,7 @@ no_zombie() {
   stats=$(app sh -c 'for f in /proc/[0-9]*/stat; do cat "$f" 2>/dev/null; done; true') \
     || { echo "  can't read the app container's process table"; return 1; }
   grep -q '^1 (tini) ' <<<"$stats" || { echo "  no PID 1 (tini) in the process table"; return 1; }
-  zombies=$(sed -n 's/^\([0-9]*\) (\(.*\)) Z .*/\1 \2/p' <<<"$stats")
+  zombies=$(sed -n 's/^\([0-9]*\) (\(.*\)) Z 1 .*/\1 \2/p' <<<"$stats")
   [ -z "$zombies" ] || { echo "  zombies: $zombies"; return 1; }
 }
 check "no zombie process: PID 1 reaps orphans" no_zombie

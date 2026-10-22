@@ -221,8 +221,8 @@ Goal 1 needs previews ready before anyone looks, so Healdan converts each new Of
 - **Packages.** The runtime stage's existing `apt-get install` line gets `libreoffice-writer-nogui`, `libreoffice-calc-nogui`, `libreoffice-impress-nogui`, `fonts-crosextra-carlito`, `fonts-crosextra-caladea` and `fonts-liberation`, with `--no-install-recommends` as now. That layer comes before `ARG REVISION`, so CI's build cache keeps it between commits.
 - **Allowed commands.** `docker/allowed-commands.txt` gets `soffice`, with a comment saying why.
 - **`tini` is PID 1,** so the `soffice.bin` processes killed after a timeout are reaped. Tomcat's JVM used to be PID 1 and never reaped them.
-- **Size.** The runtime image is 1.43 GB on arm64. The apt layer is 552 MB, including the packages that were already there. The spike measured LibreOffice's own share at +407 MB (§3.2).
-- **Home directory.** LibreOffice needs a writable home or profile path for uid 1000. The profiles live under the temp directory (§5.2); the builder checks nothing else needs writing.
+- **Size.** Uncompressed, on arm64, the runtime image is 1.01 GB before M1.5 (`logicaldoc-community:local`, built without LibreOffice) and 1.43 GB after. The apt layer grew from 134 MB to 552 MB, matching the spike's +407 MB (§3.2). (changed in the build: this said "The plan records the compressed size CI reports for both architectures". CI's `Test` jobs `load` the image instead of pushing it, so they report no compressed size. It's only visible once master publishes the image.)
+- **Home directory.** LibreOffice needs a writable home or profile path for uid 1000. The profiles live under Tomcat's temp directory (§5.2). A conversion as uid 1000 also writes `$HOME/.cache/fontconfig`, `$HOME/.cache/dconf` and `$HOME/.config`, under `/opt/logicaldoc` in the container layer. That works because `HOME` belongs to uid 1000.
 - **`docker/README.md`** says Office previews need nothing configured, and how to tell from the log whether a conversion failed.
 
 ## 9. Upstream files M1.5 edits
@@ -258,11 +258,11 @@ In `healdan-core`, running in CI's `build` check:
 
 In the Docker image:
 
-- **Smoke test** (`docker/smoke-test.sh`), on both architectures: upload a small committed `.docx` fixture into the smoke matter; poll until `/convertpdf` returns a PDF that isn't the placeholder and `/thumbnail` returns an image, with a time limit. State in the PR how many seconds this adds to the `Test` jobs.
+- **Smoke test** (`docker/smoke-test.sh`, step 5b), on both architectures. `docker/tests/test-previews.sh` generates its fixtures at run time and uploads them into the smoke matter. It waits, with a time limit, for `hd_preview_job` to drain, and checks that each PDF is in the store before any preview is asked for. Then it checks the text of each file's `/convertpdf` PDF for its token, and that the thumbnails are PNGs. State in the PR how many seconds this adds to the `Test` jobs. (changed in the build: this was "upload a small committed `.docx` fixture" and "poll until `/convertpdf` returns a PDF that isn't the placeholder". Asking `/convertpdf` first would convert on the spot, so it couldn't show that the conversion ran ahead of time.)
 - **Hardening:** the `.odt` macro test and the remote-link test from §5.3 run against the image's LibreOffice, in the smoke test or a `docker/tests/test-*.sh` script, whichever costs CI less.
 - **Zombies:** an orphan started inside the container is reaped, not left in the Z state (the reason `tini` is PID 1).
 - **Store:** each PDF is in the store before any preview is asked for.
-- **Markup:** a `.docx` with a tracked insertion, a tracked deletion and a comment, saved with markup hidden, converts to a PDF whose text includes the deleted words and the comment (`pdftotext` is in the image).
+- **Markup:** a `.docx` with a tracked insertion, a tracked deletion and a comment, saved with markup hidden, converts to a PDF whose text includes the inserted and the deleted words (`pdftotext` is in the image). The comment is a PDF note, not page text (§4.1), so the test finds it in the PDF's bytes, as UTF-16BE hex or a literal string, not through `pdftotext`. (changed in the build: this said the comment is in the PDF's text.)
 
 ### 11.2 Manual acceptance (owner)
 
