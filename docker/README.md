@@ -80,6 +80,24 @@ Ghostscript is deliberately not listed, because ImageMagick calls it directly.
 On every start the container also adds any setting that's in the image's default `context.properties` but
 missing from yours, such as one introduced by an upstream update. It never changes a value you already have.
 
+### Office previews
+
+The image includes LibreOffice (headless Writer, Calc and Impress) and metric-compatible fonts (Carlito, Caladea,
+Liberation), so Word, Excel and PowerPoint style files get a PDF preview. Nothing needs configuring.
+
+- **When it runs.** Conversions run in the background after upload. Office documents already in Healdan are
+  converted in the background after the upgrade, newest first, alongside new uploads.
+- **Allowed command.** `soffice` is in `allowed-commands.txt` for this, and the container keeps it there on every start.
+- **Failures.** A failed conversion logs `OfficeConverter` / `PreviewWorker` lines in `dms.log`, and the preview says
+  "not available".
+- **Versions that can't be converted.** A version that keeps timing out is given up after four tries, and interactive
+  previews of it say "not available". To retry it, raise `converter.OfficeConverter.timeout` (seconds, default 120)
+  in the conf volume's `context.properties`, restart, then delete its row:
+  `delete from hd_preview_job where hd_docid = <id> and hd_fileversion = '<file version>'`.
+- **Debugging.** LibreOffice's own output reaches the log only at DEBUG, on the logger `com.logicaldoc.util.exec`.
+  The default `log.xml` already sets that logger to `debug`; if your copy in the conf volume (`conf/log.xml`) sets it
+  higher, change its `<Logger name="com.logicaldoc.util.exec" ...>` line back to `level="debug"` and restart.
+
 ### Healdan's first start
 
 Healdan's plugin (`healdan-core`) sets up its own data each time the app starts, once LogicalDOC's schema exists.
