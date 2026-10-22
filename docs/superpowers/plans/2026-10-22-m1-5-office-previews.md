@@ -16,6 +16,8 @@
 - LibreOffice 26.2.6 from Ubuntu 26.04's archive, the base of `tomcat:11.0-jre25-temurin`.
 - JUnit 4.13.2 and HSQLDB 2.7.1 for tests. Bash, curl, jq and python3 for the Docker tests.
 
+**Status:** the owner approved this plan, including its spec corrections, on 2026-10-22, and chose subagent-driven execution.
+
 **Spec:** [`docs/superpowers/specs/2026-10-22-m1-5-office-previews-design.md`](../specs/2026-10-22-m1-5-office-previews-design.md), approved by the owner on 2026-10-22. Every § reference below points into it. Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
 
 ## Global Constraints
