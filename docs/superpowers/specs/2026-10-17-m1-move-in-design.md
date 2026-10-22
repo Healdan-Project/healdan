@@ -814,18 +814,19 @@ The demo template and matter aren't seeded. The owner creates them through the U
 
 ## 13. Upstream files M1 edits
 
-This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)). It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
+This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it. It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
 - R and D numbers point to the plan's rulings and decision log.
 - The Task column names the plan task, or the PR, that made the edit (key below the table).
-- Paths are relative to the repository root. Line numbers are approximate, from the code at `4d1b2ca2d`.
+- Paths are relative to the repository root. Line numbers are approximate, from the code at `1c1507d86`.
 - Every edit is a hook or a small fix. New logic lives in new files: `healdan-core`, `com.logicaldoc.gui.frontend.client.healdan`, and the fork-owned files marked **new file** below.
 - Many of these files have CRLF line endings. Keep them when editing.
 
 | File | Change | Task |
 |---|---|---|
 | `pom.xml` (root, `<modules>` ~199) | add `healdan-core` after `logicaldoc-gui` | 1 |
+| `logicaldoc-parent/pom.xml` (maven-compiler-plugin, ~85–88) | `-proc:full`: javac 23+ runs annotation processors only when asked, and Log4j's indexes `LDHtmlLayout` | JDK 25 |
 | `logicaldoc-webapp/pom.xml` (~616) | `artifactItem` for `healdan-core` `zip`/`plugin` | 1 |
-| `.github/workflows/build-logicaldoc.yml` (~92–100) | run `healdan-core`'s tests, and the named upstream tests that cover Healdan's edits: `HealdanHooksTest`, `DocumentAclEqualityTest`, `FolderServiceImplTest`, `DocumentServiceImplTest`, `SearchServiceImplTest`, `DocumentOnlyGrantTest`, `BookmarksDataServletTest`, `RpcPermissionTest`, `RpcPermissionGapsTest`, `SoapPermissionGapsTest`, `DocumentsDataServletTest`, `ConvertPdfTest` and `HealdanDocNumberSortTest`; the web-services PR added `logicaldoc-webservice` to the step's modules | 1, then extended by 3, 14, 18, 19, 20, 24, 25 (`ConvertPdfTest`), 27 (`HealdanDocNumberSortTest`, R106), the follow-ups PR (`RpcPermissionTest`), the gaps PR (`RpcPermissionGapsTest`), the web-services PR (`SoapPermissionGapsTest`) and the ACL equality PR (`DocumentAclEqualityTest`) |
+| `.github/workflows/build-logicaldoc.yml` (~132–140) | run `healdan-core`'s tests, and the named upstream tests that cover Healdan's edits: `HealdanHooksTest`, `DocumentAclEqualityTest`, `FolderServiceImplTest`, `DocumentServiceImplTest`, `SearchServiceImplTest`, `DocumentOnlyGrantTest`, `BookmarksDataServletTest`, `RpcPermissionTest`, `RpcPermissionGapsTest`, `SoapPermissionGapsTest`, `DocumentsDataServletTest`, `ConvertPdfTest` and `HealdanDocNumberSortTest`; the web-services PR added `logicaldoc-webservice` to the step's modules | 1, then extended by 3, 14, 18, 19, 20, 24, 25 (`ConvertPdfTest`), 27 (`HealdanDocNumberSortTest`, R106), the follow-ups PR (`RpcPermissionTest`), the gaps PR (`RpcPermissionGapsTest`), the web-services PR (`SoapPermissionGapsTest`) and the ACL equality PR (`DocumentAclEqualityTest`) |
 | `logicaldoc-core/.../core/HealdanHooks.java` | **new file**: the hook interface and its registry. Core calls `HealdanHooks.get()`, which is a no-op until `healdan-core` registers `HealdanHooksImpl`, so core doesn't depend on Healdan | 3 |
 | `logicaldoc-core/.../core/HealdanVetoException.java` | **new file**: `extends PersistenceException`; every Healdan veto throws it (or a subclass), and the document and folder DAOs roll back on it alone (D3) | 3 |
 | `logicaldoc-core/.../core/HealdanTreeChecks.java` | **new file**: the checks on a whole folder tree (R73's copy walk, R74's delete and merge), and the checks on one folder or document they're built from, moved from `HealdanRpcChecks` so the web services can call them too (R78) | web services |
@@ -879,7 +880,8 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 - web services: [#30](https://github.com/Healdan-Project/healdan/pull/30);
 - WebDAV/CMIS: [#32](https://github.com/Healdan-Project/healdan/pull/32);
 - ACL equality: [#33](https://github.com/Healdan-Project/healdan/pull/33);
-- extattr: [#37](https://github.com/Healdan-Project/healdan/pull/37).
+- extattr: [#37](https://github.com/Healdan-Project/healdan/pull/37);
+- JDK 25: [#40](https://github.com/Healdan-Project/healdan/pull/40), which moved CI and the Docker image to JDK 25 ahead of upstream's Java 25 switch (the plan's call 11).
 
 **Planned, but not edited:**
 - `logicaldoc-webapp/.../web/data/FoldersDataServlet.java`: the tree draws a search folder's magnifying glass through `DocUtil.getFolderIcon` (`FolderListGridField`), found in Task 24.
