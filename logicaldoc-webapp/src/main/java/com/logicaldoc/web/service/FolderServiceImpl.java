@@ -624,6 +624,10 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
             Folder folder = folderDao.findById(guiFolder.getId(), true);
             if (!folder.getName().trim().equals(guiFolder.getName().replace("/", "")))
                 checkPermission(Permission.RENAME, session.getUser(), folder.getId());
+            // Healdan: WRITE on the folder, and on the one foldRef names, where CE writes all but name, position and colour
+            checkPermission(Permission.WRITE, session.getUser(), folder.getId());
+            if (guiFolder.getFoldRef() != null)
+                checkPermission(Permission.WRITE, session.getUser(), guiFolder.getFoldRef());
 
             FolderHistory saveTransaction = new FolderHistory();
             saveTransaction.setSession(session);

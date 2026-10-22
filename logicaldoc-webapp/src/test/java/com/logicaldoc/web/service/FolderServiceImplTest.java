@@ -669,6 +669,38 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
     /**
      * Gives the author group SECURITY on the folder, besides what it has
      */
+    @Test
+    public void testSaveNeedsWrite() throws Exception {
+        // author can read folder1200 but not write it, and can write folder6
+        readOnlyForAuthor(1200L);
+        GUIFolder test = testSubject.getFolder(1200, true, true, true);
+        GUIFolder folder6 = testSubject.getFolder(6, true, true, true);
+
+        prepareSession("author", "admin");
+        test.setDescription("overwritten");
+        test.addTag("overwritten");
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(test));
+        assertNull(folderDao.findById(1200L).getDescription());
+        assertTrue(folderDao.findTags(1200L).isEmpty());
+
+        folder6.setDescription("written");
+        testSubject.save(folder6);
+        assertEquals("written", folderDao.findById(6L).getDescription());
+    }
+
+    @Test
+    public void testSaveNeedsWriteOnTheFolderItsFoldRefNames() throws Exception {
+        // CE writes everything but the name, position and colour to the folder foldRef names, which the client sends
+        readOnlyForAuthor(1200L);
+        GUIFolder folder6 = testSubject.getFolder(6, true, true, true);
+
+        prepareSession("author", "admin");
+        folder6.setFoldRef(1200L);
+        folder6.setDescription("overwritten");
+        assertThrows(AccessDeniedException.class, () -> testSubject.save(folder6));
+        assertNull(folderDao.findById(1200L).getDescription());
+    }
+
     private void grantSecurityToAuthors(long folderId) throws PersistenceException {
         Folder folder = folderDao.findById(folderId, true);
         FolderAccessControlEntry authors = folder.getAccessControlList().stream().filter(ace -> ace.getGroupId() == 2L)
@@ -677,6 +709,16 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
         granted.setSecurity(true);
         folder.getAccessControlList().remove(authors);
         folder.getAccessControlList().add(granted);
+        folderDao.store(folder);
+    }
+
+    /** Gives the author's own group READ, and nothing else, on a folder */
+    private void readOnlyForAuthor(long folderId) throws PersistenceException {
+        Folder folder = folderDao.findById(folderId, true);
+        FolderAccessControlEntry ace = new FolderAccessControlEntry();
+        ace.setGroupId(-4L);
+        ace.setRead(true);
+        folder.addAccessControlEntry(ace);
         folderDao.store(folder);
     }
 }
