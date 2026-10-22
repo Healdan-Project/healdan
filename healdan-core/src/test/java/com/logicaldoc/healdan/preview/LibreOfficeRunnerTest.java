@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -158,6 +159,56 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 			});
 			return null;
 		});
+	}
+
+	private Future<Void> interactive(ExecutorService pool, LibreOfficeRunner runner, String name) {
+		return pool.submit(() -> {
+			File src = new File(dir, name + ".docx");
+			Files.writeString(src.toPath(), "x");
+			runner.toPdf(src, Kind.TEXT, new File(dir, name + ".pdf"));
+			return null;
+		});
+	}
+
+	private static void awaitStarts(File log, int count) throws Exception {
+		long deadline = System.currentTimeMillis() + 10000;
+		while ((!log.exists() || Files.readAllLines(log.toPath()).size() < count)
+				&& System.currentTimeMillis() < deadline)
+			Thread.sleep(50);
+		assertEquals(count, Files.readAllLines(log.toPath()).size());
+	}
+
+	@Test
+	public void testInteractiveWaitForASlotIsBounded() throws Exception {
+		File log = new File(dir, "log.txt");
+		use(FakeSoffice.slow(2, log));
+		LibreOfficeRunner runner = new LibreOfficeRunner();
+		runner.setSlotWait(Duration.ofMillis(200));
+		ExecutorService pool = Executors.newFixedThreadPool(3);
+		try {
+			Future<Void> a = interactive(pool, runner, "a");
+			Future<Void> b = interactive(pool, runner, "b");
+			awaitStarts(log, 2);
+
+			long start = System.currentTimeMillis();
+			try {
+				runner.toPdf(in, Kind.TEXT, dest);
+				fail("expected IOException");
+			} catch (IOException e) {
+				assertEquals("LibreOffice is busy", e.getMessage());
+			}
+			assertTrue(System.currentTimeMillis() - start < 1500);
+			assertFalse(dest.exists());
+
+			// Background work waits for as long as it takes
+			Future<Void> bg = inBackground(pool, runner, "bg");
+			a.get(30, TimeUnit.SECONDS);
+			b.get(30, TimeUnit.SECONDS);
+			bg.get(30, TimeUnit.SECONDS);
+			assertTrue(new File(dir, "bg.pdf").exists());
+		} finally {
+			pool.shutdownNow();
+		}
 	}
 
 	@Test

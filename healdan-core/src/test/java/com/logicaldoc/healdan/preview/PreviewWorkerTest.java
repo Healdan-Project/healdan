@@ -167,6 +167,18 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testTimedOutJobStillRetried() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		PreviewJobs.get().failed(a.getId(), "1.0", "LibreOffice timed out after 120 s converting a.docx",
+				Instant.now());
+
+		assertEquals(1, worker.runOnce(T));
+
+		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
+		assertFalse(queued(a, "1.0"));
+	}
+
+	@Test
 	public void testMissingDocumentRetried() {
 		PreviewJobs.get().add(999999, "1.0", T);
 

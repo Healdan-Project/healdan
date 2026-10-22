@@ -5,8 +5,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.util.List;
 
 import org.junit.Test;
 
@@ -77,6 +81,36 @@ public class OfficeConverterTest extends AbstractHealdanTestCase {
 		try (var in = Store.get().getStream(pdfOf(doc))) {
 			assertEquals("%PDF", new String(in.readNBytes(4), "US-ASCII"));
 		}
+	}
+
+	@Test
+	public void testRecentTimeoutFailsFast() throws Exception {
+		File log = new File("target/fake-soffice/recent-timeout.log");
+		Files.createDirectories(log.getParentFile().toPath());
+		Files.deleteIfExists(log.toPath());
+		Files.createFile(log.toPath());
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.slow(0, log).getPath());
+		Document doc = upload("a.docx");
+		PreviewJobs.get().failed(doc.getId(), "1.0", "LibreOffice timed out after 120 s converting a.docx",
+				Instant.now());
+
+		long start = System.currentTimeMillis();
+		try {
+			FormatConversionManager.get().convertToPdf(doc, null);
+			fail("The conversion should fail at once");
+		} catch (IOException expected) {
+			assertEquals("conversion timed out recently; not retried yet", expected.getMessage());
+		}
+		long elapsed = System.currentTimeMillis() - start;
+		assertTrue(elapsed + " ms", elapsed < 1000);
+		assertEquals(List.of(), Files.readAllLines(log.toPath()));
+		assertFalse(Store.get().exists(pdfOf(doc)));
+
+		// Another kind of failure is no reason to refuse
+		PreviewJobs.get().failed(doc.getId(), "1.0", "LibreOffice exited 1 without a PDF for a.docx", Instant.now());
+		FormatConversionManager.get().convertToPdf(doc, null);
+		assertTrue(Store.get().exists(pdfOf(doc)));
+		assertEquals(1, Files.readAllLines(log.toPath()).stream().filter(l -> l.startsWith("start")).count());
 	}
 
 	@Test

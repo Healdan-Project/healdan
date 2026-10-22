@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -45,6 +46,9 @@ public class LibreOfficeRunner {
 
 	private static final int KILL_WAIT_SECONDS = 5;
 
+	/** How long an interactive conversion waits for a free slot */
+	private static final Duration SLOT_WAIT = Duration.ofSeconds(30);
+
 	private final Semaphore backgroundPermit = new Semaphore(1);
 
 	private final ThreadLocal<Boolean> background = ThreadLocal.withInitial(() -> Boolean.FALSE);
@@ -53,9 +57,16 @@ public class LibreOfficeRunner {
 
 	private boolean[] slotsPrepared;
 
+	private Duration slotWait = SLOT_WAIT;
+
 	/** @return the runner bean */
 	public static LibreOfficeRunner get() {
 		return Context.get(LibreOfficeRunner.class);
+	}
+
+	/** Package-private for tests. */
+	void setSlotWait(Duration slotWait) {
+		this.slotWait = slotWait;
 	}
 
 	/**
@@ -78,19 +89,28 @@ public class LibreOfficeRunner {
 	}
 
 	/**
-	 * Converts a file to PDF.
+	 * @return true while background work runs on this thread
+	 */
+	boolean isBackground() {
+		return background.get();
+	}
+
+	/**
+	 * Converts a file to PDF. An interactive conversion waits at most 30
+	 * seconds for a free slot; background work waits as long as it takes.
 	 * 
 	 * @param src the Office file
 	 * @param kind its family
 	 * @param dest where to leave the PDF
-	 * @throws IOException if LibreOffice can't be run, times out or leaves no PDF
+	 * @throws IOException if LibreOffice is busy, can't be run, times out or
+	 *         leaves no PDF
 	 */
 	public void toPdf(File src, OfficeFormats.Kind kind, File dest) throws IOException {
 		boolean viaBackground = background.get();
 		if (viaBackground)
 			acquire(backgroundPermit);
 		try {
-			int slot = takeSlot();
+			int slot = takeSlot(viaBackground);
 			try {
 				convert(src, kind, dest, slot);
 			} finally {
@@ -122,9 +142,15 @@ public class LibreOfficeRunner {
 		return freeSlots;
 	}
 
-	private int takeSlot() throws IOException {
+	private int takeSlot(boolean viaBackground) throws IOException {
 		try {
-			return slots().take();
+			if (viaBackground)
+				return slots().take();
+			// Nothing is cached, so the next view tries again
+			Integer slot = slots().poll(slotWait.toMillis(), TimeUnit.MILLISECONDS);
+			if (slot == null)
+				throw new IOException("LibreOffice is busy");
+			return slot;
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			throw new IOException("Interrupted while waiting for a LibreOffice slot", e);
