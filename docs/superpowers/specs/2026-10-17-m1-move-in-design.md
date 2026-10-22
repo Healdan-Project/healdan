@@ -2,7 +2,7 @@
 
 - **Milestone:** M1 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-17
-- **Status:** approved by the owner on 2026-10-17, and amended after the owner reviewed mockups of the PR D screens on 2026-10-21 (client names in matter lists, §8.1 and §8.2) and decided the New Matter dialog pre-selects the clicked Store, with no default Store setting (§4, §5.3, §8.6). Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). M1 was built by 2026-10-21 and awaits the owner's acceptance walkthrough (§14.2). §13 now lists the upstream edits as built, with the plan's corrections folded in.
+- **Status:** approved by the owner on 2026-10-17, and amended after the owner reviewed mockups of the PR D screens on 2026-10-21 (client names in matter lists, §8.1 and §8.2) and decided the New Matter dialog pre-selects the clicked Store, with no default Store setting (§4, §5.3, §8.6). Implementation plan: [`docs/superpowers/plans/2026-10-17-m1-move-in.md`](../plans/2026-10-17-m1-move-in.md). M1 was built by 2026-10-21, and the owner accepted it after the acceptance walkthrough (§14.2) on 2026-10-22. §13 now lists the upstream edits as built, with the plan's corrections folded in.
 - **Inputs:**
   - the roadmap's M1 section and glossary;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md);
@@ -466,8 +466,8 @@ The chain stops at the matter workspace. `client` and `matter` are local on the 
 3. Set `emailsent` and `emailreceived`.
    - `.eml`: Received falls back to the `Delivery-Date` header.
    - `.msg`: CE sets both dates to the message date. The builder should use the MSG submit and delivery times if msgparser exposes them, and otherwise accept CE's behaviour.
-4. **Name it after its subject.** CE 9.3 has no separate title (it's the file name without the extension), so the file name becomes the subject plus the original extension, e.g. `Re: Demo plan.eml`. (owner: "subject can become the default doc title")
-   - Characters that aren't allowed in file names are replaced.
+4. **Name it after its subject.** CE 9.3 has no separate title (it's the file name without the extension), so the file name becomes the subject plus the original extension, e.g. `Re_ Demo plan.eml`. (owner: "subject can become the default doc title")
+   - Characters that aren't allowed in file names (`/ \ : * ? " < > |` and control characters) become `_`, including the colon in `Re:`. The Subject field keeps the subject as it is. (owner, at the acceptance walkthrough on 2026-10-22)
    - An empty subject keeps the uploaded name.
    - Users can rename the email afterwards.
 
