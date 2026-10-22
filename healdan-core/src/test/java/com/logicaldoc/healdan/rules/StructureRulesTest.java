@@ -523,6 +523,49 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 				reload(documents), folderHistory(admin)), letter.getId());
 	}
 
+	@Test
+	public void testMergeChecksSubfoldersOfOneNameMergedIntoOneNamesake() throws Exception {
+		// Both Docs merge into the target's Docs, one after the other: the second meets what the first brought
+		Folder source = fx.folder(correspondence, "Source");
+		fx.searchFolder(fx.folder(source, "Docs"), "X");
+		Folder other = fx.folder(source, "Other");
+		rename(other, "Docs", admin);
+		Document letter = indexedDocument(fx.folder(other, "X"), "letter.txt");
+		Folder target = fx.folder(documents, "Target");
+		fx.folder(target, "Docs");
+
+		assertRefused(DOCUMENT_IN_SEARCH_FOLDER, () -> HealdanHooks.get().beforeFolderMerge(reload(source),
+				reload(target), folderHistory(admin)), letter.getId());
+	}
+
+	@Test
+	public void testMergeRefusesFolderAliases() throws Exception {
+		// CE merges an alias as the folder it points to, which nothing would check
+		Folder elsewhere = fx.folder(loose, "Elsewhere");
+		fx.folder(elsewhere, "Docs");
+		Folder alias = fx.legacyAlias(loose, "Alias", correspondence);
+		assertRefused(ALIAS_MERGE, () -> merge(alias, elsewhere, admin));
+
+		// Before anything moves, not when CE's merge of the namesakes gets to the alias
+		Folder clashing = fx.folder(loose, "Clashing");
+		fx.legacyAlias(clashing, "Docs", correspondence);
+		assertRefused(ALIAS_MERGE, () -> HealdanHooks.get().beforeFolderMerge(reload(clashing), reload(elsewhere),
+				folderHistory(admin)));
+
+		Folder plain = fx.folder(loose, "Plain");
+		fx.folder(plain, "Docs");
+		Folder intoAlias = fx.folder(loose, "Into alias");
+		fx.legacyAlias(intoAlias, "Docs", correspondence);
+		assertRefused(ALIAS_MERGE, () -> merge(plain, intoAlias, admin));
+
+		// An alias with no namesake moves as itself
+		Folder holder = fx.folder(loose, "Holder");
+		Folder link = fx.legacyAlias(holder, "Link", correspondence);
+		allowed(() -> merge(holder, elsewhere, admin));
+		assertEquals(elsewhere.getId(), reload(link).getParentId());
+		assertEquals(workspace.getId(), reload(correspondence).getParentId());
+	}
+
 	/**
 	 * @return a history entry with no user, as CE's background work and
 	 *         Healdan's seeds write

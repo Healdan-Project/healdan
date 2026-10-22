@@ -69,6 +69,8 @@ public class FilingRules {
 
 	static final String STORE_SHORTCUT = "A Store can't become a shortcut.";
 
+	static final String ALIAS_MERGE = "A folder alias can't be merged, or merged into.";
+
 	static final String FOLDER_IN_SEARCH_FOLDER = "Search folders can't hold folders.";
 
 	static final String FOLDER_IN_STORE = "Folders can't be created directly in a Store. Use New %s.";
@@ -450,6 +452,9 @@ public class FilingRules {
 		 */
 		Folder into = resolve(target);
 		Collection<Long> ids = ids(source.getId(), target.getId(), into.getId());
+		// CE merges an alias as the folder it points to, whose tree nothing here reads
+		if (source.getType() == Folder.TYPE_ALIAS || source.getFoldRef() != null)
+			throw refuse(ALIAS_MERGE, ids);
 		boolean admin = isAdmin(user);
 		// The source's tree is read once: the checks below walk parts of it many times
 		Subtree tree = new Subtree(source.getId());
@@ -470,7 +475,16 @@ public class FilingRules {
 			// A moved folder keeps its children, so its namesakes are read where they are stored too
 			FolderRow namesake = rows.liveChild(place.id(), folder.name(), true);
 			if (namesake != null) {
-				checkMergeInto(tree, folder.id(), namesakePlace(place, namesake), admin, ids, checked);
+				// Merging an alias, or into one, would reach the folder it points to
+				if (folder.alias() || namesake.alias())
+					throw refuse(ALIAS_MERGE, ids);
+				Place into = namesakePlace(place, namesake);
+				checkMergeInto(tree, folder.id(), into, admin, ids, checked);
+				// ...also after a sibling of its name has merged there, bringing its subfolders
+				for (FolderRow sibling : byName.get(folder.name()))
+					if (sibling.id() != folder.id())
+						checkMergeInto(tree, folder.id(), Place.moved(sibling.id(), into.position(), into.key()),
+								admin, ids, checked);
 				checkDeleteAt(tree.position(folder.id()), admin, ids);
 				continue;
 			}
@@ -484,6 +498,8 @@ public class FilingRules {
 			// ...or merged into a sibling of its name that moved there first
 			for (FolderRow sibling : byName.get(folder.name()))
 				if (sibling.id() != folder.id()) {
+					if (folder.alias() || sibling.alias())
+						throw refuse(ALIAS_MERGE, ids);
 					checkMergeInto(tree, folder.id(),
 							Place.moved(sibling.id(), childOf(place.position(), sibling.id(), sibling.type()),
 									place.key()),
