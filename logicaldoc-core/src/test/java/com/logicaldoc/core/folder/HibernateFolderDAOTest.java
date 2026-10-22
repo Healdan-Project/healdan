@@ -1798,12 +1798,13 @@ public class HibernateFolderDAOTest extends AbstractCoreTestCase {
         target = testSubject.findByPathExtended("/Default/Target/Pluto", 1L);
         assertNotNull(target);
 
-        Folder folder = testSubject.findByPathExtended("/Default/Target/Pollo/ABC", 1L);
-        assertTrue(folder == null || folder.getDeleted() != 0);
-        folder = testSubject.findByPathExtended("/Default/Target/Pollo/DEF", 1L);
-        assertTrue(folder == null || folder.getDeleted() != 0);
-
-        docDao.findByPath("/Default/Target/Pollo/DEF/doc4.txt", 1L);
+        // Healdan edit: subfolders keep their place below the folder they moved with
+        assertNotNull(testSubject.findByPathExtended("/Default/Target/Pollo/ABC", 1L));
+        assertNotNull(testSubject.findByPathExtended("/Default/Target/Pollo/DEF", 1L));
+        assertNull(testSubject.findByPathExtended("/Default/Target/ABC", 1L));
+        assertNull(testSubject.findByPathExtended("/Default/Target/Paperina", 1L));
+        assertNotNull(docDao.findByPath("/Default/Target/Pollo/DEF/doc4.txt", 1L));
+        assertNotNull(docDao.findByPath("/Default/Target/Pluto/Paperina/doc3.txt", 1L));
 
         try {
             testSubject.merge(null, target, fTransaction);

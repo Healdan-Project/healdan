@@ -69,6 +69,8 @@ public class FilingRules {
 
 	static final String STORE_SHORTCUT = "A Store can't become a shortcut.";
 
+	static final String ALIAS_MERGE = "A folder alias can't be merged, or merged into.";
+
 	static final String FOLDER_IN_SEARCH_FOLDER = "Search folders can't hold folders.";
 
 	static final String FOLDER_IN_STORE = "Folders can't be created directly in a Store. Use New %s.";
@@ -429,11 +431,12 @@ public class FilingRules {
 
 	/**
 	 * A folder is merged into another as CE's {@code FolderDAO.merge} does it:
-	 * its documents move into the target; each folder below it (at any depth)
-	 * moves into the target unless the target already has a folder of that
-	 * name, into which it is then merged the same way; the emptied folders are
-	 * deleted. Which folder goes where depends on the order CE meets them in,
-	 * so this refuses whatever any of the possible outcomes would be refused.
+	 * its documents move into the target; each of its subfolders moves into the
+	 * target with everything below it, unless the target already has a folder
+	 * of that name, into which it is then merged the same way; the emptied
+	 * folders are deleted. A subfolder may instead meet a sibling of its name
+	 * that moved there first, depending on the order CE meets them in, so this
+	 * refuses whatever either outcome would be refused.
 	 *
 	 * @param source the folder to merge
 	 * @param target where to
@@ -449,47 +452,71 @@ public class FilingRules {
 		 */
 		Folder into = resolve(target);
 		Collection<Long> ids = ids(source.getId(), target.getId(), into.getId());
+		// CE merges an alias as the folder it points to, whose tree nothing here reads
+		if (source.getType() == Folder.TYPE_ALIAS || source.getFoldRef() != null)
+			throw refuse(ALIAS_MERGE, ids);
 		boolean admin = isAdmin(user);
 		// The source's tree is read once: the checks below walk parts of it many times
 		Subtree tree = new Subtree(source.getId());
-		Map<String, List<FolderRow>> byName = tree.descendants(source.getId()).stream()
-				.collect(Collectors.groupingBy(FolderRow::name));
-		checkMergeInto(tree, source.getId(), Place.real(target.getId(), locator.locate(into)), byName, admin, ids,
+		checkMergeInto(tree, source.getId(), Place.real(target.getId(), locator.locate(into)), admin, ids,
 				new HashSet<>());
 		checkDeleteAt(tree.position(source.getId()), admin, ids);
 	}
 
-	private void checkMergeInto(Subtree tree, long sourceId, Place place, Map<String, List<FolderRow>> byName,
-			boolean admin, Collection<Long> ids, Set<String> checked) throws PersistenceException {
+	private void checkMergeInto(Subtree tree, long sourceId, Place place, boolean admin, Collection<Long> ids,
+			Set<String> checked) throws PersistenceException {
 		if (!checked.add(sourceId + ">" + place.key()))
 			return;
 		checkContentAt(tree.contents(sourceId), place.position(), ids);
 
-		for (FolderRow folder : tree.descendants(sourceId)) {
-			FolderRow namesake = place.id() != null ? rows.liveChild(place.id(), folder.name(), true) : null;
+		List<FolderRow> subfolders = tree.children(List.of(sourceId));
+		Map<String, List<FolderRow>> byName = subfolders.stream().collect(Collectors.groupingBy(FolderRow::name));
+		for (FolderRow folder : subfolders) {
+			// A moved folder keeps its children, so its namesakes are read where they are stored too
+			FolderRow namesake = rows.liveChild(place.id(), folder.name(), true);
 			if (namesake != null) {
-				checkMergeInto(tree, folder.id(), Place.real(namesake.id(), locator.locate(namesake.id())), byName,
-						admin, ids, checked);
+				// Merging an alias, or into one, would reach the folder it points to
+				if (folder.alias() || namesake.alias())
+					throw refuse(ALIAS_MERGE, ids);
+				Place into = namesakePlace(place, namesake);
+				checkMergeInto(tree, folder.id(), into, admin, ids, checked);
+				// ...also after a sibling of its name has merged there, bringing its subfolders
+				for (FolderRow sibling : byName.get(folder.name()))
+					if (sibling.id() != folder.id())
+						checkMergeInto(tree, folder.id(), Place.moved(sibling.id(), into.position(), into.key()),
+								admin, ids, checked);
 				checkDeleteAt(tree.position(folder.id()), admin, ids);
 				continue;
 			}
 
-			// Moved into the target...
+			// Moved into the target with what it holds...
 			FolderPosition current = tree.position(folder.id());
 			checkMoveAt(current, place.position(), folder.alias(), admin, ids);
 			checkSearchFolderAt(place.position(), folder.type(), ids);
 			checkPlacement(tree, folder.id(), childOf(place.position(), folder.id(), folder.type()), ids);
 
-			// ...or merged into a namesake that was moved there first
-			for (FolderRow other : byName.getOrDefault(folder.name(), List.of()))
-				if (other.id() != folder.id()) {
+			// ...or merged into a sibling of its name that moved there first
+			for (FolderRow sibling : byName.get(folder.name()))
+				if (sibling.id() != folder.id()) {
+					if (folder.alias() || sibling.alias())
+						throw refuse(ALIAS_MERGE, ids);
 					checkMergeInto(tree, folder.id(),
-							Place.virtual(childOf(place.position(), other.id(), other.type()),
-									"%d@%s".formatted(other.id(), place.key())),
-							byName, admin, ids, checked);
+							Place.moved(sibling.id(), childOf(place.position(), sibling.id(), sibling.type()),
+									place.key()),
+							admin, ids, checked);
 					checkDeleteAt(current, admin, ids);
 				}
 		}
+	}
+
+	/**
+	 * @return the namesake to merge into: where it is stored, or, below a
+	 *         folder of the merged tree, where it moves with that folder
+	 */
+	private Place namesakePlace(Place place, FolderRow namesake) throws PersistenceException {
+		if (place.moved())
+			return Place.moved(namesake.id(), childOf(place.position(), namesake.id(), namesake.type()), place.key());
+		return Place.real(namesake.id(), locator.locate(namesake.id()));
 	}
 
 	/**
@@ -821,37 +848,28 @@ public class FilingRules {
 			return found;
 		}
 
-		/**
-		 * @return every folder below the folder, top-down, as
-		 *         {@link StoredRows#descendants(long)} lists them
-		 */
-		List<FolderRow> descendants(long folderId) {
-			List<FolderRow> all = new ArrayList<>();
-			List<Long> level = List.of(folderId);
-			while (!level.isEmpty()) {
-				List<FolderRow> next = children(level);
-				all.addAll(next);
-				level = next.stream().map(FolderRow::id).toList();
-			}
-			return all;
-		}
 	}
 
 	/**
 	 * A folder a copy or merge puts things in
 	 *
 	 * @param id the folder, null if it would be created
-	 * @param position where it sits
+	 * @param position where it sits, or will once moved
 	 * @param key tells places apart
+	 * @param moved true for a folder of the merged tree, which moves there
 	 */
-	private record Place(Long id, FolderPosition position, String key) {
+	private record Place(Long id, FolderPosition position, String key, boolean moved) {
 
 		static Place real(long id, FolderPosition position) {
-			return new Place(id, position, Long.toString(id));
+			return new Place(id, position, Long.toString(id), false);
 		}
 
 		static Place virtual(FolderPosition position, String key) {
-			return new Place(null, position, "new " + key);
+			return new Place(null, position, "new " + key, false);
+		}
+
+		static Place moved(long id, FolderPosition position, String parentKey) {
+			return new Place(id, position, "%d@%s".formatted(id, parentKey), true);
 		}
 	}
 }

@@ -641,12 +641,13 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	/**
-	 * @return a new user who can't read the Store: in no group, not even
-	 *         Everyone
+	 * @return a new user who can't read the Store: a read-only user, whom CE
+	 *         keeps in their own group and guest only, since every other user
+	 *         stays in Everyone (plan, R132)
 	 */
 	private User outsider(String username) throws Exception {
 		User user = fx.user(username);
-		user.removeGroup(everyone.getId());
+		user.setType(User.Type.READONLY);
 		UserDAO.get().store(user);
 		assertFalse(folderDao.isReadAllowed(store.getId(), user.getId()));
 		return user;

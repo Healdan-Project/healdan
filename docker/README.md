@@ -88,7 +88,7 @@ Healdan's plugin (`healdan-core`) sets up its own data each time the app starts,
    `hd_schema_history`. This runs on every start, so a new Healdan release upgrades its tables by itself. It never
    touches LogicalDOC's tables.
 2. **Seeds.** One-time steps create what Healdan needs inside LogicalDOC:
-   - the **Everyone** group, with every user in it;
+   - the **Everyone** group, which every user except read-only ones joins and can't leave;
    - the **Healdan profile**: the template every document and folder uses (Class, Subclass, Author, Typist, the
      email fields and more), with the Class "Docs";
    - the **Templates** Store, a LogicalDOC workspace only admins can see, which holds the folder trees new

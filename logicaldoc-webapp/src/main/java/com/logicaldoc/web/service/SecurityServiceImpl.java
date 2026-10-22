@@ -402,6 +402,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
         GroupDAO groupDao = GroupDAO.get();
         try {
             Group grp = groupDao.findById(groupId, true);
+            // Healdan: refuse before the members are taken out, not after
+            com.logicaldoc.core.HealdanHooks.get().beforeGroupDelete(grp);
             for (User user : userDao.initialize(grp.getUsers())) {
                 user.removeGroup(groupId);
                 userDao.store(user);

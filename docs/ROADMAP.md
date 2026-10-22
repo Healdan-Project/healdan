@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | **built; owner acceptance pending**: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. Next is the owner's acceptance walkthrough, the plan's Task 30 |
+| M1 | Move in | – | **built; owner acceptance pending**: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. On 2026-10-22 a review of every open follow-up found four gaps to fix before acceptance, which the pre-acceptance PR ([Healdan-Project/healdan#44](https://github.com/Healdan-Project/healdan/pull/44)) fixed. Next is the owner's acceptance walkthrough, the plan's Task 30 |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |

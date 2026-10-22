@@ -8,6 +8,7 @@ import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.stream.Collectors;
@@ -624,6 +625,14 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
             Folder folder = folderDao.findById(guiFolder.getId(), true);
             if (!folder.getName().trim().equals(guiFolder.getName().replace("/", "")))
                 checkPermission(Permission.RENAME, session.getUser(), folder.getId());
+            // Healdan: the alias's stored foldRef, not the client's, and WRITE on both, where CE writes all but name, position and colour
+            Long foldRef = folder.getFoldRef();
+            checkPermission(Permission.WRITE, session.getUser(), folder.getId());
+            if (foldRef != null)
+                checkPermission(Permission.WRITE, session.getUser(), foldRef);
+            // Healdan: STORE to change where a real folder's documents are stored, as the GUI asks
+            if (foldRef == null && !Objects.equals(folder.getStore(), guiFolder.getStore()))
+                checkPermission(Permission.STORE, session.getUser(), folder.getId());
 
             FolderHistory saveTransaction = new FolderHistory();
             saveTransaction.setSession(session);
@@ -632,14 +641,15 @@ public class FolderServiceImpl extends AbstractRemoteService implements FolderSe
 
             String folderName = guiFolder.getName().replace("/", "");
 
-            if (guiFolder.getFoldRef() != null) {
+            // Healdan edit: foldRef, as stored
+            if (foldRef != null) {
                 // The user is editing an alias
                 folder.setName(folderName);
                 folder.setPosition(guiFolder.getPosition());
                 folder.setColor(guiFolder.getColor());
                 folderDao.store(folder);
 
-                folder = folderDao.findById(guiFolder.getFoldRef(), true);
+                folder = folderDao.findById(foldRef, true);
             } else {
                 // The user is editing a real folder
                 folder.setType(guiFolder.getType());

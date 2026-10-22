@@ -21,6 +21,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.beans.BeanUtils;
 
+import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Device;
@@ -124,6 +126,28 @@ public class SecurityServiceImplTest extends AbstractWPTestCase {
             // We expect an exception here
         }
         assertNotNull(groupDAO.findById(1));
+    }
+
+    @Test
+    public void testDeleteGroupRefusedKeepsTheMembers() throws Exception {
+        // Healdan: a refusal comes before the members are taken out of the group
+        HealdanHooks previous = HealdanHooks.get();
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public void beforeGroupDelete(Group group) throws PersistenceException {
+                throw new HealdanVetoException("Not this group.");
+            }
+        });
+        try {
+            testSubject.deleteGroup(2L);
+            fail("The hook should have refused the delete");
+        } catch (ServerException e) {
+            assertEquals("Not this group.", e.getMessage());
+        } finally {
+            HealdanHooks.register(previous);
+        }
+        assertTrue(userDAO.findByUsername("author", true).isMemberOf("author"));
+        assertTrue(userDAO.findByUsername("sebastian", true).isMemberOf("author"));
     }
 
     @Test

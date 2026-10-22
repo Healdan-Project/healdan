@@ -2368,7 +2368,8 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         moveDocumentsOnMerge(source, target, transaction, session);
 
         log.debug("move non-clashing folders fom folder {} to folder {}", source, target);
-        List<Folder> foldersInSource = findByParentId(source.getId());
+        // Healdan edit: the direct children, not findByParentId's whole subtree, so subfolders stay nested
+        List<Folder> foldersInSource = findChildren(source.getId(), null);
         for (Folder folder : foldersInSource) {
             // Move only non-clashing folders
             if (findByNameAndParentId(folder.getName(), target.getId()).isEmpty())
@@ -2378,7 +2379,7 @@ public class HibernateFolderDAO extends HibernatePersistentObjectDAO<Folder> imp
         /*
          * Now iterate over the clashes doing recursive merges
          */
-        foldersInSource = findByParentId(source.getId());
+        foldersInSource = findChildren(source.getId(), null);
         for (Folder fldSource : foldersInSource) {
             List<Folder> foldersInTarget = findByNameAndParentId(fldSource.getName(), target.getId());
             if (foldersInTarget.isEmpty())

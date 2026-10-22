@@ -345,7 +345,7 @@ public class StatsCollector extends Task {
             statistics.add(new BasicNameValuePair("reg_organization", regOrganization != null ? regOrganization : ""));
             statistics.add(new BasicNameValuePair("reg_website", regWebsite != null ? regWebsite : ""));
 
-            uploadStatistics(statistics);
+            // Healdan edit: nothing is sent to LogicalDOC's stats site; the local statistics above are kept
 
             if (log.isDebugEnabled())
                 log.debug("Send statistics: {}", statistics.stream()

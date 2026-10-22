@@ -1,15 +1,20 @@
 package com.logicaldoc.healdan.security;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.HealdanRuleException;
 
 public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 
@@ -56,13 +61,61 @@ public class EveryoneUserListenerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testExistingUserIsNotAddedAgainByAnEdit() throws Exception {
+	public void testAnEditCantTakeAUserOutOfEveryone() throws Exception {
 		User admin = UserDAO.get().findByUsername("admin", true);
 		admin.removeGroup(
 				admin.getGroups().stream().filter(g -> HealdanConstants.EVERYONE_GROUP.equals(g.getName())).findFirst()
 						.orElseThrow().getId());
 		UserDAO.get().store(admin);
 
-		assertFalse(UserDAO.get().findByUsername("admin", true).isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(UserDAO.get().findByUsername("admin", true).isMemberOf(HealdanConstants.EVERYONE_GROUP));
+	}
+
+	@Test
+	public void testEveryoneCantBeDeleted() throws Exception {
+		// Its members would stay members of the deleted group, which CE's permission checks still count
+		Group everyone = GroupDAO.get().findByName(HealdanConstants.EVERYONE_GROUP, Tenant.DEFAULT_ID);
+		HealdanRuleException refusal = assertThrows(HealdanRuleException.class,
+				() -> GroupDAO.get().delete(everyone.getId()));
+		assertEquals("The Everyone group can't be deleted.", refusal.getMessage());
+		assertEquals(0, GroupDAO.get().findById(everyone.getId()).getDeleted());
+		assertTrue(UserDAO.get().findByUsername("admin", true).isMemberOf(HealdanConstants.EVERYONE_GROUP));
+	}
+
+	@Test
+	public void testEveryoneCantBeRenamed() throws Exception {
+		// Healdan finds the group by its name: renamed, it would lose both rules above (R138)
+		GroupDAO groupDao = GroupDAO.get();
+		Group everyone = groupDao.findByName(HealdanConstants.EVERYONE_GROUP, Tenant.DEFAULT_ID);
+		everyone.setName("Staff");
+		HealdanRuleException refusal = assertThrows(HealdanRuleException.class, () -> groupDao.store(everyone));
+		assertEquals("The Everyone group can't be renamed.", refusal.getMessage());
+		// The GUI's group save goes through insert when it changes the inherited group
+		assertThrows(HealdanRuleException.class, () -> groupDao.insert(everyone, 2L));
+		assertEquals(HealdanConstants.EVERYONE_GROUP, groupDao.findById(everyone.getId()).getName());
+
+		// Its description can change, and so can another group's name
+		Group stored = groupDao.findById(everyone.getId());
+		stored.setDescription("Every user");
+		groupDao.store(stored);
+		assertEquals("Every user", groupDao.findById(everyone.getId()).getDescription());
+		Group author = groupDao.findByName("author", Tenant.DEFAULT_ID);
+		author.setName("writers");
+		groupDao.store(author);
+		assertEquals("writers", groupDao.findById(author.getId()).getName());
+	}
+
+	@Test
+	public void testReplacingAUsersGroupsKeepsEveryone() throws Exception {
+		// What the GUI's user form and SOAP's storeUser do right after creating the user
+		UserDAO.get().store(newUser("picked", User.Type.DEFAULT));
+		User user = UserDAO.get().findByUsername("picked", true);
+		user.removeGroupMemberships(null);
+		user.addGroup(GroupDAO.get().findByName("author", Tenant.DEFAULT_ID));
+		UserDAO.get().store(user);
+
+		User stored = UserDAO.get().findByUsername("picked", true);
+		assertTrue(stored.isMemberOf(HealdanConstants.EVERYONE_GROUP));
+		assertTrue(stored.isMemberOf("author"));
 	}
 }
