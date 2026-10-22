@@ -21,6 +21,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # Whether this job saves the Maven repository cache (see "Maven repository cache").
+      SAVE_M2: ${{ github.ref == 'refs/heads/master' }}
 
     steps:
       - name: Checkout source
@@ -37,13 +40,50 @@ jobs:
       - name: Check GUI icons against Font Awesome Free
         run: python3 .github/scripts/check-fontawesome-icons.py
 
+      # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
+      - name: JDK version (from the Dockerfile)
+        id: jdk
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          build=$(sed -n 's/^ARG MAVEN_IMAGE=maven:.*-eclipse-temurin-\([0-9]*\)$/\1/p' Dockerfile)
+          runtime=$(sed -n 's/^ARG TOMCAT_IMAGE=tomcat:.*-jre\([0-9]*\)-temurin$/\1/p' Dockerfile)
+          if [ -z "$build" ] || [ "$build" != "$runtime" ]; then
+            echo "::error file=Dockerfile::MAVEN_IMAGE and TOMCAT_IMAGE must name the same Temurin JDK (found '$build' and '$runtime')"
+            exit 1
+          fi
+          echo "version=$build" >> "$GITHUB_OUTPUT"
+
       - name: Set up JDK
         if: steps.changes.outputs.code == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '21'
-          cache: 'maven'
+          java-version: ${{ steps.jdk.outputs.version }}
+
+      # setup-java's own Maven cache had no fallback, so a pull request that edited a POM downloaded every dependency
+      # again, and failed whenever logicaldoc.sourceforge.net refused one of them. These restore the newest copy and
+      # download only what the POMs add. As in docker-image.yml, only master saves. The second restore key finds the
+      # copies setup-java saved: the cache version hashes the path as written, so it stays absolute, like setup-java's.
+      - name: Maven repository cache
+        if: steps.changes.outputs.code == 'true' && env.SAVE_M2 == 'true'
+        uses: actions/cache@v6
+        with:
+          path: /home/runner/.m2/repository
+          key: m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-
+            setup-java-Linux-x64-maven-
+
+      - name: Maven repository cache (restore only)
+        if: steps.changes.outputs.code == 'true' && env.SAVE_M2 != 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: /home/runner/.m2/repository
+          key: m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            m2-
+            setup-java-Linux-x64-maven-
+
       - name: Configure Maven settings (LogicalDOC & Terracotta repos)
         if: steps.changes.outputs.code == 'true'
         run: |

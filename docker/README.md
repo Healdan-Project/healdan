@@ -372,6 +372,7 @@ list. The app hands its two folders to uid 1000 on start. MariaDB manages its ow
 | `could not change ownership of … uid 1000 cannot write to it` | a bind-mounted share (e.g. NFS with root_squash) refuses `chown`. On the NAS, give the folder to uid/gid 1000 or make it writable for them |
 | `context.properties was just created, but the database already has a schema` | the `conf` volume was lost. Restore it from backup |
 | `Command … is not allowed. Add it to allowed-commands.txt` (in `repository/logs/dms.log`) | add the program to `conf/allowed-commands.txt` in the conf volume. It's re-read on every call, so no restart is needed |
+| `sun.misc.Unsafe::invokeCleaner has been called by org.apache.lucene.store.MMapDirectory` (once, at startup) | harmless on JDK 25. Lucene 8.11 unmaps index files through an API that JDK 25 warns about and a later JDK removes, so check it before moving past JDK 25 |
 | `Healdan's database migration failed: …` | a script for Healdan's tables failed, and the app stopped. Fix the cause, drop the `hd_` tables that script created, delete its failed row (`delete from hd_schema_history where success = 0`), and start again. Back up first |
 | `Seed step '…' failed: …` | one of Healdan's first-start steps failed, and the app stopped. Fix the cause and start again. The message also gives the SQL that skips the step instead |
 | `Healdan's tables support MariaDB and HSQLDB only` | Healdan's tables need MariaDB. MySQL isn't supported |
