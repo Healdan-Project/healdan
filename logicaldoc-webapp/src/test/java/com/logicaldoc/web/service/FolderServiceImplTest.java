@@ -666,9 +666,6 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
         }
     }
 
-    /**
-     * Gives the author group SECURITY on the folder, besides what it has
-     */
     @Test
     public void testSaveNeedsWrite() throws Exception {
         // author can read folder1200 but not write it, and can write folder6
@@ -701,6 +698,9 @@ public class FolderServiceImplTest extends AbstractWPTestCase {
         assertNull(folderDao.findById(1200L).getDescription());
     }
 
+    /**
+     * Gives the author group SECURITY on the folder, besides what it has
+     */
     private void grantSecurityToAuthors(long folderId) throws PersistenceException {
         Folder folder = folderDao.findById(folderId, true);
         FolderAccessControlEntry authors = folder.getAccessControlList().stream().filter(ace -> ace.getGroupId() == 2L)
