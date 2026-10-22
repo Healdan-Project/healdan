@@ -6,14 +6,21 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -103,6 +110,39 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		assertFalse(queued(a, "1.0"));
 		byte[] converted = Store.get().getBytes(pdfOf(a, "1.0"));
 		assertEquals("%PDF", new String(converted, 0, 4, StandardCharsets.US_ASCII));
+	}
+
+	@Test
+	public void testConvertsInTheBackground() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		File log = new File("target/fake-soffice/worker-background.log");
+		Files.deleteIfExists(log.toPath());
+		Files.createFile(log.toPath());
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.slow(2, log).getPath());
+		File held = Files.createTempFile(new File("target").toPath(), "held", ".docx").toFile();
+		Files.writeString(held.toPath(), "x");
+		LibreOfficeRunner runner = LibreOfficeRunner.get();
+		ExecutorService pool = Executors.newSingleThreadExecutor();
+		try {
+			// Another background conversion holds the single background permit
+			Future<?> other = pool.submit(() -> runner.inBackground((Callable<Void>) () -> {
+				runner.toPdf(held, OfficeFormats.Kind.TEXT, new File(held.getPath() + ".pdf"));
+				return null;
+			}));
+			long deadline = System.currentTimeMillis() + 10000;
+			while (Files.readAllLines(log.toPath()).isEmpty() && System.currentTimeMillis() < deadline)
+				Thread.sleep(50);
+
+			assertEquals(1, worker.runOnce(T));
+			other.get(30, TimeUnit.SECONDS);
+		} finally {
+			pool.shutdownNow();
+		}
+
+		// The worker's conversion waited for the permit, though a slot was free
+		List<String> kinds = Files.readAllLines(log.toPath()).stream().map(l -> l.split(" ")[0]).toList();
+		assertEquals(List.of("start", "end", "start", "end"), kinds);
+		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
 	}
 
 	@Test
