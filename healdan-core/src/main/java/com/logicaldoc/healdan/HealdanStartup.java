@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.db.HealdanMigrator;
 import com.logicaldoc.healdan.db.HealdanMigrator.Status;
+import com.logicaldoc.healdan.preview.PreviewWorker;
 import com.logicaldoc.healdan.seed.SeedRunner;
 
 import jakarta.annotation.PostConstruct;
@@ -30,27 +31,39 @@ public class HealdanStartup {
 
 	private final SeedRunner seedRunner;
 
+	private final PreviewWorker previewWorker;
+
 	@Autowired
-	public HealdanStartup(HealdanMigrator migrator, SeedRunner seedRunner) {
+	public HealdanStartup(HealdanMigrator migrator, SeedRunner seedRunner, PreviewWorker previewWorker) {
 		this.migrator = migrator;
 		this.seedRunner = seedRunner;
+		this.previewWorker = previewWorker;
 	}
 
+	/*
+	 * The worker starts only when the migrations and seeds ran. Tests build the
+	 * context before the schema exists, so for them run() returns false and
+	 * no thread starts.
+	 */
 	@PostConstruct
 	void start() {
-		run();
+		if (run())
+			previewWorker.start();
 	}
 
 	/**
 	 * Migrates Healdan's tables, then runs the first-start seeds that haven't
 	 * run yet. Does nothing more when LogicalDOC's own schema doesn't exist
 	 * yet: it runs again on the next start.
+	 * 
+	 * @return true if the migrations and seeds ran
 	 */
-	public void run() {
+	public boolean run() {
 		if (migrator.migrate() == Status.SKIPPED_NO_CE_SCHEMA) {
 			log.info("LogicalDOC's schema doesn't exist yet, Healdan will set up its tables on the next start");
-			return;
+			return false;
 		}
 		seedRunner.runPending();
+		return true;
 	}
 }

@@ -51,6 +51,16 @@ final class FakeSoffice {
 		return script("hang", "sh -c 'sleep 600; :' \"$UI\" &\nsleep 600\n");
 	}
 
+	/**
+	 * @param marker text to look for in the input file
+	 * @return a converter that hangs like {@link #hang()} on a file whose bytes contain the marker, and
+	 *         otherwise writes a PDF
+	 */
+	static File hangIfContains(String marker) throws IOException {
+		return script("hang-if-" + marker, "if grep -q '" + marker
+				+ "' \"$IN\"; then\n  sh -c 'sleep 600; :' \"$UI\" &\n  sleep 600\nfi\nwrite_pdf\n");
+	}
+
 	/** @return a converter that writes a PDF and then never finishes */
 	static File partialThenHang() throws IOException {
 		return script("partial-hang", "write_pdf\nsleep 600\n");
