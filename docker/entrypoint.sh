@@ -58,8 +58,8 @@ done
 as_app mkdir -p "$REPO"/docs "$REPO"/index "$REPO"/users "$REPO"/plugins "$REPO"/impex/in "$REPO"/impex/out \
   "$REPO"/logs "$REPO"/db
 
-# Until the exec below, bash is PID 1, and the kernel drops signals PID 1 has no handler for: without the trap,
-# stopping the container during the DB wait or schema creation waits out the grace period and ends in SIGKILL.
+# tini is PID 1 and forwards the stop signal to bash, which must pass it on to DockerInit: the trap does that, so
+# stopping the container during the DB wait or schema creation ends the init at once instead of in SIGKILL.
 # Bash defers a trap until the foreground command ends, but a signal interrupts `wait`: so DockerInit runs in the
 # background while bash waits for it.
 init_pid=

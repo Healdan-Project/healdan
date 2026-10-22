@@ -16,7 +16,7 @@
 - LibreOffice 26.2.6 from Ubuntu 26.04's archive, the base of `tomcat:11.0-jre25-temurin`.
 - JUnit 4.13.2 and HSQLDB 2.7.1 for tests. Bash, curl, jq and python3 for the Docker tests.
 
-**Status:** the owner approved this plan, including its spec corrections, on 2026-10-22, and chose subagent-driven execution.
+**Status:** the owner approved this plan, including its spec corrections, on 2026-10-22, and chose subagent-driven execution. Tasks 1–9 are built ([Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and PR B). Task 10, the owner's walkthrough, is pending.
 
 **Spec:** [`docs/superpowers/specs/2026-10-22-m1-5-office-previews-design.md`](../specs/2026-10-22-m1-5-office-previews-design.md), approved by the owner on 2026-10-22. Every § reference below points into it. Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
 
@@ -79,7 +79,10 @@ Further calls:
 
 ## PRs
 
-- **PR A, Tasks 1–6:** the server side: `healdan-core` and the `ConvertPdf` hook. Without LibreOffice in the image it's inert. Office previews keep saying "not available", nothing is cached, and the worker's failed jobs give up after four tries.
+- **PR A, Tasks 1–6:** the server side: `healdan-core` and the `ConvertPdf` hook. Without LibreOffice in the image it's inert:
+  - Office previews say "not available", and nothing is cached.
+  - The worker pauses for 10 minutes at a time without counting attempts.
+  - Nothing is lost when LibreOffice arrives.
 - **PR B, Tasks 7–9:** the image, the Docker tests and the docs. Stack it on PR A, targeting `master`, as the stacked-PR convention says.
 - **Task 10:** the owner's acceptance walkthrough, after both merge.
 
@@ -640,8 +643,24 @@ Record each row's result, and any punch-list items, in this plan's decision log.
 | 2026-10-22 | spike | `ExportNotesInMargin` fails headless (`0xc10`); `ExportNotes` makes comments PDF text notes. |
 | 2026-10-22 | spike | Removing `w:revisionView` makes a hidden-markup `.docx` show its redlines; command-line `macro:///` doesn't run headless. |
 | 2026-10-22 | spike | Default LibreOffice fetched a linked image twice; `BlockUntrustedRefererLinks` stopped it. |
+| 2026-10-22 | 1 | The link-update value for "never" is `1` in Calc and `2` in Writer (verified in `Calc.xcs` and `Writer.xcs`). A run that reached the timeout fails even with a PDF on disk. |
+| 2026-10-22 | 3 | Preview tests clear the store in `setUp`, through `PreviewTests.clearStore()`, so results don't depend on test order or earlier runs. |
+| 2026-10-22 | 6 | `findById` hides deleted documents, so the worker queries `ld_deleted` directly. Placeholder clearing includes the job's own file version. |
+| 2026-10-22 | final review | F1: `ConvertPdf`, the worker and the thumbnail builder pass the `Version`. F2: `MarkupPreparer` is bounded. F3: interactive conversions fail fast after a recorded timeout, and slot waits are capped at 30 s. F4: the worker pauses for 10 minutes without counting an attempt when LibreOffice is unavailable. F5: the worker takes newest jobs first. F6: smaller fixes (the seed skips a null file version, a timeout of 0 or less falls back to 120 s, a WARN on give-up, a slot rebuilt after a timeout, a test that the worker uses `inBackground`). |
+| 2026-10-22 | 6b | A bounded `revisionView` match, so a crafted settings part can't pin a thread, and the worker pause from F4. |
+| 2026-10-22 | 7 | `tini` is PID 1 in the image, in place of the compose `init: true` the plan first called for, so `docker run` deployments reap killed `soffice.bin` too. The runtime image is 1.43 GB on arm64; the apt layer is 552 MB, including packages that were already there. |
+| 2026-10-22 | 8 | Negative controls: unhardened, the linked image was fetched twice; hardened, 0 times. The `WEBSERVICE` cell and the `.odt` macro never fire under `--convert-to`, even unhardened (`Err:540`), so those two checks guard nothing today and stay as tripwires. |
+| 2026-10-22 | 8 | `bad.docx` is a zip signature plus seeded random bytes, because bare random bytes import as text. |
+| 2026-10-22 | 8 | `/convertpdf` authenticates with the `ldoc-sid` cookie, because the `sid` parameter is ignored unless `security.acceptsid` is set. |
+| 2026-10-22 | 8 | Step 5b of the smoke test takes about 26 s locally. |
+| 2026-10-22 | CI | PR A's `build` took 24 min, the same as recent code PRs (24–26 min), so no measurable increase. |
 
 ## Follow-ups
 
 - **SOAP `uploadResource` can overwrite a cached conversion.** It lets a user with Write upload any suffix as a resource of a document. Since M1.5 serves an Office document's `conversion.pdf` as its preview, such a user could make the preview differ from the file. They can already replace the file itself, so the risk is low. Decide whether to refuse the `conversion.pdf` suffix there.
 - **Legacy `.doc` and `.rtf`, and OpenDocument files,** don't get forced redlines (correction 2). Revisit if the owner meets one in practice.
+- **Replacing a file while it's being converted** can cache the old content, or lose the re-queue.
+- **`/uploadresource`,** which needs the Sign permission, can overwrite `conversion.pdf`, like SOAP's `uploadResource`.
+- **A fresh upload's job reached before CE saves its version row** converts the `Document`, so CE writes a CONVERTED history row for it.
+- **CE paths that pass a `Document` with an older file version** (SOAP, PDF alias downloads) still convert with the current extension, and the fail-fast check reads the current version's job.
+- **The preview test classes take about 165 s,** mostly fake-LibreOffice timeouts and sleeps. They could be trimmed if CI time matters.
