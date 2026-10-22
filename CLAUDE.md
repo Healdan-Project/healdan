@@ -15,7 +15,7 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 - The GUI bundles Font Awesome Free 6, but upstream writes the GUI against Font Awesome Pro. Pro styles (`fal`, `fa-light`, `fa-thin`, …) and Pro-only icon names compile fine and only show up at runtime, as blinking missing-icon placeholders.
   - `.github/scripts/check-fontawesome-icons.py` catches them. It runs first in `build-logicaldoc.yml`, and `build` must pass before a PR can merge. Run it locally with `python3 .github/scripts/check-fontawesome-icons.py`.
   - When it flags lines an upstream sync brought in, swap them for Free icons in the sync PR itself. That's a merge fix, not feature work.
-- `README.md` and `Build_this_Sources.md` are upstream's and out of date. They mention `build/poms` and JDK 11, which don't apply here.
+- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for. The rest of it, and `Build_this_Sources.md`, are upstream's and out of date. They mention `build/poms` and JDK 11, which don't apply here.
 
 ## Roadmap
 
@@ -113,6 +113,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
 - **`HealdanHooks`** (`logicaldoc-core/.../core/HealdanHooks.java`, fork-owned) lets CE code that bypasses the listeners call Healdan before it writes. Examples are the JDBC restores, `deleteTree` and `applySecurityToTree`, and the moves, renames, updates, merges and copies that write before a listener could refuse. `healdan-core` registers the implementation.
   - Every Healdan veto throws `HealdanVetoException` or a subclass. The document and folder DAOs roll back on it alone; a plain `PersistenceException` still commits.
 - **Upstream edits.** §13 of `docs/superpowers/specs/2026-10-17-m1-move-in-design.md` lists every upstream file M1 edits, with the reason. Keep each edit a small hook into new code, and list it in the milestone's spec.
+- **Credits.** The login page and About credit LogicalDOC as well as Healdan (`logicaldoc-gui/.../common/client/healdan/HealdanCredits.java`). Keep LogicalDOC's credit through any rebrand, and never call Healdan a registered trademark: it isn't one.
 
 ## Tests
 

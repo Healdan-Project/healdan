@@ -87,8 +87,9 @@ input:focus {
 	box-shadow: none;
 }
 
+/* Healdan: the logo's dark blue, a darker blue on hover and press, white text throughout */
 .btn {
-	background-color: #F56C13;
+	background-color: #0b5dab;
 	color: #ffffff;
 	border: 2px solid transparent;
 	font-size: 16px;
@@ -97,7 +98,7 @@ input:focus {
 
 
 .btnOver, .btnFocused, .btnFocusedOver {
-	background-color: #D8590A;
+	background-color: #084a88;
 	color: #ffffff;
 	border: 2px solid transparent;
 	font-size: 16px;
@@ -105,8 +106,8 @@ input:focus {
 }
 
 .btnDown, .btnFocusedDown {
-	background-color: #D8590A;
-	color: black;
+	background-color: #084a88;
+	color: #ffffff;
 	border: 2px solid transparent;
 	font-size: 16px;
     line-height: 30px;
