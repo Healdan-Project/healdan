@@ -3,6 +3,7 @@
 - **Date:** 2026-10-16
 - **Method.** Three read-only code surveys of this repository, run during the roadmap session (see [`docs/ROADMAP.md`](../ROADMAP.md)). Nothing was run against a live server. Claims marked **✔ checked** were re-read in the source by hand. Treat everything else as a well-sourced lead and confirm it before relying on it.
 - **Upstream merges.** This reflects the code at merge `1c2389e3d` (upstream `3085e45c3`). Line numbers will drift.
+- **M1.** Updated on 2026-10-21, when M1 was built (`4d1b2ca2d`). The CE gaps M1 fixed are marked **Fixed in M1**, and §6 adds the CE defects M1 fixed or found. The [M1 plan](../superpowers/plans/2026-10-17-m1-move-in.md) has the details: its rulings (R1–R131), decision log (D1–D8) and follow-ups.
 
 Path shorthand:
 - **CORE** = `logicaldoc-core/src/main/java/com/logicaldoc/core`
@@ -83,7 +84,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 - **Server entry points.**
   - RPC `WEB/service/SearchServiceImpl`. Its converter map registers only FULLTEXT, FOLDERS and TAGS. `registerConverter` is public static, so a plugin can add more.
   - REST/SOAP `SearchService`: `find`, `findByFilename`, `findFolders(name)`.
-- **Gotcha.** An unregistered search type causes a NullPointerException in `doSearch`.
+- **Gotcha.** An unregistered search type causes a NullPointerException in `doSearch`. **Fixed in M1** (Task 18, R48): `search`, `save` and `load` fall back to `FulltextOptionsConverter` (`SearchServiceImplTest.testUnregisteredTypeUsesDefaultConverter`).
 
 ### 2.2 Folder search
 
@@ -161,7 +162,8 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
   - `BookmarkDAO`.
   - RPC `DocumentService.addBookmarks`, `deleteBookmarks`, `updateBookmark`.
   - `/data/bookmarks.xml`.
-  - Folder bookmarks can back "My Matters" with no new storage.
+  - Folder bookmarks can back "My Matters" with no new storage. M1's My Matters is built on them.
+- **Folder bookmarks: Fixed in M1** (Task 20). `DocumentServiceImpl.addBookmarks` looked for an existing bookmark by document ID even for a folder, so a folder could be bookmarked twice. It now looks a folder up by folder (`findByUserIdAndFolderId`), and skips a folder that is missing, deleted or unreadable (`DocumentServiceImplTest.testFolderBookmarkNotDuplicated`). The M1 spec also suspected that `/data/bookmarks.xml` listed deleted folders. It doesn't: `@SQLRestriction("ld_deleted=0")` hides them, and `BookmarksDataServletTest` guards that (M1 plan, D8).
 
 ## 3. Containers, storage, tenants, security
 
@@ -175,8 +177,8 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
   - `workspaceChecks()`: workspaces can't be moved, and "Default" can't be renamed;
   - `checkIfCanDelete`.
 - **Gated only in the GUI, by 71** (`ContextMenu`, `ItemFactory.newWorkspaceSelector`).
-  - `FolderServiceImpl.create()` re-parents any type-1 folder to the root and creates it, with no feature, admin or ADD-permission check.
-  - SOAP `SoapFolderService.create` accepts type 1 under any parent. The result is malformed, and `findWorkspaces` won't list it.
+  - `FolderServiceImpl.create()` re-parents any type-1 folder to the root and creates it, with no feature, admin or ADD-permission check. **Fixed** (§6).
+  - SOAP `SoapFolderService.create` accepts type 1 under any parent. The result is malformed, and `findWorkspaces` won't list it. **Fixed in M1** (Task 9): Healdan's structure rules refuse a type-1 folder (a Store) anywhere but directly under the root, and from anyone but an admin, on every route, type changes included (`StructureRulesTest.testOnlyAdminsCreateStores`).
 - **Already there.**
   - `User.defaultWorkspace` (`ld_defworkspace`).
   - REST `folder/listWorkspaces`.
@@ -320,6 +322,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
   - so the result is `NotAvailableConverter`.
 - **Expected result:** the text inside Word, Excel, PowerPoint and email files isn't searchable. Confirm on a running server.
 - **The fix belongs in a Healdan plugin,** through the `Parser` extension point (`extension`, `class`), for example with Apache POI or Tika.
+- **Fixed in M1** (Task 21). M1 confirmed the gap on a running stack first (M1 plan, D5). `healdan-core` now declares parsers for `docx`, `docm`, `dotx`, `xlsx`, `xlsm`, `pptx`, `ppsx`, `eml` and `msg`, built on POI and `MailUtil`. A first-start seed flags existing documents of those types for re-indexing.
 
 ### 5.4 Authentication
 
@@ -348,6 +351,15 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 ## 6. Defects found (fix in Healdan; consider reporting upstream)
 
 Rows marked **Fixed** or **Hardened** were verified with failing tests and fixed on 2026-10-17. Each fix names the test that shows it. The first four came from the recon. The others were found while fixing those, or in the review of PR #16 on 2026-10-17 where a row says so. Rows marked Open are still to do.
+
+The rows from the M1 build (2026-10-18 to 2026-10-21) come last. They name the M1 plan's task, ruling (R) or decision (D), and the follow-up section an open one comes from. The PRs they name:
+- [#28](https://github.com/Healdan-Project/healdan/pull/28), the follow-ups PR;
+- [#29](https://github.com/Healdan-Project/healdan/pull/29), the gaps PR;
+- [#30](https://github.com/Healdan-Project/healdan/pull/30), the web-services PR;
+- [#32](https://github.com/Healdan-Project/healdan/pull/32), the WebDAV and CMIS PR;
+- [#33](https://github.com/Healdan-Project/healdan/pull/33), the ACL equality PR.
+
+Every upstream edit those fixes make is listed in the [M1 spec](../superpowers/specs/2026-10-17-m1-move-in-design.md)'s §13.
 
 | Severity | Where | What | Status |
 |---|---|---|---|
@@ -379,3 +391,23 @@ Rows marked **Fixed** or **Hardened** were verified with failing tests and fixed
 | Low | GUI vs core `Feature` 112 | Name mismatch (`SUPPORT_TICKET` vs `ACCESS_TICKET`). | Open. |
 | High | `WEB/data/DocumentsDataServlet.retrieveExtendedAttributesValues` ✔ checked | A folder listing took the attribute names from the `extattr` request parameter (or the `<tenant>.search.extattr` setting), wrapped each in quotes and joined them into `ld_name in (...)` with no escaping, so any signed-in user could rewrite the query through `/data/documents.xml?folderId=…&extattr=…`. Nothing else in the servlet puts the names into SQL. Found while building PR D (M1 plan, R96). | **Fixed** on 2026-10-21. The names are bound as parameters, as the docIds mode PR D added binds them. Unlike the rows above, no failing test came first: `DocumentsDataServletTest.testFolderModePrintsExtendedAttributes` only shows that ordinary names still print their values. |
 | Medium | `WEB/ConvertPdf` | Reads only the `version` request parameter, while the preview viewer sends `fileVersion`, so every older version of a PDF previews as the current one (CE's own Versions tab too). | **Fixed** in Healdan by Task 25 (R119): it serves the `fileVersion` asked for, checked against the document's versions, and takes the file type from that version's name; `ConvertPdfTest`. |
+| High | `WEB/service/DocumentServiceImpl`, `FolderServiceImpl`, `WEB/data/VersionsDataServlet`, `DeletedDocsDataServlet`, `DeletedFoldersDataServlet` ✔ checked | Many RPCs checked no permission on what they read or wrote, or checked the folder where a document was read or written. Some examples: `saveACL` and `inheritACL` (SECURITY), `rename` (RENAME), `getById`, `getVersionsById` and `/data/versions.xml` (READ), and `save`, which also took a shortcut's target from the client. `checkin` had no WRITE check, and `deleteBookmarks` didn't check the bookmark's owner. Also `delete`, the trash purges, notes, links, ratings, tickets, copies and pastes, and the deleted-items reports. A document-only grant couldn't use the calls that checked the folder. | **Fixed in M1**: Task 14 (SECURITY and RENAME), Task 19 (D7, R51), the follow-ups PR (R57–R69) and the gaps PR (R70–R77). Each call is listed under the M1 plan's "Follow-ups from PR C" and "Follow-ups found while closing PR C's". `FolderServiceImplTest`, `DocumentServiceImplTest`, `DocumentOnlyGrantTest`, `RpcPermissionTest`, `RpcPermissionGapsTest`. |
+| High | `logicaldoc-webservice` `SoapDocumentService`, `SoapFolderService` ✔ checked | The same gaps through SOAP and REST: document `copy` checked nothing; folder `copy` checked only ADD on the target; folder `delete` and `merge` checked the top folder only; `sendEmail` checked the folder's READ and silently left out the rest; `unprotect` checked nothing; document `delete` checked the folder's DELETE. | **Fixed in M1** by the web-services PR (R78, R79). `SoapPermissionGapsTest`. |
+| High | `logicaldoc-webdav` `ResourceServiceImpl`, `logicaldoc-cmis` `LDRepository` ✔ checked | WebDAV and CMIS checked only the folder given. So a user who could delete a folder deleted its whole tree, and could delete or copy a document they had no DELETE or DOWNLOAD on. | **Fixed in M1** by the WebDAV and CMIS PR (R80). `ChannelTreePermissionsTest` (`healdan-core`). |
+| Medium | SOAP/REST `SoapFolderService.create` | Makes a folder of whatever type the caller asks for, including a workspace (type 1) under any parent (§3.1). | **Fixed in M1** (Task 9) by Healdan's structure rules, on every route. `StructureRulesTest.testOnlyAdminsCreateStores`. |
+| Medium | `CORE/document/DocumentAccessControlEntry.equals` ✔ checked | Never true: it compared the wrapped entry, which only equals its own class. So every flush of a document read with `findById(id, true)` deleted and re-inserted its ACL rows and bumped its record version and last-modified date. Every CMIS call on such a document marked it modified. | **Fixed in M1** by the ACL equality PR: equal by group, as `ld_document_acl`'s key. `DocumentAclEqualityTest`. |
+| Low | `WEB/service/DocumentServiceImpl.addBookmarks` ✔ checked | Looked for a folder's existing bookmark by document ID (§2.6). | **Fixed in M1** (Task 20). `DocumentServiceImplTest.testFolderBookmarkNotDuplicated`. |
+| Low | `WEB/data/DocumentsDataServlet`, `docIds` mode ✔ checked | Didn't load the extended attributes the grid asks for, so a listing by IDs showed those columns empty. | **Fixed in M1** (Task 24, R96, R99): bound like folder mode's. `DocumentsDataServletTest.testDocIdsModePrintsExtendedAttributes`. |
+| Low | `WEB/service/SearchServiceImpl` ✔ checked | An unregistered search type threw a NullPointerException (§2.1). | **Fixed in M1** (Task 18, R48). `SearchServiceImplTest`. |
+| Low | GUI `document/DocumentsPanel.openInFolder` | Open in Folder adds the folder to the tree's selection, so the folder selected before stays selected and the folder menu acts on both. | **Fixed in M1** (Task 26, R128): the selection is cleared first. Checked on the stack; the GUI has no unit tests. |
+| Medium | `WEB/service/FolderServiceImpl.save` ✔ checked | No WRITE check. Any user can change any folder's description, tags, extended attributes, quotas, grid, colour, position and Store by ID. M1 added only RENAME, when the name changes (M1 plan, correction 3), and Healdan's rules refuse the type changes that matter to it. | Open. Needs WRITE on the folder, or on an alias's target. |
+| Medium | `CMIS/LDRepository.createFolder` (~701) ✔ checked | Checks WRITE on the parent, where the GUI and SOAP ask ADD. | Open. Ask ADD. |
+| Low | `logicaldoc-webservice` `SoapFolderService.createAlias` ✔ checked | Checks ADD on the parent but nothing on the target, so it copies a folder's name into a folder others can see. The GUI's `createAlias` asks READ on the target since PR #18 (row above). | Open. Ask READ on the target, as the GUI does. |
+| Medium | `CORE/folder/HibernateFolderDAO.merge` | Takes the source's "children" from `findByParentId`, which returns the whole subtree, each through `findFolder`, which resolves an alias to its target. So a merge flattens the tree into the target, moves the folder an alias points to (even one outside the tree), and keeps what it moved when it then fails, since the DAO's transaction commits on the checked `PersistenceException`. A user with MOVE and DELETE on a tree holding an alias can move the alias's target. Found on a probe by the web-services PR. | Open. M1 plan, "Follow-ups found while closing the web-service gaps": refuse a source tree holding an alias in `beforeFolderMerge`; whether merge keeps subfolders nested is the owner's call. |
+| Low | `logicaldoc-webservice` `SoapFolderService.delete` (~145) | Its root guard sets `rootId` to the root's tenant ID (1), so "Cannot delete root folder or Default workspace" never fires. Seen in passing, not verified. Healdan's tree check refuses a non-admin. | Open. Same follow-up section. |
+| Medium | `CMIS/LDRepository.getObject` | Reads a `doc.` ID with `findDocument`, which resolves a shortcut to its target. So `deleteObject` given a shortcut's ID deletes the target document, and `createDocumentFromSource` copies the target. Code read, not probed. | Open. M1 plan, "Follow-ups found while closing the WebDAV and CMIS gaps". |
+| Low | Folder moves: WebDAV MOVE, CMIS `moveObject`, the GUI's cut | Each route asks for different permissions: WebDAV asks DELETE on the folder and ADD on the target, CMIS DOWNLOAD and WRITE, and the GUI MOVE, which neither channel asks. Seen in passing. | Open. Same follow-up section. |
+| Low | `CORE/document/FolderAccessControlEntry` | One built with `new FolderAccessControlEntry(groupId)` never equals the stored one, because the constructor also writes unmapped inherited fields that `equals` and `hashCode` read. So `Folder.addAccessControlEntry` adds a second entry for the group instead of replacing it. Probed on core's fixture, not tested. | Open. M1 plan, "Follow-ups found while fixing document ACL equality": compare group IDs, as `DocumentAccessControlEntry` now does. |
+| Low | `WEB/data/DocumentsDataServlet.printExtendedAttributes` (~276) | Prints each `extattr` name unescaped as part of an XML element name. Only names a listed document has an attribute for are printed, and administrators name attributes, so a request can't use it on its own. | Open. M1 plan, "Follow-ups found while building PR D". |
+| Low | GUI `document/note/NotesPanel` (~115), `document/LinksPanel` (~242, ~250) | They gate adding a note and downloading a link on the folder's permissions, so a user whose only grant is on the document can't do either. | Open. Same follow-up section (D7). |
+| Low | `CORE/document/NoteAccessControlEntry` | Keeps two copies of its flags and persists the one CE's save doesn't set, so a note's ACL loses WRITE whenever the note is saved from the GUI. The note's creator and admins are unaffected. | Open. M1 plan, the follow-ups PR's accepted limits. |

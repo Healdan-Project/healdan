@@ -1,7 +1,7 @@
 # Healdan roadmap
 
 - **Date:** 2026-10-16
-- **Status:** direction agreed with the owner in an interview session. M1 has an approved design spec ([`superpowers/specs/2026-10-17-m1-move-in-design.md`](superpowers/specs/2026-10-17-m1-move-in-design.md)).
+- **Status:** direction agreed with the owner in an interview session. M1 is built and awaits the owner's acceptance ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)).
 - **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE 9.3.1 already has, what's hidden, half built or missing, with file paths.
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
@@ -73,7 +73,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
-| M1 | Move in | – | design approved 2026-10-17: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md) written 2026-10-17, plan approved 2026-10-17; building. Server side done: PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18, PR C (Tasks 17–21) 2026-10-19, and five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) is in progress in parts, after the owner reviewed its mockups on 2026-10-21: parts 1 to 4 (Tasks 22–25, 27 and 28) merged on 2026-10-21, and part 5 (Task 26) is in review |
+| M1 | Move in | – | **built; owner acceptance pending**: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. Next is the owner's acceptance walkthrough, the plan's Task 30 |
 | M1.5 | Office previews and thumbnails | M1 | not started |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
@@ -220,7 +220,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 6. An uploaded email shows its sent and received timestamps, and every document shows its Date filed.
 7. Data survives upgrading to the next Healdan release. See the schema upgrades item in §6.
 
-**Design.** Settled in the [M1 design spec](superpowers/specs/2026-10-17-m1-move-in-design.md), which the owner approved on 2026-10-17.
+**Design.** Settled in the [M1 design spec](superpowers/specs/2026-10-17-m1-move-in-design.md), which the owner approved on 2026-10-17. The [M1 plan](superpowers/plans/2026-10-17-m1-move-in.md) records how it was built: its rulings, decision log and follow-ups. The spec's §13 lists every upstream file M1 edits.
 
 ---
 
