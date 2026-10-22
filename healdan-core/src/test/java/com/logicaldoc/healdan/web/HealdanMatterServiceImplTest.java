@@ -7,18 +7,27 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.sql.Timestamp;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+
+import javax.sql.DataSource;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
@@ -35,6 +44,7 @@ import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * The New and Edit Matter dialogs' server side (spec 5.3, 8.5): who may use
@@ -283,6 +293,87 @@ public class HealdanMatterServiceImplTest extends AbstractHealdanTestCase {
 		} finally {
 			SessionManager.get().kill(readers1.getSid());
 		}
+	}
+
+	@Test
+	public void testMyAndRecent() throws Exception {
+		Folder secret = fx.store("Secret");
+		Group readers = fx.group("readers");
+		User reader = fx.user("reader", readers.getName());
+		Session readers1 = open(reader);
+		try {
+			fx.grant(store, readers, Permission.READ);
+			Matter demo = fx.matter(healdan, 1, "Healdan Demo", store);
+			Matter website = fx.matter(healdan, 2, "Healdan Website", store);
+			Matter hidden = fx.matter(fx.client(999, "Acme Healthcare"), 1, "Hidden", secret);
+
+			// My Matters: the reader's own list, by display, each entry with its client's name
+			assertEquals(0, as(readers1).myMatters().size());
+			as(readers1).addToMyMatters(website.getFolderId());
+			as(readers1).addToMyMatters(demo.getFolderId());
+			List<GUIMatter> mine = as(readers1).myMatters();
+			assertEquals(List.of("998.1 \u2013 Healdan Demo", "998.2 \u2013 Healdan Website"),
+					mine.stream().map(GUIMatter::getDisplay).toList());
+			assertEquals(List.of("Healdan", "Healdan"), mine.stream().map(GUIMatter::getClientName).toList());
+			assertEquals(List.of(demo.getFolderId(), website.getFolderId()),
+					mine.stream().map(GUIMatter::getFolderId).toList());
+			assertEquals(demo.getId(), mine.get(0).getId());
+			assertEquals(0, as(boss).myMatters().size());
+
+			// Only a matter the user can read, and only a matter
+			ServerException unreadable = assertThrows(ServerException.class,
+					() -> as(readers1).addToMyMatters(hidden.getFolderId()));
+			assertEquals("You need the read permission on this matter to add it to My Matters.",
+					unreadable.getMessage());
+			ServerException notMatter = assertThrows(ServerException.class,
+					() -> as(readers1).addToMyMatters(store.getId()));
+			assertEquals("Only a matter can be added to My Matters.", notMatter.getMessage());
+			assertEquals(2, as(readers1).myMatters().size());
+
+			as(readers1).removeFromMyMatters(website.getFolderId());
+			assertEquals(List.of(demo.getFolderId()),
+					as(readers1).myMatters().stream().map(GUIMatter::getFolderId).toList());
+
+			// Recent Matters: newest first, only matters the user can read
+			Instant now = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+			recordChange(reader, demo.getFolderId(), now.minus(Duration.ofHours(2)));
+			recordChange(reader, website.getFolderId(), now.minus(Duration.ofMinutes(5)));
+			recordChange(reader, hidden.getFolderId(), now.minus(Duration.ofMinutes(1)));
+			List<GUIMatter> recent = as(readers1).recentMatters();
+			assertEquals(List.of("998.2 \u2013 Healdan Website", "998.1 \u2013 Healdan Demo"),
+					recent.stream().map(GUIMatter::getDisplay).toList());
+			assertEquals(List.of(website.getFolderId(), demo.getFolderId()),
+					recent.stream().map(GUIMatter::getFolderId).toList());
+			assertEquals("Healdan", recent.get(0).getClientName());
+
+			// Each user's own changes, with each matter's own client
+			recordChange(bossUser, hidden.getFolderId(), now.minus(Duration.ofMinutes(3)));
+			List<GUIMatter> bosses = as(boss).recentMatters();
+			assertEquals(1, bosses.size());
+			assertEquals("999.1 \u2013 Hidden", bosses.get(0).getDisplay());
+			assertEquals("Acme Healthcare", bosses.get(0).getClientName());
+			assertEquals(hidden.getId(), bosses.get(0).getId());
+		} finally {
+			SessionManager.get().kill(readers1.getSid());
+		}
+	}
+
+	/** The id of the next history entry written, above any CE gives in a test */
+	private long nextHistoryId = 1_000_000L;
+
+	/**
+	 * Writes a document history entry, as CE does when the user changes a
+	 * document in that folder
+	 */
+	private void recordChange(User user, long folderId, Instant when) {
+		Timestamp date = Timestamp.from(when);
+		new JdbcTemplate(Context.get(DataSource.class)).update("""
+				insert into ld_history (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted,
+				                        ld_tenantid, ld_folderid, ld_userid, ld_username, ld_date, ld_event,
+				                        ld_notified)
+				values (?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, 0)
+				""", nextHistoryId++, date, date, Tenant.DEFAULT_ID, folderId, user.getId(), user.getUsername(), date,
+				DocumentEvent.CHANGED.toKey());
 	}
 
 	private static void assertRole(String kind, Long matterId, boolean topLevel, boolean searchFolder,

@@ -142,8 +142,10 @@ public class DocumentsPanel extends HLayout implements FolderObserver, DocumentO
         }
 
         MainPanel.get().selectDocumentsTab();
+        // Healdan: openFolder adds to the selection, so clear what was selected before
+        FolderNavigator.get().deselectAllRecords();
         FolderNavigator.get().openFolder(folderId, docId);
-        documentsMenu.expandSection(0);
+        documentsMenu.expandSection("browser");
         if (detailPanel instanceof DocumentDetailsPanel docDetails)
             docDetails.selectDefaultTab();
     }

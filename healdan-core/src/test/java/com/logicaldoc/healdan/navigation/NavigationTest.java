@@ -159,7 +159,7 @@ public class NavigationTest extends AbstractHealdanTestCase {
 		List<MatterEntry> entries = myMatters.list(alice.getId());
 		assertEquals(List.of("998.1 \u2013 Healdan Demo", "998.2 \u2013 Second", "998.10 \u2013 Tenth"),
 				displays(entries));
-		assertEquals(new MatterEntry(demo.getId(), demo.getFolderId(), "998.1 \u2013 Healdan Demo", null),
+		assertEquals(new MatterEntry(demo.getId(), demo.getFolderId(), "998.1 \u2013 Healdan Demo", "Healdan", null),
 				entries.get(0));
 
 		// Each is a CE folder bookmark, which CE's Bookmarks section lists too (plan, call 9)
@@ -197,11 +197,16 @@ public class NavigationTest extends AbstractHealdanTestCase {
 		// Removing takes away that user's bookmark only, and does nothing when there is none
 		myMatters.remove(alice.getId(), second.getFolderId());
 		myMatters.remove(alice.getId(), second.getFolderId());
-		myMatters.remove(alice.getId(), documents.getId());
 		assertNull(BookmarkDAO.get().findByUserIdAndFolderId(alice.getId(), second.getFolderId()));
 		assertEquals(List.of("998.1 \u2013 Healdan Demo", "998.10 \u2013 Tenth"),
 				displays(myMatters.list(alice.getId())));
 		assertEquals(List.of("998.2 \u2013 Second"), displays(myMatters.list(bob.getId())));
+
+		// A folder that isn't a matter's workspace was never in My Matters: its CE bookmark stays
+		myMatters.remove(bob.getId(), documents.getId());
+		myMatters.remove(bob.getId(), store.getId());
+		assertNotNull(BookmarkDAO.get().findByUserIdAndFolderId(bob.getId(), documents.getId()));
+		assertNotNull(BookmarkDAO.get().findByUserIdAndFolderId(bob.getId(), store.getId()));
 	}
 
 	@Test
@@ -299,7 +304,7 @@ public class NavigationTest extends AbstractHealdanTestCase {
 		for (int n = 1; n <= 19; n++)
 			expected.add("998.%d \u2013 Matter %d".formatted(n, n));
 		assertEquals(expected, displays(recent));
-		assertEquals(new MatterEntry(newest.getId(), newest.getFolderId(), "998.25 \u2013 Matter 25",
+		assertEquals(new MatterEntry(newest.getId(), newest.getFolderId(), "998.25 \u2013 Matter 25", "Healdan",
 				Date.from(halfHourAgo)), recent.get(0));
 		assertEquals(Date.from(now.minus(Duration.ofHours(1))), recent.get(1).lastChange());
 		assertEquals(Date.from(now.minus(Duration.ofHours(19))), recent.get(19).lastChange());

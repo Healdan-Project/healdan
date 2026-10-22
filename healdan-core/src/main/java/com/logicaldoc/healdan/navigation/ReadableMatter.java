@@ -53,6 +53,7 @@ record ReadableMatter(Matter matter, Client client) {
 	 */
 	MatterEntry entry(Date lastChange) {
 		return new MatterEntry(matter.getId(), matter.getFolderId(),
-				MatterDisplay.format(client.getNumber(), matter.getNumber(), matter.getName()), lastChange);
+				MatterDisplay.format(client.getNumber(), matter.getNumber(), matter.getName()), client.getName(),
+				lastChange);
 	}
 }

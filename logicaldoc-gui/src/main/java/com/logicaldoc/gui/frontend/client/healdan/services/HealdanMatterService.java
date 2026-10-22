@@ -13,9 +13,9 @@ import com.logicaldoc.gui.frontend.client.healdan.beans.GUIFolderRole;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIMatter;
 
 /**
- * Matters: creating and editing them (spec 5.3), and what the folder menu
- * needs to know. Creating, editing and the lists the dialogs pick from are
- * for administrators only.
+ * Matters: creating and editing them (spec 5.3), what the folder menu needs to
+ * know, and My Matters and Recent Matters (spec 8.2). Creating, editing and
+ * the lists the dialogs pick from are for administrators only.
  */
 @RemoteServiceRelativePath("healdanmatter")
 public interface HealdanMatterService extends RemoteService {
@@ -97,34 +97,36 @@ public interface HealdanMatterService extends RemoteService {
 	public GUIMatter update(GUIMatter matter) throws ServerException;
 
 	/**
-	 * Task 26
-	 *
-	 * @return the user's My Matters
+	 * @return the user's My Matters, by display: each with its id, workspace,
+	 *         display and client name
 	 *
 	 * @throws ServerException an error happened in the server application
 	 */
 	public List<GUIMatter> myMatters() throws ServerException;
 
 	/**
-	 * Task 26
-	 *
-	 * @return the matters the user changed recently, newest first
+	 * @return the matters the user changed a document in recently, newest
+	 *         first: each with its id, workspace, display and client name
 	 *
 	 * @throws ServerException an error happened in the server application
 	 */
 	public List<GUIMatter> recentMatters() throws ServerException;
 
 	/**
-	 * Task 26
+	 * Adds a matter to the user's My Matters, unless it's there already
 	 *
 	 * @param folderId a matter's workspace
 	 *
-	 * @throws ServerException an error happened in the server application
+	 * @throws ServerException the folder isn't a matter's workspace or the
+	 *         user can't read it (the message says why), or an error happened
+	 *         in the server application
 	 */
 	public void addToMyMatters(long folderId) throws ServerException;
 
 	/**
-	 * Task 26
+	 * Removes a matter from the user's My Matters, if it's there. A folder
+	 * that isn't a matter's workspace is left alone, with any CE bookmark on
+	 * it
 	 *
 	 * @param folderId a matter's workspace
 	 *

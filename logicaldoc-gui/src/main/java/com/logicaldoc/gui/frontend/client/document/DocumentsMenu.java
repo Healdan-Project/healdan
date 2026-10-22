@@ -7,6 +7,7 @@ import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.widgets.FeatureDisabled;
 import com.logicaldoc.gui.frontend.client.folder.FolderNavigatorPanel;
 import com.logicaldoc.gui.frontend.client.folder.browser.FolderCursor;
+import com.logicaldoc.gui.frontend.client.healdan.navigation.HealdanDocumentsMenu;
 import com.smartgwt.client.types.VisibilityMode;
 import com.smartgwt.client.widgets.layout.SectionStack;
 import com.smartgwt.client.widgets.layout.SectionStackSection;
@@ -47,6 +48,8 @@ public class DocumentsMenu extends SectionStack {
 		}
 
 		setShowResizeBar(true);
+
+		HealdanDocumentsMenu.addSections(this);
 
 		addBrowser(showBrowser);
 
