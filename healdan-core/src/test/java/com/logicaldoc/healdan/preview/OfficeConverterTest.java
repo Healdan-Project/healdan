@@ -33,6 +33,7 @@ public class OfficeConverterTest extends AbstractHealdanTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
+		PreviewTests.clearStore();
 		Context.get().getConfig().setProperty("converter.OfficeConverter.timeout", "30");
 	}
 

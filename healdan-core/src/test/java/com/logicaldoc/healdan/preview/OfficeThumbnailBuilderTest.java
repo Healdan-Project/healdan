@@ -8,6 +8,7 @@ import static org.junit.Assert.fail;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,6 +24,7 @@ import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
 public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
@@ -40,16 +42,18 @@ public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
 		}
 	}
 
+	@Override
+	public void setUp() throws IOException, SQLException, PluginException {
+		super.setUp();
+		PreviewTests.clearStore();
+	}
+
 	private Document upload(String name) throws Exception {
 		HealdanFixtures fx = new HealdanFixtures();
 		Matter matter = fx.matter(fx.client(997, "Healdan"), 1, "Office", fx.store("Main"), "Documents");
 		Folder folder = FolderDAO.get()
 				.findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents", Tenant.DEFAULT_ID, true).get(0);
-		Document doc = fx.upload(folder, name, "content", fx.admin());
-		// The test store lives under target/ and outlives runs, and document ids repeat
-		Store.get().delete(StoreResource.builder().document(doc).fileVersion(doc.getFileVersion())
-				.suffixPdfConversion().build());
-		return doc;
+		return fx.upload(folder, name, "content", fx.admin());
 	}
 
 	@Test
