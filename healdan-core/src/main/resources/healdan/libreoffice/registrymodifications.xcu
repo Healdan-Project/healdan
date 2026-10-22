@@ -10,14 +10,15 @@
   <item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop></item>
   <item oor:path="/org.openoffice.Office.Common/Security/Scripting"><prop oor:name="DisableMacrosExecution" oor:op="fuse"><value>true</value></prop></item>
   <!--
-    Never update links when loading. The value 2 is the "never" member of the
-    link-update enumeration (0 always, 1 on request, 2 never) in LibreOffice's
-    officecfg/registry/schema/org/openoffice/Office/Writer.xcs and Calc.xcs,
-    as best read from memory of that schema; the real-LibreOffice probes of the
-    M1.5 plan (Task 8) are the arbiter.
+    Never update links when loading. The two applications number the choices
+    differently. Writer: officecfg/registry/schema/org/openoffice/Office/Writer.xcs,
+    Content/Update/Link, 0 = always, 1 = on request, 2 = never. Calc:
+    officecfg/registry/schema/org/openoffice/Office/Calc.xcs, Content/Update/Link,
+    0 = always, 1 = never, 2 = on request (the default). Both files are in
+    LibreOffice's core repository.
   -->
   <item oor:path="/org.openoffice.Office.Writer/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>2</value></prop></item>
-  <item oor:path="/org.openoffice.Office.Calc/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>2</value></prop></item>
+  <item oor:path="/org.openoffice.Office.Calc/Content/Update"><prop oor:name="Link" oor:op="fuse"><value>1</value></prop></item>
   <!-- A headless run has no GPU worth using. -->
   <item oor:path="/org.openoffice.Office.Common/Misc"><prop oor:name="UseOpenCL" oor:op="fuse"><value>false</value></prop></item>
   <!-- First start: no wizard, tip of the day, update check or crash report dialog. -->

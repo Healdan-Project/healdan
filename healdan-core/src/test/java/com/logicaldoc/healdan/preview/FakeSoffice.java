@@ -51,6 +51,11 @@ final class FakeSoffice {
 		return script("hang", "sh -c 'sleep 600; :' \"$UI\" &\nsleep 600\n");
 	}
 
+	/** @return a converter that writes a PDF and then never finishes */
+	static File partialThenHang() throws IOException {
+		return script("partial-hang", "write_pdf\nsleep 600\n");
+	}
+
 	/**
 	 * @param seconds how long the conversion takes
 	 * @param log the file that gets "start" and "end" lines with epoch milliseconds

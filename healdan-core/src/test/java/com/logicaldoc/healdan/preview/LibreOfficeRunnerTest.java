@@ -135,6 +135,19 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 				.filter(h -> h.info().commandLine().map(c -> c.contains(slot)).orElse(false)).toList());
 	}
 
+	@Test
+	public void testTimeoutWithPartialOutputFails() throws IOException {
+		use(FakeSoffice.partialThenHang());
+		Context.get().getConfig().setProperty(TIMEOUT, "2");
+		try {
+			new LibreOfficeRunner().toPdf(in, Kind.TEXT, dest);
+			fail("expected IOException");
+		} catch (IOException e) {
+			assertTrue(e.getMessage(), e.getMessage().contains("timed out"));
+		}
+		assertFalse(dest.exists());
+	}
+
 	private Future<Void> inBackground(ExecutorService pool, LibreOfficeRunner runner, String name) {
 		return pool.submit(() -> {
 			File src = new File(dir, name + ".docx");
@@ -178,7 +191,11 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 		ExecutorService pool = Executors.newFixedThreadPool(2);
 		try {
 			Future<Void> bg = inBackground(pool, runner, "bg");
-			Thread.sleep(500);
+			long deadline = System.currentTimeMillis() + 10000;
+			while ((!log.exists() || Files.readAllLines(log.toPath()).isEmpty())
+					&& System.currentTimeMillis() < deadline)
+				Thread.sleep(50);
+			assertEquals(1, Files.readAllLines(log.toPath()).size());
 			use(FakeSoffice.ok());
 			long start = System.currentTimeMillis();
 			pool.submit(() -> {
@@ -186,6 +203,10 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 				return null;
 			}).get(10, TimeUnit.SECONDS);
 			assertTrue(System.currentTimeMillis() - start < 2000);
+			// The background run was still going when the interactive one finished
+			List<String> seen = Files.readAllLines(log.toPath());
+			assertEquals(1, seen.size());
+			assertTrue(seen.get(0).startsWith("start"));
 			bg.get(30, TimeUnit.SECONDS);
 		} finally {
 			pool.shutdownNow();

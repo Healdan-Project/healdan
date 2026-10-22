@@ -177,12 +177,16 @@ public class LibreOfficeRunner {
 			List<String> cmd = commandLine(path, src, kind, slotDir, outDir.toFile());
 			long started = System.nanoTime();
 			int exit;
+			long seconds;
 			try {
 				exit = new Exec().execPB(cmd, null, outDir.toFile(), timeout);
+				seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started);
 			} finally {
 				sweep(slotDir);
 			}
-			long seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started);
+			// A run that hit the timeout fails even if it left a PDF: that file may be cut off mid-write
+			if (timeout > 0 && seconds >= timeout)
+				throw new IOException("LibreOffice timed out after " + timeout + " s converting " + src.getName());
 
 			String base = src.getName();
 			int dot = base.lastIndexOf('.');
@@ -193,8 +197,6 @@ public class LibreOfficeRunner {
 				Files.move(pdf.toPath(), dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 				return;
 			}
-			if (timeout > 0 && seconds >= timeout)
-				throw new IOException("LibreOffice timed out after " + timeout + " s converting " + src.getName());
 			throw new IOException("LibreOffice exited " + exit + " without a PDF for " + src.getName());
 		} finally {
 			deleteTree(outDir);
