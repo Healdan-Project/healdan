@@ -564,7 +564,7 @@ Also enforced:
 
 CE has no group containing every user.
 - Healdan creates an **Everyone** group on first start and adds every existing user to it.
-- A `UserListener` keeps every user except read-only ones in it, on every save, so an admin can't take a user out. The owner settled this on 2026-10-22, after CE's user form and SOAP were found to drop a new user from the group (plan, R132).
+- A `UserListener` keeps every user except read-only ones in it, on every save, so an admin can't take a user out. The owner settled this on 2026-10-22, after CE's user form and SOAP were found to drop a new user from the group (plan, R132). Deleting the group is refused (R137).
 - Templates use it for "public within the install" access, as in the demo.
 
 ### 7.5 A veto must leave nothing behind
@@ -841,6 +841,7 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 | `logicaldoc-core/.../folder/HibernateFolderDAO.java` `merge` (~2347) | `beforeFolderMerge(...)` first. `merge` moves each document with `DocumentManager.moveToFolder`, which removes the hit from the index and saves a MOVED version in the background. Neither is transactional, so a veto partway through leaves both behind even when the database rolls back (D3). The pre-acceptance PR: both loops walk the direct children (`findChildren`, ~2372, ~2382) instead of `findByParentId`'s whole subtree, which landed every folder at any depth directly in the target and moved an alias's target rather than the alias (R134) | 3, pre-acceptance |
 | `logicaldoc-core/.../folder/HibernateFolderDAO.java` `copy` (~1505) | `beforeFolderCopy(...)` first. `copy` creates each document with `DocumentManager.create` inside the folder DAO's transaction, and each create writes the file to the Store and schedules the first version's save in the background, which waits for the document row. A veto partway through rolls the database back, but the files stay and each version save holds a `VersionSave` thread for about 100 s before logging an error (D3) | 3 |
 | `logicaldoc-core/.../stats/StatsCollector.java` `runTask` (~348) | the upload to `stat.logicaldoc.com` removed; the task still saves the local statistics System > General shows (R135) | pre-acceptance |
+| `logicaldoc-core/.../security/user/HibernateGroupDAO.java` `delete` (~49) | `HealdanHooks.get().beforeGroupDelete(group)` first, so Healdan can refuse deleting Everyone (R137) | pre-acceptance |
 | `logicaldoc-cmis/.../cmis/LDRepository.java` `deleteTree` (~890–895) | `HealdanHooks.get().beforeFolderDeleteTree(...)` first when the object is a folder, with a `FolderHistory` naming the session user; a refusal reaches the client through the method's own catch (`CmisStorageException`). CMIS deletes each document and subfolder in its own commit before the folder itself, so a refusal at the folder's store would leave the contents deleted (R10) | 9 |
 | `logicaldoc-cmis/.../cmis/LDRepository.java` `createDocumentFromSource` (~488), `deleteObject` (~846), `deleteTree` (~883) | `HealdanCmisChecks` on the document: DOWNLOAD on the one copied (R73); DELETE on the one deleted, `deleteTree` given a document included (R70, R80) | WebDAV/CMIS |
 | `logicaldoc-cmis/.../cmis/HealdanCmisChecks.java` | **new file**: the document checks above, through core's `HealdanTreeChecks.document` (R78), refusing with a `CmisPermissionDeniedException` (R80) | WebDAV/CMIS |
@@ -888,7 +889,7 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 - extattr: [#37](https://github.com/Healdan-Project/healdan/pull/37);
 - JDK 25: [#40](https://github.com/Healdan-Project/healdan/pull/40), which moved CI and the Docker image to JDK 25 ahead of upstream's Java 25 switch (the plan's call 11);
 - credits: [#43](https://github.com/Healdan-Project/healdan/pull/43), which credits LogicalDOC on the login page and in About, and makes the Sign in button blue;
-- pre-acceptance: the PR that fixed four gaps found before the owner's acceptance walkthrough (R132–R135).
+- pre-acceptance: the PR that fixed four gaps found before the owner's acceptance walkthrough (R132–R137).
 
 **Planned, but not edited:**
 - `logicaldoc-webapp/.../web/data/FoldersDataServlet.java`: the tree draws a search folder's magnifying glass through `DocUtil.getFolderIcon` (`FolderListGridField`), found in Task 24.
