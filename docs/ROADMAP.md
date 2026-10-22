@@ -74,7 +74,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 | # | Milestone | Depends on | Status |
 |---|---|---|---|
 | M1 | Move in | – | **done** 2026-10-22: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. On 2026-10-22 a review of every open follow-up found four gaps to fix before acceptance, which the pre-acceptance PR ([Healdan-Project/healdan#44](https://github.com/Healdan-Project/healdan/pull/44)) fixed. The owner's acceptance walkthrough (the plan's Task 30) passed all eight rows on 2026-10-22. Its one punch-list item, Doc # in search results, was fixed in [Healdan-Project/healdan#45](https://github.com/Healdan-Project/healdan/pull/45) |
-| M1.5 | Office previews and thumbnails | M1 | not started |
+| M1.5 | Office previews and thumbnails | M1 | **design approved** 2026-10-22: [spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md); [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md) approved 2026-10-22, with its spec corrections. Building |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
 | M4 | OIDC sign-in | – (can run alongside others; land before M5) | not started |
@@ -239,6 +239,8 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 - **Commands allow-list.** New external commands need a line in `docker/allowed-commands.txt`.
 - **Indexing stays separate.** Full-text indexing (M1) doesn't depend on this; it uses a parser such as POI or Tika, not PDF conversion.
 - **Watch the image size.** Record the size increase in the design.
+
+**Design.** Settled in the [M1.5 design spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), which the owner approved on 2026-10-22. A preview is a quick check that it's the expected document (owner), so Healdan converts each new Office file in the background, shows tracked changes and comments (owner), and serves the result through a small hook in CE's `ConvertPdf`, which until now served only PDFs. LibreOffice adds about 410 MB to the image.
 
 ---
 
