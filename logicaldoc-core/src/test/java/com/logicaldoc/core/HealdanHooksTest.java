@@ -24,6 +24,8 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.searchengine.SearchEngine;
+import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.threading.ThreadPools;
@@ -109,6 +111,12 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         @Override
         public void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
             calls.add("beforeApplySecurityToTree:%d".formatted(rootId));
+            throw new HealdanVetoException(VETO);
+        }
+
+        @Override
+        public void beforeGroupDelete(Group group) throws PersistenceException {
+            calls.add("beforeGroupDelete:%d".formatted(group.getId()));
             throw new HealdanVetoException(VETO);
         }
     };
@@ -332,6 +340,21 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         assertEquals(versionsBefore, folderDao.queryForLong(versionCount));
         assertEquals(0, column("ld_folder", "ld_deleted", 6L));
         assertNotNull(SearchEngine.get().getHit(1L));
+    }
+
+    @Test
+    public void testGroupDelete() throws Exception {
+        HealdanHooks.register(vetoing);
+        try {
+            GroupDAO.get().delete(2L);
+            fail("The hook should have vetoed the delete");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+
+        assertEquals(List.of("beforeGroupDelete:2"), calls);
+        assertEquals(0, column("ld_group", "ld_deleted", 2L));
+        assertEquals("author", GroupDAO.get().findById(2L).getName());
     }
 
     @Test

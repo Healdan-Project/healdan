@@ -13,8 +13,10 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.EditMarks;
@@ -38,6 +40,8 @@ import jakarta.annotation.PreDestroy;
  */
 @Component
 public class HealdanHooksImpl implements HealdanHooks {
+
+	static final String EVERYONE_DELETE = "The Everyone group can't be deleted.";
 
 	private final FilingRules rules;
 
@@ -209,6 +213,17 @@ public class HealdanHooksImpl implements HealdanHooks {
 			throws PersistenceException {
 		Vetoes.check(Vetoes.ids(source != null ? source.getId() : null, target != null ? target.getId() : null),
 				List.of(), () -> rules.checkFolderMerge(source, target, FilingRules.actor(transaction)));
+	}
+
+	/**
+	 * Every user but read-only ones stays in Everyone (plan, R132), so deleting
+	 * the group would leave their memberships behind, which CE's permission
+	 * checks still count
+	 */
+	@Override
+	public void beforeGroupDelete(Group group) throws PersistenceException {
+		if (HealdanConstants.EVERYONE_GROUP.equals(group.getName()))
+			throw new HealdanRuleException(EVERYONE_DELETE);
 	}
 
 	/**

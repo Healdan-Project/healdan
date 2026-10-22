@@ -4,6 +4,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.user.Group;
 
 /**
  * Healdan's checks on the operations whose side effects a listener veto can't
@@ -172,6 +173,19 @@ public interface HealdanHooks {
      * @throws PersistenceException to refuse the change
      */
     default void beforeApplySecurityToTree(long rootId, FolderHistory transaction) throws PersistenceException {
+        // No check by default
+    }
+
+    /**
+     * Called first in {@code HibernateGroupDAO.delete}, before the group is
+     * renamed and marked deleted. CE leaves the deleted group's memberships in
+     * place, and its permission checks still count them.
+     *
+     * @param group the group to delete
+     *
+     * @throws PersistenceException to refuse the delete
+     */
+    default void beforeGroupDelete(Group group) throws PersistenceException {
         // No check by default
     }
 

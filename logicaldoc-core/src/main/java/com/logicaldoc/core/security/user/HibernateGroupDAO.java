@@ -46,6 +46,7 @@ public class HibernateGroupDAO extends HibernatePersistentObjectDAO<Group> imple
             throw new IllegalArgumentException("code cannot be 0");
         Group group = findById(groupId);
         refresh(group);
+        com.logicaldoc.core.HealdanHooks.get().beforeGroupDelete(group);
 
         if (group.getName().equals("admin") || group.getName().equals("guest") || group.getName().equals("publisher"))
             throw new PersistenceException(String.format("Group %s cannot be deleted", group.getName()));
