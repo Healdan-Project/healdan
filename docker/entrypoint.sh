@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Container entrypoint: repairs volume ownership, seeds config from the image defaults, runs DockerInit
-# (container-managed config keys, wait for the DB, first-boot schema) and then replaces itself with Tomcat
-# running as the logicaldoc user.
+# (container-managed config keys, wait for the DB, first-boot schema) and then replaces itself with tini, which
+# runs Tomcat, both as the logicaldoc user.
 set -euo pipefail
 
 readonly LDOC_HOME=/opt/logicaldoc
@@ -58,8 +58,8 @@ done
 as_app mkdir -p "$REPO"/docs "$REPO"/index "$REPO"/users "$REPO"/plugins "$REPO"/impex/in "$REPO"/impex/out \
   "$REPO"/logs "$REPO"/db
 
-# tini is PID 1 and forwards the stop signal to bash, which must pass it on to DockerInit: the trap does that, so
-# stopping the container during the DB wait or schema creation ends the init at once instead of in SIGKILL.
+# Until the exec below, bash is PID 1, and the kernel drops signals PID 1 has no handler for: without the trap,
+# stopping the container during the DB wait or schema creation waits out the grace period and ends in SIGKILL.
 # Bash defers a trap until the foreground command ends, but a signal interrupts `wait`: so DockerInit runs in the
 # background while bash waits for it.
 init_pid=
@@ -68,8 +68,10 @@ trap 'log "stopping"; [ -z "$init_pid" ] || kill -TERM "$init_pid" 2>/dev/null |
 init_pid=$!
 wait "$init_pid"
 
+# tini becomes PID 1: it reaps orphans (soffice processes killed after a timeout) and forwards signals to Tomcat.
+# It runs as the app user, after the privilege drop, so that restart.sh (run by Tomcat) may signal PID 1.
 log "starting: $*"
 if [ "$(id -u)" = 0 ]; then
-  exec setpriv --reuid="$APP_UID" --regid="$APP_GID" --init-groups "$@"
+  exec "${app_prefix[@]}" /usr/bin/tini -- "$@"
 fi
-exec "$@"
+exec /usr/bin/tini -- "$@"

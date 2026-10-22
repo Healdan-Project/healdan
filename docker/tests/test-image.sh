@@ -69,7 +69,14 @@ check "becomes healthy" wait_healthy "$APP" 900
 base="http://$(docker port "$APP" 8080/tcp | head -1)"
 check "repository content owned by uid 1000" test "$(docker exec "$APP" stat -c %u /opt/logicaldoc/repository/root-file)" = 1000
 check "context.properties owned by uid 1000" test "$(docker exec "$APP" stat -c %u /opt/logicaldoc/conf/context.properties)" = 1000
-check "Tomcat (PID 1) runs as uid 1000" test "$(docker exec "$APP" stat -c %u /proc/1)" = 1000
+# uid 1000 must own PID 1, or restart.sh may not signal it. Tomcat is the JVM running Catalina's Bootstrap; the
+# brackets keep the scan from matching its own command line.
+check "PID 1 is tini, running as uid 1000" \
+  docker exec "$APP" sh -c 'grep -q "^1 (tini) " /proc/1/stat && test "$(stat -c %u /proc/1)" = 1000'
+tomcat_uid=$(docker exec "$APP" sh -c 'for d in /proc/[0-9]*; do
+    tr "\0" " " 2>/dev/null <"$d/cmdline" | grep -q "catalina[.]startup[.]Bootstrap" && stat -c %u "$d"
+  done; true' || true)
+check "Tomcat runs as uid 1000" test "$tomcat_uid" = 1000
 check "schema created on first boot" app_logs_have 'schema created'
 
 echo "== pages"

@@ -80,5 +80,5 @@ VOLUME ["/opt/logicaldoc/conf", "/opt/logicaldoc/repository"]
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
   CMD curl -fsS -o /dev/null http://localhost:8080/login.jsp || exit 1
-ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/logicaldoc-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/logicaldoc-entrypoint.sh"]
 CMD ["catalina.sh", "run"]
