@@ -409,4 +409,20 @@ public class SeedsTest extends AbstractHealdanTestCase {
 				String.class);
 		assertEquals(List.of("a.docx " + current, "b.XLSX 1.0", "c.pptx 1.0", "d.odt 1.0"), queued);
 	}
+
+	@Test
+	public void testQueueOfficePreviewsSkipsDocumentsWithoutFileVersion() throws Exception {
+		HealdanFixtures fx = new HealdanFixtures();
+		Matter matter = fx.matter(fx.client(997, "Healdan"), 1, "Previews", fx.store("Main"), "Documents");
+		Folder folder = FolderDAO.get()
+				.findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents", Tenant.DEFAULT_ID, true).get(0);
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		jdbc().update("update ld_document set ld_fileversion = null where ld_id = ?", a.getId());
+		jdbc().update("delete from hd_preview_job");
+
+		// A job needs a file version, so a row without one would fail the whole insert, and the startup with it
+		new QueueOfficePreviewsSeed(Context.get(DataSource.class)).run();
+
+		assertEquals(0, jdbc().queryForObject("select count(*) from hd_preview_job", Integer.class).intValue());
+	}
 }
