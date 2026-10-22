@@ -179,6 +179,29 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testUnavailableLibreOfficePostpones() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		Context.get().getConfig().setProperty(PATH, "/nonexistent/soffice");
+
+		assertEquals(1, worker.runOnce(T));
+
+		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
+		assertEquals(0, job.attempts());
+		java.sql.Timestamp next = new org.springframework.jdbc.core.JdbcTemplate(
+				Context.get(javax.sql.DataSource.class)).queryForObject(
+						"select hd_nexttry from hd_preview_job where hd_docid = ?", java.sql.Timestamp.class, a.getId());
+		assertTrue(next.toInstant() + " vs " + T, !next.toInstant().isBefore(T.plus(java.time.Duration.ofMinutes(10))));
+		assertTrue(next.toInstant() + " vs " + T, next.toInstant().isBefore(T.plus(java.time.Duration.ofMinutes(11))));
+		assertEquals(0, worker.runOnce(T.plus(java.time.Duration.ofMinutes(9))));
+
+		// Once LibreOffice is there, a later round converts it
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.ok().getPath());
+		assertEquals(1, worker.runOnce(T.plus(java.time.Duration.ofMinutes(11))));
+		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
+		assertFalse(queued(a, "1.0"));
+	}
+
+	@Test
 	public void testMissingDocumentRetried() {
 		PreviewJobs.get().add(999999, "1.0", T);
 

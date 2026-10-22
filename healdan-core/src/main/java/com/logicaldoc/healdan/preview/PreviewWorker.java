@@ -52,6 +52,9 @@ public class PreviewWorker {
 	/** How long {@link #stop()} waits for the thread */
 	private static final long STOP_WAIT_MS = 10_000;
 
+	/** How long a job waits while LibreOffice can't be started */
+	private static final Duration UNAVAILABLE_WAIT = Duration.ofMinutes(10);
+
 	/** The PDF CE serves when it has no preview; loaded once */
 	private static final byte[] PLACEHOLDER = loadPlaceholder();
 
@@ -128,13 +131,20 @@ public class PreviewWorker {
 	int runOnce(Instant now) {
 		Instant roundStart = Instant.now();
 		List<PreviewJob> jobs = PreviewJobs.get().due(now, BATCH);
+		Round round = new Round();
 		for (PreviewJob job : jobs) {
 			if (Thread.currentThread().isInterrupted())
 				break;
 			// A failure's retry delay counts from the failure, not from the start of the round
-			process(job, () -> now.plus(Duration.between(roundStart, Instant.now())));
+			process(job, () -> now.plus(Duration.between(roundStart, Instant.now())), round);
 		}
 		return jobs.size();
+	}
+
+	/** What a round of jobs has logged so far */
+	private static final class Round {
+
+		boolean unavailableLogged;
 	}
 
 	/**
@@ -144,13 +154,14 @@ public class PreviewWorker {
 	 * @param now the current time
 	 */
 	void process(PreviewJob job, Instant now) {
-		process(job, () -> now);
+		process(job, () -> now, new Round());
 	}
 
 	/**
 	 * @param clock the time of a failure, read when it happens
+	 * @param round the round the job is part of
 	 */
-	private void process(PreviewJob job, Supplier<Instant> clock) {
+	private void process(PreviewJob job, Supplier<Instant> clock, Round round) {
 		PreviewJobs jobs = PreviewJobs.get();
 		try {
 			Document doc = DocumentDAO.get().findById(job.docId());
@@ -176,6 +187,13 @@ public class PreviewWorker {
 			jobs.done(job.docId(), job.fileVersion());
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
+		} catch (LibreOfficeUnavailableException e) {
+			// Says nothing about the file, so it costs the job no try; logged once a round, not once a job
+			if (!round.unavailableLogged) {
+				log.warn("LibreOffice isn't available, Office previews are paused: {}", e.getMessage());
+				round.unavailableLogged = true;
+			}
+			jobs.postpone(job.docId(), job.fileVersion(), e.getMessage(), clock.get().plus(UNAVAILABLE_WAIT));
 		} catch (Throwable e) {
 			// Also an Error: a job that ends neither done nor failed would block the queue behind it for good
 			String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();

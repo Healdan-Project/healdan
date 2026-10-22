@@ -103,10 +103,27 @@ public class PreviewJobs {
 			return;
 		int attempts = job.get().attempts() + 1;
 		Instant next = attempts <= BACKOFF.length ? now.plus(BACKOFF[attempts - 1]) : now;
-		String message = error != null && error.length() > MAX_ERROR ? error.substring(0, MAX_ERROR) : error;
 		jdbc.update(
 				"update hd_preview_job set hd_attempts = ?, hd_nexttry = ?, hd_lasterror = ? where hd_docid = ? and hd_fileversion = ?",
-				attempts, Timestamp.from(next), message, docId, fileVersion);
+				attempts, Timestamp.from(next), truncate(error), docId, fileVersion);
+	}
+
+	private static String truncate(String error) {
+		return error != null && error.length() > MAX_ERROR ? error.substring(0, MAX_ERROR) : error;
+	}
+
+	/**
+	 * Puts a job off without counting a failed try, for a failure that says
+	 * nothing about the file, such as LibreOffice missing
+	 *
+	 * @param docId the document
+	 * @param fileVersion the file version
+	 * @param error what went wrong, cut to 4000 characters
+	 * @param nextTry when to try again
+	 */
+	public void postpone(long docId, String fileVersion, String error, Instant nextTry) {
+		jdbc.update("update hd_preview_job set hd_nexttry = ?, hd_lasterror = ? where hd_docid = ? and hd_fileversion = ?",
+				Timestamp.from(nextTry), truncate(error), docId, fileVersion);
 	}
 
 	/**

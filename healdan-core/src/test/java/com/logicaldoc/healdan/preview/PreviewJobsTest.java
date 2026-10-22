@@ -64,6 +64,21 @@ public class PreviewJobsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testPostponeCountsNoAttempt() {
+		PreviewJobs jobs = PreviewJobs.get();
+		jobs.add(7, "1.0", T);
+		jobs.failed(7, "1.0", "boom", T);
+
+		jobs.postpone(7, "1.0", "unavailable", T.plus(Duration.ofMinutes(10)));
+
+		PreviewJob job = jobs.find(7, "1.0").orElseThrow();
+		assertEquals(1, job.attempts());
+		assertEquals("unavailable", job.lastError());
+		assertTrue(jobs.due(T.plus(Duration.ofMinutes(10)).minusSeconds(1), 10).isEmpty());
+		assertEquals(1, jobs.due(T.plus(Duration.ofMinutes(10)), 10).size());
+	}
+
+	@Test
 	public void testDoneRemovesTheJob() {
 		PreviewJobs jobs = PreviewJobs.get();
 		jobs.add(7, "1.0", T);

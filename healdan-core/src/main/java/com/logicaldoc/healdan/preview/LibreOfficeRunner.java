@@ -103,7 +103,8 @@ public class LibreOfficeRunner {
 	 * @param kind its family
 	 * @param dest where to leave the PDF
 	 * @throws IOException if LibreOffice is busy, can't be run, times out or
-	 *         leaves no PDF
+	 *         leaves no PDF; a {@link LibreOfficeUnavailableException} if it
+	 *         can't be started at all
 	 */
 	public void toPdf(File src, OfficeFormats.Kind kind, File dest) throws IOException {
 		boolean viaBackground = background.get();
@@ -207,6 +208,9 @@ public class LibreOfficeRunner {
 			try {
 				exit = new Exec().execPB(cmd, null, outDir.toFile(), timeout);
 				seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started);
+			} catch (IOException e) {
+				// Exec throws only before the process runs: the command isn't allowed or can't start
+				throw new LibreOfficeUnavailableException(e.getMessage(), e);
 			} finally {
 				sweep(slotDir);
 			}

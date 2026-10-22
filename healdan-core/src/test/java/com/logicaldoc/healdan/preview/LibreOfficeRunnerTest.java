@@ -115,7 +115,19 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 			new LibreOfficeRunner().toPdf(in, Kind.TEXT, dest);
 			fail("expected IOException");
 		} catch (IOException expected) {
+			assertTrue(expected.getClass().getName(), expected instanceof LibreOfficeUnavailableException);
 			assertFalse(dest.exists());
+		}
+	}
+
+	@Test
+	public void testFailedRunIsNotUnavailable() throws IOException {
+		use(FakeSoffice.fail());
+		try {
+			new LibreOfficeRunner().toPdf(in, Kind.TEXT, dest);
+			fail("expected IOException");
+		} catch (IOException expected) {
+			assertFalse(expected instanceof LibreOfficeUnavailableException);
 		}
 	}
 
