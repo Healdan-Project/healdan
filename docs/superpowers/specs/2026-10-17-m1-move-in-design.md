@@ -648,6 +648,7 @@ The owner saw and accepted a mockup of these changes on 2026-10-17: the existing
 
 **Default columns** for new users (call): Name, Version (`fileVersion`), Doc #, Edit Date (last modified), Size, Author and Class. That matches the owner's iManage screenshot.
 - Healdan sets CE's `default.gui.document.columns` on first start.
+- **Search results** show Doc # too, right after the file name (`default.gui.search.columns`). (owner, at the acceptance walkthrough on 2026-10-22; plan, R139)
 - Users can still change their columns.
 
 **Labels.** These are edits to `logicaldoc-i18n`'s `messages.properties`, `messages_en.properties` and `messages_en_US.properties`. The two English files are full copies that the GUI loads by locale, so all three need the edit. Other languages are unchanged.
@@ -807,6 +808,7 @@ Upstream merges that change LogicalDOC's schema still need SQL applied by hand o
 | `profile` | Creates the Healdan profile CE template and its attributes (§6.6), the Class option "Docs", and the `class.default` setting. |
 | `templates-store` | Creates the Templates Store (a LogicalDOC workspace, admins only) and records its id. |
 | `columns` | Sets `default.gui.document.columns` (§8.4). |
+| `search-docnumber-column` | Adds Doc # to `default.gui.search.columns`, right after the file name (§8.4). |
 | `reindex-office` | Flags existing `docx`/`xlsx`/`pptx`/`eml`/`msg` documents for re-indexing (§9). |
 | `settings` | Writes default values for every Healdan setting. |
 

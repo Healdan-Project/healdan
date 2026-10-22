@@ -56,7 +56,7 @@ public class SearchClientColumnSeed implements SeedStep {
 	 *         the property, and is now right after {@code after} when that is
 	 *         listed, otherwise at the end
 	 */
-	private static boolean append(ContextProperties config, String property, String item, String after) {
+	static boolean append(ContextProperties config, String property, String item, String after) {
 		String current = StringUtils.trimToEmpty(config.getProperty(property));
 		List<String> items = new ArrayList<>(Arrays.asList(StringUtils.split(current, ',')));
 		items.replaceAll(String::trim);
