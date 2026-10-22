@@ -82,6 +82,10 @@
                     <encoding>iso-8859-1</encoding>
                     <source>${source.level}</source>
                     <target>${source.level}</target>
+                    <!-- Healdan: javac 23+ runs annotation processors only when asked; Log4j's indexes LDHtmlLayout -->
+                    <compilerArgs>
+                        <arg>-proc:full</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
             <plugin>

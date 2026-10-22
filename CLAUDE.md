@@ -26,7 +26,7 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 
 ## Build and test
 
-You need JDK 21 (`source.level` in `logicaldoc-parent/pom.xml`; the GWT client compiles at source level 17) and Maven 3.9+. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `.github/workflows/build-logicaldoc.yml` writes into `~/.m2/settings.xml`. Copy that block for local builds.
+You need JDK 25 and Maven 3.9+. The JDK is the one the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name; CI's `build` check reads it from there and fails if the two differ. `source.level` in `logicaldoc-parent/pom.xml` sets the Java language level, and the GWT client compiles at source level 17. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `.github/workflows/build-logicaldoc.yml` writes into `~/.m2/settings.xml`. Copy that block for local builds.
 
 ```bash
 mvn -B -ntp -DskipTests install                          # full reactor build (what the Docker image runs)
@@ -39,7 +39,7 @@ mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
 - `logicaldoc-gui` runs a GWT compile for each GWT module (frontend, login, setup), which is slow. Skip it with `-Dgwt.skipCompilation=true` when you aren't touching the UI; the module's Java still compiles, which `healdan-core` needs.
   - Up to `test` that's enough. For `package` or `install`, add `-Dmaven.antrun.skip=true` and `-pl '!logicaldoc-webapp'`, as CI's `build` check does. The GUI's antrun step fails without the GWT output, and skipping antrun leaves every plugin zip unfinished, so the WAR built from them is broken.
-- CI's `build` check compiles every module except the WAR, skips the GWT compile and runs only the `healdan-core` tests and `HealdanHooksTest`. The Docker image CI does the GWT compile and the WAR. Upstream modules' tests don't run in CI.
+- CI's `build` check compiles every module except the WAR, skips the GWT compile and runs only the `healdan-core` tests and `HealdanHooksTest`. The Docker image CI does the GWT compile and the WAR. Upstream modules' tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
 - Pull requests that change only `docs/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
