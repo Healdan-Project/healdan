@@ -2,10 +2,12 @@ package com.logicaldoc.healdan.preview;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import javax.sql.DataSource;
 
@@ -124,11 +126,13 @@ public class PreviewWorker {
 	 * @return how many jobs were processed, at most 10
 	 */
 	int runOnce(Instant now) {
+		Instant roundStart = Instant.now();
 		List<PreviewJob> jobs = PreviewJobs.get().due(now, BATCH);
 		for (PreviewJob job : jobs) {
 			if (Thread.currentThread().isInterrupted())
 				break;
-			process(job, now);
+			// A failure's retry delay counts from the failure, not from the start of the round
+			process(job, () -> now.plus(Duration.between(roundStart, Instant.now())));
 		}
 		return jobs.size();
 	}
@@ -140,6 +144,13 @@ public class PreviewWorker {
 	 * @param now the current time
 	 */
 	void process(PreviewJob job, Instant now) {
+		process(job, () -> now);
+	}
+
+	/**
+	 * @param clock the time of a failure, read when it happens
+	 */
+	private void process(PreviewJob job, Supplier<Instant> clock) {
 		PreviewJobs jobs = PreviewJobs.get();
 		try {
 			Document doc = DocumentDAO.get().findById(job.docId());
@@ -148,7 +159,7 @@ public class PreviewWorker {
 				if (isDeleted(job.docId()))
 					jobs.done(job.docId(), job.fileVersion());
 				else
-					jobs.failed(job.docId(), job.fileVersion(), "document not found", now);
+					jobs.failed(job.docId(), job.fileVersion(), "document not found", clock.get());
 				return;
 			}
 			if (doc.getDeleted() != 0 || !isWanted(doc, job.fileVersion())) {
@@ -159,19 +170,27 @@ public class PreviewWorker {
 			clearPlaceholders(doc, job.fileVersion());
 
 			LibreOfficeRunner.get().inBackground(() -> {
-				FormatConversionManager.get().convertToPdf(doc, job.fileVersion(), null);
-				ThumbnailManager.get().createTumbnail(doc, job.fileVersion(), null);
-				ThumbnailManager.get().createTile(doc, job.fileVersion(), null);
+				convert(doc, job.fileVersion());
 				return null;
 			});
 			jobs.done(job.docId(), job.fileVersion());
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-		} catch (Exception e) {
+		} catch (Throwable e) {
+			// Also an Error: a job that ends neither done nor failed would block the queue behind it for good
 			String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
 			log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);
-			jobs.failed(job.docId(), job.fileVersion(), message, now);
+			jobs.failed(job.docId(), job.fileVersion(), message, clock.get());
 		}
+	}
+
+	/**
+	 * Converts one file version and builds its thumbnails; a seam for tests.
+	 */
+	void convert(Document doc, String fileVersion) throws Exception {
+		FormatConversionManager.get().convertToPdf(doc, fileVersion, null);
+		ThumbnailManager.get().createTumbnail(doc, fileVersion, null);
+		ThumbnailManager.get().createTile(doc, fileVersion, null);
 	}
 
 	private static boolean isDeleted(long docId) {
@@ -224,7 +243,7 @@ public class PreviewWorker {
 		for (String fv : fileVersions) {
 			StoreResource resource = StoreResource.builder().document(doc).fileVersion(fv).suffixPdfConversion()
 					.build();
-			if (store.exists(resource) && isPlaceholder(store.getBytes(resource)))
+			if (store.size(resource) == PLACEHOLDER.length && isPlaceholder(store.getBytes(resource)))
 				store.delete(resource);
 		}
 	}

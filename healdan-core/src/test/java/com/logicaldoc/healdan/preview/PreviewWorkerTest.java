@@ -168,4 +168,41 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 
 		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
 	}
+
+	@Test
+	public void testErrorFailsTheJobAndTheQueueMovesOn() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		Document b = fx.upload(folder, "b.docx", "b", fx.admin());
+		PreviewWorker erroring = new PreviewWorker() {
+			@Override
+			void convert(Document doc, String fileVersion) throws Exception {
+				if (doc.getId() == a.getId())
+					throw new LinkageError("broken");
+				super.convert(doc, fileVersion);
+			}
+		};
+
+		assertEquals(2, erroring.runOnce(T));
+
+		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
+		assertEquals(1, job.attempts());
+		assertEquals("broken", job.lastError());
+		assertFalse(queued(b, "1.0"));
+		assertTrue(Store.get().exists(pdfOf(b, "1.0")));
+	}
+
+	@Test
+	public void testRetryDelayCountsFromTheFailure() throws Exception {
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.hang().getPath());
+		Context.get().getConfig().setProperty(TIMEOUT, "2");
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+
+		assertEquals(1, worker.runOnce(T));
+
+		java.sql.Timestamp next = new org.springframework.jdbc.core.JdbcTemplate(
+				Context.get(javax.sql.DataSource.class)).queryForObject(
+						"select hd_nexttry from hd_preview_job where hd_docid = ?", java.sql.Timestamp.class, a.getId());
+		// The conversion took the 2 s timeout, so the retry is more than a minute after the round's time
+		assertTrue(next.toInstant() + " vs " + T, next.toInstant().isAfter(T.plusSeconds(61)));
+	}
 }
