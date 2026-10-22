@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Random;
@@ -107,12 +108,49 @@ public class MarkupPreparerTest {
 		entries.put("word/document.xml", "<w:document/>");
 		File src = zip("b.docx", entries);
 
-		File copy = MarkupPreparer.prepare(src, work());
+		assertSame(src, MarkupPreparer.prepare(src, work()));
+		assertEquals(0, work().list().length);
+	}
 
-		try (ZipFile a = new ZipFile(src); ZipFile b = new ZipFile(copy)) {
-			assertEquals(a.size(), b.size());
-		}
-		for (String name : entries.keySet())
-			assertArrayEquals(read(src, name), read(copy, name));
+	@Test
+	public void testNoRevisionViewNotCopied() throws IOException {
+		Map<String, String> entries = new LinkedHashMap<>();
+		entries.put("[Content_Types].xml", "<Types/>");
+		entries.put("word/document.xml", "<w:document/>");
+		entries.put("word/settings.xml", "<w:settings><w:zoom w:percent=\"100\"/></w:settings>");
+		File src = zip("c.docx", entries);
+
+		assertSame(src, MarkupPreparer.prepare(src, work()));
+		assertEquals(0, work().list().length);
+	}
+
+	@Test
+	public void testOversizedSettingsUntouched() throws IOException {
+		// Random hex barely compresses, so only the size of the settings part can stop the copy
+		byte[] noise = new byte[2 * 1024 * 1024];
+		new Random(7).nextBytes(noise);
+		String settings = "<w:settings><w:revisionView w:markup=\"false\"/><!--" + HexFormat.of().formatHex(noise)
+				+ "--></w:settings>";
+		assertTrue(settings.length() > 4 * 1024 * 1024);
+		assertTrue(settings.length() < 4 * 1024 * 1024 + 100);
+		Map<String, String> entries = new LinkedHashMap<>();
+		entries.put("word/document.xml", "<w:document/>");
+		entries.put("word/settings.xml", settings);
+		File src = zip("d.docx", entries);
+
+		assertSame(src, MarkupPreparer.prepare(src, work()));
+		assertEquals(0, work().list().length);
+	}
+
+	@Test
+	public void testInflatingPastTheRatioUntouched() throws IOException {
+		Map<String, String> entries = new LinkedHashMap<>();
+		entries.put("word/settings.xml", SETTINGS);
+		entries.put("word/document.xml", "<w:document>" + "0".repeat(5_000_000) + "</w:document>");
+		File src = zip("e.docx", entries);
+		assertTrue(src.length() * 100 < 5_000_000);
+
+		assertSame(src, MarkupPreparer.prepare(src, work()));
+		assertEquals(0, work().list().length);
 	}
 }
