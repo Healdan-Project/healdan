@@ -32,6 +32,8 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 
 	private static final String TIMEOUT = "converter.OfficeConverter.timeout";
 
+	private static final String SLOTS = "converter.OfficeConverter.slots";
+
 	private File dir;
 
 	private File in;
@@ -146,6 +148,44 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 		String slot = slot0().getPath();
 		assertEquals(List.of(), ProcessHandle.allProcesses()
 				.filter(h -> h.info().commandLine().map(c -> c.contains(slot)).orElse(false)).toList());
+	}
+
+	@Test
+	public void testTimeoutNeverUnlimited() {
+		for (String value : new String[] { "0", "-5" }) {
+			Context.get().getConfig().setProperty(TIMEOUT, value);
+			assertEquals(value, 120, LibreOfficeRunner.timeout());
+		}
+		Context.get().getConfig().setProperty(TIMEOUT, "7");
+		assertEquals(7, LibreOfficeRunner.timeout());
+	}
+
+	@Test
+	public void testSlotRebuiltAfterTimeout() throws IOException {
+		Context.get().getConfig().setProperty(SLOTS, "1");
+		try {
+			LibreOfficeRunner runner = new LibreOfficeRunner();
+			use(FakeSoffice.hang());
+			Context.get().getConfig().setProperty(TIMEOUT, "2");
+			try {
+				runner.toPdf(in, Kind.TEXT, dest);
+				fail("expected IOException");
+			} catch (IOException e) {
+				assertTrue(e.getMessage(), e.getMessage().contains("timed out"));
+			}
+			// What a killed LibreOffice may leave in the profile
+			File profile = new File(slot0(), "user/registrymodifications.xcu");
+			Files.writeString(profile.toPath(), "half-written");
+
+			use(FakeSoffice.ok());
+			runner.toPdf(in, Kind.TEXT, dest);
+
+			byte[] template = getClass().getResourceAsStream("/healdan/libreoffice/registrymodifications.xcu")
+					.readAllBytes();
+			assertTrue(java.util.Arrays.equals(template, Files.readAllBytes(profile.toPath())));
+		} finally {
+			Context.get().getConfig().setProperty(SLOTS, "2");
+		}
 	}
 
 	@Test

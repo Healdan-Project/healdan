@@ -181,6 +181,10 @@ public class LibreOfficeRunner {
 		}
 	}
 
+	private synchronized void unprepareSlot(int slot) {
+		slotsPrepared[slot] = false;
+	}
+
 	private static void deleteTree(Path dir) throws IOException {
 		if (!Files.exists(dir))
 			return;
@@ -195,7 +199,7 @@ public class LibreOfficeRunner {
 		String path = config.getProperty(PREFIX + "path");
 		if (path == null || path.isBlank())
 			path = "soffice";
-		int timeout = config.getInt(PREFIX + "timeout", DEFAULT_TIMEOUT);
+		int timeout = timeout();
 
 		prepareSlot(slot);
 		File slotDir = slotDir(slot);
@@ -215,8 +219,11 @@ public class LibreOfficeRunner {
 				sweep(slotDir);
 			}
 			// A run that hit the timeout fails even if it left a PDF: that file may be cut off mid-write
-			if (timeout > 0 && seconds >= timeout)
+			if (seconds >= timeout) {
+				// The killed LibreOffice may have left the profile half-written too: rebuild it on next use
+				unprepareSlot(slot);
 				throw new IOException("LibreOffice timed out after " + timeout + " s converting " + src.getName());
+			}
 
 			String base = src.getName();
 			int dot = base.lastIndexOf('.');
@@ -231,6 +238,17 @@ public class LibreOfficeRunner {
 		} finally {
 			deleteTree(outDir);
 		}
+	}
+
+	/**
+	 * Package-private for tests.
+	 * 
+	 * @return the timeout in seconds; the default when the setting isn't
+	 *         positive, since Exec would then wait for ever
+	 */
+	static int timeout() {
+		int timeout = Context.get().getConfig().getInt(PREFIX + "timeout", DEFAULT_TIMEOUT);
+		return timeout > 0 ? timeout : DEFAULT_TIMEOUT;
 	}
 
 	private static String configuredPath() {
