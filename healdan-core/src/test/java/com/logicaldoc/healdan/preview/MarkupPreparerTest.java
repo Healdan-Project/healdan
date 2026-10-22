@@ -83,6 +83,35 @@ public class MarkupPreparerTest {
 	}
 
 	@Test
+	public void testFullWordRevisionViewRemoved() throws IOException {
+		String view = "<w:revisionView w:markup=\"0\" w:comments=\"0\" w:insDel=\"0\" w:formatting=\"0\""
+				+ " w:inkAnnotations=\"0\"/>";
+		File src = zip("f.docx", Map.of("word/settings.xml", "<w:settings><w:zoom w:percent=\"100\"/>" + view
+				+ "<w:trackRevisions/></w:settings>"));
+
+		File copy = MarkupPreparer.prepare(src, work());
+
+		assertNotSame(src, copy);
+		assertEquals("<w:settings><w:zoom w:percent=\"100\"/><w:trackRevisions/></w:settings>",
+				new String(read(copy, "word/settings.xml"), StandardCharsets.UTF_8));
+	}
+
+	@Test(timeout = 5000)
+	public void testPathologicalSettingsIsFast() throws IOException {
+		// Many openings and no ">": an unbounded [^>]* scans to the end from each one
+		String opening = "<w:revisionView ";
+		StringBuilder sb = new StringBuilder("<w:settings>");
+		while (sb.length() < 4 * 1024 * 1024 - 100)
+			sb.append(opening);
+		assertTrue(sb.length() < 4 * 1024 * 1024);
+		File src = zip("g.docx", Map.of("word/settings.xml", sb.toString()));
+
+		File result = MarkupPreparer.prepare(src, work());
+
+		assertTrue(result.exists());
+	}
+
+	@Test
 	public void testOtherFormatsUntouched() throws IOException {
 		for (String name : new String[] { "a.doc", "a.odt", "a.xlsx" }) {
 			File src = zip(name, Map.of("word/settings.xml", SETTINGS));

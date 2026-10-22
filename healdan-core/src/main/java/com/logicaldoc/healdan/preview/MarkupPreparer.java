@@ -22,7 +22,9 @@ import org.slf4j.LoggerFactory;
  * file is never touched.
  * <p>
  * It runs before LibreOffice's timeout applies, so it is bounded: it reads at
- * most 4 MB of settings, copies only a file that hides its markup, and gives
+ * most 4 MB of settings, matches the element in at most 512 characters after
+ * its name (so that a text of endless openings can't make the search
+ * quadratic), copies only a file that hides its markup, and gives
  * up on a copy that inflates past 100 times the file's size (the ratio POI's
  * {@code ZipSecureFile} allows by default).
  */
@@ -32,7 +34,7 @@ public final class MarkupPreparer {
 
 	private static final String SETTINGS = "word/settings.xml";
 
-	private static final Pattern REVISION_VIEW = Pattern.compile("<w:revisionView\\b[^>]*/>");
+	private static final Pattern REVISION_VIEW = Pattern.compile("<w:revisionView\\b[^>]{0,512}/>");
 
 	/** The largest settings part read; a real one is a few kilobytes */
 	private static final int MAX_SETTINGS = 4 * 1024 * 1024;
