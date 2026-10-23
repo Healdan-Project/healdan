@@ -23,8 +23,8 @@ on:
   push:
     branches: [ master ]
     tags: [ 'v*' ]
-    # Docs-only pushes don't change the image, so they aren't rebuilt or republished.
-    paths-ignore: [ 'docs/**', '**/*.md' ]
+    # Docs-only pushes don't change the image, so they aren't rebuilt or republished. That includes the docs site (site/).
+    paths-ignore: [ 'docs/**', 'site/**', '**/*.md' ]
 
 permissions:
   contents: read

@@ -112,7 +112,8 @@ public class EventEndpoint implements EventListener {
 	@OnOpen
 	public void onOpen(final Session session) {
 		if (!registered) {
-			Context.get(EventCollector.class).addListener(this);
+			// Healdan: one endpoint listens for all, though Tomcat makes one per peer
+			HealdanEventDelivery.listen(this);
 			registered = true;
 			log.info("Registered websockets endpoint as events listener");
 		}
@@ -239,16 +240,17 @@ public class EventEndpoint implements EventListener {
 	}
 
 	/**
-	 * Distributes a message to all the connected clients
+	 * Distributes a message to the connected clients that may read it
 	 * 
 	 * @param message The message to be sent
 	 */
 	public static void distributeMessage(WebsocketMessage message) {
 		try {
-			String serializedMessage = serializeMessage(message);
-			for (Session peer : peers)
-				if (peer.getAsyncRemote() != null)
-					sendMessageToPear(message.getEvent(), serializedMessage, peer);
+			// Healdan: each peer gets only what its user may read
+			for (Map.Entry<Session, String> delivery : HealdanEventDelivery
+					.deliveries(message, peers, EventEndpoint::serializeMessage).entrySet())
+				if (delivery.getKey().getAsyncRemote() != null)
+					sendMessageToPear(message.getEvent(), delivery.getValue(), delivery.getKey());
 		} catch (SerializationException e) {
 			log.error("Error preparing websocket message {}", message.getEvent());
 			log.error(e.getMessage(), e);

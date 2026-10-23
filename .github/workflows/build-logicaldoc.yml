@@ -6,8 +6,8 @@ name: Build LogicalDOC (Maven)
 on:
   push:
     branches: [ master, main ]
-    # Docs-only pushes don't change any code.
-    paths-ignore: [ 'docs/**', '**/*.md' ]
+    # Docs-only pushes don't change any code. The docs site (site/) has its own workflow, docs-site.yml.
+    paths-ignore: [ 'docs/**', 'site/**', '**/*.md' ]
   # No paths filter: master's ruleset requires build, so a docs-only pull request runs it with the build steps skipped.
   pull_request:
     branches: [ master, main ]
@@ -137,4 +137,4 @@ jobs:
 
       - name: Test Healdan hooks in upstream modules
         if: steps.changes.outputs.code == 'true'
-        run: mvn -B -ntp -pl logicaldoc-core,logicaldoc-webservice,logicaldoc-webapp test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest='HealdanHooksTest,DocumentAclEqualityTest,HibernateFolderDAOTest#testMerge,StatsCollectorTest,FolderServiceImplTest,SecurityServiceImplTest#testDeleteGroupRefusedKeepsTheMembers,DocumentServiceImplTest,SearchServiceImplTest,DocumentOnlyGrantTest,BookmarksDataServletTest,RpcPermissionTest,RpcPermissionGapsTest,SoapPermissionGapsTest,DocumentsDataServletTest,ConvertPdfTest,HealdanDocNumberSortTest,InitializeReadOnlyTest'
+        run: mvn -B -ntp -pl logicaldoc-core,logicaldoc-webservice,logicaldoc-webapp test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest='HealdanHooksTest,DocumentAclEqualityTest,HibernateFolderDAOTest#testMerge,StatsCollectorTest,FolderServiceImplTest,SecurityServiceImplTest#testDeleteGroupRefusedKeepsTheMembers,DocumentServiceImplTest,SearchServiceImplTest,DocumentOnlyGrantTest,BookmarksDataServletTest,RpcPermissionTest,RpcPermissionGapsTest,SoapPermissionGapsTest,DocumentsDataServletTest,ConvertPdfTest,HealdanDocNumberSortTest,InitializeReadOnlyTest,EventEndpointTest,EventEndpointPermissionTest'

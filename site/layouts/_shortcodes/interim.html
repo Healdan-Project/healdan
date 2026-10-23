@@ -1,0 +1,8 @@
+{{- /* Healdan: a page Healdan hasn't written yet (spec §6.2). Says so, and links to LogicalDOC's nearest page
+  until it is. The only place site/content/ may link to LogicalDOC's docs: check-site-sources.py enforces it. */ -}}
+<div class="healdan-interim">
+  <p><strong>This page isn't written yet.</strong> Until it is, LogicalDOC's
+    <a href="{{ .Get "href" }}" target="_blank" rel="noopener">{{ .Get "title" }}</a> covers similar ground.</p>
+  <p class="healdan-interim-warn">LogicalDOC's docs describe its Enterprise edition, so some features there aren't
+    in Healdan, and their <em>workspace</em> isn't a Healdan Workspace.</p>
+</div>
