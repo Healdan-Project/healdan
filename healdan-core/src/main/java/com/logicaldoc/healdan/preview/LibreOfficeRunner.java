@@ -28,8 +28,8 @@ import com.logicaldoc.util.spring.Context;
  * Converts Office files to PDF with a headless {@code soffice}. Each run owns
  * one of a few profile "slots" (LibreOffice allows one process per profile),
  * has a timeout, and is followed by a sweep that kills anything still using
- * the slot's profile. Background work takes a single extra permit, so that it
- * never uses every slot.
+ * the slot's profile. Background work takes a single extra permit and there
+ * are at least two slots, so that it never uses every slot.
  */
 @Component
 public class LibreOfficeRunner {
@@ -40,6 +40,7 @@ public class LibreOfficeRunner {
 
 	private static final String TEMPLATE = "/healdan/libreoffice/registrymodifications.xcu";
 
+	/** Also the fewest: one for background work and at least one for interactive previews */
 	private static final int DEFAULT_SLOTS = 2;
 
 	private static final int DEFAULT_TIMEOUT = 120;
@@ -134,7 +135,12 @@ public class LibreOfficeRunner {
 
 	private synchronized BlockingQueue<Integer> slots() {
 		if (freeSlots == null) {
-			int count = Math.max(1, Context.get().getConfig().getInt(PREFIX + "slots", DEFAULT_SLOTS));
+			int count = Context.get().getConfig().getInt(PREFIX + "slots", DEFAULT_SLOTS);
+			if (count < DEFAULT_SLOTS) {
+				log.warn("{}slots is {}; using {}, so that previews never wait behind background conversions",
+						PREFIX, count, DEFAULT_SLOTS);
+				count = DEFAULT_SLOTS;
+			}
 			freeSlots = new LinkedBlockingQueue<>();
 			for (int i = 0; i < count; i++)
 				freeSlots.add(i);
@@ -195,17 +201,13 @@ public class LibreOfficeRunner {
 	}
 
 	private void convert(File src, OfficeFormats.Kind kind, File dest, int slot) throws IOException {
-		var config = Context.get().getConfig();
-		String path = config.getProperty(PREFIX + "path");
-		if (path == null || path.isBlank())
-			path = "soffice";
 		int timeout = timeout();
 
 		prepareSlot(slot);
 		File slotDir = slotDir(slot);
 		Path outDir = Files.createTempDirectory("healdan-lo-out");
 		try {
-			List<String> cmd = commandLine(path, src, kind, slotDir, outDir.toFile());
+			List<String> cmd = commandLine(configuredPath(), src, kind, slotDir, outDir.toFile());
 			long started = System.nanoTime();
 			int exit;
 			long seconds;
@@ -270,7 +272,7 @@ public class LibreOfficeRunner {
 		cmd.add("--nologo");
 		cmd.add("--nodefault");
 		cmd.add("--nolockcheck");
-		cmd.add("-env:UserInstallation=" + slotDir.toURI());
+		cmd.add("-env:UserInstallation=" + profileUri(slotDir));
 		cmd.add("--convert-to");
 		cmd.add("pdf:" + kind.pdfFilter() + ":{\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"true\"}}");
 		cmd.add("--outdir");
@@ -279,9 +281,23 @@ public class LibreOfficeRunner {
 		return cmd;
 	}
 
-	/** Force-kills every process still using the slot's profile: soffice.bin can outlive the soffice launcher. */
+	/**
+	 * @return the profile as the command line names it, with a closing slash
+	 *         so that slot-1's never matches slot-10's
+	 */
+	private static String profileUri(File slotDir) {
+		String uri = slotDir.toURI().toString();
+		return uri.endsWith("/") ? uri : uri + "/";
+	}
+
+	/**
+	 * Force-kills every process still using the slot's profile: soffice.bin can
+	 * outlive the soffice launcher. It looks for the profile as the command
+	 * line names it, a URI that escapes spaces and uses forward slashes on
+	 * every system.
+	 */
 	private static void sweep(File slotDir) {
-		String needle = slotDir.getPath() + "/";
+		String needle = profileUri(slotDir);
 		List<ProcessHandle> victims = ProcessHandle.allProcesses()
 				.filter(h -> h.info().commandLine().map(c -> c.contains(needle)).orElse(false)).toList();
 		for (ProcessHandle h : victims) {

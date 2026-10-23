@@ -23,6 +23,7 @@ import org.junit.Test;
 
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.preview.OfficeFormats.Kind;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -64,7 +65,7 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 		File s = new File(dir, "s");
 		File o = new File(dir, "o");
 		assertEquals(List.of(System.getProperty("user.dir") + "/target/fake-soffice/ok.sh", "--headless",
-				"--norestore", "--nologo", "--nodefault", "--nolockcheck", "-env:UserInstallation=" + s.toURI(),
+				"--norestore", "--nologo", "--nodefault", "--nolockcheck", "-env:UserInstallation=" + s.toURI() + "/",
 				"--convert-to",
 				"pdf:writer_pdf_Export:{\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"true\"}}", "--outdir",
 				o.getPath(), in.getPath()), new LibreOfficeRunner().commandLine(in, Kind.TEXT, s, o));
@@ -162,29 +163,76 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testSlotRebuiltAfterTimeout() throws IOException {
-		Context.get().getConfig().setProperty(SLOTS, "1");
+		LibreOfficeRunner runner = new LibreOfficeRunner();
+		use(FakeSoffice.hang());
+		Context.get().getConfig().setProperty(TIMEOUT, "2");
 		try {
-			LibreOfficeRunner runner = new LibreOfficeRunner();
+			runner.toPdf(in, Kind.TEXT, dest);
+			fail("expected IOException");
+		} catch (IOException e) {
+			assertTrue(e.getMessage(), e.getMessage().contains("timed out"));
+		}
+		// What a killed LibreOffice may leave in the profile
+		File profile = new File(slot0(), "user/registrymodifications.xcu");
+		Files.writeString(profile.toPath(), "half-written");
+
+		// Slot 0 went to the back of the queue: the second run gets it
+		use(FakeSoffice.ok());
+		runner.toPdf(in, Kind.TEXT, dest);
+		runner.toPdf(in, Kind.TEXT, dest);
+
+		byte[] template = getClass().getResourceAsStream("/healdan/libreoffice/registrymodifications.xcu")
+				.readAllBytes();
+		assertTrue(java.util.Arrays.equals(template, Files.readAllBytes(profile.toPath())));
+	}
+
+	@Test
+	public void testAtLeastTwoSlots() throws Exception {
+		Context.get().getConfig().setProperty(SLOTS, "1");
+		File log = new File(dir, "log.txt");
+		LibreOfficeRunner runner = new LibreOfficeRunner();
+		use(FakeSoffice.slow(3, log));
+		ExecutorService pool = Executors.newFixedThreadPool(2);
+		try (LogCapture capture = LogCapture.of(LibreOfficeRunner.class)) {
+			Future<Void> bg = inBackground(pool, runner, "bg");
+			awaitStarts(log, 1);
+
+			// The background run holds a slot, and another is left for previews
+			use(FakeSoffice.ok());
+			runner.setSlotWait(Duration.ofMillis(200));
+			runner.toPdf(in, Kind.TEXT, dest);
+			assertTrue(dest.exists());
+			bg.get(30, TimeUnit.SECONDS);
+			assertEquals(1, capture.lines().stream()
+					.filter(l -> l.startsWith("WARN converter.OfficeConverter.slots is 1; using 2")).count());
+		} finally {
+			pool.shutdownNow();
+			Context.get().getConfig().setProperty(SLOTS, "2");
+		}
+	}
+
+	@Test
+	public void testTimeoutKillsEverythingWhenTheTempPathHasASpace() throws IOException {
+		String tmp = System.getProperty("java.io.tmpdir");
+		File spaced = new File(dir, "temp dir").getAbsoluteFile();
+		Files.createDirectories(spaced.toPath());
+		System.setProperty("java.io.tmpdir", spaced.getPath());
+		try {
 			use(FakeSoffice.hang());
 			Context.get().getConfig().setProperty(TIMEOUT, "2");
 			try {
-				runner.toPdf(in, Kind.TEXT, dest);
+				new LibreOfficeRunner().toPdf(in, Kind.TEXT, dest);
 				fail("expected IOException");
 			} catch (IOException e) {
 				assertTrue(e.getMessage(), e.getMessage().contains("timed out"));
 			}
-			// What a killed LibreOffice may leave in the profile
-			File profile = new File(slot0(), "user/registrymodifications.xcu");
-			Files.writeString(profile.toPath(), "half-written");
-
-			use(FakeSoffice.ok());
-			runner.toPdf(in, Kind.TEXT, dest);
-
-			byte[] template = getClass().getResourceAsStream("/healdan/libreoffice/registrymodifications.xcu")
-					.readAllBytes();
-			assertTrue(java.util.Arrays.equals(template, Files.readAllBytes(profile.toPath())));
+			// The command line names the profile as a URI, where the space is %20
+			String slot = new File(new File(spaced, "healdan-libreoffice"), "slot-0").toURI().toString();
+			assertTrue(slot, slot.contains("%20"));
+			assertEquals(List.of(), ProcessHandle.allProcesses()
+					.filter(h -> h.info().commandLine().map(c -> c.contains(slot)).orElse(false)).toList());
 		} finally {
-			Context.get().getConfig().setProperty(SLOTS, "2");
+			System.setProperty("java.io.tmpdir", tmp);
 		}
 	}
 
