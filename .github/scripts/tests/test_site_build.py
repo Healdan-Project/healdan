@@ -299,6 +299,18 @@ class SiteBuild(unittest.TestCase):
         self.assertEqual([], [item.href for item in items if item.href.startswith(("/user/", "/developer/"))
                               and item.href not in ("/user/", "/developer/")])
 
+    # Task 5
+
+    def test_install_pages_exist(self):
+        pages = {"quick-start": "Quick Start", "what-runs": "What Runs", "configuration": "Configuration",
+                 "reverse-proxy": "Reverse Proxy", "backup-and-restore": "Backup and Restore",
+                 "upgrading": "Upgrading", "host-folders": "Host Folders Instead of Volumes",
+                 "troubleshooting": "Troubleshooting", "known-limitations": "Known Limitations"}
+        for slug, title in pages.items():
+            self.assertEqual(f"{title} – Healdan Documentation", self.text(self.html(f"/install/{slug}/"), "title"))
+        for page in (self.public / "install").rglob("*.html"):
+            self.assertNotIn("ghcr.io/healdan-project/healdan", page.read_text(encoding="utf-8"), page)
+
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):
             result = subprocess.run([sys.executable, str(_scripts.SCRIPTS / script), str(arg)],
