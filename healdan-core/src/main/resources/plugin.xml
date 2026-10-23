@@ -147,6 +147,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.docnumber.DocNumberListener" />
 	</extension>
 
+	<!-- Queues new Office file versions for conversion (spec 7.1); never refuses a save -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanPreview">
+		<parameter id="position" value="150" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.PreviewDocumentListener" />
+	</extension>
+
 	<!-- The search types are HealdanConstants.SEARCH_* -->
 	<extension plugin-id="logicaldoc-core" point-id="Search" id="healdanDocNumberSearch">
 		<parameter id="type" value="101" />
@@ -222,5 +228,122 @@
 	<extension plugin-id="logicaldoc-core" point-id="Parser" id="healdanParserMsg">
 		<parameter id="extension" value="msg" />
 		<parameter id="class" value="com.logicaldoc.healdan.parser.EmailParser" />
+	</extension>
+
+	<!-- Office files become PDFs through a headless LibreOffice (M1.5 spec section 5) -->
+	<extension plugin-id="logicaldoc-core" point-id="FormatConverter" id="healdanOfficeConverter">
+		<parameter id="in" value="doc,docx,docm,dot,dotx,dotm,rtf,odt,ott,xls,xlsx,xlsm,xlt,xltx,xltm,csv,ods,ots,ppt,pptx,pptm,pps,ppsx,pot,potx,odp,otp" />
+		<parameter id="out" value="pdf" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeConverter" />
+	</extension>
+
+	<!-- Office thumbnails come from the cached PDF conversion -->
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbDoc">
+		<parameter id="extension" value="doc" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbDocx">
+		<parameter id="extension" value="docx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbDocm">
+		<parameter id="extension" value="docm" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbDot">
+		<parameter id="extension" value="dot" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbDotx">
+		<parameter id="extension" value="dotx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbDotm">
+		<parameter id="extension" value="dotm" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbRtf">
+		<parameter id="extension" value="rtf" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbOdt">
+		<parameter id="extension" value="odt" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbOtt">
+		<parameter id="extension" value="ott" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbXls">
+		<parameter id="extension" value="xls" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbXlsx">
+		<parameter id="extension" value="xlsx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbXlsm">
+		<parameter id="extension" value="xlsm" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbXlt">
+		<parameter id="extension" value="xlt" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbXltx">
+		<parameter id="extension" value="xltx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbXltm">
+		<parameter id="extension" value="xltm" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbCsv">
+		<parameter id="extension" value="csv" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbOds">
+		<parameter id="extension" value="ods" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbOts">
+		<parameter id="extension" value="ots" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPpt">
+		<parameter id="extension" value="ppt" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPptx">
+		<parameter id="extension" value="pptx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPptm">
+		<parameter id="extension" value="pptm" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPps">
+		<parameter id="extension" value="pps" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPpsx">
+		<parameter id="extension" value="ppsx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPot">
+		<parameter id="extension" value="pot" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbPotx">
+		<parameter id="extension" value="potx" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbOdp">
+		<parameter id="extension" value="odp" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
+	</extension>
+	<extension plugin-id="logicaldoc-core" point-id="ThumbnailBuilder" id="healdanThumbOtp">
+		<parameter id="extension" value="otp" />
+		<parameter id="class" value="com.logicaldoc.healdan.preview.OfficeThumbnailBuilder" />
 	</extension>
 </plugin>

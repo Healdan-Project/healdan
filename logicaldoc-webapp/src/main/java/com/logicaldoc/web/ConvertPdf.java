@@ -9,6 +9,8 @@ import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.logicaldoc.core.conversion.FormatConversionManager;
+import com.logicaldoc.core.conversion.NotAvailableConverter;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.Version;
@@ -113,12 +115,20 @@ public class ConvertPdf extends HttpServlet {
                 throw new IOException("Document version not available");
 
             // The file served is that version's, which may not be the current one's type
-            if (!version.getFileName().toLowerCase().endsWith(".pdf"))
-                throw new IOException("Unsupported format");
+            StoreResource.Builder resource = StoreResource.builder().docId(document.getId())
+                    .fileVersion(version.getFileVersion());
+            if (!version.getFileName().toLowerCase().endsWith(".pdf")) {
+                // Healdan: serve the conversion when a converter exists (M1.5 spec 5.6)
+                if (FormatConversionManager.get().getConverter(version.getFileName(),
+                        "preview.pdf") instanceof NotAvailableConverter)
+                    throw new IOException("Unsupported format");
+                FormatConversionManager.get().convertToPdf(version, version.getFileVersion(), session.getSid());
+                resource.suffixPdfConversion();
+            }
 
             // Download the already stored resource
             ServletUtil.downloadDocument(request, response, session.getSid(),
-                    StoreResource.builder().docId(document.getId()).fileVersion(version.getFileVersion()).build(), null,
+                    resource.build(), null,
                     user);
         } catch (Exception r) {
             log.error(r.getMessage(), r);
