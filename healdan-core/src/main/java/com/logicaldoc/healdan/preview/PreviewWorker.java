@@ -82,6 +82,14 @@ public class PreviewWorker {
 	}
 
 	/**
+	 * @param resource a stored conversion
+	 * @return true if it is the "not available" PDF; only a file of its size is read
+	 */
+	static boolean isPlaceholder(Store store, StoreResource resource) throws IOException {
+		return store.size(resource) == PLACEHOLDER.length && isPlaceholder(store.getBytes(resource));
+	}
+
+	/**
 	 * Starts the worker thread, if it isn't running.
 	 */
 	public synchronized void start() {
@@ -218,6 +226,7 @@ public class PreviewWorker {
 				convert(doc, version, job.fileVersion());
 				return null;
 			});
+			fillPages(doc, version, job.fileVersion());
 			jobs.done(job.docId(), job.fileVersion());
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
@@ -300,6 +309,21 @@ public class PreviewWorker {
 		ThumbnailManager.get().createTile(doc, fileVersion, null);
 	}
 
+	/**
+	 * Gives a Word file that saved no page count the pages of its new
+	 * conversion. Never throws: the preview is made, so the job is done.
+	 *
+	 * @param version the version that holds the file, null if it has no row yet
+	 */
+	private static void fillPages(Document doc, Version version, String fileVersion) {
+		try {
+			ConversionPages.fill(doc.getId(), fileVersion, version != null ? version.getFileName() : doc.getFileName());
+		} catch (RuntimeException e) {
+			log.warn("Cannot fill in the page count of document {} version {}: {}", doc.getId(), fileVersion,
+					e.getMessage(), e);
+		}
+	}
+
 	private static boolean isDeleted(long docId) {
 		return !new JdbcTemplate(Context.get(DataSource.class))
 				.queryForList("select ld_id from ld_document where ld_id = ? and ld_deleted <> 0", Long.class, docId)
@@ -339,8 +363,7 @@ public class PreviewWorker {
 	private static void clearPlaceholders(Document doc) throws IOException {
 		Store store = Store.get();
 		for (StoreResource resource : store.listResources(doc.getId(), null))
-			if (StoreResource.SUFFIX_PDF_CONVERSION.equals(resource.getSuffix())
-					&& store.size(resource) == PLACEHOLDER.length && isPlaceholder(store.getBytes(resource)))
+			if (StoreResource.SUFFIX_PDF_CONVERSION.equals(resource.getSuffix()) && isPlaceholder(store, resource))
 				store.delete(resource);
 	}
 }

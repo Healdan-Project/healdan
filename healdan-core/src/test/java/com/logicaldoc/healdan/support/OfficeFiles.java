@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.poi.ss.usermodel.SheetVisibility;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
 import org.apache.poi.xslf.usermodel.XSLFSlide;
@@ -15,7 +17,8 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 
 /**
- * Builds Office files whose page, slide or sheet counts the tests know.
+ * Builds Office files whose page, slide or sheet counts the tests know, and
+ * PDFs like the ones LibreOffice converts them to.
  */
 public final class OfficeFiles {
 
@@ -126,6 +129,20 @@ public final class OfficeFiles {
 				book.setSheetVisibility(index - 1, SheetVisibility.VERY_HIDDEN);
 			}
 			book.write(out);
+			return out.toByteArray();
+		}
+	}
+
+	/**
+	 * @param pages how many pages
+	 * @return a PDF of blank pages
+	 * @throws IOException if the file can't be written
+	 */
+	public static byte[] pdf(int pages) throws IOException {
+		try (PDDocument doc = new PDDocument(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+			for (int i = 0; i < pages; i++)
+				doc.addPage(new PDPage());
+			doc.save(out);
 			return out.toByteArray();
 		}
 	}

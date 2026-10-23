@@ -69,14 +69,26 @@ public final class OfficePages {
 	}
 
 	/**
+	 * @param fileName the file name
+	 * @return true for the Word formats, whose count is the one Word saved
+	 */
+	public static boolean isWord(String fileName) {
+		return counterOf(fileName) == SAVED_PAGES;
+	}
+
+	private static Counter counterOf(String fileName) {
+		String extension = FilenameUtils.getExtension(fileName);
+		return extension != null ? COUNTERS.get(extension.toLowerCase(Locale.ROOT)) : null;
+	}
+
+	/**
 	 * @param in the file's content
 	 * @param fileName the file name, whose extension says how to count
 	 * @return the count, 0 if the file records none, can't be read or has
 	 *         none of the {@link #extensions()}
 	 */
 	public static int count(InputStream in, String fileName) {
-		String extension = FilenameUtils.getExtension(fileName);
-		Counter counter = extension != null ? COUNTERS.get(extension.toLowerCase(Locale.ROOT)) : null;
+		Counter counter = counterOf(fileName);
 		return counter != null ? count(in, fileName, counter) : 0;
 	}
 

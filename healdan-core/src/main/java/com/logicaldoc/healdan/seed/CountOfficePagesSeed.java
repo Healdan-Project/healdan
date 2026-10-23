@@ -19,14 +19,17 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.parser.OfficePages;
+import com.logicaldoc.healdan.preview.ConversionPages;
 import com.logicaldoc.healdan.util.CacheEvictor;
 
 /**
  * Counts the pages of the Word, Excel and PowerPoint files stored before
  * Healdan's parsers counted them, which CE stored as 1 page. Each version gets
  * the count of its own file, and each document the count of its current file.
- * A file that records no count, or can't be read, keeps the count it has.
- * Shortcuts and deleted documents are left out.
+ * A Word file that saved no count takes the pages of its preview, if it has
+ * one yet; otherwise the preview worker fills them in when it converts the
+ * file. A file that has neither keeps the count it has. Shortcuts and deleted
+ * documents are left out.
  */
 @Component
 public class CountOfficePagesSeed implements SeedStep {
@@ -92,17 +95,20 @@ public class CountOfficePagesSeed implements SeedStep {
 	}
 
 	/**
-	 * @return the file's count, 0 if it records none or can't be read
+	 * @return the file's count, else a Word file's preview's; 0 if neither is known
 	 */
 	private static int count(Row row) {
+		int pages = 0;
 		StoreResource resource = StoreResource.builder().docId(row.docId()).fileVersion(row.fileVersion()).build();
 		try (InputStream in = Store.get().getStream(resource)) {
-			return OfficePages.count(in, row.fileName());
+			pages = OfficePages.count(in, row.fileName());
 		} catch (IOException | RuntimeException e) {
 			log.warn("Cannot read file version {} of document {} to count its pages: {}", row.fileVersion(),
 					row.docId(), e.getMessage());
-			return 0;
 		}
+		if (pages == 0 && OfficePages.isWord(row.fileName()))
+			pages = ConversionPages.ofConversion(row.docId(), row.fileVersion());
+		return pages;
 	}
 
 	/** A document or version row, and the file it stands for */
