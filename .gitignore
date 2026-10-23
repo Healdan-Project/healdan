@@ -6,3 +6,8 @@ target
 .bak
 *.bak
 .env
+
+# The docs site's build output and Hugo's caches
+site/public/
+site/resources/
+site/.hugo_build.lock

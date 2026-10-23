@@ -1,0 +1,96 @@
+name: Docs site
+
+# Builds and checks the docs site (site/) and publishes it to GitHub Pages at docs.healdan.com.
+# The design is docs/superpowers/specs/2026-10-23-docs-site-design.md.
+
+on:
+  # No paths filter, so the Docs site check reports on every pull request and can be one of master's required
+  # checks. It takes well under a minute.
+  pull_request:
+    branches: [ master ]
+  push:
+    branches: [ master ]
+    paths: [ 'site/**', '.github/workflows/docs-site.yml', '.github/scripts/**' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its outdated run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  HUGO_VERSION: 0.168.0
+
+jobs:
+  build:
+    name: Docs site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      # The standard edition from Hugo's release, checked against the release's checksums
+      - name: Install Hugo
+        run: |
+          base="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          tarball="hugo_${HUGO_VERSION}_linux-amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "$base/$tarball"
+          curl -fsSLO "$base/hugo_${HUGO_VERSION}_checksums.txt"
+          grep " ${tarball}\$" "hugo_${HUGO_VERSION}_checksums.txt" | sha256sum -c -
+          mkdir -p bin
+          tar -xzf "$tarball" -C bin hugo
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+
+      # Includes test_site_build.py, which builds the site and checks its landing page, nav, footer and branding
+      - name: Test the scripts and the site
+        run: python3 -m unittest discover -s .github/scripts/tests -v
+
+      - name: Build the site
+        run: hugo --source site --gc --minify --panicOnWarning
+
+      - name: Check the site's sources
+        run: python3 .github/scripts/check-site-sources.py site
+
+      - name: Check the site's links
+        run: python3 .github/scripts/check-site-links.py site/public
+
+      # So a reviewer can open the pages without building them
+      - name: Upload the built site
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-site
+          path: site/public
+          retention-days: 5
+
+      - name: Upload the site for GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/public
+
+  # Off until the owner sets the repository variable DOCS_PUBLISH to true (spec §7.3), so master stays green
+  # before GitHub Pages and the docs.healdan.com domain are set up.
+  deploy:
+    name: Publish docs site
+    needs: build
+    # Only master is published, even from a manual run on another branch
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master' && vars.DOCS_PUBLISH == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

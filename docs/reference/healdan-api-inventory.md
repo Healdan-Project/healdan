@@ -822,6 +822,8 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 
 ## 4. WebSocket `/wk-event`
 
+**Fixed since this inventory was taken:** [Healdan-Project/healdan#58](https://github.com/Healdan-Project/healdan/pull/58) (2026-10-23) makes `/wk-event` send each peer only what its user may read. The broadcast described below is the state before that fix; the serialization is unchanged.
+
 - Class `websockets.EventEndpoint` (`@ServerEndpoint("/wk-event")`), registered as an `EventCollector` listener on first `@OnOpen`. Incoming messages are ignored (log only): it is push-only. `/wk-event` requires `isAuthenticated()` at the HTTP upgrade (context-security.xml), but the endpoint keeps a global `peers` set and **broadcasts every message to every connected peer**: no per-user, per-folder or per-permission filtering, and no tenant filtering beyond the event's own tenant name in the payload.
 - Pushing is on only when `EventCollector.isEnabled()` and `<tenant>.gui.serverpush=true`, and `event.isNotifyEvent()`.
 - Events pushed (whitelist `MONITORED_EVENTS`): document STORED, CHANGED, CHECKEDIN, CHECKEDOUT, IMMUTABLE, LOCKED, UNLOCKED, SIGNED, STAMPED, MOVED, DELETED, RENAMED, INDEXED, EMBEDDED, RESTORED, PASSWORD_PROTECTED/UNPROTECTED, READING_CONFIRMED/REQUESTED; folder RENAMED, CREATED, CHANGED, MOVED, DELETED; user MESSAGE_RECEIVED, LOGIN, LOGOUT, TIMEOUT; `event.chat.newmessage`. De-duplicated by a 1000-entry FIFO per History class.
