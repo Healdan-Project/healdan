@@ -114,6 +114,19 @@ public class OfficeConverterTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testRaisedTimeoutConvertsAgain() throws Exception {
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.ok().getPath());
+		Document doc = upload("a.docx");
+		// Given up under a 20 s timeout; it is 30 s now
+		for (int i = 0; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			PreviewJobs.get().failed(doc.getId(), "1.0", LibreOfficeRunner.timedOut(20, "a.docx"), Instant.now());
+
+		FormatConversionManager.get().convertToPdf(doc, null);
+
+		assertTrue(Store.get().exists(pdfOf(doc)));
+	}
+
+	@Test
 	public void testFailureCachesNothing() throws Exception {
 		Context.get().getConfig().setProperty(PATH, FakeSoffice.fail().getPath());
 		Document doc = upload("a.docx");

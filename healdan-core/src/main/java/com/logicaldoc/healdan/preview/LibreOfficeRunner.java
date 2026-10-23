@@ -10,11 +10,14 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.slf4j.Logger;
@@ -42,6 +45,9 @@ public class LibreOfficeRunner {
 
 	/** Also the fewest: one for background work and at least one for interactive previews */
 	private static final int DEFAULT_SLOTS = 2;
+
+	/** Reads the timeout back from a failure's message, as {@link #timedOut} words it */
+	private static final Pattern TIMED_OUT = Pattern.compile("timed out after (\\d+) s");
 
 	private static final int DEFAULT_TIMEOUT = 120;
 
@@ -224,7 +230,7 @@ public class LibreOfficeRunner {
 			if (seconds >= timeout) {
 				// The killed LibreOffice may have left the profile half-written too: rebuild it on next use
 				unprepareSlot(slot);
-				throw new IOException("LibreOffice timed out after " + timeout + " s converting " + src.getName());
+				throw new IOException(timedOut(timeout, src.getName()));
 			}
 
 			String base = src.getName();
@@ -251,6 +257,33 @@ public class LibreOfficeRunner {
 	static int timeout() {
 		int timeout = Context.get().getConfig().getInt(PREFIX + "timeout", DEFAULT_TIMEOUT);
 		return timeout > 0 ? timeout : DEFAULT_TIMEOUT;
+	}
+
+	/**
+	 * @param timeout the timeout the run hit, in seconds
+	 * @param fileName the file it was converting
+	 * @return the failure's message, which {@link #timedOutAfter} reads back
+	 */
+	static String timedOut(int timeout, String fileName) {
+		return "LibreOffice timed out after " + timeout + " s converting " + fileName;
+	}
+
+	/**
+	 * @param error a failure's message, null if none
+	 * @return the timeout the failure hit, in seconds; empty if it wasn't a
+	 *         timeout or says no number
+	 */
+	static OptionalInt timedOutAfter(String error) {
+		if (error == null)
+			return OptionalInt.empty();
+		Matcher m = TIMED_OUT.matcher(error);
+		if (!m.find())
+			return OptionalInt.empty();
+		try {
+			return OptionalInt.of(Integer.parseInt(m.group(1)));
+		} catch (NumberFormatException e) {
+			return OptionalInt.empty();
+		}
 	}
 
 	private static String configuredPath() {

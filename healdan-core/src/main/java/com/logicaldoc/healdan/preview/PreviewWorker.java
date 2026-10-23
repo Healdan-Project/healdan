@@ -4,9 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.function.Supplier;
 
 import javax.sql.DataSource;
@@ -62,6 +60,9 @@ public class PreviewWorker {
 
 	/** While the clock is before this, LibreOffice is taken to be unavailable and no job is tried */
 	private volatile Instant pausedUntil = Instant.MIN;
+
+	/** The timeout given-up jobs were last checked against; 0 before the first round */
+	private int retriedAtTimeout;
 
 	private static byte[] loadPlaceholder() {
 		try (InputStream in = PreviewWorker.class.getResourceAsStream("/pdf/notavailable.pdf")) {
@@ -142,6 +143,7 @@ public class PreviewWorker {
 	int runOnce(Instant now) {
 		if (now.isBefore(pausedUntil))
 			return 0;
+		retryTimedOut(now);
 		Instant roundStart = Instant.now();
 		List<PreviewJob> jobs = jobs().due(now, BATCH);
 		int processed = 0;
@@ -154,6 +156,26 @@ public class PreviewWorker {
 				break;
 		}
 		return processed;
+	}
+
+	/**
+	 * On the first round, and whenever the timeout has changed since, gives
+	 * the given-up jobs that timed out under a shorter timeout one more try.
+	 * Never throws, so that the round goes on.
+	 */
+	private void retryTimedOut(Instant now) {
+		int timeout = LibreOfficeRunner.timeout();
+		if (timeout == retriedAtTimeout)
+			return;
+		try {
+			int retried = jobs().retryTimedOut(timeout, now);
+			if (retried > 0)
+				log.info("Trying {} given-up previews again: they timed out under a shorter timeout than {} s", retried,
+						timeout);
+			retriedAtTimeout = timeout;
+		} catch (RuntimeException e) {
+			log.error("Cannot retry the previews that timed out: {}", e.getMessage(), e);
+		}
 	}
 
 	/**
@@ -183,21 +205,43 @@ public class PreviewWorker {
 					fail(jobs, job, "document not found", clock.get());
 				return false;
 			}
-			if (doc.getDeleted() != 0 || !isWanted(doc, job.fileVersion())) {
+			// The version that holds the file, if it has a row yet
+			Version version = VersionDAO.get().findByFileVersion(doc.getId(), job.fileVersion());
+			if (doc.getDeleted() != 0 || !isWanted(doc, version)) {
 				jobs.done(job.docId(), job.fileVersion());
 				return false;
 			}
 
-			clearPlaceholders(doc, job.fileVersion());
+			clearPlaceholders(doc);
 
 			LibreOfficeRunner.get().inBackground(() -> {
-				convert(doc, job.fileVersion());
+				convert(doc, version, job.fileVersion());
 				return null;
 			});
 			jobs.done(job.docId(), job.fileVersion());
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
-		} catch (LibreOfficeUnavailableException e) {
+		} catch (Throwable e) {
+			if (Thread.currentThread().isInterrupted()) {
+				// Stopped mid-conversion, which says nothing about the file: the job stays as it was
+				log.info("Stopped while converting document {} version {}; it stays queued", job.docId(),
+						job.fileVersion());
+				return false;
+			}
+			return failed(jobs, job, e, clock);
+		}
+		return false;
+	}
+
+	/**
+	 * Postpones or fails a job whose try went wrong.
+	 *
+	 * @param failure what went wrong; also an Error: a job that ends neither
+	 *        done nor failed would block the queue behind it for good
+	 * @return true if LibreOffice was unavailable, so that the round should stop
+	 */
+	private boolean failed(PreviewJobs jobs, PreviewJob job, Throwable failure, Supplier<Instant> clock) {
+		if (failure instanceof LibreOfficeUnavailableException e) {
 			// Says nothing about the file, so it costs the job no try. The other jobs wait
 			// out the pause untouched; one probe and one warning per pause
 			Instant resume = clock.get().plus(UNAVAILABLE_WAIT);
@@ -205,12 +249,10 @@ public class PreviewWorker {
 			log.warn("LibreOffice isn't available, Office previews are paused: {}", e.getMessage());
 			postpone(jobs, job, e.getMessage(), resume);
 			return true;
-		} catch (Throwable e) {
-			// Also an Error: a job that ends neither done nor failed would block the queue behind it for good
-			String message = e.getMessage() != null ? e.getMessage() : e.getClass().getName();
-			log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);
-			fail(jobs, job, message, clock.get());
 		}
+		String message = failure.getMessage() != null ? failure.getMessage() : failure.getClass().getName();
+		log.warn("Cannot convert document {} version {}: {}", job.docId(), job.fileVersion(), message);
+		fail(jobs, job, message, clock.get());
 		return false;
 	}
 
@@ -249,9 +291,10 @@ public class PreviewWorker {
 	 * The conversion is given the version that holds the file, when it has a
 	 * row yet, so that a file of another type than the current one is
 	 * converted as what it is.
+	 *
+	 * @param version the version that holds the file, null if it has no row yet
 	 */
-	void convert(Document doc, String fileVersion) throws Exception {
-		Version version = VersionDAO.get().findByFileVersion(doc.getId(), fileVersion);
+	void convert(Document doc, Version version, String fileVersion) throws Exception {
 		FormatConversionManager.get().convertToPdf(version != null ? version : doc, fileVersion, null);
 		ThumbnailManager.get().createTumbnail(doc, fileVersion, null);
 		ThumbnailManager.get().createTile(doc, fileVersion, null);
@@ -264,10 +307,11 @@ public class PreviewWorker {
 	}
 
 	/**
+	 * @param version the version that holds the file, null if it has no row
+	 *        yet: then it is the document's current file
 	 * @return false when the version isn't an Office file or is over the preview size limit
 	 */
-	private static boolean isWanted(Document doc, String fileVersion) throws Exception {
-		Version version = findVersion(doc, fileVersion);
+	private static boolean isWanted(Document doc, Version version) throws Exception {
 		String name = version != null ? version.getFileName() : doc.getFileName();
 		if (!OfficeFormats.isOffice(name))
 			return false;
@@ -286,29 +330,17 @@ public class PreviewWorker {
 		}
 	}
 
-	private static Version findVersion(Document doc, String fileVersion) throws Exception {
-		for (Version v : VersionDAO.get().findByDocId(doc.getId()))
-			if (fileVersion.equals(v.getFileVersion()))
-				return v;
-		return null;
-	}
-
 	/**
 	 * Deletes the stored "not available" PDFs of the document's file versions, so
-	 * that CE converts again instead of serving them.
+	 * that CE converts again instead of serving them. It goes by the store's
+	 * own listing, which also holds file versions whose rows aren't saved yet
+	 * (CE saves them asynchronously).
 	 */
-	private static void clearPlaceholders(Document doc, String jobVersion) throws Exception {
+	private static void clearPlaceholders(Document doc) throws IOException {
 		Store store = Store.get();
-		// The version rows are saved asynchronously, so the job's own version may not have one yet
-		Set<String> fileVersions = new LinkedHashSet<>();
-		fileVersions.add(jobVersion);
-		for (Version v : VersionDAO.get().findByDocId(doc.getId()))
-			fileVersions.add(v.getFileVersion());
-		for (String fv : fileVersions) {
-			StoreResource resource = StoreResource.builder().document(doc).fileVersion(fv).suffixPdfConversion()
-					.build();
-			if (store.size(resource) == PLACEHOLDER.length && isPlaceholder(store.getBytes(resource)))
+		for (StoreResource resource : store.listResources(doc.getId(), null))
+			if (StoreResource.SUFFIX_PDF_CONVERSION.equals(resource.getSuffix())
+					&& store.size(resource) == PLACEHOLDER.length && isPlaceholder(store.getBytes(resource)))
 				store.delete(resource);
-		}
 	}
 }

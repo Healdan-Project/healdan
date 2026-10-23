@@ -29,6 +29,7 @@ import org.junit.Test;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Tenant;
@@ -357,10 +358,10 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 		Document b = fx.upload(folder, "b.docx", "b", fx.admin());
 		PreviewWorker erroring = new PreviewWorker() {
 			@Override
-			void convert(Document doc, String fileVersion) throws Exception {
+			void convert(Document doc, Version version, String fileVersion) throws Exception {
 				if (doc.getId() == a.getId())
 					throw new LinkageError("broken");
-				super.convert(doc, fileVersion);
+				super.convert(doc, version, fileVersion);
 			}
 		};
 
@@ -386,5 +387,80 @@ public class PreviewWorkerTest extends AbstractHealdanTestCase {
 						"select hd_nexttry from hd_preview_job where hd_docid = ?", java.sql.Timestamp.class, a.getId());
 		// The conversion took the 2 s timeout, so the retry is more than a minute after the round's time
 		assertTrue(next.toInstant() + " vs " + T, next.toInstant().isAfter(T.plusSeconds(61)));
+	}
+
+	private static void giveUp(Document doc, String error) {
+		for (int i = 0; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			PreviewJobs.get().failed(doc.getId(), "1.0", error, Instant.now());
+	}
+
+	@Test
+	public void testGivenUpTimeoutRetriedOnceTheTimeoutIsRaised() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		giveUp(a, LibreOfficeRunner.timedOut(20, "a.docx"));
+
+		// The timeout is 30 s now
+		try (LogCapture capture = LogCapture.of(PreviewWorker.class)) {
+			assertEquals(1, worker.runOnce(T));
+			assertEquals(1, capture.lines().stream().filter(l -> l.startsWith("INFO Trying 1 given-up previews again"))
+					.count());
+		}
+
+		assertTrue(Store.get().exists(pdfOf(a, "1.0")));
+		assertFalse(queued(a, "1.0"));
+	}
+
+	@Test
+	public void testGivenUpTimeoutRetriedOnlyOnce() throws Exception {
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.hang().getPath());
+		Context.get().getConfig().setProperty(TIMEOUT, "2");
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		giveUp(a, LibreOfficeRunner.timedOut(1, "a.docx"));
+
+		// One more try, which times out under the new timeout
+		assertEquals(1, worker.runOnce(T));
+		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
+		assertEquals(PreviewJobs.MAX_ATTEMPTS, job.attempts());
+		assertTrue(job.lastError(), job.lastError().contains("timed out after 2 s"));
+
+		// Given up again: neither this worker nor a restarted one tries it
+		assertEquals(0, worker.runOnce(T.plus(java.time.Duration.ofDays(1))));
+		assertEquals(0, new PreviewWorker().runOnce(T.plus(java.time.Duration.ofDays(1))));
+	}
+
+	@Test
+	public void testGivenUpTimeoutNotRetriedAtTheSameTimeout() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		giveUp(a, LibreOfficeRunner.timedOut(30, "a.docx"));
+
+		assertEquals(0, worker.runOnce(T));
+
+		assertEquals(PreviewJobs.MAX_ATTEMPTS, PreviewJobs.get().find(a.getId(), "1.0").orElseThrow().attempts());
+		assertFalse(Store.get().exists(pdfOf(a, "1.0")));
+	}
+
+	@Test
+	public void testStopMidConversionKeepsTheJob() throws Exception {
+		File log = new File("target/fake-soffice/worker-stop.log");
+		Files.deleteIfExists(log.toPath());
+		Files.createFile(log.toPath());
+		Context.get().getConfig().setProperty(PATH, FakeSoffice.slow(20, log).getPath());
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+
+		Thread round = new Thread(() -> worker.runOnce(T));
+		round.start();
+		long deadline = System.currentTimeMillis() + 10000;
+		while (Files.readAllLines(log.toPath()).isEmpty() && System.currentTimeMillis() < deadline)
+			Thread.sleep(50);
+		assertEquals(1, Files.readAllLines(log.toPath()).size());
+		round.interrupt();
+		round.join(10000);
+		assertFalse(round.isAlive());
+
+		// Stopping says nothing about the file: no try is counted
+		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
+		assertEquals(0, job.attempts());
+		assertEquals(null, job.lastError());
+		assertFalse(Store.get().exists(pdfOf(a, "1.0")));
 	}
 }

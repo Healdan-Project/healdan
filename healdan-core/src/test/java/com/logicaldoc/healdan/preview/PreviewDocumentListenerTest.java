@@ -109,6 +109,60 @@ public class PreviewDocumentListenerTest extends AbstractHealdanTestCase {
 		assertEquals(1, PreviewJobs.get().due(Instant.now().plusSeconds(1), 10).size());
 	}
 
+	private void replace(Document doc, String fileVersion) throws Exception {
+		File file = Files.createTempFile("replace", ".docx").toFile();
+		try {
+			Files.writeString(file.toPath(), "new");
+			DocumentManager.get().replaceFile(doc.getId(), fileVersion, file, fx.documentHistory(fx.admin()));
+		} finally {
+			file.delete();
+		}
+	}
+
+	@Test
+	public void testReplacingAnOlderFileQueuesThatVersion() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		DocumentManager.get().checkout(a.getId(), fx.documentHistory(fx.admin()));
+		DocumentManager.get().checkin(a.getId(), new ByteArrayInputStream("v2".getBytes(StandardCharsets.UTF_8)),
+				"a.docx", false, null, fx.documentHistory(fx.admin()));
+		PreviewJobs.get().done(a.getId(), "1.0");
+		PreviewJobs.get().done(a.getId(), "1.1");
+
+		replace(a, "1.0");
+
+		// CE deleted 1.0's conversion, and 1.1's file didn't change
+		assertTrue(queued(a.getId(), "1.0"));
+		assertFalse(queued(a.getId(), "1.1"));
+	}
+
+	@Test
+	public void testReplacingStartsAGivenUpJobOver() throws Exception {
+		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
+		for (int i = 0; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			PreviewJobs.get().failed(a.getId(), "1.0", LibreOfficeRunner.timedOut(120, "a.docx"), Instant.now());
+
+		replace(a, "1.0");
+
+		PreviewJob job = PreviewJobs.get().find(a.getId(), "1.0").orElseThrow();
+		assertEquals(0, job.attempts());
+		assertEquals(null, job.lastError());
+		assertEquals(1, PreviewJobs.get().due(Instant.now().plusSeconds(1), 10).size());
+	}
+
+	@Test
+	public void testReplacedFileVersionReadFromTheComment() {
+		Document doc = new Document();
+		doc.setFileVersion("1.4");
+		DocumentHistory transaction = new DocumentHistory();
+		transaction.setComment("file version 1.2 - null");
+		assertEquals("1.2", PreviewDocumentListener.replacedFileVersion(doc, transaction));
+		// A comment that names no file version: the current one
+		transaction.setComment("something else");
+		assertEquals("1.4", PreviewDocumentListener.replacedFileVersion(doc, transaction));
+		transaction.setComment(null);
+		assertEquals("1.4", PreviewDocumentListener.replacedFileVersion(doc, transaction));
+	}
+
 	@Test
 	public void testListenerNeverBlocksTheSave() throws Exception {
 		jdbc().execute("drop table hd_preview_job");
