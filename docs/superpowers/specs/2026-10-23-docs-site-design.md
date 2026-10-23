@@ -2,7 +2,7 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56)
 - **Date:** 2026-10-23
-- **Status:** approved by the owner on 2026-10-23; not yet built
+- **Status:** approved by the owner on 2026-10-23. Being built from [`docs/superpowers/plans/2026-10-23-docs-site.md`](../plans/2026-10-23-docs-site.md): PR A (the site, its checks, CI, and the Install and Developer manuals) is in review. The plan's "Spec corrections and calls this plan makes" amend §10.1 and §10.3, chiefly moving the Help URL into `HealdanSystemInfo`. Its decision log records the build's rulings.
 - **Inputs:**
   - issue #56, which lists every link to LogicalDOC's docs in the app and the repo;
   - a design conversation with the owner on 2026-10-23, with mockups and a throwaway spike built with Hugo and Hextra in Healdan's colours;
