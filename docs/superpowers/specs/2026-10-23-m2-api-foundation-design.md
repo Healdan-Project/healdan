@@ -2,7 +2,7 @@
 
 - **Milestone:** M2 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-23
-- **Status:** approved by the owner on 2026-10-23, with one amendment: admin-only lists of the Stores and a Store's matters (§6.2). The owner asked for the technical calls to be made in the draft and settled by iterating on it. A builder check by a reviewer who hadn't seen the conversation found six statements the code contradicts, all now corrected (§3.1), two endpoints M3 would have missed (§6.4), and one question the owner answered: sign-in throttling (§5.7).
+- **Status:** approved by the owner on 2026-10-23, with one amendment. Implementation plan: [`docs/superpowers/plans/2026-10-23-m2-api-foundation.md`](../plans/2026-10-23-m2-api-foundation.md), approved the same day; its "Spec corrections" section lists where the build departs from this spec. The amendment was: admin-only lists of the Stores and a Store's matters (§6.2). The owner asked for the technical calls to be made in the draft and settled by iterating on it. A builder check by a reviewer who hadn't seen the conversation found six statements the code contradicts, all now corrected (§3.1), two endpoints M3 would have missed (§6.4), and one question the owner answered: sign-in throttling (§5.7).
 - **Inputs:**
   - the roadmap's M2 section, and its M3, M5 and M6 sections for what the API has to carry;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md) §4 and §5.4;
