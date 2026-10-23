@@ -93,11 +93,9 @@ Liberation), so Word, Excel and PowerPoint style files get a PDF preview. Nothin
 - **Versions that can't be converted.** From the first timeout the worker records for a version, interactive
   previews of it fail fast and say "not available", so a file that keeps timing out doesn't hold a LibreOffice slot
   for the whole timeout on every view. The worker gives it up after four tries. To retry it, raise
-  `converter.OfficeConverter.timeout` (seconds, default 120) in the conf volume's `context.properties`, restart,
-  then queue it again in the background:
-  `update hd_preview_job set hd_attempts = 1, hd_nexttry = now() where hd_docid = <id>`.
-  Previews keep failing fast while the worker gets three more tries. Deleting the row instead would move the retry
-  onto the next user who views the document, and hold that request for up to the raised timeout.
+  `converter.OfficeConverter.timeout` (seconds, default 120) in the conf volume's `context.properties` and restart.
+  Previews of it convert again, and on start the worker gives each given-up version that timed out under a shorter
+  timeout one more try in the background. Replacing a version's file also starts its conversion over.
 - **Debugging.** LibreOffice's own output reaches the log only at DEBUG, on the logger `com.logicaldoc.util.exec`.
   The default `log.xml` already sets that logger to `debug`; if your copy in the conf volume (`conf/log.xml`) sets it
   higher, change its `<Logger name="com.logicaldoc.util.exec" ...>` line back to `level="debug"` and restart.
