@@ -1,6 +1,7 @@
 package com.logicaldoc.core;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -10,13 +11,17 @@ import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.security.authentication.PasswordAlreadyUsedException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * {@code initialize} only reads. It merges the detached copy it's given into
@@ -107,6 +112,62 @@ public class InitializeReadOnlyTest extends AbstractCoreTestCase {
 
         assertEquals("changed before initialize",
                 documentDao.queryForString("select ld_comment from ld_document where ld_id=" + DOC_ID));
+    }
+
+    /**
+     * As saving a user or an avatar does: the user's groups are rebuilt in the
+     * read-only session, and storing the copy still saves the change and keeps
+     * them
+     */
+    @Test
+    public void testAUserChangedAfterInitializeIsSaved() throws PersistenceException, PasswordAlreadyUsedException {
+        String countGroups = "select count(*) from ld_usergroup where ld_userid=" + USER_ID;
+        long groups = userDao.queryForLong(countGroups);
+
+        User user = userDao.initialize(userDao.findById(USER_ID));
+        user.setCity("changed after initialize");
+        userDao.store(user);
+
+        assertEquals("changed after initialize",
+                userDao.queryForString("select ld_city from ld_user where ld_id=" + USER_ID));
+        assertEquals(groups, userDao.queryForLong(countGroups));
+    }
+
+    /**
+     * Inside another transaction {@code initialize} joins it and isn't
+     * read-only, so a change on the copy it's given is saved with that
+     * transaction, as before
+     */
+    @Test
+    public void testInitializeInsideAnotherTransactionSavesTheChange() throws PersistenceException {
+        Document doc = documentDao.findById(DOC_ID);
+        doc.setComment("changed inside a transaction");
+
+        new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+            try {
+                documentDao.initialize(doc);
+            } catch (PersistenceException e) {
+                throw new IllegalStateException(e);
+            }
+        });
+
+        assertEquals("changed inside a transaction",
+                documentDao.queryForString("select ld_comment from ld_document where ld_id=" + DOC_ID));
+    }
+
+    /**
+     * A new entity has nothing to load, so it comes back as it was, unsaved
+     */
+    @Test
+    public void testInitializingANewDocumentLeavesItUnsaved() throws PersistenceException {
+        String countDocuments = "select count(*) from ld_document";
+        long documents = documentDao.queryForLong(countDocuments);
+        Document doc = new Document();
+        doc.setFileName("new.txt");
+
+        assertSame(doc, documentDao.initialize(doc));
+        assertEquals(0L, doc.getId());
+        assertEquals(documents, documentDao.queryForLong(countDocuments));
     }
 
     /**

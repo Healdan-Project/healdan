@@ -344,10 +344,12 @@ public abstract class HibernatePersistentObjectDAO<T extends PersistentObject> i
      * @throws PersistenceException Error in initializing the collections
      */
     @Override
-    // Healdan: a read, so its own transaction never flushes what merge copied in (issue #51)
+    // Healdan: a read, so its own transaction never flushes what merge copied in (issue #51).
+    // Spring's annotation replaces the class's JTA one here, so a change to that one doesn't reach this method.
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public T initialize(T entity) throws PersistenceException {
-        if (entity == null)
+        // Healdan: a new entity has nothing to load, and merge would give it an id but no row
+        if (entity == null || entity.getId() == 0L)
             return entity;
 
         try {
@@ -361,7 +363,7 @@ public abstract class HibernatePersistentObjectDAO<T extends PersistentObject> i
     }
 
     @Override
-    // Healdan: read-only as initialize(T) is, which it calls directly (issue #51)
+    // Healdan: read-only as initialize(T) is, which it calls directly; Spring's annotation as above (issue #51)
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
     public List<T> initialize(Collection<T> entities) throws PersistenceException {
         List<T> out = new ArrayList<>();
