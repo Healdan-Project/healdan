@@ -192,6 +192,25 @@
 	</dependencies>
 	<build>
 		<plugins>
+			<!-- healdan-api's tests reuse the base test case and fixtures -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>test-jar</id>
+						<goals>
+							<goal>test-jar</goal>
+						</goals>
+						<configuration>
+							<!-- Written at test time by PluginFixtures, for this module only -->
+							<excludes>
+								<exclude>healdan-plugins/**</exclude>
+							</excludes>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>

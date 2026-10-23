@@ -133,7 +133,7 @@ jobs:
         if: steps.changes.outputs.code == 'true'
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp -pl healdan-core test
+          mvn -B -ntp -pl healdan-core,healdan-api test
 
       - name: Test Healdan hooks in upstream modules
         if: steps.changes.outputs.code == 'true'

@@ -197,6 +197,7 @@
         <module>logicaldoc-dropbox</module>
         <module>logicaldoc-gui</module>
         <module>healdan-core</module>
+        <module>healdan-api</module>
         <module>logicaldoc-android</module>
         <module>logicaldoc-ios</module>
         <module>logicaldoc-webapp</module>
