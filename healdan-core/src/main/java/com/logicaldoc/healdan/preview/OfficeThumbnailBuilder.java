@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.preview;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Instant;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +24,13 @@ import com.logicaldoc.util.io.FileUtil;
  * Builds the thumbnail of an Office file from its cached PDF conversion, so
  * the file is converted once for both the thumbnail and the preview (M1.5
  * spec section 6).
+ * <p>
+ * Only background work converts here. CE asks for a missing thumbnail on the
+ * request that shows it, and caches nothing when the builder fails, so
+ * converting there would run LibreOffice for each thumbnail of a folder, on
+ * every view, and take the slots previews need. Without a cached conversion,
+ * such a request queues the file version for the worker, which builds the
+ * thumbnails once it has converted it, and fails at once.
  */
 public class OfficeThumbnailBuilder implements ThumbnailBuilder {
 
@@ -39,12 +47,17 @@ public class OfficeThumbnailBuilder implements ThumbnailBuilder {
 		File pdf = FileUtil.createTempFile("officethumb", ".pdf");
 		try {
 			AbstractDocument source = sourceOf(document, fileVersion);
-			FormatConversionManager.get().convertToPdf(source, fileVersion, sid);
+			StoreResource resource = pdfOf(source, fileVersion);
+			if (Store.get().size(resource) <= 0L) {
+				if (!LibreOfficeRunner.get().isBackground())
+					throw new IOException(queue(source, resource));
+				FormatConversionManager.get().convertToPdf(source, fileVersion, sid);
+			}
 			/*
 			 * Not FormatConversionManager.writePdfToFile: it takes only a Document
 			 * and picks the file by the current file's type, not the version's
 			 */
-			Store.get().writeToFile(pdfOf(source, fileVersion), pdf);
+			Store.get().writeToFile(resource, pdf);
 			renderFirstPage(sid, document, fileVersion, pdf, dest, size, quality);
 		} catch (PersistenceException e) {
 			throw new IOException("Cannot build the thumbnail of document %d: %s".formatted(document.getId(),
@@ -53,6 +66,19 @@ public class OfficeThumbnailBuilder implements ThumbnailBuilder {
 			if (!FileUtil.delete(pdf))
 				log.warn("Cannot delete the temporary file {}", pdf);
 		}
+	}
+
+	/**
+	 * Queues an Office file version that has no conversion yet. A job already
+	 * queued, given up included, stays as it is.
+	 *
+	 * @return why there's no thumbnail
+	 */
+	private static String queue(AbstractDocument source, StoreResource pdf) {
+		if (!OfficeFormats.isOffice(source.getFileName()))
+			return "%s has no PDF conversion".formatted(source.getFileName());
+		PreviewJobs.get().add(pdf.getDocId(), pdf.getFileVersion(), Instant.now());
+		return "%s isn't converted yet; it is queued".formatted(source.getFileName());
 	}
 
 	/**
