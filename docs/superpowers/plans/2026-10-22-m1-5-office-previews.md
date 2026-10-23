@@ -16,7 +16,7 @@
 - LibreOffice 26.2.6 from Ubuntu 26.04's archive, the base of `tomcat:11.0-jre25-temurin`.
 - JUnit 4.13.2 and HSQLDB 2.7.1 for tests. Bash, curl, jq and python3 for the Docker tests.
 
-**Status:** the owner approved this plan, including its spec corrections, on 2026-10-22, and chose subagent-driven execution. Tasks 1–9 are built ([Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49)). Task 10, the owner's walkthrough, is pending.
+**Status:** the owner approved this plan, including its spec corrections, on 2026-10-22, and chose subagent-driven execution. Tasks 1–9 are built ([Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49)). Task 10, the owner's walkthrough, passed on 2026-10-23, and M1.5 is done.
 
 **Spec:** [`docs/superpowers/specs/2026-10-22-m1-5-office-previews-design.md`](../specs/2026-10-22-m1-5-office-previews-design.md), approved by the owner on 2026-10-22. Every § reference below points into it. Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
 
@@ -655,8 +655,20 @@ Record each row's result, and any punch-list items, in this plan's decision log.
 | 2026-10-22 | 8 | Step 5b of the smoke test takes about 26 s locally. |
 | 2026-10-22 | CI | PR A's `build` took 24 min, the same as recent code PRs (24–26 min), so no measurable increase. |
 | 2026-10-22 | PR B final review | B1: with `tini` as the image's `ENTRYPOINT`, PID 1 ran as root, so `restart.sh` (uid 1000) couldn't signal it and Admin > Restart did nothing. The `ENTRYPOINT` is the entrypoint script again, which ends with `setpriv … /usr/bin/tini -- "$@"` after the privilege drop: tini is PID 1 as uid 1000, reaps orphans and forwards signals to Tomcat. During init, bash is PID 1 again, as before M1.5. `test-image.sh` checks that PID 1 is tini as uid 1000 and that Tomcat runs as uid 1000. |
+| 2026-10-23 | 10 | The owner's walkthrough ran on a throwaway stack started on M1 (`33d5fe477`) with the owner's own files, then upgraded on the same volumes to master (`d7433a242`). Flyway applied `V2`, and the `queue-office-previews` seed ran. |
+| 2026-10-23 | 10 | Row 1 passed: all 8 Office files uploaded under M1 (5 `.docx`, 2 `.xlsx`, 1 `.ods`) were converted, with thumbnails, soon after the upgrade. The PDFs and the `.eml` kept M1's previews. |
+| 2026-10-23 | 10 | Row 2 passed: an `.ods`, a `.pptx` and a `.docx` uploaded after the upgrade were converted 0–9 s after upload, before anyone opened them. |
+| 2026-10-23 | 10 | Row 3 passed: new versions preview as themselves, and old ones from the Versions tab. Both re-versioned documents had the unedited file checked in again, so their versions looked alike. A check-in of a different file on a scratch document confirmed that check-in stores the uploaded bytes and each version converts on its own. |
+| 2026-10-23 | 10 | Row 4 passed: printing from the preview works. |
+| 2026-10-23 | 10 | Row 5 passed: a `.docx` with tracked changes shows change bars, and its comment shows as a note the viewer reveals on hover. |
+| 2026-10-23 | 10 | Observation: right after the first check-in, previewing the new version from the Versions tab showed "You do not have the READ permission on the document". It was consistent until the GUI page reloaded, then didn't come back. Every path tested afterwards sent the document's id. An admin gets that message only when `prev/index.jsp` is asked for an id that isn't a live document; the version row's id reproduces it. Not lag: a preview that isn't ready shows "not available". Left open in the follow-ups. |
+| 2026-10-23 | 10 | Observations outside M1.5: emails get no thumbnail, which is expected because `.eml` isn't an M1.5 format; Office documents show 1 page on their Properties tab, because M1's Word, Excel and PowerPoint text extractors never count pages. |
 
 ## Follow-ups
+
+- **An unexplained READ refusal after a check-in** (decision log, Task 10). If "You do not have the READ permission on the document" comes back when previewing a version, capture the `docId` the browser sent to `prev/index.jsp`, for example with Tomcat's access log. That shows which GUI state carried a wrong id.
+- **Office page counts.** Every `.docx`, `.xlsx` and `.pptx` shows 1 page, because Healdan's M1 text extractors don't implement `countPages`. A separate task, "Real page counts for Office documents", takes this up.
+- **Email thumbnails.** `.eml` and `.msg` files get no thumbnail. That's expected for now, since emails aren't an M1.5 format; revisit with M5 (email).
 
 - **SOAP `uploadResource` can overwrite a cached conversion.** It lets a user with Write upload any suffix as a resource of a document. Since M1.5 serves an Office document's `conversion.pdf` as its preview, such a user could make the preview differ from the file. They can already replace the file itself, so the risk is low. Decide whether to refuse the `conversion.pdf` suffix there.
 - **Legacy `.doc` and `.rtf`, and OpenDocument files,** don't get forced redlines (correction 2). Revisit if the owner meets one in practice.
