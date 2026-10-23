@@ -10,11 +10,14 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.OptionalInt;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.slf4j.Logger;
@@ -28,8 +31,8 @@ import com.logicaldoc.util.spring.Context;
  * Converts Office files to PDF with a headless {@code soffice}. Each run owns
  * one of a few profile "slots" (LibreOffice allows one process per profile),
  * has a timeout, and is followed by a sweep that kills anything still using
- * the slot's profile. Background work takes a single extra permit, so that it
- * never uses every slot.
+ * the slot's profile. Background work takes a single extra permit and there
+ * are at least two slots, so that it never uses every slot.
  */
 @Component
 public class LibreOfficeRunner {
@@ -40,7 +43,11 @@ public class LibreOfficeRunner {
 
 	private static final String TEMPLATE = "/healdan/libreoffice/registrymodifications.xcu";
 
+	/** Also the fewest: one for background work and at least one for interactive previews */
 	private static final int DEFAULT_SLOTS = 2;
+
+	/** Reads the timeout back from a failure's message, as {@link #timedOut} words it */
+	private static final Pattern TIMED_OUT = Pattern.compile("timed out after (\\d+) s");
 
 	private static final int DEFAULT_TIMEOUT = 120;
 
@@ -134,7 +141,12 @@ public class LibreOfficeRunner {
 
 	private synchronized BlockingQueue<Integer> slots() {
 		if (freeSlots == null) {
-			int count = Math.max(1, Context.get().getConfig().getInt(PREFIX + "slots", DEFAULT_SLOTS));
+			int count = Context.get().getConfig().getInt(PREFIX + "slots", DEFAULT_SLOTS);
+			if (count < DEFAULT_SLOTS) {
+				log.warn("{}slots is {}; using {}, so that previews never wait behind background conversions",
+						PREFIX, count, DEFAULT_SLOTS);
+				count = DEFAULT_SLOTS;
+			}
 			freeSlots = new LinkedBlockingQueue<>();
 			for (int i = 0; i < count; i++)
 				freeSlots.add(i);
@@ -195,17 +207,13 @@ public class LibreOfficeRunner {
 	}
 
 	private void convert(File src, OfficeFormats.Kind kind, File dest, int slot) throws IOException {
-		var config = Context.get().getConfig();
-		String path = config.getProperty(PREFIX + "path");
-		if (path == null || path.isBlank())
-			path = "soffice";
 		int timeout = timeout();
 
 		prepareSlot(slot);
 		File slotDir = slotDir(slot);
 		Path outDir = Files.createTempDirectory("healdan-lo-out");
 		try {
-			List<String> cmd = commandLine(path, src, kind, slotDir, outDir.toFile());
+			List<String> cmd = commandLine(configuredPath(), src, kind, slotDir, outDir.toFile());
 			long started = System.nanoTime();
 			int exit;
 			long seconds;
@@ -222,7 +230,7 @@ public class LibreOfficeRunner {
 			if (seconds >= timeout) {
 				// The killed LibreOffice may have left the profile half-written too: rebuild it on next use
 				unprepareSlot(slot);
-				throw new IOException("LibreOffice timed out after " + timeout + " s converting " + src.getName());
+				throw new IOException(timedOut(timeout, src.getName()));
 			}
 
 			String base = src.getName();
@@ -251,6 +259,33 @@ public class LibreOfficeRunner {
 		return timeout > 0 ? timeout : DEFAULT_TIMEOUT;
 	}
 
+	/**
+	 * @param timeout the timeout the run hit, in seconds
+	 * @param fileName the file it was converting
+	 * @return the failure's message, which {@link #timedOutAfter} reads back
+	 */
+	static String timedOut(int timeout, String fileName) {
+		return "LibreOffice timed out after " + timeout + " s converting " + fileName;
+	}
+
+	/**
+	 * @param error a failure's message, null if none
+	 * @return the timeout the failure hit, in seconds; empty if it wasn't a
+	 *         timeout or says no number
+	 */
+	static OptionalInt timedOutAfter(String error) {
+		if (error == null)
+			return OptionalInt.empty();
+		Matcher m = TIMED_OUT.matcher(error);
+		if (!m.find())
+			return OptionalInt.empty();
+		try {
+			return OptionalInt.of(Integer.parseInt(m.group(1)));
+		} catch (NumberFormatException e) {
+			return OptionalInt.empty();
+		}
+	}
+
 	private static String configuredPath() {
 		String path = Context.get().getConfig().getProperty(PREFIX + "path");
 		return path == null || path.isBlank() ? "soffice" : path;
@@ -270,7 +305,7 @@ public class LibreOfficeRunner {
 		cmd.add("--nologo");
 		cmd.add("--nodefault");
 		cmd.add("--nolockcheck");
-		cmd.add("-env:UserInstallation=" + slotDir.toURI());
+		cmd.add("-env:UserInstallation=" + profileUri(slotDir));
 		cmd.add("--convert-to");
 		cmd.add("pdf:" + kind.pdfFilter() + ":{\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"true\"}}");
 		cmd.add("--outdir");
@@ -279,9 +314,23 @@ public class LibreOfficeRunner {
 		return cmd;
 	}
 
-	/** Force-kills every process still using the slot's profile: soffice.bin can outlive the soffice launcher. */
+	/**
+	 * @return the profile as the command line names it, with a closing slash
+	 *         so that slot-1's never matches slot-10's
+	 */
+	private static String profileUri(File slotDir) {
+		String uri = slotDir.toURI().toString();
+		return uri.endsWith("/") ? uri : uri + "/";
+	}
+
+	/**
+	 * Force-kills every process still using the slot's profile: soffice.bin can
+	 * outlive the soffice launcher. It looks for the profile as the command
+	 * line names it, a URI that escapes spaces and uses forward slashes on
+	 * every system.
+	 */
 	private static void sweep(File slotDir) {
-		String needle = slotDir.getPath() + "/";
+		String needle = profileUri(slotDir);
 		List<ProcessHandle> victims = ProcessHandle.allProcesses()
 				.filter(h -> h.info().commandLine().map(c -> c.contains(needle)).orElse(false)).toList();
 		for (ProcessHandle h : victims) {

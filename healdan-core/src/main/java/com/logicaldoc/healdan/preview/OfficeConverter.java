@@ -66,10 +66,12 @@ public class OfficeConverter extends AbstractFormatConverter {
 	 * A file version whose last background try timed out would most likely
 	 * time out again, holding a slot for the whole timeout on every view. The
 	 * memory goes with the job: when the worker converts the version, or
-	 * when a new file version gets a job of its own.
-	 * 
+	 * when a new file version gets a job of its own. It no longer holds once
+	 * the timeout is raised above the one the try hit.
+	 *
 	 * @param document the document or version being converted, null if none
-	 * @return true if its job's last failure was a timeout
+	 * @return true if its job's last failure was a timeout at least as long as
+	 *         the current one
 	 */
 	private static boolean timedOutRecently(AbstractDocument document) {
 		if (document == null)
@@ -78,8 +80,7 @@ public class OfficeConverter extends AbstractFormatConverter {
 			// The same resolution CE uses: an alias's target, or a version's document and file version
 			StoreResource file = StoreResource.builder().document(document).build();
 			Optional<PreviewJob> job = PreviewJobs.get().find(file.getDocId(), file.getFileVersion());
-			return job.isPresent() && job.get().attempts() >= 1 && job.get().lastError() != null
-					&& job.get().lastError().contains("timed out");
+			return job.isPresent() && job.get().timesOutAt(LibreOfficeRunner.timeout());
 		} catch (PersistenceException | RuntimeException e) {
 			// Only an optimisation: converting is still allowed
 			log.debug("Cannot look up the preview job of document {}: {}", document.getId(), e.getMessage());

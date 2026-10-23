@@ -26,7 +26,8 @@ import com.logicaldoc.util.spring.Context;
  * "document not found" and is retried like any other failure.
  * <p>
  * After a failure the next try comes 1 minute, then 10 minutes, then 1 hour
- * later; after the fourth failure a job is never tried again (spec section 7.2).
+ * later; after the fourth failure a job is never tried again (spec section 7.2),
+ * unless it timed out and the timeout is raised, or its file is replaced.
  */
 @Component
 public class PreviewJobs {
@@ -71,6 +72,44 @@ public class PreviewJobs {
 		} catch (DuplicateKeyException e) {
 			// Already queued
 		}
+	}
+
+	/**
+	 * Queues a file version whose content has changed, due at once. A job
+	 * already queued starts over: its failures were about the old content.
+	 *
+	 * @param docId the document
+	 * @param fileVersion the file version
+	 * @param now the current time
+	 */
+	public void requeue(long docId, String fileVersion, Instant now) {
+		int updated = jdbc.update(
+				"update hd_preview_job set hd_attempts = 0, hd_nexttry = ?, hd_lasterror = null, hd_created = ? where hd_docid = ? and hd_fileversion = ?",
+				Timestamp.from(now), Timestamp.from(now), docId, fileVersion);
+		if (updated == 0)
+			add(docId, fileVersion, now);
+	}
+
+	/**
+	 * Gives one more try to each given-up job whose last try timed out under a
+	 * shorter timeout than {@code timeout}: an admin raised it so that they
+	 * convert.
+	 *
+	 * @param timeout the timeout now in force, in seconds
+	 * @param now the current time
+	 * @return how many jobs were given a try
+	 */
+	public int retryTimedOut(int timeout, Instant now) {
+		List<PreviewJob> givenUp = jdbc.query("select " + COLUMNS
+				+ " from hd_preview_job where hd_attempts >= ? and hd_lasterror like '%timed out%'", (rs, i) -> job(rs),
+				MAX_ATTEMPTS);
+		int retried = 0;
+		for (PreviewJob job : givenUp)
+			if (!job.timesOutAt(timeout))
+				retried += jdbc.update(
+						"update hd_preview_job set hd_attempts = ?, hd_nexttry = ? where hd_docid = ? and hd_fileversion = ?",
+						MAX_ATTEMPTS - 1, Timestamp.from(now), job.docId(), job.fileVersion());
+		return retried;
 	}
 
 	/**

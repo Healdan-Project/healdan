@@ -11,8 +11,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 import org.junit.Test;
 
@@ -51,6 +53,14 @@ public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
 		PreviewTests.clearStore();
 	}
 
+	/** Builds the thumbnail as the preview worker does */
+	private static void inBackground(Recording builder, Document doc, String fileVersion, File dest) throws Exception {
+		LibreOfficeRunner.get().inBackground((Callable<Void>) () -> {
+			builder.buildThumbnail(null, doc, fileVersion, null, dest, 100, 80);
+			return null;
+		});
+	}
+
 	private Document upload(String name) throws Exception {
 		HealdanFixtures fx = new HealdanFixtures();
 		Matter matter = fx.matter(fx.client(997, "Healdan"), 1, "Office", fx.store("Main"), "Documents");
@@ -76,7 +86,8 @@ public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
 		Recording builder = new Recording();
 		File dest = File.createTempFile("thumb", ".png");
 
-		builder.buildThumbnail(null, doc, null, null, dest, 100, 80);
+		inBackground(builder, doc, null, dest);
+		// A request from the GUI uses the conversion the worker made
 		builder.buildThumbnail(null, doc, null, null, dest, 100, 80);
 
 		long runs = Files.readAllLines(log.toPath()).stream().filter(l -> l.startsWith("start")).count();
@@ -108,7 +119,7 @@ public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
 		Recording builder = new Recording();
 		File dest = File.createTempFile("thumb", ".png");
 
-		builder.buildThumbnail(null, doc, "1.0", null, dest, 100, 80);
+		inBackground(builder, doc, "1.0", dest);
 
 		byte[] stored = Store.get().getBytes(
 				StoreResource.builder().docId(doc.getId()).fileVersion("1.0").suffixPdfConversion().build());
@@ -142,13 +153,67 @@ public class OfficeThumbnailBuilderTest extends AbstractHealdanTestCase {
 		File dest = File.createTempFile("thumb", ".png");
 
 		try {
-			builder.buildThumbnail(null, doc, null, null, dest, 100, 80);
+			inBackground(builder, doc, null, dest);
 			fail("The thumbnail should fail");
 		} catch (IOException expected) {
 			// as it should
 		}
 
 		assertTrue(builder.pdfs.isEmpty());
+		dest.delete();
+	}
+
+	private static long runs(File log) throws IOException {
+		return Files.readAllLines(log.toPath()).stream().filter(l -> l.startsWith("start")).count();
+	}
+
+	@Test
+	public void testOnDemandQueuesInsteadOfConverting() throws Exception {
+		File log = new File("target/fake-soffice/thumb-on-demand.log");
+		Files.deleteIfExists(log.toPath());
+		Files.createFile(log.toPath());
+		Context.get().getConfig().setProperty("converter.OfficeConverter.path", FakeSoffice.slow(0, log).getPath());
+		Document doc = upload("a.docx");
+		PreviewJobs.get().done(doc.getId(), "1.0");
+		Recording builder = new Recording();
+		File dest = File.createTempFile("thumb", ".png");
+
+		for (int i = 0; i < 2; i++) {
+			try {
+				builder.buildThumbnail(null, doc, null, null, dest, 100, 80);
+				fail("The thumbnail should fail");
+			} catch (IOException expected) {
+				assertTrue(expected.getMessage(), expected.getMessage().contains("queued"));
+			}
+		}
+
+		assertEquals(0, runs(log));
+		assertTrue(builder.pdfs.isEmpty());
+		assertTrue(PreviewJobs.get().find(doc.getId(), "1.0").isPresent());
+		dest.delete();
+	}
+
+	@Test
+	public void testOnDemandLeavesAGivenUpJob() throws Exception {
+		File log = new File("target/fake-soffice/thumb-given-up.log");
+		Files.deleteIfExists(log.toPath());
+		Files.createFile(log.toPath());
+		Context.get().getConfig().setProperty("converter.OfficeConverter.path", FakeSoffice.slow(0, log).getPath());
+		Document doc = upload("a.docx");
+		for (int i = 0; i < PreviewJobs.MAX_ATTEMPTS; i++)
+			PreviewJobs.get().failed(doc.getId(), "1.0", "LibreOffice exited 1 without a PDF for a.docx",
+					Instant.now());
+		File dest = File.createTempFile("thumb", ".png");
+
+		try {
+			new Recording().buildThumbnail(null, doc, null, null, dest, 100, 80);
+			fail("The thumbnail should fail");
+		} catch (IOException expected) {
+			// as it should
+		}
+
+		assertEquals(0, runs(log));
+		assertEquals(PreviewJobs.MAX_ATTEMPTS, PreviewJobs.get().find(doc.getId(), "1.0").orElseThrow().attempts());
 		dest.delete();
 	}
 }
