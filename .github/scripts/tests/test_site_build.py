@@ -68,16 +68,17 @@ class _Links(html.parser.HTMLParser):
 
 
 class _Text(html.parser.HTMLParser):
-    """The text inside the first element with a given tag."""
+    """The text inside the first element with a given tag and, optionally, class token."""
 
-    def __init__(self, tag):
+    def __init__(self, tag, cls=None):
         super().__init__(convert_charrefs=True)
-        self.tag, self.depth, self.done, self.parts = tag, 0, False, []
+        self.tag, self.cls, self.depth, self.done, self.parts = tag, cls, 0, False, []
 
     def handle_starttag(self, tag, attrs):
         if self.done:
             return
-        if tag == self.tag:
+        if tag == self.tag and (self.depth or self.cls is None
+                                or self.cls in (dict(attrs).get("class") or "").split()):
             self.depth += 1
         if tag == "br" and self.depth:
             self.parts.append(" ")
@@ -140,9 +141,9 @@ class SiteBuild(unittest.TestCase):
             found.append(Link(self._site_path(href, page), _normalise("".join(parts)), own))
         return found
 
-    def text(self, html, tag="body"):
-        """The unescaped text inside the first element with this tag, whitespace collapsed."""
-        parser = _Text(tag)
+    def text(self, html, tag="body", within_class=None):
+        """The unescaped text inside the first element with this tag (and class token), whitespace collapsed."""
+        parser = _Text(tag, within_class)
         parser.feed(html)
         return _normalise("".join(parser.parts))
 
@@ -210,6 +211,18 @@ class SiteBuild(unittest.TestCase):
 
     def test_404_page_is_healdan(self):
         self.assertIn("/images/logo.svg", self.html("/404.html"))
+
+    # Task 3
+
+    def test_interim_box_renders(self):
+        page = self.html("/admin/stores/")
+        box = self.text(page, "div", "healdan-interim")
+        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Administrator's Guide covers similar "
+                      "ground.", box)
+        self.assertIn("LogicalDOC's docs describe its Enterprise edition, so some features there aren't in Healdan, "
+                      "and their workspace isn't a Healdan Workspace.", box)
+        self.assertIn("https://docs.logicaldoc.com/en/system/general-informations",
+                      [link.href for link in self.links(page, "healdan-interim")])
 
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):

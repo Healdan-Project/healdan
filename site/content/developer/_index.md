@@ -6,3 +6,7 @@ cascade:
   type: docs
 ---
 How to build Healdan from source, how it extends LogicalDOC Community Edition, and how to work on these docs.
+
+{{< cards >}}
+  {{< card link="api/" title="API" icon="code" >}}
+{{< /cards >}}

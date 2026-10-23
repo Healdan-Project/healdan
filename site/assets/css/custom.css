@@ -109,3 +109,40 @@ h1.hx\:bg-clip-text {
 .dark .healdan-404 a {
   color: #4aa8f0;
 }
+
+/* Interim pages: a pale-blue box pointing at LogicalDOC's nearest page (spec §6.2) */
+.healdan-interim {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid #bfe3f6;
+  border-left: 4px solid #22a2e0;
+  border-radius: 0.5rem;
+  background: #eef8fd;
+  color: #0c4a6e;
+}
+
+.healdan-interim p {
+  margin: 0;
+}
+
+.healdan-interim a {
+  color: #0b5dab;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.healdan-interim .healdan-interim-warn {
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.dark .healdan-interim {
+  border-color: #164e63;
+  border-left-color: #22a2e0;
+  background: rgba(34, 162, 224, 0.1);
+  color: #bae6fd;
+}
+
+.dark .healdan-interim a {
+  color: #8fd0f5;
+}
