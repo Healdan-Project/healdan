@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.parser;
 
+import java.io.File;
 import java.io.InputStream;
 
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
@@ -12,8 +13,9 @@ import com.logicaldoc.core.parser.ParseParameters;
 
 /**
  * Reads the text of Word 2007+ documents ({@code docx}, {@code docm},
- * {@code dotx}). A file it can't read (encrypted, damaged, not Word) yields no
- * text and no exception.
+ * {@code dotx}), and their page count as Word saved it. A file it can't read
+ * (encrypted, damaged, not Word) yields no text and no exception, and counts
+ * 1 page.
  */
 public class WordParser extends AbstractParser {
 
@@ -27,5 +29,15 @@ public class WordParser extends AbstractParser {
 			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		}
+	}
+
+	@Override
+	public int countPages(InputStream input, String filename) {
+		return Math.max(1, OfficePages.count(input, filename, OfficePages.SAVED_PAGES));
+	}
+
+	@Override
+	public int countPages(File file, String filename) {
+		return Math.max(1, OfficePages.count(file, filename, OfficePages.SAVED_PAGES));
 	}
 }

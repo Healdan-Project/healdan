@@ -2,14 +2,21 @@ package com.logicaldoc.healdan.parser;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.InputStream;
+import java.nio.file.Files;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ThreadPoolExecutor;
+
+import javax.sql.DataSource;
 
 import org.apache.poi.poifs.crypt.EncryptionInfo;
 import org.apache.poi.poifs.crypt.EncryptionMode;
@@ -21,10 +28,22 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.parser.Parser;
 import com.logicaldoc.core.parser.ParserFactory;
+import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
+import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.OfficeFiles;
+import com.logicaldoc.util.spring.Context;
 
 import jakarta.activation.DataHandler;
 import jakarta.mail.Session;
@@ -45,6 +64,46 @@ public class ParsersTest extends AbstractHealdanTestCase {
 	private String parse(String filename, byte[] content) throws Exception {
 		Parser parser = ParserFactory.getParser(filename);
 		return parser.parse(new ByteArrayInputStream(content), filename, "UTF-8", Locale.ENGLISH, "default");
+	}
+
+	/**
+	 * Counts the pages both ways CE asks: from a stream (the Properties tab's
+	 * recount) and from a file (upload and check-in), checking they agree.
+	 */
+	private int countPages(String filename, byte[] content) throws Exception {
+		Parser parser = ParserFactory.getParser(filename);
+		int fromStream = parser.countPages(new ByteArrayInputStream(content), filename);
+		File file = File.createTempFile("pages", "-" + filename, new File("target"));
+		try {
+			Files.write(file.toPath(), content);
+			assertEquals(filename, fromStream, parser.countPages(file, filename));
+		} finally {
+			Files.delete(file.toPath());
+		}
+		return fromStream;
+	}
+
+	private static byte[] encrypt(byte[] plain) throws Exception {
+		try (POIFSFileSystem fs = new POIFSFileSystem(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+			EncryptionInfo info = new EncryptionInfo(EncryptionMode.agile);
+			Encryptor encryptor = info.getEncryptor();
+			encryptor.confirmPassword("pw");
+			try (java.io.OutputStream os = encryptor.getDataStream(fs)) {
+				os.write(plain);
+			}
+			fs.writeFilesystem(out);
+			return out.toByteArray();
+		}
+	}
+
+	private static void awaitAsyncWork() throws Exception {
+		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		long deadline = System.currentTimeMillis() + 20000L;
+		while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
+			if (System.currentTimeMillis() > deadline)
+				fail("Background version saves didn't finish");
+			Thread.sleep(50L);
+		}
 	}
 
 	private byte[] docx(String text) throws Exception {
@@ -153,18 +212,7 @@ public class ParsersTest extends AbstractHealdanTestCase {
 	public void testEncryptedOrCorruptFilesYieldEmptyText() throws Exception {
 		// A password-protected docx is an OLE container
 		byte[] plain = docx("zqxsecret");
-		byte[] encrypted;
-		try (POIFSFileSystem fs = new POIFSFileSystem(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-			EncryptionInfo info = new EncryptionInfo(EncryptionMode.agile);
-			Encryptor encryptor = info.getEncryptor();
-			encryptor.confirmPassword("pw");
-			try (java.io.OutputStream os = encryptor.getDataStream(fs)) {
-				os.write(plain);
-			}
-			fs.writeFilesystem(out);
-			encrypted = out.toByteArray();
-		}
-		assertEquals("", parse("enc.docx", encrypted));
+		assertEquals("", parse("enc.docx", encrypt(plain)));
 
 		assertEquals("", parse("cut.docx", Arrays.copyOf(plain, plain.length / 2)));
 		assertEquals("", parse("cut.xlsx", Arrays.copyOf(xlsx("x"), 100)));
@@ -176,5 +224,75 @@ public class ParsersTest extends AbstractHealdanTestCase {
 			assertEquals(name, "", parse(name, random).trim());
 		for (String name : new String[] { "e.docx", "e.xlsx", "e.pptx", "e.eml", "e.msg" })
 			assertEquals(name, "", parse(name, new byte[0]).trim());
+	}
+
+	@Test
+	public void testWordCountIsTheOneWordSaved() throws Exception {
+		assertEquals(12, countPages("a.docx", OfficeFiles.docx(12)));
+		assertEquals(12, countPages("a.DOCM", OfficeFiles.docx(12)));
+		assertEquals(12, countPages("a.dotx", OfficeFiles.docx(12)));
+
+		// A file that saved no count, or a count of 0, has CE's default of 1
+		assertEquals(1, countPages("a.docx", OfficeFiles.docx(null)));
+		assertEquals(1, countPages("a.docx", OfficeFiles.docx(0)));
+	}
+
+	@Test
+	public void testPowerPointCountsEverySlide() throws Exception {
+		// Hidden slides count, as in PowerPoint's own slide count
+		assertEquals(3, countPages("a.pptx", OfficeFiles.pptx(3, 1)));
+		assertEquals(3, countPages("a.ppsx", OfficeFiles.pptx(3, 0)));
+		assertEquals(1, countPages("a.pptx", OfficeFiles.pptx(0, 0)));
+	}
+
+	@Test
+	public void testExcelCountsVisibleSheets() throws Exception {
+		assertEquals(2, countPages("a.xlsx", OfficeFiles.xlsx(2, 1, 1)));
+		assertEquals(4, countPages("a.xlsm", OfficeFiles.xlsx(4, 0, 0)));
+	}
+
+	@Test
+	public void testUnreadableFilesCountOnePage() throws Exception {
+		assertEquals(1, countPages("enc.docx", encrypt(OfficeFiles.docx(12))));
+		byte[] word = OfficeFiles.docx(12);
+		assertEquals(1, countPages("cut.docx", Arrays.copyOf(word, word.length / 2)));
+		assertEquals(1, countPages("cut.xlsx", Arrays.copyOf(OfficeFiles.xlsx(2, 0, 0), 100)));
+		assertEquals(1, countPages("cut.pptx", Arrays.copyOf(OfficeFiles.pptx(3, 0), 100)));
+
+		byte[] random = new byte[2048];
+		new Random(7).nextBytes(random);
+		for (String name : new String[] { "r.docx", "r.xlsx", "r.pptx" }) {
+			assertEquals(name, 1, countPages(name, random));
+			assertEquals(name, 1, countPages(name, new byte[0]));
+		}
+	}
+
+	@Test
+	public void testUploadAndCheckinCountPages() throws Exception {
+		HealdanFixtures fx = new HealdanFixtures();
+		Matter matter = fx.matter(fx.client(996, "Healdan"), 1, "Pages", fx.store("Main"), "Documents");
+		Folder folder = FolderDAO.get()
+				.findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents", Tenant.DEFAULT_ID, true).get(0);
+
+		Document word = fx.upload(folder, "a.docx", OfficeFiles.docx(12), fx.admin());
+		assertEquals(12, DocumentDAO.get().findById(word.getId()).getPages());
+		assertEquals(3, fx.upload(folder, "b.pptx", OfficeFiles.pptx(3, 0), fx.admin()).getPages());
+		assertEquals(2, fx.upload(folder, "c.xlsx", OfficeFiles.xlsx(2, 1, 0), fx.admin()).getPages());
+
+		DocumentManager.get().checkout(word.getId(), fx.documentHistory(fx.admin()));
+		DocumentManager.get().checkin(word.getId(), new ByteArrayInputStream(OfficeFiles.docx(15)), "a.docx", false,
+				null, fx.documentHistory(fx.admin()));
+		awaitAsyncWork();
+
+		word = DocumentDAO.get().findById(word.getId());
+		assertEquals(15, word.getPages());
+		// The recount on the Properties tab reads the stored file
+		assertEquals(15, DocumentManager.get().countPages(word));
+		// Each version keeps the count of its own file
+		List<String> versions = new JdbcTemplate(Context.get(DataSource.class)).queryForList(
+				"select distinct ld_fileversion || ' ' || cast(ld_pages as varchar(10)) from ld_version "
+						+ "where ld_documentid = ? and ld_deleted = 0 order by 1",
+				String.class, word.getId());
+		assertEquals(List.of("1.0 12", word.getFileVersion() + " 15"), versions);
 	}
 }
