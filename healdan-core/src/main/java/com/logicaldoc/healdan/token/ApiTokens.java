@@ -8,9 +8,13 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -38,6 +42,8 @@ public class ApiTokens {
 	private static final int TOKEN_LENGTH = PREFIX.length() + 43;
 
 	private static final long TOUCH_EVERY_MILLIS = TimeUnit.MINUTES.toMillis(5);
+
+	private static final Logger log = LoggerFactory.getLogger(ApiTokens.class);
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -147,16 +153,19 @@ public class ApiTokens {
 	}
 
 	/**
-	 * Records a use, at most once every five minutes.
+	 * Records a use, at most once every five minutes. The write is conditional,
+	 * so of two parallel requests one wins and the other does nothing.
 	 * 
 	 * @param token a token row
 	 * @param now the time of the use
 	 */
 	public void touch(ApiToken token, Date now) {
-		if (now.getTime() - token.getLastUsed().getTime() < TOUCH_EVERY_MILLIS)
+		Date cutoff = new Date(now.getTime() - TOUCH_EVERY_MILLIS);
+		if (token.getLastUsed().after(cutoff))
 			return;
-		token.setLastUsed(now);
-		save(token);
+		if (update("set lastUsed = :now where id = :id and deleted = 0 and lastUsed < :cutoff",
+				Map.of("now", now, "id", token.getId(), "cutoff", cutoff)) > 0)
+			token.setLastUsed(now);
 	}
 
 	/**
@@ -164,20 +173,22 @@ public class ApiTokens {
 	 * @param sid the CE session to bind it to
 	 */
 	public void bind(ApiToken token, String sid) {
-		token.setSid(sid);
-		save(token);
+		if (update("set sid = :sid where id = :id and deleted = 0", Map.of("sid", sid, "id", token.getId())) > 0)
+			token.setSid(sid);
 	}
 
 	/**
-	 * Revokes a token and closes the session bound to it.
+	 * Revokes a token and closes the session bound to it. Revoking a revoked
+	 * token does nothing.
 	 * 
 	 * @param token a token row
 	 */
 	public void revoke(ApiToken token) {
+		// The bound session is read from the database: it may have changed since the row was loaded
+		String sid = currentSid(token.getId());
+		update("set deleted = 1 where id = :id and deleted = 0", Map.of("id", token.getId()));
 		token.setDeleted(1);
-		save(token);
-		if (token.getSid() != null)
-			SessionManager.get().kill(token.getSid());
+		kill(sid);
 	}
 
 	/**
@@ -186,9 +197,11 @@ public class ApiTokens {
 	 */
 	public int revokeAll(long userId) {
 		try {
-			List<ApiToken> tokens = dao.findByUser(userId);
-			tokens.forEach(this::revoke);
-			return tokens.size();
+			List<String> sids = dao.findByUser(userId).stream().map(t -> currentSid(t.getId()))
+					.filter(Objects::nonNull).toList();
+			int revoked = update("set deleted = 1 where userId = :userId and deleted = 0", Map.of("userId", userId));
+			sids.forEach(ApiTokens::kill);
+			return revoked;
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list device tokens", e);
 		}
@@ -207,11 +220,30 @@ public class ApiTokens {
 		}
 	}
 
-	private void save(ApiToken token) {
+	private int update(String expression, Map<String, Object> parameters) {
 		try {
-			dao.store(token);
+			return dao.bulkUpdate(expression, parameters);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't save a device token", e);
+		}
+	}
+
+	private String currentSid(long id) {
+		try {
+			return dao.queryForList("select hd_sid from hd_api_token where ld_id = " + id, String.class).stream()
+					.filter(Objects::nonNull).findFirst().orElse(null);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read a device token", e);
+		}
+	}
+
+	private static void kill(String sid) {
+		if (sid == null)
+			return;
+		try {
+			SessionManager.get().kill(sid);
+		} catch (RuntimeException e) {
+			log.warn("Couldn't close session {} of a revoked device token", sid, e);
 		}
 	}
 

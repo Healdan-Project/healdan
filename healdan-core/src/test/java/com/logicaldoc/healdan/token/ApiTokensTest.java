@@ -217,4 +217,74 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		settings.set(HealdanSettings.API_CORS_ORIGINS, " https://a.test , ,http://b.test:3000 ");
 		assertEquals(List.of("https://a.test", "http://b.test:3000"), settings.apiCorsOrigins());
 	}
+
+	@Test
+	public void testConcurrentTouchesDoNotFail() throws Exception {
+		ApiTokens.Issued issued = tokens().issue(fx.user("clerk"), "Laptop", null);
+		ApiToken first = tokens().find(issued.token()).get();
+		ApiToken second = tokens().find(issued.token()).get();
+		Date old = new Date(System.currentTimeMillis() - 6 * 60_000);
+		setLastUsed(issued.row(), old);
+		first.setLastUsed(old);
+		second.setLastUsed(old);
+		Date now = new Date();
+
+		tokens().touch(first, now);
+		tokens().touch(second, new Date(now.getTime() + 1000));
+
+		assertEquals(now, first.getLastUsed());
+		assertEquals(old, second.getLastUsed());
+		assertEquals(now.getTime(), storedLastUsed(first), 1000);
+	}
+
+	@Test
+	public void testRevokeAfterConcurrentTouch() throws Exception {
+		User clerk = fx.user("clerk");
+		String sid = SessionManager.get().newSession(clerk.getUsername(), HealdanFixtures.PASSWORD, (Client) null)
+				.getSid();
+		try {
+			ApiTokens.Issued issued = tokens().issue(clerk, "x", sid);
+			ApiToken stale = tokens().find(issued.token()).get();
+			ApiToken other = tokens().find(issued.token()).get();
+			Date old = new Date(System.currentTimeMillis() - 6 * 60_000);
+			setLastUsed(other, old);
+			tokens().touch(other, new Date());
+
+			tokens().revoke(stale);
+
+			assertEquals(Optional.empty(), tokens().find(issued.token()));
+			assertFalse(SessionManager.get().isOpen(sid));
+		} finally {
+			SessionManager.get().kill(sid);
+		}
+	}
+
+	@Test
+	public void testRevokeAllKillsSessions() throws Exception {
+		User clerk = fx.user("clerk");
+		String one = SessionManager.get().newSession(clerk.getUsername(), HealdanFixtures.PASSWORD, (Client) null)
+				.getSid();
+		String two = SessionManager.get().newSession(clerk.getUsername(), HealdanFixtures.PASSWORD, (Client) null)
+				.getSid();
+		try {
+			tokens().issue(clerk, "a", one);
+			tokens().issue(clerk, "b", two);
+
+			assertEquals(2, tokens().revokeAll(clerk.getId()));
+
+			assertFalse(SessionManager.get().isOpen(one));
+			assertFalse(SessionManager.get().isOpen(two));
+		} finally {
+			SessionManager.get().kill(one);
+			SessionManager.get().kill(two);
+		}
+	}
+
+	@Test
+	public void testRevokeIsIdempotent() throws Exception {
+		ApiToken token = tokens().issue(fx.user("clerk"), "x", null).row();
+		tokens().revoke(token);
+		tokens().revoke(token);
+		assertEquals(Optional.empty(), tokens().find("hd_" + "A".repeat(43)));
+	}
 }
