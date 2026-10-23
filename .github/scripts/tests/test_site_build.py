@@ -280,13 +280,14 @@ class SiteBuild(unittest.TestCase):
     # Task 3
 
     def test_interim_box_renders(self):
-        page = self.html("/admin/stores/")
+        # The API page stays an interim page until M2 documents Healdan's own API
+        page = self.html("/developer/api/")
         box = self.text(page, "div", "healdan-interim")
-        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Administrator's Guide covers similar "
+        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Web Services API covers similar "
                       "ground.", box)
         self.assertIn("LogicalDOC's docs describe its Enterprise edition, so some features there aren't in Healdan, "
                       "and their workspace isn't a Healdan Workspace.", box)
-        self.assertIn("https://docs.logicaldoc.com/en/system/general-informations",
+        self.assertIn("https://docs.logicaldoc.com/en/web-services-api",
                       [link.href for link in self.links(page, "healdan-interim")])
 
     # Task 4
@@ -339,6 +340,29 @@ class SiteBuild(unittest.TestCase):
         for slug, title in pages.items():
             self.assertEqual(f"{title} – Healdan Documentation",
                              self.text(self.html(f"/developer/{slug}/"), "title"))
+
+    # Task 10
+
+    USER_LAUNCH_PAGES = (
+        "getting-started/signing-in", "getting-started/getting-around", "getting-started/clearing-your-browsers-cache",
+        "working-with-matters/stores-and-matter-workspaces", "working-with-matters/filing-a-document",
+        "working-with-matters/properties", "working-with-matters/emails", "working-with-matters/document-permissions",
+        "finding-documents/searching", "finding-documents/finding-by-doc-number", "finding-documents/search-folders",
+        "finding-documents/my-matters-and-recent-matters", "documents/versions", "documents/previews")
+
+    def test_user_launch_pages_written(self):
+        unwritten = [page for page in self.USER_LAUNCH_PAGES
+                     if "healdan-interim" in self.html(f"/user/{page}/")]
+        self.assertEqual([], unwritten)
+
+    # Task 11
+
+    ADMIN_LAUNCH_PAGES = ("stores", "clients-and-matters", "workspace-templates", "top-level-folders",
+                          "users-and-groups", "permissions", "healdan-settings", "office-previews")
+
+    def test_admin_launch_pages_written(self):
+        unwritten = [page for page in self.ADMIN_LAUNCH_PAGES if "healdan-interim" in self.html(f"/admin/{page}/")]
+        self.assertEqual([], unwritten)
 
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):
