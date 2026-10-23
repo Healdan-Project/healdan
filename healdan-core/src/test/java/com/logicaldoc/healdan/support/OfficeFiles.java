@@ -2,6 +2,11 @@ package com.logicaldoc.healdan.support;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.apache.poi.ss.usermodel.SheetVisibility;
 import org.apache.poi.xslf.usermodel.XMLSlideShow;
@@ -31,6 +36,54 @@ public final class OfficeFiles {
 			doc.write(out);
 			return out.toByteArray();
 		}
+	}
+
+	/**
+	 * Zips a Word document by hand rather than with POI: only the parts a
+	 * count needs, the extended properties as Word writes them, and no core
+	 * properties.
+	 *
+	 * @param savedPages the page count saved in the file
+	 * @return a Word document
+	 * @throws IOException if the file can't be written
+	 */
+	public static byte[] handMadeDocx(int savedPages) throws IOException {
+		Map<String, String> parts = new LinkedHashMap<>();
+		parts.put("[Content_Types].xml", """
+				<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+				<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+				<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+				<Default Extension="xml" ContentType="application/xml"/>
+				<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+				<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+				</Types>""");
+		parts.put("_rels/.rels", """
+				<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+				<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+				<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+				<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+				</Relationships>""");
+		parts.put("word/document.xml", """
+				<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+				<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+				<w:body><w:p><w:r><w:t>Pages</w:t></w:r></w:p></w:body></w:document>""");
+		parts.put("docProps/app.xml", """
+				<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+				<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" \
+				xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+				<Template>Normal.dotm</Template><TotalTime>3</TotalTime><Pages>%d</Pages><Words>1</Words>
+				<Application>Microsoft Office Word</Application><DocSecurity>0</DocSecurity></Properties>"""
+				.formatted(savedPages));
+
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		try (ZipOutputStream zip = new ZipOutputStream(out)) {
+			for (Map.Entry<String, String> part : parts.entrySet()) {
+				zip.putNextEntry(new ZipEntry(part.getKey()));
+				zip.write(part.getValue().getBytes(StandardCharsets.UTF_8));
+				zip.closeEntry();
+			}
+		}
+		return out.toByteArray();
 	}
 
 	/**

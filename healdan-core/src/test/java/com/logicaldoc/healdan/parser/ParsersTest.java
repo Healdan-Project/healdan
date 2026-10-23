@@ -231,6 +231,8 @@ public class ParsersTest extends AbstractHealdanTestCase {
 		assertEquals(12, countPages("a.docx", OfficeFiles.docx(12)));
 		assertEquals(12, countPages("a.DOCM", OfficeFiles.docx(12)));
 		assertEquals(12, countPages("a.dotx", OfficeFiles.docx(12)));
+		// Laid out as Word writes it, not as POI does
+		assertEquals(7, countPages("word.docx", OfficeFiles.handMadeDocx(7)));
 
 		// A file that saved no count, or a count of 0, has CE's default of 1
 		assertEquals(1, countPages("a.docx", OfficeFiles.docx(null)));

@@ -63,6 +63,9 @@ public class CountOfficePagesSeed implements SeedStep {
 						+ ")",
 				(rs, i) -> new Row(rs.getLong(1), rs.getLong(2), rs.getString(3), rs.getString(4), rs.getInt(5)));
 
+		// Startup waits for this step, so say why it may take a while
+		log.info("Counting the pages of {} Office documents and {} versions", documents.size(), versions.size());
+
 		// Versions share a file until it changes, so each file is read once
 		Map<String, Integer> counts = new HashMap<>();
 		List<Long> changedDocuments = update("ld_document", documents, counts);
