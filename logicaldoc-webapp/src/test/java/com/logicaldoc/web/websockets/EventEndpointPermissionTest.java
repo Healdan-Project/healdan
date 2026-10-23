@@ -2,6 +2,7 @@ package com.logicaldoc.web.websockets;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
@@ -15,6 +16,7 @@ import java.security.Principal;
 import java.sql.SQLException;
 import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,6 +24,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.junit.Test;
 
+import com.google.gwt.user.client.rpc.SerializationException;
 import com.logicaldoc.core.communication.EventCollector;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentAccessControlEntry;
@@ -45,6 +48,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.core.security.user.UserHistory;
+import com.logicaldoc.gui.common.client.beans.GUIFolder;
 import com.logicaldoc.gui.common.client.websockets.WebsocketMessage;
 import com.logicaldoc.util.io.ResourceUtil;
 import com.logicaldoc.util.plugin.PluginException;
@@ -61,16 +65,19 @@ import jakarta.websocket.Session;
  * gets a message only if its user may read what the message is about:
  * <ul>
  * <li>a document event, READ on the document, which a document-only grant
- * gives (D7). The folder's details go only to those who may read the folder;
- * the others get its id and name, as {@code getById} gives them (T19-e);</li>
+ * gives (D7), and on its target if it's a shortcut. The folder's details go
+ * only to those who may read the folder; the others get its id and name, as
+ * {@code getById} gives them (T19-e);</li>
+ * <li>a move, READ at the new location;</li>
  * <li>a folder event, READ on the folder;</li>
  * <li>a deletion, READ as it was before, from the ACL a soft delete
  * keeps;</li>
  * <li>a system message, only its recipient; a login or logout, the user and
- * the admins;</li>
+ * the admins, as they are when it's sent, not at their login;</li>
  * <li>an automation command, only the session it was sent for.</li>
  * </ul>
- * A peer whose session has ended, or that has none, gets nothing.
+ * A peer whose session has ended, or that has none, gets nothing. A copy of a
+ * message that can't be written costs only the peers it was for.
  * <p>
  * Alice isn't in IT, and a document-only grant gives her READ on a PDF in
  * Secured Documents, a folder only IT can read. Carol is in IT. Bob has no
@@ -103,6 +110,8 @@ public class EventEndpointPermissionTest extends AbstractWPTestCase {
     private final Map<String, List<String>> received = new HashMap<>();
 
     private final Map<String, com.logicaldoc.core.security.Session> sessions = new HashMap<>();
+
+    private Group it;
 
     private Folder secured;
 
@@ -253,6 +262,120 @@ public class EventEndpointPermissionTest extends AbstractWPTestCase {
         assertEquals(1, listeners.stream().filter(EventEndpoint.class::isInstance).count());
     }
 
+    @Test
+    public void testShortcutNeedsReadOnItsTarget() throws Exception {
+        // Bob may read the shortcut, through its folder, but not the PDF it points to
+        Folder shared = folder("Shared", "Bob, Alice and IT", userGroup("bob"), userGroup("alice"), it.getId());
+        DocumentHistory transaction = new DocumentHistory();
+        transaction.setSession(session);
+        Document shortcut = DocumentManager.get().createAlias(doc, shared, null, transaction);
+        assertTrue(DocumentDAO.get().isReadAllowed(shortcut.getId(), userId("bob")));
+
+        events.newEvent(documentEvent(DocumentEvent.CHANGED, shortcut, shared, "shortcut-changed"));
+
+        assertEquals(1, received("admin", "shortcut-changed").size());
+        assertEquals(1, received("carol", "shortcut-changed").size());
+        assertEquals(1, received("alice", "shortcut-changed").size());
+        assertTrue(received("bob", "shortcut-changed").isEmpty());
+    }
+
+    @Test
+    public void testMoveReachesTheNewLocationsReaders() throws Exception {
+        // A PDF with no ACL of its own, which Bob may read through its folder until it moves to Secured Documents
+        Folder shared = folder("Shared", "Bob and IT", userGroup("bob"), it.getId());
+        Document moving = create("moving.pdf", shared);
+        assertTrue(DocumentDAO.get().isReadAllowed(moving.getId(), userId("bob")));
+        DocumentHistory transaction = new DocumentHistory();
+        transaction.setSession(session);
+        DocumentManager.get().moveToFolder(moving, secured, transaction);
+        moving = DocumentDAO.get().findById(moving.getId(), true);
+        assertFalse(DocumentDAO.get().isReadAllowed(moving.getId(), userId("bob")));
+
+        events.newEvent(documentEvent(DocumentEvent.MOVED, moving, secured, "doc-moved"));
+
+        assertEquals(1, received("admin", "doc-moved").size());
+        assertEquals(1, received("carol", "doc-moved").size());
+        assertTrue(received("carol", "doc-moved").get(0).contains(FOLDER_DESCRIPTION));
+        // The message names the new folder, so Bob, who read it only at the old one, gets nothing
+        assertTrue(received("bob", "doc-moved").isEmpty());
+        assertTrue(received("alice", "doc-moved").isEmpty());
+    }
+
+    @Test
+    public void testAdminsAreTheAdminsOfNow() throws Exception {
+        // Dave signs in as an admin
+        user("dave");
+        Group admin = GroupDAO.get().findByName("admin", Tenant.DEFAULT_ID);
+        User dave = UserDAO.get().findByUsername("dave", true);
+        dave.addGroup(admin);
+        UserDAO.get().store(dave);
+        connect("dave", "dave", PASSWORD);
+
+        events.newEvent(userEvent(UserEvent.LOGIN, "bob", "while-admin"));
+        assertEquals(1, received("dave", "while-admin").size());
+
+        // and then stops being one, still signed in
+        dave = UserDAO.get().findByUsername("dave", true);
+        dave.removeGroup(admin.getId());
+        UserDAO.get().store(dave);
+
+        events.newEvent(userEvent(UserEvent.LOGIN, "bob", "no-longer-admin"));
+        assertTrue(received("dave", "no-longer-admin").isEmpty());
+        assertEquals(1, received("admin", "no-longer-admin").size());
+    }
+
+    @Test
+    public void testACopyThatCannotBeWrittenCostsOnlyItsPeers() throws Exception {
+        Set<Session> connected = new HashSet<>(peers.values());
+
+        // The copy with the folder hidden fails: those who read the folder still get theirs
+        Map<Session, String> deliveries = HealdanEventDelivery.deliveries(checkout(), connected,
+                message -> written(message, true));
+        assertEquals("full", deliveries.get(peers.get("admin")));
+        assertEquals("full", deliveries.get(peers.get("carol")));
+        assertFalse(deliveries.containsKey(peers.get("alice")));
+        assertFalse(deliveries.containsKey(peers.get("bob")));
+
+        // The full copy fails: Alice still gets the one with the folder hidden
+        deliveries = HealdanEventDelivery.deliveries(checkout(), connected, message -> written(message, false));
+        assertEquals("folder hidden", deliveries.get(peers.get("alice")));
+        assertFalse(deliveries.containsKey(peers.get("admin")));
+        assertFalse(deliveries.containsKey(peers.get("carol")));
+
+        // No copy can be written: the endpoint logs it, as CE did
+        assertThrows(SerializationException.class, () -> HealdanEventDelivery.deliveries(checkout(), connected,
+                message -> {
+                    throw new SerializationException("cannot write");
+                }));
+    }
+
+    /**
+     * Writes a message as "full" or "folder hidden", failing on the copy
+     * {@code failHidden} names
+     */
+    private static String written(WebsocketMessage message, boolean failHidden) throws SerializationException {
+        boolean hidden = !FOLDER_DESCRIPTION.equals(message.getFolder().getDescription());
+        if (hidden == failHidden)
+            throw new SerializationException("cannot write");
+        return hidden ? "folder hidden" : "full";
+    }
+
+    /**
+     * @return a check-out of the PDF, as the endpoint builds it
+     */
+    private WebsocketMessage checkout() {
+        WebsocketMessage message = new WebsocketMessage(session.getSid(), DocumentEvent.CHECKEDOUT.toString());
+        message.setId(nextEventId++);
+        message.setTenantId(Tenant.DEFAULT_ID);
+        message.setDocId(doc.getId());
+        message.setFolderId(secured.getId());
+        GUIFolder folder = new GUIFolder(secured.getId());
+        folder.setName(secured.getName());
+        folder.setDescription(FOLDER_DESCRIPTION);
+        message.setFolder(folder);
+        return message;
+    }
+
     /**
      * @return the messages the peer was sent that carry the marker
      */
@@ -261,15 +384,19 @@ public class EventEndpointPermissionTest extends AbstractWPTestCase {
     }
 
     private DocumentHistory documentEvent(DocumentEvent event, String marker) throws Exception {
+        return documentEvent(event, doc, secured, marker);
+    }
+
+    private DocumentHistory documentEvent(DocumentEvent event, Document document, Folder folder, String marker) {
         DocumentHistory history = new DocumentHistory();
         history.setId(nextEventId++);
         history.setSession(session);
         history.setEvent(event);
         history.setComment(marker);
-        history.setDocId(doc.getId());
-        history.setDocument(doc);
-        history.setFolderId(secured.getId());
-        history.setFolder(secured);
+        history.setDocId(document.getId());
+        history.setDocument(document);
+        history.setFolderId(folder.getId());
+        history.setFolder(folder);
         return history;
     }
 
@@ -321,7 +448,7 @@ public class EventEndpointPermissionTest extends AbstractWPTestCase {
     }
 
     private void createCase() throws Exception {
-        Group it = new Group();
+        it = new Group();
         it.setName("IT");
         it.setTenantId(Tenant.DEFAULT_ID);
         GroupDAO.get().store(it);
@@ -332,31 +459,10 @@ public class EventEndpointPermissionTest extends AbstractWPTestCase {
         UserDAO.get().store(carol);
 
         // A folder only IT can read
-        Folder vo = new Folder("Secured Documents");
-        vo.setTenantId(Tenant.DEFAULT_ID);
-        secured = FolderDAO.get().create(FolderDAO.get().findById(Folder.DEFAULTWORKSPACEID), vo, false,
-                folderHistory());
-        secured = FolderDAO.get().findById(secured.getId(), true);
-        secured.setDescription(FOLDER_DESCRIPTION);
-        secured.setSecurityRef(null);
-        secured.getAccessControlList().clear();
-        FolderAccessControlEntry itFolder = new FolderAccessControlEntry(it.getId());
-        itFolder.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE, Permission.ADD));
-        secured.addAccessControlEntry(itFolder);
-        FolderDAO.get().store(secured, folderHistory());
-        secured = FolderDAO.get().findById(secured.getId(), true);
+        secured = folder("Secured Documents", FOLDER_DESCRIPTION, it.getId());
 
         // A PDF in it, with its own ACL: IT, and Alice's document-only grant
-        Document docVO = new Document();
-        docVO.setFileName("secured.pdf");
-        docVO.setFolder(secured);
-        docVO.setTenantId(Tenant.DEFAULT_ID);
-        docVO.setLanguage("en");
-        DocumentHistory transaction = new DocumentHistory();
-        transaction.setSession(session);
-        try (InputStream in = ResourceUtil.getInputStream("pdf1.pdf")) {
-            doc = DocumentManager.get().create(in, docVO, transaction).getDocument();
-        }
+        doc = create("secured.pdf", secured);
         Document current = DocumentDAO.get().findById(doc.getId(), true);
         DocumentAccessControlEntry itDocument = new DocumentAccessControlEntry(it.getId());
         itDocument.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE));
@@ -374,8 +480,53 @@ public class EventEndpointPermissionTest extends AbstractWPTestCase {
         assertTrue(DocumentDAO.get().isReadAllowed(doc.getId(), alice.getId()));
         assertTrue(FolderDAO.get().isReadAllowed(secured.getId(), carol.getId()));
         assertTrue(DocumentDAO.get().isReadAllowed(doc.getId(), carol.getId()));
-        long bob = UserDAO.get().findByUsername("bob").getId();
-        assertFalse(DocumentDAO.get().isReadAllowed(doc.getId(), bob));
+        assertFalse(DocumentDAO.get().isReadAllowed(doc.getId(), userId("bob")));
+    }
+
+    /**
+     * @return a new folder in the default workspace, which only the groups may
+     *         read
+     */
+    private Folder folder(String name, String description, long... groupIds) throws Exception {
+        Folder vo = new Folder(name);
+        vo.setTenantId(Tenant.DEFAULT_ID);
+        Folder folder = FolderDAO.get().create(FolderDAO.get().findById(Folder.DEFAULTWORKSPACEID), vo, false,
+                folderHistory());
+        folder = FolderDAO.get().findById(folder.getId(), true);
+        folder.setDescription(description);
+        folder.setSecurityRef(null);
+        folder.getAccessControlList().clear();
+        for (long groupId : groupIds) {
+            FolderAccessControlEntry entry = new FolderAccessControlEntry(groupId);
+            entry.grantPermissions(EnumSet.of(Permission.READ, Permission.WRITE, Permission.ADD));
+            folder.addAccessControlEntry(entry);
+        }
+        FolderDAO.get().store(folder, folderHistory());
+        return FolderDAO.get().findById(folder.getId(), true);
+    }
+
+    /**
+     * @return a new PDF in the folder, with no ACL of its own
+     */
+    private Document create(String fileName, Folder folder) throws Exception {
+        Document docVO = new Document();
+        docVO.setFileName(fileName);
+        docVO.setFolder(folder);
+        docVO.setTenantId(Tenant.DEFAULT_ID);
+        docVO.setLanguage("en");
+        DocumentHistory transaction = new DocumentHistory();
+        transaction.setSession(session);
+        try (InputStream in = ResourceUtil.getInputStream("pdf1.pdf")) {
+            return DocumentManager.get().create(in, docVO, transaction).getDocument();
+        }
+    }
+
+    private static long userId(String username) throws Exception {
+        return UserDAO.get().findByUsername(username).getId();
+    }
+
+    private static long userGroup(String username) throws Exception {
+        return UserDAO.get().findByUsername(username).getUserGroup().getId();
     }
 
     private FolderHistory folderHistory() {

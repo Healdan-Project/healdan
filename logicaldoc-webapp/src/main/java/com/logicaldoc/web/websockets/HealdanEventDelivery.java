@@ -1,6 +1,7 @@
 package com.logicaldoc.web.websockets;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,6 +22,7 @@ import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.spring.LDAuthenticationToken;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIFolder;
@@ -57,7 +59,10 @@ import jakarta.websocket.Session;
  * </ul>
  * A message is serialized at most twice, in full and with the folder hidden,
  * and each user's permissions are read once per message, however many peers
- * the user has.
+ * the user has. So are the user's groups, since the session's user is as it
+ * was at login: an admin removed since then is no longer one here. A
+ * permission check that fails, or a copy that can't be written, costs only the
+ * peers it was for.
  */
 public final class HealdanEventDelivery {
 
@@ -114,7 +119,9 @@ public final class HealdanEventDelivery {
      *
      * @return each peer that gets the message, with the text to send it
      *
-     * @throws SerializationException the message can't be written
+     * @throws SerializationException no peer's copy of the message can be
+     *         written. When only one of the two copies fails, it's logged here
+     *         and the other copy's peers still get theirs.
      */
     public static Map<Session, String> deliveries(WebsocketMessage message, Set<Session> peers,
             Serializer serializer) throws SerializationException {
@@ -124,7 +131,8 @@ public final class HealdanEventDelivery {
         }
 
         Map<Long, View> views = new HashMap<>();
-        Map<View, String> texts = new HashMap<>();
+        Map<View, String> texts = new EnumMap<>(View.class);
+        Map<View, SerializationException> failures = new EnumMap<>(View.class);
         Map<Session, String> deliveries = new LinkedHashMap<>();
         for (Session peer : connected) {
             com.logicaldoc.core.security.Session session = session(peer);
@@ -135,16 +143,29 @@ public final class HealdanEventDelivery {
             if (COMMAND.equals(message.getEvent()))
                 view = session.getSid().equals(message.getSid()) ? View.FULL : View.NONE;
             else
-                view = views.computeIfAbsent(session.getUserId(), id -> view(message, session.getUser()));
-            if (view == View.NONE)
+                view = views.computeIfAbsent(session.getUserId(), id -> view(message, id));
+            if (view == View.NONE || failures.containsKey(view))
                 continue;
 
             String text = texts.get(view);
             if (text == null) {
-                text = view == View.FULL ? serializer.serialize(message) : folderHidden(message, serializer);
+                try {
+                    text = view == View.FULL ? serializer.serialize(message) : folderHidden(message, serializer);
+                } catch (SerializationException e) {
+                    failures.put(view, e);
+                    continue;
+                }
                 texts.put(view, text);
             }
             deliveries.put(peer, text);
+        }
+
+        if (!failures.isEmpty()) {
+            SerializationException failure = failures.values().iterator().next();
+            if (deliveries.isEmpty())
+                throw failure;
+            log.error("Cannot write the websocket message {} for some of its recipients", message.getEvent(),
+                    failure);
         }
         return deliveries;
     }
@@ -160,10 +181,14 @@ public final class HealdanEventDelivery {
         return manager.isOpen(token.getSid()) ? manager.get(token.getSid()) : null;
     }
 
-    private static View view(WebsocketMessage message, User user) {
+    private static View view(WebsocketMessage message, long userId) {
         String event = message.getEvent();
         try {
             if (event == null)
+                return View.NONE;
+            // Not the session's user, whose groups are those of its login
+            User user = UserDAO.get().findById(userId, true);
+            if (user == null)
                 return View.NONE;
             if (event.startsWith(USER_EVENTS))
                 return userEvent(message, user);
@@ -173,8 +198,9 @@ public final class HealdanEventDelivery {
             if (message.getDocId() != null)
                 return documentEvent(message, user);
             return View.NONE;
-        } catch (PersistenceException e) {
-            log.warn("Cannot tell whether user {} may get the websocket message {}", user.getUsername(), event, e);
+        } catch (PersistenceException | RuntimeException e) {
+            // Only this user misses the message
+            log.warn("Cannot tell whether user {} may get the websocket message {}", userId, event, e);
             return View.NONE;
         }
     }
