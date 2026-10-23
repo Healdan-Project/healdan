@@ -30,5 +30,26 @@ build steps, but still reports `build`, `Test (amd64)` and `Test (arm64)`, which
 
 ## Publishing the Image
 
-Publishing to `ghcr.io` is off until the repository variable `GHCR_PUBLISH` is `true`. Until then, pushes to
-`master` and `v*` tags build and test the image without publishing it.
+`docker-image.yml` builds and tests the image on every push to `master` and every `v*` tag, but publishes it to
+`ghcr.io/healdan-project/healdan` only while the repository variable `GHCR_PUBLISH` is `true`. It's off today. To
+switch it on:
+
+1. Set the variable, under Settings → Secrets and variables → Actions → Variables, or with:
+
+   ```bash
+   gh variable set GHCR_PUBLISH --body true --repo Healdan-Project/healdan
+   ```
+
+   The workflow signs in with its own `GITHUB_TOKEN`, so no secret is needed.
+2. After the first publish, open the package (the Healdan-Project organisation → Packages → `healdan`). If it's
+   private, make it public under Package settings → Change visibility, so pulls work without `docker login`.
+
+To publish a release, push a tag such as `v9.3.1-1`.
+
+### Once Images Are Published
+
+The image is tagged `latest` and `master` for the latest build of `master`, `sha-<commit>` (the first 7 characters
+of the commit's hash) for one commit's build, and `v…` for a release. An install then sets `LOGICALDOC_IMAGE` in
+`.env` to one of them and runs `docker compose pull` and `docker compose up -d`, without `--build`, which would
+build from the checkout and store the result under the published name. The Install manual gets a page for this, and
+its Upgrading page the advice on pinning tags, in the pull request that switches publishing on.

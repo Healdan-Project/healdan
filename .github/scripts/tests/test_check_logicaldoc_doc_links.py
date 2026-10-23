@@ -79,10 +79,8 @@ class CheckLogicalDocDocLinksTest(unittest.TestCase):
             self.assertEqual(1, checker.main([str(self.repo)]))
         self.assertIn("bad.txt:1:", out.getvalue())
 
-    def test_current_repo_fails_before_switch(self):
-        # The app's links are switched; the repo's own docs follow in the next commit
-        files = {problem.split(":", 1)[0] for problem in checker.find_links(_scripts.REPO)}
-        self.assertEqual({"README.md", "Build_this_Sources.md"}, files)
+    def test_current_repo_passes(self):
+        self.assertEqual([], checker.find_links(_scripts.REPO))
 
 if __name__ == "__main__":
     unittest.main()
