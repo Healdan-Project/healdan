@@ -27,7 +27,8 @@ services:
     build:
       context: .
     # Set LOGICALDOC_IMAGE to a published image (ghcr.io/healdan-project/healdan:<tag>) to pull it instead
-    # of building. See docker/README.md.
+    # of building. Publishing is off for now; see the Developer Guide's Continuous Integration page
+    # (https://docs.healdan.com/developer/continuous-integration/).
     image: ${LOGICALDOC_IMAGE:-logicaldoc-community:local}
     restart: unless-stopped
     depends_on:

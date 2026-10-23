@@ -18,5 +18,6 @@ Their source is in [`site/`](site/), and they change in the same pull request as
 
 ## Licence
 
-Healdan's code is free software under the GNU Lesser General Public License, version 3 ([LICENSE](LICENSE)). Its
-documentation is licensed under CC BY 4.0 ([site/LICENSE](site/LICENSE)).
+Healdan's code is free software under the GNU Lesser General Public License, version 3 ([LICENSE](LICENSE)). The
+docs site's content, in `site/content/`, is licensed under CC BY 4.0; [site/LICENSE](site/LICENSE) covers the rest
+of `site/`.

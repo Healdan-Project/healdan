@@ -9,9 +9,9 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons, compiles every module except the WAR without the GWT compile, then runs `healdan-core`'s tests and the upstream tests in its `-Dtest` list, which cover Healdan's edits to upstream code |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`) and for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), compiles every module except the WAR without the GWT compile, then runs `healdan-core`'s tests and the upstream tests in its `-Dtest` list, which cover Healdan's edits to upstream code |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image |
-| `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources and its internal links, and on pushes to `master` publishes it |
+| `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
 ## Docs-Only Pull Requests
 
@@ -25,14 +25,19 @@ build steps, but still reports `build`, `Test (amd64)` and `Test (arm64)`, which
   Pro styles and Pro-only icons compile, and only show at runtime as blinking placeholders.
   `.github/scripts/check-fontawesome-icons.py` runs first in `build` and catches them. When a sync brings some in,
   swap them for Free icons in the sync PR itself.
+- **Links to LogicalDOC's docs.** `.github/scripts/check-logicaldoc-doc-links.py` runs next to the icon check and
+  fails `build` on any tracked file that links to docs, wiki, help or forums.logicaldoc.com, naming the file and line.
+  When a sync brings one in, point it at docs.healdan.com in the sync PR. The docs site's interim pages are checked
+  by `check-site-sources.py` instead, and the script's `ALLOWED` list holds the few exact lines Healdan leaves
+  alone, each with its reason.
 - **Broken POMs.** Upstream sometimes ships a POM that fails Maven's validation, such as a duplicate dependency. If
-  CI fails within a minute, check the POMs and the icon check first.
+  CI fails within a minute, check the POMs, the icon check and the doc-links check first.
 
 ## Publishing the Image
 
-`docker-image.yml` builds and tests the image on every push to `master` and every `v*` tag, but publishes it to
-`ghcr.io/healdan-project/healdan` only while the repository variable `GHCR_PUBLISH` is `true`. It's off today. To
-switch it on:
+`docker-image.yml` builds and tests the image on every push to `master` and every `v*` tag (pushes that only change
+docs are skipped), but publishes it to `ghcr.io/healdan-project/healdan` only while the repository variable
+`GHCR_PUBLISH` is `true`. It's off today. To switch it on:
 
 1. Set the variable, under Settings → Secrets and variables → Actions → Variables, or with:
 
