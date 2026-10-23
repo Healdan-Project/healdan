@@ -6,7 +6,7 @@
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
 
-- **Before building:** every milestone gets its own design session first: brainstorm → design spec in `docs/superpowers/specs/` → plan in `docs/superpowers/plans/` → build.
+- **Before building:** every milestone gets its own design session first: brainstorm → design spec in `docs/superpowers/specs/` → plan in `docs/superpowers/plans/` → build. The spec names the docs pages the milestone adds or changes, and the plan has tasks for them.
 - **When a milestone moves:** update its status here and link its spec and plan.
 - **Changing direction:** if a design session changes an owner decision recorded here, update this file in the same PR.
 
@@ -503,6 +503,7 @@ These are calls unless CLAUDE.md already says the same thing.
 - **Tests run in CI for Healdan modules.** CI currently builds with `-DskipTests`, which proves nothing about behaviour.
 - **Security fixes in upstream code.** Fix them in Healdan, keep each fix small so it merges cleanly, and consider reporting them upstream.
 - **Keeping this file current.** After each milestone, update its status here and record any decision that changed.
+- **Docs ship with the code.** A PR that changes behaviour a manual describes, or adds behaviour a manual should describe, updates the docs site (`site/`, published at docs.healdan.com) in the same PR. (owner, 2026-10-23) The site's [spec](superpowers/specs/2026-10-23-docs-site-design.md) and [plan](superpowers/plans/2026-10-23-docs-site.md) are tracked in [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56).
 
 ## 7. Open decisions for the owner
 

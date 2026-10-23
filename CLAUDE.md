@@ -59,6 +59,17 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 - **The smoke fixture overlay.** Healdan refuses documents outside a matter, and a fresh stack has none. `docker/tests/compose.smoke.yaml` sets `HEALDAN_SMOKE_FIXTURE=true`, which makes the `smoke-fixture` seed create Store "Smoke", a template, client 1 and matter 1.1 with a Documents folder. `docker/smoke-test.sh` adds the overlay itself. Add it (`-f compose.yaml -f docker/tests/compose.smoke.yaml`) to a throwaway stack that needs somewhere to upload. Production never sets the variable.
 - CI: `.github/workflows/docker-image.yml` builds on native amd64 and arm64 runners and runs the `tools` target and `docker/smoke-test.sh` on each. Only pushes write the build cache, which pull requests read. BuildKit doesn't save the Maven build's cache mount, so `actions/cache` and `buildkit-cache-dance` keep its dependencies between runs; only master's amd64 job saves them. It publishes to `ghcr.io/healdan-project/healdan` from `master` and `v*` tags only while the repository variable `GHCR_PUBLISH` is `true`.
 
+## Docs site
+
+- `site/` is the source of https://docs.healdan.com. It's Hugo 0.168.0 (the standard edition) with the Hextra theme vendored in `site/_vendor/`, so building needs neither Go nor the network. Preview with `hugo server --source site`. The design is `docs/superpowers/specs/2026-10-23-docs-site-design.md`.
+- **Docs change in the same PR as the code they describe.** A change to something a manual describes updates its pages, and a new feature adds them. Each milestone's spec names the pages it adds or changes, and its plan has tasks for them.
+- Each manual is a top-level folder (`install/`, `user/`, `admin/`, `developer/`) with `cascade: { type: docs }`, and the left nav shows only the current one. `site/layouts/_partials/sidebar.html` overrides Hextra's for the phone menu, with each change marked `Healdan:`; re-apply them when upgrading Hextra.
+- The writing rules are on the Developer Guide's Writing Docs page (`site/content/developer/writing-docs.md`): Title Case for titles, headings and labels, British spelling, Healdan's glossary terms.
+  - Quote a front-matter value containing ` #`, and end a heading that ends in `#` with `\#`. YAML and Markdown drop them otherwise.
+- A page not written yet holds `{{< interim href="…" title="…" >}}`, which links to LogicalDOC's nearest page. It's the only place `site/content/` may link to LogicalDOC's docs.
+- The `Docs site` check (`.github/workflows/docs-site.yml`) runs `python3 -m unittest discover -s .github/scripts/tests`, a strict build (`--panicOnWarning`), `check-site-sources.py` and `check-site-links.py`. It publishes to GitHub Pages from `master` only while the repository variable `DOCS_PUBLISH` is `true`.
+- Build, test and CI facts are in this file and in the Developer Guide. A change updates both.
+
 ## Architecture
 
 **Modules.** `logicaldoc-util` sits at the bottom. `logicaldoc-core` builds on it, and the feature modules build on core: `webservice` (SOAP via CXF plus REST), `webdav`, `cmis`, `dropbox`, `android` and `ios`. `logicaldoc-webapp` is the WAR that bundles everything. `logicaldoc-gui` (GWT client) depends only on util. `logicaldoc-i18n` holds the resource bundles.
