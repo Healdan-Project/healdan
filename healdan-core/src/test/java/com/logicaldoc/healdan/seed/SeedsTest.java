@@ -6,14 +6,18 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.sql.DataSource;
 
+import org.apache.commons.io.FileUtils;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -22,6 +26,7 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.IndexingStatus;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
@@ -31,6 +36,9 @@ import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.core.store.Store;
+import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanStartup;
@@ -38,6 +46,7 @@ import com.logicaldoc.healdan.HealdanStartupException;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.OfficeFiles;
 import com.logicaldoc.healdan.util.CacheEvictor;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
@@ -424,5 +433,90 @@ public class SeedsTest extends AbstractHealdanTestCase {
 		new QueueOfficePreviewsSeed(Context.get(DataSource.class)).run();
 
 		assertEquals(0, jdbc().queryForObject("select count(*) from hd_preview_job", Integer.class).intValue());
+	}
+
+	@Test
+	public void testCountOfficePagesIsABeanAndDoneAfterStartup() {
+		assertTrue(Context.get().getBeansOfType(SeedStep.class).stream()
+				.anyMatch(step -> step instanceof CountOfficePagesSeed));
+		assertEquals("done", Context.get(HealdanSettings.class).get("seed.count-office-pages"));
+	}
+
+	@Test
+	public void testCountOfficePagesCountsStoredFiles() throws Exception {
+		// Document ids repeat between runs, so an earlier run's conversions would look like this one's
+		File storeDir = new File(Context.get().getConfig().getProperty("store.1.dir"));
+		if (storeDir.isDirectory())
+			FileUtils.cleanDirectory(storeDir);
+		HealdanFixtures fx = new HealdanFixtures();
+		Matter matter = fx.matter(fx.client(995, "Healdan"), 1, "Pages", fx.store("Main"), "Documents");
+		Folder folder = FolderDAO.get()
+				.findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents", Tenant.DEFAULT_ID, true).get(0);
+
+		Document a = fx.upload(folder, "a.docx", OfficeFiles.docx(12), fx.admin());
+		DocumentManager.get().checkout(a.getId(), fx.documentHistory(fx.admin()));
+		DocumentManager.get().checkin(a.getId(), new ByteArrayInputStream(OfficeFiles.docx(15)), "a.docx", false,
+				null, fx.documentHistory(fx.admin()));
+		Document b = fx.upload(folder, "b.PPTX", OfficeFiles.pptx(3, 0), fx.admin());
+		Document c = fx.upload(folder, "c.xlsx", OfficeFiles.xlsx(2, 1, 0), fx.admin());
+		Document d = fx.upload(folder, "d.docx", OfficeFiles.docx(null), fx.admin());
+		Document e = fx.upload(folder, "e.docx", "not a zip", fx.admin());
+		Document f = fx.upload(folder, "f.txt", "text", fx.admin());
+		Document g = fx.upload(folder, "g.docx", OfficeFiles.docx(9), fx.admin());
+		Document h = fx.upload(folder, "h.xlsx", OfficeFiles.xlsx(4, 0, 0), fx.admin());
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_deleted = 1 where ld_id = ?", g.getId());
+		// A shortcut, as data from before Healdan may hold, with a file of its own
+		jdbc().update("update ld_document set ld_docref = ? where ld_id = ?", c.getId(), h.getId());
+
+		// The previews made so far: Word's saved count beats its PDF's, a file without one takes it
+		Store.get().store(new ByteArrayInputStream(OfficeFiles.pdf(99)), conversionOf(a, "1.1"));
+		Store.get().store(new ByteArrayInputStream(OfficeFiles.pdf(6)), conversionOf(d, "1.0"));
+
+		// Every count as CE stored it before Healdan counted, but one an admin typed in
+		jdbc().update("update ld_document set ld_pages = 1");
+		jdbc().update("update ld_version set ld_pages = 1");
+		jdbc().update("update ld_document set ld_pages = 7 where ld_id = ?", e.getId());
+		CacheEvictor evictor = Context.get(CacheEvictor.class);
+		evictor.evictDocuments(jdbc().queryForList("select ld_id from ld_document", Long.class));
+		evictor.evictVersions(jdbc().queryForList("select ld_id from ld_version", Long.class));
+		// Cached now, so that the DAOs only see the new counts if the step evicts them
+		assertEquals(1, DocumentDAO.get().findById(a.getId()).getPages());
+		assertEquals(1, VersionDAO.get().findByFileVersion(a.getId(), "1.0").getPages());
+
+		new CountOfficePagesSeed(Context.get(DataSource.class), evictor).run();
+
+		assertEquals(15, DocumentDAO.get().findById(a.getId()).getPages());
+		assertEquals(12, VersionDAO.get().findByFileVersion(a.getId(), "1.0").getPages());
+		assertEquals(List.of("1.0 12", "1.1 15"), jdbc().queryForList(
+				"select distinct ld_fileversion || ' ' || cast(ld_pages as varchar(10)) from ld_version "
+						+ "where ld_documentid = ? order by 1",
+				String.class, a.getId()));
+		assertEquals(3, DocumentDAO.get().findById(b.getId()).getPages());
+		assertEquals(2, DocumentDAO.get().findById(c.getId()).getPages());
+		assertEquals(6, DocumentDAO.get().findById(d.getId()).getPages());
+		assertEquals(6, VersionDAO.get().findByFileVersion(d.getId(), "1.0").getPages());
+		// An unreadable file without a preview, another format: unchanged
+		assertEquals(7, DocumentDAO.get().findById(e.getId()).getPages());
+		assertEquals(1, DocumentDAO.get().findById(f.getId()).getPages());
+		// Deleted documents and shortcuts are left out, with their versions
+		assertEquals(List.of(1), jdbc().queryForList(
+				"select ld_pages from ld_version where ld_documentid in (?, ?) union "
+						+ "select ld_pages from ld_document where ld_id in (?, ?)",
+				Integer.class, g.getId(), h.getId(), g.getId(), h.getId()));
+	}
+
+	private static StoreResource conversionOf(Document doc, String fileVersion) {
+		return StoreResource.builder().docId(doc.getId()).fileVersion(fileVersion).suffixPdfConversion().build();
+	}
+
+	private static void awaitAsyncWork() throws Exception {
+		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		long deadline = System.currentTimeMillis() + 20000L;
+		while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
+			if (System.currentTimeMillis() > deadline)
+				fail("Background version saves didn't finish");
+			Thread.sleep(50L);
+		}
 	}
 }

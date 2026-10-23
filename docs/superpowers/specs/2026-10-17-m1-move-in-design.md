@@ -709,6 +709,14 @@ One new panel under CE's **Administration** tab. It holds:
 - Indexing attachment *contents* is optional (builder's call). If it's done, it goes through the same parsers.
 - Documents uploaded before the fix need re-indexing. A Healdan seed step (§12.3) flags existing documents of these types with `ld_indexed = 0`.
 
+**Page counts** (added 2026-10-23, after M1's acceptance). CE asks a document's parser for its page count at upload and check-in, and shows it as Pages on the Properties tab. M1's Word, Excel and PowerPoint parsers didn't answer, so every such document showed CE's default of 1. They now count what the file itself records (owner's choice, over the preview PDF's count):
+- **Word:** the page count Word saved in the file.
+  - Files written by code rather than by Word often save none. Those take the page count of their preview PDF (M1.5) once the background worker has converted them, and show 1 until then (owner, after QA on 2026-10-23). Where both exist, the two counts agreed on the owner's files.
+- **PowerPoint:** its slides, hidden ones included, as PowerPoint counts them.
+- **Excel:** its visible sheets, the way CE counts an OpenDocument spreadsheet's sheets. (call)
+- A file that records no count, or can't be read, still counts 1, except for the Word fallback above.
+- The seed step `count-office-pages` (§12.3) counts the documents stored before, each version from its own file. It uses a Word file's existing preview where the file saved no count.
+
 ## 10. Code organisation (call)
 
 ### 10.1 The module
@@ -810,6 +818,7 @@ Upstream merges that change LogicalDOC's schema still need SQL applied by hand o
 | `columns` | Sets `default.gui.document.columns` (§8.4). |
 | `search-docnumber-column` | Adds Doc # to `default.gui.search.columns`, right after the file name (§8.4). |
 | `reindex-office` | Flags existing `docx`/`xlsx`/`pptx`/`eml`/`msg` documents for re-indexing (§9). |
+| `count-office-pages` | Counts the pages of existing `docx`/`xlsx`/`pptx` documents and their versions (§9). Added 2026-10-23. |
 | `settings` | Writes default values for every Healdan setting. |
 
 The demo template and matter aren't seeded. The owner creates them through the UI as the acceptance test (§14.2).

@@ -266,6 +266,18 @@ public class HealdanFixtures {
 	 * @throws Exception if the document can't be created
 	 */
 	public Document upload(Folder folder, String fileName, String text, User as) throws Exception {
+		return upload(folder, fileName, text.getBytes(StandardCharsets.UTF_8), as);
+	}
+
+	/**
+	 * @param folder where to put the document
+	 * @param fileName the file name
+	 * @param content the file's bytes
+	 * @param as the user who uploads
+	 * @return the stored document
+	 * @throws Exception if the document can't be created
+	 */
+	public Document upload(Folder folder, String fileName, byte[] content, User as) throws Exception {
 		Document vo = new Document();
 		vo.setFileName(fileName);
 		vo.setFolder(folder);
@@ -274,8 +286,7 @@ public class HealdanFixtures {
 		DocumentHistory transaction = new DocumentHistory();
 		transaction.setSessionId("fixtures");
 		transaction.setUser(as);
-		return DocumentManager.get()
-				.create(new ByteArrayInputStream(text.getBytes(StandardCharsets.UTF_8)), vo, transaction).getDocument();
+		return DocumentManager.get().create(new ByteArrayInputStream(content), vo, transaction).getDocument();
 	}
 
 	/**

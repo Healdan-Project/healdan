@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.parser;
 
+import java.io.File;
 import java.io.InputStream;
 
 import org.apache.poi.xssf.extractor.XSSFExcelExtractor;
@@ -11,8 +12,9 @@ import com.logicaldoc.core.parser.AbstractParser;
 import com.logicaldoc.core.parser.ParseParameters;
 
 /**
- * Reads the cell text of Excel 2007+ workbooks ({@code xlsx}, {@code xlsm}). A
- * file it can't read yields no text and no exception.
+ * Reads the cell text of Excel 2007+ workbooks ({@code xlsx}, {@code xlsm}).
+ * Their pages are their visible sheets. A file it can't read yields no text
+ * and no exception, and counts 1 page.
  */
 public class ExcelParser extends AbstractParser {
 
@@ -26,5 +28,15 @@ public class ExcelParser extends AbstractParser {
 			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		}
+	}
+
+	@Override
+	public int countPages(InputStream input, String filename) {
+		return Math.max(1, OfficePages.count(input, filename, OfficePages.VISIBLE_SHEETS));
+	}
+
+	@Override
+	public int countPages(File file, String filename) {
+		return Math.max(1, OfficePages.count(file, filename, OfficePages.VISIBLE_SHEETS));
 	}
 }

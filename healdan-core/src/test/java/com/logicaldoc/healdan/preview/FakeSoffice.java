@@ -36,6 +36,15 @@ final class FakeSoffice {
 		return script("ok", "write_pdf\n");
 	}
 
+	/**
+	 * @param pdf the PDF to hand back
+	 * @return a converter that writes a copy of the given PDF, whatever it converts
+	 */
+	static File copying(File pdf) throws IOException {
+		String path = pdf.getAbsolutePath();
+		return script("copy-" + Integer.toHexString(path.hashCode()), "cp '" + path + "' \"$OUT/$BASE.pdf\"\n");
+	}
+
 	/** @return a converter that exits 1 */
 	static File fail() throws IOException {
 		return script("fail", "exit 1\n");

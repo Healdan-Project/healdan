@@ -17,6 +17,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import com.logicaldoc.core.document.AbstractDocument;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.util.spring.Context;
 
@@ -66,6 +67,15 @@ public class CacheEvictor {
 	 */
 	public void evictDocuments(Collection<Long> ids) {
 		evict(Document.class, ids);
+	}
+
+	/**
+	 * Evicts versions and their collections.
+	 * 
+	 * @param ids the version ids
+	 */
+	public void evictVersions(Collection<Long> ids) {
+		evict(Version.class, ids);
 	}
 
 	/**

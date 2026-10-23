@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.parser;
 
+import java.io.File;
 import java.io.InputStream;
 
 import org.apache.poi.xslf.extractor.XSLFPowerPointExtractor;
@@ -12,7 +13,8 @@ import com.logicaldoc.core.parser.ParseParameters;
 
 /**
  * Reads the slide text of PowerPoint 2007+ presentations ({@code pptx},
- * {@code ppsx}). A file it can't read yields no text and no exception.
+ * {@code ppsx}). Their pages are their slides. A file it can't read yields no
+ * text and no exception, and counts 1 page.
  */
 public class PowerPointParser extends AbstractParser {
 
@@ -26,5 +28,15 @@ public class PowerPointParser extends AbstractParser {
 			Interrupts.keep(e);
 			logger.warn("Cannot extract the text of {}: {}", parameters.getFileName(), e.toString());
 		}
+	}
+
+	@Override
+	public int countPages(InputStream input, String filename) {
+		return Math.max(1, OfficePages.count(input, filename, OfficePages.SLIDES));
+	}
+
+	@Override
+	public int countPages(File file, String filename) {
+		return Math.max(1, OfficePages.count(file, filename, OfficePages.SLIDES));
 	}
 }
