@@ -1,11 +1,14 @@
 package com.logicaldoc.healdan.support;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.function.UnaryOperator;
 import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -106,6 +109,49 @@ public final class OfficeFiles {
 			show.write(out);
 			return out.toByteArray();
 		}
+	}
+
+	/**
+	 * A presentation with sections, as PowerPoint 2010+ saves it: its section
+	 * list names every slide a second time ({@code p14:sldId}).
+	 *
+	 * @param slides how many slides
+	 * @return a PowerPoint presentation
+	 * @throws IOException if the file can't be written
+	 */
+	public static byte[] pptxWithSections(int slides) throws IOException {
+		StringBuilder ids = new StringBuilder();
+		for (int i = 0; i < slides; i++)
+			ids.append("<p14:sldId id=\"%d\"/>".formatted(256 + i));
+		String sections = """
+				<extLst xmlns="http://schemas.openxmlformats.org/presentationml/2006/main">\
+				<ext uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}">\
+				<p14:sectionLst xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main">\
+				<p14:section name="Default Section" id="{6F1E7A12-3C4B-4D5E-8F90-A1B2C3D4E5F6}">\
+				<p14:sldIdLst>%s</p14:sldIdLst></p14:section></p14:sectionLst></ext></extLst>""".formatted(ids);
+		return replacePart(pptx(slides, 0), "ppt/presentation.xml", xml -> {
+			int end = xml.lastIndexOf("</");
+			return xml.substring(0, end) + sections + xml.substring(end);
+		});
+	}
+
+	/**
+	 * @return the zip with one entry's text changed
+	 */
+	private static byte[] replacePart(byte[] zip, String name, UnaryOperator<String> edit) throws IOException {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip));
+				ZipOutputStream copy = new ZipOutputStream(out)) {
+			for (ZipEntry entry = in.getNextEntry(); entry != null; entry = in.getNextEntry()) {
+				byte[] content = in.readAllBytes();
+				if (entry.getName().equals(name))
+					content = edit.apply(new String(content, StandardCharsets.UTF_8)).getBytes(StandardCharsets.UTF_8);
+				copy.putNextEntry(new ZipEntry(entry.getName()));
+				copy.write(content);
+				copy.closeEntry();
+			}
+		}
+		return out.toByteArray();
 	}
 
 	/**

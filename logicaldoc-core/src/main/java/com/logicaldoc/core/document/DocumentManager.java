@@ -1209,8 +1209,10 @@ public class DocumentManager {
      */
     public int countPages(Document doc) {
         try {
-            return ParserFactory.getParser(doc.getFileName())
+            int pages = ParserFactory.getParser(doc.getFileName())
                     .countPages(store.getStream(StoreResource.builder().document(doc).build()), doc.getFileName());
+            // Healdan: the count Healdan stores, e.g. a Word file's preview's when it saved none
+            return com.logicaldoc.core.HealdanHooks.get().countPages(doc, pages);
         } catch (Exception e) {
             log.warn("Cannot count pages of document {}", doc, e);
             return 1;

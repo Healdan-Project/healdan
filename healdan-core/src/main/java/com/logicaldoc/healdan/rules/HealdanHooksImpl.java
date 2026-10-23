@@ -21,6 +21,7 @@ import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.preview.ConversionPages;
 import com.logicaldoc.healdan.profile.EditMarks;
 import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.Propagation;
@@ -257,5 +258,14 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Vetoes.check(Vetoes.ids(rootId), List.of(),
 				() -> PermissionRules.get().checkApplyToTree(rootId, FilingRules.actor(transaction)));
 		PermissionRules.get().afterApplySecurityToTree(rootId);
+	}
+
+	/**
+	 * A Word file that saved no page count takes its preview's (M1 spec
+	 * section 9), on a recount as when the preview worker fills it in
+	 */
+	@Override
+	public int countPages(Document document, int pages) throws PersistenceException {
+		return ConversionPages.recount(document, pages);
 	}
 }

@@ -12,8 +12,9 @@ import com.logicaldoc.core.security.user.Group;
  * any side effect (the after-hook at its very end), so a
  * {@link HealdanVetoException} it throws refuses the operation before anything
  * is written. The document and folder DAOs roll back on that exception, not on
- * other {@link PersistenceException}s. Every method is a no-op by default, and
- * {@link #get()} returns a no-op until healdan-core registers its
+ * other {@link PersistenceException}s. {@link #countPages} is the one hook that
+ * isn't a check: it corrects a value CE works out. Every method is a no-op by
+ * default, and {@link #get()} returns a no-op until healdan-core registers its
  * implementation, so CE behaves as before without Healdan.
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
@@ -200,6 +201,24 @@ public interface HealdanHooks {
      */
     default void beforeGroupDelete(Group group) throws PersistenceException {
         // No check by default
+    }
+
+    /**
+     * Called last in {@code DocumentManager.countPages(Document)}, CE's recount
+     * of a stored document (the Properties tab's recount, automation's
+     * {@code DocTool.countPages}), with the count the parser gave. Not a check:
+     * it lets Healdan give the count it stores, which a parser can't always
+     * work out from the file alone.
+     *
+     * @param document the document, possibly a shortcut
+     * @param pages the parser's count
+     *
+     * @return the count to give
+     *
+     * @throws PersistenceException if the count can't be worked out
+     */
+    default int countPages(Document document, int pages) throws PersistenceException {
+        return pages;
     }
 
     /**
