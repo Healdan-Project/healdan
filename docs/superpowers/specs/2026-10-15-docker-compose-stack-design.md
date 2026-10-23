@@ -281,6 +281,10 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
      ```
    - Set `LOGICALDOC_PUBLIC_URL=https://<domain>` and restart.
    - Troubleshooting: 502 errors (wrong network or alias), WebSocket errors (toggle off), 413 errors (body size).
+   - **NPM on another machine** (added later): no overlay. `LOGICALDOC_BIND=<LAN IP>` on a fixed address, forward
+     host set to that IP, a `curl` reachability check from NPM's machine, and a `DOCKER-USER` rule so only NPM's
+     address reaches the port (published ports bypass `ufw`). It also covers the plain HTTP hop between the
+     machines and which source addresses Tomcat trusts forwarded headers from.
 4. **Other proxies**: short Caddy and plain nginx snippets, and the "proxy on another host" option (`LOGICALDOC_BIND=<LAN IP>`).
 5. **Dev workflow**: the dev overlay, attaching a debugger to 5005, connecting to MariaDB on 3306, resetting the stack, and the cost of the GWT compile on rebuilds.
 6. **Backup and restore**:

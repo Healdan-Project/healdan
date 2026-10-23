@@ -1,7 +1,5 @@
 package com.logicaldoc.healdan.seed;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -16,8 +14,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import com.logicaldoc.core.store.Store;
-import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.parser.OfficePages;
 import com.logicaldoc.healdan.preview.ConversionPages;
 import com.logicaldoc.healdan.util.CacheEvictor;
@@ -85,30 +81,14 @@ public class CountOfficePagesSeed implements SeedStep {
 	private List<Long> update(String table, List<Row> rows, Map<String, Integer> counts) {
 		List<Long> changed = new ArrayList<>();
 		for (Row row : rows) {
-			int pages = counts.computeIfAbsent(row.docId() + "/" + row.fileVersion(), k -> count(row));
+			int pages = counts.computeIfAbsent(row.docId() + "/" + row.fileVersion(),
+					k -> ConversionPages.pagesOf(row.docId(), row.fileVersion(), row.fileName()));
 			if (pages > 0 && pages != row.pages()) {
 				jdbc.update("update " + table + " set ld_pages = ? where ld_id = ?", pages, row.id());
 				changed.add(row.id());
 			}
 		}
 		return changed;
-	}
-
-	/**
-	 * @return the file's count, else a Word file's preview's; 0 if neither is known
-	 */
-	private static int count(Row row) {
-		int pages = 0;
-		StoreResource resource = StoreResource.builder().docId(row.docId()).fileVersion(row.fileVersion()).build();
-		try (InputStream in = Store.get().getStream(resource)) {
-			pages = OfficePages.count(in, row.fileName());
-		} catch (IOException | RuntimeException e) {
-			log.warn("Cannot read file version {} of document {} to count its pages: {}", row.fileVersion(),
-					row.docId(), e.getMessage());
-		}
-		if (pages == 0 && OfficePages.isWord(row.fileName()))
-			pages = ConversionPages.ofConversion(row.docId(), row.fileVersion());
-		return pages;
 	}
 
 	/** A document or version row, and the file it stands for */

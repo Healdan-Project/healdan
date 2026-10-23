@@ -310,8 +310,9 @@ public class PreviewWorker {
 	}
 
 	/**
-	 * Gives a Word file that saved no page count the pages of its new
-	 * conversion. Never throws: the preview is made, so the job is done.
+	 * Writes the file version's page count, now that its conversion is made
+	 * ({@link ConversionPages#fill}). Never throws: the preview is made, so the
+	 * job is done.
 	 *
 	 * @param version the version that holds the file, null if it has no row yet
 	 */

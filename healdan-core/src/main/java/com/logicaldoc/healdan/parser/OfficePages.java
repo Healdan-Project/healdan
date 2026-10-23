@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,7 +22,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
 
 import com.logicaldoc.util.io.FileUtil;
 
@@ -74,6 +74,14 @@ public final class OfficePages {
 	 */
 	public static boolean isWord(String fileName) {
 		return counterOf(fileName) == SAVED_PAGES;
+	}
+
+	/**
+	 * @param fileName the file name
+	 * @return true if it has one of the {@link #extensions()}
+	 */
+	public static boolean counts(String fileName) {
+		return counterOf(fileName) != null;
 	}
 
 	private static Counter counterOf(String fileName) {
@@ -133,21 +141,34 @@ public final class OfficePages {
 	}
 
 	private static int slides(OPCPackage pkg) throws Exception {
-		return mainPart(pkg).getElementsByTagNameNS("*", "sldId").getLength();
+		// Only the presentation's own list: PowerPoint 2010+ lists every slide again under its sections
+		int slides = 0;
+		for (Element list : children(mainPart(pkg), "sldIdLst"))
+			slides += children(list, "sldId").size();
+		return slides;
 	}
 
 	private static int visibleSheets(OPCPackage pkg) throws Exception {
-		NodeList lists = mainPart(pkg).getElementsByTagNameNS("*", "sheets");
-		if (lists.getLength() == 0)
-			return 0;
 		int visible = 0;
-		for (Node node = lists.item(0).getFirstChild(); node != null; node = node.getNextSibling())
-			if (node instanceof Element sheet && "sheet".equals(sheet.getLocalName())) {
+		for (Element list : children(mainPart(pkg), "sheets"))
+			for (Element sheet : children(list, "sheet")) {
 				String state = sheet.getAttribute("state");
 				if (!"hidden".equals(state) && !"veryHidden".equals(state))
 					visible++;
 			}
 		return visible;
+	}
+
+	/**
+	 * @return the parent's child elements of this local name, in any namespace
+	 *         (the transitional or the strict one)
+	 */
+	private static List<Element> children(Element parent, String localName) {
+		List<Element> children = new ArrayList<>();
+		for (Node node = parent.getFirstChild(); node != null; node = node.getNextSibling())
+			if (node instanceof Element child && localName.equals(child.getLocalName()))
+				children.add(child);
+		return children;
 	}
 
 	/**

@@ -712,9 +712,12 @@ One new panel under CE's **Administration** tab. It holds:
 **Page counts** (added 2026-10-23, after M1's acceptance). CE asks a document's parser for its page count at upload and check-in, and shows it as Pages on the Properties tab. M1's Word, Excel and PowerPoint parsers didn't answer, so every such document showed CE's default of 1. They now count what the file itself records (owner's choice, over the preview PDF's count):
 - **Word:** the page count Word saved in the file.
   - Files written by code rather than by Word often save none. Those take the page count of their preview PDF (M1.5) once the background worker has converted them, and show 1 until then (owner, after QA on 2026-10-23). Where both exist, the two counts agreed on the owner's files.
-- **PowerPoint:** its slides, hidden ones included, as PowerPoint counts them.
+- **PowerPoint:** its slides, hidden ones included, as PowerPoint counts them. They're counted from the presentation's own slide list, because PowerPoint 2010+ lists each slide a second time under its sections.
 - **Excel:** its visible sheets, the way CE counts an OpenDocument spreadsheet's sheets. (call)
 - A file that records no count, or can't be read, still counts 1, except for the Word fallback above.
+- After each conversion the worker writes the file version's count to the versions that hold the file and, while it's the current one, to the document. That's how the Word fallback lands. It also gives a replaced file (CE's "replace file", which CE never counts) its own count. The worker first waits, up to 10 s, for CE's background version saves, which write versions counted before the conversion.
+- CE's indexer saves the whole document it loaded before parsing it. On that save, Healdan's preview listener keeps the stored count, so a count the worker wrote meanwhile isn't undone.
+- The Properties tab's recount and automation's `DocTool.countPages` ask Healdan through a hook in `DocumentManager.countPages` (§13), so they give the same count.
 - The seed step `count-office-pages` (§12.3) counts the documents stored before, each version from its own file. It uses a Word file's existing preview where the file saved no count.
 
 ## 10. Code organisation (call)
@@ -825,7 +828,7 @@ The demo template and matter aren't seeded. The owner creates them through the U
 
 ## 13. Upstream files M1 edits
 
-This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it, plus the credits PR ([#43](https://github.com/Healdan-Project/healdan/pull/43)) and the pre-acceptance PR ([#44](https://github.com/Healdan-Project/healdan/pull/44)), which closed some of the plan's leftovers, and the initialize PR ([#53](https://github.com/Healdan-Project/healdan/pull/53)), which fixed a bug found after acceptance. It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
+This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](https://github.com/Healdan-Project/healdan/pull/41)) and the JDK 25 PR ([#40](https://github.com/Healdan-Project/healdan/pull/40)) that merged after it, plus the credits PR ([#43](https://github.com/Healdan-Project/healdan/pull/43)) and the pre-acceptance PR ([#44](https://github.com/Healdan-Project/healdan/pull/44)), which closed some of the plan's leftovers, and two PRs made after acceptance: the initialize PR ([#53](https://github.com/Healdan-Project/healdan/pull/53)), which fixed a bug, and the page-count fixes PR ([#54](https://github.com/Healdan-Project/healdan/pull/54)). It replaces the list approved with this spec. It includes the [M1 plan](../plans/2026-10-17-m1-move-in.md)'s corrections 1–5 and every row that its decisions D1, D3 and D7 added.
 - R and D numbers point to the plan's rulings and decision log.
 - The Task column names the plan task, or the PR, that made the edit (key below the table).
 - Paths are relative to the repository root. Line numbers are approximate, from the code at `1c1507d86`.
@@ -846,6 +849,7 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 | `logicaldoc-core/.../document/DocumentManager.java` `moveToFolder` (~917) | `HealdanHooks.get().beforeDocumentMove(...)` right after the same-folder early return, so a no-op move isn't vetoed | 3 |
 | `logicaldoc-core/.../document/DocumentManager.java` `rename` (~1406) | `beforeDocumentRename(...)` first. CE schedules the renamed version's background save before the store, so a listener veto still leaves an `ld_version` row (D3) | 3 |
 | `logicaldoc-core/.../document/DocumentManager.java` `update` (~760) | `beforeDocumentUpdate(...)` first. When the language changes, CE calls `deleteHit` before the store, so a listener veto leaves the document out of the index (D3) | 3 |
+| `logicaldoc-core/.../document/DocumentManager.java` `countPages(Document)` (~1212) | returns `HealdanHooks.get().countPages(doc, pages)` instead of the parser's count, so the Properties tab's recount and `DocTool.countPages` give a Word file that saved no page count its preview's (§9). It's the one hook that isn't a check | page-count fixes |
 | `logicaldoc-core/.../document/HibernateDocumentDAO.java` `restore` (~1016), class annotation (~71) | `beforeDocumentRestore(...)` first (correction 1: `DocumentManager` has no `restore`); `@Transactional(rollbackOn = HealdanVetoException.class)`. `restore` undeletes the rows with JDBC and then calls `store` in the same transaction, so a listener veto there would otherwise commit the undelete (D3) | 3 |
 | `logicaldoc-core/.../document/DocumentAccessControlEntry.java` `equals` (~302), `hashCode` (~307) | two entries are equal when they're for the same group (`ld_document_acl`'s key), and the hash is the group id's. CE's `equals` was never true, so every flush of an initialized document rewrote its ACL rows and bumped its record version and last-modified date | ACL equality |
 | `logicaldoc-core/.../core/HibernatePersistentObjectDAO.java` `initialize(T)` (~350), `initialize(Collection)` (~368) | Spring's `@Transactional(readOnly = true)`, so an `initialize` in its own transaction never flushes what its merge copied in, and a new entity (id 0) is returned as it is. CE's version rewrote the row of every entity it read on MariaDB, so concurrent user listings failed on the optimistic lock and left the GUI's user pickers empty ([#51](https://github.com/Healdan-Project/healdan/issues/51)) | initialize |
@@ -903,7 +907,8 @@ This is the list as built, after M1's last PR ([Healdan-Project/healdan#41](http
 - JDK 25: [#40](https://github.com/Healdan-Project/healdan/pull/40), which moved CI and the Docker image to JDK 25 ahead of upstream's Java 25 switch (the plan's call 11);
 - credits: [#43](https://github.com/Healdan-Project/healdan/pull/43), which credits LogicalDOC on the login page and in About, and makes the Sign in button blue;
 - pre-acceptance: [#44](https://github.com/Healdan-Project/healdan/pull/44), which fixed four gaps found before the owner's acceptance walkthrough (R132–R138);
-- initialize: [#53](https://github.com/Healdan-Project/healdan/pull/53), which stops `initialize` writing the entity it reads.
+- initialize: [#53](https://github.com/Healdan-Project/healdan/pull/53), which stops `initialize` writing the entity it reads;
+- page-count fixes: [#54](https://github.com/Healdan-Project/healdan/pull/54), the review fixes for the Word, Excel and PowerPoint page counts of [#52](https://github.com/Healdan-Project/healdan/pull/52) (§9).
 
 **Planned, but not edited:**
 - `logicaldoc-webapp/.../web/data/FoldersDataServlet.java`: the tree draws a search folder's magnifying glass through `DocUtil.getFolderIcon` (`FolderListGridField`), found in Task 24.

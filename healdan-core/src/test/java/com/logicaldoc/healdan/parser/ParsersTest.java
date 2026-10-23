@@ -245,6 +245,8 @@ public class ParsersTest extends AbstractHealdanTestCase {
 		assertEquals(3, countPages("a.pptx", OfficeFiles.pptx(3, 1)));
 		assertEquals(3, countPages("a.ppsx", OfficeFiles.pptx(3, 0)));
 		assertEquals(1, countPages("a.pptx", OfficeFiles.pptx(0, 0)));
+		// A section list names each slide again, which doesn't count
+		assertEquals(4, countPages("sections.pptx", OfficeFiles.pptxWithSections(4)));
 	}
 
 	@Test
