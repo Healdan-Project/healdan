@@ -33,7 +33,8 @@ import com.logicaldoc.util.plugin.PluginException;
 
 /**
  * Proves that each {@link HealdanHooks} call runs before CE's JDBC and index
- * side effects, so a hook that throws leaves nothing behind.
+ * side effects, so a hook that throws leaves nothing behind, and that CE's
+ * page recount gives the count {@link HealdanHooks#countPages} returns.
  */
 public class HealdanHooksTest extends AbstractCoreTestCase {
 
@@ -156,6 +157,22 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
 
         HealdanHooks.register(null);
         assertSame(none, HealdanHooks.get());
+    }
+
+    @Test
+    public void testCountPagesGivesTheHooksCount() throws PersistenceException {
+        Document doc = documentDao.findById(1L);
+        assertEquals(55, DocumentManager.get().countPages(doc));
+
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public int countPages(Document document, int pages) {
+                calls.add("countPages:%d,%d".formatted(document.getId(), pages));
+                return 7;
+            }
+        });
+        assertEquals(7, DocumentManager.get().countPages(doc));
+        assertEquals(List.of("countPages:1,55"), calls);
     }
 
     @Test

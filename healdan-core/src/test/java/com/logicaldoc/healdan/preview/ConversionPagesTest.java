@@ -21,6 +21,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -152,6 +154,107 @@ public class ConversionPagesTest extends AbstractHealdanTestCase {
 
 		assertEquals(5, pagesOf(a));
 		assertEquals(List.of("1.0 7", current + " 5"), versionPages(a));
+	}
+
+	@Test
+	public void testReplacedFileTakesItsOwnCount() throws Exception {
+		Document deck = fx.upload(folder, "b.pptx", OfficeFiles.pptx(3, 0), fx.admin());
+		Document word = fx.upload(folder, "a.docx", OfficeFiles.docx(12), fx.admin());
+		awaitAsyncWork();
+		assertEquals(2, worker.runOnce(T));
+
+		DocumentManager.get().replaceFile(deck.getId(), "1.0", new ByteArrayInputStream(OfficeFiles.pptx(5, 1)),
+				fx.documentHistory(fx.admin()));
+		DocumentManager.get().replaceFile(word.getId(), "1.0", new ByteArrayInputStream(OfficeFiles.docx(30)),
+				fx.documentHistory(fx.admin()));
+		awaitAsyncWork();
+		// CE doesn't count a replaced file
+		assertEquals(3, pagesOf(deck));
+
+		assertEquals(2, worker.runOnce(T));
+
+		assertEquals(5, pagesOf(deck));
+		assertEquals(List.of("1.0 5"), versionPages(deck));
+		assertEquals(30, pagesOf(word));
+		assertEquals(List.of("1.0 30"), versionPages(word));
+	}
+
+	@Test
+	public void testIndexingKeepsTheFilledCount() throws Exception {
+		Document a = fx.upload(folder, "a.docx", OfficeFiles.docx(null), fx.admin());
+		awaitAsyncWork();
+		// The indexer loads the document before it parses it, and the worker fills the count meanwhile
+		Document indexed = DocumentDAO.get().findById(a.getId(), true);
+		assertEquals(1, worker.runOnce(T));
+		assertEquals(5, pagesOf(a));
+
+		DocumentHistory transaction = fx.documentHistory(fx.admin());
+		transaction.setEvent(DocumentEvent.INDEXED);
+		DocumentDAO.get().store(indexed, transaction);
+		assertEquals(5, pagesOf(a));
+
+		// Other saves still write the count they're given
+		Document changed = DocumentDAO.get().findById(a.getId(), true);
+		changed.setPages(9);
+		DocumentDAO.get().store(changed);
+		assertEquals(9, pagesOf(a));
+	}
+
+	@Test
+	public void testFillWaitsForTheVersionSave() throws Exception {
+		Document a = fx.upload(folder, "a.docx", OfficeFiles.docx(null), fx.admin());
+		awaitAsyncWork();
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		long size = jdbc.queryForObject("select ld_filesize from ld_version where ld_documentid = ?", Long.class,
+				a.getId());
+
+		// As if CE's background save of the version hadn't landed: it does a second after the conversion, with
+		// the count it took at upload
+		jdbc.update("update ld_version set ld_filesize = ? where ld_documentid = ?", size + 1, a.getId());
+		Thread save = new Thread(() -> {
+			try {
+				for (int i = 0; i < 1000 && !Store.get().exists(pdfOf(a, "1.0")); i++)
+					Thread.sleep(20L);
+				Thread.sleep(1000L);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+			}
+			jdbc.update("update ld_version set ld_filesize = ?, ld_pages = 1 where ld_documentid = ?", size,
+					a.getId());
+		});
+		save.start();
+		assertEquals(1, worker.runOnce(T));
+		save.join();
+		assertEquals(5, pagesOf(a));
+		assertEquals(List.of("1.0 5"), versionPages(a));
+
+		// A save that never lands doesn't hold the count back for good
+		Document b = fx.upload(folder, "b.docx", OfficeFiles.docx(null), fx.admin());
+		awaitAsyncWork();
+		jdbc.update("update ld_version set ld_filesize = ld_filesize + 1 where ld_documentid = ?", b.getId());
+		ConversionPages.versionSaveWait = Duration.ofMillis(300);
+		try {
+			assertEquals(1, worker.runOnce(T));
+		} finally {
+			ConversionPages.versionSaveWait = Duration.ofSeconds(10);
+		}
+		assertEquals(5, pagesOf(b));
+		assertEquals(List.of("1.0 5"), versionPages(b));
+	}
+
+	@Test
+	public void testRecountGivesTheFilledCount() throws Exception {
+		Document a = fx.upload(folder, "a.docx", OfficeFiles.docx(null), fx.admin());
+		Document one = fx.upload(folder, "one.docx", OfficeFiles.docx(1), fx.admin());
+		awaitAsyncWork();
+		// No preview yet
+		assertEquals(1, DocumentManager.get().countPages(DocumentDAO.get().findById(a.getId())));
+
+		assertEquals(2, worker.runOnce(T));
+
+		assertEquals(5, DocumentManager.get().countPages(DocumentDAO.get().findById(a.getId())));
+		// Word's saved count of 1 beats the preview's 5
+		assertEquals(1, DocumentManager.get().countPages(DocumentDAO.get().findById(one.getId())));
 	}
 
 	@Test

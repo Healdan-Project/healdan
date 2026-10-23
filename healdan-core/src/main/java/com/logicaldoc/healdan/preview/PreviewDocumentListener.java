@@ -21,9 +21,10 @@ import com.logicaldoc.core.document.VersionDAO;
  * Queues an Office document's new file version for conversion (spec section 7.1).
  * {@code afterFileStore} covers upload, check-in and copy; {@code afterStore}
  * covers a replaced file, and queues the file version that was replaced, its
- * job starting over. The listener never refuses anything: a failure to queue
- * is logged and the save goes on. CE creates it by reflection, hence the
- * public no-arg constructor.
+ * job starting over. {@code beforeStore} keeps the page count the worker filled
+ * in from being undone by CE's indexer. The listener never refuses anything: a
+ * failure is logged and the save goes on. CE creates it by reflection, hence
+ * the public no-arg constructor.
  */
 public class PreviewDocumentListener implements DocumentListener {
 
@@ -86,7 +87,13 @@ public class PreviewDocumentListener implements DocumentListener {
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		// Nothing to do
+		try {
+			if (document != null && transaction != null
+					&& DocumentEvent.INDEXED.toKey().equals(transaction.getEvent()))
+				ConversionPages.keepStoredPages(document);
+		} catch (Throwable t) {
+			log.warn("Cannot keep the page count of document {}: {}", document.getId(), t.getMessage());
+		}
 	}
 
 	@Override
