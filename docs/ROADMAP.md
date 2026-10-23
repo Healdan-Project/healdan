@@ -50,6 +50,7 @@ Throughout, **(owner)** marks something the owner decided or described. **(call)
    - Merge `upstream/master` regularly.
 6. **Re-implement, never copy.** Features that LogicalDOC sells are rebuilt from observed behaviour, not from proprietary code. (owner's standing direction)
 7. **Linux and macOS first.** Windows comes later, for adoption. (owner)
+8. **One licence for the code.** All of Healdan's code, including its own modules, is under the LGPL-3.0, like upstream. The docs site's content is under CC BY 4.0. (owner, 2026-10-23)
 
 ## 3. Glossary
 
@@ -507,5 +508,4 @@ These are calls unless CLAUDE.md already says the same thing.
 
 These aren't needed before M1's design session. Settle them before outside adoption.
 
-- **License.** Healdan's own new modules need a license. Upstream is LGPLv3.
 - **Reporting upstream.** Whether, and how, to report the upstream security bugs to LogicalDOC.
