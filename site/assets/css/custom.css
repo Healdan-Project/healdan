@@ -1,0 +1,111 @@
+/* Healdan's colours, from the logo: #0b5dab (dark blue) and #22a2e0 (light blue).
+   Spec §5.2. #22a2e0 is only for borders, gradients and accents: it's too faint for text on white. */
+
+/* Hextra draws links, the current tab and the current page from the 600 shade, which is 0.9 x this lightness.
+   40% puts them on #0b5ead, one step from the logo's #0b5dab. */
+:root {
+  --primary-hue: 209deg;
+  --primary-saturation: 88%;
+  --primary-lightness: 40%;
+}
+
+/* The landing page's headline. The logo's dark blue is unreadable on black, so dark mode starts lighter. */
+h1.hx\:bg-clip-text {
+  background-image: linear-gradient(90deg, #0b5dab 10%, #22a2e0 90%);
+}
+
+.dark h1.hx\:bg-clip-text {
+  background-image: linear-gradient(90deg, #4aa8f0 10%, #8fd0f5 90%);
+}
+
+/* Links in dark mode */
+.dark .content a:not(.not-prose a),
+.dark .healdan-devlink a {
+  color: #4aa8f0;
+}
+
+/* The Developer Guide link under the landing page's cards */
+.healdan-devlink {
+  margin-top: 2.5rem;
+  font-size: 0.95rem;
+  color: #6b7280;
+}
+
+.healdan-devlink a {
+  color: #0b5dab;
+  font-weight: 600;
+}
+
+/* Footer: brand, guide links and project links above the copyright line */
+.healdan-footer {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1.4fr;
+  gap: 2rem;
+  padding: 3rem 0 0;
+}
+
+@media (max-width: 768px) {
+  .healdan-footer {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+.healdan-footer-brand p {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  max-width: 18rem;
+}
+
+.healdan-footer-col h4 {
+  margin-bottom: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #1d2125;
+}
+
+.dark .healdan-footer-col h4 {
+  color: #e5e7eb;
+}
+
+.healdan-footer-col a {
+  display: block;
+  padding: 0.15rem 0;
+  font-size: 0.875rem;
+}
+
+.healdan-footer-col a:hover {
+  color: #0b5dab;
+}
+
+.dark .healdan-footer-col a:hover {
+  color: #8fd0f5;
+}
+
+/* The 404 page */
+.healdan-404 {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 6rem 1.5rem;
+}
+
+.healdan-404 h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.healdan-404 ul {
+  margin-top: 1.5rem;
+}
+
+.healdan-404 a {
+  color: #0b5dab;
+  font-weight: 600;
+}
+
+.dark .healdan-404 a {
+  color: #4aa8f0;
+}

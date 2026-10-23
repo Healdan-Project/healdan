@@ -1,0 +1,13 @@
+{{- /* Healdan: a 404 page with the site's header, footer and guide links, instead of Hextra's bare one. */ -}}
+{{ define "main" }}
+  <main id="content" class="healdan-404">
+    <h1>Page Not Found</h1>
+    <p>There's no page at this address. It may have moved, or the address may be mistyped.</p>
+    <ul>
+      <li><a href="{{ "install/" | relURL }}">Install</a></li>
+      <li><a href="{{ "user/" | relURL }}">User Guide</a></li>
+      <li><a href="{{ "admin/" | relURL }}">Admin Guide</a></li>
+      <li><a href="{{ "developer/" | relURL }}">Developer Guide</a></li>
+    </ul>
+  </main>
+{{ end }}
