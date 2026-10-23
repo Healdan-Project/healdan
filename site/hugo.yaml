@@ -1,0 +1,67 @@
+# Healdan's docs site, published at https://docs.healdan.com. See site/README.md and
+# docs/superpowers/specs/2026-10-23-docs-site-design.md.
+baseURL: https://docs.healdan.com/
+title: Healdan Documentation
+locale: en-GB
+
+module:
+  imports:
+    - path: github.com/imfing/hextra
+
+markup:
+  goldmark:
+    renderer:
+      # The landing page and the interim shortcode write HTML
+      unsafe: true
+  highlight:
+    noClasses: false
+
+# One tab per manual. Each manual is a top-level folder under content/.
+menu:
+  main:
+    - name: Install
+      pageRef: /install/
+      weight: 1
+    - name: User
+      pageRef: /user/
+      weight: 2
+    - name: Admin
+      pageRef: /admin/
+      weight: 3
+    - name: Developer
+      pageRef: /developer/
+      weight: 4
+    - name: Search
+      weight: 5
+      params:
+        type: search
+    - name: GitHub
+      weight: 6
+      url: https://github.com/Healdan-Project/healdan
+      params:
+        icon: github
+
+params:
+  description: Documentation for Healdan, a self-hosted, matter-centric document management system.
+  navbar:
+    displayTitle: false
+    displayLogo: true
+    logo:
+      path: images/logo.svg
+      dark: images/logo-dark.svg
+      width: 144
+      height: 28
+  theme:
+    default: system
+    displayToggle: true
+  footer:
+    enable: true
+    displayCopyright: true
+    displayPoweredBy: false
+  search:
+    enable: true
+    type: flexsearch
+  highlight:
+    copy:
+      enable: true
+      display: hover

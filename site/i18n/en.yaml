@@ -1,0 +1,2 @@
+# The footer's copyright line (spec §5.4). Hextra renders it with markdownify.
+copyright: "© 2026 The Healdan Project. This documentation is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); Healdan's code is licensed under the [LGPL-3.0](https://github.com/Healdan-Project/healdan/blob/master/LICENSE).<br>Healdan is a modified version of [LogicalDOC Community Edition](https://www.logicaldoc.com), © 2006-2027 LOGICALDOC Srl. LogicalDOC is a trademark of LOGICALDOC Srl, which doesn't endorse Healdan."

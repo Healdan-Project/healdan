@@ -6,8 +6,8 @@ name: Build LogicalDOC (Maven)
 on:
   push:
     branches: [ master, main ]
-    # Docs-only pushes don't change any code.
-    paths-ignore: [ 'docs/**', '**/*.md' ]
+    # Docs-only pushes don't change any code. The docs site (site/) has its own workflow, docs-site.yml.
+    paths-ignore: [ 'docs/**', 'site/**', '**/*.md' ]
   # No paths filter: master's ruleset requires build, so a docs-only pull request runs it with the build steps skipped.
   pull_request:
     branches: [ master, main ]
