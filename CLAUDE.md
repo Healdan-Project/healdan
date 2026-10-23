@@ -43,7 +43,7 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 - Spring-based tests fail in `setUp` unless `~/logicaldoc-dev.properties` exists. An empty file works; CI creates one.
 - `healdan-core`'s tests run against the installed jars of the modules it uses. After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module (`-pl <module> -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install`) before running them.
 - CI's `build` check compiles every module except the WAR and skips the GWT compile. It runs the `healdan-core` tests, then the upstream tests named in its `-Dtest` list, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
-- Pull requests that change only `docs/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
+- Pull requests that change only `docs/`, `site/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
 ## Docker
