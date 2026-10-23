@@ -4,7 +4,7 @@ weight: 1
 ---
 
 The search box is at the top right of the screen. The scope picker beside it says what to search: **Documents**
-unless you change it. It remembers your choice until you sign out.
+unless you change it. It remembers your choice until you close the browser.
 
 ![The scope picker open beside the search box, listing Documents, Emails, Docs & Emails, Folders, Matters and Clients](scopes.png)
 
@@ -20,9 +20,9 @@ unless you change it. It remembers your choice until you sign out.
 | Matters | a matter number such as `998.1`, or words | the matter with that number, opened straight away; or the matters whose name or description contains the words |
 | Clients | a client number or words | the matters of every client whose number or name matches |
 
-Your install may call matters *projects*. The Matters and Clients scopes then use that word.
+Your install may call matters *projects*. The Matters scope then uses that word.
 
-## Words Inside Files
+## Full-Text Search
 
 Full-text search finds words inside documents, including Word, Excel and PowerPoint files, PDFs, and emails' text
 and attachment names. A document is searchable shortly after it's filed.
@@ -31,7 +31,8 @@ and attachment names. A document is searchable shortly after it's filed.
 
 - **`998.1`** opens matter 1 of client 998.
 - **A bare number,** such as `1`, depends on how your install numbers matters. If each client numbers its own
-  matters, it lists every matter numbered 1. If matter numbers are unique across the system, it opens that matter.
+  matters, it lists every matter numbered 1, or opens it if there's only one. If matter numbers are unique across the
+  system, it opens that matter.
 - **Matter results show their client's name,** so two clients' "Leases" matters can be told apart.
 
 ## Results

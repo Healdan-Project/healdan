@@ -17,7 +17,7 @@ So version 2.3 is the third snapshot after version 2 was started, and the next n
 
 ## Where to See Them
 
-- **The Version column** in the documents list shows the version the file was last saved as.
+- **The File version column** in the documents list shows the version the file was last saved as.
 - **The Versions tab** shows the whole timeline, every snapshot included. Preview or download any of them from
   there.
 - **To go back to an earlier snapshot,** promote it from the Versions tab. That saves it as the latest.

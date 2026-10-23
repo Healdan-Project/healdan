@@ -12,7 +12,8 @@ version than the server, it shows a page asking you to clear your browser's cach
 Often a hard reload is enough. With Healdan open, press:
 
 - **Windows and Linux:** `Ctrl` + `Shift` + `R`
-- **Mac:** `Cmd` + `Shift` + `R`
+- **Mac, in Chrome, Edge or Firefox:** `Cmd` + `Shift` + `R`
+- **Mac, in Safari:** `Option` + `Cmd` + `R`
 
 ## Clearing the Cache
 
@@ -24,7 +25,7 @@ If a hard reload doesn't help, clear the cache. You don't need to clear cookies 
 
 1. Press `Ctrl` + `Shift` + `Delete` (`Cmd` + `Shift` + `Delete` on a Mac).
 2. Choose **Cached images and files**, and untick everything else.
-3. Click **Clear data** (Chrome) or **Clear now** (Edge).
+3. Click **Delete data** (Chrome) or **Clear now** (Edge).
 
 {{< /tab >}}
 

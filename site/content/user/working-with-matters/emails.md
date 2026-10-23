@@ -12,7 +12,8 @@ When an email is filed, Healdan fills in its properties from the message:
 
 - **From, To and CC.** Several recipients are separated by commas.
 - **Subject.**
-- **Sent and Received.** For a `.eml` file without a Received time, Healdan uses its delivery date.
+- **Sent and Received.** For a `.eml` file without a Received time, Healdan uses its delivery date. A `.msg` file
+  keeps only one date, so its Received is the same as its Sent.
 
 ## Its Name
 

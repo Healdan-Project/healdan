@@ -4,7 +4,8 @@ weight: 2
 ---
 
 Every matter belongs to a client, and only admins create them. A matter **is** its workspace: one folder in a
-Store, copied from a template.
+Store, copied from a template. Your install can call matters something else, such as projects: see the matter label
+in [Healdan Settings](../healdan-settings/).
 
 ## Clients
 
@@ -39,16 +40,18 @@ Then adjust the workspace's permissions on its **Security** tab, if the template
 
 ## Matter Numbers
 
-How matters are numbered is set once per install, in [Healdan Settings](../healdan-settings/):
+How matters are numbered is one setting for the whole install, in [Healdan Settings](../healdan-settings/). Choose it
+before clients start sharing matter numbers:
 
 | | Per client (the default) | System-wide |
 |---|---|---|
 | Unique across | the client's matters, so 998.1 and 999.1 can both exist | all matters |
 | Suggested number | the client's highest matter number plus one | the highest matter number in the system plus one |
-| Searching for `1` in the Matters scope | lists every matter numbered 1 | opens that matter |
+| Searching for `1` in the Matters scope | lists every matter numbered 1, or opens it if there's only one | opens that matter |
 
 Switching from system-wide to per client is always allowed. Switching from per client to system-wide is allowed only
-if no two clients share a matter number; otherwise Healdan lists the clashes.
+if no two clients share a matter number; otherwise Healdan lists the clashes. Matter numbers can't be changed, so once
+two clients share one, numbering stays per client.
 
 ## Editing and Deleting a Matter
 

@@ -8,7 +8,7 @@ weight: 2
 ## The Top Bar
 
 - **Account** has your profile and password. **Tools** has a few utilities.
-- **The help icon** opens the documentation, and **the power icon** signs you out.
+- **The help icon** opens a Support menu, and **the power icon** signs you out.
 - **The search box** is on the right, with its scope picker beside it. See [Searching](../../finding-documents/searching/).
 
 ## The Tabs
@@ -26,13 +26,14 @@ Administrators also see an **Administration** tab.
 - **My Matters:** the matters you've chosen to keep at hand.
 - **Recent Matters:** the matters you've worked in lately.
 - **Browser:** the folder tree, with the Stores you can see at the top and their matters inside them.
-- **Bookmarks:** documents and folders you've bookmarked.
+- **Bookmarks:** documents and folders you've bookmarked. Your My Matters are kept as bookmarks, so they show here too.
 - **Trash:** things you've deleted, until they're emptied.
 
 [My Matters and Recent Matters](../../finding-documents/my-matters-and-recent-matters/) explains the first two.
 
-**The list** in the middle shows the open folder's documents, with each one's file name, version, doc # and when it
-was last changed. The toolbar above it has the upload button, among others.
+**The list** in the middle shows the open folder's documents: each one's file name, file version, doc #, when it was
+last changed, its size, Author and Class. Scroll sideways for the last columns. The toolbar above it has the upload
+button, among others.
 
 **The details** under the list show the selected document:
 
@@ -46,4 +47,5 @@ was last changed. The toolbar above it has the upload button, among others.
 
 More tabs appear when you have the permissions for them, such as Security.
 
-**The right-hand panel** shows a preview of the selected document too.
+**The right-hand panel** can show a preview of the selected document too. If it shows a **Reload** button, as in the
+picture, click it.

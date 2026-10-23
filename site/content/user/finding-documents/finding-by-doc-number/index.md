@@ -18,14 +18,18 @@ With the search box's scope on **Documents**, type the doc # with a `#` in front
 | `#1234.2` or `#1234v2` | version 2 as it stands: its latest snapshot |
 | `#1234.2.1` or `#1234v2.1` | exactly snapshot 2.1 |
 
-![The search box with #3 typed in, and the Search tab listing one result: Charterparty – MV Northern Star.docx, doc # 3](doc-number-lookup.png)
+![The search box with #3 typed in, and the result list showing one document: Charterparty – MV Northern Star.docx, doc # 3](doc-number-lookup.png)
 
-A space after the `#` is fine. The result is just that document, ready to open, preview, download, or to look at
-its properties and versions. For a version or snapshot, its row in the Versions tab is a click away. See
-[Versions](../../documents/versions/).
+A space after the `#` is fine.
+
+- **For `#1234`,** the Search tab lists just that document, ready to open, preview, download, or to look at its
+  properties and versions.
+- **For a version or snapshot,** a window titled "#1234 version 2.1" shows when that version was saved and by whom,
+  with **Preview** and **Download** buttons. See [Versions](../../documents/versions/).
 
 - **It's found the moment it's filed.** Doc # lookups don't wait for the search index.
-- **If you can't read the document,** Healdan answers as if it didn't exist: "No document #1234".
+- **If you can't read the document,** Healdan answers as if it didn't exist: "No document #1234". A version that
+  doesn't exist answers "Document #1234 has no version 2.1".
 - **Without the `#`,** `1234` is an ordinary full-text search, because numbers appear inside documents too.
 
 ## Legacy Doc \#

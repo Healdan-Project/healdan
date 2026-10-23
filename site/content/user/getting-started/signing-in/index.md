@@ -17,8 +17,10 @@ matters and the search box. So some screens still look like LogicalDOC's. A new 
 Your administrator sets your user name and a first password. Change the password once you're in, from your
 profile: see [Your Profile and Password](../your-profile-and-password/).
 
-- **Remember me** keeps you signed in on this browser. Leave it unticked on a computer others use.
-- **Choose your language** sets the language of Healdan's screens.
+- **Remember me** saves your user name and password in this browser, and fills them in next time. Leave it unticked
+  on a computer others use.
+- **Choose your language** sets the language of Healdan's screens. These docs describe them in English. In other
+  languages, some of Healdan's labels, such as Doc # and Date filed, still show LogicalDOC's wording.
 
 ## Signing Out
 

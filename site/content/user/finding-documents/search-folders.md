@@ -4,7 +4,8 @@ weight: 3
 ---
 
 A **search folder** is a folder in a matter whose list of documents comes from a rule, such as "documents anyone
-changed in the last 30 days". It can't hold documents or folders of its own. Templates often include two:
+changed in the last 30 days". It can't hold documents or folders of its own. A template might include two, for
+example:
 
 - **Recent Work:** documents anyone in the matter changed in the last 30 days.
 - **My Recent Work:** documents you changed in the last 30 days. Each person sees their own list.
@@ -19,15 +20,16 @@ changed in the last 30 days". It can't hold documents or folders of its own. Tem
 
 ## Creating One
 
-Right-click a folder in the matter and choose **New search folder…**. Only admins can create one directly inside a
-matter's workspace, as with any folder there. The rule has these parts:
+Right-click a folder in the matter and choose **New search folder…**. You need the Add permission on that folder, and
+only admins can create one directly inside a matter's workspace, as with any folder there. The rule has these parts:
 
-| Part | Choices |
+| Field | Choices |
 |---|---|
-| Window | changed in the last *N* days |
-| Whose changes | anyone's, or only the person viewing |
-| Kind | everything, documents only, or emails only |
+| Changed within | the last *N* days |
+| Only my changes | ticked: only the changes of the person viewing; unticked: anyone's |
+| Show | Documents and emails, Documents only, or Emails only |
 | Class | optional: only documents of this Class |
-| Subclass | optional: only documents of this Subclass |
+| Subclass | optional: only documents of this Subclass. It needs a Class |
 
-To change a rule, right-click the search folder and choose **Edit search folder…**.
+To change a rule, right-click the search folder and choose **Edit search folder…**, which needs the Write permission.
+Renaming it needs Rename.

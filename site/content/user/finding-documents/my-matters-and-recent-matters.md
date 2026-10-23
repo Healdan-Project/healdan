@@ -9,7 +9,8 @@ away.
 ## My Matters
 
 Your own list of matters. To add one, right-click its workspace and choose **Add to My Matters**; to take it off,
-choose **Remove from My Matters**.
+choose **Remove from My Matters**. My Matters are kept as bookmarks, so a matter you add shows in the **Bookmarks**
+section too, and removing that bookmark removes it from My Matters.
 
 ## Recent Matters
 
