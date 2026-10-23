@@ -50,7 +50,7 @@
             Here is an example to list the children folders: &lt;br/&gt;
             curl -u admin:admin -H ''Accept: application/json'' http://localhost:8080/services/rest/folder/listChildren?folderId=4
             &lt;br/&gt;&lt;br/&gt;
-            More examples are available at the following address: http://wiki.logicaldoc.com/wiki/Bindings_And_Samples
+            More examples are available at the following address: https://docs.healdan.com/developer/api/
             &lt;br/&gt;&lt;br/&gt;
             **Find out more about LogicalDOC** https://www.logicaldoc.com"/>                                    
     </bean>

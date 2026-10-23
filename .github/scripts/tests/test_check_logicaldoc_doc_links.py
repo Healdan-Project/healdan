@@ -80,16 +80,9 @@ class CheckLogicalDocDocLinksTest(unittest.TestCase):
         self.assertIn("bad.txt:1:", out.getvalue())
 
     def test_current_repo_fails_before_switch(self):
+        # The app's links are switched; the repo's own docs follow in the next commit
         files = {problem.split(":", 1)[0] for problem in checker.find_links(_scripts.REPO)}
-        for expected in ("README.md", "logicaldoc-gui/war/releasecheck.jsp",
-                         "logicaldoc-webservice/src/main/java/com/logicaldoc/webservice/rest/endpoint/RestAuthService.java",
-                         "logicaldoc-webservicedoc/src/main/resources/context/context-webservicedoc.xml",
-                         "logicaldoc-gui/src/main/java/com/logicaldoc/gui/common/client/beans/GUIBranding.java",
-                         "Build_this_Sources.md",
-                         "logicaldoc-i18n/src/main/resources/i18n/messages_en.properties"):
-            self.assertIn(expected, files)
-        self.assertNotIn(SYSTEM_INFO, files)
-
+        self.assertEqual({"README.md", "Build_this_Sources.md"}, files)
 
 if __name__ == "__main__":
     unittest.main()
