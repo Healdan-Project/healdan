@@ -93,6 +93,47 @@ class _Text(html.parser.HTMLParser):
             self.parts.append(data)
 
 
+SidebarItem = collections.namedtuple("SidebarItem", "href has_toggle li_classes")
+
+
+class _SidebarItems(html.parser.HTMLParser):
+    """Hextra's sidebar entries inside elements carrying all the wanted class tokens: each entry's link, whether
+    it has an open/close button, and the classes of the <li> around it."""
+
+    def __init__(self, wanted):
+        super().__init__(convert_charrefs=True)
+        self.wanted = wanted
+        self.stack = []  # (tag, classes)
+        self.items = []
+        self.item = None  # [href, has_toggle, li_classes, depth]
+
+    def _inside_wanted(self):
+        return self.wanted <= frozenset().union(*(c for _, c in self.stack))
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = frozenset((attrs.get("class") or "").split())
+        if tag == "div" and "hextra-sidebar-item" in classes and self._inside_wanted():
+            li = next((c for t, c in reversed(self.stack) if t == "li"), frozenset())
+            self.item = [None, False, li, len(self.stack)]
+        elif self.item is not None:
+            if tag == "a" and self.item[0] is None:
+                self.item[0] = attrs.get("href") or ""
+            elif tag == "button" and "hextra-sidebar-collapsible-button" in classes:
+                self.item[1] = True
+        if tag not in VOID:
+            self.stack.append((tag, classes))
+
+    def handle_endtag(self, tag):
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
+        if self.item is not None and len(self.stack) <= self.item[3]:
+            self.items.append(SidebarItem(*self.item[:3]))
+            self.item = None
+
+
 def _normalise(text):
     return re.sub(r"\s+", " ", text.replace("’", "'")).strip()
 
@@ -140,6 +181,12 @@ class SiteBuild(unittest.TestCase):
                 continue
             found.append(Link(self._site_path(href, page), _normalise("".join(parts)), own))
         return found
+
+    def sidebar_items(self, html, within_class, page="/"):
+        """Hextra's sidebar entries inside within_class (space-separated class tokens), with hrefs as site paths."""
+        parser = _SidebarItems(set(within_class.split()))
+        parser.feed(html)
+        return [item._replace(href=self._site_path(item.href or "", page)) for item in parser.items]
 
     def text(self, html, tag="body", within_class=None):
         """The unescaped text inside the first element with this tag (and class token), whitespace collapsed."""
@@ -223,6 +270,34 @@ class SiteBuild(unittest.TestCase):
                       "and their workspace isn't a Healdan Workspace.", box)
         self.assertIn("https://docs.logicaldoc.com/en/system/general-informations",
                       [link.href for link in self.links(page, "healdan-interim")])
+
+    # Task 4
+
+    def test_phone_menu_lists_manuals_and_opens_only_current(self):
+        page = "/user/finding-documents/finding-by-doc-number/"
+        items = self.sidebar_items(self.html(page), "hextra-sidebar-container hx:md:hidden", page)
+        by_href = {item.href: item for item in items}
+        for other in ("/install/", "/admin/", "/developer/"):
+            self.assertIn(other, by_href)
+            self.assertFalse(by_href[other].has_toggle, other)
+        strays = [item.href for item in items if item.href not in ("/install/", "/admin/", "/developer/")
+                  and not item.href.startswith(("/user/", "#"))]
+        self.assertEqual([], strays)
+        self.assertIn(page, by_href)
+        for ancestor in ("/user/", "/user/finding-documents/"):
+            self.assertIn("open", by_href[ancestor].li_classes, ancestor)
+        self.assertNotIn("open", by_href["/user/documents/"].li_classes)
+
+    def test_phone_menu_on_a_manuals_landing_page(self):
+        items = self.sidebar_items(self.html("/admin/"), "hextra-sidebar-container hx:md:hidden", "/admin/")
+        by_href = {item.href: item for item in items}
+        self.assertIn("open", by_href["/admin/"].li_classes)
+        self.assertIn("/admin/stores/", by_href)
+        for other in ("/install/", "/user/", "/developer/"):
+            self.assertFalse(by_href[other].has_toggle, other)
+            self.assertNotIn("open", by_href[other].li_classes, other)
+        self.assertEqual([], [item.href for item in items if item.href.startswith(("/user/", "/developer/"))
+                              and item.href not in ("/user/", "/developer/")])
 
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):
