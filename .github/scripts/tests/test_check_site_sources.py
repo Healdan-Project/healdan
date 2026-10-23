@@ -100,6 +100,16 @@ class CheckSiteSourcesTest(unittest.TestCase):
             """)
         self.assertEqual([], self.problems())
 
+    def test_escaped_interim_example_is_fine(self):
+        # The Writing Docs page shows the shortcode escaped, so Hugo prints it instead of running it
+        self.page("developer/writing.md", """
+            ---
+            title: Writing Docs
+            ---
+            {{</* interim href="https://docs.logicaldoc.com/en/working-with-documents/versioning" title="Versioning" */>}}
+            """)
+        self.assertEqual([], self.problems())
+
     def test_wiki_help_and_forum_links_reported(self):
         self.page("developer/g.md", """
             ---

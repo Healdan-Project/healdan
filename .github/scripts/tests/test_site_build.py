@@ -311,6 +311,17 @@ class SiteBuild(unittest.TestCase):
         for page in (self.public / "install").rglob("*.html"):
             self.assertNotIn("ghcr.io/healdan-project/healdan", page.read_text(encoding="utf-8"), page)
 
+    # Task 6
+
+    def test_developer_pages_exist(self):
+        pages = {"building-from-source": "Building from Source", "development-stack": "Running a Development Stack",
+                 "tests": "Tests", "continuous-integration": "Continuous Integration",
+                 "how-healdan-extends-logicaldoc": "How Healdan Extends LogicalDOC",
+                 "upstream-syncs": "Upstream Syncs", "writing-docs": "Writing Docs"}
+        for slug, title in pages.items():
+            self.assertEqual(f"{title} – Healdan Documentation",
+                             self.text(self.html(f"/developer/{slug}/"), "title"))
+
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):
             result = subprocess.run([sys.executable, str(_scripts.SCRIPTS / script), str(arg)],

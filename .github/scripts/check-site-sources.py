@@ -21,6 +21,8 @@ import re
 import sys
 
 LOGICALDOC_DOCS = re.compile(r"https?://(docs|wiki|help|forums)\.logicaldoc\.com")
+# The shortcode, or its escaped form {{</* interim … */>}}, which a page about writing docs shows as an example
+INTERIM = re.compile(r"\{\{<(/\*)?\s*interim\s")
 FRONT_MATTER_VALUE = re.compile(r"^\s*[A-Za-z_][\w-]*:\s+(?P<value>\S.*)$")
 HEADING = re.compile(r"^#{1,6}\s")
 FENCE = re.compile(r"^\s*(```|~~~)")
@@ -45,7 +47,7 @@ def check_file(path, relative):
         elif not in_fence and HEADING.match(line) and line.rstrip().endswith("#") \
                 and not line.rstrip().endswith("\\#"):
             problems.append(f"{where}: Markdown drops a heading's closing '#'. End it with '\\#'")
-        if LOGICALDOC_DOCS.search(line) and "{{< interim" not in line:
+        if LOGICALDOC_DOCS.search(line) and not INTERIM.search(line):
             problems.append(f"{where}: links to LogicalDOC's docs. Use the interim shortcode, or link to Healdan's own page")
     return problems
 
