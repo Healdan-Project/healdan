@@ -2,4 +2,23 @@
 title: My Matters and Recent Matters
 weight: 4
 ---
-{{< interim href="https://docs.logicaldoc.com/en/working-with-folders" title="Working with Folders" >}}
+
+The left pane of the Documents screen has two lists above the folder tree, so the matters you use most are a click
+away.
+
+## My Matters
+
+Your own list of matters. To add one, right-click its workspace and choose **Add to My Matters**; to take it off,
+choose **Remove from My Matters**.
+
+## Recent Matters
+
+The matters where you filed or changed a document in the last 30 days, newest first, up to 20. Your administrator
+can change the 30 days. A matter leaves the list once you haven't worked in it for that long.
+
+## In Both Lists
+
+- **Each entry** shows the matter, then its client's name in smaller text: `998.1 – Healdan Demo (Healdan)`. Hover
+  over an entry that's cut off to see all of it.
+- **Click an entry** to open the matter in the folder tree below.
+- **A matter you can no longer open,** or one that's been deleted, doesn't appear.

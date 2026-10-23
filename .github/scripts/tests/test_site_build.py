@@ -340,6 +340,20 @@ class SiteBuild(unittest.TestCase):
             self.assertEqual(f"{title} – Healdan Documentation",
                              self.text(self.html(f"/developer/{slug}/"), "title"))
 
+    # Task 10
+
+    USER_LAUNCH_PAGES = (
+        "getting-started/signing-in", "getting-started/getting-around", "getting-started/clearing-your-browsers-cache",
+        "working-with-matters/stores-and-matter-workspaces", "working-with-matters/filing-a-document",
+        "working-with-matters/properties", "working-with-matters/emails", "working-with-matters/document-permissions",
+        "finding-documents/searching", "finding-documents/finding-by-doc-number", "finding-documents/search-folders",
+        "finding-documents/my-matters-and-recent-matters", "documents/versions", "documents/previews")
+
+    def test_user_launch_pages_written(self):
+        unwritten = [page for page in self.USER_LAUNCH_PAGES
+                     if "healdan-interim" in self.html(f"/user/{page}/")]
+        self.assertEqual([], unwritten)
+
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):
             result = subprocess.run([sys.executable, str(_scripts.SCRIPTS / script), str(arg)],
