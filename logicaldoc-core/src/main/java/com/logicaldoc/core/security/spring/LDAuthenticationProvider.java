@@ -19,7 +19,6 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.logicaldoc.core.security.Client;
-import com.logicaldoc.core.security.LoginThrottle;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.authentication.AccountDisabledException;
@@ -83,9 +82,6 @@ public class LDAuthenticationProvider implements AuthenticationProvider {
             for (String role : session.getUser().getGroups().stream().map(Group::getName).toList()) {
                 authorities.add(new SimpleGrantedAuthority(role));
             }
-
-            // Clear the login failures
-            LoginThrottle.clearFailures(username, client.getAddress());
 
             // Return an authenticated token, containing user data and
             // authorities

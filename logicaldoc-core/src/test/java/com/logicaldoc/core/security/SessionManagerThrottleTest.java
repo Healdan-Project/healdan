@@ -243,6 +243,28 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	}
 
 	@Test
+	public void testFormLoginWithExistingSessionDoesNotClear() {
+		for (int i = 0; i < 4; i++)
+			fail("author", outside);
+		Session admin = signIn("admin", "admin", server);
+
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		when(request.getRemoteAddr()).thenReturn("10.0.0.9");
+		when(request.getRemoteHost()).thenReturn("host");
+		when(request.getHeader(SessionManager.PARAM_SID)).thenReturn(admin.getSid());
+		when(request.getSession(true)).thenReturn(mock(jakarta.servlet.http.HttpSession.class));
+		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(request));
+
+		// No password is checked here: the request just carries someone's valid session
+		UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken("author", "anything");
+		token.setDetails(new LDAuthenticationDetails(request));
+		new LDAuthenticationProvider().authenticate(token);
+
+		fail("author", outside);
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	@Test
 	public void testOffWhenDisabled() {
 		Context.get().getConfig().setProperty("throttle.enabled", "false");
 		for (int i = 0; i < 10; i++)
