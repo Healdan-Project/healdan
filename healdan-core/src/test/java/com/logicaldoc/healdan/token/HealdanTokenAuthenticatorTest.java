@@ -3,6 +3,7 @@ package com.logicaldoc.healdan.token;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
@@ -51,17 +52,17 @@ public class HealdanTokenAuthenticatorTest extends AbstractHealdanTestCase {
 
 		ApiTokens.Issued revoked = ApiTokens.get().issue(clerk, "Revoked", null);
 		ApiTokens.get().revoke(revoked.row());
-		assertThrows(AuthenticationException.class, () -> SessionManager.get().newSession(revoked.token(), new Client()));
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(revoked.token(), new Client()));
 
 		ApiTokens.Issued expired = ApiTokens.get().issue(clerk, "Expired", null);
 		jdbc.update("update hd_api_token set hd_expires = ? where ld_id = ?", new Date(System.currentTimeMillis() - DAY),
 				expired.row().getId());
-		assertThrows(AuthenticationException.class, () -> SessionManager.get().newSession(expired.token(), new Client()));
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(expired.token(), new Client()));
 
 		ApiTokens.Issued idle = ApiTokens.get().issue(clerk, "Idle", null);
 		jdbc.update("update hd_api_token set hd_lastused = ? where ld_id = ?",
 				new Date(System.currentTimeMillis() - 31 * DAY), idle.row().getId());
-		assertThrows(AuthenticationException.class, () -> SessionManager.get().newSession(idle.token(), new Client()));
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(idle.token(), new Client()));
 	}
 
 	@Test
@@ -73,8 +74,29 @@ public class HealdanTokenAuthenticatorTest extends AbstractHealdanTestCase {
 		// The update bypassed the DAO, so drop the user it cached
 		UserDAO.get().evict(User.class, clerk.getId());
 
-		assertThrows(AccountDisabledException.class,
+		TokenRefusedException e = assertThrows(TokenRefusedException.class,
 				() -> SessionManager.get().newSession(issued.token(), new Client()));
+		assertEquals(new AccountDisabledException().getMessage(), e.getMessage());
+		assertTrue(e.getCause() instanceof AccountDisabledException);
+	}
+
+	@Test
+	public void testRefusalsAreNotRecorded() throws Exception {
+		User clerk = fx.user("clerk");
+		ApiTokens.Issued issued = ApiTokens.get().issue(clerk, "Laptop", null);
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		jdbc.update("update ld_user set ld_enabled = 0 where ld_id = ?", clerk.getId());
+		UserDAO.get().evict(User.class, clerk.getId());
+		String unknown = ApiTokens.PREFIX + "A".repeat(43);
+		Client client = new Client("c1", "10.0.0.9", "host");
+
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(unknown, client));
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(issued.token(), client));
+
+		assertEquals(0, jdbc.queryForObject("select count(*) from ld_sequence where ld_name like 'loginfail-apikey-%'",
+				Integer.class).intValue());
+		assertEquals(0, jdbc.queryForObject("select count(*) from ld_sequence where ld_name = 'loginfail-ip-10.0.0.9'",
+				Integer.class).intValue());
 	}
 
 	@Test

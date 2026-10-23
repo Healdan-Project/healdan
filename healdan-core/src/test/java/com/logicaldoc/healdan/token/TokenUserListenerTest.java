@@ -70,6 +70,11 @@ public class TokenUserListenerTest extends AbstractHealdanTestCase {
 
 		SessionManager.get().newSession("clerk", HealdanFixtures.PASSWORD, (Client) null);
 
+		// Re-setting the same password is not a change
+		User loaded = UserDAO.get().findById(clerk.getId(), true);
+		loaded.setDecodedPassword(HealdanFixtures.PASSWORD);
+		store(loaded);
+
 		assertEquals(2, ApiTokens.get().list(clerk.getId()).size());
 	}
 }

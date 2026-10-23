@@ -41,18 +41,22 @@ public class HealdanTokenAuthenticator extends AbstractAuthenticator {
 		ApiTokens tokens = ApiTokens.get();
 		Date now = new Date();
 		ApiToken token = tokens.find(key).filter(t -> tokens.usable(t, now))
-				.orElseThrow(() -> new AuthenticationException(INVALID));
+				.orElseThrow(() -> new TokenRefusedException(this, INVALID));
 
 		User user;
 		try {
 			user = UserDAO.get().findById(token.getUserId(), true);
 		} catch (PersistenceException e) {
-			throw new AuthenticationException(this, "dataerror", e);
+			throw new TokenRefusedException(this, "dataerror", e);
 		}
 		if (user == null)
-			throw new AuthenticationException(INVALID);
+			throw new TokenRefusedException(this, INVALID);
 
-		Context.get(DefaultAuthenticator.class).validateUser(user);
+		try {
+			Context.get(DefaultAuthenticator.class).validateUser(user);
+		} catch (AuthenticationException e) {
+			throw new TokenRefusedException(this, e.getMessage(), e);
+		}
 		tokens.touch(token, now);
 		return user;
 	}
