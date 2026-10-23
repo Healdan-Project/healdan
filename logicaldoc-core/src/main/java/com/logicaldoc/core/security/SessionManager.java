@@ -160,12 +160,17 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
      */
     public synchronized Session newSession(String username, String password, String key, Client client)
             throws AuthenticationException {
+        // Before the try, so a blocked attempt is not counted as a failure
+        String address = client != null ? client.getAddress() : null;
+        LoginThrottle.checkLoginThrottle(username, key, address);
+
         try {
             User user = authenticationChain.authenticate(username, password, key, client);
             if (user == null)
                 return null;
             else {
                 Session session = createSession(user, key, client);
+                LoginThrottle.clearFailures(user.getUsername(), address);
                 if (TicketDAO.get().isAccessTicket(username))
                     recordSupportSession(username, session);
                 return session;
@@ -200,6 +205,9 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
      * @throws AuthenticationException raised in case of failed login
      */
     public synchronized Session newSession(String apikey, Client client) throws AuthenticationException {
+        // Only checks: a key session must not reset the counts of a password attack
+        LoginThrottle.checkLoginThrottle(null, apikey, client != null ? client.getAddress() : null);
+
         try {
             User user = authenticationChain.authenticate("", "", apikey, client);
             if (user == null)
