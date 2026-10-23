@@ -6,8 +6,11 @@ import org.apache.cxf.bus.extension.ExtensionManagerBus;
 import org.apache.cxf.transport.servlet.CXFNonSpringServlet;
 
 import jakarta.servlet.ServletConfig;
+import jakarta.servlet.ServletException;
 import jakarta.servlet.annotation.WebInitParam;
 import jakarta.servlet.annotation.WebServlet;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 /**
  * Serves Healdan's API at {@code /api/*} (spec section 10.2). Tomcat finds it
@@ -52,5 +55,21 @@ public class ApiServlet extends CXFNonSpringServlet {
 		apiBus.initialize();
 		setBus(apiBus);
 		ApiServer.start(getBus(), extraBeans);
+	}
+
+	/**
+	 * Serves a request with nothing signed in on the thread before it, and
+	 * nothing left after it, whatever happens: Tomcat's threads serve one
+	 * request after another. {@link TokenFilter} clears it too, when CXF gets
+	 * as far as the response filters.
+	 */
+	@Override
+	protected void invoke(HttpServletRequest request, HttpServletResponse response) throws ServletException {
+		TokenFilter.clear();
+		try {
+			super.invoke(request, response);
+		} finally {
+			TokenFilter.clear();
+		}
 	}
 }

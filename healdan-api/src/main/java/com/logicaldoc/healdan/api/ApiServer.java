@@ -69,13 +69,16 @@ public class ApiServer implements ApplicationContextAware {
 	}
 
 	/**
-	 * @return the providers every request goes through. The request filters,
-	 *         such as the token check, belong in this list too.
+	 * @return the providers every request goes through: JSON, problems, CORS
+	 *         (before matching, so a preflight needs no token) and the token
+	 *         check
 	 */
 	static List<Object> providers() {
 		List<Object> providers = new ArrayList<>();
 		providers.add(ApiJson.provider());
 		providers.add(new ProblemMapper());
+		providers.add(new CorsFilter());
+		providers.add(new TokenFilter());
 		// CXF answers ?_wadl with a WADL document whenever its generator is on the classpath, as the webservice
 		// plugin puts it; the API is described by openapi.yaml only
 		if (ClassUtils.isPresent(WADL_GENERATOR, ApiServer.class.getClassLoader()))

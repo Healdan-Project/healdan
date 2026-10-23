@@ -18,6 +18,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import jakarta.servlet.ServletContext;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.ServletException;
 
 /**
@@ -40,6 +41,8 @@ public class ApiCall {
 	private final String query;
 
 	private final Map<String, List<String>> headers = new LinkedHashMap<>();
+
+	private final List<Cookie> cookies = new ArrayList<>();
 
 	private String remote = "127.0.0.1";
 
@@ -71,6 +74,14 @@ public class ApiCall {
 
 	public ApiCall header(String name, String value) {
 		headers.computeIfAbsent(name, n -> new ArrayList<>()).add(value);
+		return this;
+	}
+
+	/**
+	 * Sends a cookie, as a browser would.
+	 */
+	public ApiCall cookie(String name, String value) {
+		cookies.add(new Cookie(name, value));
 		return this;
 	}
 
@@ -157,6 +168,8 @@ public class ApiCall {
 			}
 		}
 		headers.forEach((name, values) -> values.forEach(value -> request.addHeader(name, value)));
+		if (!cookies.isEmpty())
+			request.setCookies(cookies.toArray(new Cookie[0]));
 
 		if (!parts.isEmpty()) {
 			ByteArrayOutputStream out = new ByteArrayOutputStream();

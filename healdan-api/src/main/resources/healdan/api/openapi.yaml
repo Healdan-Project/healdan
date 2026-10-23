@@ -54,6 +54,121 @@ paths:
                 type: string
         default:
           $ref: '#/components/responses/Problem'
+  /v1/auth/tokens:
+    post:
+      operationId: signIn
+      summary: Sign in with a password, and get a device token
+      description: |
+        Runs Healdan's whole sign-in, with the same rules as its web page.
+        The token is shown only in this answer; send it as
+        `Authorization: Bearer <token>`. It stops working when it goes
+        unused (30 days by default), a year after sign-in (by default), when
+        it's revoked, or when the user's password changes.
+
+        Refusals: `401 sign-in-failed` never says whether the username or
+        the password was wrong, or that the account can't sign in.
+        `401 password-expired` means the password must be changed in the
+        web page first. `429 too-many-attempts` means too many failed
+        sign-ins; the detail says when to try again.
+      tags: [Sign-in]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignIn'
+      responses:
+        '201':
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedIn'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: listTokens
+      summary: Your devices that are signed in
+      description: Every usable token of the caller, newest first. Never the tokens themselves.
+      tags: [Sign-in]
+      responses:
+        '200':
+          description: The tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/auth/tokens/current:
+    delete:
+      operationId: signOut
+      summary: Sign out
+      description: Revokes the token making the request.
+      tags: [Sign-in]
+      responses:
+        '204':
+          description: Signed out
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/auth/tokens/{id}:
+    delete:
+      operationId: revokeToken
+      summary: Sign one of your devices out
+      description: Revokes one of the caller's tokens. Another user's token is `404`.
+      tags: [Sign-in]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Revoked
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/me:
+    get:
+      operationId: getMe
+      summary: Who you're signed in as
+      tags: [Users]
+      responses:
+        '200':
+          description: The user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/users:
+    get:
+      operationId: findUsers
+      summary: Find people, for a user field such as Author
+      description: |
+        Active people whose username, first name, last name or "first last"
+        contains `q`, in any case. Sorted by name, at most 20.
+      tags: [Users]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What to look for. A blank `q` is `400`.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: The people found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserHitPage'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     bearerAuth:
@@ -90,7 +205,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, forbidden, not-found, refused, validation, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, refused, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
@@ -113,7 +228,8 @@ components:
       type: object
       description: |
         The shape of every list. A list of things is
-        `allOf: [{$ref: Page}, {properties: {items: {type: array, items: {$ref: Thing}}}}]`.
+        `allOf: [{$ref: Page}, {properties: {items: {type: array, items: {$ref: Thing}}}}]`
+        with `unevaluatedProperties: false`, as `TokenPage` is.
       required: [items, offset, limit, total]
       properties:
         items:
@@ -161,3 +277,122 @@ components:
           items:
             type: string
             enum: [password]
+    SignIn:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          format: password
+        name:
+          type: [string, 'null']
+          maxLength: 100
+          description: What the device is called, so you can tell your devices apart. Blank is "Unnamed device".
+          examples: [Word on MacBook]
+    SignedIn:
+      type: object
+      additionalProperties: false
+      required: [token, id, name, expiresAt, user]
+      properties:
+        token:
+          type: string
+          pattern: '^hd_[A-Za-z0-9_-]{43}$'
+          description: The device token. Shown only here.
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the token stops working at the latest
+        user:
+          $ref: '#/components/schemas/UserView'
+    TokenView:
+      type: object
+      additionalProperties: false
+      required: [id, name, created, lastUsed, expiresAt, current]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        created:
+          type: string
+          format: date-time
+        lastUsed:
+          type: string
+          format: date-time
+          description: To within a few minutes
+        expiresAt:
+          type: string
+          format: date-time
+        current:
+          type: boolean
+          description: True for the token making the request
+    TokenPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/TokenView'
+      unevaluatedProperties: false
+    UserView:
+      type: object
+      additionalProperties: false
+      required: [id, username, name, email, language, admin]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        name:
+          type: string
+          description: The full name
+        email:
+          type: [string, 'null']
+        language:
+          type: [string, 'null']
+          examples: [en]
+        admin:
+          type: boolean
+    UserRef:
+      type: object
+      description: A user named in another object, such as a document's creator
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: [string, 'null']
+    UserHit:
+      type: object
+      additionalProperties: false
+      required: [id, username, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        name:
+          type: string
+    UserHitPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserHit'
+      unevaluatedProperties: false

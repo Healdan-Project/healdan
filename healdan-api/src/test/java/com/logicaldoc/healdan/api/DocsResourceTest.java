@@ -37,6 +37,8 @@ public class DocsResourceTest extends ApiTestCase {
 		assertTrue(page, page.contains("../v1/openapi.yaml"));
 		// Nothing from the internet: the server may have no access to it
 		assertFalse(page, page.contains("http:") || page.contains("https:"));
+		// A token typed into "Authorize" isn't kept in the browser's storage on the old UI's origin
+		assertFalse(page, page.contains("persistAuthorization"));
 
 		// The webjar's own index.html would load its demo description from the internet
 		assertEquals(page, get("/api/docs/index.html").send().text());

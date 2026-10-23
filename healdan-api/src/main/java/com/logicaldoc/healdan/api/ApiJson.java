@@ -54,13 +54,16 @@ public final class ApiJson {
 	}
 
 	/**
-	 * Writes a date in UTC, to the second, with a {@code Z}.
+	 * Writes a date in UTC, to the second, with a {@code Z}. It takes the
+	 * milliseconds, because {@code java.sql.Date} and {@code java.sql.Time},
+	 * which JDBC hands over, can't give an instant.
 	 */
 	private static class UtcDateSerializer extends JsonSerializer<Date> {
 
 		@Override
 		public void serialize(Date value, JsonGenerator generator, SerializerProvider serializers) throws IOException {
-			generator.writeString(DateTimeFormatter.ISO_INSTANT.format(value.toInstant().truncatedTo(ChronoUnit.SECONDS)));
+			generator.writeString(DateTimeFormatter.ISO_INSTANT
+					.format(Instant.ofEpochMilli(value.getTime()).truncatedTo(ChronoUnit.SECONDS)));
 		}
 	}
 

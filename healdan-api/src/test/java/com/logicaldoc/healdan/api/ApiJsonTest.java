@@ -32,6 +32,19 @@ public class ApiJsonTest {
 	}
 
 	@Test
+	public void testSqlDatesAndTimestamps() throws Exception {
+		long millis = Instant.parse("2026-10-23T14:05:00.250Z").toEpochMilli();
+
+		// JDBC hands these over for date and timestamp columns
+		assertEquals("{\"name\":\"d\",\"when\":\"2026-10-23T14:05:00Z\"}",
+				ApiJson.mapper().writeValueAsString(new Stamp("d", new java.sql.Date(millis))));
+		assertEquals("{\"name\":\"t\",\"when\":\"2026-10-23T14:05:00Z\"}",
+				ApiJson.mapper().writeValueAsString(new Stamp("t", new java.sql.Timestamp(millis))));
+		assertEquals("{\"name\":\"h\",\"when\":\"2026-10-23T14:05:00Z\"}",
+				ApiJson.mapper().writeValueAsString(new Stamp("h", new java.sql.Time(millis))));
+	}
+
+	@Test
 	public void testNullsAreWritten() throws Exception {
 		assertEquals("{\"name\":null,\"when\":null}", ApiJson.mapper().writeValueAsString(new Stamp(null, null)));
 	}

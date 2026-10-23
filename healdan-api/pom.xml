@@ -78,6 +78,12 @@
 			<artifactId>jakarta.servlet-api</artifactId>
 			<scope>provided</scope>
 		</dependency>
+		<!-- The token filter puts the request's session where CE's code looks for it; the WAR already ships it -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-core</artifactId>
+			<scope>provided</scope>
+		</dependency>
 
 		<!-- The rest of what healdan-core builds against, so that its classes load in the tests -->
 		<dependency>
