@@ -293,4 +293,61 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertEquals("Project", HealdanSettings.get().matterLabel());
 		assertEquals("Projects", HealdanSettings.get().matterLabelPlural());
 	}
+
+	@Test
+	public void testApiSettingsRoundTrip() throws Exception {
+		GUIHealdanSettings settings = as(boss).load();
+		assertEquals(30, settings.getApiTokenIdleDays());
+		assertEquals(365, settings.getApiTokenMaxDays());
+		assertEquals("", settings.getApiCorsOrigins());
+
+		settings.setApiTokenIdleDays(10);
+		settings.setApiTokenMaxDays(100);
+		settings.setApiCorsOrigins("https://localhost:3000, https://addin.example.org");
+		GUIHealdanSettings saved = as(boss).save(settings);
+
+		GUIHealdanSettings loaded = as(boss).load();
+		assertEquals(10, saved.getApiTokenIdleDays());
+		assertEquals(10, loaded.getApiTokenIdleDays());
+		assertEquals(100, loaded.getApiTokenMaxDays());
+		assertEquals("https://localhost:3000, https://addin.example.org", loaded.getApiCorsOrigins());
+		assertEquals(10, HealdanSettings.get().apiTokenIdleDays());
+		assertEquals(100, HealdanSettings.get().apiTokenMaxDays());
+		assertEquals(List.of("https://localhost:3000", "https://addin.example.org"),
+				HealdanSettings.get().apiCorsOrigins());
+	}
+
+	@Test
+	public void testApiSettingsRefused() throws Exception {
+		String idle = "A device sign-in must expire after between 1 and 3650 unused days.";
+		String max = "A device sign-in must last between 1 and 3650 days.";
+		String order = "A device sign-in can't last fewer days than it may go unused.";
+
+		assertApiRefused(0, 365, "", idle);
+		assertApiRefused(3651, 3651, "", idle);
+		assertApiRefused(30, 0, "", max);
+		assertApiRefused(30, 3651, "", max);
+		assertApiRefused(10, 5, "", order);
+		assertApiRefused(30, 365, "*", origin("*"));
+		assertApiRefused(30, 365, "https://a.test/path", origin("https://a.test/path"));
+		assertApiRefused(30, 365, "https://ok.test, ftp://a.test", origin("ftp://a.test"));
+	}
+
+	private static String origin(String value) {
+		return "'%s' isn't an origin. Write it as https://host or https://host:port, with no path.".formatted(value);
+	}
+
+	private void assertApiRefused(int idle, int max, String origins, String message) throws Exception {
+		GUIHealdanSettings settings = as(boss).load();
+		settings.setApiTokenIdleDays(idle);
+		settings.setApiTokenMaxDays(max);
+		settings.setApiCorsOrigins(origins);
+
+		ServerException e = assertThrows(ServerException.class, () -> as(boss).save(settings));
+
+		assertEquals(message, e.getMessage());
+		assertEquals(30, HealdanSettings.get().apiTokenIdleDays());
+		assertEquals(365, HealdanSettings.get().apiTokenMaxDays());
+		assertTrue(HealdanSettings.get().apiCorsOrigins().isEmpty());
+	}
 }
