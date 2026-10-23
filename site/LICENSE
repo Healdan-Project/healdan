@@ -4,11 +4,14 @@ Healdan's documentation site
 The site's content, everything under site/content/, is © 2026 The Healdan
 Project and licensed under the Creative Commons Attribution 4.0 International
 licence (CC BY 4.0), whose legal code follows below. You may share and adapt it,
-including commercially, as long as you credit Healdan and link to the licence.
+including commercially, as long as you credit Healdan, link to the licence and
+say whether you made changes.
 https://creativecommons.org/licenses/by/4.0/
 
-The Hextra theme in site/_vendor/github.com/imfing/hextra/ is © its authors and
-licensed under the MIT licence in its own LICENSE file.
+The Hextra theme in site/_vendor/github.com/imfing/hextra/ is © 2023 Xin and
+licensed under the MIT licence. `hugo mod vendor` doesn't copy the theme's
+LICENSE file, so its text is kept in site/static/licenses/hextra.txt, which the
+site also publishes at /licenses/hextra.txt.
 
 Healdan's templates, styles, images and configuration in site/ are part of
 Healdan's code and licensed under the GNU Lesser General Public License,

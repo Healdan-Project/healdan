@@ -69,6 +69,7 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 - A page not written yet holds `{{< interim href="…" title="…" >}}`, which links to LogicalDOC's nearest page. It's the only place `site/content/` may link to LogicalDOC's docs.
 - The `Docs site` check (`.github/workflows/docs-site.yml`) runs `python3 -m unittest discover -s .github/scripts/tests`, a strict build (`--panicOnWarning`), `check-site-sources.py` and `check-site-links.py`. It publishes to GitHub Pages from `master` only while the repository variable `DOCS_PUBLISH` is `true`.
 - Build, test and CI facts are in this file and in the Developer Guide. A change updates both.
+- Until the app's links move to the site (PR C of `docs/superpowers/plans/2026-10-23-docs-site.md`), `docker/README.md` stays as it is too. A change to the Docker stack updates both it and the Install or Developer Guide.
 
 ## Architecture
 

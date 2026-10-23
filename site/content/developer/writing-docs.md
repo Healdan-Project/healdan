@@ -12,6 +12,9 @@ A pull request that changes something these docs describe, or adds something a m
 those pages in the same pull request. The pull request template asks. Each milestone's design spec names the pages
 it adds or changes, and its plan has tasks for them.
 
+The build, test and CI facts in this manual are also in the repository's `CLAUDE.md`, the brief Claude sessions
+read. A change to the build, the tests or CI updates both, wherever each states the fact that changed.
+
 ## Running the Site
 
 You need Hugo 0.168.0, the standard edition (`brew install hugo` on macOS). The theme is in `site/_vendor/`, so

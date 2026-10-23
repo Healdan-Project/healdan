@@ -22,8 +22,10 @@ import _scripts
 SITE = _scripts.REPO / "site"
 BASE_URL = "https://docs.healdan.com/"
 VENDORED_STATIC = SITE / "_vendor/github.com/imfing/hextra/static"
-FAVICONS = ("favicon.svg", "favicon.ico", "favicon-16x16.png", "favicon-32x32.png", "apple-touch-icon.png",
-            "android-chrome-192x192.png", "android-chrome-512x512.png", "site.webmanifest")
+# Healdan's files at the paths where Hextra ships its own, so a missing one would quietly publish Hextra's
+BRANDING = ("favicon.svg", "favicon.ico", "favicon-16x16.png", "favicon-32x32.png", "apple-touch-icon.png",
+            "android-chrome-192x192.png", "android-chrome-512x512.png", "site.webmanifest",
+            "images/logo.svg", "images/logo-dark.svg")
 MANUALS = {"Install": "/install/", "User": "/user/", "Admin": "/admin/", "Developer": "/developer/"}
 
 COPYRIGHT_1 = ("© 2026 The Healdan Project. This documentation is licensed under CC BY 4.0; "
@@ -225,15 +227,20 @@ class SiteBuild(unittest.TestCase):
                          self.links(home, "healdan-devlink"))
 
     def test_current_manual_tab_is_highlighted(self):
-        nav = {link.text: link for link in self.links(self.html("/admin/"), "hextra-nav-container")}
-        for name, path in MANUALS.items():
-            self.assertEqual(path, nav[name].href)
-            self.assertEqual(name == "Admin", "hx:font-medium" in nav[name].classes, name)
+        for page, current in (("/admin/", "Admin"), ("/user/finding-documents/finding-by-doc-number/", "User")):
+            nav = {link.text: link for link in self.links(self.html(page), "hextra-nav-container")}
+            for name, path in MANUALS.items():
+                self.assertEqual(path, nav[name].href)
+                self.assertEqual(name == current, "hx:font-medium" in nav[name].classes, f"{page}: {name}")
 
     def test_desktop_nav_shows_only_current_manual(self):
-        sidebar = self.links(self.html("/admin/"), "hextra-sidebar-container hx:max-md:hidden")
-        others = [link.href for link in sidebar if link.href.startswith(("/install/", "/user/", "/developer/"))]
-        self.assertEqual([], others)
+        for page, own in (("/admin/", "/admin/stores/"), ("/user/finding-documents/finding-by-doc-number/",
+                                                          "/user/documents/versions/")):
+            sidebar = [link.href for link in self.links(self.html(page), "hextra-sidebar-container hx:max-md:hidden")]
+            self.assertIn(own, sidebar, page)
+            manual = own.split("/")[1]
+            self.assertEqual([], [href for href in sidebar if href.startswith("/") and
+                                  not href.startswith(f"/{manual}/")], page)
 
     def test_footer_copyright_and_links(self):
         home = self.html("/")
@@ -249,7 +256,7 @@ class SiteBuild(unittest.TestCase):
     def test_no_hextra_branding(self):
         for page in self.public.rglob("*.html"):
             self.assertNotIn("Powered by Hextra", page.read_text(encoding="utf-8"), page)
-        for name in FAVICONS:
+        for name in BRANDING:
             built = (self.public / name).read_bytes()
             self.assertEqual((SITE / "static" / name).read_bytes(), built, name)
             self.assertNotEqual((VENDORED_STATIC / name).read_bytes(), built, name)
@@ -258,6 +265,17 @@ class SiteBuild(unittest.TestCase):
 
     def test_404_page_is_healdan(self):
         self.assertIn("/images/logo.svg", self.html("/404.html"))
+
+    def test_404_page_has_the_phone_menu(self):
+        # Hextra's menu script expects the sidebar; without it the phone menu button does nothing
+        self.assertIn("hextra-sidebar-container", self.html("/404.html"))
+
+    def test_hextra_licence_is_shipped(self):
+        # site/_vendor has no LICENSE (hugo mod vendor copies only mounted folders), so Healdan keeps the MIT notice
+        licence = (self.public / "licenses/hextra.txt").read_text(encoding="utf-8")
+        self.assertIn("MIT License", licence)
+        self.assertIn("Copyright (c) 2023 Xin", licence)
+        self.assertIn("licenses/hextra.txt", (SITE / "LICENSE").read_text(encoding="utf-8"))
 
     # Task 3
 

@@ -4,6 +4,8 @@
 .claude
 .superpowers
 docs
+# The docs site, with the build output and caches Hugo and its tests leave in it. docs-site.yml builds it.
+site
 **/target
 **/gwt-unitCache
 **/.settings

@@ -1,5 +1,7 @@
 {{- /* Healdan: a 404 page with the site's header, footer and guide links, instead of Hextra's bare one. */ -}}
 {{ define "main" }}
+  {{- /* Hextra's menu script needs the sidebar: without it the phone menu button does nothing. */ -}}
+  {{ partial "sidebar.html" (dict "context" . "disableSidebar" true) }}
   <main id="content" class="healdan-404">
     <h1>Page Not Found</h1>
     <p>There's no page at this address. It may have moved, or the address may be mistyped.</p>
