@@ -2,7 +2,7 @@
 
 - **Milestone:** M1.5 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-22
-- **Status:** approved by the owner on 2026-10-22. A builder check by a reviewer who hadn't seen the conversation found that `ConvertPdf` never converts (§5.6) and raised the two questions the owner answered in §4.1 and §10.
+- **Status:** built on 2026-10-22, following [`docs/superpowers/plans/2026-10-22-m1-5-office-previews.md`](../plans/2026-10-22-m1-5-office-previews.md): the server side in [Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and the image, smoke checks and docs in [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49). The owner's acceptance walkthrough (§11.2) is still to come. Approved by the owner on 2026-10-22. A builder check by a reviewer who hadn't seen the conversation found that `ConvertPdf` never converts (§5.6) and raised the two questions the owner answered in §4.1 and §10. A code review of both PRs on 2026-10-23 changed §4.1, §5.1, §5.5, §6, §7.1 and §7.2; each change is marked "changed in the code review".
 - **Inputs:**
   - the roadmap's M1.5 section;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md);
@@ -107,10 +107,12 @@ How each kind comes out:
 A preview shows the markup a document still carries, so the quick check before emailing or printing catches a draft that isn't clean.
 
 - **Tracked changes** show as redlines: insertions and deletions marked, as Word shows "All Markup". They show even when the document was saved with markup hidden.
-- **Comments** show in the margin of Word documents. In spreadsheets and presentations they show as notes the viewer can display, as far as LibreOffice allows.
+- **Comments** show as PDF notes. The viewer shows an icon at the commented text, and clicking it shows the comment. (changed in the build: this was "in the margin of Word documents". Headless LibreOffice refuses to put comments in the margin, so the owner accepted notes with the plan.) Thumbnails show at most the icon.
 - **Thumbnails** come from the same PDF, so they show the markup too.
 
-The builder checks each with a test file. If plain `soffice --convert-to` with PDF export options can't force tracked changes to show, the builder may drive LibreOffice with a small script inside the same one-process-per-conversion model (§5.1), and says so in the plan.
+Tracked changes are forced to show only for `docx`, `docm`, `dotx` and `dotm`: before converting, Healdan removes WordprocessingML's `revisionView` element from a copy's settings part. It finds the part through the package's relationships and the element by its namespace, as LibreOffice does, whatever its prefix, its encoding or the form of its tags, and replaces a settings part too large or malformed to read with an empty one. (changed in the code review: this matched `<w:revisionView .../>` in `word/settings.xml` only, so a closing tag, another prefix, UTF-16 or a renamed part still hid the deletions.) Legacy `doc`, `dot` and `rtf`, and the OpenDocument formats, follow the document's own setting. (changed in the build: this was "even when the document was saved with markup hidden", for every format. The plain `soffice --convert-to` can't force it, and a script or a UNO bridge would break the model in §5.1.)
+
+The builder checked each with a test file.
 
 ## 5. The converter
 
@@ -120,7 +122,9 @@ A Healdan `FormatConverter`, here called `OfficeConverter` in `com.logicaldoc.he
 
 - **One process per conversion.** The converter runs `soffice --headless --convert-to pdf` for each file and waits for it to finish. There's no long-running LibreOffice daemon: §3.2 shows start-up is cheap, it needs no new Java libraries, and an idle server holds no LibreOffice memory.
   - If the owner finds on-the-spot previews slow on real documents, a warm process pool (JODConverter, say) is the fallback. That's a change inside the converter, not to the rest of this design.
-- **Slots.** LibreOffice processes can't share a profile directory, so each conversion running at once uses its own profile: a *slot*. There are **2 slots** by default.
+- **Slots.** LibreOffice processes can't share a profile directory, so each conversion running at once uses its own profile: a *slot*. There are **2 slots** by default, and never fewer: one for the background worker and at least one for previews. (changed in the code review: a setting of 1 let the worker hold the only slot through a backlog.)
+  - An interactive caller waits at most 30 s for a slot, then gets "busy". Nothing is cached, so the next view retries.
+  - A slot's profile is rebuilt after a timeout.
 - **The background worker uses at most 1 slot** (§7.2), so an on-the-spot preview never waits behind the backlog.
 - **Allow-listed.** The command goes through the `allowed-commands.txt` check, and `docker/allowed-commands.txt` gets a `soffice` line. Allowing `soffice` is admin-equivalent in the same way `convert` already is, since only server code and admins choose the command lines.
 - **Timeout.** A conversion that runs longer than **120 s** is stopped, and **every** process it started is killed. `soffice` is a launcher that starts `soffice.bin`, so killing only the launcher, as `Exec.execPB` does, can leave LibreOffice running.
@@ -134,9 +138,15 @@ Each slot's profile is created from a template that `healdan-core` ships, the fi
 
 The profile template turns these off. The builder verifies each one with a test document (§11).
 
-- **Macros.** Macro security at its highest level, and macro execution disabled outright. Converting a `.docm` with an auto-run macro must not run it.
+- **Macros.** Macro security at its highest level, and macro execution disabled outright. Converting a document with an auto-run macro must not run it. The test uses an `.odt`, because a `.docm`'s VBA lives in a binary part that a script can't write.
 - **Links and remote content.** LibreOffice never updates links or fetches linked images, fonts or data when it loads a document. Converting a document that links to an HTTP URL must make no request to it.
 - **Anything interactive.** No first-start wizard, no update check, no crash reporter, no recovery dialog.
+
+**What the negative controls showed.** Task 8 ran each probe by hand against LibreOffice 26.2.6, with and without the hardening:
+
+- LibreOffice's default profile fetched a linked image twice. Healdan's profile fetched it 0 times.
+- Under `--convert-to`, neither the `WEBSERVICE` cell nor the document macro fires, even without the hardening. The cell shows `Err:540`.
+- So those two smoke checks are tripwires that guard nothing today. They're kept in case LibreOffice changes.
 
 ### 5.4 Fonts
 
@@ -153,6 +163,7 @@ Aptos, Office's default since 2023, has no free metric-compatible match that we 
 - **The converter always reports itself enabled.** If it could be disabled, CE would fall back to `NotAvailableConverter` and cache the placeholder (§3.1).
 - **It throws instead of producing a placeholder.** When LibreOffice is missing, fails, times out or produces an empty file, the converter throws. `ConvertPdf` then shows "not available" for that request only, and nothing is cached, so a later attempt can succeed.
 - **No on/off switch.** On a host without LibreOffice, every Office conversion fails as above and the preview says "not available", as it does today. (call)
+- **A timeout is remembered.** After the worker records a timeout for a version, interactive previews of that version fail fast until the worker succeeds, a new file version arrives, the file is replaced (§7.1), or the timeout is raised above the one the try hit. A given-up version stays "not available" until then. Raising the timeout is enough to retry it: when the worker starts, and whenever the timeout changes, it gives each given-up version that timed out under a shorter timeout one more try, as `docker/README.md` explains. (call, in the final review: one huge file must not take a LibreOffice slot for 2 minutes on every view, goal 5. §5.5 forbids caching a placeholder, not remembering a timeout.) (changed in the code review: retrying meant deleting the version's `hd_preview_job` row by hand, and a raised timeout didn't end the refusals.)
 
 ### 5.6 Serving the preview (call; upstream edit)
 
@@ -162,13 +173,15 @@ Aptos, Office's default since 2023, has no free metric-compatible match that we 
 - **Otherwise it refuses as it does now.** That keeps the hook generic: it names no Healdan class or format. Since the image enables no CE converter (§3.1), only Healdan's converter qualifies.
 - **CE's checks before it are unchanged:** the permissions, alias resolution, publishing and the document password.
 - **Permissions stay as they are for PDFs: Read and Download.** A user with Preview but not Download gets a thumbnail but "not available" in the viewer, exactly as for a PDF today. Changing that rule for every format is a separate decision. (call)
+- **It passes the `Version`.** An old version whose file type differs from the current one converts as its own type. The usual case is a Word draft followed by a PDF final.
+- **`getConverter` falls back to a `*-pdf` converter.** None is registered or enabled today, but an enabled catch-all would make every type convertible through the hook.
 - **Why here, not elsewhere.** A Healdan filter in front of `/convertpdf` would avoid the upstream edit but would have to copy `ConvertPdf`'s checks, which upstream rewrote on 2026-10-12 and may change again. Pointing the GUI at a Healdan servlet would be an upstream GUI edit with the same copying problem. Healdan already edits `ConvertPdf` (M1's R119), and `ConvertPdfTest` is already in CI's `-Dtest` list.
 
 ## 6. Thumbnails
 
-A Healdan `ThumbnailBuilder` (`OfficeThumbnailBuilder`) is registered for the same extensions. It gets the document's PDF conversion through `FormatConversionManager`, which uses the cached one when it exists, and hands that PDF to CE's `PdfThumbnailBuilder`. A thumbnail therefore never converts the document twice, and a thumbnail and the preview always agree.
+A Healdan `ThumbnailBuilder` (`OfficeThumbnailBuilder`) is registered for the same extensions. It hands the document's cached PDF conversion to CE's `PdfThumbnailBuilder`. A thumbnail therefore never converts the document twice, and a thumbnail and the preview always agree.
 
-When the conversion fails, the builder throws, CE logs it and caches nothing, and the grid shows the file-type icon as it does today.
+Only background work converts in the builder: the worker makes the thumbnails right after the conversion (§7.2, step 4). A thumbnail the GUI asks for before the conversion exists queues the file version (§7.1) and fails at once. CE logs it and caches nothing, and the grid shows the file-type icon until the worker is done, or for good when the conversion fails. (changed in the code review: the builder converted through `FormatConversionManager` on the request itself. CE asks for a missing thumbnail on the request that shows it and remembers no failure, so a folder of unconverted files ran LibreOffice for each thumbnail on every view, taking the slots previews need.)
 
 ## 7. Converting ahead of time (call)
 
@@ -179,19 +192,23 @@ Goal 1 needs previews ready before anyone looks, so Healdan converts each new Of
 - **A Healdan table, `hd_preview_job`,** added by a new Flyway script, `V2__preview_jobs.sql`, for MariaDB and HSQLDB. One row per document and file version waiting to be converted, with its attempt count, the time of its next try and its last error.
 - **Adding jobs.** A new `DocumentListener` (`healdanPreview`) adds a row whenever a document whose extension is in §4 gets a new file version: on create, on check-in, and on every other route that stores new file content. The builder lists those routes and tests each one.
 - **Timing.** Adding the row mustn't make the document's save fail or wait. The worker can come to a job before the document's transaction has committed, so a missing document is retried later, not dropped.
-- **Duplicates.** A second job for the same document and file version is ignored.
+- **Duplicates.** A second job for the same document and file version is ignored, except for a replaced file.
+- **A replaced file** queues the file version that was replaced, which CE records only in the event's comment; the current one when the comment names none. Its job starts over, since its failures were about the old content. (changed in the code review: this queued the document's current file version, plan call 6, so replacing an older version's file left that version unqueued, and a given-up job kept refusing the new content.)
 
 ### 7.2 The worker
 
-- **One background thread,** started after Healdan's startup (migrations and seeds) has finished, takes due jobs oldest first.
+- **One background thread,** started after Healdan's startup (migrations and seeds) has finished, takes due jobs **newest first**. (changed in the build: this was "oldest first". Call, in the final review: a backfill of thousands mustn't delay new uploads by hours, goal 1.)
 - **For each job:**
   1. Skip it if the document has been deleted, or is larger than `gui.preview.maxfilesize`, since the GUI won't ask for its preview.
   2. Delete every cached conversion of the document, for any of its versions, that is the "not available" placeholder (compare it with `/pdf/notavailable.pdf`).
   3. Convert to PDF through `FormatConversionManager.convertToPdf`, which also caches it.
   4. Make the `thumb.png` and `tile.png` thumbnails through `ThumbnailManager`.
   5. Delete the job.
-- **Failures.** A failed job is tried again after 1 minute, then 10 minutes, then 1 hour. After the fourth failure it stays in the table with its last error and isn't tried again. A new version of the document gets a new job as usual.
+- **Failures.** A failed job is tried again after 1 minute, then 10 minutes, then 1 hour. After the fourth failure it stays in the table with its last error and isn't tried again, unless its file is replaced (§7.1) or it timed out and the timeout is raised (§5.5). A new version of the document gets a new job as usual.
+- **Stopping.** A try that the worker is stopped in the middle of, when the webapp stops, counts no attempt: the job stays as it was. (changed in the code review: it counted as a failure, so a few restarts during a long conversion could give a job up.)
 - **One slot.** The worker converts one document at a time, through one of the converter's slots (§5.1).
+- **LibreOffice unavailable.** When LibreOffice can't be started, the worker pauses for 10 minutes without counting an attempt. It makes one probe and logs one WARN per pause, so nothing is lost when LibreOffice arrives.
+- **A given-up job** logs a WARN.
 
 ### 7.3 Documents already in Healdan
 
@@ -204,8 +221,9 @@ Goal 1 needs previews ready before anyone looks, so Healdan converts each new Of
 
 - **Packages.** The runtime stage's existing `apt-get install` line gets `libreoffice-writer-nogui`, `libreoffice-calc-nogui`, `libreoffice-impress-nogui`, `fonts-crosextra-carlito`, `fonts-crosextra-caladea` and `fonts-liberation`, with `--no-install-recommends` as now. That layer comes before `ARG REVISION`, so CI's build cache keeps it between commits.
 - **Allowed commands.** `docker/allowed-commands.txt` gets `soffice`, with a comment saying why.
-- **Size.** About +410 MB on disk (§3.2). The plan records the compressed size CI reports for both architectures.
-- **Home directory.** LibreOffice needs a writable home or profile path for uid 1000. The profiles live under the temp directory (§5.2); the builder checks nothing else needs writing.
+- **`tini` is PID 1,** so the `soffice.bin` processes killed after a timeout are reaped. Tomcat's JVM used to be PID 1 and never reaped them.
+- **Size.** Uncompressed, on arm64, the runtime image is 1.01 GB before M1.5 (`logicaldoc-community:local`, built without LibreOffice) and 1.43 GB after. The apt layer grew from 134 MB to 552 MB, matching the spike's +407 MB (§3.2). (changed in the build: this said "The plan records the compressed size CI reports for both architectures". CI's `Test` jobs `load` the image instead of pushing it, so they report no compressed size. It's only visible once master publishes the image.)
+- **Home directory.** LibreOffice needs a writable home or profile path for uid 1000. The profiles live under Tomcat's temp directory (§5.2). A conversion as uid 1000 also writes `$HOME/.cache/fontconfig`, `$HOME/.cache/dconf` and `$HOME/.config`, under `/opt/logicaldoc` in the container layer. That works because `HOME` belongs to uid 1000.
 - **`docker/README.md`** says Office previews need nothing configured, and how to tell from the log whether a conversion failed.
 
 ## 9. Upstream files M1.5 edits
@@ -214,7 +232,7 @@ One: the `ConvertPdf` hook (§5.6). Everything else lives in `healdan-core`, the
 
 | File | Change | Why |
 |---|---|---|
-| `logicaldoc-webapp/.../web/ConvertPdf.java` (~118–120) | a non-PDF version with a real converter is converted and its `conversion.pdf` served, instead of refused (§5.6) | the preview page only loads `/convertpdf`, and `ConvertPdf` never converts |
+| `logicaldoc-webapp/.../web/ConvertPdf.java` (~118–128) | a non-PDF version with a real converter is converted, passing the `Version`, and its `conversion.pdf` served, instead of refused (§5.6) | the preview page only loads `/convertpdf`, and `ConvertPdf` never converts |
 | `logicaldoc-webapp/src/test/.../web/ConvertPdfTest.java` | `testFileTypeIsTheVersions` keeps its refusal for a type with no converter (`.txt`); new tests cover a type with a real converter (a stand-in converter, so the test needs no LibreOffice), and that a converter failure still serves the placeholder without caching it | covers the edit; the class is already in CI's `-Dtest` list |
 
 If the builder finds another upstream edit unavoidable, it gets listed here with its reason, as M1's §13 does, and covered by a test in CI's `-Dtest` list.
@@ -234,16 +252,18 @@ M1.5 does make those server calls produce real PDFs for Office files through RPC
 In `healdan-core`, running in CI's `build` check:
 
 - **Converter:** the command line it builds; the profile template is applied to new slots; a timeout kills the whole process tree (use a stand-in script that starts a child and hangs); it throws, rather than writing a placeholder, when the command is missing or fails.
-- **Thumbnail builder:** it uses the cached conversion and doesn't convert twice.
+- **Thumbnail builder:** it uses the cached conversion and doesn't convert twice; outside background work it queues the version instead of converting.
 - **Queue:** each file-changing route adds a job; duplicates are ignored; the retry schedule; giving up after four failures; deleted and over-size documents are skipped; a cached placeholder is deleted before converting.
 - **Seed:** it queues every current Office file version, and nothing else.
 - **Real LibreOffice:** tests that need `soffice` are skipped when it isn't installed. CI's `build` runner may not have it; the Docker smoke test covers the real thing.
 
 In the Docker image:
 
-- **Smoke test** (`docker/smoke-test.sh`), on both architectures: upload a small committed `.docx` fixture into the smoke matter; poll until `/convertpdf` returns a PDF that isn't the placeholder and `/thumbnail` returns an image, with a time limit. State in the PR how many seconds this adds to the `Test` jobs.
-- **Hardening:** the `.docm` macro test and the remote-link test from §5.3 run against the image's LibreOffice, in the smoke test or a `docker/tests/test-*.sh` script, whichever costs CI less.
-- **Markup:** a `.docx` with a tracked insertion, a tracked deletion and a comment, saved with markup hidden, converts to a PDF whose text includes the deleted words and the comment (`pdftotext` is in the image).
+- **Smoke test** (`docker/smoke-test.sh`, step 5b), on both architectures. `docker/tests/test-previews.sh` generates its fixtures at run time and uploads them into the smoke matter. It waits, with a time limit, for `hd_preview_job` to drain, and checks that each PDF is in the store before any preview is asked for. Then it checks the text of each file's `/convertpdf` PDF for its token, and that the thumbnails are PNGs. State in the PR how many seconds this adds to the `Test` jobs. (changed in the build: this was "upload a small committed `.docx` fixture" and "poll until `/convertpdf` returns a PDF that isn't the placeholder". Asking `/convertpdf` first would convert on the spot, so it couldn't show that the conversion ran ahead of time.)
+- **Hardening:** the `.odt` macro test and the remote-link test from §5.3 run against the image's LibreOffice, in the smoke test or a `docker/tests/test-*.sh` script, whichever costs CI less.
+- **Zombies:** an orphan started inside the container is reaped, not left in the Z state (the reason `tini` is PID 1).
+- **Store:** each PDF is in the store before any preview is asked for.
+- **Markup:** a `.docx` with a tracked insertion, a tracked deletion and a comment, saved with markup hidden, converts to a PDF whose text includes the inserted and the deleted words (`pdftotext` is in the image). The comment is a PDF note, not page text (§4.1), so the test finds it in the PDF's bytes, as UTF-16BE hex or a literal string, not through `pdftotext`. (changed in the build: this said the comment is in the PDF's text.)
 
 ### 11.2 Manual acceptance (owner)
 
@@ -275,5 +295,5 @@ On a stack upgraded from M1, with a handful of the owner's own Word, Excel and P
 - **Metric-compatible fonts;** Aptos documents may reflow slightly. (call)
 - **Macros never run; nothing is fetched.** (call)
 - **No settings screen** and no on/off switch. (call)
-- **Previews show markup:** tracked changes as redlines, comments in the margin. (owner, after the builder check)
+- **Previews show markup:** tracked changes as redlines, comments as PDF notes. (owner, after the builder check)
 - **CE's PDF buttons stay hidden.** (owner, after the builder check)

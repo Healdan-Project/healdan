@@ -176,6 +176,12 @@ echo "== 5a. full text in Office and email files (spec §9)"
 # Uploads a .docx and an .eml into the Smoke Matter and searches for a token in each; their output carries its own PASS/FAIL lines
 check "full-text tokens found in the .docx and the .eml" env BASE="$BASE" FOLDER_ID="$doc_folder" bash docker/tests/test-fulltext.sh
 
+echo "== 5b. Office previews (M1.5 spec §11.1)"
+# Uploads Office files into the Smoke Matter and checks their PDFs, thumbnails and the conversion's hardening; its
+# output carries its own PASS/FAIL lines
+check "Office previews, markup and hardening" env BASE="$BASE" FOLDER_ID="$doc_folder" DOC_PATH="$doc_path" SID="$sid" \
+  APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" bash docker/tests/test-previews.sh
+
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
