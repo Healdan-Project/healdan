@@ -2,13 +2,17 @@ name: Build LogicalDOC (Maven)
 
 # Compiles every module and runs the Healdan tests. It leaves the GWT compile and the WAR to the Docker image CI
 # (docker-image.yml), which builds both on every pull request and whose Test checks master also requires.
+#
+# The checks job runs the quick checks and plans the test shards. Each shard is a job that compiles the modules and runs
+# its share of the tests, side by side with the others. The build job, the check master's ruleset requires, passes when
+# they all did.
 
 on:
   push:
     branches: [ master, main ]
     # Docs-only pushes don't change any code. The docs site (site/) has its own workflow, docs-site.yml.
     paths-ignore: [ 'docs/**', 'site/**', '**/*.md' ]
-  # No paths filter: master's ruleset requires build, so a docs-only pull request runs it with the build steps skipped.
+  # No paths filter: master's ruleset requires build, so a docs-only pull request runs it with the tests skipped.
   pull_request:
     branches: [ master, main ]
 
@@ -19,11 +23,12 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  build:
+  checks:
     runs-on: ubuntu-latest
-    env:
-      # Whether this job saves the Maven repository cache (see "Maven repository cache").
-      SAVE_M2: ${{ github.ref == 'refs/heads/master' }}
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+      jdk: ${{ steps.jdk.outputs.version }}
+      shards: ${{ steps.plan.outputs.shards }}
 
     steps:
       - name: Checkout source
@@ -57,19 +62,76 @@ jobs:
           fi
           echo "version=$build" >> "$GITHUB_OUTPUT"
 
-      - name: Set up JDK
+      # How long each test class took in the newest run that saved its times (the test-times job): this pull request's
+      # own, or else master's. The key never matches, so the restore key finds the newest.
+      - name: Restore test times
         if: steps.changes.outputs.code == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: test-times.txt
+          key: test-times-${{ github.run_id }}
+          restore-keys: test-times-
+
+      # Every test class in a healdan-* module, plus these upstream tests, split into shards of about five minutes.
+      # A class without a recorded time is estimated from its @Test count.
+      - name: Plan the test shards
+        id: plan
+        env:
+          # The upstream tests that cover Healdan's edits to upstream code, one per line: a class, or Class#method.
+          UPSTREAM_TESTS: |
+            HealdanHooksTest
+            DocumentAclEqualityTest
+            HibernateFolderDAOTest#testMerge
+            StatsCollectorTest
+            FolderServiceImplTest
+            SecurityServiceImplTest#testDeleteGroupRefusedKeepsTheMembers
+            DocumentServiceImplTest
+            SearchServiceImplTest
+            DocumentOnlyGrantTest
+            BookmarksDataServletTest
+            RpcPermissionTest
+            RpcPermissionGapsTest
+            SoapPermissionGapsTest
+            DocumentsDataServletTest
+            ConvertPdfTest
+            HealdanDocNumberSortTest
+            InitializeReadOnlyTest
+            EventEndpointTest
+            EventEndpointPermissionTest
+        run: python3 .github/scripts/test-shards.py plan --times test-times.txt --minutes 5 --max-shards 8 "$UPSTREAM_TESTS"
+
+  tests:
+    name: Tests (${{ matrix.shard }} of ${{ matrix.of }})
+    needs: checks
+    if: needs.checks.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      # A failing shard leaves the others running, so one run shows every failing test.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.checks.outputs.shards) }}
+    env:
+      # Whether this job saves the Maven repository cache (see "Maven repository cache"): one shard, and only on master.
+      SAVE_M2: ${{ github.ref == 'refs/heads/master' && matrix.saves_m2 }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: ${{ steps.jdk.outputs.version }}
+          java-version: ${{ needs.checks.outputs.jdk }}
 
       # setup-java's own Maven cache had no fallback, so a pull request that edited a POM downloaded every dependency
       # again, and failed whenever logicaldoc.sourceforge.net refused one of them. These restore the newest copy and
-      # download only what the POMs add. As in docker-image.yml, only master saves. The second restore key finds the
-      # copies setup-java saved: the cache version hashes the path as written, so it stays absolute, like setup-java's.
+      # download only what the POMs add. As in docker-image.yml, only master saves, from the shard the plan picks
+      # (the first that tests logicaldoc-webapp, so the cache holds its dependencies too). The second restore key finds
+      # the copies setup-java saved: the cache version hashes the path as written, so it stays absolute, like
+      # setup-java's.
       - name: Maven repository cache
-        if: steps.changes.outputs.code == 'true' && env.SAVE_M2 == 'true'
+        if: env.SAVE_M2 == 'true'
         uses: actions/cache@v6
         with:
           path: /home/runner/.m2/repository
@@ -79,7 +141,7 @@ jobs:
             setup-java-Linux-x64-maven-
 
       - name: Maven repository cache (restore only)
-        if: steps.changes.outputs.code == 'true' && env.SAVE_M2 != 'true'
+        if: env.SAVE_M2 != 'true'
         uses: actions/cache/restore@v6
         with:
           path: /home/runner/.m2/repository
@@ -88,57 +150,81 @@ jobs:
             m2-
             setup-java-Linux-x64-maven-
 
-      - name: Configure Maven settings (LogicalDOC & Terracotta repos)
-        if: steps.changes.outputs.code == 'true'
+      # The LogicalDOC and Terracotta repositories, which have dependencies Maven Central doesn't. The Docker build
+      # uses the same file.
+      - name: Configure Maven settings
         run: |
           mkdir -p ~/.m2
-          cat > ~/.m2/settings.xml << 'EOF'
-          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
-                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                    xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
-            <profiles>
-              <profile>
-                <id>with-extra-repos</id>
-                <repositories>
-                  <!-- Maven Central -->
-                  <repository>
-                    <id>central</id>
-                    <url>https://repo1.maven.org/maven2</url>
-                  </repository>
+          cp docker/maven-settings.xml ~/.m2/settings.xml
 
-                  <!-- LogicalDOC repository (hosts the *-jakarta Jackrabbit artifacts, etc.) -->
-                  <repository>
-                    <id>logicaldoc</id>
-                    <url>https://logicaldoc.sourceforge.net/maven/</url>
-                  </repository>
-
-                  <!-- Terracotta repo (for org.terracotta.internal:statistics, etc.) -->
-                  <repository>
-                    <id>terracotta</id>
-                    <url>https://repo.terracotta.org/maven2</url>
-                  </repository>
-                </repositories>
-              </profile>
-            </profiles>
-            <activeProfiles>
-              <activeProfile>with-extra-repos</activeProfile>
-            </activeProfiles>
-          </settings>
-          EOF
       # Every module but the WAR, and the GUI's Java without its GWT compile (healdan-core needs the GUI's classes).
       # The Docker image CI runs both, and they're most of a full build's time. The antrun skip goes with the GWT one:
       # the GUI's package step edits files the GWT compile writes, and the other modules' antrun steps only finish
-      # the plugin zips the WAR unpacks.
+      # the plugin zips the WAR unpacks. The tests need neither the javadoc jars nor the plugin zips, which the Docker
+      # image CI also builds.
       - name: Maven install (all modules but the WAR, without the GWT compile)
-        if: steps.changes.outputs.code == 'true'
-        run: mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -pl '!logicaldoc-webapp' install
+        run: >-
+          mvn -B -ntp -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dmaven.javadoc.skip=true
+          -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
 
-      - name: Test Healdan
-        if: steps.changes.outputs.code == 'true'
+      # Each module gets the whole -Dtest list and runs the classes it has. -fae runs every module's tests even when
+      # one module's fail.
+      - name: Test
+        env:
+          MODULES: ${{ matrix.modules }}
+          TESTS: ${{ matrix.tests }}
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp -pl healdan-core test
+          mvn -B -ntp -fae -pl "$MODULES" test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
 
-      - name: Test Healdan hooks in upstream modules
-        if: steps.changes.outputs.code == 'true'
-        run: mvn -B -ntp -pl logicaldoc-core,logicaldoc-webservice,logicaldoc-webapp test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest='HealdanHooksTest,DocumentAclEqualityTest,HibernateFolderDAOTest#testMerge,StatsCollectorTest,FolderServiceImplTest,SecurityServiceImplTest#testDeleteGroupRefusedKeepsTheMembers,DocumentServiceImplTest,SearchServiceImplTest,DocumentOnlyGrantTest,BookmarksDataServletTest,RpcPermissionTest,RpcPermissionGapsTest,SoapPermissionGapsTest,DocumentsDataServletTest,ConvertPdfTest,HealdanDocNumberSortTest,InitializeReadOnlyTest,EventEndpointTest,EventEndpointPermissionTest'
+      - name: Record test times
+        run: python3 .github/scripts/test-shards.py times ./*/target/surefire-reports > test-times-${{ matrix.shard }}.txt
+
+      - name: Upload test times
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-times-${{ matrix.shard }}
+          path: test-times-${{ matrix.shard }}.txt
+          retention-days: 1
+
+  # Saves the times every shard recorded, for the next run's plan. Skipped when a shard failed. It isn't part of build.
+  test-times:
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download test times
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test-times-*
+          merge-multiple: true
+          path: shards
+
+      - name: Merge test times
+        run: cat shards/*.txt > test-times.txt
+
+      - name: Save test times
+        uses: actions/cache/save@v6
+        with:
+          path: test-times.txt
+          key: test-times-${{ github.run_id }}-${{ github.run_attempt }}
+
+  # The check master's ruleset requires. It passes when the checks and every shard passed, or when a docs-only pull
+  # request skipped the shards. It runs even when the run is cancelled, and then fails, so a cancelled run can't count
+  # as a pass.
+  build:
+    needs: [ checks, tests ]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the jobs' results
+        env:
+          CHECKS: ${{ needs.checks.result }}
+          TESTS: ${{ needs.tests.result }}
+          CODE: ${{ needs.checks.outputs.code }}
+        run: |
+          echo "checks: $CHECKS, tests: $TESTS, code changed: $CODE"
+          if [ "$CHECKS" = success ] && { [ "$TESTS" = success ] || { [ "$TESTS" = skipped ] && [ "$CODE" = false ]; }; }; then
+            exit 0
+          fi
+          echo "::error::The checks or a test shard didn't pass"
+          exit 1
