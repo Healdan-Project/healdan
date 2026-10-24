@@ -31,6 +31,15 @@ public class GUIHealdanSettings implements Serializable {
 	 */
 	private Long nextDocNumber;
 
+	/** Days a device sign-in may go unused before it expires */
+	private int apiTokenIdleDays;
+
+	/** Days a device sign-in lasts at most */
+	private int apiTokenMaxDays;
+
+	/** The origins the API allows across origins, comma-separated; empty for none */
+	private String apiCorsOrigins = "";
+
 	public String getMatterLabel() {
 		return matterLabel;
 	}
@@ -85,5 +94,29 @@ public class GUIHealdanSettings implements Serializable {
 
 	public void setNextDocNumber(Long nextDocNumber) {
 		this.nextDocNumber = nextDocNumber;
+	}
+
+	public int getApiTokenIdleDays() {
+		return apiTokenIdleDays;
+	}
+
+	public void setApiTokenIdleDays(int apiTokenIdleDays) {
+		this.apiTokenIdleDays = apiTokenIdleDays;
+	}
+
+	public int getApiTokenMaxDays() {
+		return apiTokenMaxDays;
+	}
+
+	public void setApiTokenMaxDays(int apiTokenMaxDays) {
+		this.apiTokenMaxDays = apiTokenMaxDays;
+	}
+
+	public String getApiCorsOrigins() {
+		return apiCorsOrigins;
+	}
+
+	public void setApiCorsOrigins(String apiCorsOrigins) {
+		this.apiCorsOrigins = apiCorsOrigins;
 	}
 }

@@ -46,6 +46,12 @@ public class HealdanSettingsPanel extends AdminPanel {
 
 	private static final String NEXT = "nextdocnumber";
 
+	private static final String API_IDLE = "apiidledays";
+
+	private static final String API_MAX = "apimaxdays";
+
+	private static final String API_ORIGINS = "apiorigins";
+
 	private static final String ID = "id";
 
 	private static final String NUMBER = "number";
@@ -120,7 +126,23 @@ public class HealdanSettingsPanel extends AdminPanel {
 		next.setWidth(120);
 		next.setHint("Can only be raised. Lowest allowed: " + settings.getNextDocNumber());
 
-		form.setItems(label, plural, numbering, docClass, recent, next);
+		SpinnerItem apiIdle = ItemFactory.newSpinnerItem(API_IDLE, "Device sign-in expires after (unused days)",
+				settings.getApiTokenIdleDays(), 1, 3650);
+		apiIdle.setHint("days");
+		apiIdle.setRequired(true);
+
+		SpinnerItem apiMax = ItemFactory.newSpinnerItem(API_MAX, "Device sign-in lasts at most (days)",
+				settings.getApiTokenMaxDays(), 1, 3650);
+		apiMax.setHint("days");
+		apiMax.setRequired(true);
+
+		TextItem apiOrigins = ItemFactory.newTextItem(API_ORIGINS, "API origins allowed (CORS)",
+				settings.getApiCorsOrigins());
+		apiOrigins.setWidth(340);
+		apiOrigins.setHint(
+				"Comma-separated, e.g. https://localhost:3000. Leave empty unless an add-in is served from another address.");
+
+		form.setItems(label, plural, numbering, docClass, recent, next, apiIdle, apiMax, apiOrigins);
 
 		Label clientsTitle = new Label("<b>Clients</b>");
 		clientsTitle.setHeight(20);
@@ -204,6 +226,9 @@ public class HealdanSettingsPanel extends AdminPanel {
 		settings.setNumberingMode(form.getValueAsString(NUMBERING));
 		settings.setDefaultClass(form.getValueAsString(CLASS));
 		settings.setRecentMattersDays(Integer.parseInt(form.getValueAsString(RECENT)));
+		settings.setApiTokenIdleDays(Integer.parseInt(form.getValueAsString(API_IDLE)));
+		settings.setApiTokenMaxDays(Integer.parseInt(form.getValueAsString(API_MAX)));
+		settings.setApiCorsOrigins(form.getValueAsString(API_ORIGINS));
 
 		Long next;
 		try {
@@ -237,6 +262,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 				HealdanLabels.set(saved.getMatterLabel(), saved.getMatterLabelPlural());
 				form.getItem(NEXT).setValue(saved.getNextDocNumber());
 				form.getItem(NEXT).setHint("Can only be raised. Lowest allowed: " + saved.getNextDocNumber());
+				form.getItem(API_ORIGINS).setValue(saved.getApiCorsOrigins());
 				form.getItem(RECENT).setTitle("Recent " + saved.getMatterLabelPlural() + " window");
 				form.markForRedraw();
 				GuiLog.info(I18N.message("settingssaved"), null);

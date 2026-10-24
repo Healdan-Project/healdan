@@ -111,6 +111,7 @@
  
  
     <security:http pattern="/services/rest/auth/**" security="none" />
+    <security:http pattern="/api/**" security="none" />
     <security:http pattern="/services/rest/**" use-expressions="true"
         create-session="never" disable-url-rewriting="true" auto-config="false"
         authentication-manager-ref="authenticationManager"

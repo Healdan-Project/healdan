@@ -107,6 +107,18 @@
 		<parameter id="class" value="com.logicaldoc.healdan.security.EveryoneUserListener" />
 	</extension>
 
+	<!-- Device tokens sign in as API keys (spec section 5) -->
+	<extension plugin-id="logicaldoc-core" point-id="Authentication" id="healdanTokenAuthentication">
+		<parameter id="authenticatorId" value="healdanTokenAuthenticator" />
+		<parameter id="position" value="105" />
+	</extension>
+
+	<!-- A password change or a disabled user revokes device tokens (spec section 5) -->
+	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanTokens">
+		<parameter id="position" value="110" />
+		<parameter id="class" value="com.logicaldoc.healdan.token.TokenUserListener" />
+	</extension>
+
 	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanRules">
 		<parameter id="position" value="100" />
 		<parameter id="class" value="com.logicaldoc.healdan.rules.RulesDocumentListener" />

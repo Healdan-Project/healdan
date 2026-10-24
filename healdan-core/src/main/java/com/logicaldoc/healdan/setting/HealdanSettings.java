@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.setting;
 
+import java.util.Arrays;
 import java.util.List;
 
 import javax.sql.DataSource;
@@ -35,6 +36,16 @@ public class HealdanSettings {
 	public static final String CLASS_DEFAULT = "class.default";
 
 	public static final String RECENT_MATTERS_DAYS = "recentmatters.days";
+
+	public static final String API_TOKEN_IDLE_DAYS = "api.token.idledays";
+
+	public static final String API_TOKEN_MAX_DAYS = "api.token.maxdays";
+
+	public static final String API_CORS_ORIGINS = "api.cors.origins";
+
+	public static final int DEFAULT_API_TOKEN_IDLE_DAYS = 30;
+
+	public static final int DEFAULT_API_TOKEN_MAX_DAYS = 365;
 
 	public static final String DEFAULT_MATTER_LABEL = "Matter";
 
@@ -150,6 +161,32 @@ public class HealdanSettings {
 	public int recentMattersDays() {
 		Long days = longValue(RECENT_MATTERS_DAYS);
 		return days != null ? days.intValue() : DEFAULT_RECENT_MATTERS_DAYS;
+	}
+
+	/**
+	 * @return how many days a device token may go unused, 30 by default
+	 */
+	public int apiTokenIdleDays() {
+		Long days = longValue(API_TOKEN_IDLE_DAYS);
+		return days != null ? days.intValue() : DEFAULT_API_TOKEN_IDLE_DAYS;
+	}
+
+	/**
+	 * @return how many days a device token lives, 365 by default
+	 */
+	public int apiTokenMaxDays() {
+		Long days = longValue(API_TOKEN_MAX_DAYS);
+		return days != null ? days.intValue() : DEFAULT_API_TOKEN_MAX_DAYS;
+	}
+
+	/**
+	 * @return the origins the API allows across origins, empty by default
+	 */
+	public List<String> apiCorsOrigins() {
+		String value = get(API_CORS_ORIGINS);
+		if (StringUtils.isBlank(value))
+			return List.of();
+		return Arrays.stream(value.split(",")).map(String::trim).filter(o -> !o.isEmpty()).toList();
 	}
 
 	private String stringValue(String key, String defaultValue) {

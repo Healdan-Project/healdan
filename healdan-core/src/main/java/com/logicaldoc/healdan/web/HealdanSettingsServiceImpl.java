@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.web;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 
@@ -24,6 +25,7 @@ import com.logicaldoc.healdan.matter.MatterNumbering;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.token.ApiTokens;
 import com.logicaldoc.healdan.util.BasicPlane;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -48,6 +50,12 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 	 * counter's overflow and the 2^53 a browser's number keeps exactly
 	 */
 	static final long MAX_NEXT_DOC_NUMBER = 999_999_999_999L;
+
+	/** The longest device sign-in lifetime, in days: ten years */
+	static final int MAX_API_DAYS = 3650;
+
+	/** An origin the API may be called from: scheme, host and optional port, no path */
+	private static final Pattern ORIGIN = Pattern.compile("^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?$");
 
 	@Override
 	public GUIHealdanSettings load() throws ServerException {
@@ -129,6 +137,9 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		gui.setClasses(new ArrayList<>(ProfileSchema.get().classOptions()));
 		gui.setRecentMattersDays(settings.recentMattersDays());
 		gui.setNextDocNumber(DocNumberCounter.get().peekNext());
+		gui.setApiTokenIdleDays(settings.apiTokenIdleDays());
+		gui.setApiTokenMaxDays(settings.apiTokenMaxDays());
+		gui.setApiCorsOrigins(StringUtils.defaultString(settings.get(HealdanSettings.API_CORS_ORIGINS)));
 		return gui;
 	}
 
@@ -142,7 +153,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 
 	/** The settings to save, each one checked */
 	private record Values(String label, String plural, NumberingMode mode, String docClass, int recentDays,
-			Long nextDocNumber) {
+			Long nextDocNumber, int apiIdleDays, int apiMaxDays, String apiOrigins) {
 	}
 
 	/*
@@ -176,7 +187,19 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		if (next != null && next > MAX_NEXT_DOC_NUMBER)
 			throw new HealdanRuleException("The next doc # can't be higher than %d.".formatted(MAX_NEXT_DOC_NUMBER));
 
-		return new Values(label, plural, mode, docClass, days, next);
+		int idleDays = settings.getApiTokenIdleDays();
+		if (idleDays < 1 || idleDays > MAX_API_DAYS)
+			throw new HealdanRuleException(
+					"A device sign-in must expire after between 1 and %d unused days.".formatted(MAX_API_DAYS));
+		int maxDays = settings.getApiTokenMaxDays();
+		if (maxDays < 1 || maxDays > MAX_API_DAYS)
+			throw new HealdanRuleException(
+					"A device sign-in must last between 1 and %d days.".formatted(MAX_API_DAYS));
+		if (maxDays < idleDays)
+			throw new HealdanRuleException("A device sign-in can't last fewer days than it may go unused.");
+		String origins = origins(settings.getApiCorsOrigins());
+
+		return new Values(label, plural, mode, docClass, days, next, idleDays, maxDays, origins);
 	}
 
 	private static String label(String value, String which) throws HealdanRuleException {
@@ -191,6 +214,22 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 			throw new HealdanRuleException(
 					"The %s label cannot contain emoji or other characters the database can't store.".formatted(which));
 		return label;
+	}
+
+	/* The origins as entered, trimmed and joined by ", ". Each one is checked. */
+	private static String origins(String value) throws HealdanRuleException {
+		List<String> origins = new ArrayList<>();
+		for (String entry : StringUtils.split(StringUtils.defaultString(value), ',')) {
+			String origin = StringUtils.strip(entry);
+			if (origin.isEmpty())
+				continue;
+			if (!ORIGIN.matcher(origin).matches())
+				throw new HealdanRuleException(
+						"'%s' isn't an origin. Write it as https://host or https://host:port, with no path."
+								.formatted(origin));
+			origins.add(origin);
+		}
+		return String.join(", ", origins);
 	}
 
 	private static NumberingMode mode(String value) throws HealdanRuleException {
@@ -211,6 +250,11 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		MatterNumbering.get().setMode(values.mode());
 		settings.set(HealdanSettings.CLASS_DEFAULT, values.docClass());
 		settings.set(HealdanSettings.RECENT_MATTERS_DAYS, Integer.toString(values.recentDays()));
+		settings.set(HealdanSettings.API_TOKEN_IDLE_DAYS, Integer.toString(values.apiIdleDays()));
+		settings.set(HealdanSettings.API_TOKEN_MAX_DAYS, Integer.toString(values.apiMaxDays()));
+		// A lower maximum applies to the device sign-ins already made too
+		ApiTokens.get().capLifetime(values.apiMaxDays());
+		settings.set(HealdanSettings.API_CORS_ORIGINS, values.apiOrigins());
 		if (values.nextDocNumber() != null && values.nextDocNumber() > DocNumberCounter.get().peekNext())
 			DocNumberCounter.get().raiseNext(values.nextDocNumber());
 	}
