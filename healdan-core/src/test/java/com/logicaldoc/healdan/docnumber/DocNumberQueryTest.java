@@ -29,6 +29,19 @@ public class DocNumberQueryTest {
 	}
 
 	@Test
+	public void testSpaceBeforeV() {
+		assertParses("#1234 v2.1", 1234, 2, 1);
+		assertParses("#1234  V2", 1234, 2, null);
+		assertParses("# 1234 v2.1 ", 1234, 2, 1);
+	}
+
+	@Test
+	public void testSpaceBeforeDotStillRefused() {
+		assertFalse(DocNumberQuery.looksLikeNumber("#1234 .2"));
+		assertEquals(Optional.empty(), DocNumberQuery.parse("#1234 .2"));
+	}
+
+	@Test
 	public void testOverflowLooksLikeANumberButDoesNotParse() {
 		assertTrue(DocNumberQuery.looksLikeNumber("#99999999999999999999"));
 		assertEquals(Optional.empty(), DocNumberQuery.parse("#99999999999999999999"));
