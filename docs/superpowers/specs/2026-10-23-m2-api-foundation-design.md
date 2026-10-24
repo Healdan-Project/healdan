@@ -301,7 +301,7 @@ All paths are under `/api/v1`. "Token" means the request needs a valid bearer to
 |---|---|
 | `GET /documents/{docNumber}` | A document (below). |
 | `GET /documents/{docNumber}/content` | The file. `?version=2.1` returns that version's file. `Content-Disposition` carries the file name. |
-| `GET /documents/{docNumber}/versions` | The timeline, newest first: `version`, `fileVersion`, `kind` (`version` or `snapshot`), `date`, `user { id, name }`, `comment`, `event`. |
+| `GET /documents/{docNumber}/versions` | The timeline, newest first: `version`, `fileVersion`, `kind` (`version` or `snapshot`), `date`, `by { id, name }`, `comment`, `event`. (changed in the build: `by`, as in `hold`, not `user`.) |
 | `GET /documents/recent` | Recent documents: the documents the user filed, saved, checked out, checked in or opened (downloaded) within `recentmatters.days`, newest first, at most 50. |
 | `GET /me/checkouts` | The documents the user has checked out, newest first. |
 
@@ -330,7 +330,7 @@ A document is:
 - `version` is CE's version, which moves on property edits, moves and renames too. `fileVersion` is the version the file content was last saved as, which is what the Versions column and the M3 footer show (M1 spec §6.4).
 - A save's new number counts from `version`, not `fileVersion` (§6.6). In the timeline, a row whose `fileVersion` differs from its `version` is a change of properties, a move or a rename (its `event` says which), which carries the file of `fileVersion`. `kind` follows `version`, so such a row is a `snapshot` that isn't a save: a list of older saves takes the rows whose `fileVersion` is their `version`. (the final review: the contract now says so, for M3's footer and its "Open older version".)
 - `reference` is the footer form without the `#`: doc #, then `fileVersion`.
-- `hold` is `null` when the document is free. Otherwise its `kind` is `checkout` or `lock` (§3.1), with who holds it and since when. M3's "others get a read-only copy and see who has it" reads it.
+- `hold` is `null` when the document is free. Otherwise its `kind` is `checkout` or `lock` (§3.1), with who holds it and since when. M3's "others get a read-only copy and see who has it" reads it. (the final review: `since` is the latest check-out or lock event, so a save with `keepCheckedOut`, which checks the document in and out again, moves it, and `/me/checkouts` is ordered by it. The contract says so. A "checked out since" label in M3 would show the last save.)
 - `canEdit` says whether the user may check it out and save to it.
 
 ### 6.5 Filing a new document

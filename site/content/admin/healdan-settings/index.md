@@ -71,10 +71,20 @@ above in full.
 
 ### Changing the Limits
 
-The throttle has no screen in Healdan. Its settings are in the configuration volume's `context.properties`. Stop
-the app first (`docker compose stop app`), change them, then start it again (`docker compose start app`). While the
-app runs, a settings screen that saves rewrites the whole file from what the app read when it started, and your
-change would be lost.
+The throttle has no screen in Healdan. Its settings are in the configuration volume's `context.properties`. While
+the app runs, a settings screen that saves rewrites the whole file from what the app read when it started, and your
+change would be lost. So stop the app first, and start it again afterwards. From the folder with Healdan's
+`compose.yaml`:
+
+```bash
+docker compose stop app
+docker run --rm -it -v logicaldoc_logicaldoc-conf:/conf busybox vi /conf/context.properties
+docker compose start app
+```
+
+In `vi`, find a setting with `/` and its name, press `i` to edit, then `Esc` and `:wq` to save and quit. The app
+writes each setting as `name=value`. [Configuration](../../install/configuration/#settings-without-a-screen) says
+more about editing the file.
 
 | Setting | Healdan's value | What it does |
 |---|---|---|

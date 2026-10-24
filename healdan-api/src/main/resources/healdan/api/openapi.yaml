@@ -154,7 +154,8 @@ paths:
       summary: Documents you've checked out
       description: |
         The documents the caller has checked out and can still read, the
-        latest check-out first (`hold.since`). In one page.
+        latest check-out first (`hold.since`, which a save that keeps the
+        document checked out moves on). In one page.
       tags: [Users]
       responses:
         '200':
@@ -1318,6 +1319,11 @@ components:
         since:
           type: [string, 'null']
           format: date-time
+          description: |
+            The latest check-out or lock event. A save with
+            `keepCheckedOut: true` checks the document in and out again, so
+            it moves `since` to that save. Null when the server's data
+            doesn't say.
     DocumentView:
       type: object
       additionalProperties: false
