@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.sql.DataSource;
 
@@ -12,6 +13,7 @@ import org.springframework.mock.web.MockServletConfig;
 import org.springframework.mock.web.MockServletContext;
 
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.plugin.PluginException;
@@ -119,6 +121,20 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 		if (response.status() != 201)
 			throw new AssertionError("Couldn't sign " + username + " in: " + response);
 		return response.json().path("token").textValue();
+	}
+
+	/**
+	 * Waits for CE's background version saves, which every new document and
+	 * check-in starts.
+	 */
+	protected static void awaitAsyncWork() throws Exception {
+		ThreadPoolExecutor pool = ThreadPools.get().getPool("VersionSave");
+		long deadline = System.currentTimeMillis() + 20000L;
+		while (!pool.getQueue().isEmpty() || pool.getActiveCount() > 0) {
+			if (System.currentTimeMillis() > deadline)
+				throw new AssertionError("Background version saves didn't finish");
+			Thread.sleep(50L);
+		}
 	}
 
 	/**
