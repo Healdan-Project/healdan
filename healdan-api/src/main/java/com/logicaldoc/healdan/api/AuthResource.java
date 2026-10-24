@@ -54,6 +54,9 @@ public class AuthResource {
 
 	static final String PASSWORD_EXPIRED = "Your password has expired. Change it in Healdan's web page, then sign in again.";
 
+	/** The field of a sign-in's device id, in a validation problem */
+	private static final String DEVICE_ID = "device.id";
+
 	/** What separates the two users of an impersonation in CE's sign-in */
 	private static final String IMPERSONATION = ">";
 
@@ -63,7 +66,7 @@ public class AuthResource {
 	 * Signs in with a password through CE's whole sign-in chain, throttle
 	 * included, and issues a device token bound to the session it opens.
 	 *
-	 * @param body the credentials and the device's name
+	 * @param body the credentials, the device's name and its id
 	 * @param request the HTTP request, for the client's address
 	 * @return {@code 201} with the token
 	 */
@@ -71,7 +74,7 @@ public class AuthResource {
 	@Public
 	@Consumes(MediaType.APPLICATION_JSON)
 	public Response signIn(SignIn body, @jakarta.ws.rs.core.Context HttpServletRequest request) {
-		SignIn credentials = body != null ? body : new SignIn(null, null, null);
+		SignIn credentials = body != null ? body : new SignIn(null, null, null, null);
 		List<FieldError> errors = new ArrayList<>();
 		if (StringUtils.isBlank(credentials.username()))
 			errors.add(new FieldError("username", "required", "Username is required."));
@@ -86,6 +89,7 @@ public class AuthResource {
 			errors.add(new FieldError("name", ApiTokens.nameTooLong(credentials.name()) ? Uploads.TOO_LONG : "invalid",
 					e.getMessage()));
 		}
+		String device = device(credentials, errors);
 		if (!errors.isEmpty())
 			throw ApiProblem.validation(errors);
 
@@ -107,7 +111,7 @@ public class AuthResource {
 		User user = session.getUser();
 		ApiTokens.Issued issued;
 		try {
-			issued = ApiTokens.get().issue(user, name, session.getSid());
+			issued = ApiTokens.get().issue(user, name, device, session.getSid());
 		} catch (PersistenceException e) {
 			sessions.kill(session.getSid());
 			throw new IllegalStateException("Can't issue a device token", e);
@@ -161,6 +165,30 @@ public class AuthResource {
 				.findFirst().orElseThrow(() -> ApiProblem.notFound("You have no device token with this id."));
 		tokens.revoke(token);
 		return Response.noContent().build();
+	}
+
+	/**
+	 * @param credentials the sign-in's body
+	 * @param errors where to add what's wrong with the device's id, as the
+	 *        field {@code device.id}
+	 * @return the device's id, or null if the body names no device or a
+	 *         wrong one
+	 */
+	private static String device(SignIn credentials, List<FieldError> errors) {
+		if (credentials.device() == null)
+			return null;
+		String id = credentials.device().id();
+		if (StringUtils.isEmpty(id)) {
+			errors.add(new FieldError(DEVICE_ID, "required", "Give the device's id."));
+			return null;
+		}
+		try {
+			return ApiTokens.checkDevice(id);
+		} catch (HealdanRuleException e) {
+			errors.add(new FieldError(DEVICE_ID, ApiTokens.deviceTooLong(id) ? Uploads.TOO_LONG : "invalid",
+					e.getMessage()));
+			return null;
+		}
 	}
 
 	private static ApiProblem signInFailed() {

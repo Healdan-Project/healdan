@@ -73,7 +73,14 @@ paths:
         sign-ins; the detail says when to try again. `422 validation` with
         the field `name` is a device name over 100 characters (`too-long`),
         or one with characters the database can't store, such as emoji
-        (`invalid`); it's checked before the password.
+        (`invalid`); with the field `device.id`, a device id that's missing
+        (`required`), over 64 characters (`too-long`), or has characters
+        other than letters, digits and hyphens (`invalid`). Both are checked
+        before the password.
+
+        A client on a computer sends that computer's `device`, the same each
+        time it signs in: the documents it has checked out stay its own when
+        it signs in again (see `checkOutDocument`).
       tags: [Sign-in]
       security: []
       requestBody:
@@ -573,21 +580,49 @@ paths:
       summary: Check a document out
       description: |
         Checks the document out to the caller, so nobody else can save to it
-        until it's checked in or released, and returns it. A document the
-        caller has checked out already is returned as it is. The checks run
-        in this order:
+        until it's checked in or released, and returns it.
 
-        1. `404 not-found` for a document the caller can't read.
-        2. `403 forbidden` without the Write permission, and for a document
+        The check-out is held on the caller's device, the `device` the token
+        signed in with, and the answer's `hold.device` names it. Saves,
+        check-ins, releases and changes of properties through the API from
+        the caller's other devices are then `409 held-elsewhere`, and so is
+        a check-out from them, unless it asks with `move: true` to move the
+        check-out to its own device; the move is recorded in the history as
+        a check-out. A
+        token that signed in with no device holds no device's check-out, and
+        nor does the web page: such a check-out works from any of the
+        caller's devices until a check-out or a save through the API records
+        one. The web page itself is never refused for a device.
+
+        A document the caller has checked out already is returned as it is,
+        and from then on held on the caller's device, if the token has one
+        and no other device holds it. The checks run in this order:
+
+        1. `400 bad-request` for a body that isn't the JSON expected (`415`
+           for one that isn't sent as JSON), and `422 validation` with the
+           field `app` for an app's name over 100 characters (`too-long`) or
+           with characters the database can't store (`invalid`). The body is
+           optional.
+        2. `404 not-found` for a document the caller can't read.
+        3. `403 forbidden` without the Write permission, and for a document
            protected by a password, which is always refused through the API:
            open it in Healdan's web page.
-        3. `409 checked-out` when someone else has it checked out, and
-           `409 locked` when it's locked with the web page's Lock action, by
-           anyone, the caller included. Both add the `hold`.
-        4. `409 refused` for an immutable or an archived document.
+        4. `409 held-elsewhere` when the caller has it checked out on another
+           device, without `move: true`, with the `hold` and `lastSaved`.
+        5. `409 checked-out` when someone else has it checked out, with or
+           without `move`, and `409 locked` when it's locked with the web
+           page's Lock action, by anyone, the caller included. Both add the
+           `hold`.
+        6. `409 refused` for an immutable or an archived document.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
       responses:
         '200':
           description: The document, checked out to the caller
@@ -602,8 +637,9 @@ paths:
       summary: Release a check-out or a lock
       description: |
         Releases the document's check-out or lock without saving anything,
-        and returns the document. The user who holds it can, and so can an
-        administrator; the release is recorded in the history. An
+        and returns the document. The user who holds it can, from the device
+        that holds the check-out (`409 held-elsewhere` from another), and so
+        can an administrator; the release is recorded in the history. An
         administrator's release also makes an immutable document mutable
         again, as the web page's does. Anyone else gets `409 checked-out` or
         `409 locked`, with the `hold`. A free document is returned as it is,
@@ -668,11 +704,11 @@ paths:
         A free
         document is checked out to the caller, saved and checked in again;
         with `keepCheckedOut: true`, the save while editing, it's checked out
-        to the caller again afterwards, and the history shows a check-in
-        followed by a check-out. The web page can take the document in the
-        moment between them: the save stands, and the answer's `hold` shows
-        who has it. Two saves of one document are applied one after the
-        other.
+        to the caller again afterwards, held on the caller's device, and the
+        history shows a check-in followed by a check-out. The web page can
+        take the document in the moment between them: the save stands, and
+        the answer's `hold` shows who has it. Two saves of one document are
+        applied one after the other.
 
         Nothing is saved unless every check passes. They run in this order,
         and the first that fails gives the answer:
@@ -689,7 +725,9 @@ paths:
            edit. An administrator releases the hold first
            (`DELETE /v1/documents/{docNumber}/checkout`). `409 locked` when
            it's locked with the web page's Lock action, by anyone, the caller
-           included. Both add the `hold`.
+           included. Both add the `hold`. `409 held-elsewhere` when the
+           caller has it checked out on another device (see
+           `checkOutDocument`), with the `hold` and `lastSaved`.
         5. `409 refused` for an immutable or an archived document.
         6. The name: the version part's `name`, or else the file part's name
            (RFC 5987's `filename*` first), or the document's when neither
@@ -775,10 +813,11 @@ paths:
         A property is `editable` when `setProperties` would take a change to
         it. So none is when the caller may not change the document's
         properties at all: without the Write permission, when someone else
-        has it checked out or anyone has it locked, when it's immutable and
-        the caller isn't an administrator, or when it's protected by a
-        password. A client can grey out the form instead of finding out from
-        a `403` or `409`.
+        has it checked out or anyone has it locked, when the caller has it
+        checked out on another device, when it's immutable and the caller
+        isn't an administrator, or when it's protected by a password. A
+        client can grey out the form instead of finding out from a `403` or
+        `409`.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -825,6 +864,8 @@ paths:
         3. `409 checked-out` when someone else has it checked out, and
            `409 locked` when it's locked with the web page's Lock action, by
            anyone, the caller included. Both add the `hold`.
+           `409 held-elsewhere` when the caller has it checked out on another
+           device (see `checkOutDocument`), with the `hold` and `lastSaved`.
         4. `409 refused` for an immutable document, unless the caller is an
            administrator.
 
@@ -1186,7 +1227,8 @@ components:
       type: object
       description: |
         An RFC 9457 problem. Some codes add members: `validation` adds
-        `fields`, and `checked-out` and `locked` add `hold`.
+        `fields`, `checked-out` and `locked` add `hold`, and
+        `held-elsewhere` adds `hold` and `lastSaved`.
       required: [type, title, status, detail, code]
       properties:
         type:
@@ -1204,13 +1246,21 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
             $ref: '#/components/schemas/FieldError'
         hold:
           $ref: '#/components/schemas/HoldView'
+        lastSaved:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            For `held-elsewhere`: when the document's content was last stored
+            (its latest save, or its filing), so a client can warn that what
+            the other device hasn't sent since isn't in Healdan. Null when
+            the server's data doesn't say.
     FieldError:
       type: object
       additionalProperties: false
@@ -1293,6 +1343,25 @@ components:
           maxLength: 100
           description: What the device is called, so you can tell your devices apart. Blank is "Unnamed device".
           examples: [Word on MacBook]
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceRef'
+            - type: 'null'
+          description: |
+            The computer signing in. Its check-outs are held on it, whichever
+            of its tokens made them. Null or left out for none.
+    DeviceRef:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9-]{1,64}$'
+          description: |
+            The computer's device id, the same on every sign-in from it, such
+            as a random UUID the client keeps.
+          examples: [3f2b8c1e-9d4a-4f7e-b6a2-0c5d8e1f2a3b]
     SignedIn:
       type: object
       additionalProperties: false
@@ -1428,7 +1497,7 @@ components:
       type: object
       description: Who has a document checked out or locked
       additionalProperties: false
-      required: [kind, by, since]
+      required: [kind, by, since, device]
       properties:
         kind:
           type: string
@@ -1444,8 +1513,54 @@ components:
           description: |
             The latest check-out or lock event. A save with
             `keepCheckedOut: true` checks the document in and out again, so
-            it moves `since` to that save. Null when the server's data
-            doesn't say.
+            it moves `since` to that save, and moving the check-out to
+            another device moves it too. Null when the server's data doesn't
+            say.
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceView'
+            - type: 'null'
+          description: |
+            The computer that holds the check-out, shown only to the user who
+            holds it. Null for anyone else, for a lock, and when no device
+            holds it: a check-out from the web page, or from a token with no
+            device.
+    DeviceView:
+      type: object
+      description: The computer that holds a check-out
+      additionalProperties: false
+      required: [id, name, app]
+      properties:
+        id:
+          type: string
+          description: Its device id
+        name:
+          type: string
+          description: |
+            What it's called: the name of the token it last wrote through,
+            such as `Healdan Helper on MacBook`.
+        app:
+          type: [string, 'null']
+          description: The app its check-out named, or null
+          examples: [LibreOffice]
+    CheckoutRequest:
+      type: object
+      additionalProperties: false
+      description: The optional body of `checkOutDocument`.
+      properties:
+        move:
+          type: [boolean, 'null']
+          description: |
+            `true` to move the caller's check-out from another of their
+            devices to this one. Edits on the other device that it hasn't
+            saved yet won't be in Healdan. On a free document it checks it
+            out as usual, and on the device that holds it already it changes
+            nothing.
+        app:
+          type: [string, 'null']
+          maxLength: 100
+          description: The app the document is opened in
+          examples: [LibreOffice]
     DocumentView:
       type: object
       additionalProperties: false
@@ -1506,7 +1621,8 @@ components:
             Write permission, not immutable, not archived, not protected by a
             password (always refused through the API), and no hold but the
             caller's own check-out (a lock is a hold even for the user who
-            took it). It isn't the test for changing the properties, which an
+            took it), and that not held on another of the caller's devices.
+            It isn't the test for changing the properties, which an
             administrator may do to an immutable document: see
             `ProfileField.editable`.
     VersionView:

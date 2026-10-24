@@ -40,6 +40,10 @@ public class ApiToken extends PersistentObject {
 	@Column(name = "hd_sid", length = 255)
 	private String sid;
 
+	/** The id of the computer the token was issued to, or null if the client named none */
+	@Column(name = "hd_device", length = 64)
+	private String device;
+
 	public long getUserId() {
 		return userId;
 	}
@@ -86,5 +90,13 @@ public class ApiToken extends PersistentObject {
 
 	public void setSid(String sid) {
 		this.sid = sid;
+	}
+
+	public String getDevice() {
+		return device;
+	}
+
+	public void setDevice(String device) {
+		this.device = device;
 	}
 }

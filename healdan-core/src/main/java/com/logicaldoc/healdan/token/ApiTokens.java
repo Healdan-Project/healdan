@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,11 @@ public class ApiTokens {
 	public static final String UNNAMED = "Unnamed device";
 
 	static final int MAX_NAME_LENGTH = 100;
+
+	static final int MAX_DEVICE_LENGTH = 64;
+
+	/** A device id: letters, digits and hyphens, as in the random UUID the helper makes */
+	private static final Pattern DEVICE_ID = Pattern.compile("[A-Za-z0-9-]+");
 
 	private static final int TOKEN_LENGTH = PREFIX.length() + 43;
 
@@ -106,7 +112,7 @@ public class ApiTokens {
 	}
 
 	/**
-	 * Issues a token for a user.
+	 * Issues a token for a user, on no device in particular.
 	 * 
 	 * @param user the user it signs in as
 	 * @param name what the device is called; blank becomes "Unnamed device"
@@ -117,7 +123,25 @@ public class ApiTokens {
 	 *         the database can't store
 	 */
 	public Issued issue(User user, String name, String sid) throws PersistenceException {
+		return issue(user, name, null, sid);
+	}
+
+	/**
+	 * Issues a token for a user, on a device. Signing in again on the same
+	 * device keeps the check-outs it holds ({@link DeviceHolds}).
+	 * 
+	 * @param user the user it signs in as
+	 * @param name what the device is called; blank becomes "Unnamed device"
+	 * @param device the computer's device id, or null for none
+	 * @param sid the CE session it is bound to, or null
+	 * @return the token and its row
+	 * @throws PersistenceException error at data layer
+	 * @throws HealdanRuleException if the name is too long or holds characters
+	 *         the database can't store, or the device id isn't one
+	 */
+	public Issued issue(User user, String name, String device, String sid) throws PersistenceException {
 		String clean = checkName(name);
+		String deviceId = checkDevice(device);
 		String token = PREFIX + randomPart();
 
 		Date now = new Date();
@@ -129,6 +153,7 @@ public class ApiTokens {
 		row.setLastUsed(now);
 		row.setExpires(new Date(now.getTime() + TimeUnit.DAYS.toMillis(settings.apiTokenMaxDays())));
 		row.setSid(sid);
+		row.setDevice(deviceId);
 		dao.store(row);
 		// A password change while this sign-in ran may have revoked the user's tokens before this one was stored
 		if (!Objects.equals(user.getPassword(), storedPassword(user.getId())))
@@ -397,5 +422,32 @@ public class ApiTokens {
 	 */
 	public static boolean nameTooLong(String name) {
 		return name != null && name.strip().length() > MAX_NAME_LENGTH;
+	}
+
+	/**
+	 * Checks a device id, so that a caller can refuse it before signing in.
+	 * 
+	 * @param device a device id, possibly null
+	 * @return the id as it is, or null if there is none
+	 * @throws HealdanRuleException unless it's 1 to 64 letters, digits and
+	 *         hyphens
+	 */
+	public static String checkDevice(String device) throws HealdanRuleException {
+		if (device == null)
+			return null;
+		if (deviceTooLong(device))
+			throw new HealdanRuleException(
+					"A device id can't be longer than %d characters.".formatted(MAX_DEVICE_LENGTH));
+		if (!DEVICE_ID.matcher(device).matches())
+			throw new HealdanRuleException("A device id can contain only letters, digits and hyphens.");
+		return device;
+	}
+
+	/**
+	 * @param device a device id, possibly null
+	 * @return true if {@link #checkDevice} refuses it for its length
+	 */
+	public static boolean deviceTooLong(String device) {
+		return device != null && device.length() > MAX_DEVICE_LENGTH;
 	}
 }

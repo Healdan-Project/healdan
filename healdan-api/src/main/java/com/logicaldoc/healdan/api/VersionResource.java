@@ -34,6 +34,8 @@ import com.logicaldoc.healdan.api.model.NewVersion;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.VersionView;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.token.DeviceHolds;
+import com.logicaldoc.healdan.token.HoldDevice;
 import com.logicaldoc.util.html.HTMLSanitizer;
 
 import jakarta.ws.rs.Consumes;
@@ -118,7 +120,9 @@ public class VersionResource {
 	 * <li>{@code 403} without the Write permission, or for a document
 	 * protected by a password, which the API never opens;</li>
 	 * <li>{@code 409 checked-out} for someone else's check-out, administrators
-	 * included, and {@code 409 locked} for any lock, the caller's own too;</li>
+	 * included, and {@code 409 locked} for any lock, the caller's own too;
+	 * {@code 409 held-elsewhere} for the caller's own check-out on another of
+	 * their devices;</li>
 	 * <li>{@code 409 refused} for an immutable or archived document;</li>
 	 * <li>the name ({@code 422}): it must keep the document's extension;</li>
 	 * <li>the file: {@code 413 too-large} over the upload limit, {@code 422}
@@ -128,7 +132,8 @@ public class VersionResource {
 	 * </ol>
 	 * None of these leaves anything behind. A free document is then checked
 	 * out to the caller, checked in with the file, and with
-	 * {@code keepCheckedOut} checked out again. A rule that refuses the
+	 * {@code keepCheckedOut} checked out again, held on the caller's device;
+	 * the check-in on closing ends the device's hold. A rule that refuses the
 	 * check-in ({@code 409 refused}) leaves the document as it was, but
 	 * checked out to the caller: CE writes nothing when a rule refuses it. A
 	 * save CE didn't store is a {@code 500} ({@link #confirmStored}) that says
@@ -175,8 +180,9 @@ public class VersionResource {
 		if (!AccessChecks.allowed(user, Permission.WRITE, document))
 			throw ApiProblem.forbidden("You may not save to document #%d.".formatted(docNumber));
 		DocumentResource.refuseProtected(document, session, docNumber);
-		// Never over someone else's hold, administrators included (spec section 6.6)
+		// Never over someone else's hold, administrators included (spec section 6.6), nor the caller's elsewhere
 		CheckoutResource.refuseHolds(document, user, docNumber);
+		CheckoutResource.refuseElsewhere(document, caller, docNumber);
 		CheckoutResource.refuseImmutable(document, user, false, docNumber);
 		CheckoutResource.refuseArchived(document, docNumber);
 
@@ -198,10 +204,15 @@ public class VersionResource {
 			if (!errors.isEmpty())
 				throw ApiProblem.validation(errors);
 
-			// The checks above leave it free or checked out to the caller
-			if (!ApiViews.checkedOutBy(document, user))
+			// The checks above leave it free or checked out to the caller, held here if on any device
+			DeviceHolds devices = DeviceHolds.get();
+			String app = devices.current(document).map(HoldDevice::getApp).orElse(null);
+			if (!ApiViews.checkedOutBy(document, user)) {
 				DocumentManager.get().checkout(document.getId(),
 						CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
+				// So that if the check-in is refused, the check-out it leaves is this device's
+				devices.record(DocumentDAO.get().findById(document.getId()), caller.token(), app);
+			}
 			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
 			checkin.setComment(comment);
 			String before = document.getVersion();
@@ -212,7 +223,13 @@ public class VersionResource {
 
 			if (Boolean.TRUE.equals(request.keepCheckedOut()))
 				checkOutAgain(document.getId(), session, docNumber);
-			return ApiViews.document(DocumentDAO.get().findById(document.getId()), user);
+			Document saved = DocumentDAO.get().findById(document.getId());
+			// The first save through the API records the device, and the check-in on closing ends its hold
+			if (ApiViews.checkedOutBy(saved, user))
+				devices.record(saved, caller.token(), app);
+			else
+				devices.clear(saved);
+			return ApiViews.document(saved, user);
 		} finally {
 			FileUtils.deleteQuietly(upload);
 		}

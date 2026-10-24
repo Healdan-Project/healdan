@@ -24,6 +24,7 @@ import com.logicaldoc.healdan.api.model.PropertyPatch;
 import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.ProfileView;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.token.DeviceHolds;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -102,6 +103,9 @@ public class PropertiesResource {
 				transaction.setSession(caller.session());
 				transaction.setEvent(DocumentEvent.CHANGED);
 				DocumentManager.get().update(document, valueObject(document, values), transaction);
+				// The device that holds the check-out wrote through this token
+				DeviceHolds devices = DeviceHolds.get();
+				devices.current(readable).ifPresent(held -> devices.record(readable, caller.token(), held.getApp()));
 				return properties(document, true);
 			});
 		} catch (PersistenceException e) {
@@ -115,8 +119,9 @@ public class PropertiesResource {
 	 * check-out and save refuse it ({@code 403}); checked out to someone else,
 	 * or locked by anyone, the caller too, as a save is refused
 	 * ({@code 409 checked-out} or {@code 409 locked}, with the {@code hold});
-	 * immutable, unless the caller is an administrator, as CE's update allows
-	 * ({@code 409 refused}).
+	 * checked out to the caller on another of their devices
+	 * ({@code 409 held-elsewhere}); immutable, unless the caller is an
+	 * administrator, as CE's update allows ({@code 409 refused}).
 	 *
 	 * @param document a document the caller may read
 	 * @param caller the signed-in caller
@@ -129,6 +134,7 @@ public class PropertiesResource {
 			throw ApiProblem.forbidden("You may not change document #%d.".formatted(docNumber));
 		DocumentResource.refuseProtected(document, caller.session(), docNumber);
 		CheckoutResource.refuseHolds(document, user, docNumber);
+		CheckoutResource.refuseElsewhere(document, caller, docNumber);
 		CheckoutResource.refuseImmutable(document, user, true, docNumber);
 	}
 
