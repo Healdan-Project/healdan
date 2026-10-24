@@ -125,7 +125,7 @@ Errors use **RFC 9457 problem details** (`application/problem+json`):
 
 ```json
 {
-  "type": "https://healdan.org/problems/checked-out",
+  "type": "https://healdan.com/problems/checked-out",
   "title": "Checked out",
   "status": 409,
   "detail": "Document #1234 is checked out to Jane Smith.",
@@ -134,7 +134,7 @@ Errors use **RFC 9457 problem details** (`application/problem+json`):
 ```
 
 - `code` is a short stable string that clients switch on. `detail` is an English sentence a client can show as it is.
-- The `type` URI doesn't have to resolve.
+- The `type` URI is `https://healdan.com/problems/<code>`, under the project's own domain as RFC 9457 expects. It doesn't have to resolve. (changed in the final review: it was under healdan.org.)
 - Validation failures (422) add `fields`: a list of `{ "field": "docclass", "code": "required", "detail": "Class is required." }`.
 
 | HTTP | `code` | When |

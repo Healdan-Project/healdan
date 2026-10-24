@@ -87,7 +87,7 @@ Errors are RFC 9457 problems, sent as `application/problem+json`:
 
 ```json
 {
-  "type": "https://healdan.org/problems/checked-out",
+  "type": "https://healdan.com/problems/checked-out",
   "title": "Checked out",
   "status": 409,
   "detail": "Document #1234 is checked out to Jane Smith.",
