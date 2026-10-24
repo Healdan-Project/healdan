@@ -19,6 +19,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
@@ -225,6 +226,54 @@ public class DocumentResourceTest extends ApiTestCase {
 		String header = response.header("Content-Disposition");
 		assertTrue(header, header.contains("filename*=UTF-8''Board%20minutes%20%E2%80%93%20%C3%A9.docx"));
 		assertTrue(header, header.startsWith("attachment; filename=\"Board minutes _ _.docx\";"));
+	}
+
+	@Test
+	public void testProtectedDocumentIsRefused() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		DocumentHistory history = fx.documentHistory(boss);
+		history.setEvent(DocumentEvent.CHANGED);
+		DocumentDAO.get().setPassword(d.getId(), "S3cret-pw!", history);
+		String token = signIn(clerk);
+
+		ApiResponse refused = get("/api/v1/documents/" + number(d) + "/content").token(token).send();
+
+		assertEquals(refused.toString(), 403, refused.status());
+		assertEquals("forbidden", refused.code());
+		assertEquals("Document #%d is protected by a password. Open it in Healdan's web page.".formatted(number(d)),
+				refused.json().path("detail").textValue());
+		assertEquals(0, jdbc().queryForObject(
+				"select count(*) from ld_history where ld_event = 'event.downloaded' and ld_docid = ?", Integer.class,
+				d.getId()).intValue());
+		// The metadata is still shown
+		assertEquals(200, get("/api/v1/documents/" + number(d)).token(token).send().status());
+	}
+
+	@Test
+	public void testMissingFileIsAServerError() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		FileUtils.deleteDirectory(((FSStore) Store.get()).getRoot());
+
+		ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 500, response.status());
+		assertEquals("server-error", response.code());
+		assertEquals("The document's file is missing from storage.", response.json().path("detail").textValue());
+		assertEquals(0, jdbc().queryForObject(
+				"select count(*) from ld_history where ld_event = 'event.downloaded' and ld_docid = ?", Integer.class,
+				d.getId()).intValue());
+	}
+
+	@Test
+	public void testSizeComesFromTheStore() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		jdbc().update("update ld_document set ld_filesize = 3 where ld_id = ?", d.getId());
+
+		ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("11", response.header("Content-Length"));
+		assertArrayEquals("Lease draft".getBytes(StandardCharsets.UTF_8), response.body());
 	}
 
 	@Test

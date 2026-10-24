@@ -62,9 +62,20 @@ public final class AccessChecks {
 			return Optional.empty();
 		if (!DocumentDAO.get().isReadAllowed(document.getId(), user.getId()))
 			return Optional.empty();
-		if (!document.isPublishing() && !user.isMemberOf(Group.GROUP_ADMIN) && !user.isMemberOf(PUBLISHER_GROUP))
-			return Optional.empty();
-		return Optional.of(document);
+		return visible(document, user) ? Optional.of(document) : Optional.empty();
+	}
+
+	/**
+	 * The one publishing rule, CE's own ({@code Document.isPublishing}): the
+	 * {@code #} lookup and the API both use it.
+	 *
+	 * @param document a document
+	 * @param user the user, with its groups
+	 * @return true if the document is published now, or the user is in the
+	 *         {@code admin} or {@code publisher} group
+	 */
+	public static boolean visible(Document document, User user) {
+		return document.isPublishing() || user.isMemberOf(Group.GROUP_ADMIN) || user.isMemberOf(PUBLISHER_GROUP);
 	}
 
 	/**

@@ -80,9 +80,13 @@ public class DocumentResource {
 			if (!AccessChecks.allowed(caller.user(), Permission.DOWNLOAD, document))
 				throw ApiProblem.forbidden("You may not download document #%d.".formatted(docNumber));
 
+			// As every CE download path: a protected document opens only for a session that unprotected it
+			if (document.isPasswordProtected() && !caller.session().getUnprotectedDocs().containsKey(document.getId()))
+				throw ApiProblem.forbidden(
+						"Document #%d is protected by a password. Open it in Healdan's web page.".formatted(docNumber));
+
 			String fileVersion = document.getFileVersion();
 			String fileName = document.getFileName();
-			long size = document.getFileSize();
 			if (StringUtils.isNotBlank(version)) {
 				Version found = VersionDAO.get().findByVersion(document.getId(), version.strip());
 				if (found == null)
@@ -90,13 +94,17 @@ public class DocumentResource {
 				fileVersion = found.getFileVersion();
 				if (StringUtils.isNotBlank(found.getFileName()))
 					fileName = found.getFileName();
-				size = found.getFileSize();
 			}
+
+			// The store is the truth: the size recorded in the database can be wrong
+			StoreResource resource = StoreResource.builder().docId(document.getId()).fileVersion(fileVersion).build();
+			if (!Store.get().exists(resource))
+				throw new ApiProblem(500, "server-error", "The document's file is missing from storage.");
+			long size = Store.get().size(resource);
 
 			// While the caller's session is at hand, and before the first byte is sent
 			recordDownload(document, caller.user(), caller.session());
 
-			StoreResource resource = StoreResource.builder().docId(document.getId()).fileVersion(fileVersion).build();
 			StreamingOutput body = out -> {
 				// Opened here so that it is closed here, whatever happens to the response
 				try (InputStream in = Store.get().getStream(resource)) {

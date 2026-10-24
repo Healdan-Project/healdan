@@ -7,11 +7,11 @@ import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
-import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 
@@ -30,9 +30,6 @@ public final class DocNumberLookup {
 	static final String NO_VERSION = "Document #%s has no version %s";
 
 	static final String NOT_A_NUMBER = "'%s' isn't a document number. Type # and the number, e.g. #1234.";
-
-	/** The group whose members CE's searches show unpublished documents to, as in {@code Search} */
-	private static final String PUBLISHER_GROUP = "publisher";
 
 	private DocNumberLookup() {
 	}
@@ -59,7 +56,7 @@ public final class DocNumberLookup {
 		DocumentDAO documents = DocumentDAO.get();
 		// The DAO skips deleted documents. A number is looked up in the user's own tenant only
 		Document document = documents.findByCustomId(Long.toString(query.number()), user.getTenantId());
-		if (document == null || !documents.isReadAllowed(document.getId(), userId) || !shown(document, user))
+		if (document == null || !documents.isReadAllowed(document.getId(), userId) || !AccessChecks.visible(document, user))
 			return LookupResult.notFound(NO_DOCUMENT.formatted(query.number()));
 		long folderId = document.getFolder().getId();
 		if (query.major() == null)
@@ -74,21 +71,6 @@ public final class DocNumberLookup {
 				version.getFileVersion(),
 				version.getVersionDate() == null ? null : new Date(version.getVersionDate().getTime()),
 				version.getUsername(), null);
-	}
-
-	/**
-	 * @return false if CE's searches would hide the document from the user: it
-	 *         isn't published now (not published, or outside its publishing
-	 *         dates, as in {@code Search.enrichAndPopulateHits}) and the user
-	 *         is neither an administrator nor a publisher
-	 */
-	private static boolean shown(Document document, User user) {
-		if (user.isMemberOf(Group.GROUP_ADMIN) || user.isMemberOf(PUBLISHER_GROUP))
-			return true;
-		Date now = new Date();
-		Date start = document.getStartPublishing();
-		Date stop = document.getStopPublishing();
-		return document.isPublished() && start != null && !start.after(now) && (stop == null || stop.after(now));
 	}
 
 	/**
