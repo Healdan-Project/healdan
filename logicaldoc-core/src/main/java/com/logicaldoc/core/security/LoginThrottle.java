@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,13 +97,17 @@ public class LoginThrottle {
         // Update the failed login counters
         try {
             if (Context.get().getConfig().getBoolean(THROTTLE_ENABLED)) {
+                // Healdan: alert once, when the failure that starts a block is counted, and count a key by its digest
                 SequenceDAO sDao = SequenceDAO.get();
-                if (StringUtils.isNotEmpty(username))
-                    sDao.next(LOGINFAIL_USERNAME + username, 0L, Tenant.SYSTEM_ID);
-                if (StringUtils.isNotEmpty(client.getAddress()))
-                    sDao.next(LOGINFAIL_IP + client.getAddress(), 0L, Tenant.SYSTEM_ID);
-                if (StringUtils.isNotEmpty(apiKey))
-                    sDao.next(LOGINFAIL_APIKEY + apiKey, 0L, Tenant.SYSTEM_ID);
+                if (StringUtils.isNotEmpty(username) && HealdanThrottle.startsBlock("username",
+                        sDao.next(LOGINFAIL_USERNAME + username, 0L, Tenant.SYSTEM_ID)))
+                    notifyBruteForceAttack(username, null, null);
+                if (StringUtils.isNotEmpty(client.getAddress()) && HealdanThrottle.startsBlock("ip",
+                        sDao.next(LOGINFAIL_IP + client.getAddress(), 0L, Tenant.SYSTEM_ID)))
+                    notifyBruteForceAttack(null, client.getAddress(), null);
+                if (StringUtils.isNotEmpty(apiKey) && HealdanThrottle.startsBlock("apikey",
+                        sDao.next(HealdanThrottle.keyCounter(apiKey), 0L, Tenant.SYSTEM_ID)))
+                    notifyBruteForceAttack(null, null, HealdanThrottle.keyLabel(apiKey));
             }
         } catch (PersistenceException e) {
             log.warn(e.getMessage(), e);
@@ -182,8 +187,7 @@ public class LoginThrottle {
                     cal.add(Calendar.MINUTE, -wait);
                     Date oldestDate = cal.getTime();
                     if (oldestDate.before(seq.getLastModified())) {
-                        log.warn("Possible brute force attack detected for IP {}", ip);
-                        notifyBruteForceAttack(null, ip, null);
+                        log.debug("Sign-in blocked for IP {}", ip);
                         throw new IPBlockedException();
                     } else {
                         log.info("Login block for IP {} expired", ip);
@@ -210,8 +214,7 @@ public class LoginThrottle {
                     cal.add(Calendar.MINUTE, -wait);
                     Date oldestDate = cal.getTime();
                     if (oldestDate.before(seq.getLastModified())) {
-                        log.warn("Possible brute force attack detected for username {}", username);
-                        notifyBruteForceAttack(username, null, null);
+                        log.debug("Sign-in blocked for username {}", username);
 
                         disableUser(username);
 
@@ -236,7 +239,7 @@ public class LoginThrottle {
         int maxTrials = config.getInt("throttle.apikey.max", 0);
 
         if (maxTrials > 0 && wait > 0) {
-            String counterName = LOGINFAIL_APIKEY + apikey;
+            String counterName = HealdanThrottle.keyCounter(apikey);
             Sequence seq = SequenceDAO.get().findByAlternateKey(counterName, 0L, Tenant.SYSTEM_ID);
             if (seq != null) {
                 long count = seq.getValue();
@@ -244,11 +247,10 @@ public class LoginThrottle {
                     cal.add(Calendar.MINUTE, -wait);
                     Date oldestDate = cal.getTime();
                     if (oldestDate.before(seq.getLastModified())) {
-                        log.warn("Possible brute force attack detected for ApiKey {}", apikey);
-                        notifyBruteForceAttack(null, null, apikey);
+                        log.debug("Sign-in blocked for an ApiKey");
                         throw new ApiKeyBlockedException();
                     } else {
-                        log.info("Login block for ApiKey {} expired", apikey);
+                        log.info("Login block for ApiKey {} expired", HealdanThrottle.keyLabel(apikey));
                         deleteSequence(seq);
                     }
                 }
@@ -278,6 +280,9 @@ public class LoginThrottle {
     }
 
     private static void notifyBruteForceAttack(String suspectedUsername, String suspectedIp, String suspectedApiKey) {
+        log.warn("Possible brute force attack detected for {}",
+                suspectedUsername != null ? "username " + suspectedUsername
+                        : suspectedIp != null ? "IP " + suspectedIp : "ApiKey " + suspectedApiKey);
         ThreadPools.get().schedule(() -> {
             try {
                 Date date = new Date();
@@ -286,9 +291,10 @@ public class LoginThrottle {
                     log.debug("Prepare Brute Force Attack Alert for user {}", user);
 
                     Map<String, Object> dictionary = new HashMap<>();
-                    dictionary.put("suspectedUsername", suspectedUsername);
-                    dictionary.put("suspectedIp", suspectedIp);
-                    dictionary.put("suspectedApiKey", suspectedApiKey);
+                    // Healdan: the message is HTML, and the username is whatever the client typed
+                    dictionary.put("suspectedUsername", StringEscapeUtils.escapeHtml(suspectedUsername));
+                    dictionary.put("suspectedIp", StringEscapeUtils.escapeHtml(suspectedIp));
+                    dictionary.put("suspectedApiKey", StringEscapeUtils.escapeHtml(suspectedApiKey));
                     dictionary.put("date", date);
                     dictionary.put(Automation.LOCALE, user.getLocale());
 
