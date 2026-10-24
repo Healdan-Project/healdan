@@ -408,6 +408,82 @@ paths:
                 $ref: '#/components/schemas/VersionPage'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/properties:
+    get:
+      operationId: getProperties
+      summary: A document's properties
+      description: |
+        Every property of the document, in the profile's order, with where
+        its value comes from: `local` for a value set on the document itself
+        (an override of what it would inherit, or a value only a document
+        has, such as Author), `inherited` with the folder it comes from, or
+        `default` for the install's default Class. Client and Matter are
+        inherited from the matter's top folder.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The properties, in one page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileFieldPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: setProperties
+      summary: Change a document's properties
+      description: |
+        Sets the properties named in `values` and leaves the others alone.
+        A value that differs from what the property would inherit becomes
+        the document's own (`local`). Sending the inherited value, or
+        `null`, makes it inherit again. `null` clears a property that doesn't
+        inherit, such as Legacy doc #. The change is saved as the web page's
+        Save saves it, as a new version in the document's timeline, and the
+        answer is the document's properties after it.
+
+        Needs the Write permission: without it the answer is
+        `403 forbidden`, as it is for an immutable document unless the
+        caller is an administrator. A document someone else has checked out is
+        `409 checked-out`, and one someone else has locked is `409 locked`;
+        both include the `hold`.
+
+        Every value is checked before anything is saved, and a refusal
+        changes nothing. `422 validation` lists every field that is wrong,
+        in the order sent, with these codes:
+
+        - `unknown`: there's no such property; or the user, folder or
+          document the value names doesn't exist.
+        - `read-only`: the property can't be changed (Client, Matter, the
+          email fields, read-only properties).
+        - `type`: the value has the wrong JSON type or format for the
+          property's `type`.
+        - `required`: a required property in `values` would be left with no
+          value. A cleared property that inherits takes what it inherits, so
+          `null` for Class is never refused.
+        - `class-mismatch`: the document's own Subclass wouldn't belong to its
+          Class.
+
+        A body with any other field than `values` is `400 bad-request`.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyPatch'
+      responses:
+        '200':
+          description: The properties after the change, in one page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileFieldPage'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/folders/recent:
     get:
       operationId: listRecentFolders
@@ -481,6 +557,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderChildPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{folderId}/form:
+    get:
+      operationId: getForm
+      summary: The properties form for filing a new document
+      description: |
+        The properties a new document filed into the folder would have, in
+        the same shape as a document's properties: the values it would
+        inherit and where they come from, with the caller as Author and
+        Typist (`default`). A client renders any form from these fields,
+        including properties an administrator added to the profile.
+
+        A folder that can't hold documents is `409 filing-rule`, with the
+        rule's words: a Store, a matter's top folder, a search folder.
+        Folders outside the Stores, aliases, folders the caller can't read,
+        and folders that don't exist are all `404` with the same answer.
+      tags: [Folders]
+      parameters:
+        - name: folderId
+          in: path
+          required: true
+          description: The folder's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: The form's fields, in one page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileFieldPage'
         default:
           $ref: '#/components/responses/Problem'
   /v1/matters/{id}:
@@ -673,11 +783,13 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, refused, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, filing-rule, refused, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
             $ref: '#/components/schemas/FieldError'
+        hold:
+          $ref: '#/components/schemas/HoldView'
     FieldError:
       type: object
       additionalProperties: false
@@ -1162,3 +1274,108 @@ components:
                     folder: '#/components/schemas/FolderView'
                     document: '#/components/schemas/DocumentView'
       unevaluatedProperties: false
+    ProfileField:
+      type: object
+      description: |
+        One property of a document, or of the form for filing a new one. A
+        client renders any form from these, without knowing the properties
+        in advance.
+      additionalProperties: false
+      required: [name, label, type, required, editable, value, source, inheritedFrom, options]
+      properties:
+        name:
+          type: string
+          description: The property's name, as `PATCH` names it
+          examples: [docclass]
+        label:
+          type: string
+          examples: [Class]
+        type:
+          type: string
+          enum: [string, integer, decimal, date, boolean, user, folder, document]
+          description: The type of the value
+        required:
+          type: boolean
+        editable:
+          type: boolean
+          description: |
+            False for Client and Matter, which come from the matter, for the
+            email fields, which come from the message, and for read-only
+            properties
+        value:
+          description: |
+            Null when there is none. Text for a `string`, a number for an
+            `integer` or a `decimal`, true or false for a `boolean`, an ISO
+            8601 timestamp for a `date`, a `UserRef` for a `user`, the
+            folder's id for a `folder` and the doc # for a `document`.
+            `PATCH` takes the same, but a user's id for a `user`.
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        source:
+          type: [string, 'null']
+          enum: [inherited, local, default, null]
+          description: |
+            `local`: set on the document itself. `inherited`: from the folder
+            `inheritedFrom` names, or from the matter's top folder for Client
+            and Matter. `default`: the install's default Class, or the caller
+            as Author and Typist of a new document. Null when there's no
+            value.
+        inheritedFrom:
+          oneOf:
+            - $ref: '#/components/schemas/FolderRef'
+            - type: 'null'
+          description: The folder an inherited value comes from, or null
+        options:
+          type: [array, 'null']
+          description: The values to pick from, in order; null when the property isn't picked from a list
+          items:
+            $ref: '#/components/schemas/Option'
+    Option:
+      type: object
+      description: One value of a property picked from a list
+      additionalProperties: false
+      required: [value, label, class]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        class:
+          type: [string, 'null']
+          description: |
+            For a Subclass, the Class it belongs to, so a client can narrow
+            the list to the chosen Class; null otherwise
+    ProfileFieldPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProfileField'
+      unevaluatedProperties: false
+    PropertyPatch:
+      type: object
+      additionalProperties: false
+      required: [values]
+      properties:
+        values:
+          type: object
+          description: |
+            The new value of each property to change, by name, in the same
+            form as `ProfileField.value`, except that a `user` takes the
+            user's id. `null`, or empty text, clears a property: it inherits
+            again if it can.
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: number
+              - type: boolean
+              - type: 'null'
+          examples:
+            - docclass: Letters
+              legacydocnum: null

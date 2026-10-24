@@ -126,8 +126,12 @@ public class FolderResource {
 		}
 	}
 
-	/** An alias is not a folder of its own here: it answers like an unknown id */
-	private static FolderView view(long id, User caller) throws PersistenceException {
+	/**
+	 * @return the folder's view, if the caller may read it and it is in a
+	 *         Store; an alias is not a folder of its own here
+	 * @throws ApiProblem {@code 404} otherwise, as for an unknown id
+	 */
+	static FolderView view(long id, User caller) throws PersistenceException {
 		Optional<Folder> folder = AccessChecks.readableFolder(id, caller);
 		if (folder.isEmpty() || folder.get().getType() == Folder.TYPE_ALIAS)
 			throw ApiProblem.notFound("No folder #" + id);
