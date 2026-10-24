@@ -229,6 +229,64 @@ public class DocumentResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testContentDispositionNeutralisesTheName() throws Exception {
+		Document d = fx.upload(documents, "a\"b\\c\r\nd.docx", "Minutes", boss);
+		awaitAsyncWork();
+
+		ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("attachment; filename=\"a_b_c__d.docx\"; filename*=UTF-8''a%22b%5Cc%0D%0Ad.docx",
+				response.header("Content-Disposition"));
+	}
+
+	@Test
+	public void testHeadRecordsNothing() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		String token = signIn(clerk);
+
+		ApiResponse head = head("/api/v1/documents/" + number(d) + "/content").token(token).send();
+
+		assertEquals(head.toString(), 200, head.status());
+		assertEquals("11", head.header("Content-Length"));
+		assertTrue(head.header("Content-Disposition"), head.header("Content-Disposition").startsWith("attachment;"));
+		assertEquals(0, head.body().length);
+		assertEquals(0, jdbc().queryForObject(
+				"select count(*) from ld_history where ld_event = 'event.downloaded' and ld_docid = ?", Integer.class,
+				d.getId()).intValue());
+	}
+
+	@Test
+	public void testDownloadSurvivesAHistoryFailure() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		String token = signIn(clerk);
+		jdbc().execute("alter table ld_history rename to ld_history_away");
+		try {
+			ApiResponse response = get("/api/v1/documents/" + number(d) + "/content").token(token).send();
+
+			assertEquals(response.toString(), 200, response.status());
+			assertArrayEquals("Lease draft".getBytes(StandardCharsets.UTF_8), response.body());
+		} finally {
+			jdbc().execute("alter table ld_history_away rename to ld_history");
+		}
+	}
+
+	@Test
+	public void testDownloadOfAnotherDocumentInBetween() throws Exception {
+		Document a = file("a.docx", "Lease draft");
+		Document b = file("b.docx", "Other");
+		String token = signIn(clerk);
+
+		for (Document d : new Document[] { a, b, a })
+			assertEquals(200, get("/api/v1/documents/" + number(d) + "/content").token(token).send().status());
+
+		// As the old UI: only the session's latest download counts as a repeat
+		String sql = "select count(*) from ld_history where ld_event = 'event.downloaded' and ld_docid = ?";
+		assertEquals(2, jdbc().queryForObject(sql, Integer.class, a.getId()).intValue());
+		assertEquals(1, jdbc().queryForObject(sql, Integer.class, b.getId()).intValue());
+	}
+
+	@Test
 	public void testProtectedDocumentIsRefused() throws Exception {
 		Document d = file("a.docx", "Lease draft");
 		DocumentHistory history = fx.documentHistory(boss);

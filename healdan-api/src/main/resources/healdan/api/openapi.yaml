@@ -214,6 +214,86 @@ paths:
                 $ref: '#/components/schemas/DocumentPage'
         default:
           $ref: '#/components/responses/Problem'
+    post:
+      operationId: fileDocument
+      summary: File a new document
+      description: |
+        Files a file in a folder as a new document, as an upload in the web
+        page does. It gets the next doc #, its Date filed is now, and its
+        properties are inherited from the folder, with any `properties` sent
+        as the document's own. Author and Typist are the caller unless sent.
+        An email (`.eml` or `.msg`) gets its From, To, CC, Subject, Sent and
+        Received from the message, and is named after its subject. With
+        `checkOut: true` the document is checked out to the caller too. The
+        answer is `201` with the document, and its address as `Location`.
+
+        Nothing is stored unless every check passes. They run in this order,
+        and the first that fails gives the answer:
+
+        1. `400 bad-request` for a `document` part that is missing, isn't
+           the JSON expected (a field the server doesn't know included) or
+           has no `folderId`, and for a missing `file` part.
+        2. `404 not-found` for a folder the caller can't read, as for one
+           that doesn't exist.
+        3. `409 filing-rule` for a folder that can't hold documents: a
+           Store, a matter's top folder or a search folder.
+        4. `403 forbidden` without the Write permission on the folder.
+        5. The name: `name`, or the file part's name when that's blank
+           (RFC 5987's `filename*` first).
+        6. The file: `413 too-large` over the upload limit, the
+           `upload.maxsize` setting in MB; `422` when it's empty. A file
+           more than 1 MB over the limit is refused while it's sent, before
+           anything else.
+        7. The properties.
+
+        One `422 validation` lists every field that is wrong: the name, the
+        file, then the properties. The codes are:
+
+        - for `name`: `required` when there's no name at all, `invalid` for
+          a name with `/`, `\` or a control character, `extension` for one
+          that doesn't end with an extension, and `disallowed` for an
+          extension the `upload.disallow` setting lists, in any case;
+        - for `file`: `empty`;
+        - for a property: those of `setProperties`, and `required` for every
+          required property that has no value once inheritance has run.
+          A value sent as the folder's form shows it
+          (`GET /v1/folders/{folderId}/form`) is ignored, so a client can send
+          the whole form back.
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document, file]
+              properties:
+                document:
+                  $ref: '#/components/schemas/NewDocument'
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The file. The part's `Content-Disposition` names it, with
+                    `filename` or RFC 5987's `filename*`.
+            encoding:
+              document:
+                contentType: application/json
+      responses:
+        '201':
+          description: The document, as filed
+          headers:
+            Location:
+              description: The document's address, such as `/api/v1/documents/1234`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/search:
     get:
       operationId: search
@@ -353,6 +433,8 @@ paths:
         A document protected by a password is `403 forbidden` too, unless
         the signed-in session has unlocked it in the web page. A document whose file is missing from storage
         is `500 server-error`.
+
+        `HEAD` answers with the headers alone, and records nothing.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -794,7 +876,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, filing-rule, refused, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
@@ -1382,18 +1464,57 @@ components:
             `{id, name}` the API shows. `null`, or empty text, clears a
             property: it inherits again if it can.
           additionalProperties:
-            oneOf:
-              - type: string
-              - type: number
-              - type: boolean
-              - type: object
-                description: A user, by its `id`
-                required: [id]
-                properties:
-                  id:
-                    type: integer
-                    format: int64
-              - type: 'null'
+            $ref: '#/components/schemas/PropertyValue'
           examples:
             - docclass: Letters
               legacydocnum: null
+    PropertyValue:
+      description: |
+        A property's value as a request sends it, in the same form as
+        `ProfileField.value`.
+      oneOf:
+        - type: string
+        - type: number
+        - type: boolean
+        - type: object
+          description: A user, by its `id`
+          required: [id]
+          properties:
+            id:
+              type: integer
+              format: int64
+        - type: 'null'
+    NewDocument:
+      type: object
+      additionalProperties: false
+      description: The `document` part of `fileDocument`.
+      required: [folderId]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The folder to file the document into.
+        name:
+          type: [string, 'null']
+          description: |
+            The name to file it under, with its extension. The file part's
+            name when it's left out or blank.
+          examples: [Lease draft.docx]
+        properties:
+          type: [object, 'null']
+          description: |
+            Values for the new document's properties, by name, in the form
+            `PropertyPatch.values` takes them. A property left out, sent as
+            `null`, or sent as it would inherit, inherits from the folder; a
+            different value becomes the document's own (`local`).
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyValue'
+          examples:
+            - docclass: Letters
+        checkOut:
+          type: [boolean, 'null']
+          description: |
+            `true` to check the document out to the caller once it's filed,
+            when it stays open in Word after "Save to Healdan". `false` by
+            default.

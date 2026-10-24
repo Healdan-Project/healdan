@@ -72,7 +72,8 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 				: ApiProblem.notFound("There's nothing at this address.");
 		case 401 -> ApiProblem.unauthenticated("Sign in first.");
 		case 403 -> ApiProblem.forbidden("You can't do this.");
-		case 413 -> new ApiProblem(413, "too-large", "The upload is too large.");
+		// CXF stopped reading an upload part over its limit (UploadFilter)
+		case 413 -> Uploads.tooLarge();
 		case 405 -> new ApiProblem(405, "bad-request", "This address doesn't take this request method.");
 		case 406 -> new ApiProblem(406, "bad-request", "The server can't answer in a format the request accepts.");
 		case 415 -> new ApiProblem(415, "bad-request", "The server doesn't take this request's content type.");
@@ -105,7 +106,10 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 		return null;
 	}
 
-	private static String describe(JsonProcessingException e) {
+	/**
+	 * @return what's wrong with JSON that can't be read, for the user
+	 */
+	static String describe(JsonProcessingException e) {
 		if (e instanceof UnrecognizedPropertyException unknown)
 			return "The request has a field the server doesn't know: %s.".formatted(unknown.getPropertyName());
 		if (e instanceof JsonMappingException mapping && !mapping.getPath().isEmpty()) {

@@ -16,7 +16,6 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 
-import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.ws.rs.Path;
@@ -70,8 +69,8 @@ public class ApiServer implements ApplicationContextAware {
 
 	/**
 	 * @return the providers every request goes through: JSON, problems, CORS
-	 *         (before matching, so a preflight needs no token) and the token
-	 *         check
+	 *         (before matching, so a preflight needs no token), the token
+	 *         check, and the upload limit and clean-up
 	 */
 	static List<Object> providers() {
 		List<Object> providers = new ArrayList<>();
@@ -79,6 +78,7 @@ public class ApiServer implements ApplicationContextAware {
 		providers.add(new ProblemMapper());
 		providers.add(new CorsFilter());
 		providers.add(new TokenFilter());
+		providers.add(new UploadFilter());
 		// CXF answers ?_wadl with a WADL document whenever its generator is on the classpath, as the webservice
 		// plugin puts it; the API is described by openapi.yaml only
 		if (ClassUtils.isPresent(WADL_GENERATOR, ApiServer.class.getClassLoader()))
@@ -98,15 +98,14 @@ public class ApiServer implements ApplicationContextAware {
 	}
 
 	/**
-	 * Uploads stream to temporary files above 1 MB and stop at the old UI's
-	 * limit, {@code upload.maxsize} MB (spec section 10.2).
+	 * Upload parts stream to temporary files above 1 MB (spec section 10.2).
+	 * Their size limit follows {@code upload.maxsize} on every request
+	 * ({@link UploadFilter}).
 	 */
 	private static Map<String, Object> properties() {
-		long maxMegabytes = Context.get().getConfig().getLong(Tenant.DEFAULT_NAME + ".upload.maxsize", 10L);
 		Map<String, Object> properties = new HashMap<>();
 		properties.put("attachment-directory", System.getProperty("java.io.tmpdir"));
 		properties.put("attachment-memory-threshold", "1048576");
-		properties.put("attachment-max-size", String.valueOf(maxMegabytes * 1024 * 1024));
 		return properties;
 	}
 

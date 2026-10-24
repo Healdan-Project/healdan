@@ -133,6 +133,17 @@ public class ApiCall {
 		return this;
 	}
 
+	/**
+	 * Adds a file part as an HTML form sends it: the name, whatever it is, in
+	 * a plain {@code filename}, written in UTF-8.
+	 */
+	public ApiCall formFile(String name, String fileName, byte[] content) {
+		String head = "Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\nContent-Type: application/octet-stream\r\n"
+				.formatted(name, fileName);
+		parts.add(part(head, content));
+		return this;
+	}
+
 	private byte[] part(String head, byte[] content) {
 		ByteArrayOutputStream out = new ByteArrayOutputStream();
 		out.writeBytes(("--" + boundary + "\r\n" + head + "\r\n").getBytes(StandardCharsets.UTF_8));

@@ -77,6 +77,10 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 		return call("GET", path);
 	}
 
+	protected ApiCall head(String path) {
+		return call("HEAD", path);
+	}
+
 	protected ApiCall post(String path) {
 		return call("POST", path);
 	}
