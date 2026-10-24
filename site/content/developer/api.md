@@ -127,7 +127,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 
 ## Conventions
 
-- **Healdan's words.** Fields say `store`, `matter`, `client`, `docNumber`, `legacyDocNumber`, `dateFiled` and
+- **Healdan's words.** Names say `store`, `matter`, `client`, `docNumber`, `legacyDocNumber`, `dateFiled` and
   `snapshot`, never LogicalDOC's `workspace` or `customId`. The API always says `matter`; `GET /server` gives the
   word your install shows people instead, such as Project.
 - **Documents are addressed by doc #:** `/documents/1234` is document #1234.
@@ -202,5 +202,10 @@ which start `ld-` and are sent as `X-API-KEY`. People make them in the web page,
 bar, in **Security → API Keys**.
 
 They're LogicalDOC's older services. They speak LogicalDOC's words, so a Store is a workspace there, and an API key
-never expires and survives a password change. New clients use `/api`, which doesn't take API keys, and whose
-device tokens are only for `/api`.
+never expires and survives a password change. New clients use `/api`, which doesn't take API keys.
+
+**A device token is also a LogicalDOC API key.** Sent as `X-API-KEY` to `/services/rest/auth/loginApiKey`, or to
+the SOAP service's `loginApiKey`, it opens a LogicalDOC session for the token's user, with that user's rights. While
+a session opened with the token is open, LogicalDOC's other routes accept the token as `X-API-KEY` too. Revoking
+the token, or changing the password, ends those sessions. A session that's already open lasts until LogicalDOC
+closes it, even if the token expires first. So guard a token as you would the password.

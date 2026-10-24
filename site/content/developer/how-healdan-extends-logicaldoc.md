@@ -47,7 +47,8 @@ learn from.
   - Its servlets register with `@WebServlet`. Its RPC paths are `/frontend/healdan*` and its data paths
     `/data/healdan*`.
   - Its listeners enforce Healdan's rules on every route into the server: the web UI, Healdan's API, LogicalDOC's
-    web services, WebDAV and CMIS.
+    web services, WebDAV and CMIS. Required properties are the exception: on the server, only Healdan's API
+    checks them when a document is filed.
 - **`healdan-api`** is Healdan's [API](../api/), a plugin of its own that requires `healdan-core`. Its code is under
   `com.logicaldoc.healdan.api`, where `healdan-core`'s Spring scan finds it.
   - `ApiServlet` serves `/api/*`, and registers with `@WebServlet`. It runs CXF's JAX-RS on a CXF bus of its own,

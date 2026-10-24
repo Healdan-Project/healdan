@@ -195,7 +195,8 @@ address is the one Tomcat works out from `X-Forwarded-For`, so:
 - **Known limitation: a machine on a private network can claim any address.** Tomcat trusts `X-Forwarded-For` from
   every private, loopback and link-local address, not just from your proxy. nginx and NPM also pass on a header
   the client made up, with the client's own address added at the end. So a machine on your LAN or VPN can send a
-  false address, through such a proxy or straight to the app's port, and Healdan believes it.
+  false address, through such a proxy or straight to the app's port, and Healdan believes it. So can anything on
+  the Docker host, which reaches the app through Docker's network.
   - It can claim a new address for each attempt, and never meet the per-address limit. The per-username limit
     still holds.
   - It can claim `127.0.0.1`. LogicalDOC never blocks the `admin` account signing in from that address, so it can

@@ -33,9 +33,10 @@ is required. After changing `.env`, run `docker compose up -d`.
 Change those in `.env`. Everything else is set in the app's admin screens, and survives restarts, recreating the
 containers and rebuilding the image.
 
-A few settings have no screen. They're in the configuration volume's `context.properties`: change them there, then
-restart the app with `docker compose restart app`. The pages that need one say so, such as
-[the sign-in throttle](../../admin/healdan-settings/#changing-the-limits).
+A few settings have no screen. They're in the configuration volume's `context.properties`. Stop the app first
+(`docker compose stop app`), change them, then start it again (`docker compose start app`): while the app runs, a
+settings screen that saves rewrites the whole file from what the app read when it started. The pages that need one
+say so, such as [the sign-in throttle](../../admin/healdan-settings/#changing-the-limits).
 
 ## Passwords and Special Characters
 

@@ -6,7 +6,7 @@ weight: 7
 Healdan's own settings are under **Administration → Healdan → Settings**. Click **Save** after changing them.
 Clients are saved from their own window, without Save.
 
-![The Healdan settings panel: matter labels, numbering, default Class, the Recent Matters window, the next doc #, and the client list with Add client and Edit](healdan-settings.png)
+![The Healdan settings panel: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit](healdan-settings.png)
 
 | Setting | What it does |
 |---|---|
@@ -17,7 +17,7 @@ Clients are saved from their own window, without Save.
 | Next doc # | the number the next document gets. It can only be raised, for example to start at 1000 after a trial. The panel shows the lowest number allowed |
 | Device sign-in expires after (unused days) | how long a device signed in through Healdan's [API](../../developer/api/) stays signed in without being used. 30 to begin with, and from 1 to 3650. A change applies to every device at once |
 | Device sign-in lasts at most (days) | how long a device's sign-in lasts however often it's used. 365 to begin with, from 1 to 3650, and no less than the unused days. A change applies to sign-ins made after it |
-| API origins allowed (CORS) | the addresses, other than Healdan's own, whose pages may call the API, such as `https://localhost:3000`, separated by commas: scheme, host and port, with no path and no `*`. Empty to begin with, which is right unless an add-in is served from another address |
+| API origins allowed (CORS) | the addresses, other than Healdan's own, whose pages may call the API, such as `https://localhost:3000`, separated by commas: scheme, host and an optional port, with no path and no `*`. Empty to begin with, which is right unless an add-in is served from another address |
 | Clients | the client list. **Add client** adds one, and **Edit** changes the selected client's name |
 
 ## The Class and Subclass Lists
@@ -52,19 +52,23 @@ services.
   temporarily blocked. Try after 15 minutes." for a blocked address. The API answers `429 too-many-attempts`.
 - **Alerts.** Each blocked attempt sends the users in `throttle.alert.recipients` (`admin` to begin with) a message
   in Healdan, and an email too if [outgoing email](../system/outgoing-email/) is set up.
-- **`admin` from the server itself.** LogicalDOC never blocks the `admin` account signing in from `127.0.0.1` or
-  `::1`, the server's own address. In the Docker stack only a request from inside the app's container has that
-  address: a browser on the Docker host comes in through Docker's network. So a blocked `admin` waits the 15
-  minutes like anyone else.
+- **`admin` and the server's own address.** LogicalDOC never blocks the `admin` account signing in from
+  `127.0.0.1` or `::1`. Only a request from inside the app's container really comes from that address. But
+  anything Tomcat trusts to forward addresses can claim it: the Docker host, which reaches the app through Docker's
+  network, and the machines on your network when the app is published there or behind nginx or NPM. So the throttle
+  doesn't protect `admin` from those. Give `admin` a long password that isn't used anywhere else. See
+  [Reverse Proxy](../../install/reverse-proxy/#the-sign-in-throttle-behind-a-proxy).
 
 Behind a reverse proxy, Healdan has to see each person's own address. See
-[Reverse Proxy](../../install/reverse-proxy/#the-sign-in-throttle-behind-a-proxy), which also has a limitation to
-know about.
+[Reverse Proxy](../../install/reverse-proxy/#the-sign-in-throttle-behind-a-proxy), which also has the limitation
+above in full.
 
 ### Changing the Limits
 
-The throttle has no screen in Healdan. Its settings are in the configuration volume's `context.properties`; change
-them there, then restart the app with `docker compose restart app`.
+The throttle has no screen in Healdan. Its settings are in the configuration volume's `context.properties`. Stop
+the app first (`docker compose stop app`), change them, then start it again (`docker compose start app`). While the
+app runs, a settings screen that saves rewrites the whole file from what the app read when it started, and your
+change would be lost.
 
 | Setting | Healdan's value | What it does |
 |---|---|---|

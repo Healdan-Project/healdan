@@ -35,7 +35,7 @@ Use the power icon in the top bar, next to the help icon.
 - **A forgotten password:** **Lost your password?** under the Sign In button resets it by email, if your install
   can send email. Otherwise your administrator can reset it.
 - **"Your username is temporarily blocked. Try after 15 minutes."** After five wrong passwords in a row, Healdan
-  refuses your user name for 15 minutes, even with the right password, wherever you sign in. Wait, then sign in
+  refuses that username for 15 minutes, even with the right password, wherever you sign in. Wait, then sign in
   again. Your account isn't disabled, and trying again while you wait doesn't make the wait longer. If the wrong
   passwords weren't yours, tell your administrator.
 - **"Your IP is temporarily blocked. Try after 15 minutes."** Twenty failed sign-ins in a row from your network
