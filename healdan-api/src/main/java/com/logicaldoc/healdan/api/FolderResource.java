@@ -2,7 +2,10 @@ package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import org.springframework.stereotype.Component;
 
@@ -86,7 +89,7 @@ public class FolderResource {
 			} else {
 				all.addAll(subfolders(folder, caller));
 				if (!foldersOnly)
-					all.addAll(documents(id, caller));
+					all.addAll(documents(folder, caller));
 			}
 
 			Page<Object> slice = paging.slice(all);
@@ -100,14 +103,12 @@ public class FolderResource {
 		}
 	}
 
+	/** An alias is not a folder of its own here: it answers like an unknown id */
 	private static FolderView view(long id, User caller) throws PersistenceException {
-		return AccessChecks.readableFolder(id, caller).flatMap(f -> {
-			try {
-				return ApiViews.folder(f, caller);
-			} catch (PersistenceException e) {
-				throw new IllegalStateException("Can't read folder #" + id, e);
-			}
-		}).orElseThrow(() -> ApiProblem.notFound("No folder #" + id));
+		Optional<Folder> folder = AccessChecks.readableFolder(id, caller);
+		if (folder.isEmpty() || folder.get().getType() == Folder.TYPE_ALIAS)
+			throw ApiProblem.notFound("No folder #" + id);
+		return ApiViews.folder(folder.get(), caller).orElseThrow(() -> ApiProblem.notFound("No folder #" + id));
 	}
 
 	private static List<Folder> subfolders(Folder parent, User caller) throws PersistenceException {
@@ -123,21 +124,36 @@ public class FolderResource {
 		return readable;
 	}
 
-	private static List<Document> documents(long folderId, User caller) throws PersistenceException {
-		List<Document> readable = new ArrayList<>();
-		for (Document d : DocumentDAO.get().findByFolder(folderId, null))
-			if (AccessChecks.readableDocument(d, caller).isPresent())
-				readable.add(d);
+	private static List<Document> documents(Folder folder, User caller) throws PersistenceException {
+		// One batched permission check for the folder, not one per document
+		List<Document> readable = new ArrayList<>(AccessChecks.readableDocuments(folder,
+				DocumentDAO.get().findByFolder(folder.getId(), null), caller));
 		readable.sort(Comparator.comparing(Document::getFileName, String.CASE_INSENSITIVE_ORDER)
 				.thenComparing(Document::getFileName).thenComparingLong(Document::getId));
 		return readable;
 	}
 
+	/**
+	 * @return the documents the search folder lists, in its order: they are
+	 *         already filtered to what the viewer can read, so only publishing
+	 *         is checked; at most 1000, counted after that
+	 */
 	private static List<Document> searchDocuments(long folderId, User caller) throws PersistenceException {
 		List<Long> ids = SearchFolderService.get().evaluate(folderId, caller);
+		Map<Long, Document> byId = new HashMap<>();
+		for (int from = 0; from < ids.size(); from += 500)
+			for (Document d : DocumentDAO.get().findByWhere("_entity.id in (:ids)",
+					Map.of("ids", ids.subList(from, Math.min(from + 500, ids.size()))), null, null))
+				byId.put(d.getId(), d);
+
 		List<Document> documents = new ArrayList<>();
-		for (Long docId : ids.subList(0, Math.min(ids.size(), SEARCH_FOLDER_CAP)))
-			AccessChecks.readableDocument(DocumentDAO.get().findById(docId), caller).ifPresent(documents::add);
+		for (Long docId : ids) {
+			Document d = byId.get(docId);
+			if (d != null && d.getDeleted() == 0 && AccessChecks.visible(d, caller))
+				documents.add(d);
+			if (documents.size() == SEARCH_FOLDER_CAP)
+				break;
+		}
 		return documents;
 	}
 }

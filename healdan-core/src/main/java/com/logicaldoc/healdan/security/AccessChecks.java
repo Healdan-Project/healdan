@@ -1,6 +1,16 @@
 package com.logicaldoc.healdan.security;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+
+import javax.sql.DataSource;
+
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
@@ -11,6 +21,7 @@ import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.rules.FilingRules;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * What a user may see and do, for code that answers a user rather than a
@@ -22,6 +33,18 @@ public final class AccessChecks {
 
 	/** The group whose members CE's searches show unpublished documents to */
 	private static final String PUBLISHER_GROUP = "publisher";
+
+	/** Ids per query, to stay under the databases' limits on a list */
+	private static final int CHUNK = 500;
+
+	/**
+	 * Every permission column of {@code ld_document_acl}, as CE's
+	 * {@code getAllowedPermissions} reads them
+	 */
+	private static final String ANY_PERMISSION = String.join(" + ", "ld_read", "ld_write", "ld_security", "ld_immutable",
+			"ld_delete", "ld_rename", "ld_sign", "ld_archive", "ld_workflow", "ld_download", "ld_calendar",
+			"ld_subscription", "ld_print", "ld_password", "ld_move", "ld_email", "ld_automation", "ld_readingreq",
+			"ld_preview", "ld_customid", "ld_revision");
 
 	private AccessChecks() {
 	}
@@ -112,5 +135,65 @@ public final class AccessChecks {
 	 */
 	public static boolean allowed(User user, Permission permission, Folder folder) throws PersistenceException {
 		return FolderDAO.get().isPermissionAllowed(permission, folder.getId(), user.getId());
+	}
+
+	/**
+	 * Which of a folder's documents the user can read, for a listing: the
+	 * answer of {@link #readableDocument(Document, User)} for each, with one
+	 * query on the documents' own ACLs instead of several per document.
+	 * <p>
+	 * As CE decides ({@code getAllowedPermissions}): an administrator reads all;
+	 * a document whose own ACL rows for the user's groups grant anything is
+	 * read if they grant READ; any other document takes its folder's answer.
+	 *
+	 * @param folder the folder that holds all the documents
+	 * @param documents documents of the folder
+	 * @param user the user, with its groups
+	 * @return the readable and published ones, in the order given
+	 * @throws PersistenceException error at data layer
+	 */
+	public static List<Document> readableDocuments(Folder folder, List<Document> documents, User user)
+			throws PersistenceException {
+		boolean admin = user.isAdmin();
+		boolean folderRead = admin || FolderDAO.get().isReadAllowed(folder.getId(), user.getId());
+		Map<Long, Boolean> own = admin || documents.isEmpty() ? Map.of()
+				: ownAclDecisions(documents.stream().map(Document::getId).toList(), user.getId());
+
+		List<Document> readable = new ArrayList<>();
+		for (Document document : documents) {
+			if (document.getDeleted() != 0)
+				continue;
+			if (!own.getOrDefault(document.getId(), folderRead))
+				continue;
+			if (visible(document, user))
+				readable.add(document);
+		}
+		return readable;
+	}
+
+	/**
+	 * @return for each document with own ACL rows that grant the user's groups
+	 *         anything, whether they grant READ
+	 */
+	private static Map<Long, Boolean> ownAclDecisions(List<Long> docIds, long userId) {
+		NamedParameterJdbcTemplate jdbc = new NamedParameterJdbcTemplate(Context.get(DataSource.class));
+		Map<Long, Boolean> decisions = new HashMap<>();
+		Set<Long> seen = new HashSet<>();
+		for (int from = 0; from < docIds.size(); from += CHUNK) {
+			List<Long> chunk = docIds.subList(from, Math.min(from + CHUNK, docIds.size()));
+			jdbc.query("""
+					select ld_docid, max(ld_read), max(%s)
+					  from ld_document_acl
+					 where ld_docid in (:ids)
+					   and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = :user)
+					 group by ld_docid
+					""".formatted("(" + ANY_PERMISSION + ")"),
+					Map.of("ids", chunk, "user", userId), rs -> {
+						// Rows that grant nothing at all send the document to its folder
+						if (rs.getInt(3) > 0 && seen.add(rs.getLong(1)))
+							decisions.put(rs.getLong(1), rs.getInt(2) > 0);
+					});
+		}
+		return decisions;
 	}
 }

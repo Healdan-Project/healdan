@@ -224,6 +224,30 @@ public class FolderResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAliasIsNotFound() throws Exception {
+		Folder target = fx.folder(documents, "Target");
+		fx.folder(target, "Inside");
+		Folder inMatter = fx.legacyAlias(documents, "Shortcut", target);
+		Folder templates = FolderDAO.get().findById(HealdanSettings.get().templatesStoreId());
+		Folder outside = fx.legacyAlias(documents, "Elsewhere", templates);
+		String token = signIn(boss);
+
+		ApiResponse unknown = get("/api/v1/folders/" + (inMatter.getId() + 1000)).token(token).send();
+		for (Folder alias : new Folder[] { inMatter, outside }) {
+			ApiResponse view = get("/api/v1/folders/" + alias.getId()).token(token).send();
+			assertEquals(view.toString(), 404, view.status());
+			assertEquals(unknown.text().replace(Long.toString(inMatter.getId() + 1000), "N"),
+					view.text().replace(Long.toString(alias.getId()), "N"));
+			ApiResponse children = get("/api/v1/folders/" + alias.getId() + "/children").token(token).send();
+			assertEquals(children.toString(), 404, children.status());
+		}
+
+		// And the listing of the parent leaves the aliases out
+		assertEquals(1, get("/api/v1/folders/" + documents.getId() + "/children").token(token).send().json()
+				.path("total").asInt());
+	}
+
+	@Test
 	public void testMatterWorkspaceChildren() throws Exception {
 		fx.searchFolder(workspace, "Recent");
 
