@@ -3,6 +3,7 @@
 - **What:** every server call the old GWT UI makes, with the milestone that first needs it in the new JSON API, and where it lands there.
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
+- **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
 
 **Tags.** The milestone that first needs the call: `M2` (the add-in slice), `M3`, `M5`, `M6` (the User app), `M7` (walls), `Admin` (the backlog's Admin app), or `none`. `none` covers enterprise stubs with no server code (marked **NO IMPL**) and CE features Healdan doesn't use. Tags are judgements, and a milestone's design session can move them.
 
@@ -30,7 +31,9 @@
 | none | 223 | 5 | 6 | 234 |
 | **all** | 475 | 52 | 23 | 550 |
 
-### 0.1 What M2 replaces
+### 0.1 What M2 replaces (built in M2)
+
+M2 built every endpoint in this table. The rows marked "(none: …)" are endpoints with no old call behind them.
 
 | Old call | M2 endpoint |
 |---|---|
@@ -58,6 +61,9 @@
 | `HealdanMatterService.listStores`; `/data/folders.xml` on a Store (admins) | `GET /stores`, `GET /stores/{id}/matters` (admins only) |
 | (none: recent folders are new) | `GET /folders/recent` |
 | (none: recent documents are new) | `GET /documents/recent` |
+| (none: a user's device sign-ins are new) | `GET /auth/tokens`, `DELETE /auth/tokens/{id}` |
+| (none: the matter admin RPCs read a matter by its workspace, for admins only) | `GET /matters/{id}` |
+| (none: the description file is new) | `GET /openapi.yaml`, and the docs page at `/api/docs/` |
 
 ### 0.2 Per service
 
@@ -744,7 +750,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/templates.xml` | TemplatesDataServlet | type, templateId, withempty | Templates (Healdan: profiles) available for documents or folders. Healdan has one profile, so the API's form doesn't need it. | Admin | `/admin/profile` |
 | `/data/attributes.xml` | AttributesDataServlet | templateId, context, sections, extOnly | Attributes of a template (or all attribute-set attributes): name, type, mandatory, defaults, options-set. | M2 | `/folders/{id}/form`, `/documents/{docNumber}/properties` |
 | `/data/attributeoptions.xml` | AttributeOptionsDataServlet | setId, attribute, category, withempty | Option values for a dropdown/preset attribute. | M2 | the `options` of each form field |
-| `/data/lockeddocs.xml` | LockedDocsDataServlet | userId | Documents locked/checked out (by a user). "My checked-out documents". | M2 | `/me/checkouts` |
+| `/data/lockeddocs.xml` | LockedDocsDataServlet | userId | Documents locked/checked out (by a user). "My checked-out documents". **Broken upstream:** its SQL is missing a comma, and it checks no permission (capability map §6). | M2 | `/me/checkouts` (built on `DocumentDAO.findByLockUserAndStatus` instead) |
 | `/data/versions.xml` | VersionsDataServlet | docId, archiveId | Version history of a document (or versions of an Import/Export archive). | M2 | `/documents/{docNumber}/versions` |
 | `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | M6 | `/documents/{docNumber}/history` |
 | `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | M6 | `/folders/{id}/history` |

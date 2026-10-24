@@ -232,6 +232,10 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		HealdanRuleException tooLong = assertThrows(HealdanRuleException.class,
 				() -> tokens().issue(clerk, "a".repeat(101), null));
 		assertEquals("A device name can't be longer than 100 characters.", tooLong.getMessage());
+		// Which refusal it is, for the API's too-long
+		assertTrue(ApiTokens.nameTooLong("a".repeat(101)));
+		assertFalse(ApiTokens.nameTooLong(" " + "a".repeat(100) + " "));
+		assertFalse(ApiTokens.nameTooLong(null));
 
 		assertThrows(HealdanRuleException.class, () -> tokens().issue(clerk, "Phone \uD83D\uDE00", null));
 	}
@@ -312,38 +316,51 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		}
 	}
 
-	// A session opened with the token as an API key, as CE's loginApiKey routes do: not bound to the row
-	private static String keySession(ApiTokens.Issued issued) {
-		return SessionManager.get().newSession(issued.token(), new Client()).getSid();
+	// A session the API opened for the token once its first one closed
+	private String apiSession(ApiTokens.Issued issued) {
+		return tokens().openSession(issued.token(), issued.row(), new Client()).getSid();
 	}
 
 	@Test
-	public void testRevokeClosesSessionsOpenedWithTheToken() throws Exception {
+	public void testRevokeClosesEverySessionTheApiOpened() throws Exception {
 		User clerk = fx.user("clerk");
 		ApiTokens.Issued issued = tokens().issue(clerk, "Laptop", null);
 		ApiTokens.Issued other = tokens().issue(clerk, "Phone", null);
-		String sid = keySession(issued);
-		String otherSid = keySession(other);
+		// Two requests that both found the bound session closed each open one; the second is bound
+		String lost = apiSession(issued);
+		String sid = apiSession(issued);
+		String otherSid = apiSession(other);
+		// The web page's session isn't the token's
+		String browser = SessionManager.get().newSession(clerk.getUsername(), HealdanFixtures.PASSWORD, (Client) null)
+				.getSid();
+		// CE's loginApiKey routes can't open one: a token signs in only at /api
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(issued.token(), new Client()));
 		try {
+			assertEquals(sid, tokens().find(issued.token()).get().getSid());
+			assertTrue(SessionManager.get().isOpen(lost));
 			assertTrue(SessionManager.get().isOpen(sid));
 
 			tokens().revoke(issued.row());
 
+			assertFalse(SessionManager.get().isOpen(lost));
 			assertFalse(SessionManager.get().isOpen(sid));
 			assertTrue(SessionManager.get().isOpen(otherSid));
+			assertTrue(SessionManager.get().isOpen(browser));
 		} finally {
+			SessionManager.get().kill(lost);
 			SessionManager.get().kill(sid);
 			SessionManager.get().kill(otherSid);
+			SessionManager.get().kill(browser);
 		}
 	}
 
 	@Test
-	public void testRevokeAllClosesSessionsOpenedWithTheTokens() throws Exception {
+	public void testRevokeAllClosesEverySessionTheApiOpened() throws Exception {
 		User clerk = fx.user("clerk");
 		User boss = fx.user("boss", "admin");
-		String one = keySession(tokens().issue(clerk, "a", null));
-		String two = keySession(tokens().issue(clerk, "b", null));
-		String bosses = keySession(tokens().issue(boss, "c", null));
+		String one = apiSession(tokens().issue(clerk, "a", null));
+		String two = apiSession(tokens().issue(clerk, "b", null));
+		String bosses = apiSession(tokens().issue(boss, "c", null));
 		try {
 			assertEquals(2, tokens().revokeAll(clerk.getId()));
 

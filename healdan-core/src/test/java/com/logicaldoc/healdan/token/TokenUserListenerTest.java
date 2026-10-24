@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.token;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Date;
@@ -44,12 +45,13 @@ public class TokenUserListenerTest extends AbstractHealdanTestCase {
 		assertEquals(0, ApiTokens.get().list(clerk.getId()).size());
 	}
 
-	// CE's loginApiKey routes open sessions with a token that aren't bound to its row
+	// A token signs in only at /api: CE's loginApiKey routes can't open a session with it, and the API's are closed
 	@Test
-	public void testPasswordChangeClosesSessionsOpenedWithAToken() throws Exception {
+	public void testPasswordChangeClosesSessionsTheApiOpened() throws Exception {
 		User clerk = fx.user("clerk");
 		ApiTokens.Issued issued = ApiTokens.get().issue(clerk, "Laptop", null);
-		String sid = SessionManager.get().newSession(issued.token(), new Client()).getSid();
+		assertThrows(TokenRefusedException.class, () -> SessionManager.get().newSession(issued.token(), new Client()));
+		String sid = ApiTokens.get().openSession(issued.token(), issued.row(), new Client()).getSid();
 		try {
 			assertTrue(SessionManager.get().isOpen(sid));
 

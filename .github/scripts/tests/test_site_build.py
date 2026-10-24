@@ -280,15 +280,21 @@ class SiteBuild(unittest.TestCase):
     # Task 3
 
     def test_interim_box_renders(self):
-        # The API page stays an interim page until M2 documents Healdan's own API
-        page = self.html("/developer/api/")
+        # A page that isn't written yet: the Admin Guide's protocols page stays interim until Healdan documents them
+        page = self.html("/admin/system/webdav-cmis-and-web-services/")
         box = self.text(page, "div", "healdan-interim")
-        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Web Services API covers similar "
-                      "ground.", box)
+        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Protocols covers similar ground.", box)
         self.assertIn("LogicalDOC's docs describe its Enterprise edition, so some features there aren't in Healdan, "
                       "and their workspace isn't a Healdan Workspace.", box)
-        self.assertIn("https://docs.logicaldoc.com/en/web-services-api",
+        self.assertIn("https://docs.logicaldoc.com/en/settings/protocols",
                       [link.href for link in self.links(page, "healdan-interim")])
+
+    def test_api_page_written(self):
+        # M2 replaced the API page's interim box with Healdan's own API; RestAuthService's key hint links here
+        page = self.html("/developer/api/")
+        self.assertNotIn("healdan-interim", page)
+        self.assertEqual("API – Healdan Documentation", self.text(page, "title"))
+        self.assertIn("/api/v1/openapi.yaml", page)
 
     # Task 4
 

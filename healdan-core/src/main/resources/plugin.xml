@@ -107,7 +107,7 @@
 		<parameter id="class" value="com.logicaldoc.healdan.security.EveryoneUserListener" />
 	</extension>
 
-	<!-- Device tokens sign in as API keys (spec section 5) -->
+	<!-- Device tokens sign in, for the API only, through CE's chain (spec section 5.1) -->
 	<extension plugin-id="logicaldoc-core" point-id="Authentication" id="healdanTokenAuthentication">
 		<parameter id="authenticatorId" value="healdanTokenAuthenticator" />
 		<parameter id="position" value="105" />

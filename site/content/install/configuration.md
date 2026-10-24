@@ -33,6 +33,28 @@ is required. After changing `.env`, run `docker compose up -d`.
 Change those in `.env`. Everything else is set in the app's admin screens, and survives restarts, recreating the
 containers and rebuilding the image.
 
+## Settings Without a Screen
+
+A few settings have no screen. They're in the configuration volume's `context.properties`. The pages that need one
+say so, such as [the sign-in throttle](../../admin/healdan-settings/#changing-the-limits).
+
+Stop the app before you change the file, and start it again afterwards: while the app runs, a settings screen that
+saves rewrites the whole file from what the app read when it started. From the folder with Healdan's
+`compose.yaml`:
+
+```bash
+docker compose stop app
+docker run --rm -it -v logicaldoc_logicaldoc-conf:/conf busybox vi /conf/context.properties
+docker compose start app
+```
+
+- **The volume's name** is the stack's project name, `logicaldoc`, then `_logicaldoc-conf`, as in
+  [Backup and Restore](../backup-and-restore/).
+- **In `vi`,** find a setting with `/` and its name, press `i` to edit, then `Esc` and `:wq` to save and quit, or
+  `:q!` to quit without saving. The app writes each setting as `name=value`.
+- **The file is Latin-1.** Write only Latin-1 characters in it, as in `.env`.
+- **The file's owner** doesn't matter: the app takes the volume back when it starts.
+
 ## Passwords and Special Characters
 
 - **Quote values in `.env`.** Inside single quotes nothing is interpreted: `DB_PASSWORD='p@ss $word #1'`.

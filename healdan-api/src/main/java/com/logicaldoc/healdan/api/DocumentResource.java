@@ -184,7 +184,10 @@ public class DocumentResource {
 			DocumentHistory transaction = new DocumentHistory();
 			transaction.setSession(caller.session());
 			transaction.setEvent(DocumentEvent.STORED);
-			long id = DocumentManager.get().create(upload, vo, transaction).getDocument().getId();
+			Document created = DocumentManager.get().create(upload, vo, transaction).getDocument();
+			long id = created.getId();
+			// CE swallows a failed write of the version record, as it does on a save
+			VersionResource.confirmStored(id, Long.parseLong(created.getCustomId()), null, user);
 
 			if (Boolean.TRUE.equals(request.checkOut())) {
 				DocumentHistory checkout = new DocumentHistory();
