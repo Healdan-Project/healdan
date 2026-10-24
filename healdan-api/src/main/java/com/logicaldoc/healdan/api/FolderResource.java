@@ -117,9 +117,15 @@ public class FolderResource {
 
 			Page<Object> slice = paging.slice(all);
 			List<Object> items = new ArrayList<>();
-			for (Object item : slice.items())
-				items.add(item instanceof Folder f ? ApiViews.folder(f, caller).orElseThrow()
-						: ApiViews.document((Document) item, caller));
+			// The folder's own view gives what its children share; a search folder's documents are anywhere
+			for (Object item : slice.items()) {
+				if (item instanceof Folder f)
+					items.add(ApiViews.subfolder(f, view, caller));
+				else if ("searchFolder".equals(view.kind()))
+					items.add(ApiViews.document((Document) item, caller));
+				else
+					items.add(ApiViews.document((Document) item, caller, view.kind(), view.matter()));
+			}
 			return new Page<>(items, slice.offset(), slice.limit(), slice.total());
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list folder #" + id, e);
@@ -177,8 +183,7 @@ public class FolderResource {
 		List<Document> documents = new ArrayList<>();
 		for (Long docId : ids) {
 			Document d = byId.get(docId);
-			if (d != null && d.getDeleted() == 0 && AccessChecks.visible(d, caller)
-					&& ApiViews.hasDocNumber(d))
+			if (d != null && d.getDeleted() == 0 && AccessChecks.visible(d, caller) && ApiViews.shows(d))
 				documents.add(d);
 			if (documents.size() == SEARCH_FOLDER_CAP)
 				break;

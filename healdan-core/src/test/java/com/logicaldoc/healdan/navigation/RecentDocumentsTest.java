@@ -205,6 +205,13 @@ public class RecentDocumentsTest extends AbstractHealdanTestCase {
 		// The newest is the last, the oldest is dropped
 		assertEquals(docs.get(docs.size() - 1).getId(), ids.get(0).longValue());
 		assertTrue(!ids.contains(docs.get(0).getId()));
+
+		// A filter applies before the cap: leaving the newest out brings the oldest back
+		long newest = docs.get(docs.size() - 1).getId();
+		List<Long> filtered = RecentDocuments.get().list(alice.getId(), d -> d.getId() != newest).stream()
+				.map(RecentDocument::docId).toList();
+		assertEquals(RecentDocuments.MAX_ENTRIES, filtered.size());
+		assertTrue(filtered.contains(docs.get(0).getId()));
 	}
 
 	private void record(User user, Document doc, DocumentEvent event, Instant when) {

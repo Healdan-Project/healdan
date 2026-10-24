@@ -21,6 +21,7 @@ import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.model.ClientRef;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FolderRef;
@@ -83,6 +84,17 @@ public final class ApiViews {
 	}
 
 	/**
+	 * @param d a document
+	 * @return whether the API shows it: it has a numeric doc # and is in a
+	 *         Store, like every folder the API shows. Elsewhere it answers like
+	 *         one that doesn't exist.
+	 * @throws PersistenceException error at data layer
+	 */
+	public static boolean shows(Document d) throws PersistenceException {
+		return hasDocNumber(d) && MatterLocator.get().locate(d.getFolder().getId()).isUnderAStore();
+	}
+
+	/**
 	 * @param d a document the caller may read
 	 * @param caller the signed-in user, with its groups
 	 * @return the document's view; {@code canEdit} also asks that the current
@@ -90,8 +102,21 @@ public final class ApiViews {
 	 * @throws PersistenceException error at data layer
 	 */
 	public static DocumentView document(Document d, User caller) throws PersistenceException {
+		FolderPosition position = MatterLocator.get().locate(d.getFolder().getId());
+		return document(d, caller, folderKind(position), matterOf(position));
+	}
+
+	/**
+	 * @param d a document the caller may read
+	 * @param caller the signed-in user, with its groups
+	 * @param folderKind the kind of the document's folder
+	 * @param matter the matter of the document's folder, or null
+	 * @return the document's view, for a listing that knows its folder
+	 * @throws PersistenceException error at data layer
+	 */
+	static DocumentView document(Document d, User caller, String folderKind, MatterRef matter)
+			throws PersistenceException {
 		long folderId = d.getFolder().getId();
-		FolderPosition position = MatterLocator.get().locate(folderId);
 		HoldView hold = hold(d);
 		// As the check-out and the save decide: no one else's hold, and no lock at all (spec correction 10)
 		boolean canEdit = AccessChecks.allowed(caller, Permission.WRITE, d) && !d.isImmutable()
@@ -100,8 +125,8 @@ public final class ApiViews {
 		long docNumber = Long.parseLong(d.getCustomId());
 		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
-				new FolderRef(folderId, d.getFolder().getName(), folderKind(position)), matterOf(position),
-				d.getCreation(), d.getLastModified(), hold, canEdit);
+				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter, d.getCreation(),
+				d.getLastModified(), hold, canEdit);
 	}
 
 	/**
@@ -135,20 +160,28 @@ public final class ApiViews {
 	 */
 	public static HoldView hold(Document d) throws PersistenceException {
 		String kind;
-		if (d.getStatus() == DocumentStatus.CHECKEDOUT)
+		DocumentEvent event;
+		if (d.getStatus() == DocumentStatus.CHECKEDOUT) {
 			kind = "checkout";
-		else if (d.getStatus() == DocumentStatus.LOCKED)
+			event = DocumentEvent.CHECKEDOUT;
+		} else if (d.getStatus() == DocumentStatus.LOCKED) {
 			kind = "lock";
-		else
+			event = DocumentEvent.LOCKED;
+		} else {
 			return null;
+		}
 
-		List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
-				"_entity.docId = :docId and _entity.event in (:events)",
-				Map.of("docId", d.getId(), "events",
-						List.of(DocumentEvent.CHECKEDOUT.toKey(), DocumentEvent.LOCKED.toKey())),
-				"_entity.date desc, _entity.id desc", 1);
-		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()),
-				latest.isEmpty() ? null : latest.get(0).getDate());
+		// The holder's own latest check-out or lock, never an earlier holder's
+		Date since = null;
+		if (d.getLockUserId() != null) {
+			List<DocumentHistory> latest = DocumentHistoryDAO.get().findByWhere(
+					"_entity.docId = :docId and _entity.event = :event and _entity.userId = :userId",
+					Map.of("docId", d.getId(), "event", event.toKey(), "userId", d.getLockUserId()),
+					"_entity.date desc, _entity.id desc", 1);
+			if (!latest.isEmpty())
+				since = latest.get(0).getDate();
+		}
+		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since);
 	}
 
 	/**
@@ -211,6 +244,26 @@ public final class ApiViews {
 				&& folders.isWriteAllowed(f.getId(), caller.getId());
 		return Optional.of(new FolderView("folder", f.getId(), f.getName(), kind, matterOf(position),
 				storeRef(position.storeId()), List.copyOf(path), canFile));
+	}
+
+	/**
+	 * As {@link #folder(Folder, User)}, from the parent's view: below a matter's
+	 * workspace every folder is in the same matter and Store, as
+	 * {@link MatterLocator} decides, so nothing is looked up again.
+	 *
+	 * @param f a subfolder the caller may read
+	 * @param parent the view of a matter's workspace or a folder inside a matter
+	 * @param caller the signed-in user, with its groups
+	 * @return the subfolder's view
+	 * @throws PersistenceException error at data layer
+	 */
+	static FolderView subfolder(Folder f, FolderView parent, User caller) throws PersistenceException {
+		String kind = f.getType() == HealdanConstants.FOLDER_TYPE_SEARCH ? "searchFolder" : "folder";
+		List<FolderRef> path = new ArrayList<>(parent.path());
+		path.add(new FolderRef(f.getId(), f.getName(), kind));
+		boolean canFile = "folder".equals(kind) && FolderDAO.get().isWriteAllowed(f.getId(), caller.getId());
+		return new FolderView("folder", f.getId(), f.getName(), kind, parent.matter(), parent.store(),
+				List.copyOf(path), canFile);
 	}
 
 	private static StoreRef storeRef(Long storeId) throws PersistenceException {

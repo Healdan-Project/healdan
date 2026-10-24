@@ -78,6 +78,19 @@ public class RecentDocuments {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<RecentDocument> list(long userId) throws PersistenceException {
+		return list(userId, document -> true);
+	}
+
+	/**
+	 * @param userId the user
+	 * @param filter which of the readable documents the caller lists; applied
+	 *        before the cap, so the list still holds as many as there are
+	 * @return the documents the user worked with within the window that the
+	 *         user may read and the filter accepts, latest first, at most
+	 *         {@value #MAX_ENTRIES}
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<RecentDocument> list(long userId, Filter filter) throws PersistenceException {
 		User user = UserDAO.get().findById(userId);
 		if (user == null)
 			return List.of();
@@ -96,10 +109,23 @@ public class RecentDocuments {
 			if (entries.size() == MAX_ENTRIES)
 				break;
 			Document document = DocumentDAO.get().findById(event.docId());
-			if (AccessChecks.readableDocument(document, user).isPresent())
+			if (AccessChecks.readableDocument(document, user).isPresent() && filter.accepts(document))
 				entries.add(event);
 		}
 		return entries;
+	}
+
+	/**
+	 * Which documents a caller lists
+	 */
+	@FunctionalInterface
+	public interface Filter {
+		/**
+		 * @param document a document the user may read
+		 * @return whether to list it
+		 * @throws PersistenceException error at data layer
+		 */
+		boolean accepts(Document document) throws PersistenceException;
 	}
 
 	/**

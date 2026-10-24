@@ -7,13 +7,13 @@ import java.util.Optional;
 import org.apache.commons.lang3.StringUtils;
 
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.healdan.security.AccessChecks;
 
 /**
  * Finds a document, and optionally one of its versions, by the doc # a user
@@ -35,6 +35,14 @@ public final class DocNumberLookup {
 	}
 
 	/**
+	 * @param input what the user typed
+	 * @return the message for input that doesn't look like a doc #
+	 */
+	public static String notANumber(String input) {
+		return NOT_A_NUMBER.formatted(StringUtils.defaultString(input));
+	}
+
+	/**
 	 * @param input what the user typed, such as {@code #1234.2}
 	 * @param userId who asks
 	 * @return the document and version found, or a message saying why there
@@ -43,7 +51,7 @@ public final class DocNumberLookup {
 	 */
 	public static LookupResult lookup(String input, long userId) throws PersistenceException {
 		if (!DocNumberQuery.looksLikeNumber(input))
-			return LookupResult.notFound(NOT_A_NUMBER.formatted(StringUtils.defaultString(input)));
+			return LookupResult.notFound(notANumber(input));
 		Optional<DocNumberQuery> parsed = DocNumberQuery.parse(input);
 		if (parsed.isEmpty())
 			// Too big for a doc #: what follows the # is shown as typed
@@ -56,7 +64,7 @@ public final class DocNumberLookup {
 		DocumentDAO documents = DocumentDAO.get();
 		// The DAO skips deleted documents. A number is looked up in the user's own tenant only
 		Document document = documents.findByCustomId(Long.toString(query.number()), user.getTenantId());
-		if (document == null || !documents.isReadAllowed(document.getId(), userId) || !AccessChecks.visible(document, user))
+		if (AccessChecks.readableDocument(document, user).isEmpty())
 			return LookupResult.notFound(NO_DOCUMENT.formatted(query.number()));
 		long folderId = document.getFolder().getId();
 		if (query.major() == null)

@@ -17,9 +17,10 @@ import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.spring.LDAuthenticationToken;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
+import com.logicaldoc.healdan.token.HealdanTokenAuthenticator;
+import com.logicaldoc.healdan.token.TokenRefusedException;
 
 import jakarta.annotation.Priority;
 import jakarta.servlet.http.HttpServletRequest;
@@ -74,14 +75,15 @@ public class TokenFilter implements ContainerRequestFilter {
 		// Refused here, before CE's sign-in chain, so a stale token never counts against the client's address
 		ApiTokens tokens = ApiTokens.get();
 		Date now = new Date();
-		ApiToken token = tokens.find(presented).filter(t -> tokens.usable(t, now)).orElse(null);
+		ApiToken token = tokens.findUsable(presented, now).orElse(null);
 		if (token == null) {
 			requestContext.abortWith(refused());
 			return;
 		}
 
-		// Checked on every request: deleting a user fires no listener, and the bound session may predate a change
-		User user = activeUser(token.getUserId());
+		// Checked on every request as CE's sign-in checks a user: deleting a user fires no listener, and an
+		// expiry date or working hours can pass while the bound session stays open
+		User user = signInUser(token);
 		if (user == null) {
 			requestContext.abortWith(refused());
 			return;
@@ -127,12 +129,14 @@ public class TokenFilter implements ContainerRequestFilter {
 	}
 
 	/**
-	 * @return the user, with its groups, if it still exists and is enabled
+	 * @return the token's user, with its groups, if it still exists and may
+	 *         sign in now, otherwise null
 	 */
-	private static User activeUser(long userId) {
+	private static User signInUser(ApiToken token) {
 		try {
-			User user = UserDAO.get().findById(userId, true);
-			return user != null && user.getDeleted() == 0 && user.isEnabled() ? user : null;
+			return HealdanTokenAuthenticator.get().signInUser(token);
+		} catch (TokenRefusedException e) {
+			return null;
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the user of a device token", e);
 		}

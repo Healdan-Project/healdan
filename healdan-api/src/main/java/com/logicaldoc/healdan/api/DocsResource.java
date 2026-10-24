@@ -17,19 +17,16 @@ import jakarta.ws.rs.core.Response;
 
 /**
  * The description file and the docs page (spec section 4.6). Swagger UI is
- * served from its webjar on the classpath, so the page loads nothing from the
- * internet and stays behind {@code /api/**}'s Spring Security exemption (spec
- * correction 5).
+ * served from its files in this plugin's jar, so the page loads nothing from
+ * the internet and stays behind {@code /api/**}'s Spring Security exemption
+ * (spec correction 5).
  */
 @Component
 @Path("/")
 public class DocsResource {
 
-	/**
-	 * Where Swagger UI's files are in its webjar. The version is the POM's
-	 * {@code swagger-ui.version}: DocsResourceTest fails when they differ.
-	 */
-	static final String SWAGGER_UI = "META-INF/resources/webjars/swagger-ui/5.32.15/";
+	/** Where Swagger UI's files are: the POM unpacks them there from its webjar */
+	static final String SWAGGER_UI = "healdan/api/swagger-ui/";
 
 	private static final String OPENAPI = "healdan/api/openapi.yaml";
 

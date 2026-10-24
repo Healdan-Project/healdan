@@ -11,11 +11,12 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 - Healdan's own modules (`healdan-*`) follow upstream's version: their POM parent and `plugin.xml` version match the root POM's. A module left behind makes Maven fetch stock LogicalDOC jars, which lack the fork's classes.
   - When a clean sync merge brings a LogicalDOC release bump, `.github/scripts/upstream-sync.sh` adds a "Follow upstream to <version>" commit. After a conflicted merge it doesn't, so whoever resolves the conflicts bumps them too.
 - Upstream changes `logicaldoc-core` and `logicaldoc-gui` the most. To keep syncs cheap, put new work in new plugin modules and avoid editing upstream files where possible.
-- Upstream sometimes ships POMs that fail Maven validation (for example, a duplicate dependency). If CI fails within a minute, check POM errors and the icon check (next bullet) first.
+- Upstream sometimes ships POMs that fail Maven validation (for example, a duplicate dependency). If CI fails within a minute, check POM errors, the icon check and the doc-links check (next bullets) first.
 - The GUI bundles Font Awesome Free 6, but upstream writes the GUI against Font Awesome Pro. Pro styles (`fal`, `fa-light`, `fa-thin`, …) and Pro-only icon names compile fine and only show up at runtime, as blinking missing-icon placeholders.
   - `.github/scripts/check-fontawesome-icons.py` catches them. It runs first in `build-logicaldoc.yml`, and `build` must pass before a PR can merge. Run it locally with `python3 .github/scripts/check-fontawesome-icons.py`.
   - When it flags lines an upstream sync brought in, swap them for Free icons in the sync PR itself. That's a merge fix, not feature work.
-- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for. The rest of it, and `Build_this_Sources.md`, are upstream's and out of date. They mention `build/poms` and JDK 11, which don't apply here.
+- Outside the docs site's interim pages, nothing links to LogicalDOC's docs (docs, wiki, help or forums.logicaldoc.com). `.github/scripts/check-logicaldoc-doc-links.py` runs next to the icon check and fails `build` on one, naming the file and line. When a sync brings one in, point it at docs.healdan.com in the sync PR, a merge fix like the icons. Its `ALLOWED` list holds the few exact lines Healdan leaves alone, each with its reason (the `SystemInfo` defaults `HealdanSystemInfo` replaces).
+- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for, then points to the docs site. It's Healdan's own now: when a sync brings an edit to upstream's README, keep Healdan's. `Build_this_Sources.md` and `docker/README.md` are short pointers to the site.
 
 ## Roadmap
 
@@ -26,7 +27,7 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 
 ## Build and test
 
-You need JDK 25 and Maven 3.9+. The JDK is the one the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name; CI's `build` check reads it from there and fails if the two differ. `source.level` in `logicaldoc-parent/pom.xml` sets the Java language level, and the GWT client compiles at source level 17. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `.github/workflows/build-logicaldoc.yml` writes into `~/.m2/settings.xml`. Copy that block for local builds.
+You need JDK 25 and Maven 3.9+. The JDK is the one the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name; CI's `build` check reads it from there and fails if the two differ. `source.level` in `logicaldoc-parent/pom.xml` sets the Java language level, and the GWT client compiles at source level 17. Some dependencies aren't on Maven Central. They come from `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`, which `docker/maven-settings.xml` lists. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there for local builds.
 
 ```bash
 mvn -B -ntp -DskipTests install                          # full reactor build (what the Docker image runs)
@@ -35,6 +36,7 @@ mvn -pl logicaldoc-core test                              # one module's tests (
 mvn -pl logicaldoc-core test -Dtest=DocumentManagerTest   # one test class
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one method
 mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or one class of them
+mvn -pl healdan-api test                                  # the API's tests (install healdan-core first)
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
@@ -42,17 +44,21 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
   - Up to `test` that's enough. For `package` or `install`, add `-Dmaven.antrun.skip=true` and `-pl '!logicaldoc-webapp'`, as CI's `build` check does. The GUI's antrun step fails without the GWT output, and skipping antrun leaves every plugin zip unfinished, so the WAR built from them is broken.
 - Spring-based tests fail in `setUp` unless `~/logicaldoc-dev.properties` exists. An empty file works; CI creates one.
 - `healdan-core`'s tests run against the installed jars of the modules it uses. After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module (`-pl <module> -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install`) before running them.
-- CI's `build` check compiles every module except the WAR and skips the GWT compile. It runs the `healdan-core` tests, then the upstream tests named in its `-Dtest` list, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
+- `healdan-api`'s tests reuse `healdan-core`'s test-jar (its base test case and fixtures) and its test `context.properties`. `-Dmaven.test.skip=true` doesn't build that test-jar, so `healdan-api` leaves the dependency out then (the `with-tests` profile); `-DskipTests` still builds it.
+- CI's `build` check compiles every module except the WAR, skipping the GWT compile, and runs Healdan's tests in parallel shards. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI.
+  - The tests are every test class in a `healdan-*` module (found without a list) and the upstream tests named in the workflow's `UPSTREAM_TESTS`, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. A name no upstream module has fails the check.
+  - The `checks` job runs the quick checks, then `.github/scripts/test-shards.py` splits the tests into shards of about five minutes (at most eight). Each class weighs its time in the newest successful run, which the `test-times` job caches, or 3 s per `@Test` until it has one. Each `Tests (n of N)` job installs the modules, without javadoc or plugin zips, and runs its share. The `build` job, the check master requires, passes when they all did, or when a docs-only pull request skipped them.
+  - Its Maven repository cache falls back to master's newest copy, and only master saves it (from one shard), so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
 - Pull requests that change only `docs/`, `site/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
 ## Docker
 
-- `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. `docker/README.md` is the user guide; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
+- `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. The docs site's Install manual (`site/content/install/`) is the user guide, and its Developer Guide covers the dev overlay, tests and CI; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
 - The container never runs the setup wizard. `docker/tools/src/DockerInit.java` seeds `context.properties` and, on a fresh database, creates the schema by running the `DbInit` scripts from every `plugin.xml`, so a plugin's `DbInit` extension is picked up for new installs. Existing databases are never migrated, apart from Healdan's own `hd_` tables, which Flyway upgrades on every start (see "Healdan's code"). A plugin or upstream change that adds SQL to CE's tables needs it applied by hand there.
 - On every start, keys in the image's default `context.properties` that the conf volume lacks are added (values are never overwritten).
 - LogicalDOC only runs external programs listed in a classpath `allowed-commands.txt`. The lines in `docker/allowed-commands.txt` are re-added to the conf volume's copy on every start; a new external tool needs a line there.
-- Tests:
+- Tests (the Developer Guide's Tests page describes each):
   - `docker build --target tools .` for the init tool's unit tests
   - `docker/tests/test-*.sh`
   - `docker/smoke-test.sh` for end to end
@@ -69,7 +75,6 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 - A page not written yet holds `{{< interim href="…" title="…" >}}`, which links to LogicalDOC's nearest page. It's the only place `site/content/` may link to LogicalDOC's docs.
 - The `Docs site` check (`.github/workflows/docs-site.yml`) runs `python3 -m unittest discover -s .github/scripts/tests`, a strict build (`--panicOnWarning`), `check-site-sources.py` and `check-site-links.py`. It publishes to GitHub Pages from `master` only while the repository variable `DOCS_PUBLISH` is `true`.
 - Build, test and CI facts are in this file and in the Developer Guide. A change updates both.
-- Until the app's links move to the site (PR C of `docs/superpowers/plans/2026-10-23-docs-site.md`), `docker/README.md` stays as it is too. A change to the Docker stack updates both it and the Install or Developer Guide.
 
 ## Architecture
 
@@ -113,6 +118,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - Its GUI code is in `logicaldoc-gui` under `com.logicaldoc.gui.frontend.client.healdan`, reached from one-line hooks in upstream GUI classes.
   - Its servlets register with `@WebServlet`, never `addServlet`, because the Docker image rebuilds `web.xml`. RPC paths are `/frontend/healdan*` and data paths `/data/healdan*`.
   - Its listeners enforce the rules on every route. Extension ids in its `plugin.xml` must be unique: JPF silently drops the whole plugin on a duplicate.
+- **`healdan-api`** is Healdan's JSON API at `/api/*` (JPF id `healdan-api`, which requires `healdan-core`; M2's spec is `docs/superpowers/specs/2026-10-23-m2-api-foundation-design.md`). It's CXF JAX-RS on a bus of its own behind `ApiServlet` (`@WebServlet`), and `/api/**` is outside Spring Security, so only an `Authorization: Bearer` device token signs a request in. `openapi.yaml` describes every route, and its tests check each response against it. Device tokens and the sign-in throttle's settings live in `healdan-core`.
 - **Flyway owns the `hd_` tables, and only those.**
   - Scripts are `healdan-core/src/main/resources/healdan/db/migration/{mariadb,hsqldb}/V<n>__<name>.sql`, and the history table is `hd_schema_history`.
   - A change ships as a new script; never edit one that has shipped.

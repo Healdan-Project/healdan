@@ -178,7 +178,7 @@ public final class DockerInit {
         System.err.println(rule);
         System.err.println("[docker-init] WARNING: context.properties was just created, but the database already has a schema.");
         System.err.println("[docker-init] The encryption key and node id are new, so settings encrypted before will not decrypt.");
-        System.err.println("[docker-init] Restore /opt/logicaldoc/conf from your backup if you have one (see docker/README.md).");
+        System.err.println("[docker-init] Restore /opt/logicaldoc/conf from your backup if you have one (see https://docs.healdan.com/install/backup-and-restore/).");
         System.err.println(rule);
     }
 

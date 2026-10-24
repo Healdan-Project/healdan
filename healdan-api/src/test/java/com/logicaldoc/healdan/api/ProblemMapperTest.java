@@ -88,7 +88,7 @@ public class ProblemMapperTest extends ApiTestCase {
 
 		assertProblem(response, 404, "not-found");
 		assertTrue(response.header("Content-Type").startsWith("application/problem+json"));
-		assertEquals("https://healdan.org/problems/not-found", response.json().path("type").textValue());
+		assertEquals("https://healdan.com/problems/not-found", response.json().path("type").textValue());
 		assertEquals("Not found", response.json().path("title").textValue());
 	}
 

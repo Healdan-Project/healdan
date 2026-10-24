@@ -161,8 +161,8 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
     public synchronized Session newSession(String username, String password, String key, Client client)
             throws AuthenticationException {
         // Before the try, so a blocked attempt is not counted as a failure
-        String address = client != null ? client.getAddress() : null;
-        checkThrottle(username, key, client);
+        String account = HealdanThrottle.account(username);
+        HealdanThrottle.check(account, key, client);
 
         try {
             User user = authenticationChain.authenticate(username, password, key, client);
@@ -170,36 +170,13 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
                 return null;
             else {
                 Session session = createSession(user, key, client);
-                LoginThrottle.clearFailures(user.getUsername(), address);
+                HealdanThrottle.succeeded(account, key, client);
                 if (TicketDAO.get().isAccessTicket(username))
                     recordSupportSession(username, session);
                 return session;
             }
         } catch (AuthenticationException e) {
-            LoginThrottle.recordFailure(username, key, client, e);
-            throw e;
-        }
-    }
-
-    /**
-     * Runs the login throttle. A blocked attempt is logged as a failed login,
-     * which the old login page reads to say why, but is not counted.
-     */
-    private void checkThrottle(String username, String key, Client client) throws AuthenticationException {
-        try {
-            LoginThrottle.checkLoginThrottle(username, key, client != null ? client.getAddress() : null);
-        } catch (AuthenticationException e) {
-            try {
-                User user = UserDAO.get().findByUsername(username);
-                if (user == null) {
-                    user = new User();
-                    user.setUsername(username);
-                    user.setName(username);
-                }
-                UserHistoryDAO.get().createUserHistory(user, UserEvent.LOGIN_FAILED, e.getMessage(), null, client);
-            } catch (PersistenceException pe) {
-                log.warn(pe.getMessage(), pe);
-            }
+            LoginThrottle.recordFailure(account, key, client, e);
             throw e;
         }
     }
@@ -228,8 +205,8 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
      * @throws AuthenticationException raised in case of failed login
      */
     public synchronized Session newSession(String apikey, Client client) throws AuthenticationException {
-        // Only checks: a key session must not reset the counts of a password attack
-        checkThrottle(null, apikey, client);
+        // Only checks, with no account: a key session must not reset the counts of a password attack
+        HealdanThrottle.check("", apikey, client);
 
         try {
             User user = authenticationChain.authenticate("", "", apikey, client);

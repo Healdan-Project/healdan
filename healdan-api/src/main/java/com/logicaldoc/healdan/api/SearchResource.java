@@ -1,7 +1,9 @@
 package com.logicaldoc.healdan.api;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
@@ -94,10 +96,12 @@ public class SearchResource {
 			long wanted = Math.min((long) paging.offset() + paging.limit(), MAX_WINDOW);
 			long window = wanted;
 			List<Object> shown;
+			// Each hit is checked once, however often the window grows
+			Map<Long, Optional<Object>> checked = new HashMap<>();
 			while (true) {
 				options.setMaxHits((int) window);
 				List<Hit> hits = search.search();
-				shown = shown(hits, options.getType(), user);
+				shown = shown(hits, options.getType(), user, wanted, checked);
 				if (shown.size() >= wanted || hits.size() < window || window >= MAX_WINDOW)
 					break;
 				window = Math.min(window * 2, MAX_WINDOW);
@@ -163,29 +167,48 @@ public class SearchResource {
 	}
 
 	/**
+	 * @param wanted how many to find; the hits after them aren't checked
+	 * @param checked what earlier windows found for each hit, by id; this
+	 *        window's answers are added
 	 * @return what of the hits the caller may see, as the matters, folders or
-	 *         documents themselves, in the hits' order; the views come later,
-	 *         for the page alone
+	 *         documents themselves, in the hits' order, at most {@code wanted};
+	 *         the views come later, for the page alone
 	 */
-	private static List<Object> shown(List<Hit> hits, int type, User user) throws PersistenceException {
+	private static List<Object> shown(List<Hit> hits, int type, User user, long wanted,
+			Map<Long, Optional<Object>> checked) throws PersistenceException {
 		List<Object> shown = new ArrayList<>();
 		for (Hit hit : hits) {
-			if (type == HealdanConstants.SEARCH_MATTERS || type == HealdanConstants.SEARCH_CLIENTS) {
-				Matter matter = MatterDAO.get().findByFolderId(hit.getId());
-				if (matter != null && AccessChecks.readableFolder(hit.getId(), user).isPresent())
-					shown.add(matter);
-			} else if (type == SearchOptions.TYPE_FOLDERS) {
-				Optional<Folder> folder = AccessChecks.readableFolder(hit.getId(), user);
-				// The API shows folders inside Stores only, and no aliases
-				if (folder.isPresent() && folder.get().getDeleted() == 0 && folder.get().getType() != Folder.TYPE_ALIAS
-						&& MatterLocator.get().locate(folder.get()).isUnderAStore())
-					shown.add(folder.get());
-			} else {
-				AccessChecks.readableDocument(DocumentDAO.get().findById(hit.getId()), user)
-						.filter(ApiViews::hasDocNumber).ifPresent(shown::add);
+			if (shown.size() >= wanted)
+				break;
+			Optional<Object> found = checked.get(hit.getId());
+			if (found == null) {
+				found = check(hit, type, user);
+				checked.put(hit.getId(), found);
 			}
+			found.ifPresent(shown::add);
 		}
 		return shown;
+	}
+
+	/**
+	 * @return the matter, folder or document the hit is, if the caller may see
+	 *         it
+	 */
+	private static Optional<Object> check(Hit hit, int type, User user) throws PersistenceException {
+		if (type == HealdanConstants.SEARCH_MATTERS || type == HealdanConstants.SEARCH_CLIENTS) {
+			Matter matter = MatterDAO.get().findByFolderId(hit.getId());
+			return matter != null && AccessChecks.readableFolder(hit.getId(), user).isPresent() ? Optional.of(matter)
+					: Optional.empty();
+		}
+		if (type == SearchOptions.TYPE_FOLDERS) {
+			Optional<Folder> folder = AccessChecks.readableFolder(hit.getId(), user);
+			// The API shows folders inside Stores only, and no aliases
+			return folder.isPresent() && folder.get().getDeleted() == 0 && folder.get().getType() != Folder.TYPE_ALIAS
+					&& MatterLocator.get().locate(folder.get()).isUnderAStore() ? Optional.of(folder.get())
+							: Optional.empty();
+		}
+		Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(hit.getId()), user);
+		return document.isPresent() && ApiViews.shows(document.get()) ? Optional.of(document.get()) : Optional.empty();
 	}
 
 	private static Optional<Object> view(Object found, User user) throws PersistenceException {
