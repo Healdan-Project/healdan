@@ -1,7 +1,7 @@
 # Healdan roadmap
 
 - **Date:** 2026-10-16
-- **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)). M2 is done: the owner accepted it on 2026-10-24 ([spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), [plan](superpowers/plans/2026-10-23-m2-api-foundation.md)). M3 is next, starting with its design session.
+- **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)). M2 is done: the owner accepted it on 2026-10-24 ([spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), [plan](superpowers/plans/2026-10-23-m2-api-foundation.md)). M3's design and plan were approved on 2026-10-24, after a trial build ([spec](superpowers/specs/2026-10-24-m3-office-integration-design.md), [plan](superpowers/plans/2026-10-24-m3-office-integration.md)).
 - **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE 9.3.1 already has, what's hidden, half built or missing, with file paths.
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
@@ -77,7 +77,8 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 | M1 | Move in | – | **done** 2026-10-22: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. On 2026-10-22 a review of every open follow-up found four gaps to fix before acceptance, which the pre-acceptance PR ([Healdan-Project/healdan#44](https://github.com/Healdan-Project/healdan/pull/44)) fixed. The owner's acceptance walkthrough (the plan's Task 30) passed all eight rows on 2026-10-22. Its one punch-list item, Doc # in search results, was fixed in [Healdan-Project/healdan#45](https://github.com/Healdan-Project/healdan/pull/45) |
 | M1.5 | Office previews and thumbnails | M1 | **done** 2026-10-23: [spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md); [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md). Built 2026-10-22 in PR A (the server side) [Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and PR B [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49) (the image, smoke checks and docs). The owner's acceptance walkthrough (the plan's Task 10) passed all five rows on 2026-10-23, on a stack upgraded from M1. It left no M1.5 punch-list items; its observations are in the plan's decision log and follow-ups |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | **done** 2026-10-24: [spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md); [plan](superpowers/plans/2026-10-23-m2-api-foundation.md). Design and plan approved 2026-10-23 ([Healdan-Project/healdan#57](https://github.com/Healdan-Project/healdan/pull/57)). Built in PR A (the sign-in throttle, device tokens and the API's frame) [Healdan-Project/healdan#62](https://github.com/Healdan-Project/healdan/pull/62), PR B (finding things) [Healdan-Project/healdan#63](https://github.com/Healdan-Project/healdan/pull/63), PR C (properties, filing, check-out and saves) [Healdan-Project/healdan#64](https://github.com/Healdan-Project/healdan/pull/64) and PR D (the Docker flow test, the docs and the final review's fixes) [Healdan-Project/healdan#66](https://github.com/Healdan-Project/healdan/pull/66). The owner's acceptance walkthrough (spec §14.2) passed on 2026-10-24, on a stack built from PR D. What's left open is in the plan's follow-ups; none of it blocks M3 |
-| M3 | Office integration | M2 (M4 for single sign-on) | **next**: its design session hasn't been held. It opens with the transport spike (M3's Calls below), and the M2 plan's follow-ups list questions for it |
+| M3 | Office integration: LibreOffice, through the Healdan Helper | M2 (M4 for single sign-on) | **design and plan approved** 2026-10-24: [spec](superpowers/specs/2026-10-24-m3-office-integration-design.md); [plan](superpowers/plans/2026-10-24-m3-office-integration.md). A trial build ran on the owner's Mac before approval (spec §12.5). Phase 1 is LibreOffice on macOS. Phase 2, LibreOffice on Linux, starts once the owner's semi-production server is running |
+| M3.5 | Microsoft Office on the Mac | M3 | not started. Split from M3 on 2026-10-24 (owner: "MS Office follows later"); M3's spec §7 and §12.5 are its starting point |
 | M4 | OIDC sign-in | – (can run alongside others; land before M5) | not started |
 | M5 | Email | M2, M4, M1's email indexing fix | not started |
 | M6 | New web UI: User app | M2, expanded | not started |
@@ -319,47 +320,46 @@ The owner also decided that sign-in is throttled on every route, which CE never 
 - **Insert doc ID.** A button inserts a footer field that updates itself with each new version.
 - **Excel and PowerPoint** get the same open and save flow. Footer stamping is Word and LibreOffice Writer only at first.
 - **Platform priority.**
-  1. LibreOffice on Linux and macOS.
-  2. Microsoft 365 desktop apps on macOS.
+  1. LibreOffice on Linux and macOS. (2026-10-24: macOS first, then Linux once the owner's semi-production server is running.)
+  2. Microsoft 365 desktop apps on macOS. (2026-10-24: later, as M3.5.)
   3. Windows, later. Others will need it before they adopt Healdan.
+- **A helper app on each computer (2026-10-24).** A small app in C# on .NET, with Avalonia for its windows, holds the sign-in, catches links from the web page, keeps local copies, and draws the Save, Open and Properties windows once for every app. The add-ins inside the apps stay slim, and nothing on the user's computer is Java.
+- **Taking over Open, Save and Save As (2026-10-24),** with a way back to the app's own boxes; where an app won't allow it, Healdan's buttons sit beside its own.
+- **The title bar and footer read `#1234 v2.1` (2026-10-24).**
 - **Out of scope: editing in Word for the web.**
   - Microsoft requires its Cloud Storage Partner Program for this.
   - It's recorded as a known limitation.
 
-**Calls.**
+**Calls.** (As the design session on 2026-10-24 settled them; the spec has the rest.)
 
-- **Start with a spike.** M3 opens with a throwaway trial build to settle how files travel between the app and the server, because the title bar requirement rules out a simple "upload a copy" add-in. The candidates:
-  - **WebDAV.** Open the file straight from the server, with real file locking (WebDAV class 2) and the doc # in the file name.
-  - **Local cache.** An add-in or small helper keeps local copies, the way iManage and NetDocuments do.
-- **LibreOffice.** A LibreOffice extension (UNO, probably Python) runs the same on Linux, macOS and Windows. It can probably download, cache and upload files itself.
-- **Microsoft 365 on the Mac.** An Office web add-in (Office.js) plus whichever transport the spike picks.
-- **Shared components.** The Office web add-ins share React components with the new web UI, such as the workspace picker and the properties form.
-- **Sign-in.** Add-ins start with Healdan credentials exchanged for a token. They move to the OIDC provider's pop-up once M4 lands.
+- **A trial build first.** It ran on the owner's Mac before the spec was approved. The owner chose the helper's local copies over WebDAV, and the trial proved them in LibreOffice and, without its add-in, in Word (spec §12.5).
+- **LibreOffice.** A Python UNO extension that runs the same on Linux and macOS.
+- **Microsoft 365 on the Mac (M3.5).** The helper does most of the work through AppleScript, and the add-in is buttons and the footer. Sideloading didn't load it in Word 16.114, so it comes from the owner's Microsoft 365 admin centre.
+- **Shared components:** dropped. The windows are the helper's (owner), not React components shared with M6.
+- **Sign-in.** The helper exchanges Healdan credentials for M2's device token, kept in the system keychain. It moves to the OIDC provider's pop-up once M4 lands.
 
 **Facts from the recon.**
 
 - **WebDAV.** CE advertises no class-2 locking. LOCK is turned into a check-out with no lock token. Expect read-only opens or failed saves in Word and LibreOffice until that's fixed. macOS Finder also mounts such a share read-only.
 - **CMIS.** CE has CMIS AtomPub 1.0, which LibreOffice's CMIS support uses. It hasn't been tested.
 
-**Inputs from M2.**
-
-- **What M2 built for the add-ins.** Device tokens, `#` lookup, recent matters and folders, the properties form, filing, check-out and both saves, all at `/api/v1`. The docs site's API page describes them for client developers.
-- **Questions for the design session.** The [M2 plan](superpowers/plans/2026-10-23-m2-api-foundation.md)'s follow-ups list them. Among them:
-  - holds are per user, not per device, so two of one person's devices can both save;
-  - a save takes at least about 1.1 s on the server;
-  - a footer stamped before upload works out the next number from `version`, and an `ifVersion` precondition on saves is M3's call;
-  - device tokens work only at `/api`, so if the spike picks WebDAV, it needs a narrow allowance there.
-
 **Done when.**
 
-- In LibreOffice on Linux and on macOS, the owner can:
+- In LibreOffice on macOS (phase 1) and on Linux (phase 2), the owner can:
   1. create a document;
   2. Save to Healdan;
   3. close it and reopen it from Healdan;
   4. edit it;
   5. save a new version;
   6. insert the doc ID footer.
-- The same works in Word for Mac.
+- The spec's §14.2 walkthrough is the full list. The same in Word for Mac is M3.5's.
+
+**Design.** Settled in the [M3 design spec](superpowers/specs/2026-10-24-m3-office-integration-design.md), which the owner approved on 2026-10-24, with its [plan](superpowers/plans/2026-10-24-m3-office-integration.md), approved the same day for subagent-driven building.
+
+- **The trial build.** It ran first, on the owner's Mac, and its results are in the spec's §12.5. The owner deferred its Ubuntu rows to phase 2, and its Word add-in rows to M3.5.
+- **Server additions.** M2's API gains search within a folder, New Folder, favourites (CE's bookmarks), which computer holds a check-out, save preconditions, stamping the doc ID into stored files, thumbnails and the `#1234 v2.1` form.
+- **Comments.** A searchable property, as in iManage's Save window (owner).
+- **The web page.** Open in App is CE's hidden "Edit with Office", pointed at the helper.
 
 ---
 
@@ -452,6 +452,7 @@ The owner also decided that sign-in is throttled on every route, which CE never 
   - **Right side.** A panel for faceted filters (date presets, file type, author, client, matter) or for the selected item's details.
 - **Three separate units.** The new UI is split into **User**, **Admin** and **Walls**, the way iManage separates them. An average user never loads the Admin or Walls code.
 - **Its own design session.** The full UI design happens in a separate session, with mockups.
+- **Double-click opens a document in its app (2026-10-24),** through M3's helper. The old UI keeps double-click as preview, with Open in App beside it.
 - **No full Store browsing (2026-10-23).** Users start from My Matters, Recent Matters or a search, never from a list of every matter in a Store, the way a big database starts from a query. A busy Store holds hundreds of matters in one flat list, and that's a non-issue because browsing it isn't offered. The M2 API lists a Store's matters only for admins, for the admin side (M2 spec §6.2).
 
 **Calls.**
