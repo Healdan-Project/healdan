@@ -254,8 +254,134 @@ paths:
                 $ref: '#/components/schemas/VersionPage'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/folders/{id}:
+    get:
+      operationId: getFolder
+      summary: A folder inside a Store
+      description: |
+        A Store, a matter's workspace, a folder or a search folder. Folders
+        outside the Stores (the root, the Default workspace, the Templates
+        Store and what is in them), folders the caller can't read, and
+        folders that don't exist are all `404` with the same answer.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+      responses:
+        '200':
+          description: The folder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{id}/children:
+    get:
+      operationId: listFolderChildren
+      summary: What is in a folder
+      description: |
+        A matter's workspace or a folder gives the subfolders the caller can
+        read (by name, ignoring case), then the documents the caller can read
+        (by name). Hidden folders and aliases are left out. A search folder
+        gives its documents, newest change first, at most 1000. `total` is
+        the full count.
+
+        A Store gives `409 not-browsable` and lists nothing: find a matter by
+        search, My Matters or Recent Matters.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+        - name: type
+          in: query
+          required: false
+          description: '`folder` for the subfolders alone. Anything else is `400`.'
+          schema:
+            type: string
+            const: folder
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The children
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderChildPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/matters/{id}:
+    get:
+      operationId: getMatter
+      summary: A matter
+      description: |
+        A matter whose workspace the caller can't read and one that doesn't
+        exist are both `404` with the same answer. `lastChange` is null here.
+      tags: [Matters]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The matter's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: The matter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/matters/mine:
+    get:
+      operationId: listMyMatters
+      summary: My Matters
+      description: |
+        The matters the caller added, that the caller can still read, by
+        client number then matter number. All of them, in one page.
+        `lastChange` is null.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/matters/recent:
+    get:
+      operationId: listRecentMatters
+      summary: Recent Matters
+      description: |
+        The matters the caller changed documents in lately, that the caller
+        can still read, newest first, with `lastChange`. At most 20, in one
+        page.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterPage'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   parameters:
+    FolderId:
+      name: id
+      in: path
+      required: true
+      description: The folder's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
     DocNumber:
       name: docNumber
       in: path
@@ -632,4 +758,120 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/VersionView'
+      unevaluatedProperties: false
+    StoreRef:
+      type: object
+      description: A Store named in another object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+    ClientRef:
+      type: object
+      description: A client named in another object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    FolderView:
+      type: object
+      additionalProperties: false
+      required: [type, id, name, kind, matter, store, path, canFile]
+      properties:
+        type:
+          type: string
+          const: folder
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [store, matter, folder, searchFolder]
+          description: '`matter` is a matter''s own top folder.'
+        matter:
+          oneOf:
+            - $ref: '#/components/schemas/MatterRef'
+            - type: 'null'
+          description: Null for a Store
+        store:
+          $ref: '#/components/schemas/StoreRef'
+        path:
+          type: array
+          description: From the Store down to the folder itself
+          items:
+            $ref: '#/components/schemas/FolderRef'
+        canFile:
+          type: boolean
+          description: Whether the caller may file documents into the folder. Only a folder inside a matter can be filed into.
+    MatterView:
+      type: object
+      additionalProperties: false
+      required: [type, id, number, display, name, description, client, store, folderId, lastChange]
+      properties:
+        type:
+          type: string
+          const: matter
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+          description: The number within its client
+        display:
+          type: string
+          description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        client:
+          $ref: '#/components/schemas/ClientRef'
+        store:
+          $ref: '#/components/schemas/StoreRef'
+        folderId:
+          type: integer
+          format: int64
+          description: The matter's workspace folder, to open with `/v1/folders/{id}`
+        lastChange:
+          type: [string, 'null']
+          format: date-time
+          description: The caller's latest change in the matter. Only Recent Matters knows it.
+    MatterPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MatterView'
+      unevaluatedProperties: false
+    FolderChildPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                oneOf:
+                  - $ref: '#/components/schemas/FolderView'
+                  - $ref: '#/components/schemas/DocumentView'
+                discriminator:
+                  propertyName: type
+                  mapping:
+                    folder: '#/components/schemas/FolderView'
+                    document: '#/components/schemas/DocumentView'
       unevaluatedProperties: false

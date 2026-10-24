@@ -1,7 +1,10 @@
 package com.logicaldoc.healdan.api;
 
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -11,12 +14,18 @@ import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.DocumentStatus;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.api.model.ClientRef;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FolderRef;
+import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.MatterRef;
+import com.logicaldoc.healdan.api.model.MatterView;
+import com.logicaldoc.healdan.api.model.StoreRef;
 import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.api.model.UserView;
 import com.logicaldoc.healdan.matter.Client;
@@ -107,7 +116,7 @@ public final class ApiViews {
 		return matterOf(MatterLocator.get().locate(folderId));
 	}
 
-	private static MatterRef matterOf(FolderPosition position) throws PersistenceException {
+	static MatterRef matterOf(FolderPosition position) throws PersistenceException {
 		Matter matter = position.matter();
 		if (matter == null)
 			return null;
@@ -128,5 +137,58 @@ public final class ApiViews {
 		case MATTER_WORKSPACE -> "matter";
 		default -> "folder";
 		};
+	}
+
+	/**
+	 * @param f a folder the caller may read
+	 * @param caller the signed-in user, with its groups
+	 * @return the folder's view; empty for a folder outside the Stores (the
+	 *         root, the Default workspace, the Templates Store and what is in
+	 *         them), which the API doesn't show
+	 * @throws PersistenceException error at data layer
+	 */
+	public static Optional<FolderView> folder(Folder f, User caller) throws PersistenceException {
+		FolderPosition position = MatterLocator.get().locate(f);
+		if (!position.isUnderAStore())
+			return Optional.empty();
+
+		FolderDAO folders = FolderDAO.get();
+		List<FolderRef> path = new ArrayList<>();
+		for (Folder parent : folders.findParents(f.getId())) {
+			// CE's parents run from the root, which isn't part of a path
+			FolderPosition above = MatterLocator.get().locate(parent);
+			if (above.isUnderAStore())
+				path.add(new FolderRef(parent.getId(), parent.getName(), folderKind(above)));
+		}
+		String kind = folderKind(position);
+		path.add(new FolderRef(f.getId(), f.getName(), kind));
+
+		boolean canFile = "folder".equals(kind) && position.depth() >= 1
+				&& folders.isWriteAllowed(f.getId(), caller.getId());
+		return Optional.of(new FolderView("folder", f.getId(), f.getName(), kind, matterOf(position),
+				storeRef(position.storeId()), List.copyOf(path), canFile));
+	}
+
+	private static StoreRef storeRef(Long storeId) throws PersistenceException {
+		if (storeId == null)
+			return null;
+		Folder store = FolderDAO.get().findById(storeId);
+		return store == null ? null : new StoreRef(store.getId(), store.getName());
+	}
+
+	/**
+	 * @param m a matter whose workspace the caller may read
+	 * @param lastChange the caller's latest change in it, or null
+	 * @return the matter's view
+	 * @throws PersistenceException error at data layer
+	 */
+	public static MatterView matter(Matter m, Date lastChange) throws PersistenceException {
+		Client client = ClientDAO.get().findById(m.getClientId());
+		Folder workspace = FolderDAO.get().findById(m.getFolderId());
+		return new MatterView("matter", m.getId(), m.getNumber(),
+				MatterDisplay.format(client.getNumber(), m.getNumber(), m.getName()), m.getName(),
+				StringUtils.defaultIfBlank(m.getDescription(), null),
+				new ClientRef(client.getId(), client.getNumber(), client.getName()),
+				storeRef(workspace.getParentId()), m.getFolderId(), lastChange);
 	}
 }
