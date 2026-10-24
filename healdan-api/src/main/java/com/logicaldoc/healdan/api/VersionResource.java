@@ -219,37 +219,47 @@ public class VersionResource {
 	}
 
 	/**
-	 * Makes sure CE stored the save before the API says it did. CE writes the
-	 * version record after the check-in returns, and when that write fails it
-	 * logs the failure and returns the document all the same. Its own record
-	 * may then have moved to the new version or not, so the answer says which
-	 * (spec section 6.6, PR C review concern 4).
+	 * Makes sure CE stored a save or a filing before the API says it did. CE
+	 * writes the version record after the check-in or the creation returns,
+	 * and when that write fails it logs the failure and returns the document
+	 * all the same. After a save, its own record may then have moved to the
+	 * new version or not, so the answer says which (spec sections 6.5 and
+	 * 6.6, PR C review concern 4).
 	 *
 	 * @param docId the document's id
 	 * @param docNumber its doc #
-	 * @param before its version before the save
+	 * @param before its version before the save, or null for a document just
+	 *        filed
 	 * @param user the caller
 	 * @throws ApiProblem {@code 500 server-error} unless the document moved to
-	 *         a new version and that version has its record
+	 *         a new version, or has one at all when just filed, and that
+	 *         version has its record
 	 * @throws PersistenceException error at data layer
 	 */
-	private static void confirmStored(long docId, long docNumber, String before, User user)
-			throws PersistenceException {
+	static void confirmStored(long docId, long docNumber, String before, User user) throws PersistenceException {
 		Document after = DocumentDAO.get().findById(docId);
 		boolean moved = after != null && !Objects.equals(before, after.getVersion());
 		if (moved && VersionDAO.get().findByVersion(docId, after.getVersion()) != null)
 			return;
 
-		log.error("The save of document #{} (id {}) wasn't stored: the document is at version {}, which {}", docNumber,
-				docId, after != null ? after.getVersion() : null,
+		boolean filed = before == null;
+		log.error("The {} of document #{} (id {}) wasn't stored: the document is at version {}, which {}",
+				filed ? "filing" : "save", docNumber, docId, after != null ? after.getVersion() : null,
 				moved ? "has no version record" : "is the version before the save");
-		String stored = moved
-				? ("Document #%d's save wasn't stored completely: its content is the file sent, as version %s, but that "
-						+ "version isn't in its timeline.").formatted(docNumber, after.getVersion())
-				: "Document #%d's save wasn't stored: its content is as it was.".formatted(docNumber);
+		String stored;
+		if (filed)
+			stored = "Document #%d was filed, but its version %s isn't in its timeline. Its content is the file sent."
+					.formatted(docNumber, after != null ? after.getVersion() : null);
+		else if (moved)
+			stored = ("Document #%d's save wasn't stored completely: its content is the file sent, as version %s, but "
+					+ "that version isn't in its timeline.").formatted(docNumber, after.getVersion());
+		else
+			stored = "Document #%d's save wasn't stored: its content is as it was.".formatted(docNumber);
+		// Filing checks the document out only after this
 		String hold = after != null && ApiViews.checkedOutBy(after, user) ? " It's still checked out to you."
 				: " It isn't checked out to you.";
-		throw new ApiProblem(500, "server-error", stored + hold + " Send the save again.");
+		throw new ApiProblem(500, "server-error",
+				stored + hold + (filed ? " Don't file it again." : " Send the save again."));
 	}
 
 	/**

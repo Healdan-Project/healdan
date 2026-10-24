@@ -192,6 +192,34 @@ public class FilingTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testUnrecordedFirstVersionIsAnError() throws Exception {
+		// As for a save (SaveTest): CE writes the version record after it creates the document, and only logs a
+		// failure. Here the document is created, but its version record can't be written
+		String token = signIn(clerk);
+		long next = DocNumberCounter.get().peekNext();
+
+		ApiResponse failed;
+		jdbc().execute("alter table ld_version alter column ld_foldername set data type varchar(3)");
+		try {
+			failed = file(token, document(documents, null, null, true), "a.docx", CONTENT);
+		} finally {
+			jdbc().execute("alter table ld_version alter column ld_foldername set data type varchar(1000)");
+		}
+
+		assertEquals(failed.toString(), 500, failed.status());
+		assertEquals("server-error", failed.code());
+		assertEquals(("Document #%d was filed, but its version 1.0 isn't in its timeline. Its content is the file "
+				+ "sent. It isn't checked out to you. Don't file it again.").formatted(next),
+				failed.json().path("detail").textValue());
+		// What the client sees: the document with the file sent, free, and nothing in its timeline
+		JsonNode doc = get("/api/v1/documents/" + next).token(token).send().json();
+		assertEquals("1.0", doc.path("fileVersion").textValue());
+		assertTrue(doc.path("hold").isNull());
+		assertEquals(0, get("/api/v1/documents/" + next + "/versions").token(token).send().json().path("items").size());
+		assertArrayEquals(CONTENT, get("/api/v1/documents/" + next + "/content").token(token).send().body());
+	}
+
+	@Test
 	public void testFilingRule() throws Exception {
 		Folder search = fx.searchFolder(documents, "Recent");
 		String token = signIn(clerk);

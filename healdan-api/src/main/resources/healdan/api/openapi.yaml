@@ -265,6 +265,13 @@ paths:
           A value sent as the folder's form shows it
           (`GET /v1/folders/{folderId}/form`) is ignored, so a client can send
           the whole form back.
+
+        `201` means the document is stored with its version 1.0 in its
+        timeline. When the server stores the document but not that version,
+        the answer is `500 server-error`, and its `detail` gives the new
+        doc #: the document's content is the file sent, its timeline is
+        empty, and it isn't checked out, even with `checkOut: true`. Don't
+        file it again.
       tags: [Documents]
       requestBody:
         required: true
