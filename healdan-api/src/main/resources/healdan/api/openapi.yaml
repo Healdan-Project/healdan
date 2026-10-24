@@ -718,10 +718,16 @@ paths:
            the JSON expected (a missing or unknown `kind` included), and for
            a missing `file` part.
         2. `404 not-found` for a document the caller can't read.
-        3. `403 forbidden` without the Write permission, and for a document
+        3. A `saveId` that is the last one stored for the document is the
+           same save sent again after its answer was lost: the answer is
+           `201` with the document as it is now, and nothing is stored. That
+           holds whatever happened to the document since, a check-in by the
+           save itself included, so a client that didn't hear back sends
+           the save again unchanged.
+        4. `403 forbidden` without the Write permission, and for a document
            protected by a password, which is always refused through the API:
            open it in Healdan's web page.
-        4. `409 checked-out` when someone else has it checked out,
+        5. `409 checked-out` when someone else has it checked out,
            administrators included: nobody saves over another person's open
            edit. An administrator releases the hold first
            (`DELETE /v1/documents/{docNumber}/checkout`). `409 locked` when
@@ -729,8 +735,18 @@ paths:
            included. Both add the `hold`. `409 held-elsewhere` when the
            caller has it checked out on another device (see
            `checkOutDocument`), with the `hold` and `lastSaved`.
-        5. `409 refused` for an immutable or an archived document.
-        6. The name: the version part's `name`, or else the file part's name
+        6. The preconditions. With `ifHeld: true`, `409 not-held` when the
+           document isn't checked out to the caller, which after step 5
+           means it's free: its check-out was released, or checked in from
+           the web page. Then
+           `409 version-moved` when the document's `version` isn't
+           `ifVersion`, with the `document` as it is now: someone changed
+           its properties or name, or saved it, after the version the save
+           started from. When its `fileVersion` is still the one the client
+           started from, nobody stored newer content, and the client may
+           send the save again with the new `ifVersion`.
+        7. `409 refused` for an immutable or an archived document.
+        8. The name: the version part's `name`, or else the file part's name
            (RFC 5987's `filename*` first), or the document's when neither
            gives one. It may change, but its extension may not: compared in
            any case, it must be the document's, and it keeps the document's
@@ -738,18 +754,20 @@ paths:
            `Lease.docx`). A browser names a file part it has no name for
            `blob`, which has no extension, so a client in a browser, such as
            an Office add-in, sends `name`: the document's name to keep it.
-        7. The file: `413 too-large` over the upload limit; `422` when it's
+        9. The file: `413 too-large` over the upload limit; `422` when it's
            empty. A file more than 1 MB over the limit is refused while it's
            sent, before anything else.
-        8. The comment, which is cleaned of markup as the web page's check-in
-           cleans it: `<img src=x onerror=...>` goes, `a < b & c` stays.
+        10. The comment, which is cleaned of markup as the web page's check-in
+            cleans it: `<img src=x onerror=...>` goes, `a < b & c` stays; and
+            the `saveId`.
 
         One `422 validation` lists what is wrong. For the name, the field is
         `name` when it came from `name`, and `file` otherwise: `extension`
         for another extension, `too-long` over 255 characters, `invalid` for
         a name with `/`, `\` or a control character, and `disallowed` for an
         extension the `upload.disallow` setting lists. For `file`: `empty`.
-        For `comment`: `too-long` over 1000 characters once cleaned.
+        For `comment`: `too-long` over 1000 characters once cleaned. For
+        `saveId`: `invalid` when it isn't a UUID.
 
         None of these refusals changes anything. A rule that refuses the
         check-in itself is `409 refused`: the document is left as it was, but
@@ -757,7 +775,8 @@ paths:
         again, or release it.
 
         `201` means the save is stored: the document has a new version, and
-        the version is in its timeline. When the server can't store it, the
+        the version is in its timeline, and its `saveId`, if it had one, is
+        the document's last. When the server can't store it, the
         answer is `500 server-error`, and its `detail` says what's left and
         whether the document is still checked out to the caller. Either the
         document is as it was, or its content is the file sent, as a version
@@ -1228,8 +1247,8 @@ components:
       type: object
       description: |
         An RFC 9457 problem. Some codes add members: `validation` adds
-        `fields`, `checked-out` and `locked` add `hold`, and
-        `held-elsewhere` adds `hold` and `lastSaved`.
+        `fields`, `checked-out` and `locked` add `hold`, `held-elsewhere`
+        adds `hold` and `lastSaved`, and `version-moved` adds `document`.
       required: [type, title, status, detail, code]
       properties:
         type:
@@ -1247,7 +1266,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
@@ -1262,6 +1281,11 @@ components:
             (its latest save, or its filing), so a client can warn that what
             the other device hasn't sent since isn't in Healdan. Null when
             the server's data doesn't say.
+        document:
+          $ref: '#/components/schemas/DocumentView'
+          description: |
+            For `version-moved`: the document as it is now, so a client can
+            tell from its `fileVersion` whether anyone stored newer content.
     FieldError:
       type: object
       additionalProperties: false
@@ -2090,3 +2114,27 @@ components:
             `true` for a save while editing, which leaves the document
             checked out to the caller; `false` by default, the save on
             closing, which checks it in.
+        ifVersion:
+          type: [string, 'null']
+          description: |
+            The document's `version` the save started from: the save is
+            `409 version-moved` when the document is at another, and nothing
+            is stored. Left out, the save is made whatever the version.
+          examples: ['2.1']
+        ifHeld:
+          type: [boolean, 'null']
+          description: |
+            `true` when the save is only to be made while the document is
+            checked out to the caller (on this device, when the check-out
+            names one): it's `409 not-held` when it isn't, and nothing is
+            stored. `false` by default, which checks a free document out to
+            the caller for the save.
+        saveId:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            A UUID the client makes for this save, and sends again unchanged
+            when it sends the save again. The server keeps the last one
+            stored for each document, and a save repeating it is answered
+            `201` with the document as it is, storing nothing.
+          examples: ['0b0c5f8e-3f4c-4d39-9a52-0d1e2f3a4b5c']

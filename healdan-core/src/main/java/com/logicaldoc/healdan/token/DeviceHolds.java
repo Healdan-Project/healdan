@@ -76,19 +76,34 @@ public class DeviceHolds {
 	 * @param app the app the document is open in, or null
 	 */
 	public void record(Document doc, ApiToken token, String app) {
+		record(doc, token, app, null);
+	}
+
+	/**
+	 * As {@link #record(Document, ApiToken, String)}, after a save through
+	 * the API, in the same write.
+	 *
+	 * @param doc the document, as it is now: checked out to the token's user
+	 * @param token the token of the device that holds it
+	 * @param app the app the document is open in, or null
+	 * @param saveId the id of the save just stored, which
+	 *        {@link #lastSaveId(Document)} answers from now on; null to keep
+	 *        the last one
+	 */
+	public void record(Document doc, ApiToken token, String app, String saveId) {
 		HoldDevice row = find(doc);
 		if (row != null && upToDate(doc, row) && Objects.equals(row.getDevice(), token.getDevice())
-				&& Objects.equals(row.getTokenId(), token.getId()) && Objects.equals(row.getApp(), app))
+				&& Objects.equals(row.getTokenId(), token.getId()) && Objects.equals(row.getApp(), app)
+				&& (saveId == null || saveId.equals(row.getLastSaveId())))
 			return;
 
-		if (row == null) {
-			row = new HoldDevice();
-			row.setTenantId(doc.getTenantId());
-			row.setDocId(doc.getId());
-		}
+		if (row == null)
+			row = newRow(doc);
 		row.setDevice(token.getDevice());
 		row.setTokenId(token.getId());
 		row.setApp(app);
+		if (saveId != null)
+			row.setLastSaveId(saveId);
 		store(row);
 	}
 
@@ -157,13 +172,46 @@ public class DeviceHolds {
 	 * @param doc the document
 	 */
 	public void clear(Document doc) {
+		clear(doc, null);
+	}
+
+	/**
+	 * As {@link #clear(Document)}, after a save through the API that ended
+	 * the check-out, in the same write. A document with no record gets one
+	 * that names no device, for the save's id.
+	 *
+	 * @param doc the document
+	 * @param saveId the id of the save just stored, which
+	 *        {@link #lastSaveId(Document)} answers from now on; null to keep
+	 *        the last one
+	 */
+	public void clear(Document doc, String saveId) {
 		HoldDevice row = find(doc);
-		if (row == null || row.getDevice() == null && row.getTokenId() == null && row.getApp() == null)
+		boolean empty = row == null || row.getDevice() == null && row.getTokenId() == null && row.getApp() == null;
+		if (empty && (saveId == null || row != null && saveId.equals(row.getLastSaveId())))
 			return;
+
+		if (row == null)
+			row = newRow(doc);
 		row.setDevice(null);
 		row.setTokenId(null);
 		row.setApp(null);
+		if (saveId != null)
+			row.setLastSaveId(saveId);
 		store(row);
+	}
+
+	/**
+	 * Whatever the document's state: the id outlives the check-out it was
+	 * saved in, so that a save on closing sent again is told too.
+	 *
+	 * @param doc a document
+	 * @return the id of the last save stored through the API with one, or
+	 *         null if none was
+	 */
+	public String lastSaveId(Document doc) {
+		HoldDevice row = find(doc);
+		return row != null ? row.getLastSaveId() : null;
 	}
 
 	/**
@@ -218,6 +266,13 @@ public class DeviceHolds {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read a device token", e);
 		}
+	}
+
+	private static HoldDevice newRow(Document doc) {
+		HoldDevice row = new HoldDevice();
+		row.setTenantId(doc.getTenantId());
+		row.setDocId(doc.getId());
+		return row;
 	}
 
 	private HoldDevice find(Document doc) {

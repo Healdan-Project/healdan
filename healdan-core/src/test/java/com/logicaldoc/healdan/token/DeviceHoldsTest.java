@@ -148,6 +148,35 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testLastSaveId() throws Exception {
+		ApiToken mac = token("mac-1");
+		assertNull(holds().lastSaveId(reload()));
+
+		// A save on closing of a check-out with no record: a row for the id alone, which holds nothing
+		holds().clear(reload(), "save-1");
+		assertEquals("save-1", holds().lastSaveId(reload()));
+		checkout(clerk);
+		assertTrue(holds().current(reload()).isEmpty());
+		assertTrue(holds().heldHere(reload(), mac));
+
+		// Saved while editing: the device and the id in one write
+		holds().record(reload(), mac, "LibreOffice", "save-2");
+		assertEquals("save-2", holds().lastSaveId(reload()));
+		assertEquals("mac-1", holds().current(reload()).orElseThrow().getDevice());
+
+		// Writes without an id keep the last one, and so does the end of the check-out
+		holds().record(reload(), mac, "Writer");
+		assertEquals("save-2", holds().lastSaveId(reload()));
+		DocumentManager.get().unlock(doc.getId(), history(clerk, DocumentEvent.UNLOCKED));
+		holds().clear(reload());
+		assertEquals("save-2", holds().lastSaveId(reload()));
+		holds().clear(reload(), "save-3");
+		assertEquals("save-3", holds().lastSaveId(reload()));
+		assertEquals(1, (int) jdbc().queryForObject("select count(*) from hd_hold_device where hd_docid = ?",
+				Integer.class, doc.getId()));
+	}
+
+	@Test
 	public void testMove() throws Exception {
 		ApiToken mac = token("mac-1");
 		ApiToken linux = token("linux-2");
