@@ -280,6 +280,51 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		}
 	}
 
+	// A session opened with the token as an API key, as CE's loginApiKey routes do: not bound to the row
+	private static String keySession(ApiTokens.Issued issued) {
+		return SessionManager.get().newSession(issued.token(), new Client()).getSid();
+	}
+
+	@Test
+	public void testRevokeClosesSessionsOpenedWithTheToken() throws Exception {
+		User clerk = fx.user("clerk");
+		ApiTokens.Issued issued = tokens().issue(clerk, "Laptop", null);
+		ApiTokens.Issued other = tokens().issue(clerk, "Phone", null);
+		String sid = keySession(issued);
+		String otherSid = keySession(other);
+		try {
+			assertTrue(SessionManager.get().isOpen(sid));
+
+			tokens().revoke(issued.row());
+
+			assertFalse(SessionManager.get().isOpen(sid));
+			assertTrue(SessionManager.get().isOpen(otherSid));
+		} finally {
+			SessionManager.get().kill(sid);
+			SessionManager.get().kill(otherSid);
+		}
+	}
+
+	@Test
+	public void testRevokeAllClosesSessionsOpenedWithTheTokens() throws Exception {
+		User clerk = fx.user("clerk");
+		User boss = fx.user("boss", "admin");
+		String one = keySession(tokens().issue(clerk, "a", null));
+		String two = keySession(tokens().issue(clerk, "b", null));
+		String bosses = keySession(tokens().issue(boss, "c", null));
+		try {
+			assertEquals(2, tokens().revokeAll(clerk.getId()));
+
+			assertFalse(SessionManager.get().isOpen(one));
+			assertFalse(SessionManager.get().isOpen(two));
+			assertTrue(SessionManager.get().isOpen(bosses));
+		} finally {
+			SessionManager.get().kill(one);
+			SessionManager.get().kill(two);
+			SessionManager.get().kill(bosses);
+		}
+	}
+
 	@Test
 	public void testRevokeIsIdempotent() throws Exception {
 		ApiToken token = tokens().issue(fx.user("clerk"), "x", null).row();

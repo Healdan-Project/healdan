@@ -6,12 +6,16 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Collection;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanRuleException;
@@ -178,8 +183,9 @@ public class ApiTokens {
 	}
 
 	/**
-	 * Revokes a token and closes the session bound to it. Revoking a revoked
-	 * token does nothing.
+	 * Revokes a token and closes the session bound to it, and any other
+	 * session opened with it as an API key (CE's {@code loginApiKey} routes).
+	 * Revoking a revoked token does nothing.
 	 * 
 	 * @param token a token row
 	 */
@@ -189,18 +195,24 @@ public class ApiTokens {
 		update("set deleted = 1 where id = :id and deleted = 0", Map.of("id", token.getId()));
 		token.setDeleted(1);
 		kill(sid);
+		killKeySessions(List.of(token.getHash()));
 	}
 
 	/**
+	 * Revokes all of a user's tokens and closes their sessions, as
+	 * {@link #revoke(ApiToken)} does.
+	 * 
 	 * @param userId the user's id
 	 * @return how many tokens were revoked
 	 */
 	public int revokeAll(long userId) {
 		try {
-			List<String> sids = dao.findByUser(userId).stream().map(t -> currentSid(t.getId()))
-					.filter(Objects::nonNull).toList();
+			List<ApiToken> rows = dao.findByUser(userId);
+			List<String> sids = rows.stream().map(t -> currentSid(t.getId())).filter(Objects::nonNull).toList();
+			List<String> hashes = rows.stream().map(ApiToken::getHash).toList();
 			int revoked = update("set deleted = 1 where userId = :userId and deleted = 0", Map.of("userId", userId));
 			sids.forEach(ApiTokens::kill);
+			killKeySessions(hashes);
 			return revoked;
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list device tokens", e);
@@ -245,6 +257,23 @@ public class ApiTokens {
 		} catch (RuntimeException e) {
 			log.warn("Couldn't close session {} of a revoked device token", sid, e);
 		}
+	}
+
+	/**
+	 * Closes the open sessions whose API key is one of these tokens. CE keeps
+	 * a session's key as the upper-case hex SHA-256 of the key it was opened
+	 * with; ours are lower-case.
+	 * 
+	 * @param hashes the tokens' hashes
+	 */
+	private static void killKeySessions(Collection<String> hashes) {
+		Set<String> keys = hashes.stream().filter(Objects::nonNull).map(h -> h.toLowerCase(Locale.ROOT))
+				.collect(Collectors.toSet());
+		if (keys.isEmpty())
+			return;
+		SessionManager.get().getSessions().stream()
+				.filter(s -> s.isOpen() && s.getKey() != null && keys.contains(s.getKey().toLowerCase(Locale.ROOT)))
+				.map(Session::getSid).forEach(ApiTokens::kill);
 	}
 
 	private static String cleanName(String name) throws HealdanRuleException {
