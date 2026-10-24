@@ -469,7 +469,7 @@ git commit -m "Let admins set device sign-in limits and API origins"
     - `ApiProblem with(String name, Object value)`;
     - factories `notFound(String)`, `forbidden(String)`, `badRequest(String)`, `unauthenticated(String)`, `conflict(String code, String detail)` and `validation(List<FieldError> fields)`.
   - **`record FieldError(String field, String code, String detail)`.**
-  - **`ProblemMapper implements ExceptionMapper<Throwable>`** writes `application/problem+json` with `type` `https://healdan.org/problems/<code>`, `title`, `status`, `detail`, `code` and any extras. It maps:
+  - **`ProblemMapper implements ExceptionMapper<Throwable>`** writes `application/problem+json` with `type` `https://healdan.com/problems/<code>`, `title`, `status`, `detail`, `code` and any extras. It maps:
     - `ApiProblem` as itself;
     - `HealdanVetoException` to `409 refused`;
     - JSON parse and mapping errors to `400 bad-request`;

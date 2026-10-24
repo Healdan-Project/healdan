@@ -112,6 +112,9 @@ public class AuthResource {
 		}
 
 		ApiToken row = issued.row();
+		// The password changed while signing in, so the token was revoked as soon as it was stored
+		if (row.getDeleted() != 0)
+			throw signInFailed();
 		return Response.status(Response.Status.CREATED)
 				.entity(new SignedIn(issued.token(), row.getId(), row.getName(), row.getExpires(), ApiViews.user(user)))
 				.build();

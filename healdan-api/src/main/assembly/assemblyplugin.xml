@@ -15,12 +15,6 @@
 			<outputFileNameMapping>
 				${artifact.artifactId}-${artifact.version}-plugin.${artifact.type}</outputFileNameMapping>
 		</dependencySet>
-		<dependencySet>
-			<outputDirectory>WEB-INF/lib</outputDirectory>
-			<includes>
-				<include>org.webjars:swagger-ui</include>
-			</includes>
-		</dependencySet>
 	</dependencySets>
 	<fileSets>
 		<fileSet>

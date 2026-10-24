@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
@@ -61,5 +62,13 @@ public class DocsResourceTest extends ApiTestCase {
 		assertEquals(404, get("/api/docs/..%2Fpom.xml").send().status());
 		assertEquals(404, get("/api/docs/..").send().status());
 		assertEquals(404, get("/api/docs/nothing.js").send().status());
+		// The webjar's script that loads its demo description from the internet
+		assertEquals(404, get("/api/docs/swagger-initializer.js").send().status());
+	}
+
+	// Tomcat would serve a webjar's files, demo page included, at /webjars/ without a sign-in
+	@Test
+	public void testNoWebjarOnTheClasspath() {
+		assertNull(getClass().getClassLoader().getResource("META-INF/resources/webjars/swagger-ui"));
 	}
 }

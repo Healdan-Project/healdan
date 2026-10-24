@@ -25,6 +25,7 @@ import com.logicaldoc.healdan.matter.MatterNumbering;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.token.ApiTokens;
 import com.logicaldoc.healdan.util.BasicPlane;
 
 import jakarta.servlet.annotation.WebServlet;
@@ -251,6 +252,8 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		settings.set(HealdanSettings.RECENT_MATTERS_DAYS, Integer.toString(values.recentDays()));
 		settings.set(HealdanSettings.API_TOKEN_IDLE_DAYS, Integer.toString(values.apiIdleDays()));
 		settings.set(HealdanSettings.API_TOKEN_MAX_DAYS, Integer.toString(values.apiMaxDays()));
+		// A lower maximum applies to the device sign-ins already made too
+		ApiTokens.get().capLifetime(values.apiMaxDays());
 		settings.set(HealdanSettings.API_CORS_ORIGINS, values.apiOrigins());
 		if (values.nextDocNumber() != null && values.nextDocNumber() > DocNumberCounter.get().peekNext())
 			DocNumberCounter.get().raiseNext(values.nextDocNumber());

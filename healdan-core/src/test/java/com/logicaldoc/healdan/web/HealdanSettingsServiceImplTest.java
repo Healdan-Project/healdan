@@ -6,7 +6,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
 import org.junit.Before;
@@ -31,6 +33,9 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.NumberingMode;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.token.ApiToken;
+import com.logicaldoc.healdan.token.ApiTokenDAO;
+import com.logicaldoc.healdan.token.ApiTokens;
 
 /**
  * The Healdan Settings panel's server side (spec 8.6): who may read and write
@@ -315,6 +320,20 @@ public class HealdanSettingsServiceImplTest extends AbstractHealdanTestCase {
 		assertEquals(100, HealdanSettings.get().apiTokenMaxDays());
 		assertEquals(List.of("https://localhost:3000", "https://addin.example.org"),
 				HealdanSettings.get().apiCorsOrigins());
+	}
+
+	@Test
+	public void testLowerMaximumShortensDeviceSignIns() throws Exception {
+		ApiToken token = ApiTokens.get().issue(clerk.getUser(), "Laptop", null).row();
+
+		GUIHealdanSettings settings = as(boss).load();
+		settings.setApiTokenIdleDays(7);
+		settings.setApiTokenMaxDays(7);
+		as(boss).save(settings);
+
+		// Read through Hibernate: the test database keeps timestamps in Europe/Rome's time
+		Date expires = ApiTokenDAO.get().findById(token.getId()).getExpires();
+		assertEquals(token.getCreation().getTime() + TimeUnit.DAYS.toMillis(7), expires.getTime(), 1000);
 	}
 
 	@Test

@@ -35,7 +35,7 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	/** The media type of a problem */
 	public static final String PROBLEM_JSON = "application/problem+json";
 
-	private static final String TYPE_BASE = "https://healdan.org/problems/";
+	private static final String TYPE_BASE = "https://healdan.com/problems/";
 
 	private static final String SERVER_ERROR = "Something went wrong on the server.";
 
