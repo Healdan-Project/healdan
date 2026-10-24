@@ -2,7 +2,7 @@
 
 - **Milestone:** M3 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-24
-- **Status:** for the owner's approval.
+- **Status:** approved by the owner on 2026-10-24. Implementation plan: [`docs/superpowers/plans/2026-10-24-m3-office-integration.md`](../plans/2026-10-24-m3-office-integration.md); its "Spec corrections and calls" section lists where the build departs from this spec.
   - **Builder check.** A reviewer who hadn't seen the design conversation found nine statements the code contradicts, all now corrected (§3.1), and eleven gaps. Two of the gaps were the owner's to answer: the file format at first save, and a Comments property (§5.6, §9.9).
   - **Trial build (§12).** It ran on 2026-10-24 on the owner's Mac, before approval as the owner decided, and answered the questions marked "(the trial)" (§12.5).
   - **Deferred rows.** The owner deferred the trial's Ubuntu rows and its Word add-in rows: "we have proven the concept". The Ubuntu rows wait for the owner's semi-production server; the Word rows go with Microsoft Office, which comes later (§2.1).
