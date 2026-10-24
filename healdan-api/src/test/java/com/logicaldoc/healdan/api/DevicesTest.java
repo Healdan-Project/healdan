@@ -16,6 +16,7 @@ import org.junit.Test;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
@@ -110,6 +111,38 @@ public class DevicesTest extends ApiTestCase {
 		ApiResponse saved = save(mac, d, true);
 		assertEquals(saved.toString(), 201, saved.status());
 		assertDevice(saved.json().path("hold").path("device"), "mac-1", "Test device", "LibreOffice");
+	}
+
+	@Test
+	public void testFilingChecksOutOnTheDevice() throws Exception {
+		String mac = signIn("mac-1");
+		String linux = signIn("linux-2");
+
+		// Save to Healdan from the helper: the new document stays open on the computer that filed it
+		ApiResponse filed = post("/api/v1/documents").token(mac)
+				.part("document",
+						ApiJson.mapper().writeValueAsString(Map.of("folderId", documents.getId(), "checkOut", true)))
+				.file("file", "new.docx", "one".getBytes(StandardCharsets.UTF_8)).send();
+
+		assertEquals(filed.toString(), 201, filed.status());
+		assertDevice(filed.json().path("hold").path("device"), "mac-1", "Test device", null);
+		awaitAsyncWork();
+		Document d = DocumentDAO.get().findByCustomId(Long.toString(filed.json().path("docNumber").asLong()),
+				Tenant.DEFAULT_ID);
+		assertHeldElsewhere(post(checkout(d)).token(linux).send(), d);
+		ApiResponse saved = save(mac, d, true);
+		assertEquals(saved.toString(), 201, saved.status());
+		assertDevice(saved.json().path("hold").path("device"), "mac-1", "Test device", null);
+
+		// A token without a device files as in M2: no device holds the check-out
+		ApiResponse unheld = post("/api/v1/documents").token(signIn(clerk))
+				.part("document",
+						ApiJson.mapper().writeValueAsString(Map.of("folderId", documents.getId(), "checkOut", true)))
+				.file("file", "other.docx", "one".getBytes(StandardCharsets.UTF_8)).send();
+		assertEquals(unheld.toString(), 201, unheld.status());
+		assertEquals("checkout", unheld.json().path("hold").path("kind").textValue());
+		assertTrue(unheld.json().path("hold").path("device").isNull());
+		assertTrue(unheld.json().path("canEdit").booleanValue());
 	}
 
 	@Test

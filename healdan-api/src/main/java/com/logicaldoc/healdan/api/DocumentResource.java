@@ -49,6 +49,7 @@ import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.ProfileView;
 import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.util.MimeType;
 
 import jakarta.ws.rs.Consumes;
@@ -194,6 +195,8 @@ public class DocumentResource {
 				checkout.setSession(caller.session());
 				checkout.setEvent(DocumentEvent.CHECKEDOUT);
 				DocumentManager.get().checkout(id, checkout);
+				// Held on the device that filed it, as by any check-out through the API; filing names no app
+				DeviceHolds.get().record(DocumentDAO.get().findById(id), caller.token(), null);
 			}
 
 			DocumentView filed = ApiViews.document(DocumentDAO.get().findById(id), user);

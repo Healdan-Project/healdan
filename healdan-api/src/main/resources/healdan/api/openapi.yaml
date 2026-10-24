@@ -302,8 +302,9 @@ paths:
         as the document's own. Author and Typist are the caller unless sent.
         An email (`.eml` or `.msg`) gets its From, To, CC, Subject, Sent and
         Received from the message, and is named after its subject. With
-        `checkOut: true` the document is checked out to the caller too. The
-        answer is `201` with the document, and its address as `Location`.
+        `checkOut: true` the document is checked out to the caller too, held
+        on the caller's device as by `checkOutDocument`. The answer is `201`
+        with the document, and its address as `Location`.
 
         Nothing is stored unless every check passes. They run in this order,
         and the first that fails gives the answer:
