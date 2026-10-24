@@ -159,6 +159,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `GET` and `PATCH /properties`; `GET /documents/recent` |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
+| Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
 The docs page has each one's fields, rules and errors. Every endpoint makes the checks the web page makes, so a
 document you can't read through the web page doesn't exist through the API either.
