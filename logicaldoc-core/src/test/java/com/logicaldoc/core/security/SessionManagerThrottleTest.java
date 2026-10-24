@@ -16,12 +16,15 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -34,6 +37,7 @@ import com.logicaldoc.core.security.authentication.UsernameBlockedException;
 import com.logicaldoc.core.security.authentication.WrongPasswordException;
 import com.logicaldoc.core.security.spring.LDAuthenticationDetails;
 import com.logicaldoc.core.security.spring.LDAuthenticationProvider;
+import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.plugin.PluginException;
@@ -137,6 +141,27 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		}
 	}
 
+	// The comments of a user's LOGIN_FAILED history, oldest first
+	private List<String> failures(long userId) throws SQLException {
+		List<String> comments = new ArrayList<>();
+		try (Connection con = getConnection();
+				PreparedStatement ps = con.prepareStatement(
+						"select ld_comment from ld_user_history where ld_userid = ? and ld_event = ? order by ld_id")) {
+			ps.setLong(1, userId);
+			ps.setString(2, UserEvent.LOGIN_FAILED.toString());
+			try (ResultSet rs = ps.executeQuery()) {
+				while (rs.next())
+					comments.add(rs.getString(1));
+			}
+		}
+		return comments;
+	}
+
+	private String lastFailure(long userId) throws SQLException {
+		List<String> comments = failures(userId);
+		return comments.isEmpty() ? null : comments.get(comments.size() - 1);
+	}
+
 	@Test
 	public void testFiveWrongPasswordsBlockTheUsername() {
 		for (int i = 0; i < 5; i++)
@@ -155,6 +180,24 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
 		assertThrows(UsernameBlockedException.class, () -> signIn("author", "wrong", outside));
 
+		assertEquals(5L, count(counter));
+		assertEquals(before, modified(counter));
+	}
+
+	// The old login page tells a blocked user why from the last LOGIN_FAILED comment
+	@Test
+	public void testBlockedAttemptIsLogged() throws SQLException {
+		for (int i = 0; i < 5; i++)
+			fail("author", outside);
+		String counter = LoginThrottle.LOGINFAIL_USERNAME + "author";
+		age(counter, 14);
+		Timestamp before = modified(counter);
+		int logged = failures(4L).size();
+
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(logged + 1, failures(4L).size());
+		assertEquals("usernameblocked", lastFailure(4L));
 		assertEquals(5L, count(counter));
 		assertEquals(before, modified(counter));
 	}
@@ -181,7 +224,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	}
 
 	@Test
-	public void testTwentyFailuresBlockTheAddress() {
+	public void testTwentyFailuresBlockTheAddress() throws SQLException {
 		String[] names = { "u1", "u2", "u3", "u4", "u5" };
 		for (String name : names)
 			for (int i = 0; i < 4; i++)
@@ -189,6 +232,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 						() -> signIn(name, "wrong", outside));
 
 		assertThrows(IPBlockedException.class, () -> signIn("author", PASSWORD, outside));
+		assertEquals("ipblocked", lastFailure(4L));
 		Client other = new Client("c3", "10.0.0.10", "host");
 		assertNotNull(signIn("author", PASSWORD, other));
 	}
@@ -226,7 +270,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	}
 
 	@Test
-	public void testFormLoginIsBlocked() {
+	public void testFormLoginIsBlocked() throws SQLException {
 		for (int i = 0; i < 5; i++)
 			fail("author", outside);
 
@@ -238,8 +282,36 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 
 		UsernamePasswordAuthenticationToken token = new UsernamePasswordAuthenticationToken("author", PASSWORD);
 		token.setDetails(new LDAuthenticationDetails(request));
-		assertThrows(org.springframework.security.core.AuthenticationException.class,
-				() -> new LDAuthenticationProvider().authenticate(token));
+		assertThrows(CredentialsExpiredException.class, () -> new LDAuthenticationProvider().authenticate(token));
+		assertEquals("usernameblocked", lastFailure(4L));
+	}
+
+	@Test
+	public void testBlockedKeySignInIsLogged() throws Exception {
+		ApiKey key = new ApiKey(4L, "AuthorKey");
+		ApiKeyDAO.get().store(key);
+		String[] names = { "u1", "u2", "u3", "u4", "u5" };
+		for (String name : names)
+			for (int i = 0; i < 4; i++)
+				assertThrows(com.logicaldoc.core.security.authentication.AuthenticationException.class,
+						() -> signIn(name, "wrong", outside));
+		String counter = LoginThrottle.LOGINFAIL_IP + outside.getAddress();
+		age(counter, 14);
+		Timestamp before = modified(counter);
+
+		assertThrows(IPBlockedException.class, () -> SessionManager.get().newSession(key.getDecodedKey(), outside));
+
+		try (Connection con = getConnection();
+				PreparedStatement ps = con.prepareStatement(
+						"select count(*) from ld_user_history where ld_event = ? and ld_comment = 'ipblocked'")) {
+			ps.setString(1, UserEvent.LOGIN_FAILED.toString());
+			try (ResultSet rs = ps.executeQuery()) {
+				assertTrue(rs.next());
+				assertEquals(1L, rs.getLong(1));
+			}
+		}
+		assertEquals(20L, count(counter));
+		assertEquals(before, modified(counter));
 	}
 
 	@Test

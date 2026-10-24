@@ -162,7 +162,7 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
             throws AuthenticationException {
         // Before the try, so a blocked attempt is not counted as a failure
         String address = client != null ? client.getAddress() : null;
-        LoginThrottle.checkLoginThrottle(username, key, address);
+        checkThrottle(username, key, client);
 
         try {
             User user = authenticationChain.authenticate(username, password, key, client);
@@ -177,6 +177,29 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
             }
         } catch (AuthenticationException e) {
             LoginThrottle.recordFailure(username, key, client, e);
+            throw e;
+        }
+    }
+
+    /**
+     * Runs the login throttle. A blocked attempt is logged as a failed login,
+     * which the old login page reads to say why, but is not counted.
+     */
+    private void checkThrottle(String username, String key, Client client) throws AuthenticationException {
+        try {
+            LoginThrottle.checkLoginThrottle(username, key, client != null ? client.getAddress() : null);
+        } catch (AuthenticationException e) {
+            try {
+                User user = UserDAO.get().findByUsername(username);
+                if (user == null) {
+                    user = new User();
+                    user.setUsername(username);
+                    user.setName(username);
+                }
+                UserHistoryDAO.get().createUserHistory(user, UserEvent.LOGIN_FAILED, e.getMessage(), null, client);
+            } catch (PersistenceException pe) {
+                log.warn(pe.getMessage(), pe);
+            }
             throw e;
         }
     }
@@ -206,7 +229,7 @@ public class SessionManager extends ConcurrentHashMap<String, Session> {
      */
     public synchronized Session newSession(String apikey, Client client) throws AuthenticationException {
         // Only checks: a key session must not reset the counts of a password attack
-        LoginThrottle.checkLoginThrottle(null, apikey, client != null ? client.getAddress() : null);
+        checkThrottle(null, apikey, client);
 
         try {
             User user = authenticationChain.authenticate("", "", apikey, client);
