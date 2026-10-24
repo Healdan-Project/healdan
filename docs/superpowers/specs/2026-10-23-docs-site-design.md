@@ -2,7 +2,7 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56)
 - **Date:** 2026-10-23
-- **Status:** approved by the owner on 2026-10-23, and built from [`docs/superpowers/plans/2026-10-23-docs-site.md`](../plans/2026-10-23-docs-site.md) in three PRs. The site has been live at https://docs.healdan.com since 2026-10-23 (PR A, #59), with the User and Admin pages for M1 and M1.5 (PR B, #60). PR C moves the app's and the repo's links to it and fails CI on links to LogicalDOC's docs. The interim pages that remain are tracked in #56. The plan's "Spec corrections and calls this plan makes" amend §10.1 and §10.3, chiefly moving the Help URL into `HealdanSystemInfo`. Its decision log records the build's rulings.
+- **Status:** approved by the owner on 2026-10-23, and built from [`docs/superpowers/plans/2026-10-23-docs-site.md`](../plans/2026-10-23-docs-site.md) in three PRs. The site has been live at https://docs.healdan.com since 2026-10-23 (PR A, #59), with the User and Admin pages for M1 and M1.5 (PR B, #60). PR C (#61, merged on 2026-10-24) moved the app's and the repo's links to it and fails CI on links to LogicalDOC's docs. The interim pages that remain are tracked in #56. The plan's "Spec corrections and calls this plan makes" amend §10.1 and §10.3, chiefly moving the Help URL into `HealdanSystemInfo`. Its decision log records the build's rulings.
 - **Inputs:**
   - issue #56, which lists every link to LogicalDOC's docs in the app and the repo;
   - a design conversation with the owner on 2026-10-23, with mockups and a throwaway spike built with Hugo and Hextra in Healdan's colours;

@@ -1,7 +1,7 @@
 # Healdan roadmap
 
 - **Date:** 2026-10-16
-- **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)). M2 is done: the owner accepted it on 2026-10-24 ([spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), [plan](superpowers/plans/2026-10-23-m2-api-foundation.md)).
+- **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)). M2 is done: the owner accepted it on 2026-10-24 ([spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), [plan](superpowers/plans/2026-10-23-m2-api-foundation.md)). M3 is next, starting with its design session.
 - **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE 9.3.1 already has, what's hidden, half built or missing, with file paths.
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
@@ -47,7 +47,7 @@ Throughout, **(owner)** marks something the owner decided or described. **(call)
 5. **Stay mergeable with upstream.** (CLAUDE.md, owner's standing direction)
    - New work goes in new plugin modules.
    - Keep edits to upstream files to a minimum, and list them in each milestone spec.
-   - Merge `upstream/master` regularly.
+   - Merge `upstream/master` regularly. The `upstream-sync` workflow opens a sync PR every Monday.
 6. **Re-implement, never copy.** Features that LogicalDOC sells are rebuilt from observed behaviour, not from proprietary code. (owner's standing direction)
 7. **Linux and macOS first.** Windows comes later, for adoption. (owner)
 8. **One licence for the code.** All of Healdan's code, including its own modules, is under the LGPL-3.0, like upstream. The docs site's content is under CC BY 4.0. (owner, 2026-10-23)
@@ -77,7 +77,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 | M1 | Move in | – | **done** 2026-10-22: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. On 2026-10-22 a review of every open follow-up found four gaps to fix before acceptance, which the pre-acceptance PR ([Healdan-Project/healdan#44](https://github.com/Healdan-Project/healdan/pull/44)) fixed. The owner's acceptance walkthrough (the plan's Task 30) passed all eight rows on 2026-10-22. Its one punch-list item, Doc # in search results, was fixed in [Healdan-Project/healdan#45](https://github.com/Healdan-Project/healdan/pull/45) |
 | M1.5 | Office previews and thumbnails | M1 | **done** 2026-10-23: [spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md); [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md). Built 2026-10-22 in PR A (the server side) [Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and PR B [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49) (the image, smoke checks and docs). The owner's acceptance walkthrough (the plan's Task 10) passed all five rows on 2026-10-23, on a stack upgraded from M1. It left no M1.5 punch-list items; its observations are in the plan's decision log and follow-ups |
 | M2 | API foundation | – (M1 domain model for its matter endpoints) | **done** 2026-10-24: [spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md); [plan](superpowers/plans/2026-10-23-m2-api-foundation.md). Design and plan approved 2026-10-23 ([Healdan-Project/healdan#57](https://github.com/Healdan-Project/healdan/pull/57)). Built in PR A (the sign-in throttle, device tokens and the API's frame) [Healdan-Project/healdan#62](https://github.com/Healdan-Project/healdan/pull/62), PR B (finding things) [Healdan-Project/healdan#63](https://github.com/Healdan-Project/healdan/pull/63), PR C (properties, filing, check-out and saves) [Healdan-Project/healdan#64](https://github.com/Healdan-Project/healdan/pull/64) and PR D (the Docker flow test, the docs and the final review's fixes) [Healdan-Project/healdan#66](https://github.com/Healdan-Project/healdan/pull/66). The owner's acceptance walkthrough (spec §14.2) passed on 2026-10-24, on a stack built from PR D. What's left open is in the plan's follow-ups; none of it blocks M3 |
-| M3 | Office integration | M2 (M4 for single sign-on) | not started |
+| M3 | Office integration | M2 (M4 for single sign-on) | **next**: its design session hasn't been held. It opens with the transport spike (M3's Calls below), and the M2 plan's follow-ups list questions for it |
 | M4 | OIDC sign-in | – (can run alongside others; land before M5) | not started |
 | M5 | Email | M2, M4, M1's email indexing fix | not started |
 | M6 | New web UI: User app | M2, expanded | not started |
@@ -291,7 +291,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 
 The owner also decided that sign-in is throttled on every route, which CE never actually did (spec §5.7). The [inventory](reference/healdan-api-inventory.md) of every server call the old UI makes is committed beside the spec.
 
-**Built** on 2026-10-23 and 2026-10-24, in four PRs (#62, #63, #64 and #66), and accepted by the owner on 2026-10-24, with a docs page for client developers on the docs site. The build departed from the spec in a few ways, each marked "changed in the build" there. The main ones: the tests drive the real servlet through Spring's servlet mocks rather than CXF's local transport; only a password sign-in clears the throttle's failure counts, so CE's own clear in the form login is removed, one more upstream edit; a lock taken with the old UI's Lock action stops saves through the API even for the person who took it; `/search` never counts its results; uploads keep the old UI's size and extension limits; and password-protected documents can't be downloaded, checked out, saved or changed through the API, though their properties can be read. The build also found that Tomcat trusts forwarded addresses from every private network, so a machine on the LAN can dodge the per-address limit or claim the server's own address, which exempts `admin`. A follow-up, "Harden the sign-in throttle behind the proxy", is proposed to the owner. The owner's acceptance walkthrough (spec §14.2) is still to come.
+**Built** on 2026-10-23 and 2026-10-24, in four PRs (#62, #63, #64 and #66), and accepted by the owner on 2026-10-24, with a docs page for client developers on the docs site. The build departed from the spec in a few ways, each marked "changed in the build" there. The main ones: the tests drive the real servlet through Spring's servlet mocks rather than CXF's local transport; only a password sign-in clears the throttle's failure counts, so CE's own clear in the form login is removed, one more upstream edit; a lock taken with the old UI's Lock action stops saves through the API even for the person who took it; `/search` never counts its results; uploads keep the old UI's size and extension limits; and password-protected documents can't be downloaded, checked out, saved or changed through the API, though their properties can be read. The build also found that Tomcat trusts forwarded addresses from every private network, so a machine on the LAN can dodge the per-address limit or claim the server's own address, which exempts `admin`. Its fix, "Harden the sign-in throttle behind the proxy", heads the plan's follow-ups and must land before any production deploy (§7).
 
 ---
 
@@ -340,6 +340,15 @@ The owner also decided that sign-in is throttled on every route, which CE never 
 
 - **WebDAV.** CE advertises no class-2 locking. LOCK is turned into a check-out with no lock token. Expect read-only opens or failed saves in Word and LibreOffice until that's fixed. macOS Finder also mounts such a share read-only.
 - **CMIS.** CE has CMIS AtomPub 1.0, which LibreOffice's CMIS support uses. It hasn't been tested.
+
+**Inputs from M2.**
+
+- **What M2 built for the add-ins.** Device tokens, `#` lookup, recent matters and folders, the properties form, filing, check-out and both saves, all at `/api/v1`. The docs site's API page describes them for client developers.
+- **Questions for the design session.** The [M2 plan](superpowers/plans/2026-10-23-m2-api-foundation.md)'s follow-ups list them. Among them:
+  - holds are per user, not per device, so two of one person's devices can both save;
+  - a save takes at least about 1.1 s on the server;
+  - a footer stamped before upload works out the next number from `version`, and an `ifVersion` precondition on saves is M3's call;
+  - device tokens work only at `/api`, so if the spike picks WebDAV, it needs a narrow allowance there.
 
 **Done when.**
 
@@ -452,6 +461,11 @@ The owner also decided that sign-in is throttled on every route, which CE never 
 - **Order.** The User app comes first, in M6. Walls comes with M7. Admin is in the backlog, and once it exists the old UI can be retired.
 - **Upload.** Dragging and dropping files and emails into folders.
 
+**Inputs from M2.**
+
+- **Push updates.** M2 has none. Its spec proposes Server-Sent Events for M6.
+- **Performance.** Folder listings load the whole folder for each page, and full-text search tops out at about 1000 engine hits. The [M2 plan](superpowers/plans/2026-10-23-m2-api-foundation.md)'s follow-ups have the details.
+
 ---
 
 ### M7 — Ethical walls and the Walls app
@@ -508,15 +522,16 @@ These are calls unless CLAUDE.md already says the same thing.
 - **Plugin modules.** Use the four-piece plugin pattern in CLAUDE.md. List every upstream file a milestone edits in its spec, with the reason.
 - **No reliance on UI gating.** Enabling a CE feature that is gated only in the GUI is cheap: declare its `Feature_<n>` extension in a Healdan plugin. Healdan's own rules are enforced on the server.
 - **Schema upgrades.** From M1 on, the owner runs Healdan with real data, so every later schema change needs an upgrade path for an existing database.
-  - Today nothing migrates existing databases. The Docker init creates the schema only on a fresh database.
-  - The M1 design decides how Healdan's own tables get upgraded, e.g. versioned SQL scripts applied at startup. It must also say whether that mechanism touches upstream tables.
-- **Tests run in CI for Healdan modules.** CI currently builds with `-DskipTests`, which proves nothing about behaviour.
+  - Settled in M1 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md) §12): Flyway upgrades Healdan's own `hd_` tables on every start, from versioned scripts that never change once shipped.
+  - Healdan never changes the structure of CE's `ld_` tables, and nothing migrates them on an existing database: the Docker init creates CE's schema only on a fresh one. An upstream release that adds SQL to CE's tables needs it applied by hand, so check each upstream sync for SQL changes.
+- **Tests run in CI for Healdan modules.** CI's `build` check runs every test class in a `healdan-*` module, plus the upstream tests that cover Healdan's edits to upstream code (the workflow's `UPSTREAM_TESTS`), in parallel shards. A change that edits upstream code adds its test class there.
 - **Security fixes in upstream code.** Fix them in Healdan, keep each fix small so it merges cleanly, and consider reporting them upstream.
 - **Keeping this file current.** After each milestone, update its status here and record any decision that changed.
 - **Docs ship with the code.** A PR that changes behaviour a manual describes, or adds behaviour a manual should describe, updates the docs site (`site/`, published at docs.healdan.com) in the same PR. (owner, 2026-10-23) The site's [spec](superpowers/specs/2026-10-23-docs-site-design.md) and [plan](superpowers/plans/2026-10-23-docs-site.md) are tracked in [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56).
+  - The site has been live since 2026-10-23, and the app's and the repo's links have pointed at it since 2026-10-24 ([Healdan-Project/healdan#61](https://github.com/Healdan-Project/healdan/pull/61)).
+  - 23 pages, all about CE features Healdan uses unchanged, are still interim pages that link to LogicalDOC's. The feature PRs that touch them replace them, and #56 closes when none are left.
 
 ## 7. Open decisions for the owner
 
-These aren't needed before M1's design session. Settle them before outside adoption.
-
-- **Reporting upstream.** Whether, and how, to report the upstream security bugs to LogicalDOC.
+- **Trusted proxy addresses.** Which addresses Tomcat trusts to report a client's real address, for the sign-in throttle. It's the M2 plan's first follow-up. Settle it before any production deploy.
+- **Reporting upstream.** Whether, and how, to report the upstream security bugs to LogicalDOC. Settle it before outside adoption.
