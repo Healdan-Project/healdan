@@ -364,6 +364,16 @@ class SiteBuild(unittest.TestCase):
         unwritten = [page for page in self.ADMIN_LAUNCH_PAGES if "healdan-interim" in self.html(f"/admin/{page}/")]
         self.assertEqual([], unwritten)
 
+    # Task 17
+
+    def test_ci_page_names_every_check_the_workflows_run(self):
+        workflows = (_scripts.REPO / ".github/workflows").glob("*.yml")
+        checks = {name for workflow in workflows
+                  for name in re.findall(r"\.github/scripts/(check-[\w-]+\.py)", workflow.read_text(encoding="utf-8"))}
+        page = self.html("/developer/continuous-integration/")
+        self.assertIn("check-fontawesome-icons.py", checks)
+        self.assertEqual([], sorted(name for name in checks if name not in page))
+
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):
             result = subprocess.run([sys.executable, str(_scripts.SCRIPTS / script), str(arg)],

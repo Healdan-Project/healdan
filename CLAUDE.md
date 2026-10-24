@@ -11,11 +11,12 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
 - Healdan's own modules (`healdan-*`) follow upstream's version: their POM parent and `plugin.xml` version match the root POM's. A module left behind makes Maven fetch stock LogicalDOC jars, which lack the fork's classes.
   - When a clean sync merge brings a LogicalDOC release bump, `.github/scripts/upstream-sync.sh` adds a "Follow upstream to <version>" commit. After a conflicted merge it doesn't, so whoever resolves the conflicts bumps them too.
 - Upstream changes `logicaldoc-core` and `logicaldoc-gui` the most. To keep syncs cheap, put new work in new plugin modules and avoid editing upstream files where possible.
-- Upstream sometimes ships POMs that fail Maven validation (for example, a duplicate dependency). If CI fails within a minute, check POM errors and the icon check (next bullet) first.
+- Upstream sometimes ships POMs that fail Maven validation (for example, a duplicate dependency). If CI fails within a minute, check POM errors, the icon check and the doc-links check (next bullets) first.
 - The GUI bundles Font Awesome Free 6, but upstream writes the GUI against Font Awesome Pro. Pro styles (`fal`, `fa-light`, `fa-thin`, …) and Pro-only icon names compile fine and only show up at runtime, as blinking missing-icon placeholders.
   - `.github/scripts/check-fontawesome-icons.py` catches them. It runs first in `build-logicaldoc.yml`, and `build` must pass before a PR can merge. Run it locally with `python3 .github/scripts/check-fontawesome-icons.py`.
   - When it flags lines an upstream sync brought in, swap them for Free icons in the sync PR itself. That's a merge fix, not feature work.
-- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for. The rest of it, and `Build_this_Sources.md`, are upstream's and out of date. They mention `build/poms` and JDK 11, which don't apply here.
+- Outside the docs site's interim pages, nothing links to LogicalDOC's docs (docs, wiki, help or forums.logicaldoc.com). `.github/scripts/check-logicaldoc-doc-links.py` runs next to the icon check and fails `build` on one, naming the file and line. When a sync brings one in, point it at docs.healdan.com in the sync PR, a merge fix like the icons. Its `ALLOWED` list holds the few exact lines Healdan leaves alone, each with its reason (the `SystemInfo` defaults `HealdanSystemInfo` replaces).
+- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for, then points to the docs site. It's Healdan's own now: when a sync brings an edit to upstream's README, keep Healdan's. `Build_this_Sources.md` and `docker/README.md` are short pointers to the site.
 
 ## Roadmap
 
@@ -48,11 +49,11 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 
 ## Docker
 
-- `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. `docker/README.md` is the user guide; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
+- `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. The docs site's Install manual (`site/content/install/`) is the user guide, and its Developer Guide covers the dev overlay, tests and CI; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
 - The container never runs the setup wizard. `docker/tools/src/DockerInit.java` seeds `context.properties` and, on a fresh database, creates the schema by running the `DbInit` scripts from every `plugin.xml`, so a plugin's `DbInit` extension is picked up for new installs. Existing databases are never migrated, apart from Healdan's own `hd_` tables, which Flyway upgrades on every start (see "Healdan's code"). A plugin or upstream change that adds SQL to CE's tables needs it applied by hand there.
 - On every start, keys in the image's default `context.properties` that the conf volume lacks are added (values are never overwritten).
 - LogicalDOC only runs external programs listed in a classpath `allowed-commands.txt`. The lines in `docker/allowed-commands.txt` are re-added to the conf volume's copy on every start; a new external tool needs a line there.
-- Tests:
+- Tests (the Developer Guide's Tests page describes each):
   - `docker build --target tools .` for the init tool's unit tests
   - `docker/tests/test-*.sh`
   - `docker/smoke-test.sh` for end to end
@@ -69,7 +70,6 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 - A page not written yet holds `{{< interim href="…" title="…" >}}`, which links to LogicalDOC's nearest page. It's the only place `site/content/` may link to LogicalDOC's docs.
 - The `Docs site` check (`.github/workflows/docs-site.yml`) runs `python3 -m unittest discover -s .github/scripts/tests`, a strict build (`--panicOnWarning`), `check-site-sources.py` and `check-site-links.py`. It publishes to GitHub Pages from `master` only while the repository variable `DOCS_PUBLISH` is `true`.
 - Build, test and CI facts are in this file and in the Developer Guide. A change updates both.
-- Until the app's links move to the site (PR C of `docs/superpowers/plans/2026-10-23-docs-site.md`), `docker/README.md` stays as it is too. A change to the Docker stack updates both it and the Install or Developer Guide.
 
 ## Architecture
 

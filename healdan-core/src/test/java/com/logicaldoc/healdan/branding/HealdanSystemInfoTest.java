@@ -17,6 +17,7 @@ import org.junit.Test;
 
 import com.logicaldoc.core.SystemInfo;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.gui.common.client.beans.GUIBranding;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.util.spring.Context;
 
@@ -43,6 +44,17 @@ public class HealdanSystemInfoTest extends AbstractHealdanTestCase {
 		assertEquals(Context.get().getConfig().getProperty("product.release"), info.getRelease());
 		assertEquals(Tenant.DEFAULT_ID, info.getTenantId());
 		assertTrue(info.getFeatures().contains("Feature_71"));
+	}
+
+	/**
+	 * Help opens Healdan's docs site, in the GUI (which copies SystemInfo's
+	 * value into its branding) and in the GUI's own default.
+	 */
+	@Test
+	public void testHelpOpensHealdanDocs() {
+		assertEquals("https://docs.healdan.com", HealdanSystemInfo.HELP);
+		assertEquals(HealdanSystemInfo.HELP, SystemInfo.get(Tenant.DEFAULT_ID).getHelp());
+		assertEquals(HealdanSystemInfo.HELP, new GUIBranding().getHelp());
 	}
 
 	/**
