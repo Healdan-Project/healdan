@@ -1,0 +1,65 @@
+<style>
+  .tb { background:#ececec; color:#333; border:1px solid #c7c7cc; border-radius:8px; padding:8px 12px; display:flex; align-items:center; gap:10px; font-size:13px; margin-bottom:6px; }
+  .tb .dots span { display:inline-block; width:11px; height:11px; border-radius:50%; margin-right:5px; }
+  .tb .t { flex:1; text-align:center; font-weight:600; }
+  .tb .n { background:#fff3c4; padding:1px 6px; border-radius:4px; }
+  .cap { font-size:12px; color:var(--text-secondary); margin-bottom:22px; }
+  .dia { display:grid; grid-template-columns: 1fr 60px 1.25fr 60px 1fr; align-items:center; gap:0; }
+  .col { display:flex; flex-direction:column; gap:12px; }
+  .box { background:var(--bg-secondary); border:1.5px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px; }
+  .box h3 { font-size:14px; margin-bottom:4px; }
+  .box ul { margin-left:16px; color:var(--text-secondary); }
+  .box li { margin-bottom:2px; }
+  .helper { border-color:#3b5bdb; border-width:2px; }
+  .server { border-color:#2b8a3e; border-width:2px; }
+  .cache { border-style:dashed; }
+  .arr { text-align:center; color:var(--text-secondary); font-size:22px; }
+  .arr small { display:block; font-size:10px; line-height:1.2; }
+  .steps { margin-top:24px; background:var(--bg-secondary); border:1px solid var(--border); border-radius:10px; padding:12px 16px; font-size:13px; }
+  .steps ol { margin-left:20px; }
+  .steps li { margin-bottom:4px; }
+  .g { font-size:10px; background:#e5dbff; color:#5022a8; border-radius:6px; padding:1px 6px; font-weight:600; }
+  .o { font-size:10px; background:#d3f9d8; color:#1b6b2a; border-radius:6px; padding:1px 6px; font-weight:600; }
+</style>
+
+<h2>The helper app, as I picture it</h2>
+<p class="subtitle">Your choices are marked <span class="o">yours</span>. My guesses are marked <span class="g">guess</span>.</p>
+
+<div class="tb"><div class="dots"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div><div class="t">Lease agreement <span class="n">#1234 v2.1</span> — LibreOffice Writer</div></div>
+<div class="cap">The title bar, in your format <span class="o">yours</span></div>
+
+<div class="dia">
+  <div class="col">
+    <div class="box"><h3>Healdan in the browser</h3><ul><li>Find by # or matter</li><li>Double-click a document</li></ul></div>
+    <div class="box"><h3>LibreOffice + Healdan extension</h3><ul><li>Toolbar buttons</li><li>Sets the title bar</li><li>Doc ID footer</li></ul></div>
+    <div class="box"><h3>Word for Mac + Healdan add-in</h3><ul><li>Ribbon buttons</li><li>Doc ID footer</li></ul></div>
+  </div>
+  <div class="arr">→<small>healdan:// link<br>or button</small></div>
+  <div class="col">
+    <div class="box helper"><h3>Healdan Helper</h3>
+      <ul>
+        <li>C#, .NET, Avalonia <span class="o">yours</span></li>
+        <li>Runs in the menu bar or tray</li>
+        <li>Signs in once and keeps the device token in the keychain</li>
+        <li>Catches <code>healdan://</code> links from the web page</li>
+        <li>Draws the Save to Healdan and Open from Healdan windows, the same in both apps <span class="g">guess</span></li>
+        <li>Notices saves and closes, and talks to the server</li>
+      </ul>
+    </div>
+    <div class="box cache"><h3>Local copies (cache)</h3><ul><li><code>Lease agreement #1234 v2.1.docx</code></li><li>The file name carries the # and version, so Word's title bar shows them too</li></ul></div>
+  </div>
+  <div class="arr">→<small>/api/v1<br>(M2)</small></div>
+  <div class="col">
+    <div class="box server"><h3>Healdan server</h3><ul><li>Check out</li><li>Download</li><li>Save a snapshot or a version</li><li>Check in</li></ul></div>
+  </div>
+</div>
+
+<div class="steps">
+  <b>Opening an existing document</b>
+  <ol>
+    <li>You double-click #1234 in the web page, which sends a <code>healdan://open/1234</code> link to the helper.</li>
+    <li>The helper checks the document out, downloads it to the cache and opens it in LibreOffice or Word.</li>
+    <li>Each time you save, the helper sends the file up as a snapshot (v2.1 → v2.2).</li>
+    <li>When you close it, the helper checks it in and tidies the cache.</li>
+  </ol>
+</div>
