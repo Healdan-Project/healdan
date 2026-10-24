@@ -79,7 +79,7 @@ public final class Contract {
 		for (String field : List.of("type", "title", "detail", "code"))
 			assertTrue(where + " answered a problem without " + field, problem.path(field).isTextual());
 		assertEquals(where + " answered a problem whose type doesn't follow its code",
-				"https://healdan.org/problems/" + problem.path("code").textValue(), problem.path("type").textValue());
+				"https://healdan.com/problems/" + problem.path("code").textValue(), problem.path("type").textValue());
 	}
 
 	private static SimpleResponse toValidatorResponse(ApiResponse response) {

@@ -55,7 +55,7 @@ public class ContractTest {
 	@Test
 	public void testProblemsOnDescribedRoutesMustAgreeWithTheirStatusAndCode() {
 		String problem = """
-				{"type": "https://healdan.org/problems/not-found", "title": "Not found",
+				{"type": "https://healdan.com/problems/not-found", "title": "Not found",
 				 "status": %d, "detail": "No such document", "code": "not-found"}""";
 		ApiResponse good = new ApiResponse(404, Map.of("Content-Type", List.of("application/problem+json")),
 				problem.formatted(404).getBytes(StandardCharsets.UTF_8));
