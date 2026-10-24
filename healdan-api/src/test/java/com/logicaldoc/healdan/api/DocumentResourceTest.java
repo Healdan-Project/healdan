@@ -11,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Date;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -22,6 +23,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -143,6 +145,45 @@ public class DocumentResourceTest extends ApiTestCase {
 		JsonNode mine = get("/api/v1/documents/" + number(d)).token(signIn(boss)).send().json();
 		assertEquals("checkout", mine.path("hold").path("kind").textValue());
 		assertTrue(mine.path("canEdit").booleanValue());
+	}
+
+	@Test
+	public void testHoldSinceIsTheHoldersOwn() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		checkout(d, boss);
+		String since = get("/api/v1/documents/" + number(d)).token(signIn(clerk)).send().json().path("hold")
+				.path("since").textValue();
+
+		// Later rows of another user, and of another kind of hold, aren't Boss's check-out
+		for (Object[] row : new Object[][] { { clerk, DocumentEvent.CHECKEDOUT }, { boss, DocumentEvent.LOCKED } }) {
+			DocumentHistory history = fx.documentHistory((User) row[0]);
+			history.setDocument(DocumentDAO.get().findById(d.getId()));
+			history.setEvent((DocumentEvent) row[1]);
+			history.setDate(new Date(System.currentTimeMillis() + 3_600_000L));
+			DocumentHistoryDAO.get().store(history);
+		}
+
+		JsonNode hold = get("/api/v1/documents/" + number(d)).token(signIn(clerk)).send().json().path("hold");
+		assertEquals(boss.getId(), hold.path("by").path("id").asLong());
+		assertEquals(since, hold.path("since").textValue());
+	}
+
+	@Test
+	public void testOutsideStoresIsNotFound() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		String token = signIn(boss);
+		assertEquals(1, get("/api/v1/documents/recent").token(token).send().json().path("items").size());
+
+		// As a document CE filed before Healdan, in its Default workspace
+		jdbc().update("update ld_document set ld_folderid = ? where ld_id = ?", Folder.DEFAULTWORKSPACEID, d.getId());
+		DocumentDAO.get().evict(Document.class, d.getId());
+
+		for (String path : new String[] { "", "/content", "/versions" }) {
+			ApiResponse response = get("/api/v1/documents/" + number(d) + path).token(token).send();
+			assertEquals(path + " " + response, 404, response.status());
+		}
+		assertEquals(404, get("/api/v1/lookup?q=%23" + number(d)).token(token).send().status());
+		assertEquals(0, get("/api/v1/documents/recent").token(token).send().json().path("items").size());
 	}
 
 	@Test

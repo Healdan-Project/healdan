@@ -325,8 +325,9 @@ paths:
       summary: A document
       description: |
         Addressed by its doc #. A document the caller can't read, one that
-        isn't published to them, and one that doesn't exist are all `404`
-        with the same answer.
+        isn't published to them, one outside the Stores (like the folders
+        there) and one that doesn't exist are all `404` with the same answer.
+        Lists, search and lookup leave out the same documents.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
