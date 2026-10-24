@@ -3,6 +3,11 @@ package com.logicaldoc.healdan.api;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -110,6 +115,45 @@ public class ListsTest extends ApiTestCase {
 
 		// Boss uploaded one document, in Documents
 		assertEquals(1, get("/api/v1/folders/recent").token(signIn(boss)).send().json().path("items").size());
+	}
+
+	@Test
+	public void testApiWritesFeedTheLists() throws Exception {
+		// Spec section 14.1: the API's own writes record the caller, so they reach the caller's lists
+		Document saved = file(documents, "saved.docx", boss);
+		Document held = file(documents, "held.docx", boss);
+		String token = signIn(clerk);
+		assertEquals(List.of(), docNumbers(get("/api/v1/documents/recent").token(token).send()));
+
+		ApiResponse filed = post("/api/v1/documents").token(token)
+				.part("document", "{\"folderId\": %d}".formatted(documents.getId()))
+				.file("file", "filed.docx", "Healdan filed".getBytes(StandardCharsets.UTF_8)).send();
+		assertEquals(filed.toString(), 201, filed.status());
+		long filedNumber = filed.json().path("docNumber").asLong();
+		assertEquals(Set.of(filedNumber), Set.copyOf(docNumbers(get("/api/v1/documents/recent").token(token).send())));
+
+		ApiResponse save = post("/api/v1/documents/" + number(saved) + "/versions").token(token)
+				.part("version", "{\"kind\": \"snapshot\"}")
+				.file("file", "saved.docx", "Healdan saved".getBytes(StandardCharsets.UTF_8)).send();
+		assertEquals(save.toString(), 201, save.status());
+		assertEquals(Set.of(filedNumber, number(saved)),
+				Set.copyOf(docNumbers(get("/api/v1/documents/recent").token(token).send())));
+
+		assertEquals(200, post("/api/v1/documents/" + number(held) + "/checkout").token(token).send().status());
+		assertEquals(List.of(number(held)), docNumbers(get("/api/v1/me/checkouts").token(token).send()));
+		assertEquals(Set.of(filedNumber, number(saved), number(held)),
+				Set.copyOf(docNumbers(get("/api/v1/documents/recent").token(token).send())));
+
+		assertEquals(200, delete("/api/v1/documents/" + number(held) + "/checkout").token(token).send().status());
+		assertEquals(List.of(), docNumbers(get("/api/v1/me/checkouts").token(token).send()));
+	}
+
+	private static List<Long> docNumbers(ApiResponse page) {
+		assertEquals(page.toString(), 200, page.status());
+		List<Long> numbers = new ArrayList<>();
+		for (JsonNode item : page.json().path("items"))
+			numbers.add(item.path("docNumber").asLong());
+		return numbers;
 	}
 
 	@Test

@@ -214,6 +214,88 @@ paths:
                 $ref: '#/components/schemas/DocumentPage'
         default:
           $ref: '#/components/responses/Problem'
+    post:
+      operationId: fileDocument
+      summary: File a new document
+      description: |
+        Files a file in a folder as a new document, as an upload in the web
+        page does. It gets the next doc #, its Date filed is now, and its
+        properties are inherited from the folder, with any `properties` sent
+        as the document's own. Author and Typist are the caller unless sent.
+        An email (`.eml` or `.msg`) gets its From, To, CC, Subject, Sent and
+        Received from the message, and is named after its subject. With
+        `checkOut: true` the document is checked out to the caller too. The
+        answer is `201` with the document, and its address as `Location`.
+
+        Nothing is stored unless every check passes. They run in this order,
+        and the first that fails gives the answer:
+
+        1. `400 bad-request` for a `document` part that is missing, isn't
+           the JSON expected (a field the server doesn't know included) or
+           has no `folderId`, and for a missing `file` part.
+        2. `404 not-found` for a folder the caller can't read, as for one
+           that doesn't exist.
+        3. `409 filing-rule` for a folder that can't hold documents: a
+           Store, a matter's top folder or a search folder.
+        4. `403 forbidden` without the Write permission on the folder.
+        5. The name: `name`, or the file part's name when that's blank
+           (RFC 5987's `filename*` first).
+        6. The file: `413 too-large` over the upload limit, the
+           `upload.maxsize` setting in MB; `422` when it's empty. A file
+           more than 1 MB over the limit is refused while it's sent, before
+           anything else.
+        7. The properties.
+
+        One `422 validation` lists every field that is wrong: the name, the
+        file, then the properties. The codes are:
+
+        - for `name`: `required` when there's no name at all, `too-long`
+          over 255 characters, `invalid` for a name with `/`, `\` or a
+          control character, `extension` for one that doesn't end with an
+          extension, and `disallowed` for an extension the `upload.disallow`
+          setting lists, in any case;
+        - for `file`: `empty`;
+        - for a property: those of `setProperties`, and `required` for every
+          required property that has no value once inheritance has run.
+          Text is cleaned of markup, as for `setProperties`.
+          A value sent as the folder's form shows it
+          (`GET /v1/folders/{folderId}/form`) is ignored, so a client can send
+          the whole form back.
+      tags: [Documents]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [document, file]
+              properties:
+                document:
+                  $ref: '#/components/schemas/NewDocument'
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The file. The part's `Content-Disposition` names it, with
+                    `filename` or RFC 5987's `filename*`.
+            encoding:
+              document:
+                contentType: application/json
+      responses:
+        '201':
+          description: The document, as filed
+          headers:
+            Location:
+              description: The document's address, such as `/api/v1/documents/1234`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/search:
     get:
       operationId: search
@@ -351,9 +433,11 @@ paths:
         is `404`. The download is recorded in the document's history, as the
         old web page records it, once per 30 seconds.
 
-        A document protected by a password is `403 forbidden` too, unless
-        the signed-in session has unlocked it in the web page. A document whose file is missing from storage
-        is `500 server-error`.
+        A document protected by a password is always `403 forbidden` through
+        the API: open it in Healdan's web page. A document whose file is
+        missing from storage is `500 server-error`.
+
+        `HEAD` answers with the headers alone, and records nothing.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -388,6 +472,59 @@ paths:
                 contentMediaType: application/octet-stream
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/checkout:
+    post:
+      operationId: checkOutDocument
+      summary: Check a document out
+      description: |
+        Checks the document out to the caller, so nobody else can save to it
+        until it's checked in or released, and returns it. A document the
+        caller has checked out already is returned as it is. The checks run
+        in this order:
+
+        1. `404 not-found` for a document the caller can't read.
+        2. `403 forbidden` without the Write permission, and for a document
+           protected by a password, which is always refused through the API:
+           open it in Healdan's web page.
+        3. `409 checked-out` when someone else has it checked out, and
+           `409 locked` when it's locked with the web page's Lock action, by
+           anyone, the caller included. Both add the `hold`.
+        4. `409 refused` for an immutable or an archived document.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The document, checked out to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: releaseDocument
+      summary: Release a check-out or a lock
+      description: |
+        Releases the document's check-out or lock without saving anything,
+        and returns the document. The user who holds it can, and so can an
+        administrator; the release is recorded in the history. An
+        administrator's release also makes an immutable document mutable
+        again, as the web page's does. Anyone else gets `409 checked-out` or
+        `409 locked`, with the `hold`. A free document is returned as it is,
+        and one the caller can't read is `404`.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The document, free
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/versions:
     get:
       operationId: listVersions
@@ -407,6 +544,214 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: saveVersion
+      summary: Save new content
+      description: |
+        Saves the file as the document's new content and returns the
+        document. `kind: snapshot` is an ordinary save (2.1 becomes 2.2);
+        `kind: version` is "Save as new version" (2.2 becomes 3.0). A free
+        document is checked out to the caller, saved and checked in again;
+        with `keepCheckedOut: true`, the save while editing, it's checked out
+        to the caller again afterwards, and the history shows a check-in
+        followed by a check-out. The web page can take the document in the
+        moment between them: the save stands, and the answer's `hold` shows
+        who has it. Two saves of one document are applied one after the
+        other.
+
+        Nothing is saved unless every check passes. They run in this order,
+        and the first that fails gives the answer:
+
+        1. `400 bad-request` for a `version` part that is missing or isn't
+           the JSON expected (a missing or unknown `kind` included), and for
+           a missing `file` part.
+        2. `404 not-found` for a document the caller can't read.
+        3. `403 forbidden` without the Write permission, and for a document
+           protected by a password, which is always refused through the API:
+           open it in Healdan's web page.
+        4. `409 checked-out` when someone else has it checked out,
+           administrators included: nobody saves over another person's open
+           edit. An administrator releases the hold first
+           (`DELETE /v1/documents/{docNumber}/checkout`). `409 locked` when
+           it's locked with the web page's Lock action, by anyone, the caller
+           included. Both add the `hold`.
+        5. `409 refused` for an immutable or an archived document.
+        6. The name: the version part's `name`, or else the file part's name
+           (RFC 5987's `filename*` first), or the document's when neither
+           gives one. It may change, but its extension may not: compared in
+           any case, it must be the document's, and it keeps the document's
+           spelling (`Lease.DOCX` saved over `Lease.docx` keeps
+           `Lease.docx`). A browser names a file part it has no name for
+           `blob`, which has no extension, so a client in a browser, such as
+           an Office add-in, sends `name`: the document's name to keep it.
+        7. The file: `413 too-large` over the upload limit; `422` when it's
+           empty. A file more than 1 MB over the limit is refused while it's
+           sent, before anything else.
+        8. The comment, which is cleaned of markup as the web page's check-in
+           cleans it: `<img src=x onerror=...>` goes, `a < b & c` stays.
+
+        One `422 validation` lists what is wrong. For the name, the field is
+        `name` when it came from `name`, and `file` otherwise: `extension`
+        for another extension, `too-long` over 255 characters, `invalid` for
+        a name with `/`, `\` or a control character, and `disallowed` for an
+        extension the `upload.disallow` setting lists. For `file`: `empty`.
+        For `comment`: `too-long` over 1000 characters once cleaned.
+
+        None of these refusals changes anything. A rule that refuses the
+        check-in itself is `409 refused`: the document is left as it was, but
+        checked out to the caller, even if it was free before. Send the save
+        again, or release it.
+
+        `201` means the save is stored: the document has a new version, and
+        the version is in its timeline. When the server can't store it, the
+        answer is `500 server-error`, and its `detail` says what's left and
+        whether the document is still checked out to the caller. Either the
+        document is as it was, or its content is the file sent, as a version
+        that isn't in its timeline (`listVersions`), which `?version=` can't
+        fetch. Either way the previous versions and their files can still be
+        read, and sending the save again stores it as the next version. Any
+        other `500` may also come after the document's content became the
+        file sent: read the document and its versions before sending the
+        save again.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [version, file]
+              properties:
+                version:
+                  $ref: '#/components/schemas/NewVersion'
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The new content. The part's `Content-Disposition` names
+                    it, with `filename` or RFC 5987's `filename*`, unless the
+                    version part's `name` does.
+            encoding:
+              version:
+                contentType: application/json
+      responses:
+        '201':
+          description: The document, as saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/properties:
+    get:
+      operationId: getProperties
+      summary: A document's properties
+      description: |
+        Every property of the document, in the profile's order, with where
+        its value comes from: `local` for a value set on the document itself
+        (an override of what it would inherit, or a value only a document
+        has, such as Author), `inherited` with the folder it comes from, or
+        `default` for the install's default Class. Client and Matter are
+        inherited from the matter's top folder.
+
+        A property is `editable` when `setProperties` would take a change to
+        it. So none is when the caller may not change the document's
+        properties at all: without the Write permission, when someone else
+        has it checked out or anyone has it locked, when it's immutable and
+        the caller isn't an administrator, or when it's protected by a
+        password. A client can grey out the form instead of finding out from
+        a `403` or `409`.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The properties, in one page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileFieldPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: setProperties
+      summary: Change a document's properties
+      description: |
+        Sets the properties named in `values` and leaves the others alone.
+        A value that differs from what the property would inherit becomes
+        the document's own (`local`). Sending the inherited value, or
+        `null`, makes it inherit again. `null` clears a property that doesn't
+        inherit, such as Legacy doc #. The change is saved as the web page's
+        Save saves it, as a new version in the document's timeline, and the
+        answer is the document's properties after it.
+
+        A value sent as the property has it now is ignored, so a client can
+        send back the whole form: unchanged Client, Matter and email fields
+        aren't refused, nor is a value that is no longer in its list, and a
+        form sent back unchanged saves nothing. (An override that equals
+        what the property would inherit stays an override when sent back;
+        send `null` to make it inherit.) Dates are compared to the second, as
+        the API writes them.
+
+        Text is cleaned of markup as the web page's Save cleans it:
+        `<img src=x onerror=...>` goes, `a < b & c` stays. Text that is the
+        property's value once cleaned, or as it is, is unchanged.
+
+        The checks on the document run in this order, and `getProperties`
+        shows their outcome with `editable`:
+
+        1. `404 not-found` for a document the caller can't read.
+        2. `403 forbidden` without the Write permission, and for a document
+           protected by a password, which is always refused through the API:
+           open it in Healdan's web page.
+        3. `409 checked-out` when someone else has it checked out, and
+           `409 locked` when it's locked with the web page's Lock action, by
+           anyone, the caller included. Both add the `hold`.
+        4. `409 refused` for an immutable document, unless the caller is an
+           administrator.
+
+        Every value is checked before anything is saved, and a refusal
+        changes nothing. `422 validation` lists every field that is wrong,
+        in the order sent, with these codes:
+
+        - `unknown`: there's no such property; or the user the value names
+          doesn't exist; or the folder or document it names doesn't exist or
+          the caller can't read it (the same answer).
+        - `read-only`: the property can't be changed (Client, Matter, the
+          email fields, read-only properties).
+        - `type`: the value has the wrong JSON type or format for the
+          property's `type`.
+        - `too-long`: text over 4000 characters once cleaned.
+        - `not-an-option`: the property is picked from a list (it has
+          `options`) and the value, once cleaned, isn't one of them.
+        - `required`: a required property in `values` would be left with no
+          value. A cleared property that inherits takes what it inherits, so
+          `null` for Class is never refused.
+        - `class-mismatch`: the document's own Subclass wouldn't belong to its
+          Class.
+
+        A body with any other field than `values` is `400 bad-request`.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PropertyPatch'
+      responses:
+        '200':
+          description: The properties after the change, in one page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileFieldPage'
         default:
           $ref: '#/components/responses/Problem'
   /v1/folders/recent:
@@ -482,6 +827,40 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderChildPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{folderId}/form:
+    get:
+      operationId: getForm
+      summary: The properties form for filing a new document
+      description: |
+        The properties a new document filed into the folder would have, in
+        the same shape as a document's properties: the values it would
+        inherit and where they come from, with the caller as Author and
+        Typist (`default`). A client renders any form from these fields,
+        including properties an administrator added to the profile.
+
+        A folder that can't hold documents is `409 filing-rule`, with the
+        rule's words: a Store, a matter's top folder, a search folder.
+        Folders outside the Stores, aliases, folders the caller can't read,
+        and folders that don't exist are all `404` with the same answer.
+      tags: [Folders]
+      parameters:
+        - name: folderId
+          in: path
+          required: true
+          description: The folder's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: The form's fields, in one page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileFieldPage'
         default:
           $ref: '#/components/responses/Problem'
   /v1/matters/{id}:
@@ -674,11 +1053,13 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, refused, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
             $ref: '#/components/schemas/FieldError'
+        hold:
+          $ref: '#/components/schemas/HoldView'
     FieldError:
       type: object
       additionalProperties: false
@@ -902,7 +1283,10 @@ components:
           type: string
           enum: [checkout, lock]
         by:
-          $ref: '#/components/schemas/UserRef'
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+          description: Who holds it; null when the server's data doesn't say
         since:
           type: [string, 'null']
           format: date-time
@@ -954,7 +1338,14 @@ components:
           description: Null when the document is free
         canEdit:
           type: boolean
-          description: Whether the caller may check the document out and save to it
+          description: |
+            Whether the caller may check the document out and save to it: the
+            Write permission, not immutable, not archived, not protected by a
+            password (always refused through the API), and no hold but the
+            caller's own check-out (a lock is a hold even for the user who
+            took it). It isn't the test for changing the properties, which an
+            administrator may do to an immutable document: see
+            `ProfileField.editable`.
     VersionView:
       type: object
       additionalProperties: false
@@ -969,8 +1360,9 @@ components:
           type: string
           enum: [version, snapshot]
         date:
-          type: string
+          type: [string, 'null']
           format: date-time
+          description: When the version was saved; null when the server's data doesn't say
         by:
           oneOf:
             - $ref: '#/components/schemas/UserRef'
@@ -1163,3 +1555,193 @@ components:
                     folder: '#/components/schemas/FolderView'
                     document: '#/components/schemas/DocumentView'
       unevaluatedProperties: false
+    ProfileField:
+      type: object
+      description: |
+        One property of a document, or of the form for filing a new one. A
+        client renders any form from these, without knowing the properties
+        in advance.
+      additionalProperties: false
+      required: [name, label, type, required, editable, value, source, inheritedFrom, options]
+      properties:
+        name:
+          type: string
+          description: The property's name, as `PATCH` names it
+          examples: [docclass]
+        label:
+          type: string
+          examples: [Class]
+        type:
+          type: string
+          enum: [string, integer, decimal, date, boolean, user, folder, document]
+          description: The type of the value
+        required:
+          type: boolean
+        editable:
+          type: boolean
+          description: |
+            False for Client and Matter, which come from the matter, for the
+            email fields, which come from the message, and for read-only
+            properties. In a document's properties, false for every property
+            when the caller may not change them (see `getProperties`).
+        value:
+          description: |
+            Null when there is none. Text for a `string`, a number for an
+            `integer` or a `decimal`, true or false for a `boolean`, an ISO
+            8601 timestamp for a `date`, a `UserRef` for a `user`, the
+            folder's id for a `folder` and the doc # for a `document`.
+            `PATCH` takes the same; a `user` also takes just the user's id.
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        source:
+          type: [string, 'null']
+          enum: [inherited, local, default, null]
+          description: |
+            `local`: set on the document itself. `inherited`: from the folder
+            `inheritedFrom` names, or from the matter's top folder for Client
+            and Matter. `default`: the install's default Class, or the caller
+            as Author and Typist of a new document. Null when there's no
+            value.
+        inheritedFrom:
+          oneOf:
+            - $ref: '#/components/schemas/FolderRef'
+            - type: 'null'
+          description: The folder an inherited value comes from, or null
+        options:
+          type: [array, 'null']
+          description: The values to pick from, in order; null when the property isn't picked from a list
+          items:
+            $ref: '#/components/schemas/Option'
+    Option:
+      type: object
+      description: One value of a property picked from a list
+      additionalProperties: false
+      required: [value, label, class]
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        class:
+          type: [string, 'null']
+          description: |
+            For a Subclass, the Class it belongs to, so a client can narrow
+            the list to the chosen Class; null otherwise
+    ProfileFieldPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/ProfileField'
+      unevaluatedProperties: false
+    PropertyPatch:
+      type: object
+      additionalProperties: false
+      required: [values]
+      properties:
+        values:
+          type: object
+          description: |
+            The new value of each property to change, by name, in the same
+            form as `ProfileField.value`: a `user` takes the user's id, or the
+            `{id, name}` the API shows. `null`, or empty text, clears a
+            property: it inherits again if it can.
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyValue'
+          examples:
+            - docclass: Letters
+              legacydocnum: null
+    PropertyValue:
+      description: |
+        A property's value as a request sends it, in the same form as
+        `ProfileField.value`. Text is at most 4000 characters once cleaned of
+        markup.
+      oneOf:
+        - type: string
+          maxLength: 4000
+        - type: number
+        - type: boolean
+        - type: object
+          description: A user, by its `id`
+          required: [id]
+          properties:
+            id:
+              type: integer
+              format: int64
+        - type: 'null'
+    NewDocument:
+      type: object
+      additionalProperties: false
+      description: The `document` part of `fileDocument`.
+      required: [folderId]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The folder to file the document into.
+        name:
+          type: [string, 'null']
+          maxLength: 255
+          description: |
+            The name to file it under, with its extension. The file part's
+            name when it's left out or blank. At most 255 characters, from
+            either.
+          examples: [Lease draft.docx]
+        properties:
+          type: [object, 'null']
+          description: |
+            Values for the new document's properties, by name, in the form
+            `PropertyPatch.values` takes them. A property left out, sent as
+            `null`, or sent as it would inherit, inherits from the folder; a
+            different value becomes the document's own (`local`).
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyValue'
+          examples:
+            - docclass: Letters
+        checkOut:
+          type: [boolean, 'null']
+          description: |
+            `true` to check the document out to the caller once it's filed,
+            when it stays open in Word after "Save to Healdan". `false` by
+            default.
+    NewVersion:
+      type: object
+      additionalProperties: false
+      description: The `version` part of `saveVersion`.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [snapshot, version]
+          description: |
+            `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for
+            "Save as new version" (2.2 becomes 3.0).
+        name:
+          type: [string, 'null']
+          maxLength: 255
+          description: |
+            The name to save under, with the document's extension. The file
+            part's name when it's left out or blank. A client in a browser
+            sends it, because a browser names a file part it has no name for
+            `blob`.
+          examples: [Lease draft.docx]
+        comment:
+          type: [string, 'null']
+          maxLength: 1000
+          description: |
+            The comment saved with the version, cleaned of markup. At most
+            1000 characters once cleaned.
+          examples: [Sent to the client]
+        keepCheckedOut:
+          type: [boolean, 'null']
+          description: |
+            `true` for a save while editing, which leaves the document
+            checked out to the caller; `false` by default, the save on
+            closing, which checks it in.

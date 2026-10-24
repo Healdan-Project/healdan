@@ -5,6 +5,8 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -15,6 +17,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
@@ -112,6 +115,26 @@ public class VersionResourceTest extends ApiTestCase {
 			assertEquals("1.1", items.get(1).path("version").textValue());
 			assertEquals("1.0", items.get(2).path("version").textValue());
 		}
+	}
+
+	@Test
+	public void testVersionWithoutDate() throws Exception {
+		// CE's data can have a version without a version date: its own date stands in
+		jdbc().update("update ld_version set ld_versiondate = null where ld_documentid = ? and ld_version = '1.1'",
+				doc.getId());
+		String expected = VersionDAO.get().findByVersion(doc.getId(), "1.1").getDate().toInstant()
+				.truncatedTo(ChronoUnit.SECONDS).toString();
+
+		ApiResponse response = get("/api/v1/documents/" + doc.getCustomId() + "/versions").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		JsonNode undated = null;
+		for (JsonNode v : response.json().path("items"))
+			if ("1.1".equals(v.path("version").textValue()))
+				undated = v;
+		assertEquals(3, response.json().path("items").size());
+		assertEquals(expected, Instant.parse(undated.path("date").textValue())
+				.truncatedTo(ChronoUnit.SECONDS).toString());
 	}
 
 	@Test

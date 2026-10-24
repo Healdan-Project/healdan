@@ -23,7 +23,8 @@ import com.fasterxml.jackson.databind.JsonNode;
  * Checks every response a test receives against {@code openapi.yaml} (spec
  * section 4.6). A route the file doesn't describe, such as an unknown path or
  * a test-only resource, must answer with a problem. The docs page under
- * {@code /api/docs} isn't described, so it isn't checked.
+ * {@code /api/docs} isn't described, so it isn't checked. A {@code HEAD}
+ * request is checked as the {@code GET} it stands for, without the body.
  */
 public final class Contract {
 
@@ -47,8 +48,15 @@ public final class Contract {
 		if (path.equals("/api/docs") || path.startsWith("/api/docs/"))
 			return;
 
-		ValidationReport report = validator().validateResponse(path, Request.Method.valueOf(method),
-				toValidatorResponse(response));
+		// JAX-RS answers HEAD wherever it answers GET, with the GET's headers and no body
+		boolean head = "HEAD".equals(method);
+		if (head)
+			assertEquals(method + " " + path + " answered with a body", 0, response.body().length);
+		ValidationReport report = validator().validateResponse(path,
+				Request.Method.valueOf(head ? "GET" : method), toValidatorResponse(response));
+		if (head)
+			report = ValidationReport.from(report.getMessages().stream()
+					.filter(m -> !"validation.response.body.missing".equals(m.getKey())).toList());
 		if (report.getMessages().stream().anyMatch(m -> UNDESCRIBED.contains(m.getKey()))) {
 			checkProblem(method, path, response);
 			return;
