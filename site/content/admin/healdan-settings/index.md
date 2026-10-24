@@ -31,9 +31,15 @@ The choices for Class and Subclass belong to the Healdan profile's attribute set
 
 ## Device Sign-Ins
 
-A device that signs in through the API, such as an Office add-in, keeps a token instead of the password. The web
-page has no list of devices; the API lists a person's own. To sign out every device a person has signed in on,
-change their password or disable them. Deleting a person stops their devices at once too.
+A device that signs in through the API, such as an Office add-in, keeps a token instead of the password. The token
+works only in the API: LogicalDOC's web services refuse it. The web page has no list of devices; the API lists a
+person's own. To sign out every device a person has signed in on, change their password or disable them. Deleting a
+person stops their devices at once too.
+
+**A lost device.** Change the person's password, which signs out every device. Then have them delete any LogicalDOC
+API keys they don't recognise: under the person icon in the top bar, **Security → API Keys**, right-click a key and
+choose **Delete**. A device token can't make a key, but whoever had the device may have had the web page too, and a
+key outlasts a password change. Disabling the person stops their keys as well as their devices.
 
 ## The Sign-In Throttle
 

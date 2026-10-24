@@ -61,7 +61,8 @@ paths:
       description: |
         Runs Healdan's whole sign-in, with the same rules as its web page.
         The token is shown only in this answer; send it as
-        `Authorization: Bearer <token>`. It stops working when it goes
+        `Authorization: Bearer <token>`. It works only here, under `/api`:
+        LogicalDOC's own services refuse it. It stops working when it goes
         unused (30 days by default), a year after sign-in (by default), when
         it's revoked, or when the user's password changes.
 

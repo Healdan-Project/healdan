@@ -13,4 +13,6 @@ weight: 9
   itself, can claim another network address, and so get round the per-address limit and every limit on `admin`. See
   [Reverse Proxy](../reverse-proxy/#the-sign-in-throttle-behind-a-proxy).
 - **No list of signed-in devices.** The web page doesn't show the devices a person has signed in on through the
-  API. Changing their password or disabling them signs every one out.
+  API. Changing their password or disabling them signs every one out. For a lost device, also delete any LogicalDOC
+  API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
+  change. See [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).

@@ -58,6 +58,8 @@ curl -s "$BASE/api/v1/me" -H "Authorization: Bearer $TOKEN"
   example. A client never needs to keep the password.
 - **Only the token signs a request in.** The API ignores cookies, `sid`, Basic authentication and `X-API-KEY`, so a
   web page can't make your browser call it with your sign-in.
+- **The token works only in the API,** under `/api`. LogicalDOC's own services refuse it (see
+  [below](#logicaldocs-web-services-and-api-keys)).
 - **`GET /server`** needs no sign-in. A client calls it first, to check that it's talking to Healdan.
 - **A refused sign-in:** `401 sign-in-failed` never says whether the username or the password was wrong, or that
   the account can't sign in. `401 password-expired` means the password has to be changed in the web page first.
@@ -70,7 +72,10 @@ apart; a blank name is "Unnamed device".
 - **A token stops working** when it hasn't been used for 30 days, 365 days after sign-in at the latest
   (`expiresAt`), when it's revoked, and when its user is disabled or deleted. An administrator can change the 30
   and the 365 in [Healdan Settings](../../admin/healdan-settings/).
-- **Changing your password signs out every device.** It's the quick way to sign out a lost laptop.
+- **Changing your password signs out every device.** For a lost device, do that, then delete any LogicalDOC API
+  keys you don't recognise: in the web page, under the person icon in the top bar, **Security → API Keys**,
+  right-click a key and choose **Delete**. A device token can't make a key, but whoever had the device may have had
+  the web page too, and a key outlasts a password change.
 - **Signing out** is `DELETE /auth/tokens/current`, which revokes the token making the request.
 - **Your devices:** `GET /auth/tokens` lists your tokens that still work, newest first, never the tokens themselves.
   `current` marks the one making the request. `DELETE /auth/tokens/{id}` revokes one of them.
@@ -192,8 +197,8 @@ certificate the computer running Office trusts.
 - **A stack to try it on.** A throwaway stack with the smoke overlay has a matter to file into: see
   [Running a Development Stack](../development-stack/#a-matter-to-upload-into). Open `/api/docs/` on it.
 - **A worked example.** `docker/tests/test-api.sh` runs an Office add-in's whole flow with `curl`: sign in, find a
-  matter, file a `.docx`, check it out, save twice, download two of its versions, and sign out. The smoke test runs
-  it.
+  matter, file a `.docx`, check it out, save twice, download two of its versions, check that LogicalDOC's services
+  refuse the token, and sign out. The smoke test runs it.
 
 ## LogicalDOC's Web Services and API Keys
 
@@ -204,8 +209,8 @@ bar, in **Security → API Keys**.
 They're LogicalDOC's older services. They speak LogicalDOC's words, so a Store is a workspace there, and an API key
 never expires and survives a password change. New clients use `/api`, which doesn't take API keys.
 
-**A device token is also a LogicalDOC API key.** Sent as `X-API-KEY` to `/services/rest/auth/loginApiKey`, or to
-the SOAP service's `loginApiKey`, it opens a LogicalDOC session for the token's user, with that user's rights. While
-a session opened with the token is open, LogicalDOC's other routes accept the token as `X-API-KEY` too. Revoking
-the token, or changing the password, ends those sessions. A session that's already open lasts until LogicalDOC
-closes it, even if the token expires first. So guard a token as you would the password.
+**A device token isn't an API key.** It works only under `/api`. LogicalDOC's services refuse it however it's sent:
+to `/services/rest/auth/loginApiKey` or the SOAP service's `loginApiKey`, as `X-API-KEY` on any of their routes, or
+as the password or key of a Basic sign-in, which WebDAV and CMIS use. So a lost token can't be turned into an API
+key, which would outlast it. Still, guard a token as you would the password: until it's revoked, it signs in to the
+API as you.

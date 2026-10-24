@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The Office add-in's flow against the JSON API in the real Docker image (M2 spec §14.1): sign in, find a matter,
-# file a document, check it out, save twice, read it back, hit the sign-in throttle and sign out. In-process tests
-# can't reach CE's real filter chain (XssFilter, SessionFilter and the rest), so this proves a Bearer token passes it.
+# file a document, check it out, save twice, read it back, hit the sign-in throttle, check that LogicalDOC's own
+# services refuse the token, and sign out. In-process tests can't reach CE's real filter chain (XssFilter,
+# SessionFilter and the rest), so this proves a Bearer token passes it.
 # Needs the smoke fixture (Store "Smoke" > "1.1 - Smoke Matter" > Documents) and a running stack.
 # Usage: BASE=http://127.0.0.1:8080 docker/tests/test-api.sh   (needs curl, jq, python3, cmp)
 set -euo pipefail
@@ -184,6 +185,19 @@ step18() {
   req -X DELETE "$BASE/api/v1/auth/tokens/current"; expect 204 "DELETE /auth/tokens/current" || return 1
   req "$BASE/api/v1/me"; expect 401 "GET /me with the revoked token"
 }
+# A device token works only under /api (M2 spec §5.1): sent as LogicalDOC's API key, it gets no session. CE answers
+# a refused sign-in there with 500; before the fix it answered 200 and a session id.
+step19() {
+  local token=$TOKEN
+  TOKEN=
+  req -H "X-API-KEY: $token" "$BASE/services/rest/auth/loginApiKey"
+  TOKEN=$token
+  expect 500 "GET /services/rest/auth/loginApiKey with the token as X-API-KEY" || return 1
+  if grep -Eq '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-' "$OUT"; then
+    echo "  it answered a session id: $(head -c 100 "$OUT")"
+    return 1
+  fi
+}
 
 check "1. GET /api/v1/server names Healdan" step1
 check "2. the docs page and openapi.yaml are served" step2
@@ -203,6 +217,8 @@ check "14. Save as new version checks it in as 2.0" step14
 check "15. Recent Documents lists the document" step15
 check "16. content and content?version=1.0 return the right files" step16
 check "17. six wrong passwords: 401 five times, then 429" step17
+# 19 runs before 18, which revokes the token.
+check "19. LogicalDOC's loginApiKey refuses the token" step19
 check "18. sign-out revokes the token" step18
 
 finish

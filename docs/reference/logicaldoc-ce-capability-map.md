@@ -235,7 +235,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 
 ### 4.1 REST
 
-- **Healdan's own API.** M2 added a JSON API at `/api/v1` (`healdan-api`), with device tokens, for Healdan's new clients. It's described by `healdan-api/src/main/resources/healdan/api/openapi.yaml`; see the [M2 spec](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) and the docs site's Developer Guide, API page. Everything below is CE's REST, which stays as it is.
+- **Healdan's own API.** M2 added a JSON API at `/api/v1` (`healdan-api`), with device tokens that work only there, for Healdan's new clients. It's described by `healdan-api/src/main/resources/healdan/api/openapi.yaml`; see the [M2 spec](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) and the docs site's Developer Guide, API page. Everything below is CE's REST, which stays as it is.
 - **Where it lives.**
   - Interfaces: `logicaldoc-webservice/.../rest/*.java`.
   - Implementations: `rest/endpoint/Rest*Service`, each extending its `Soap*Service`.
@@ -258,7 +258,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
   - `/services/rest/auth/**` is open, and everything else under `/services/rest/**` requires authentication.
   - `SessionFilter` reads a `sid` from a parameter, a header, an attribute or the `ldoc-sid` cookie.
   - An `X-API-KEY` header goes through `ApiKeyAuthenticator`. Keys start with `ld-`.
-  - **An open session is reused without re-authenticating.** `SessionManager.getSessionFromApiKey` finds an open session whose key hash matches the `X-API-KEY` and uses it, with no check of the key, its user or the chain (✔ checked). So a key, or an M2 device token sent as one, keeps working as long as its session is open. Healdan's token revocation closes those sessions (M2 spec §5.1).
+  - **An open session is reused without re-authenticating.** `SessionManager.getSessionFromApiKey` finds an open session whose key hash matches the `X-API-KEY` and uses it, with no check of the key, its user or the chain (✔ checked). So a key keeps working as long as its session is open. An M2 device token isn't a key: it works only at `/api`, and LogicalDOC's routes refuse it (M2 spec §5.1). The sessions the API opens for a token are keyed by a one-time key that no client knows, so this lookup never finds them from the token.
   - **`SessionFilter` can't open a session from a key.** With no open session it calls `newSession(null, null, key, request)`, and `AuthenticationChain.authenticate` calls `username.contains(...)` on the null username, so the request fails (✔ checked). A key signs in through `/services/rest/auth/loginApiKey` or SOAP's `loginApiKey`, after which the reuse above applies. Found while building M2.
   - HTTP Basic works when `webservice.basicauth.enabled=true`, which is the default.
   - There are no JWT, OAuth bearer or refresh tokens.

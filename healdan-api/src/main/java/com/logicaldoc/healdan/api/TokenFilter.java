@@ -140,7 +140,8 @@ public class TokenFilter implements ContainerRequestFilter {
 
 	/**
 	 * @return the CE session bound to the token, renewed, or a new one opened
-	 *         with the token as the key and bound to it
+	 *         for the token and bound to it ({@link ApiTokens#openSession}),
+	 *         which CE's own routes can't find by the token
 	 * @throws AuthenticationException if CE's sign-in chain refuses the token
 	 */
 	private Session session(String presented, ApiToken token, User user) throws AuthenticationException {
@@ -154,10 +155,7 @@ public class TokenFilter implements ContainerRequestFilter {
 			}
 		}
 
-		Session created = sessions.newSession(presented, sessions.buildClient(servletRequest));
-		if (created != null)
-			ApiTokens.get().bind(token, created.getSid());
-		return created;
+		return ApiTokens.get().openSession(presented, token, sessions.buildClient(servletRequest));
 	}
 
 	/**

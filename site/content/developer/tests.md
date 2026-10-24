@@ -44,7 +44,7 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
 | `docker/tests/test-overlays.sh` | the dev and proxy overlays |
 | `docker/tests/test-fulltext.sh` | full-text search: a `.docx` and an `.eml` are indexed and found by their words |
 | `docker/tests/test-previews.sh` | Office previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
-| `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: an Office add-in's flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, and the sign-in throttle. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
+| `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: an Office add-in's flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
 | `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the API's add-in flow (`test-api.sh`, step 5c), and data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
 
 ## Script and Docs Site Tests
