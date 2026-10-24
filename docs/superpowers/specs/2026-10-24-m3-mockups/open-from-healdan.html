@@ -1,0 +1,98 @@
+<style>
+  .dlg { background:#fff; color:#1d1d1f; border:1px solid #c7c7cc; border-radius:10px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,.14); font-size:13px; }
+  .dhead { padding:12px 16px; font-size:17px; font-weight:600; border-bottom:1px solid #e0e0e5; display:flex; justify-content:space-between; }
+  .tool { display:flex; align-items:center; gap:8px; padding:8px 12px; background:#f7f7f9; border-bottom:1px solid #e0e0e5; }
+  .arrows { color:#555; letter-spacing:8px; }
+  .scope { border:1px solid #c7c7cc; border-radius:5px 0 0 5px; padding:5px 10px; background:#fff; white-space:nowrap; }
+  .sbox { flex:1; border:1px solid #c7c7cc; border-left:none; border-radius:0 5px 5px 0; padding:5px 10px; color:#1d1d1f; background:#fff; }
+  .body { display:grid; grid-template-columns:180px 1fr 250px; min-height:330px; }
+  .nav { border-right:1px solid #e0e0e5; background:#fbfbfd; }
+  .nav div { padding:10px 14px; border-bottom:1px solid #eee; }
+  .nav .on { background:#e8f0fe; font-weight:600; }
+  .nav .sep { padding:4px 14px; font-size:10px; color:#8e8e93; text-transform:uppercase; letter-spacing:.05em; background:#f2f2f5; }
+  .mid { border-right:1px solid #e0e0e5; }
+  table.list { width:100%; border-collapse:collapse; }
+  table.list th { text-align:left; font-weight:500; color:#6e6e73; font-size:12px; padding:6px 10px; border-bottom:1px solid #eee; }
+  table.list td { padding:7px 10px; border-bottom:1px solid #f2f2f2; }
+  table.list tr.sel td { background:#e8f0fe; }
+  .muted { color:#8e8e93; }
+  .lock { font-size:11px; color:#a61e4d; }
+  .mine { font-size:11px; color:#1b6b2a; }
+  .side { padding:12px 14px; }
+  .side h4 { font-size:14px; margin-bottom:8px; }
+  .kv { display:grid; grid-template-columns:78px 1fr; gap:4px 8px; font-size:12px; }
+  .kv span:nth-child(odd) { color:#6e6e73; }
+  .thumb { height:90px; border:1px solid #e0e0e5; border-radius:6px; background:repeating-linear-gradient(180deg,#fff 0 9px,#f0f0f3 9px 10px); margin-bottom:10px; }
+  .foot { display:flex; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid #e0e0e5; background:#f7f7f9; }
+  .foot .sp { flex:1; }
+  .btn { border:1px solid #c7c7cc; border-radius:6px; padding:6px 18px; background:#fff; }
+  .btn.pri { background:#3b5bdb; color:#fff; border-color:#3b5bdb; }
+  .link { color:#3b5bdb; }
+  .chk { font-size:12px; }
+
+  .alert { max-width:520px; margin:26px auto 0; background:#fff; color:#1d1d1f; border:1px solid #c7c7cc; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,.16); padding:18px 20px; font-size:13px; }
+  .alert h3 { font-size:15px; margin-bottom:8px; }
+  .alert p { margin-bottom:8px; }
+  .warn { background:#fff4e6; border:1px solid #ffc078; border-radius:8px; padding:8px 10px; color:#7a3e00; }
+  .abtns { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+  .g { font-size:10px; background:#e5dbff; color:#5022a8; border-radius:6px; padding:1px 6px; font-weight:600; }
+  .o { font-size:10px; background:#d3f9d8; color:#1b6b2a; border-radius:6px; padding:1px 6px; font-weight:600; }
+  .cap { text-align:center; font-size:12px; color:var(--text-secondary); margin-top:8px; }
+</style>
+
+<h2>Open from Healdan</h2>
+<p class="subtitle">The same three panes as Save, so it feels like one tool. Built from your iManage description and my guesses <span class="g">guess</span>.</p>
+
+<div class="dlg">
+  <div class="dhead"><span>Open from Healdan</span><span class="muted">✕</span></div>
+  <div class="tool">
+    <span class="arrows">← → ↑</span>
+    <span class="scope">Documents ▾</span><span class="sbox">#1234</span>
+  </div>
+  <div class="body">
+    <div class="nav">
+      <div class="on">Recent Documents</div>
+      <div>Checked Out to Me</div>
+      <div>Favorites</div>
+      <div class="sep">Browse</div>
+      <div>Recent Matters</div>
+      <div>My Matters</div>
+      <div>Recent Folders</div>
+    </div>
+    <div class="mid">
+      <table class="list">
+        <tr><th>Title</th><th>Doc #</th><th>Version</th><th>Matter</th><th>Edited</th></tr>
+        <tr class="sel"><td>Lease agreement<br><span class="mine">● checked out to you on MacBook</span></td><td>1234</td><td>2.1</td><td>998.1</td><td class="muted">10:42</td></tr>
+        <tr><td>Heads of terms</td><td>1231</td><td>3.2</td><td>998.1</td><td class="muted">Monday</td></tr>
+        <tr><td>Board minutes<br><span class="lock">● checked out to Jane Smith</span></td><td>1207</td><td>1.4</td><td>412.3</td><td class="muted">Monday</td></tr>
+        <tr><td>Engagement letter</td><td>1229</td><td>1.0</td><td>998.1</td><td class="muted">Wednesday</td></tr>
+      </table>
+    </div>
+    <div class="side">
+      <div class="thumb"></div>
+      <h4>Lease agreement</h4>
+      <div class="kv">
+        <span>Doc #</span><span>1234 v2.1</span>
+        <span>Matter</span><span>998.1 – Healdan Demo</span>
+        <span>Folder</span><span>Drafts</span>
+        <span>Author</span><span>Robert Lawrence</span>
+        <span>Class</span><span>Docs</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot">
+    <span class="link">Open from local computer</span>
+    <span class="sp"></span>
+    <span class="chk">☐ Open read-only</span>
+    <span class="btn">Cancel</span><span class="btn pri">Open</span>
+  </div>
+</div>
+<div class="cap">Typing <code>#1234</code> and Enter jumps straight to that document, as in the web page.</div>
+
+<div class="alert">
+  <h3>#1234 is checked out to you on MacBook (Word)</h3>
+  <p>It was last saved to Healdan from MacBook today at 10:42.</p>
+  <div class="warn"><b>Edits on MacBook that haven't reached Healdan won't be in this copy.</b> If MacBook was offline or still has unsaved changes, editing here means working without them. MacBook keeps its copy, and you can file it later as a new document. <span class="o">yours</span></div>
+  <div class="abtns"><span class="btn">Open Read-Only</span><span class="btn">Edit Here Instead</span><span class="btn pri">Cancel</span></div>
+</div>
+<div class="cap">What your second computer shows when you open a document you're editing on the first.</div>
