@@ -72,13 +72,20 @@ public class AuthResource {
 	@Consumes(MediaType.APPLICATION_JSON)
 	public Response signIn(SignIn body, @jakarta.ws.rs.core.Context HttpServletRequest request) {
 		SignIn credentials = body != null ? body : new SignIn(null, null, null);
-		List<FieldError> missing = new ArrayList<>();
+		List<FieldError> errors = new ArrayList<>();
 		if (StringUtils.isBlank(credentials.username()))
-			missing.add(new FieldError("username", "required", "Username is required."));
+			errors.add(new FieldError("username", "required", "Username is required."));
 		if (StringUtils.isEmpty(credentials.password()))
-			missing.add(new FieldError("password", "required", "Password is required."));
-		if (!missing.isEmpty())
-			throw ApiProblem.validation(missing);
+			errors.add(new FieldError("password", "required", "Password is required."));
+		// Before signing in, so a bad name opens no session and clears no failure count
+		String name = null;
+		try {
+			name = ApiTokens.checkName(credentials.name());
+		} catch (HealdanRuleException e) {
+			errors.add(new FieldError("name", "invalid", e.getMessage()));
+		}
+		if (!errors.isEmpty())
+			throw ApiProblem.validation(errors);
 
 		// A device token stands for its own user's password, never for someone impersonated
 		if (credentials.username().contains(IMPERSONATION))
@@ -98,10 +105,7 @@ public class AuthResource {
 		User user = session.getUser();
 		ApiTokens.Issued issued;
 		try {
-			issued = ApiTokens.get().issue(user, credentials.name(), session.getSid());
-		} catch (HealdanRuleException e) {
-			sessions.kill(session.getSid());
-			throw ApiProblem.validation(List.of(new FieldError("name", "invalid", e.getMessage())));
+			issued = ApiTokens.get().issue(user, name, session.getSid());
 		} catch (PersistenceException e) {
 			sessions.kill(session.getSid());
 			throw new IllegalStateException("Can't issue a device token", e);

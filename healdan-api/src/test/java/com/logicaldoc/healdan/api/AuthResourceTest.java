@@ -16,10 +16,12 @@ import org.junit.Test;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.security.Client;
+import com.logicaldoc.core.security.LoginThrottle;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.core.security.user.UserEvent;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
@@ -163,16 +165,32 @@ public class AuthResourceTest extends ApiTestCase {
 		assertEquals(unnamed.toString(), 201, unnamed.status());
 		assertEquals(ApiTokens.UNNAMED, unnamed.json().path("name").textValue());
 		ApiTokens.get().revoke(row(unnamed.json().path("token").textValue()));
+		assertEquals(401, signInAs("clerk", "wrong").status());
 		int sessionsBefore = SessionManager.get().countOpened("clerk");
+		int rowsBefore = sessionRows("clerk");
+		int loginsBefore = logins(clerk);
 
 		ApiResponse response = post(TOKENS)
 				.json(Map.of("username", "clerk", "password", HealdanFixtures.PASSWORD, "name", "x".repeat(101))).send();
 
 		assertEquals(response.toString(), 422, response.status());
 		assertEquals("name", response.json().path("fields").path(0).path("field").textValue());
-		// No token, and the session the sign-in opened is closed again
+		// The name is checked before signing in: no token, no session, no login, and the failure still counts
 		assertEquals(0, ApiTokens.get().list(clerk.getId()).size());
 		assertEquals(sessionsBefore, SessionManager.get().countOpened("clerk"));
+		assertEquals(rowsBefore, sessionRows("clerk"));
+		assertEquals(loginsBefore, logins(clerk));
+		assertEquals(1L, (long) jdbc().queryForObject("select ld_value from ld_sequence where ld_name = ?", Long.class,
+				LoginThrottle.LOGINFAIL_USERNAME + "clerk"));
+	}
+
+	private int sessionRows(String username) {
+		return jdbc().queryForObject("select count(*) from ld_session where ld_username = ?", Integer.class, username);
+	}
+
+	private int logins(User user) {
+		return jdbc().queryForObject("select count(*) from ld_user_history where ld_userid = ? and ld_event = ?",
+				Integer.class, user.getId(), UserEvent.LOGIN.toString());
 	}
 
 	@Test

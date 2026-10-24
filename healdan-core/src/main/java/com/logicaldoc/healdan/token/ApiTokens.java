@@ -111,7 +111,7 @@ public class ApiTokens {
 	 *         the database can't store
 	 */
 	public Issued issue(User user, String name, String sid) throws PersistenceException {
-		String clean = cleanName(name);
+		String clean = checkName(name);
 
 		byte[] bytes = new byte[32];
 		RANDOM.nextBytes(bytes);
@@ -276,7 +276,16 @@ public class ApiTokens {
 				.map(Session::getSid).forEach(ApiTokens::kill);
 	}
 
-	private static String cleanName(String name) throws HealdanRuleException {
+	/**
+	 * Checks a device's name, so that a caller can refuse it before signing
+	 * in.
+	 * 
+	 * @param name what the device is called, possibly null
+	 * @return the name stripped, or "Unnamed device" if it is blank
+	 * @throws HealdanRuleException if the name is too long or holds characters
+	 *         the database can't store
+	 */
+	public static String checkName(String name) throws HealdanRuleException {
 		String clean = name == null ? "" : name.strip();
 		if (clean.isEmpty())
 			return UNNAMED;
