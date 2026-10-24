@@ -24,7 +24,7 @@
 - **macOS packaging:** `codesign`, `notarytool`, `stapler` and `hdiutil`.
 - **Linux packaging (phase 2):** `dpkg-deb` in an `ubuntu:26.04` container.
 
-**Status:** written on 2026-10-24, for the owner's review.
+**Status:** the owner approved this plan on 2026-10-24, and chose subagent-driven execution.
 
 **Spec:** [`docs/superpowers/specs/2026-10-24-m3-office-integration-design.md`](../specs/2026-10-24-m3-office-integration-design.md), approved by the owner on 2026-10-24. Every § below points into it.
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
