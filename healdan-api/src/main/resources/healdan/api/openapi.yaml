@@ -530,8 +530,13 @@ paths:
       operationId: listVersions
       summary: A document's timeline
       description: |
-        Every version, newest first. A version is a whole number (`2.0`);
-        the numbers between are snapshots (`1.1`).
+        Every row of the document's timeline, newest first. Each save adds
+        one: a version is a whole number (`2.0`), and the numbers between
+        are snapshots (`2.1`). A change of properties, a move and a rename
+        add one too, numbered as a snapshot, but they keep the file: on
+        such a row `fileVersion` differs from `version`, and names the save
+        whose file the row carries (see `event`). So the saves are the rows
+        whose `fileVersion` is their `version`.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -552,7 +557,20 @@ paths:
       description: |
         Saves the file as the document's new content and returns the
         document. `kind: snapshot` is an ordinary save (2.1 becomes 2.2);
-        `kind: version` is "Save as new version" (2.2 becomes 3.0). A free
+        `kind: version` is "Save as new version" (2.2 becomes 3.0).
+
+        The new number counts from the document's `version`, not its
+        `fileVersion`: a snapshot adds 1 to `version`'s minor number, and a
+        version takes the next major number, with minor number 0. The
+        saved document's `version` and `fileVersion` are both that number.
+        `version` is ahead of `fileVersion` after a change of properties, a
+        move or a rename: a document saved as 1.0 whose properties then
+        changed is at `version` 1.1, and its next snapshot is 1.2. A client
+        that writes the number into the file before it sends it, such as a
+        doc ID footer, works it out from the `version` it last read, and
+        reads the document again if anything may have changed it since.
+
+        A free
         document is checked out to the caller, saved and checked in again;
         with `keepCheckedOut: true`, the save while editing, it's checked out
         to the caller again afterwards, and the history shows a check-in
@@ -1310,11 +1328,18 @@ components:
           description: The current file's size in bytes
         version:
           type: string
-          description: CE's version, which moves on property edits, moves and renames too
+          description: |
+            The document's place on its timeline. Every save moves it, and so
+            does a change of properties, a move or a rename, so it can be
+            ahead of `fileVersion`. A save's new number counts from it (see
+            `saveVersion`).
           examples: ['2.1']
         fileVersion:
           type: string
-          description: The version the file's content was last saved as
+          description: |
+            The version the file's content was last saved as, which the doc
+            ID footer and the web page's Versions column show. A save makes
+            it equal to `version`.
           examples: ['2.1']
         reference:
           type: string
@@ -1348,17 +1373,30 @@ components:
             `ProfileField.editable`.
     VersionView:
       type: object
+      description: |
+        A row of a document's timeline: a save, or a change of properties, a
+        move or a rename, which keeps the file (see `listVersions`).
       additionalProperties: false
       required: [version, fileVersion, kind, date, by, comment, event]
       properties:
         version:
           type: string
+          description: The row's number on the timeline
           examples: ['1.1']
         fileVersion:
           type: string
+          description: |
+            The save whose file the row carries. It's `version` for a save,
+            and an earlier number for a change of properties, a move or a
+            rename.
+          examples: ['1.0']
         kind:
           type: string
           enum: [version, snapshot]
+          description: |
+            `version` when `version` is a whole number, `snapshot`
+            otherwise. A row whose `fileVersion` differs from its `version`
+            is `snapshot` too, but isn't a save.
         date:
           type: [string, 'null']
           format: date-time
@@ -1721,8 +1759,11 @@ components:
           type: string
           enum: [snapshot, version]
           description: |
-            `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for
-            "Save as new version" (2.2 becomes 3.0).
+            `snapshot` for an ordinary save, which adds 1 to the minor
+            number of the document's `version` (2.1 becomes 2.2); `version`
+            for "Save as new version", which takes the next major number
+            (2.2 becomes 3.0). It counts from `version`, not `fileVersion`:
+            see `saveVersion`.
         name:
           type: [string, 'null']
           maxLength: 255

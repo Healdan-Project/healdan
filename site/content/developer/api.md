@@ -136,7 +136,11 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   `snapshot`, never LogicalDOC's `workspace` or `customId`. The API always says `matter`; `GET /server` gives the
   word your install shows people instead, such as Project.
 - **Documents are addressed by doc #:** `/documents/1234` is document #1234.
-- **Versions use Healdan's numbering:** `2.0` is version 2, and `2.1` is a snapshot on its timeline.
+- **Versions use Healdan's numbering:** `2.0` is version 2, and `2.1` is a snapshot on its timeline. A document's
+  `version` moves on every save, and on a change of properties, a move or a rename too, so it can be ahead of
+  `fileVersion`, the save the file comes from. A save's new number counts from `version`: a document saved as 1.0
+  whose properties then changed is at `version` 1.1, and its next snapshot is 1.2. In the timeline, a row whose
+  `fileVersion` isn't its `version` is one of those changes, not a save.
 - **Every document, folder and matter carries `type`:** `document`, `folder` or `matter`. Folder listings and
   search results mix them, so switch on it.
 - **Field names are camelCase.** A field with no value is `null`, never left out. Timestamps are ISO 8601 in UTC,

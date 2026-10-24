@@ -328,6 +328,7 @@ A document is:
 ```
 
 - `version` is CE's version, which moves on property edits, moves and renames too. `fileVersion` is the version the file content was last saved as, which is what the Versions column and the M3 footer show (M1 spec §6.4).
+- A save's new number counts from `version`, not `fileVersion` (§6.6). In the timeline, a row whose `fileVersion` differs from its `version` is a change of properties, a move or a rename (its `event` says which), which carries the file of `fileVersion`. `kind` follows `version`, so such a row is a `snapshot` that isn't a save: a list of older saves takes the rows whose `fileVersion` is their `version`. (the final review: the contract now says so, for M3's footer and its "Open older version".)
 - `reference` is the footer form without the `#`: doc #, then `fileVersion`.
 - `hold` is `null` when the document is free. Otherwise its `kind` is `checkout` or `lock` (§3.1), with who holds it and since when. M3's "others get a read-only copy and see who has it" reads it.
 - `canEdit` says whether the user may check it out and save to it.
@@ -364,6 +365,7 @@ It returns `201` with the document, and `Location: /api/v1/documents/{docNumber}
 It returns `201` with the document.
 
 - **`kind: "snapshot"`** is an ordinary save: 2.1 becomes 2.2. **`kind: "version"`** is "Save as new version": 2.2 becomes 3.0. (M1 spec §6.4, matching the M3 flow.)
+- **The new number counts from `version`, not `fileVersion`.** A snapshot adds 1 to `version`'s minor number, and a version takes the next major number, with minor number 0. The two differ after a change of properties, a move or a rename: a document saved as 1.0 whose properties then changed is at `version` 1.1, and its next snapshot is 1.2. A client that stamps the number into the file before sending it, as M3's doc ID footer will, works it out from `version`. (the final review: "2.1 becomes 2.2" didn't say which number it counts from, and read as `fileVersion`. An `ifVersion` precondition on the save, answering `409` when `version` has moved on since the client read it, would make a stamped footer certain. It's left to M3.)
 - **`keepCheckedOut: true`** is a save while editing. **`false`** is the save on closing, which checks the document in.
 - **Allowed when** nobody else holds the document. If it's free, the request checks it out, saves and, unless `keepCheckedOut` is true, checks it in again. (changed in the build: a lock is a hold even for its owner. A document locked with the old UI's Lock action can't be saved through the API, nor its properties changed, until it's released with `DELETE …/checkout`, whoever locked it. The caller's own check-out still allows both. Plan correction 10.)
 - **Never over someone else's hold, admins included (call).** CE lets an admin check in a document someone else has checked out. The API doesn't, so a save from Word can never overwrite another person's open edit. An admin who needs to break a hold releases it first (`DELETE …/checkout`), which leaves a record in the history.
