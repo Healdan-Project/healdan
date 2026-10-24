@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -100,9 +101,11 @@ public class DocumentResource {
 		User caller = Caller.current().user();
 		try {
 			List<Document> found = new ArrayList<>();
-			for (long id : LegacyDocNumbers.find(legacy, caller.getTenantId()))
-				AccessChecks.readableDocument(DocumentDAO.get().findById(id), caller).ifPresent(found::add);
-			found.removeIf(d -> !ApiViews.hasDocNumber(d));
+			for (long id : LegacyDocNumbers.find(legacy, caller.getTenantId())) {
+				Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(id), caller);
+				if (document.isPresent() && ApiViews.shows(document.get()))
+					found.add(document.get());
+			}
 			found.sort(Comparator.comparingLong(d -> Long.parseLong(d.getCustomId())));
 			List<DocumentView> views = new ArrayList<>();
 			for (Document document : found)
@@ -256,9 +259,9 @@ public class DocumentResource {
 		User caller = Caller.current().user();
 		try {
 			List<DocumentView> views = new ArrayList<>();
-			for (RecentDocument recent : RecentDocuments.get().list(caller.getId())) {
+			for (RecentDocument recent : RecentDocuments.get().list(caller.getId(), ApiViews::shows)) {
 				Document document = DocumentDAO.get().findById(recent.docId());
-				if (document != null && ApiViews.hasDocNumber(document))
+				if (document != null)
 					views.add(ApiViews.document(document, caller));
 			}
 			return Page.whole(views);
@@ -340,13 +343,15 @@ public class DocumentResource {
 	}
 
 	/**
-	 * @return the document, if the caller may read it
-	 * @throws ApiProblem {@code 404} if there is no such document or the caller
-	 *         can't read it
+	 * @return the document, if the caller may read it and the API shows it
+	 * @throws ApiProblem {@code 404} if there is no such document, the caller
+	 *         can't read it or it is outside the Stores
 	 */
 	static Document readable(long docNumber, User caller) throws PersistenceException {
-		return AccessChecks.readableDocument(docNumber, caller)
-				.orElseThrow(() -> ApiProblem.notFound("No document #" + docNumber));
+		Optional<Document> document = AccessChecks.readableDocument(docNumber, caller);
+		if (document.isEmpty() || !ApiViews.shows(document.get()))
+			throw ApiProblem.notFound("No document #" + docNumber);
+		return document.get();
 	}
 
 	/**
@@ -380,6 +385,7 @@ public class DocumentResource {
 			history.setEvent(DocumentEvent.DOWNLOADED);
 
 			DocumentHistoryDAO histories = DocumentHistoryDAO.get();
+			// The session's latest download alone: a device token's session can live for days
 			List<DocumentHistory> latest = histories.findByWhere(
 					"_entity.userId = :userId and _entity.event = :event and _entity.sessionId = :sessionId",
 					Map.of("userId", user.getId(), "event", history.getEvent(), "sessionId", session.getSid()),

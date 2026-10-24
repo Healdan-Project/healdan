@@ -109,6 +109,18 @@ public class LoginThrottle {
         }
 
         // Record the failed login attempt
+        recordFailedLogin(username, client, exception.getMessage());
+    }
+
+    /**
+     * Records a failed login attempt in the user's history, without counting
+     * it
+     *
+     * @param username the username
+     * @param client the client address from which the login intent comes from
+     * @param reason why the login failed
+     */
+    public static void recordFailedLogin(String username, Client client, String reason) {
         try {
             User user = UserDAO.get().findByUsername(username);
             if (user == null) {
@@ -116,7 +128,7 @@ public class LoginThrottle {
                 user.setUsername(username);
                 user.setName(username);
             }
-            UserHistoryDAO.get().createUserHistory(user, UserEvent.LOGIN_FAILED, exception.getMessage(), null, client);
+            UserHistoryDAO.get().createUserHistory(user, UserEvent.LOGIN_FAILED, reason, null, client);
         } catch (PersistenceException e) {
             log.warn(e.getMessage(), e);
         }

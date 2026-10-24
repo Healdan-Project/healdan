@@ -54,7 +54,7 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	private static final String PASSWORD = "Thr0ttle-Test!";
 
 	private static final String[] KEYS = { "throttle.enabled", "throttle.username.max", "throttle.username.wait",
-			"throttle.ip.max", "throttle.ip.wait", "throttle.username.disableuser" };
+			"throttle.ip.max", "throttle.ip.wait", "throttle.username.disableuser", "login.ignorecase" };
 
 	private final Map<String, String> saved = new HashMap<>();
 
@@ -92,8 +92,11 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	public void tearDown() throws IOException {
 		ContextProperties config = Context.get().getConfig();
 		for (String key : KEYS) {
+			// A key the test configuration lacks goes again, rather than keeping this test's value
 			if (saved.get(key) != null)
 				config.setProperty(key, saved.get(key));
+			else
+				config.remove(key);
 		}
 		RequestContextHolder.resetRequestAttributes();
 		super.tearDown();
@@ -162,6 +165,18 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		return comments.isEmpty() ? null : comments.get(comments.size() - 1);
 	}
 
+	// A failed sign-in of any kind, such as for an unknown username
+	private void failAny(String username, Client client) {
+		assertThrows(com.logicaldoc.core.security.authentication.AuthenticationException.class,
+				() -> SessionManager.get().newSession(username, "wrong", client));
+	}
+
+	// Failures for that many different usernames, so that none of them gets blocked
+	private void failFrom(Client client, int times) {
+		for (int i = 0; i < times; i++)
+			failAny("u" + i, client);
+	}
+
 	@Test
 	public void testFiveWrongPasswordsBlockTheUsername() {
 		for (int i = 0; i < 5; i++)
@@ -223,6 +238,43 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		assertNotNull(signIn("author", PASSWORD, outside));
 	}
 
+	// The chain checks the password of the name before an impersonation's '>', so every way of writing a name
+	// counts against that account
+	@Test
+	public void testNameVariantsShareTheCount() {
+		for (String variant : new String[] { "author>admin", "author>boss", " author", "author >x", "author\t" })
+			failAny(variant, outside);
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	@Test
+	public void testCaseVariantsShareTheCountWhenSignInIgnoresCase() {
+		Context.get().getConfig().setProperty("login.ignorecase", "true");
+		for (String variant : new String[] { "Author", "AUTHOR", "aUthor", "auThor", "autHor" })
+			fail(variant, outside);
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	// One account's success mustn't reset an attack on other accounts from the same address
+	@Test
+	public void testSuccessKeepsARecentAddressCount() {
+		failFrom(outside, 19);
+		assertNotNull(signIn("author", PASSWORD, outside));
+		failAny("u19", outside);
+
+		assertThrows(IPBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	@Test
+	public void testSuccessClearsAQuietAddressCount() throws SQLException {
+		failFrom(outside, 19);
+		String counter = LoginThrottle.LOGINFAIL_IP + outside.getAddress();
+		age(counter, 16);
+
+		assertNotNull(signIn("author", PASSWORD, outside));
+		assertEquals(-1L, count(counter));
+	}
+
 	@Test
 	public void testTwentyFailuresBlockTheAddress() throws SQLException {
 		String[] names = { "u1", "u2", "u3", "u4", "u5" };
@@ -264,6 +316,31 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 			fail("author", outside);
 
 		assertNotNull(SessionManager.get().newSession(key.getDecodedKey(), outside));
+		fail("author", outside);
+
+		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	// A key sign-in has no account, so it never reads the count of a username typed as "null"
+	@Test
+	public void testKeySignInIgnoresAUsernameCalledNull() throws Exception {
+		ApiKey key = new ApiKey(4L, "AuthorKey");
+		ApiKeyDAO.get().store(key);
+		for (int i = 0; i < 5; i++)
+			failAny("null", outside);
+
+		assertNotNull(SessionManager.get().newSession(key.getDecodedKey(), outside));
+	}
+
+	// With a key the chain can sign in without the password, so such a sign-in never clears the counts
+	@Test
+	public void testSignInWithAKeyDoesNotClear() throws Exception {
+		ApiKey key = new ApiKey(4L, "AuthorKey");
+		ApiKeyDAO.get().store(key);
+		for (int i = 0; i < 4; i++)
+			fail("author", outside);
+
+		assertNotNull(SessionManager.get().newSession("author", "wrong", key.getDecodedKey(), outside));
 		fail("author", outside);
 
 		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));

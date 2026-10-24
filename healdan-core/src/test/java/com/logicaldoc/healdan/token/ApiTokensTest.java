@@ -119,6 +119,38 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testCapLifetime() throws Exception {
+		ApiToken token = tokens().issue(fx.user("clerk"), "Laptop", null).row();
+
+		assertEquals(0, tokens().capLifetime(400));
+		assertEquals(1, tokens().capLifetime(7));
+		assertEquals(0, tokens().capLifetime(7));
+
+		// Read through Hibernate: the test database keeps timestamps in Europe/Rome's time
+		Date expires = ApiTokenDAO.get().findById(token.getId()).getExpires();
+		assertEquals(token.getCreation().getTime() + 7 * DAY, expires.getTime(), 1000);
+	}
+
+	// A password change that ran while the sign-in did: the token issued afterwards is revoked at once
+	@Test
+	public void testIssueAfterAPasswordChangeRevokes() throws Exception {
+		User clerk = fx.user("clerk");
+		String sid = SessionManager.get().newSession(clerk.getUsername(), HealdanFixtures.PASSWORD, (Client) null)
+				.getSid();
+		try {
+			jdbc().update("update ld_user set ld_password = ? where ld_id = ?", "changed", clerk.getId());
+
+			ApiTokens.Issued issued = tokens().issue(clerk, "Laptop", sid);
+
+			assertEquals(1, issued.row().getDeleted());
+			assertEquals(Optional.empty(), tokens().find(issued.token()));
+			assertFalse(SessionManager.get().isOpen(sid));
+		} finally {
+			SessionManager.get().kill(sid);
+		}
+	}
+
+	@Test
 	public void testTouchAtMostEveryFiveMinutes() throws Exception {
 		ApiToken token = tokens().issue(fx.user("clerk"), "Laptop", null).row();
 		Date now = new Date();

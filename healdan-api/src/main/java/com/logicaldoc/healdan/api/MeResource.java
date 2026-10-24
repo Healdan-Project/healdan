@@ -52,7 +52,7 @@ public class MeResource {
 			for (Document partial : DocumentDAO.get().findByLockUserAndStatus(caller.getId(),
 					DocumentStatus.CHECKEDOUT)) {
 				Document document = DocumentDAO.get().findById(partial.getId());
-				if (AccessChecks.readableDocument(document, caller).isPresent() && ApiViews.hasDocNumber(document))
+				if (AccessChecks.readableDocument(document, caller).isPresent() && ApiViews.shows(document))
 					views.add(ApiViews.document(document, caller));
 			}
 			views.sort(Comparator.comparing(MeResource::since, Comparator.nullsLast(Comparator.reverseOrder()))

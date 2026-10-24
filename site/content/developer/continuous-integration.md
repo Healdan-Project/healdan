@@ -9,14 +9,38 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`) and for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), compiles every module except the WAR without the GWT compile, then runs `healdan-core`'s and `healdan-api`'s tests (`-pl healdan-core,healdan-api test`) and the upstream tests in its `-Dtest` list, which cover Healdan's edits to upstream code |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`) and for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow included |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
+## How `build` Runs
+
+`build` is the last of several jobs, so that the tests can run side by side:
+
+1. **`checks`** runs the icon and doc-link checks, reads the JDK from the `Dockerfile`, and plans the test shards
+   with `.github/scripts/test-shards.py`.
+2. **`Tests (1 of N)` … `Tests (N of N)`** each compile every module except the WAR, without the GWT compile, the
+   javadoc or the plugin zips (the Docker build makes all of those), then run their share of the tests.
+3. **`build`** passes when `checks` and every shard passed. It's the check `master` requires.
+4. **`test-times`** saves how long each test class took, for the next run's plan. It isn't part of `build`.
+
+The tests are:
+
+- every test class in a `healdan-*` module. A new class, or a new `healdan-*` module in the reactor, is picked up
+  without a list.
+- the upstream tests named in the workflow's `UPSTREAM_TESTS`, one per line, which cover Healdan's edits to
+  upstream code. A line is a class name, or `Class#method`. When a change edits upstream code, add its test class
+  there. A name that no upstream module has fails `checks`.
+
+The plan gives each shard about five minutes of tests, with at most eight shards. Each test class weighs its time in
+the newest successful run, the pull request's own or else `master`'s, or 3 seconds per `@Test` until a run records
+one. The log of `checks`' plan step lists each shard's classes with their times. A failing shard doesn't stop the
+others, so one run shows every failing test.
+
 ## Docs-Only Pull Requests
 
-A pull request that changes only `docs/`, `site/` or Markdown outside a `src/` folder skips the Java and Docker
-build steps, but still reports `build`, `Test (amd64)` and `Test (arm64)`, which `master` requires.
+A pull request that changes only `docs/`, `site/` or Markdown outside a `src/` folder skips the test shards and the
+Docker build steps, but still reports `build`, `Test (amd64)` and `Test (arm64)`, which `master` requires.
 `.github/scripts/code-changed.sh` decides. Pushes to `master` that change only those files don't rebuild the image.
 
 ## Things That Catch Upstream Syncs

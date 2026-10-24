@@ -130,6 +130,9 @@ public class ApiTokens {
 		row.setExpires(new Date(now.getTime() + TimeUnit.DAYS.toMillis(settings.apiTokenMaxDays())));
 		row.setSid(sid);
 		dao.store(row);
+		// A password change while this sign-in ran may have revoked the user's tokens before this one was stored
+		if (!Objects.equals(user.getPassword(), storedPassword(user.getId())))
+			revoke(row);
 		return new Issued(token, row);
 	}
 
@@ -181,16 +184,54 @@ public class ApiTokens {
 	}
 
 	/**
+	 * @param token a presented token
+	 * @param now the time to judge it at
+	 * @return its row, or empty if it isn't a token, is unknown or isn't
+	 *         {@link #usable usable} at that time
+	 */
+	public Optional<ApiToken> findUsable(String token, Date now) {
+		return find(token).filter(t -> usable(t, now));
+	}
+
+	/**
 	 * @param token a token row
 	 * @param now the time to judge it at
 	 * @return true if it isn't revoked, hasn't passed its absolute expiry and
 	 *         was used within the idle limit
 	 */
 	public boolean usable(ApiToken token, Date now) {
+		return usable(token, now, settings.apiTokenIdleDays());
+	}
+
+	private static boolean usable(ApiToken token, Date now, int idleDays) {
 		if (token.getDeleted() != 0)
 			return false;
-		long idleEnd = token.getLastUsed().getTime() + TimeUnit.DAYS.toMillis(settings.apiTokenIdleDays());
+		long idleEnd = token.getLastUsed().getTime() + TimeUnit.DAYS.toMillis(idleDays);
 		return now.before(token.getExpires()) && now.getTime() < idleEnd;
+	}
+
+	/**
+	 * Shortens the tokens that would last longer than a new, lower maximum,
+	 * counted from when each was issued.
+	 *
+	 * @param maxDays the maximum, in days
+	 * @return how many tokens were shortened
+	 */
+	public int capLifetime(int maxDays) {
+		List<ApiToken> rows;
+		try {
+			rows = dao.findAll();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't list device tokens", e);
+		}
+		int capped = 0;
+		for (ApiToken row : rows) {
+			Date latest = new Date(row.getCreation().getTime() + TimeUnit.DAYS.toMillis(maxDays));
+			if (latest.before(row.getExpires()))
+				capped += update("set expires = :latest where id = :id and expires > :latest",
+						Map.of("latest", latest, "id", row.getId()));
+		}
+		return capped;
 	}
 
 	/**
@@ -243,17 +284,20 @@ public class ApiTokens {
 	 * @return how many tokens were revoked
 	 */
 	public int revokeAll(long userId) {
+		int revoked = update("set deleted = 1 where userId = :userId and deleted = 0", Map.of("userId", userId));
+		// Read after the update, so a token stored meanwhile has its sessions closed too
+		List<Object[]> rows;
 		try {
-			List<ApiToken> rows = dao.findByUser(userId);
-			List<String> sids = rows.stream().map(t -> currentSid(t.getId())).filter(Objects::nonNull).toList();
-			List<Long> ids = rows.stream().map(ApiToken::getId).toList();
-			int revoked = update("set deleted = 1 where userId = :userId and deleted = 0", Map.of("userId", userId));
-			sids.forEach(ApiTokens::kill);
-			killOpenedSessions(ids);
-			return revoked;
+			rows = dao.query("select ld_id, hd_sid from hd_api_token where hd_userid = :userId and ld_deleted = 1",
+					Map.of("userId", userId), (rs, i) -> new Object[] { rs.getLong(1), rs.getString(2) }, null);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list device tokens", e);
 		}
+		// Every revoked token of the user is here, so only the sessions still open are closed
+		rows.stream().map(row -> (String) row[1]).filter(sid -> sid != null && SessionManager.get().isOpen(sid))
+				.forEach(ApiTokens::kill);
+		killOpenedSessions(rows.stream().map(row -> (Long) row[0]).toList());
+		return revoked;
 	}
 
 	/**
@@ -263,7 +307,8 @@ public class ApiTokens {
 	public List<ApiToken> list(long userId) {
 		try {
 			Date now = new Date();
-			return dao.findByUser(userId).stream().filter(t -> usable(t, now)).toList();
+			int idleDays = settings.apiTokenIdleDays();
+			return dao.findByUser(userId).stream().filter(t -> usable(t, now, idleDays)).toList();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list device tokens", e);
 		}
@@ -283,6 +328,15 @@ public class ApiTokens {
 					.filter(Objects::nonNull).findFirst().orElse(null);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read a device token", e);
+		}
+	}
+
+	private String storedPassword(long userId) {
+		try {
+			return dao.queryForList("select ld_password from ld_user where ld_id = " + userId, String.class).stream()
+					.filter(Objects::nonNull).findFirst().orElse(null);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read a user's password", e);
 		}
 	}
 

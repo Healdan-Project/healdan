@@ -208,6 +208,27 @@ public class FolderResourceTest extends ApiTestCase {
 		assertEquals("bad-request", other.code());
 	}
 
+	@Test
+	public void testChildrenAnswerAsTheirOwnViews() throws Exception {
+		fx.folder(documents, "Sub");
+		fx.searchFolder(workspace, "Recent");
+		fx.upload(documents, "a.docx", "aa", boss);
+		awaitAsyncWork();
+		String token = signIn(clerk);
+
+		for (Folder parent : new Folder[] { workspace, documents }) {
+			JsonNode items = get("/api/v1/folders/" + parent.getId() + "/children").token(token).send().json()
+					.path("items");
+			assertEquals(2, items.size());
+			for (JsonNode item : items) {
+				String own = "folder".equals(item.path("type").textValue())
+						? "/api/v1/folders/" + item.path("id").asLong()
+						: "/api/v1/documents/" + item.path("docNumber").asLong();
+				assertEquals(get(own).token(token).send().json(), item);
+			}
+		}
+	}
+
 	/** Gives the document ACL rows of its own: Boss may read it, Clerk's group has a row without READ */
 	private void hideDocument(Document d) throws Exception {
 		Document current = DocumentDAO.get().findById(d.getId(), true);
