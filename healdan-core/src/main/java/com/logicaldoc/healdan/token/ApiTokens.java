@@ -328,12 +328,20 @@ public class ApiTokens {
 		String clean = name == null ? "" : name.strip();
 		if (clean.isEmpty())
 			return UNNAMED;
-		if (clean.length() > MAX_NAME_LENGTH)
+		if (nameTooLong(clean))
 			throw new HealdanRuleException(
 					"A device name can't be longer than %d characters.".formatted(MAX_NAME_LENGTH));
 		if (!BasicPlane.holds(clean))
 			throw new HealdanRuleException(
 					"A device name can't contain emoji or other characters the database can't store.");
 		return clean;
+	}
+
+	/**
+	 * @param name what a device is called, possibly null
+	 * @return true if {@link #checkName} refuses it for its length
+	 */
+	public static boolean nameTooLong(String name) {
+		return name != null && name.strip().length() > MAX_NAME_LENGTH;
 	}
 }

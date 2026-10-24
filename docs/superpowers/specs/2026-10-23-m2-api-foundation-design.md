@@ -197,7 +197,7 @@ Lists take `offset` (default 0) and `limit` (default 50, at most 200), and retur
 | `DELETE /auth/tokens/current` | token | Sign out: revokes the token making the request. |
 | `DELETE /auth/tokens/{id}` | token | Revokes one of the user's own tokens. |
 
-(the build's calls on sign-in) The device `name` is checked before the password, so a bad one opens no session and clears no failure count: at most 100 characters, nothing the database can't store, and a blank one is "Unnamed device" (`422` otherwise). A username with CE's impersonation separator `>` is refused as `sign-in-failed`, because a token stands for its own user's password. `password-expired` is said only to a caller who gave the right password; anyone else hears `sign-in-failed`.
+(the build's calls on sign-in) The device `name` is checked before the password, so a bad one opens no session and clears no failure count: at most 100 characters, nothing the database can't store, and a blank one is "Unnamed device" (`422 validation` otherwise: `too-long` over 100 characters, as for any other name over its limit, and `invalid` for characters the database can't store; changed in the final review, which found both were `invalid`). A username with CE's impersonation separator `>` is refused as `sign-in-failed`, because a token stands for its own user's password. `password-expired` is said only to a caller who gave the right password; anyone else hears `sign-in-failed`.
 
 ### 5.3 How a token signs a request in
 

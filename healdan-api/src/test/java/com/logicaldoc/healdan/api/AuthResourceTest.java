@@ -175,6 +175,8 @@ public class AuthResourceTest extends ApiTestCase {
 
 		assertEquals(response.toString(), 422, response.status());
 		assertEquals("name", response.json().path("fields").path(0).path("field").textValue());
+		// The code every other name over its limit gets
+		assertEquals("too-long", response.json().path("fields").path(0).path("code").textValue());
 		// The name is checked before signing in: no token, no session, no login, and the failure still counts
 		assertEquals(0, ApiTokens.get().list(clerk.getId()).size());
 		assertEquals(sessionsBefore, SessionManager.get().countOpened("clerk"));
@@ -182,6 +184,13 @@ public class AuthResourceTest extends ApiTestCase {
 		assertEquals(loginsBefore, logins(clerk));
 		assertEquals(1L, (long) jdbc().queryForObject("select ld_value from ld_sequence where ld_name = ?", Long.class,
 				LoginThrottle.LOGINFAIL_USERNAME + "clerk"));
+
+		// A name the database can't store is invalid
+		ApiResponse emoji = post(TOKENS)
+				.json(Map.of("username", "clerk", "password", HealdanFixtures.PASSWORD, "name", "Laptop \uD83D\uDCBB"))
+				.send();
+		assertEquals(emoji.toString(), 422, emoji.status());
+		assertEquals("invalid", emoji.json().path("fields").path(0).path("code").textValue());
 	}
 
 	private int sessionRows(String username) {

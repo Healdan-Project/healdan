@@ -200,6 +200,10 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		HealdanRuleException tooLong = assertThrows(HealdanRuleException.class,
 				() -> tokens().issue(clerk, "a".repeat(101), null));
 		assertEquals("A device name can't be longer than 100 characters.", tooLong.getMessage());
+		// Which refusal it is, for the API's too-long
+		assertTrue(ApiTokens.nameTooLong("a".repeat(101)));
+		assertFalse(ApiTokens.nameTooLong(" " + "a".repeat(100) + " "));
+		assertFalse(ApiTokens.nameTooLong(null));
 
 		assertThrows(HealdanRuleException.class, () -> tokens().issue(clerk, "Phone \uD83D\uDE00", null));
 	}

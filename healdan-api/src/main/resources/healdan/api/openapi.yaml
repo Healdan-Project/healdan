@@ -70,7 +70,10 @@ paths:
         the password was wrong, or that the account can't sign in.
         `401 password-expired` means the password must be changed in the
         web page first. `429 too-many-attempts` means too many failed
-        sign-ins; the detail says when to try again.
+        sign-ins; the detail says when to try again. `422 validation` with
+        the field `name` is a device name over 100 characters (`too-long`),
+        or one with characters the database can't store, such as emoji
+        (`invalid`); it's checked before the password.
       tags: [Sign-in]
       security: []
       requestBody:
