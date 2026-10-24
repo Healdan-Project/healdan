@@ -115,13 +115,18 @@ def upstream_tests(root, modules, spec):
 
 
 def read_times(path):
-    """Seconds per class from a file of "<seconds> <class>" lines; empty when there's no file."""
+    """Seconds per class from a file of "<seconds> <class>" lines; empty when there's no file. A line that isn't one
+    is skipped, so that a bad file in the cache can't fail every run until a good one replaces it."""
     times = {}
     if path and pathlib.Path(path).is_file():
-        for line in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
+        for line in pathlib.Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
             seconds, _, name = line.strip().partition(" ")
-            if name:
-                times[name] = max(times.get(name, 0.0), float(seconds))
+            try:
+                value = float(seconds)
+            except ValueError:
+                continue
+            if name and math.isfinite(value):
+                times[name] = max(times.get(name, 0.0), value)
     return times
 
 
@@ -140,7 +145,9 @@ def plan(tests, modules, times, minutes=5, max_shards=8):
         return loads[index] + test.seconds + (SECONDS_PER_MODULE if new_module else 0)
 
     for test in sorted(tests, key=lambda test: (-test.seconds, test.module, test.name)):
-        lightest = min(range(count), key=lambda index: (load_with(index, test), index))
+        # An empty shard comes first, so that none is left without tests
+        empty = [index for index in range(count) if not shards[index]]
+        lightest = empty[0] if empty else min(range(count), key=lambda index: (load_with(index, test), index))
         loads[lightest] = load_with(lightest, test)
         shards[lightest].append(test)
 

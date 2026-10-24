@@ -204,6 +204,20 @@ class TestShardsTest(unittest.TestCase):
         self.assertEqual({"com.x.ATest": 130.388, "com.x.CTest": 0.016}, shards.read_times(self.root / "times.txt"))
         self.assertEqual({}, shards.read_times(self.root / "missing.txt"))
 
+    def test_times_file_skips_bad_lines(self):
+        self.write("times.txt", "130.388 com.x.ATest\nbroken\nx com.x.BTest\nnan com.x.CTest\n2 com.x.DTest\n")
+        self.assertEqual({"com.x.ATest": 130.388, "com.x.DTest": 2.0}, shards.read_times(self.root / "times.txt"))
+
+    def test_no_shard_is_left_empty(self):
+        # With the module's cost, the last class would join the second shard's, leaving the third empty
+        self.add_class("healdan-core", "ATest")
+        self.add_class("healdan-core", "BTest")
+        self.add_class("healdan-core", "CTest")
+        times = {"com.logicaldoc.x.ATest": 700.0, "com.logicaldoc.x.BTest": 0.0, "com.logicaldoc.x.CTest": 0.0}
+        entries = self.plan(times=times, minutes=5)
+        self.assertEqual(3, len(entries))
+        self.assertTrue(all(entry["tests"] for entry in entries))
+
     def test_main_writes_the_matrix(self):
         self.add_class("healdan-core", "ATest")
         self.add_class("logicaldoc-core", "UpstreamTest")
