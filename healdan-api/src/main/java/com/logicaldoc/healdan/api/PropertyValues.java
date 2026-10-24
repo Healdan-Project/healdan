@@ -6,7 +6,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
+import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
 
@@ -15,8 +15,8 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.folder.Folder;
-import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.Attribute;
+import com.logicaldoc.core.metadata.AttributeOptionDAO;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -28,13 +28,18 @@ import com.logicaldoc.healdan.api.model.UserRef;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
+import com.logicaldoc.healdan.security.AccessChecks;
 
 /**
  * Property values between CE's attributes and JSON (spec section 6.7), by the
  * attribute's type: text for {@code string}, numbers for {@code integer} and
  * {@code decimal}, ISO 8601 timestamps for {@code date}, true or false for
- * {@code boolean}, a user's id (shown as {@code {id, name}}) for {@code user},
- * a folder's id for {@code folder} and a doc # for {@code document}.
+ * {@code boolean}, a user's id (shown as {@code {id, name}}, which is taken
+ * too) for {@code user}, a folder's id for {@code folder} and a doc # for
+ * {@code document}.
+ * <p>
+ * A caller that sets values converts each with {@link #fromJson}, then checks
+ * a list property's value with {@link #checkOption}.
  */
 public final class PropertyValues {
 
@@ -45,14 +50,17 @@ public final class PropertyValues {
 	 * @param attribute the property's definition, with its name
 	 * @param node the JSON value; JSON {@code null}, or none, clears it, as does
 	 *        empty text for a {@code string}
+	 * @param caller the signed-in user, who must be able to read a folder or
+	 *        document the value names
 	 * @param errors where to add what's wrong: {@code type} for a value of the
-	 *        wrong JSON type or format, {@code unknown} for a user, folder or
-	 *        document that doesn't exist
+	 *        wrong JSON type or format, {@code unknown} for a user that doesn't
+	 *        exist, or a folder or document that doesn't exist or the caller
+	 *        can't read (the same answer)
 	 * @return the value as CE takes it (String, Long, Double, Date, Boolean,
 	 *         User, Folder or Document); null to clear, or when an error was
 	 *         added
 	 */
-	public static Object fromJson(Attribute attribute, JsonNode node, List<FieldError> errors) {
+	public static Object fromJson(Attribute attribute, JsonNode node, User caller, List<FieldError> errors) {
 		if (node == null || node.isNull())
 			return null;
 		String name = attribute.getName();
@@ -74,28 +82,27 @@ public final class PropertyValues {
 			case Attribute.TYPE_DATE:
 				return date(node, name, label, errors);
 			case Attribute.TYPE_USER:
-				if (!isId(node))
+				Long userId = userId(node);
+				if (userId == null)
 					return wrongType(errors, name, "%s takes a user's id.".formatted(label));
-				User user = UserDAO.get().findById(node.longValue());
+				User user = UserDAO.get().findById(userId);
 				if (user == null || user.getDeleted() != 0)
-					return unknown(errors, name, "There's no user %d.".formatted(node.longValue()));
+					return unknown(errors, name, "There's no user %d.".formatted(userId));
 				return user;
 			case Attribute.TYPE_FOLDER:
 				if (!isId(node))
 					return wrongType(errors, name, "%s takes a folder's id.".formatted(label));
-				Folder folder = FolderDAO.get().findById(node.longValue());
-				if (folder == null || folder.getDeleted() != 0)
+				Optional<Folder> folder = AccessChecks.readableFolder(node.longValue(), caller);
+				if (folder.isEmpty())
 					return unknown(errors, name, "There's no folder %d.".formatted(node.longValue()));
-				return folder;
+				return folder.get();
 			case Attribute.TYPE_DOCUMENT:
 				if (!isId(node))
 					return wrongType(errors, name, "%s takes a doc #.".formatted(label));
-				// A doc # is unique across the system; the DAO skips deleted documents
-				List<Document> found = DocumentDAO.get().findByWhere("_entity.customId = :customId",
-						Map.of("customId", Long.toString(node.longValue())), null, 1);
-				if (found.isEmpty())
+				Optional<Document> document = AccessChecks.readableDocument(node.longValue(), caller);
+				if (document.isEmpty())
 					return unknown(errors, name, "There's no document #%d.".formatted(node.longValue()));
-				return found.get(0);
+				return document.get();
 			default:
 				if (!node.isTextual())
 					return wrongType(errors, name, "%s takes text.".formatted(label));
@@ -104,6 +111,55 @@ public final class PropertyValues {
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the value of " + name, e);
 		}
+	}
+
+	/**
+	 * Refuses a value that isn't one of a list property's options: a property
+	 * with CE's list editor takes only the values admins listed for it.
+	 *
+	 * @param attribute the property's definition, with its name
+	 * @param value the value from {@link #fromJson}; null (clearing) is never
+	 *        refused
+	 * @param errors where to add {@code not-an-option}
+	 */
+	public static void checkOption(Attribute attribute, Object value, List<FieldError> errors) {
+		if (value == null || attribute.getEditor() != Attribute.EDITOR_LISTBOX || attribute.getSetId() == null
+				|| !(value instanceof String || value instanceof Number || value instanceof Boolean))
+			return;
+		try {
+			String text = value.toString();
+			boolean listed = AttributeOptionDAO.get().findByAttribute(attribute.getSetId(), attribute.getName())
+					.stream().anyMatch(option -> text.equals(option.getValue()));
+			if (!listed)
+				errors.add(new FieldError(attribute.getName(), "not-an-option",
+						"%s must be one of its listed values."
+								.formatted(StringUtils.defaultIfBlank(attribute.getLabel(), attribute.getName()))));
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read the options of " + attribute.getName(), e);
+		}
+	}
+
+	/**
+	 * @param attribute the property's definition
+	 * @param node the JSON value sent
+	 * @param current the property's value now, as {@code ProfileView} gives it
+	 * @return true if the JSON says the value the property has now, as the API
+	 *         shows it: dates to the second, a user by id or as {@code {id,
+	 *         name}}, a document by doc #
+	 */
+	static boolean unchanged(Attribute attribute, JsonNode node, Object current) {
+		boolean empty = node == null || node.isNull() || (node.isTextual() && node.textValue().isEmpty());
+		Object shown = toJson(attribute, current);
+		if (shown == null || empty)
+			return shown == null && empty;
+		return switch (shown) {
+		case UserRef user -> Long.valueOf(user.id()).equals(userId(node));
+		case Long number -> node.isIntegralNumber() && node.canConvertToLong() && node.longValue() == number;
+		case Double number -> node.isNumber() && Double.compare(node.doubleValue(), number) == 0;
+		case Boolean bool -> node.isBoolean() && node.booleanValue() == bool;
+		case Date date -> node.isTextual() && sameSecond(node.textValue(), date);
+		default -> node.isTextual() && node.textValue().equals(shown.toString());
+		};
 	}
 
 	/**
@@ -183,6 +239,25 @@ public final class PropertyValues {
 
 	private static boolean isId(JsonNode node) {
 		return node.isIntegralNumber() && node.canConvertToLong();
+	}
+
+	/**
+	 * @return the user's id from an id, or from an object with an {@code id}
+	 *         such as the {@code {id, name}} the API shows; null otherwise
+	 */
+	private static Long userId(JsonNode node) {
+		if (node == null)
+			return null;
+		JsonNode id = node.isObject() ? node.get("id") : node;
+		return id != null && isId(id) ? id.longValue() : null;
+	}
+
+	private static boolean sameSecond(String text, Date date) {
+		try {
+			return Instant.parse(text.trim()).getEpochSecond() == Math.floorDiv(date.getTime(), 1000L);
+		} catch (DateTimeException e) {
+			return false;
+		}
 	}
 
 	private static Object wrongType(List<FieldError> errors, String name, String detail) {

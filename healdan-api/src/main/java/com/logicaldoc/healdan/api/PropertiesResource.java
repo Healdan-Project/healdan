@@ -94,7 +94,7 @@ public class PropertiesResource {
 				throw ApiProblem.badRequest("Say which properties to change in values.");
 
 			Document document = DocumentDAO.get().findById(readable.getId(), true);
-			Map<String, Object> values = validate(document, patch.values());
+			Map<String, Object> values = validate(document, patch.values(), user);
 			if (values.isEmpty())
 				return properties(document);
 
@@ -133,10 +133,14 @@ public class PropertiesResource {
 	}
 
 	/**
-	 * @return the values to set, as CE takes them, by name
+	 * A value sent as the property has it now is left out, so a client can send
+	 * the whole form back: an unchanged read-only property, or a value no
+	 * longer in its list, isn't refused.
+	 *
+	 * @return the values to change, as CE takes them, by name
 	 * @throws ApiProblem {@code 422 validation} with every field that is wrong
 	 */
-	private static Map<String, Object> validate(Document document, Map<String, JsonNode> patch)
+	private static Map<String, Object> validate(Document document, Map<String, JsonNode> patch, User caller)
 			throws PersistenceException {
 		Map<String, ProfileField> fields = new LinkedHashMap<>();
 		for (ProfileField field : ProfileView.get().forDocument(document))
@@ -154,16 +158,20 @@ public class PropertiesResource {
 				errors.add(new FieldError(name, "unknown", "There's no property %s.".formatted(name)));
 				continue;
 			}
+			Attribute definition = new Attribute(template.getAttribute(name));
+			definition.setName(name);
+			definition.setLabel(field.label());
+			if (PropertyValues.unchanged(definition, entry.getValue(), field.value()))
+				continue;
 			if (!field.editable()) {
 				errors.add(new FieldError(name, "read-only", "%s can't be changed.".formatted(field.label())));
 				continue;
 			}
 
-			Attribute definition = new Attribute(template.getAttribute(name));
-			definition.setName(name);
-			definition.setLabel(field.label());
 			int before = errors.size();
-			Object value = PropertyValues.fromJson(definition, entry.getValue(), errors);
+			Object value = PropertyValues.fromJson(definition, entry.getValue(), caller, errors);
+			if (errors.size() == before)
+				PropertyValues.checkOption(definition, value, errors);
 			if (errors.size() > before)
 				continue;
 

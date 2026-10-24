@@ -160,22 +160,39 @@ public class PropertiesResourceTest extends ApiTestCase {
 		court.setMandatory(true);
 		court.setPosition(13);
 		profile.getTemplateAttributes().put("court", court);
+		Attribute box = new Attribute();
+		box.setLabel("Box");
+		box.setType(Attribute.TYPE_FOLDER);
+		box.setPosition(14);
+		profile.getTemplateAttributes().put("box", box);
 		TemplateDAO.get().store(profile);
+		// Clerk has no grant on it
+		Folder secret = fx.store("Private");
 		Document d = file("a.docx");
 		String token = signIn(clerk);
-		assertEquals(200, get(properties(d)).token(token).send().status());
+		// Clearing a required property that has a value, and inherits none, is refused
+		assertEquals(200, patch(properties(d)).token(token).json(values("court", "High Court")).send().status());
 		DbSnapshot before = fx.snapshot();
 
 		assertRefused(d, token, values("colour", "red"), List.of("colour unknown"));
 		assertRefused(d, token, values(HealdanConstants.ATTR_CLIENT, "5"), List.of("client read-only"));
 		assertRefused(d, token, values(HealdanConstants.ATTR_EMAILSUBJECT, "Hi"), List.of("emailsubject read-only"));
 		assertRefused(d, token, values(CLASS, 5), List.of("docclass type"));
+		assertRefused(d, token, values(CLASS, "Lettres"), List.of("docclass not-an-option"));
+		assertRefused(d, token, values(SUBCLASS, "Nonsense"), List.of("docsubclass not-an-option"));
 		assertRefused(d, token, values(SUBCLASS, "Sub1"), List.of("docsubclass class-mismatch"));
 		assertRefused(d, token, values(CLASS, "Letters", SUBCLASS, "Sub2"), List.of("docsubclass class-mismatch"));
 		assertRefused(d, token, values(HealdanConstants.ATTR_AUTHOR, 99999), List.of("author unknown"));
 		assertRefused(d, token, values(HealdanConstants.ATTR_AUTHOR, "boss"), List.of("author type"));
 		assertRefused(d, token, values("court", null), List.of("court required"));
 		assertRefused(d, token, values("court", ""), List.of("court required"));
+		// A folder the caller can't read is answered as one that doesn't exist
+		JsonNode unreadable = assertRefused(d, token, values("box", secret.getId()), List.of("box unknown"))
+				.path("fields").get(0);
+		JsonNode missing = assertRefused(d, token, values("box", 987654), List.of("box unknown")).path("fields")
+				.get(0);
+		assertEquals(missing.path("detail").textValue().replace("987654", "N"),
+				unreadable.path("detail").textValue().replace(Long.toString(secret.getId()), "N"));
 
 		// Every field that is wrong, in the order sent
 		assertRefused(d, token,
@@ -189,6 +206,41 @@ public class PropertiesResourceTest extends ApiTestCase {
 		ApiResponse malformed = patch(properties(d)).token(token).json("{\"colour\": \"red\"}").send();
 		assertEquals(malformed.toString(), 400, malformed.status());
 		assertEquals("bad-request", malformed.code());
+		before.assertUnchanged();
+
+		// A folder the caller can read is taken
+		JsonNode set = field(patch(properties(d)).token(token).json(values("box", documents.getId())).send(), "box");
+		assertEquals(documents.getId(), set.path("value").asLong());
+	}
+
+	@Test
+	public void testUnchangedFormIsIgnored() throws Exception {
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		assertEquals(200, patch(properties(d)).token(token).json(values(CLASS, "Letters", "legacydocnum", "OLD-1"))
+				.send().status());
+		// Letters is then taken off the list
+		AttributeSet set = AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID);
+		for (AttributeOption option : AttributeOptionDAO.get().findByAttribute(set.getId(), CLASS))
+			if ("Letters".equals(option.getValue()))
+				AttributeOptionDAO.get().delete(option.getId());
+
+		JsonNode form = get(properties(d)).token(token).send().json().path("items");
+		Map<String, Object> all = new LinkedHashMap<>();
+		for (JsonNode field : form)
+			all.put(field.path("name").textValue(), field.path("value"));
+		DbSnapshot before = fx.snapshot();
+
+		// Client, Matter and the email fields as they are, a Class no longer listed, Author as {id, name}
+		ApiResponse response = patch(properties(d)).token(token).json(Map.of("values", all)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(form, response.json().path("items"));
+		before.assertUnchanged();
+
+		// A read-only property that is changed is still refused
+		all.put(HealdanConstants.ATTR_CLIENT, "5");
+		assertRefused(d, token, Map.of("values", all), List.of("client read-only"));
 		before.assertUnchanged();
 	}
 
@@ -276,7 +328,7 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals("Memos", field(get(properties(d)).token(clerkToken).send(), CLASS).path("value").textValue());
 	}
 
-	private void assertRefused(Document d, String token, Map<String, Object> values, List<String> expected) {
+	private JsonNode assertRefused(Document d, String token, Map<String, Object> values, List<String> expected) {
 		ApiResponse refused = patch(properties(d)).token(token).json(values).send();
 		assertEquals(refused.toString(), 422, refused.status());
 		assertEquals("validation", refused.code());
@@ -286,6 +338,7 @@ public class PropertiesResourceTest extends ApiTestCase {
 			assertTrue(field.toString(), field.path("detail").textValue().length() > 0);
 		}
 		assertEquals(refused.toString(), expected, fields);
+		return refused.json();
 	}
 
 	private void assertInherited(JsonNode field, String value) {

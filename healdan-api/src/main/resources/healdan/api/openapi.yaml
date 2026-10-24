@@ -443,6 +443,14 @@ paths:
         Save saves it, as a new version in the document's timeline, and the
         answer is the document's properties after it.
 
+        A value sent as the property has it now is ignored, so a client can
+        send back the whole form: unchanged Client, Matter and email fields
+        aren't refused, nor is a value that is no longer in its list, and a
+        form sent back unchanged saves nothing. (An override that equals
+        what the property would inherit stays an override when sent back;
+        send `null` to make it inherit.) Dates are compared to the second, as
+        the API writes them.
+
         Needs the Write permission: without it the answer is
         `403 forbidden`, as it is for an immutable document unless the
         caller is an administrator. A document someone else has checked out is
@@ -453,12 +461,15 @@ paths:
         changes nothing. `422 validation` lists every field that is wrong,
         in the order sent, with these codes:
 
-        - `unknown`: there's no such property; or the user, folder or
-          document the value names doesn't exist.
+        - `unknown`: there's no such property; or the user the value names
+          doesn't exist; or the folder or document it names doesn't exist or
+          the caller can't read it (the same answer).
         - `read-only`: the property can't be changed (Client, Matter, the
           email fields, read-only properties).
         - `type`: the value has the wrong JSON type or format for the
           property's `type`.
+        - `not-an-option`: the property is picked from a list (it has
+          `options`) and the value isn't one of them.
         - `required`: a required property in `values` would be left with no
           value. A cleared property that inherits takes what it inherits, so
           `null` for Class is never refused.
@@ -1308,7 +1319,7 @@ components:
             `integer` or a `decimal`, true or false for a `boolean`, an ISO
             8601 timestamp for a `date`, a `UserRef` for a `user`, the
             folder's id for a `folder` and the doc # for a `document`.
-            `PATCH` takes the same, but a user's id for a `user`.
+            `PATCH` takes the same; a `user` also takes just the user's id.
           oneOf:
             - type: string
             - type: number
@@ -1367,14 +1378,21 @@ components:
           type: object
           description: |
             The new value of each property to change, by name, in the same
-            form as `ProfileField.value`, except that a `user` takes the
-            user's id. `null`, or empty text, clears a property: it inherits
-            again if it can.
+            form as `ProfileField.value`: a `user` takes the user's id, or the
+            `{id, name}` the API shows. `null`, or empty text, clears a
+            property: it inherits again if it can.
           additionalProperties:
             oneOf:
               - type: string
               - type: number
               - type: boolean
+              - type: object
+                description: A user, by its `id`
+                required: [id]
+                properties:
+                  id:
+                    type: integer
+                    format: int64
               - type: 'null'
           examples:
             - docclass: Letters
