@@ -36,14 +36,18 @@ mvn -pl logicaldoc-core test                              # one module's tests (
 mvn -pl logicaldoc-core test -Dtest=DocumentManagerTest   # one test class
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one method
 mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or one class of them
+mvn -pl healdan-core -DskipTests install                  # healdan-core with its test-jar, which healdan-api's tests need
+mvn -pl healdan-api test -Dtest=FolderResourceTest        # the API's tests, or one class of them
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
 - `logicaldoc-gui` runs a GWT compile for each GWT module (frontend, login, setup), which is slow. Skip it with `-Dgwt.skipCompilation=true` when you aren't touching the UI; the module's Java still compiles, which `healdan-core` needs.
   - Up to `test` that's enough. For `package` or `install`, add `-Dmaven.antrun.skip=true` and `-pl '!logicaldoc-webapp'`, as CI's `build` check does. The GUI's antrun step fails without the GWT output, and skipping antrun leaves every plugin zip unfinished, so the WAR built from them is broken.
 - Spring-based tests fail in `setUp` unless `~/logicaldoc-dev.properties` exists. An empty file works; CI creates one.
-- `healdan-core`'s tests run against the installed jars of the modules it uses. After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module (`-pl <module> -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install`) before running them.
-- CI's `build` check compiles every module except the WAR and skips the GWT compile. It runs the `healdan-core` tests, then the upstream tests named in its `-Dtest` list, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
+- `healdan-core`'s and `healdan-api`'s tests run against the installed jars of the modules they use. After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module (`-pl <module> -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install`) before running them.
+- `healdan-api`'s tests also need `healdan-core` installed, test-jar included: they reuse its `AbstractHealdanTestCase` and fixtures. Re-install it after changing `healdan-core`.
+  - `-DskipTests` still compiles tests, so it builds and installs that test-jar. `-Dmaven.test.skip=true` doesn't, and `healdan-api`'s `with-tests` profile then leaves the test-jar dependency out, so the build works but `healdan-api`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
+- CI's `build` check compiles every module except the WAR and skips the GWT compile. It runs the `healdan-core` and `healdan-api` tests (`-pl healdan-core,healdan-api test`), then the upstream tests named in its `-Dtest` list, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
 - Pull requests that change only `docs/`, `site/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
@@ -56,7 +60,7 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
 - Tests (the Developer Guide's Tests page describes each):
   - `docker build --target tools .` for the init tool's unit tests
   - `docker/tests/test-*.sh`
-  - `docker/smoke-test.sh` for end to end
+  - `docker/smoke-test.sh` for end to end. Its step 5c runs `docker/tests/test-api.sh`, the Office add-in's flow through `/api/v1` with a Bearer token, through CE's real filter chain (sign in, file, check out, save, download, the throttle, sign out). That script needs a fresh stack with the smoke overlay (it signs in as `admin`/`admin`, and leaves a username blocked for 15 minutes).
 - **The smoke fixture overlay.** Healdan refuses documents outside a matter, and a fresh stack has none. `docker/tests/compose.smoke.yaml` sets `HEALDAN_SMOKE_FIXTURE=true`, which makes the `smoke-fixture` seed create Store "Smoke", a template, client 1 and matter 1.1 with a Documents folder. `docker/smoke-test.sh` adds the overlay itself. Add it (`-f compose.yaml -f docker/tests/compose.smoke.yaml`) to a throwaway stack that needs somewhere to upload. Production never sets the variable.
 - CI: `.github/workflows/docker-image.yml` builds on native amd64 and arm64 runners and runs the `tools` target and `docker/smoke-test.sh` on each. Only pushes write the build cache, which pull requests read. BuildKit doesn't save the Maven build's cache mount, so `actions/cache` and `buildkit-cache-dance` keep its dependencies between runs; only master's amd64 job saves them. It publishes to `ghcr.io/healdan-project/healdan` from `master` and `v*` tags only while the repository variable `GHCR_PUBLISH` is `true`.
 
@@ -113,6 +117,11 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - Its GUI code is in `logicaldoc-gui` under `com.logicaldoc.gui.frontend.client.healdan`, reached from one-line hooks in upstream GUI classes.
   - Its servlets register with `@WebServlet`, never `addServlet`, because the Docker image rebuilds `web.xml`. RPC paths are `/frontend/healdan*` and data paths `/data/healdan*`.
   - Its listeners enforce the rules on every route. Extension ids in its `plugin.xml` must be unique: JPF silently drops the whole plugin on a duplicate.
+- **`healdan-api`** is Healdan's JSON API, the HTTP layer at `/api/*` (JPF id `healdan-api`, which requires `healdan-core`). Its code is under `com.logicaldoc.healdan.api`, and `HealdanContext`'s scan finds its beans, so it has no `@PluginContext` of its own. Domain code (tokens, read models) stays in `healdan-core`. The docs site's Developer Guide has a page for API clients (`site/content/developer/api.md`).
+  - `ApiServlet` (`@WebServlet("/api/*")`) runs a CXF JAX-RS server on its own `ExtensionManagerBus`, not CXF's Spring bus, which would expose every `/services/rest` server under `/api/rest` too. Its resources are the Spring beans in the package that carry `@Path`.
+  - `/api/**` is `security="none"` in `context-security.xml`: the API's `TokenFilter` signs requests in from `Authorization: Bearer hd_…` device tokens only, never a cookie, `sid`, Basic or `X-API-KEY`.
+  - `healdan-api/src/main/resources/healdan/api/openapi.yaml` (OpenAPI 3.1, served at `/api/v1/openapi.yaml`, browsable at `/api/docs/`) is hand-written and is the contract: `ApiTestCase` checks every response a test gets against it, and `RouteCoverageTest` fails when the routes and the file differ. A new endpoint goes into it in the same change. A list schema built with `allOf` needs `unevaluatedProperties: false` (see `Page`).
+  - Errors are RFC 9457 problems with stable `code`s (`ApiProblem`); unreadable means `404`, as in the old UI.
 - **Flyway owns the `hd_` tables, and only those.**
   - Scripts are `healdan-core/src/main/resources/healdan/db/migration/{mariadb,hsqldb}/V<n>__<name>.sql`, and the history table is `hd_schema_history`.
   - A change ships as a new script; never edit one that has shipped.
@@ -124,7 +133,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - A failed seed stops startup. To re-run a step on a test stack, delete its marker row and restart.
 - **`HealdanHooks`** (`logicaldoc-core/.../core/HealdanHooks.java`, fork-owned) lets CE code that bypasses the listeners call Healdan before it writes. Examples are the JDBC restores, `deleteTree` and `applySecurityToTree`, and the moves, renames, updates, merges and copies that write before a listener could refuse. `healdan-core` registers the implementation.
   - Every Healdan veto throws `HealdanVetoException` or a subclass. The document and folder DAOs roll back on it alone; a plain `PersistenceException` still commits.
-- **Upstream edits.** §13 of `docs/superpowers/specs/2026-10-17-m1-move-in-design.md` lists every upstream file M1 edits, with the reason. Keep each edit a small hook into new code, and list it in the milestone's spec.
+- **Upstream edits.** Each milestone's spec lists every upstream file it edits, with the reason: §13 of `docs/superpowers/specs/2026-10-17-m1-move-in-design.md` for M1, §9 of the M1.5 spec and §13 of `docs/superpowers/specs/2026-10-23-m2-api-foundation-design.md` for M2. Keep each edit a small hook into new code, and list it in the milestone's spec.
 - **Credits.** The login page and About credit LogicalDOC as well as Healdan (`logicaldoc-gui/.../common/client/healdan/HealdanCredits.java`). Keep LogicalDOC's credit through any rebrand, and never call Healdan a registered trademark: it isn't one.
 
 ## Tests
@@ -132,5 +141,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
 - Tests use JUnit 4. The base class `com.logicaldoc.util.junit.AbstractTestCase` builds a Spring context from the module's test `context.xml` and `context.properties`.
 - That context includes an in-memory HSQLDB loaded from `getDatabaseScripts()`. For core, that's `sql/logicaldoc-core.sql` plus the test `data.sql` fixture data.
 - Each module has its own base class, such as `AbstractCoreTestCase`, `AbstractWebappTestCase` or `AbstractWebserviceTestCase`. Extend the closest one. `healdan-core`'s `AbstractHealdanTestCase` also runs Healdan's migrations and seeds on the test database.
+- `healdan-api`'s `ApiTestCase` extends `AbstractHealdanTestCase` (from `healdan-core`'s test-jar) and drives the real `ApiServlet`, filters included, through Spring's servlet mocks. Its `context.properties` is copied at build time from `../healdan-core/src/test/resources`.
+- The sign-in throttle is on in every `healdan-core` and `healdan-api` test (the `throttle-signin` seed runs on each fresh test database), so a test that fails one user's password five times blocks that user for the rest of the test.
 - Some tests load plugin manifests from fixture jars in `src/test/resources` through `getPluginArchives()`. Those jars are hand-maintained fixtures, not built from source.
 - Tests write their stores, indexes and temp files under `target/`.
