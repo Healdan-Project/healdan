@@ -170,14 +170,8 @@
 			<scope>provided</scope>
 		</dependency>
 
-		<!-- Tests: healdan-core's base test case and fixtures, and the same context it builds -->
-		<dependency>
-			<groupId>com.logicaldoc</groupId>
-			<artifactId>healdan-core</artifactId>
-			<version>${project.version}</version>
-			<type>test-jar</type>
-			<scope>test</scope>
-		</dependency>
+		<!-- Tests: healdan-core's base test case and fixtures (in the with-tests profile below), and the same context it
+			builds -->
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-test</artifactId>
@@ -293,4 +287,26 @@
 			</plugin>
 		</plugins>
 	</build>
+	<profiles>
+		<!-- -Dmaven.test.skip=true doesn't build healdan-core's test-jar, and Maven would still resolve it here, so a
+			clean build would fail. Leave it out then; -DskipTests still builds it. -->
+		<profile>
+			<id>with-tests</id>
+			<activation>
+				<property>
+					<name>maven.test.skip</name>
+					<value>!true</value>
+				</property>
+			</activation>
+			<dependencies>
+				<dependency>
+					<groupId>com.logicaldoc</groupId>
+					<artifactId>healdan-core</artifactId>
+					<version>${project.version}</version>
+					<type>test-jar</type>
+					<scope>test</scope>
+				</dependency>
+			</dependencies>
+		</profile>
+	</profiles>
 </project>
