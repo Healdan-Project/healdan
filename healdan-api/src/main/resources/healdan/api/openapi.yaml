@@ -186,6 +186,108 @@ paths:
                 $ref: '#/components/schemas/UserHitPage'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents:
+    get:
+      operationId: findDocumentsByLegacyDocNumber
+      summary: Documents by legacy doc #
+      description: |
+        The documents whose Legacy doc # equals `legacyDocNumber` exactly
+        (same case, no wildcards), that the caller can read and that are
+        published to the caller, lowest doc # first. In one page. The number
+        is never read as a doc #. A missing or blank `legacyDocNumber` is
+        `400`.
+      tags: [Documents]
+      parameters:
+        - name: legacyDocNumber
+          in: query
+          required: true
+          description: The legacy doc # to find.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: The documents, none if none match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/search:
+    get:
+      operationId: search
+      summary: Search, as the search box does
+      description: |
+        Runs the old web page's searches. The hits are only what the caller
+        can read and what is published to the caller. `total` is always
+        `null`: a page with fewer than `limit` items is the last one.
+
+        - `documents`: documents, without emails. A `q` like `#1234`, `#1234.2`
+          or `#1234v2` returns just that document, as the old web page does.
+        - `emails`: emails only.
+        - `all`: full text, documents and emails.
+        - `folders`: folders inside Stores whose name contains `q`, in any case.
+        - `matters`: matters by `998.1`-style number, a number, or name text.
+        - `clients`: the matters of every client matching by number or name.
+
+        A search that fails is `500 server-error`, not an empty page.
+      tags: [Search]
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          description: Where to search. `documents` by default; any other value is `400`.
+          schema:
+            type: string
+            enum: [documents, emails, all, folders, matters, clients]
+            default: documents
+        - name: q
+          in: query
+          required: true
+          description: What to look for. A blank `q` is `400`. Encode a `#` as `%23`.
+          schema:
+            type: string
+            minLength: 1
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The hits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/lookup:
+    get:
+      operationId: lookupDocNumber
+      summary: Resolve a typed doc #
+      description: |
+        Resolves `#1234`, `#1234.2`, `#1234v2` and `#1234.2.1` to the document
+        and version. Input that isn't a doc # is `400`. A document that
+        doesn't exist, can't be read by the caller, isn't published to the
+        caller, or has no such version is `404` with the old web page's
+        message, such as "No document #1234".
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What was typed, starting with `#`. Encode the `#` as `%23`.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: The document and version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupView'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/recent:
     get:
       operationId: listRecentDocuments
@@ -994,6 +1096,36 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/StoreRef'
+      unevaluatedProperties: false
+    LookupView:
+      type: object
+      additionalProperties: false
+      required: [docNumber, version]
+      properties:
+        docNumber:
+          type: integer
+          format: int64
+        version:
+          type: string
+          description: The version the input names, or the current version when it names none
+          examples: ['2.1']
+    SearchPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                oneOf:
+                  - $ref: '#/components/schemas/DocumentView'
+                  - $ref: '#/components/schemas/FolderView'
+                  - $ref: '#/components/schemas/MatterView'
+                discriminator:
+                  propertyName: type
+                  mapping:
+                    document: '#/components/schemas/DocumentView'
+                    folder: '#/components/schemas/FolderView'
+                    matter: '#/components/schemas/MatterView'
       unevaluatedProperties: false
     FolderChildPage:
       allOf:

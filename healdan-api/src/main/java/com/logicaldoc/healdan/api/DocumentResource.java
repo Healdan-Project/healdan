@@ -4,6 +4,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
@@ -26,6 +27,7 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -53,6 +55,30 @@ public class DocumentResource {
 
 	/** As in {@code ServletUtil.saveHistory}: a download within this many seconds of the last is not recorded again */
 	private static final int DEDUPLICATE_SECONDS = 30;
+
+	/**
+	 * @param legacy the legacy doc # a document carries from the system it came
+	 *        from, matched exactly
+	 * @return the documents with it that the caller can read, lowest doc # first
+	 */
+	@GET
+	public Page<DocumentView> byLegacy(@QueryParam("legacyDocNumber") String legacy) {
+		if (StringUtils.isBlank(legacy))
+			throw ApiProblem.badRequest("Say which legacy doc # to look for with legacyDocNumber.");
+		User caller = Caller.current().user();
+		try {
+			List<Document> found = new ArrayList<>();
+			for (long id : LegacyDocNumbers.find(legacy, caller.getTenantId()))
+				AccessChecks.readableDocument(DocumentDAO.get().findById(id), caller).ifPresent(found::add);
+			found.sort(Comparator.comparingLong(d -> Long.parseLong(d.getCustomId())));
+			List<DocumentView> views = new ArrayList<>();
+			for (Document document : found)
+				views.add(ApiViews.document(document, caller));
+			return Page.whole(views);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't find documents by legacy doc #", e);
+		}
+	}
 
 	/**
 	 * @return the documents the caller filed, changed, checked out or
