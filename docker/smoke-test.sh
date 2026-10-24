@@ -185,6 +185,13 @@ echo "== 5b. Office previews (M1.5 spec §11.1)"
 check "Office previews, markup and hardening" env BASE="$BASE" FOLDER_ID="$doc_folder" DOC_PATH="$doc_path" SID="$sid" \
   APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" bash docker/tests/test-previews.sh
 
+echo "== 5c. the add-in flow through the JSON API (M2 spec §14.1)"
+# Signs in as a new non-admin user and files, checks out and saves a .docx in the Smoke Matter through /api/v1 with a
+# Bearer token, through CE's real filter chain; its output carries its own PASS/FAIL lines
+api_started=$SECONDS
+check "the add-in flow through the API" env BASE="$BASE" bash docker/tests/test-api.sh
+echo "step 5c took $((SECONDS - api_started)) s"
+
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
