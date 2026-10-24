@@ -63,7 +63,7 @@ public class RestAuthService extends SoapAuthService implements AuthService {
 
 	@GET
 	@Path("/loginApiKey")
-	@Operation(summary = "Login by API Key", description = "Performs login by passing the API Key in the header. Read more at https://docs.logicaldoc.com/en/web-services-api/api-keys")
+	@Operation(summary = "Login by API Key", description = "Performs login by passing the API Key in the header. Read more at https://docs.healdan.com/developer/api/")
 	@ApiResponses(value = { 
 			@ApiResponse(responseCode = "200", description = "Successful operation. The Session ID (sid) is returned.", content = @Content(schema = @Schema(implementation = String.class, description = "The session ID (sid) created", example = "ca3c411d-b043-49a3-b151-e363dddcecef"))),
 			@ApiResponse(responseCode = "500", description = "Authentication failed")})

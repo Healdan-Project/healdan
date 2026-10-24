@@ -104,7 +104,7 @@ body {
     <p>
        <%=message("performfollowingsteps",request)%>:
        <ol>
-         <li><%=message("deletecache",request)%> <a href="http://docs.logicaldoc.com/en/update/clear-browser-cache" target="_blank"><%=message("clickforhowto",request)%></a></li>
+         <li><%=message("deletecache",request)%> <a href="https://docs.healdan.com/user/getting-started/clearing-your-browsers-cache/" target="_blank"><%=message("clickforhowto",request)%></a></li>
          <li><%=message("loginfromhere",request)%>: <a href="${pageContext.request.contextPath}/${param.loginpage}?skipreleasecheck=true"><%=message("login",request)%></a></li>
        </ol>
     </p>
