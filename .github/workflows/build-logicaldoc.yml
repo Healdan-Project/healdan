@@ -40,6 +40,10 @@ jobs:
       - name: Check GUI icons against Font Awesome Free
         run: python3 .github/scripts/check-fontawesome-icons.py
 
+      # Healdan's docs are docs.healdan.com; an upstream sync can bring LogicalDOC's doc links back
+      - name: Check for links to LogicalDOC's docs
+        run: python3 .github/scripts/check-logicaldoc-doc-links.py
+
       # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
       - name: JDK version (from the Dockerfile)
         id: jdk

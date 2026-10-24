@@ -2,7 +2,7 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56)
 - **Date:** 2026-10-23
-- **Status:** approved by the owner on 2026-10-23. Being built from [`docs/superpowers/plans/2026-10-23-docs-site.md`](../plans/2026-10-23-docs-site.md): PR A (the site, its checks, CI, and the Install and Developer manuals) is in review. The plan's "Spec corrections and calls this plan makes" amend §10.1 and §10.3, chiefly moving the Help URL into `HealdanSystemInfo`. Its decision log records the build's rulings.
+- **Status:** approved by the owner on 2026-10-23, and built from [`docs/superpowers/plans/2026-10-23-docs-site.md`](../plans/2026-10-23-docs-site.md) in three PRs. The site has been live at https://docs.healdan.com since 2026-10-23 (PR A, #59), with the User and Admin pages for M1 and M1.5 (PR B, #60). PR C moves the app's and the repo's links to it and fails CI on links to LogicalDOC's docs. The interim pages that remain are tracked in #56. The plan's "Spec corrections and calls this plan makes" amend §10.1 and §10.3, chiefly moving the Help URL into `HealdanSystemInfo`. Its decision log records the build's rulings.
 - **Inputs:**
   - issue #56, which lists every link to LogicalDOC's docs in the app and the repo;
   - a design conversation with the owner on 2026-10-23, with mockups and a throwaway spike built with Hugo and Hextra in Healdan's colours;
@@ -360,15 +360,16 @@ Each is a small edit, listed here as CLAUDE.md asks.
 
 | File | Change |
 |---|---|
-| `logicaldoc-core/.../core/SystemInfo.java:39` | `help` defaults to `https://docs.healdan.com` |
-| `logicaldoc-gui/.../common/client/beans/GUIBranding.java:47` | the same |
-| `logicaldoc-webservice/.../webservice/model/WSSystemInfo.java:31`, `:40` | `help` as above. `forum` becomes `https://github.com/Healdan-Project/healdan/issues`, since Discussions are off (call) |
+| `healdan-core/.../branding/HealdanSystemInfo.java` (Healdan's own) | `help` is `HELP`, `https://docs.healdan.com`. CE uses this class in place of `SystemInfo`, and `InfoServiceImpl` copies its help URL into the GUI (plan correction 1) |
+| `logicaldoc-gui/.../common/client/beans/GUIBranding.java:47` | `help` defaults to `https://docs.healdan.com`, beside the other defaults M1 made match `HealdanSystemInfo`'s |
 | `logicaldoc-gui/war/releasecheck.jsp:107` | the User Guide's Clearing Your Browser's Cache page |
 | `logicaldoc-webservice/.../rest/endpoint/RestAuthService.java:66` | the Developer Guide's API page (an interim page until M2) |
 | `logicaldoc-webservicedoc/.../context/context-webservicedoc.xml:53` | the same |
-| `logicaldoc-i18n`'s 34 bundles, keys `webstarthintlauncher` and `officeaddinhintlauncher` | `https://docs.healdan.com`. Healdan doesn't ship LogicalDOC's Webstart Launcher or Office add-in, and CE never shows these hints (§3.1). M3's Office add-ins get their own pages (call). No plugin can override a GUI message (§3.1), so the 34 files are edited. Edit only the URL in each line, keeping the rest of the line byte for byte, so a sync conflicts only where upstream changes these two keys |
+| `logicaldoc-i18n`'s 34 bundles, keys `webstarthintlauncher` and `officeaddinhintlauncher` | `https://docs.healdan.com`. Healdan doesn't ship LogicalDOC's Webstart Launcher or Office add-in, and CE never shows these hints (§3.1). M3's Office add-ins get their own pages (call). No plugin can override a GUI message (§3.1), so the 34 files are edited, only the URL in each of the two lines. Three bundles escape the colon (`https\://`), and French's Office hint links to `/webstart`; each line keeps its own form |
 
-- **Tests.** CLAUDE.md asks for a test when a change edits upstream code. Add one asserting `SystemInfo`'s and `WSSystemInfo`'s defaults, and add it to the `-Dtest` list in `build-logicaldoc.yml`.
+Not edited (plan corrections 1 and 2): `SystemInfo.java:39` and `WSSystemInfo.java:31` and `:40` keep CE's defaults, which `HealdanSystemInfo` always replaces, and the link check allows exactly those lines. `HealdanSystemInfo` has set `forum` to `-` since M1, which hides Help > Forum, so the forum link doesn't change.
+
+- **Tests.** `HealdanSystemInfoTest.testHelpOpensHealdanDocs` checks `HealdanSystemInfo.HELP`, `SystemInfo.get().getHelp()` and `GUIBranding`'s default. It's a `healdan-core` test, which CI already runs, so the `-Dtest` list doesn't change (plan correction 3).
 - **Where the GUI's link comes from.** `InfoServiceImpl.java:260` copies `SystemInfo`'s help URL into the GUI's branding, so the `SystemInfo` default is what users see. Per-tenant branding sits behind the branding feature gates (`Feature.BRANDING_STANDARD`, `BRANDING_FULL`). The builder checks on a stack that nothing overrides the default.
 
 ### 10.2 Repo docs (call)
