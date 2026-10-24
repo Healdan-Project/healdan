@@ -12,7 +12,8 @@ import java.util.List;
  *        {@code boolean}, {@code user}, {@code folder} or {@code document}
  * @param required whether it must have a value
  * @param editable false for client, matter, the email fields and read-only
- *        properties
+ *        properties; for a document's, false for every property when the
+ *        caller may not change them
  * @param value a string, number or boolean; a {@link UserRef} for a user; an
  *        ISO 8601 timestamp for a date; a folder's id; a document's doc #;
  *        null when there is none

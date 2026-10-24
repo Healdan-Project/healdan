@@ -7,10 +7,14 @@ import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.stereotype.Component;
 
 /**
- * One lock per document, so that two API requests on the same document run
- * one after the other (spec section 6.6): a save's check-out, check-in and
- * new check-out can't interleave with another save, check-out or release.
- * A document's lock exists only while a request holds it or waits for it.
+ * One lock per document, so that the API requests that change a document run
+ * one after the other (spec section 6.6). These requests take it, and no
+ * others: a save ({@code POST .../versions}), a check-out and a release
+ * ({@code POST} and {@code DELETE .../checkout}), and a change of the
+ * properties ({@code PATCH .../properties}). So a save's check-out, check-in
+ * and new check-out can't interleave with another of them. Reads and filing a
+ * new document don't take it. A document's lock exists only while a request
+ * holds it or waits for it.
  * <p>
  * It is this server's alone: the old web page, WebDAV and another cluster node
  * don't take it.

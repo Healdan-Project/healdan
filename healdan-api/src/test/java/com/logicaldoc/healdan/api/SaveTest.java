@@ -177,6 +177,83 @@ public class SaveTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testCommentCleaned() throws Exception {
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+
+		// As the old UI's check-in cleans it (I1): the tag goes, the text stays
+		ApiResponse cleaned = save(token, d, version("snapshot", "Sent <img src=x onerror=alert(1)>to the client", null),
+				"a.docx", "two");
+		assertEquals(cleaned.toString(), 201, cleaned.status());
+		assertEquals("Sent to the client", get(path(d)).token(token).send().json().path("items").get(0).path("comment")
+				.textValue());
+		assertEquals("Sent to the client", jdbc().queryForObject(
+				"select ld_comment from ld_history where ld_docid = ? and ld_event = 'event.checkedin'", String.class,
+				d.getId()));
+
+		// Text that only looks like markup is kept
+		assertEquals(201, save(token, d, version("snapshot", "a < b & c", null), "a.docx", "three").status());
+		assertEquals("a < b & c",
+				get(path(d)).token(token).send().json().path("items").get(0).path("comment").textValue());
+	}
+
+	@Test
+	public void testTooLong() throws Exception {
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		DbSnapshot before = fx.snapshot();
+
+		// Refused before the document is checked out for the save: nothing is left behind
+		ApiResponse comment = save(token, d, version("snapshot", "x".repeat(1001), null), "a.docx", "two");
+		assertEquals(List.of("comment too-long"), fields(comment));
+		assertEquals("The comment can't be longer than 1000 characters.", comment.json().path("detail").textValue());
+		String tooLong = "a".repeat(251) + ".docx";
+		assertEquals(List.of("file too-long"),
+				fields(save(token, d, version("snapshot", null, null), tooLong, "two")));
+		assertEquals(List.of("name too-long"),
+				fields(save(token, d, named("snapshot", tooLong), "blob", "two")));
+		assertEquals(List.of("file too-long", "comment too-long"),
+				fields(save(token, d, version("snapshot", "x".repeat(1001), true), tooLong, "two")));
+		before.assertUnchanged();
+
+		// The longest comment and name are taken
+		String longest = "a".repeat(250) + ".docx";
+		ApiResponse saved = save(token, d, version("snapshot", "x".repeat(1000), null), longest, "two");
+		assertEquals(saved.toString(), 201, saved.status());
+		assertEquals(longest, saved.json().path("name").textValue());
+		assertEquals("x".repeat(1000),
+				get(path(d)).token(token).send().json().path("items").get(0).path("comment").textValue());
+	}
+
+	@Test
+	public void testNameSent() throws Exception {
+		// M4: a browser names a Blob appended without a name "blob"; the version part's name wins over it
+		Document d = file("Lease.docx");
+		String token = signIn(clerk);
+		DbSnapshot before = fx.snapshot();
+
+		assertEquals(List.of("file extension"), fields(save(token, d, version("snapshot", null, null), "blob", "two")));
+		assertEquals(List.of("name extension"), fields(save(token, d, named("snapshot", "Lease.pdf"), "blob", "two")));
+		assertEquals(List.of("name invalid"), fields(save(token, d, named("snapshot", "a/b.docx"), "blob", "two")));
+		before.assertUnchanged();
+
+		ApiResponse kept = save(token, d, named("snapshot", "Lease.docx"), "blob", "two");
+		assertEquals(kept.toString(), 201, kept.status());
+		assertEquals("Lease.docx", kept.json().path("name").textValue());
+		assertEquals("1.1", kept.json().path("fileVersion").textValue());
+
+		// It may rename the document, as the file part's name may; a blank one leaves the file part's
+		ApiResponse renamed = save(token, d, named("snapshot", "Lease (signed).docx"), "blob", "three");
+		assertEquals(renamed.toString(), 201, renamed.status());
+		assertEquals("Lease (signed).docx", renamed.json().path("name").textValue());
+		assertEquals("Lease (signed).docx",
+				jdbc().queryForObject("select ld_filename from ld_document where ld_id = ?", String.class, d.getId()));
+		ApiResponse blank = save(token, d, named("snapshot", " "), "Lease.docx", "four");
+		assertEquals(blank.toString(), 201, blank.status());
+		assertEquals("Lease.docx", blank.json().path("name").textValue());
+	}
+
+	@Test
 	public void testHeldByOthersEvenForAdmins() throws Exception {
 		Document d = file("a.docx");
 		checkout(d, clerk);
@@ -445,6 +522,11 @@ public class SaveTest extends ApiTestCase {
 		if (keepCheckedOut != null)
 			body.put("keepCheckedOut", keepCheckedOut);
 		return ApiJson.mapper().writeValueAsString(body);
+	}
+
+	/** A version part with the name to save under */
+	private static String named(String kind, String name) throws JsonProcessingException {
+		return ApiJson.mapper().writeValueAsString(Map.of("kind", kind, "name", name));
 	}
 
 	private static byte[] bytes(String text) {

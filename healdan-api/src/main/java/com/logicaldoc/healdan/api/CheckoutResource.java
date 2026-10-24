@@ -9,6 +9,7 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.Group;
@@ -34,6 +35,9 @@ import jakarta.ws.rs.core.MediaType;
 @Path("/v1/documents/{docNumber: [0-9]+}/checkout")
 @Produces(MediaType.APPLICATION_JSON)
 public class CheckoutResource {
+
+	/** The code of a refusal by the document's state, or by one of Healdan's rules */
+	static final String REFUSED = "refused";
 
 	private final DocumentLocks locks;
 
@@ -65,7 +69,8 @@ public class CheckoutResource {
 				if (ApiViews.checkedOutBy(document, user))
 					return ApiViews.document(document, user);
 				refuseHolds(document, user, docNumber);
-				refuseImmutable(document, docNumber);
+				refuseImmutable(document, user, false, docNumber);
+				refuseArchived(document, docNumber);
 
 				DocumentManager.get().checkout(document.getId(), history(caller.session(), DocumentEvent.CHECKEDOUT));
 				return ApiViews.document(DocumentDAO.get().findById(document.getId()), user);
@@ -121,12 +126,30 @@ public class CheckoutResource {
 	}
 
 	/**
-	 * @throws ApiProblem {@code 409 refused} for an immutable document, which
-	 *         CE won't check in for anyone
+	 * The one answer for an immutable document, which is the document's state
+	 * rather than the caller's permission.
+	 *
+	 * @param document the document
+	 * @param user the caller, with its groups
+	 * @param adminsMay true where CE lets an administrator change an immutable
+	 *        document, as its update of the properties does; false where it
+	 *        lets nobody, as its check-in
+	 * @param docNumber its doc #
+	 * @throws ApiProblem {@code 409 refused} if the document is immutable and
+	 *         the caller may not change it
 	 */
-	static void refuseImmutable(Document document, long docNumber) {
-		if (document.isImmutable())
-			throw ApiProblem.conflict("refused", "Document #%d is immutable and can't be changed.".formatted(docNumber));
+	static void refuseImmutable(Document document, User user, boolean adminsMay, long docNumber) {
+		if (document.isImmutable() && !(adminsMay && user.isMemberOf(Group.GROUP_ADMIN)))
+			throw ApiProblem.conflict(REFUSED, "Document #%d is immutable and can't be changed.".formatted(docNumber));
+	}
+
+	/**
+	 * @throws ApiProblem {@code 409 refused} for an archived document, which
+	 *         CE won't check out or in for anyone
+	 */
+	static void refuseArchived(Document document, long docNumber) {
+		if (document.getStatus() == DocumentStatus.ARCHIVED)
+			throw ApiProblem.conflict(REFUSED, "Document #%d is archived and can't be changed.".formatted(docNumber));
 	}
 
 	/**

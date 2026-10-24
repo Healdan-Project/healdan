@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -10,6 +11,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -42,6 +48,7 @@ import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * {@code GET} and {@code PATCH /v1/documents/{docNumber}/properties} (spec
@@ -283,8 +290,17 @@ public class PropertiesResourceTest extends ApiTestCase {
 		Document d = file("a.docx");
 		String readerToken = signIn(reader);
 		String outsiderToken = signIn(outsider);
+		String clerkToken = signIn(clerk);
+		String bossToken = signIn(boss);
 
-		assertEquals(200, get(properties(d)).token(readerToken).send().status());
+		// The fields the clerk may change are shown so, and the others aren't
+		ApiResponse free = get(properties(d)).token(clerkToken).send();
+		assertTrue(field(free, CLASS).path("editable").booleanValue());
+		assertFalse(field(free, HealdanConstants.ATTR_CLIENT).path("editable").booleanValue());
+
+		ApiResponse read = get(properties(d)).token(readerToken).send();
+		assertEquals(200, read.status());
+		assertNoneEditable(read);
 		ApiResponse forbidden = patch(properties(d)).token(readerToken).json(values(CLASS, "Letters")).send();
 		assertEquals(forbidden.toString(), 403, forbidden.status());
 		assertEquals("forbidden", forbidden.code());
@@ -295,14 +311,19 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals(unknown.text().replace("987654", "N"), unreadable.text().replace(d.getCustomId(), "N"));
 		assertEquals(404, patch(properties(d)).token(outsiderToken).json(values(CLASS, "Letters")).send().status());
 
-		// CE lets only an administrator change an immutable document
+		// An immutable document is refused as check-out and save refuse it; CE lets an administrator change it
 		Document stored = DocumentDAO.get().findById(d.getId(), true);
 		stored.setImmutable(true);
 		DocumentDAO.get().store(stored);
-		String clerkToken = signIn(clerk);
 		ApiResponse immutable = patch(properties(d)).token(clerkToken).json(values(CLASS, "Letters")).send();
-		assertEquals(immutable.toString(), 403, immutable.status());
-		assertEquals("forbidden", immutable.code());
+		assertEquals(immutable.toString(), 409, immutable.status());
+		assertEquals("refused", immutable.code());
+		assertEquals("Document #%s is immutable and can't be changed.".formatted(d.getCustomId()),
+				immutable.json().path("detail").textValue());
+		assertNoneEditable(get(properties(d)).token(clerkToken).send());
+		assertTrue(field(get(properties(d)).token(bossToken).send(), CLASS).path("editable").booleanValue());
+		assertEquals(200, patch(properties(d)).token(bossToken).json(values(HealdanConstants.ATTR_LEGACYDOCNUM, "OLD-1"))
+				.send().status());
 		stored = DocumentDAO.get().findById(d.getId(), true);
 		stored.setImmutable(false);
 		DocumentDAO.get().store(stored);
@@ -314,9 +335,12 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals("checked-out", checkedOut.code());
 		assertEquals("checkout", checkedOut.json().path("hold").path("kind").textValue());
 		assertEquals(boss.getId(), checkedOut.json().path("hold").path("by").path("id").asLong());
-		assertEquals("Docs", field(get(properties(d)).token(clerkToken).send(), CLASS).path("value").textValue());
+		ApiResponse held = get(properties(d)).token(clerkToken).send();
+		assertEquals("Docs", field(held, CLASS).path("value").textValue());
+		assertNoneEditable(held);
 		// The holder may edit
-		assertEquals(200, patch(properties(d)).token(signIn(boss)).json(values(CLASS, "Memos")).send().status());
+		assertTrue(field(get(properties(d)).token(bossToken).send(), CLASS).path("editable").booleanValue());
+		assertEquals(200, patch(properties(d)).token(bossToken).json(values(CLASS, "Memos")).send().status());
 
 		// Someone else's lock
 		DocumentManager.get().unlock(d.getId(), fx.documentHistory(boss));
@@ -325,7 +349,163 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals(locked.toString(), 409, locked.status());
 		assertEquals("locked", locked.code());
 		assertNotNull(locked.json().path("hold").path("by"));
-		assertEquals("Memos", field(get(properties(d)).token(clerkToken).send(), CLASS).path("value").textValue());
+		ApiResponse lockedView = get(properties(d)).token(clerkToken).send();
+		assertEquals("Memos", field(lockedView, CLASS).path("value").textValue());
+		assertNoneEditable(lockedView);
+
+		// A lock is a hold even for the user who took it, as for check-out and save (spec correction 10)
+		DocumentManager.get().unlock(d.getId(), fx.documentHistory(boss));
+		hold(d, clerk, DocumentStatus.LOCKED);
+		DbSnapshot before = fx.snapshot();
+		ApiResponse own = patch(properties(d)).token(clerkToken).json(values(CLASS, "Letters")).send();
+		assertEquals(own.toString(), 409, own.status());
+		assertEquals("locked", own.code());
+		assertEquals("Document #%s is locked by you. Release it first.".formatted(d.getCustomId()),
+				own.json().path("detail").textValue());
+		assertNoneEditable(get(properties(d)).token(clerkToken).send());
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testProtected() throws Exception {
+		Document d = file("a.docx");
+		DocumentHistory history = fx.documentHistory(boss);
+		history.setEvent(DocumentEvent.CHANGED);
+		DocumentDAO.get().setPassword(d.getId(), "S3cret-pw!", history);
+		String token = signIn(clerk);
+		DbSnapshot before = fx.snapshot();
+
+		// As content, check-out and save refuse it
+		ApiResponse refused = patch(properties(d)).token(token).json(values(CLASS, "Letters")).send();
+
+		assertEquals(refused.toString(), 403, refused.status());
+		assertEquals("forbidden", refused.code());
+		assertEquals("Document #%s is protected by a password. Open it in Healdan's web page."
+				.formatted(d.getCustomId()), refused.json().path("detail").textValue());
+		before.assertUnchanged();
+		// Its properties may still be read, and none is shown editable
+		ApiResponse read = get(properties(d)).token(token).send();
+		assertEquals(read.toString(), 200, read.status());
+		assertNoneEditable(read);
+	}
+
+	@Test
+	public void testMarkupRemoved() throws Exception {
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		String legacy = HealdanConstants.ATTR_LEGACYDOCNUM;
+
+		// As the old UI's Save cleans text (I1): the tag goes, the text stays
+		JsonNode cleaned = field(patch(properties(d)).token(token)
+				.json(values(legacy, "Re <img src=x onerror=alert(1)>Smith")).send(), legacy);
+		assertEquals("Re Smith", cleaned.path("value").textValue());
+		assertEquals("Re Smith", stringValue(d, legacy));
+		// Sent again, it is the value the property has once cleaned: nothing is saved
+		DbSnapshot before = fx.snapshot();
+		ApiResponse again = patch(properties(d)).token(token).json(values(legacy, "Re <img src=x onerror=alert(1)>Smith"))
+				.send();
+		assertEquals(again.toString(), 200, again.status());
+		before.assertUnchanged();
+
+		// Text that only looks like markup is kept, as the old UI keeps it
+		assertEquals("a < b & c",
+				field(patch(properties(d)).token(token).json(values(legacy, "a < b & c")).send(), legacy).path("value")
+						.textValue());
+		assertEquals("a < b & c", stringValue(d, legacy));
+
+		// A listed value is checked once it's cleaned
+		assertEquals("Letters", field(patch(properties(d)).token(token)
+				.json(values(CLASS, "<img src=x onerror=alert(1)>Letters")).send(), CLASS).path("value").textValue());
+	}
+
+	@Test
+	public void testEmailFormSentBack() throws Exception {
+		String eml = """
+				From: "Ann Smith" <ann@example.com>
+				To: bob@example.com
+				Subject: Re: <urgent> plan
+				Date: Tue, 14 Oct 2025 09:29:00 +0200
+				MIME-Version: 1.0
+				Content-Type: text/plain; charset=UTF-8
+
+				Hello Bob.
+				""".replace("\n", "\r\n");
+		Document d = file("x.eml", eml);
+		String token = signIn(clerk);
+		JsonNode form = get(properties(d)).token(token).send().json().path("items");
+		Map<String, Object> all = new LinkedHashMap<>();
+		for (JsonNode field : form)
+			all.put(field.path("name").textValue(), field.path("value"));
+		// Values the message gave, which look like markup to the cleaning
+		assertEquals("Ann Smith <ann@example.com>", ((JsonNode) all.get(HealdanConstants.ATTR_EMAILFROM)).textValue());
+		DbSnapshot before = fx.snapshot();
+
+		// Sent back as they are, they are the values the properties have: not refused, and nothing is saved
+		ApiResponse response = patch(properties(d)).token(token).json(Map.of("values", all)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(form, response.json().path("items"));
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testTooLong() throws Exception {
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		String legacy = HealdanConstants.ATTR_LEGACYDOCNUM;
+		DbSnapshot before = fx.snapshot();
+
+		JsonNode refused = assertRefused(d, token, values(legacy, "x".repeat(4001)), List.of("legacydocnum too-long"));
+
+		assertEquals("Legacy doc # can't be longer than 4000 characters.",
+				refused.path("fields").get(0).path("detail").textValue());
+		before.assertUnchanged();
+		// The length is the text's as it's saved, without its markup
+		String longest = "x".repeat(4000);
+		JsonNode taken = field(patch(properties(d)).token(token)
+				.json(values(legacy, longest + "<img src=x onerror=alert(1)>")).send(), legacy);
+		assertEquals(longest, taken.path("value").textValue());
+	}
+
+	@Test
+	public void testWaitsForTheDocumentsLock() throws Exception {
+		// M2: a PATCH runs after any other API request on the document, and sees what that request left
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		DocumentLocks locks = Context.get(DocumentLocks.class);
+		CountDownLatch held = new CountDownLatch(1);
+		ExecutorService pool = Executors.newFixedThreadPool(2);
+		try {
+			Future<Object> other = pool.submit(() -> locks.withLock(d.getId(), () -> {
+				held.countDown();
+				// Long enough for the PATCH to arrive and wait
+				Thread.sleep(1500L);
+				hold(d, boss, DocumentStatus.CHECKEDOUT);
+				return null;
+			}));
+			held.await();
+			Future<ApiResponse> patched = pool
+					.submit(() -> patch(properties(d)).token(token).json(values(CLASS, "Letters")).send());
+			other.get(30, TimeUnit.SECONDS);
+			ApiResponse response = patched.get(30, TimeUnit.SECONDS);
+
+			assertEquals(response.toString(), 409, response.status());
+			assertEquals("checked-out", response.code());
+		} finally {
+			pool.shutdownNow();
+		}
+		assertEquals("Docs", field(get(properties(d)).token(token).send(), CLASS).path("value").textValue());
+	}
+
+	private static void assertNoneEditable(ApiResponse response) {
+		assertEquals(response.toString(), 200, response.status());
+		for (JsonNode field : response.json().path("items"))
+			assertFalse(field.toString(), field.path("editable").booleanValue());
+	}
+
+	private String stringValue(Document d, String name) {
+		return jdbc().queryForObject("select ld_stringvalue from ld_document_ext where ld_docid = ? and ld_name = ?",
+				String.class, d.getId(), name);
 	}
 
 	private JsonNode assertRefused(Document d, String token, Map<String, Object> values, List<String> expected) {
@@ -361,7 +541,11 @@ public class PropertiesResourceTest extends ApiTestCase {
 	}
 
 	private Document file(String name) throws Exception {
-		Document d = fx.upload(documents, name, "Healdan", clerk);
+		return file(name, "Healdan");
+	}
+
+	private Document file(String name, String content) throws Exception {
+		Document d = fx.upload(documents, name, content, clerk);
 		awaitAsyncWork();
 		return d;
 	}

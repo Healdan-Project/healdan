@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.apache.cxf.Bus;
 import org.apache.cxf.BusFactory;
+import org.apache.cxf.attachment.AttachmentDeserializer;
 import org.apache.cxf.endpoint.Server;
 import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
 import org.apache.cxf.jaxrs.model.wadl.WadlGenerator;
@@ -32,6 +33,9 @@ public class ApiServer implements ApplicationContextAware {
 	private static final String PACKAGE = ApiServer.class.getPackageName();
 
 	private static final String WADL_GENERATOR = "org.apache.cxf.jaxrs.model.wadl.WadlGenerator";
+
+	/** The longest header line of an upload part, as Tomcat's default for a request's headers */
+	private static final int MAX_PART_HEADER_LENGTH = 8192;
 
 	private ApplicationContext applicationContext;
 
@@ -101,11 +105,17 @@ public class ApiServer implements ApplicationContextAware {
 	 * Upload parts stream to temporary files above 1 MB (spec section 10.2).
 	 * Their size limit follows {@code upload.maxsize} on every request
 	 * ({@link UploadFilter}).
+	 * <p>
+	 * A part's header line may be as long as Tomcat's request headers. CXF's
+	 * default of 300 characters refuses a file part named with about 40 Greek
+	 * or 26 Chinese letters in RFC 5987's {@code filename*}, or with 255 plain
+	 * ones, as too large; a name's length is the API's own check.
 	 */
 	private static Map<String, Object> properties() {
 		Map<String, Object> properties = new HashMap<>();
 		properties.put("attachment-directory", System.getProperty("java.io.tmpdir"));
 		properties.put("attachment-memory-threshold", "1048576");
+		properties.put(AttachmentDeserializer.ATTACHMENT_MAX_HEADER_SIZE, String.valueOf(MAX_PART_HEADER_LENGTH));
 		return properties;
 	}
 

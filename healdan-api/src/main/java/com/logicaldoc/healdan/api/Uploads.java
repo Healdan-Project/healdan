@@ -45,6 +45,12 @@ public final class Uploads {
 
 	private static final String CONTENT_DISPOSITION = "Content-Disposition";
 
+	/** The longest file name CE stores ({@code ld_filename}) */
+	public static final int MAX_NAME_LENGTH = 255;
+
+	/** The field error's code for text longer than the database keeps */
+	public static final String TOO_LONG = "too-long";
+
 	private static final Logger log = LoggerFactory.getLogger(Uploads.class);
 
 	private Uploads() {
@@ -116,16 +122,20 @@ public final class Uploads {
 	 * @param name the name
 	 * @param field the request field it came from, for the errors
 	 * @param errors where to add what's wrong: {@code required} when there's
-	 *        no name; {@code invalid} when it has a {@code /}, a {@code \} or a
-	 *        control character; {@code extension} when it doesn't end with an
-	 *        extension; {@code disallowed} when its extension is listed in
-	 *        {@code upload.disallow}, in any case
+	 *        no name; {@code too-long} over {@value #MAX_NAME_LENGTH}
+	 *        characters, which CE can't store; {@code invalid} when it has a
+	 *        {@code /}, a {@code \} or a control character; {@code extension}
+	 *        when it doesn't end with an extension; {@code disallowed} when its
+	 *        extension is listed in {@code upload.disallow}, in any case
 	 */
 	public static void checkName(String name, String field, List<FieldError> errors) {
 		if (StringUtils.isBlank(name)) {
 			errors.add(new FieldError(field, "required", "Give the document a name, or send the file with one."));
 			return;
 		}
+		if (name.length() > MAX_NAME_LENGTH)
+			errors.add(new FieldError(field, TOO_LONG,
+					"A name can't be longer than %d characters.".formatted(MAX_NAME_LENGTH)));
 		if (name.chars().anyMatch(c -> c == '/' || c == '\\' || Character.isISOControl(c)))
 			errors.add(new FieldError(field, "invalid", "A name can't contain /, \\ or control characters."));
 		String extension = extension(name);

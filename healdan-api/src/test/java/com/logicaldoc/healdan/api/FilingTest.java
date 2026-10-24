@@ -256,6 +256,14 @@ public class FilingTest extends ApiTestCase {
 				List.of("docsubclass class-mismatch"));
 		assertRefused(token, document(documents, null, values("court", "High Court", HealdanConstants.ATTR_AUTHOR,
 				99999), null), List.of("author unknown"));
+		// Longer than the database keeps (M3)
+		assertRefused(token, document(documents, null, values("court", "x".repeat(4001)), null),
+				List.of("court too-long"));
+		String tooLong = "a".repeat(251) + ".docx";
+		assertRefused(token, document(documents, tooLong, values("court", "High Court"), null),
+				List.of("name too-long"));
+		assertRefused(token, document(documents, null, values("court", "High Court"), null), tooLong, CONTENT,
+				List.of("name too-long"));
 		// One answer lists the name, the file and the properties
 		ApiResponse all = post("/api/v1/documents").token(token).part("document",
 				document(documents, "a/b.docx", values(CLASS, 5), null)).file("file", "a.docx", new byte[0]).send();
@@ -273,6 +281,26 @@ public class FilingTest extends ApiTestCase {
 		sent.put("court", "High Court");
 		ApiResponse filed = file(token, document(documents, null, sent, null), "a.docx", CONTENT);
 		assertEquals(filed.toString(), 201, filed.status());
+	}
+
+	@Test
+	public void testMarkupRemoved() throws Exception {
+		String token = signIn(clerk);
+
+		// As the old UI's upload cleans text properties (I1); a listed value is checked once it's cleaned
+		ApiResponse filed = file(token,
+				document(documents, null, values(HealdanConstants.ATTR_LEGACYDOCNUM,
+						"a < b & c<img src=x onerror=alert(1)>", CLASS, "<img src=x onerror=alert(1)>Letters"), null),
+				"a.docx", CONTENT);
+
+		assertEquals(filed.toString(), 201, filed.status());
+		JsonNode properties = get("/api/v1/documents/" + filed.json().path("docNumber").asLong() + "/properties")
+				.token(token).send().json().path("items");
+		assertEquals("a < b & c", field(properties, HealdanConstants.ATTR_LEGACYDOCNUM).path("value").textValue());
+		assertEquals("Letters", field(properties, CLASS).path("value").textValue());
+		assertEquals("a < b & c", jdbc().queryForObject(
+				"select e.ld_stringvalue from ld_document_ext e join ld_document d on d.ld_id = e.ld_docid where d.ld_customid = ? and e.ld_name = ?",
+				String.class, filed.json().path("docNumber").asText(), HealdanConstants.ATTR_LEGACYDOCNUM));
 	}
 
 	@Test
@@ -398,6 +426,17 @@ public class FilingTest extends ApiTestCase {
 		assertEquals(name, response.json().path("name").textValue());
 		assertEquals(name, jdbc().queryForObject("select ld_filename from ld_document where ld_customid = ?",
 				String.class, response.json().path("docNumber").asText()));
+	}
+
+	@Test
+	public void testLongNameKept() throws Exception {
+		// Greek letters take two bytes in UTF-8, so filename* spells each with six characters
+		String name = "\u03b1".repeat(200) + ".docx";
+
+		ApiResponse response = file(signIn(clerk), document(documents, null, null, null), name, CONTENT);
+
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals(name, response.json().path("name").textValue());
 	}
 
 	@Test

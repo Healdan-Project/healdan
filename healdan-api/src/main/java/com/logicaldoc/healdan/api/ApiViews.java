@@ -95,7 +95,8 @@ public final class ApiViews {
 		HoldView hold = hold(d);
 		// As the check-out and the save decide: no one else's hold, and no lock at all (spec correction 10)
 		boolean canEdit = AccessChecks.allowed(caller, Permission.WRITE, d) && !d.isImmutable()
-				&& (hold == null || checkedOutBy(d, caller)) && opens(d, Caller.current().session());
+				&& d.getStatus() != DocumentStatus.ARCHIVED && (hold == null || checkedOutBy(d, caller))
+				&& opens(d, Caller.current().session());
 		long docNumber = Long.parseLong(d.getCustomId());
 		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),

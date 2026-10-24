@@ -347,9 +347,13 @@ public class DocumentResource {
 	}
 
 	/**
+	 * The one refusal of a password-protected document, for content,
+	 * check-out, save and a change of the properties.
+	 *
 	 * @throws ApiProblem {@code 403} if the document is protected by a password
-	 *         that the caller's session hasn't given in the web page
-	 *         ({@link ApiViews#opens})
+	 *         that the caller's session hasn't given ({@link ApiViews#opens}).
+	 *         No API request gives one, so through the API such a document is
+	 *         always refused.
 	 */
 	static void refuseProtected(Document document, Session session, long docNumber) {
 		if (!ApiViews.opens(document, session))

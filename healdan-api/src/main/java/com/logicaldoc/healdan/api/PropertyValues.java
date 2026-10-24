@@ -11,6 +11,7 @@ import java.util.Optional;
 import org.apache.commons.lang.StringUtils;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.TextNode;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -29,6 +30,7 @@ import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.util.html.HTMLSanitizer;
 
 /**
  * Property values between CE's attributes and JSON (spec section 6.7), by the
@@ -40,8 +42,16 @@ import com.logicaldoc.healdan.security.AccessChecks;
  * <p>
  * A caller that sets values converts each with {@link #fromJson}, then checks
  * a list property's value with {@link #checkOption}.
+ * <p>
+ * Text is cleaned of markup as the old UI's Save and upload clean it
+ * ({@code HTMLSanitizer.sanitizeSimpleText}), because the old UI's grids show
+ * it as HTML: {@code <img src=x onerror=...>} goes, and {@code a < b & c}
+ * stays.
  */
 public final class PropertyValues {
+
+	/** The longest text CE stores in a property ({@code ld_stringvalue}) */
+	public static final int MAX_TEXT_LENGTH = 4000;
 
 	private PropertyValues() {
 	}
@@ -49,16 +59,18 @@ public final class PropertyValues {
 	/**
 	 * @param attribute the property's definition, with its name
 	 * @param node the JSON value; JSON {@code null}, or none, clears it, as does
-	 *        empty text for a {@code string}
+	 *        empty text for a {@code string}, or text that is nothing but
+	 *        markup
 	 * @param caller the signed-in user, who must be able to read a folder or
 	 *        document the value names
 	 * @param errors where to add what's wrong: {@code type} for a value of the
 	 *        wrong JSON type or format, {@code unknown} for a user that doesn't
 	 *        exist, or a folder or document that doesn't exist or the caller
-	 *        can't read (the same answer)
+	 *        can't read (the same answer), {@code too-long} for text over
+	 *        {@value #MAX_TEXT_LENGTH} characters once cleaned
 	 * @return the value as CE takes it (String, Long, Double, Date, Boolean,
-	 *         User, Folder or Document); null to clear, or when an error was
-	 *         added
+	 *         User, Folder or Document), text cleaned of markup; null to clear,
+	 *         or when an error was added
 	 */
 	public static Object fromJson(Attribute attribute, JsonNode node, User caller, List<FieldError> errors) {
 		if (node == null || node.isNull())
@@ -106,7 +118,13 @@ public final class PropertyValues {
 			default:
 				if (!node.isTextual())
 					return wrongType(errors, name, "%s takes text.".formatted(label));
-				return node.textValue().isEmpty() ? null : node.textValue();
+				String text = clean(attribute, node.textValue());
+				if (text.length() > MAX_TEXT_LENGTH) {
+					errors.add(new FieldError(name, Uploads.TOO_LONG,
+							"%s can't be longer than %d characters.".formatted(label, MAX_TEXT_LENGTH)));
+					return null;
+				}
+				return text.isEmpty() ? null : text;
 			}
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the value of " + name, e);
@@ -145,9 +163,27 @@ public final class PropertyValues {
 	 * @param current the property's value now, as {@code ProfileView} gives it
 	 * @return true if the JSON says the value the property has now, as the API
 	 *         shows it: dates to the second, a user by id or as {@code {id,
-	 *         name}}, a document by doc #
+	 *         name}}, a document by doc #, and text either once cleaned of
+	 *         markup, as it would be saved, or as it is, so that text from
+	 *         elsewhere, such as an email's From
+	 *         ({@code Ann <ann@example.com>}), can be sent back
 	 */
 	static boolean unchanged(Attribute attribute, JsonNode node, Object current) {
+		if (says(attribute, node, current))
+			return true;
+		return attribute.getType() == Attribute.TYPE_STRING && node != null && node.isTextual()
+				&& says(attribute, TextNode.valueOf(clean(attribute, node.textValue())), current);
+	}
+
+	/**
+	 * @return the text as the old UI's Save and upload keep it: a
+	 *         {@code string} property's cleaned of markup, any other as it is
+	 */
+	private static String clean(Attribute attribute, String text) {
+		return attribute.getType() == Attribute.TYPE_STRING ? HTMLSanitizer.sanitizeSimpleText(text) : text;
+	}
+
+	private static boolean says(Attribute attribute, JsonNode node, Object current) {
 		boolean empty = node == null || node.isNull() || (node.isTextual() && node.textValue().isEmpty());
 		Object shown = toJson(attribute, current);
 		if (shown == null || empty)
@@ -194,6 +230,17 @@ public final class PropertyValues {
 	 * @throws PersistenceException error at data layer
 	 */
 	static List<ProfileFieldView> views(List<ProfileField> fields) throws PersistenceException {
+		return views(fields, true);
+	}
+
+	/**
+	 * @param fields properties from {@code ProfileView}
+	 * @param changeable false when the caller may not change any of them, so
+	 *        none is shown {@code editable}
+	 * @return them as the API shows them
+	 * @throws PersistenceException error at data layer
+	 */
+	static List<ProfileFieldView> views(List<ProfileField> fields, boolean changeable) throws PersistenceException {
 		Template template = ProfileSchema.get().template();
 		List<ProfileFieldView> views = new ArrayList<>();
 		for (ProfileField field : fields) {
@@ -203,7 +250,7 @@ public final class PropertyValues {
 			List<OptionView> options = field.options() == null ? null
 					: field.options().stream().map(o -> new OptionView(o.value(), o.label(), o.docClass())).toList();
 			views.add(new ProfileFieldView(field.name(), field.label(), typeName(field.type()), field.required(),
-					field.editable(), toJson(template.getAttribute(field.name()), field.value()),
+					changeable && field.editable(), toJson(template.getAttribute(field.name()), field.value()),
 					field.source() == null ? null : field.source().name().toLowerCase(Locale.ROOT), from, options));
 		}
 		return views;

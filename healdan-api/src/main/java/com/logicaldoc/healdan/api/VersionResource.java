@@ -33,6 +33,7 @@ import com.logicaldoc.healdan.api.model.NewVersion;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.VersionView;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.util.html.HTMLSanitizer;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -61,10 +62,17 @@ public class VersionResource {
 
 	private static final String VERSION = "version";
 
-	/** The request field the new content comes in */
+	/** The request fields the new content, its name and the comment come in */
 	private static final String FILE = "file";
 
+	private static final String NAME = "name";
+
+	private static final String COMMENT = "comment";
+
 	private static final String EXTENSION = "extension";
+
+	/** The longest comment CE stores ({@code ld_version.ld_comment}) */
+	private static final int MAX_COMMENT_LENGTH = 1000;
 
 	private final DocumentLocks locks;
 
@@ -107,19 +115,24 @@ public class VersionResource {
 	 * JSON expected, or a missing {@code file} part;</li>
 	 * <li>{@code 404} for a document the caller can't read;</li>
 	 * <li>{@code 403} without the Write permission, or for a document
-	 * protected by a password the session hasn't given;</li>
+	 * protected by a password, which the API never opens;</li>
 	 * <li>{@code 409 checked-out} for someone else's check-out, administrators
 	 * included, and {@code 409 locked} for any lock, the caller's own too;</li>
-	 * <li>{@code 409 refused} for an immutable document;</li>
+	 * <li>{@code 409 refused} for an immutable or archived document;</li>
 	 * <li>the name ({@code 422}): it must keep the document's extension;</li>
 	 * <li>the file: {@code 413 too-large} over the upload limit, {@code 422}
-	 * when it's empty.</li>
+	 * when it's empty;</li>
+	 * <li>the comment ({@code 422}), cleaned of markup as the old UI's
+	 * check-in cleans it, over 1000 characters.</li>
 	 * </ol>
-	 * A free document is then checked out to the caller, checked in with the
-	 * file, and with {@code keepCheckedOut} checked out again. A check-in that
-	 * is refused or fails leaves the document checked out to the caller, with
-	 * its content as it was: CE writes nothing when a rule refuses the
-	 * check-in, and puts the document back when the file can't be stored.
+	 * None of these leaves anything behind. A free document is then checked
+	 * out to the caller, checked in with the file, and with
+	 * {@code keepCheckedOut} checked out again. A rule that refuses the
+	 * check-in ({@code 409 refused}) leaves the document as it was, but
+	 * checked out to the caller: CE writes nothing when a rule refuses it. A
+	 * failure ({@code 500}) may come before CE stores the file, which CE then
+	 * puts back, or after, when the save is applied: the client reads the
+	 * versions before it sends the save again.
 	 *
 	 * @param docNumber the doc #
 	 * @param version the {@code version} part, as JSON ({@link NewVersion})
@@ -159,10 +172,11 @@ public class VersionResource {
 		DocumentResource.refuseProtected(document, session, docNumber);
 		// Never over someone else's hold, administrators included (spec section 6.6)
 		CheckoutResource.refuseHolds(document, user, docNumber);
-		CheckoutResource.refuseImmutable(document, docNumber);
+		CheckoutResource.refuseImmutable(document, user, false, docNumber);
+		CheckoutResource.refuseArchived(document, docNumber);
 
 		List<FieldError> errors = new ArrayList<>();
-		String name = name(file, document.getFileName(), errors);
+		String name = name(request, file, document.getFileName(), errors);
 		File upload = null;
 		try {
 			upload = Uploads.toTempFile(file);
@@ -171,6 +185,11 @@ public class VersionResource {
 			FieldError empty = Uploads.emptyError(upload, FILE);
 			if (empty != null)
 				errors.add(empty);
+			// As the old UI's check-in cleans it; CE can't store a longer one, and would fail after the check-out
+			String comment = HTMLSanitizer.sanitizeSimpleText(request.comment());
+			if (comment != null && comment.length() > MAX_COMMENT_LENGTH)
+				errors.add(new FieldError(COMMENT, Uploads.TOO_LONG,
+						"The comment can't be longer than %d characters.".formatted(MAX_COMMENT_LENGTH)));
 			if (!errors.isEmpty())
 				throw ApiProblem.validation(errors);
 
@@ -179,7 +198,7 @@ public class VersionResource {
 				DocumentManager.get().checkout(document.getId(),
 						CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
 			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
-			checkin.setComment(request.comment());
+			checkin.setComment(comment);
 			// Waits for CE's version record, so the timeline shows the save at once
 			DocumentManager.get()
 					.checkin(document.getId(), upload, name, VERSION.equals(request.kind()), null, checkin).get();
@@ -207,25 +226,31 @@ public class VersionResource {
 	}
 
 	/**
+	 * @param request the {@code version} part
 	 * @param file the {@code file} part
 	 * @param current the document's name
 	 * @param errors where to add what's wrong with the name, as for a new
-	 *        document's, but for its extension: it must be the document's
-	 * @return the name to save under: the file part's, or the document's when
-	 *         the part has none; an extension that differs only in case keeps
-	 *         the document's spelling, as Word may send {@code Lease.DOCX} for
-	 *         {@code Lease.docx}
+	 *        document's, but for its extension: it must be the document's. The
+	 *        field is {@code name} for the version part's name, {@code file}
+	 *        for the file part's.
+	 * @return the name to save under: the version part's, or else the file
+	 *         part's, or the document's when neither gives one; an extension
+	 *         that differs only in case keeps the document's spelling, as Word
+	 *         may send {@code Lease.DOCX} for {@code Lease.docx}
 	 */
-	private static String name(Attachment file, String current, List<FieldError> errors) {
-		String sent = StringUtils.strip(Uploads.fileName(file));
+	private static String name(NewVersion request, Attachment file, String current, List<FieldError> errors) {
+		// A browser names a file part it has no name for "blob", so a browser-based client names it here
+		boolean named = StringUtils.isNotBlank(request.name());
+		String field = named ? NAME : FILE;
+		String sent = StringUtils.strip(named ? request.name() : Uploads.fileName(file));
 		String name = StringUtils.isBlank(sent) ? current : sent;
-		Uploads.checkName(name, FILE, errors);
+		Uploads.checkName(name, field, errors);
 		errors.removeIf(error -> EXTENSION.equals(error.code()));
 
 		String extension = Uploads.extension(current);
 		String sentExtension = Uploads.extension(name);
 		if (!sentExtension.equalsIgnoreCase(extension)) {
-			errors.add(new FieldError(FILE, EXTENSION,
+			errors.add(new FieldError(field, EXTENSION,
 					extension.isEmpty() ? "The file's name can't have an extension, as the document's has none."
 							: "The file's name must end in .%s, as the document's does.".formatted(extension)));
 			return name;

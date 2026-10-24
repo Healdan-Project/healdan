@@ -145,6 +145,31 @@ public class CheckoutResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testArchived() throws Exception {
+		Document d = file();
+		Document stored = DocumentDAO.get().findById(d.getId(), true);
+		stored.setStatus(DocumentStatus.ARCHIVED);
+		DocumentDAO.get().store(stored);
+		String token = signIn(clerk);
+		String detail = "Document #%d is archived and can't be changed.".formatted(number(d));
+		assertFalse(get("/api/v1/documents/" + number(d)).token(token).send().json().path("canEdit").booleanValue());
+		DbSnapshot before = fx.snapshot();
+
+		ApiResponse checkout = post(path(d)).token(token).send();
+		assertEquals(checkout.toString(), 409, checkout.status());
+		assertEquals("refused", checkout.code());
+		assertEquals(detail, checkout.json().path("detail").textValue());
+
+		ApiResponse save = post("/api/v1/documents/" + number(d) + "/versions").token(token)
+				.part("version", "{\"kind\": \"snapshot\"}")
+				.file("file", "a.docx", "two".getBytes(StandardCharsets.UTF_8)).send();
+		assertEquals(save.toString(), 409, save.status());
+		assertEquals("refused", save.code());
+		assertEquals(detail, save.json().path("detail").textValue());
+		before.assertUnchanged();
+	}
+
+	@Test
 	public void testPermissions() throws Exception {
 		Document d = file();
 		String readerToken = signIn(reader);

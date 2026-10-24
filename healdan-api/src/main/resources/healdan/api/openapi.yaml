@@ -249,13 +249,15 @@ paths:
         One `422 validation` lists every field that is wrong: the name, the
         file, then the properties. The codes are:
 
-        - for `name`: `required` when there's no name at all, `invalid` for
-          a name with `/`, `\` or a control character, `extension` for one
-          that doesn't end with an extension, and `disallowed` for an
-          extension the `upload.disallow` setting lists, in any case;
+        - for `name`: `required` when there's no name at all, `too-long`
+          over 255 characters, `invalid` for a name with `/`, `\` or a
+          control character, `extension` for one that doesn't end with an
+          extension, and `disallowed` for an extension the `upload.disallow`
+          setting lists, in any case;
         - for `file`: `empty`;
         - for a property: those of `setProperties`, and `required` for every
           required property that has no value once inheritance has run.
+          Text is cleaned of markup, as for `setProperties`.
           A value sent as the folder's form shows it
           (`GET /v1/folders/{folderId}/form`) is ignored, so a client can send
           the whole form back.
@@ -430,9 +432,9 @@ paths:
         is `404`. The download is recorded in the document's history, as the
         old web page records it, once per 30 seconds.
 
-        A document protected by a password is `403 forbidden` too, unless
-        the signed-in session has unlocked it in the web page. A document whose file is missing from storage
-        is `500 server-error`.
+        A document protected by a password is always `403 forbidden` through
+        the API: open it in Healdan's web page. A document whose file is
+        missing from storage is `500 server-error`.
 
         `HEAD` answers with the headers alone, and records nothing.
       tags: [Documents]
@@ -481,12 +483,12 @@ paths:
 
         1. `404 not-found` for a document the caller can't read.
         2. `403 forbidden` without the Write permission, and for a document
-           protected by a password that the signed-in session hasn't given in
-           the web page.
+           protected by a password, which is always refused through the API:
+           open it in Healdan's web page.
         3. `409 checked-out` when someone else has it checked out, and
            `409 locked` when it's locked with the web page's Lock action, by
            anyone, the caller included. Both add the `hold`.
-        4. `409 refused` for an immutable document.
+        4. `409 refused` for an immutable or an archived document.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -566,33 +568,42 @@ paths:
            a missing `file` part.
         2. `404 not-found` for a document the caller can't read.
         3. `403 forbidden` without the Write permission, and for a document
-           protected by a password that the signed-in session hasn't given in
-           the web page.
+           protected by a password, which is always refused through the API:
+           open it in Healdan's web page.
         4. `409 checked-out` when someone else has it checked out,
            administrators included: nobody saves over another person's open
            edit. An administrator releases the hold first
            (`DELETE /v1/documents/{docNumber}/checkout`). `409 locked` when
            it's locked with the web page's Lock action, by anyone, the caller
            included. Both add the `hold`.
-        5. `409 refused` for an immutable document.
-        6. The name: the file part's name (RFC 5987's `filename*` first), or
-           the document's when the part has none. It may change, but its
-           extension may not: compared in any case, it must be the
-           document's, and it keeps the document's spelling (`Lease.DOCX`
-           saved over `Lease.docx` keeps `Lease.docx`).
+        5. `409 refused` for an immutable or an archived document.
+        6. The name: the version part's `name`, or else the file part's name
+           (RFC 5987's `filename*` first), or the document's when neither
+           gives one. It may change, but its extension may not: compared in
+           any case, it must be the document's, and it keeps the document's
+           spelling (`Lease.DOCX` saved over `Lease.docx` keeps
+           `Lease.docx`). A browser names a file part it has no name for
+           `blob`, which has no extension, so a client in a browser, such as
+           an Office add-in, sends `name`: the document's name to keep it.
         7. The file: `413 too-large` over the upload limit; `422` when it's
            empty. A file more than 1 MB over the limit is refused while it's
            sent, before anything else.
+        8. The comment, which is cleaned of markup as the web page's check-in
+           cleans it: `<img src=x onerror=...>` goes, `a < b & c` stays.
 
-        One `422 validation` lists what is wrong with `file`: `extension` for
-        another extension, `invalid` for a name with `/`, `\` or a control
-        character, `disallowed` for an extension the `upload.disallow`
-        setting lists, and `empty`.
+        One `422 validation` lists what is wrong. For the name, the field is
+        `name` when it came from `name`, and `file` otherwise: `extension`
+        for another extension, `too-long` over 255 characters, `invalid` for
+        a name with `/`, `\` or a control character, and `disallowed` for an
+        extension the `upload.disallow` setting lists. For `file`: `empty`.
+        For `comment`: `too-long` over 1000 characters once cleaned.
 
-        A rule that refuses the check-in itself is `409 refused`. A check-in
-        that is refused or fails leaves the document checked out to the
-        caller, even if it was free before, with its content as it was: send
-        the save again, or release it.
+        None of these refusals changes anything. A rule that refuses the
+        check-in itself is `409 refused`: the document is left as it was, but
+        checked out to the caller, even if it was free before. Send the save
+        again, or release it. A `500 server-error` may come after the save
+        was applied: read the versions (`listVersions`) before sending it
+        again.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -611,7 +622,8 @@ paths:
                   contentMediaType: application/octet-stream
                   description: |
                     The new content. The part's `Content-Disposition` names
-                    it, with `filename` or RFC 5987's `filename*`.
+                    it, with `filename` or RFC 5987's `filename*`, unless the
+                    version part's `name` does.
             encoding:
               version:
                 contentType: application/json
@@ -635,6 +647,14 @@ paths:
         has, such as Author), `inherited` with the folder it comes from, or
         `default` for the install's default Class. Client and Matter are
         inherited from the matter's top folder.
+
+        A property is `editable` when `setProperties` would take a change to
+        it. So none is when the caller may not change the document's
+        properties at all: without the Write permission, when someone else
+        has it checked out or anyone has it locked, when it's immutable and
+        the caller isn't an administrator, or when it's protected by a
+        password. A client can grey out the form instead of finding out from
+        a `403` or `409`.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -667,11 +687,22 @@ paths:
         send `null` to make it inherit.) Dates are compared to the second, as
         the API writes them.
 
-        Needs the Write permission: without it the answer is
-        `403 forbidden`, as it is for an immutable document unless the
-        caller is an administrator. A document someone else has checked out is
-        `409 checked-out`, and one someone else has locked is `409 locked`;
-        both include the `hold`.
+        Text is cleaned of markup as the web page's Save cleans it:
+        `<img src=x onerror=...>` goes, `a < b & c` stays. Text that is the
+        property's value once cleaned, or as it is, is unchanged.
+
+        The checks on the document run in this order, and `getProperties`
+        shows their outcome with `editable`:
+
+        1. `404 not-found` for a document the caller can't read.
+        2. `403 forbidden` without the Write permission, and for a document
+           protected by a password, which is always refused through the API:
+           open it in Healdan's web page.
+        3. `409 checked-out` when someone else has it checked out, and
+           `409 locked` when it's locked with the web page's Lock action, by
+           anyone, the caller included. Both add the `hold`.
+        4. `409 refused` for an immutable document, unless the caller is an
+           administrator.
 
         Every value is checked before anything is saved, and a refusal
         changes nothing. `422 validation` lists every field that is wrong,
@@ -684,8 +715,9 @@ paths:
           email fields, read-only properties).
         - `type`: the value has the wrong JSON type or format for the
           property's `type`.
+        - `too-long`: text over 4000 characters once cleaned.
         - `not-an-option`: the property is picked from a list (it has
-          `options`) and the value isn't one of them.
+          `options`) and the value, once cleaned, isn't one of them.
         - `required`: a required property in `values` would be left with no
           value. A cleared property that inherits takes what it inherits, so
           `null` for Class is never refused.
@@ -1297,9 +1329,12 @@ components:
           type: boolean
           description: |
             Whether the caller may check the document out and save to it: the
-            Write permission, not immutable, not protected by a password the
-            session hasn't given, and no hold but the caller's own check-out
-            (a lock is a hold even for the user who took it).
+            Write permission, not immutable, not archived, not protected by a
+            password (always refused through the API), and no hold but the
+            caller's own check-out (a lock is a hold even for the user who
+            took it). It isn't the test for changing the properties, which an
+            administrator may do to an immutable document: see
+            `ProfileField.editable`.
     VersionView:
       type: object
       additionalProperties: false
@@ -1536,7 +1571,8 @@ components:
           description: |
             False for Client and Matter, which come from the matter, for the
             email fields, which come from the message, and for read-only
-            properties
+            properties. In a document's properties, false for every property
+            when the caller may not change them (see `getProperties`).
         value:
           description: |
             Null when there is none. Text for a `string`, a number for an
@@ -1613,9 +1649,11 @@ components:
     PropertyValue:
       description: |
         A property's value as a request sends it, in the same form as
-        `ProfileField.value`.
+        `ProfileField.value`. Text is at most 4000 characters once cleaned of
+        markup.
       oneOf:
         - type: string
+          maxLength: 4000
         - type: number
         - type: boolean
         - type: object
@@ -1639,9 +1677,11 @@ components:
           description: The folder to file the document into.
         name:
           type: [string, 'null']
+          maxLength: 255
           description: |
             The name to file it under, with its extension. The file part's
-            name when it's left out or blank.
+            name when it's left out or blank. At most 255 characters, from
+            either.
           examples: [Lease draft.docx]
         properties:
           type: [object, 'null']
@@ -1672,9 +1712,21 @@ components:
           description: |
             `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for
             "Save as new version" (2.2 becomes 3.0).
+        name:
+          type: [string, 'null']
+          maxLength: 255
+          description: |
+            The name to save under, with the document's extension. The file
+            part's name when it's left out or blank. A client in a browser
+            sends it, because a browser names a file part it has no name for
+            `blob`.
+          examples: [Lease draft.docx]
         comment:
           type: [string, 'null']
-          description: The comment saved with the version.
+          maxLength: 1000
+          description: |
+            The comment saved with the version, cleaned of markup. At most
+            1000 characters once cleaned.
           examples: [Sent to the client]
         keepCheckedOut:
           type: [boolean, 'null']
