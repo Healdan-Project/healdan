@@ -68,8 +68,11 @@ if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -
 check "app healthy" wait_healthy "$(compose ps -q app)" 900
 [ "$FAILED" = 0 ] || exit 1
 
-echo "== 2. login page"
+echo "== 2. login page and the API"
 check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
+# The healdan-api plugin is in the WAR and /api reaches its servlet, past CE's security chain.
+api_product() { curl -fsS "$BASE/api/v1/server" | jq -er .product; }
+check "GET /api/v1/server answers JSON naming Healdan" test "$(api_product)" = Healdan
 
 echo "== 3. REST login, default workspace and the Smoke Matter"
 sid=$(login)
