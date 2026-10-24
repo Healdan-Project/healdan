@@ -123,7 +123,10 @@ public class SearchResource {
 	 */
 	private static void checkSyntax(String q) {
 		try {
-			new QueryParser("content", new StandardAnalyzer()).parse(q);
+			QueryParser parser = new QueryParser("content", new StandardAnalyzer());
+			// The engine's parser takes *word and ?word, as the old web page's searches do
+			parser.setAllowLeadingWildcard(true);
+			parser.parse(q);
 		} catch (ParseException e) {
 			throw ApiProblem.badRequest("That search can't be understood. Check its quotes and brackets.");
 		}

@@ -279,4 +279,14 @@ public class SearchResourceTest extends ApiTestCase {
 		assertEquals(response.toString(), 200, response.status());
 		assertEquals(0, response.json().path("items").size());
 	}
+
+	@Test
+	public void testLeadingWildcardsAreAccepted() throws Exception {
+		Document d = file("report.docx", "Report " + DOCX_WORD);
+		for (String q : new String[] { "*report", "?oo", "*" }) {
+			ApiResponse response = get("/api/v1/search?scope=documents&q=" + q).token(signIn(clerk)).send();
+			assertEquals(q + " " + response, 200, response.status());
+		}
+		assertEquals(List.of(number(d)), docNumbers(items("scope=documents&q=*cornapi", clerk)));
+	}
 }
