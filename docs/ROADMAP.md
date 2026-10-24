@@ -1,7 +1,7 @@
 # Healdan roadmap
 
 - **Date:** 2026-10-16
-- **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)).
+- **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)). M2's design and plan are approved ([spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), [plan](superpowers/plans/2026-10-23-m2-api-foundation.md)).
 - **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE 9.3.1 already has, what's hidden, half built or missing, with file paths.
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
@@ -76,7 +76,7 @@ The words *Store* and *workspace* already mean something different in LogicalDOC
 |---|---|---|---|
 | M1 | Move in | – | **done** 2026-10-22: [spec](superpowers/specs/2026-10-17-m1-move-in-design.md); [plan](superpowers/plans/2026-10-17-m1-move-in.md). Design and plan approved 2026-10-17. PR A (Tasks 1–7) merged 2026-10-17, PR B (Tasks 8–16) 2026-10-18 and PR C (Tasks 17–21) 2026-10-19. Five PRs closing CE permission gaps merged 2026-10-19 and 2026-10-20. PR D (Tasks 22–28, the GUI and rebrand) merged in five parts on 2026-10-21, after the owner reviewed its mockups. On 2026-10-22 a review of every open follow-up found four gaps to fix before acceptance, which the pre-acceptance PR ([Healdan-Project/healdan#44](https://github.com/Healdan-Project/healdan/pull/44)) fixed. The owner's acceptance walkthrough (the plan's Task 30) passed all eight rows on 2026-10-22. Its one punch-list item, Doc # in search results, was fixed in [Healdan-Project/healdan#45](https://github.com/Healdan-Project/healdan/pull/45) |
 | M1.5 | Office previews and thumbnails | M1 | **done** 2026-10-23: [spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md); [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md). Built 2026-10-22 in PR A (the server side) [Healdan-Project/healdan#48](https://github.com/Healdan-Project/healdan/pull/48) and PR B [Healdan-Project/healdan#49](https://github.com/Healdan-Project/healdan/pull/49) (the image, smoke checks and docs). The owner's acceptance walkthrough (the plan's Task 10) passed all five rows on 2026-10-23, on a stack upgraded from M1. It left no M1.5 punch-list items; its observations are in the plan's decision log and follow-ups |
-| M2 | API foundation | – (M1 domain model for its matter endpoints) | not started |
+| M2 | API foundation | – (M1 domain model for its matter endpoints) | **in progress**: design and plan approved 2026-10-23: [spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md); [plan](superpowers/plans/2026-10-23-m2-api-foundation.md) |
 | M3 | Office integration | M2 (M4 for single sign-on) | not started |
 | M4 | OIDC sign-in | – (can run alongside others; land before M5) | not started |
 | M5 | Email | M2, M4, M1's email indexing fix | not started |
@@ -284,6 +284,13 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 - **Framework.** Use the existing CXF JAX-RS stack, or something else.
 - **Push updates.** The `/wk-event` websocket sends GWT-serialized payloads. Decide what the new clients use instead.
 
+**Design.** Settled in the [M2 design spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), which the owner approved on 2026-10-23. The owner decided that M2's only consumer is M3: it's done when M3 can start, judged by tests and a docs page rather than a demo. No compatibility promises are made until the initial roadmap is complete. The spec answers the three questions above:
+- **Code location:** M1's `com.logicaldoc.healdan` package, with the HTTP layer in a new `healdan-api` module.
+- **Framework:** CXF JAX-RS, which the WAR already ships.
+- **Push updates:** none in M2, with Server-Sent Events proposed for M6.
+
+The owner also decided that sign-in is throttled on every route, which CE never actually did (spec §5.7). The [inventory](reference/healdan-api-inventory.md) of every server call the old UI makes is committed beside the spec.
+
 ---
 
 ### M3 — Office integration
@@ -434,6 +441,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
   - **Right side.** A panel for faceted filters (date presets, file type, author, client, matter) or for the selected item's details.
 - **Three separate units.** The new UI is split into **User**, **Admin** and **Walls**, the way iManage separates them. An average user never loads the Admin or Walls code.
 - **Its own design session.** The full UI design happens in a separate session, with mockups.
+- **No full Store browsing (2026-10-23).** Users start from My Matters, Recent Matters or a search, never from a list of every matter in a Store, the way a big database starts from a query. A busy Store holds hundreds of matters in one flat list, and that's a non-issue because browsing it isn't offered. The M2 API lists a Store's matters only for admins, for the admin side (M2 spec §6.2).
 
 **Calls.**
 
