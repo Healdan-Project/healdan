@@ -214,6 +214,15 @@ public class DocNumberLookupTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testPublishedWithoutStartDateIsFound() throws Exception {
+		// CE's rule (Document.isPublishing): no start date means published from the beginning
+		setPublishing(true, null, null);
+		assertEquals(Long.valueOf(doc.getId()), DocNumberLookup.lookup("#" + n, alice.getId()).docId());
+		assertEquals(doc.getId(), com.logicaldoc.healdan.security.AccessChecks
+				.readableDocument(Long.parseLong(n), alice).orElseThrow().getId());
+	}
+
+	@Test
 	public void testSearchListsWhatTheLookupFinds() throws Exception {
 		addVersion("2.1", "2.0");
 		SearchEngine.get().unlock();

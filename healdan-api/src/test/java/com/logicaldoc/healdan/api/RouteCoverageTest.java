@@ -19,7 +19,8 @@ import jakarta.ws.rs.Path;
 /**
  * The server implements exactly the {@code /v1} operations that
  * {@code openapi.yaml} describes (spec section 4.6), and the file says which
- * of them need no token. The docs page, outside {@code /v1}, isn't described.
+ * of them need no token. Only the docs page, {@code /docs} and {@code /docs/{file}}, isn't described: a
+ * resource anywhere else, such as {@code /v2} or a mistyped {@code /vl}, fails.
  */
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
@@ -53,7 +54,7 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 					continue;
 				Path methodPath = method.getAnnotation(Path.class);
 				String path = normalize(classPath + "/" + (methodPath != null ? methodPath.value() : ""));
-				if (path.startsWith("/v1/"))
+				if (!path.equals("/docs") && !path.equals("/docs/{file}"))
 					routes.put(verb + " " + path, method.isAnnotationPresent(Public.class));
 			}
 		}

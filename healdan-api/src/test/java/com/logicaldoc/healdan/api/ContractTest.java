@@ -53,6 +53,24 @@ public class ContractTest {
 	}
 
 	@Test
+	public void testProblemsOnDescribedRoutesMustAgreeWithTheirStatusAndCode() {
+		String problem = """
+				{"type": "https://healdan.com/problems/not-found", "title": "Not found",
+				 "status": %d, "detail": "No such document", "code": "not-found"}""";
+		ApiResponse good = new ApiResponse(404, Map.of("Content-Type", List.of("application/problem+json")),
+				problem.formatted(404).getBytes(StandardCharsets.UTF_8));
+		Contract.check("GET", "/api/v1/documents/1/versions", good);
+
+		ApiResponse wrongStatus = new ApiResponse(404, Map.of("Content-Type", List.of("application/problem+json")),
+				problem.formatted(400).getBytes(StandardCharsets.UTF_8));
+		assertThrows(AssertionError.class, () -> Contract.check("GET", "/api/v1/documents/1/versions", wrongStatus));
+
+		ApiResponse wrongType = new ApiResponse(404, Map.of("Content-Type", List.of("application/problem+json")),
+				problem.formatted(404).replace("problems/not-found", "problems/gone").getBytes(StandardCharsets.UTF_8));
+		assertThrows(AssertionError.class, () -> Contract.check("GET", "/api/v1/documents/1/versions", wrongType));
+	}
+
+	@Test
 	public void testUndescribedRoutesMustRefuse() {
 		assertThrows(AssertionError.class, () -> Contract.check("GET", "/api/v1/nowhere", json(200, "{}")));
 	}

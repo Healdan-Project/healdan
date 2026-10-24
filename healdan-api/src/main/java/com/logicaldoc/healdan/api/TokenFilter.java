@@ -27,8 +27,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.Priorities;
 import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.container.ContainerRequestFilter;
-import jakarta.ws.rs.container.ContainerResponseContext;
-import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -43,11 +41,12 @@ import jakarta.ws.rs.core.Response;
  * For the length of the request the caller is in {@link Caller}, and an
  * {@link LDAuthenticationToken} with the token's CE session is in
  * {@link SecurityContextHolder}, where CE's code looks for the current
- * session. The response filter clears both, and {@link ApiServlet} clears
- * them again whatever happened.
+ * session. {@link ApiServlet} clears both after every request, once the
+ * response is written: a streamed body, such as a document's content, is
+ * written after the response filters ran.
  */
 @Priority(Priorities.AUTHENTICATION)
-public class TokenFilter implements ContainerRequestFilter, ContainerResponseFilter {
+public class TokenFilter implements ContainerRequestFilter {
 
 	private static final Pattern BEARER = Pattern.compile("^Bearer[ \\t]+(\\S+)[ \\t]*$", Pattern.CASE_INSENSITIVE);
 
@@ -109,11 +108,6 @@ public class TokenFilter implements ContainerRequestFilter, ContainerResponseFil
 		LDAuthenticationToken authentication = new LDAuthenticationToken(user, null, authorities(user));
 		authentication.setSid(session.getSid());
 		SecurityContextHolder.getContext().setAuthentication(authentication);
-	}
-
-	@Override
-	public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
-		clear();
 	}
 
 	/**

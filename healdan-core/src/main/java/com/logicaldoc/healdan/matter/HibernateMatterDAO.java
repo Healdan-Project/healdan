@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.matter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -53,6 +54,39 @@ public class HibernateMatterDAO extends HibernatePersistentObjectDAO<Matter> imp
 	public List<Matter> findLive() throws PersistenceException {
 		return findByWhere("_entity.folderId in (select f.id from Folder f where f.deleted = 0)", null,
 				"_entity.id asc", null);
+	}
+
+	/** The live matters in a Store */
+	private static final String IN_STORE = """
+			  from hd_matter m
+			  join hd_client c on c.ld_id = m.hd_clientid
+			  join ld_folder f on f.ld_id = m.hd_folderid
+			 where m.ld_deleted = 0
+			   and c.ld_deleted = 0
+			   and f.ld_deleted = 0
+			   and f.ld_parentid = :store
+			""";
+
+	@Override
+	public List<Matter> findByStore(long storeId, int offset, int limit) throws PersistenceException {
+		if (limit <= 0)
+			return List.of();
+		// The page alone; MariaDB and HSQLDB, the only databases Healdan runs on, both take LIMIT and OFFSET
+		List<Long> ids = queryForList("select m.ld_id" + IN_STORE
+				+ " order by c.hd_number, m.hd_number, m.ld_id limit %d offset %d".formatted(limit, Math.max(offset, 0)),
+				Map.of("store", storeId), Long.class, null);
+		List<Matter> matters = new ArrayList<>();
+		for (Long id : ids) {
+			Matter matter = findById(id);
+			if (matter != null)
+				matters.add(matter);
+		}
+		return matters;
+	}
+
+	@Override
+	public long countByStore(long storeId) throws PersistenceException {
+		return queryForLong("select count(*)" + IN_STORE, Map.of("store", storeId));
 	}
 
 	@Override

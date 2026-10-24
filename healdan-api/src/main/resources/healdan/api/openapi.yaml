@@ -144,6 +144,23 @@ paths:
                 $ref: '#/components/schemas/UserView'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/me/checkouts:
+    get:
+      operationId: listCheckouts
+      summary: Documents you've checked out
+      description: |
+        The documents the caller has checked out and can still read, the
+        latest check-out first (`hold.since`). In one page.
+      tags: [Users]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/users:
     get:
       operationId: findUsers
@@ -169,7 +186,459 @@ paths:
                 $ref: '#/components/schemas/UserHitPage'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents:
+    get:
+      operationId: findDocumentsByLegacyDocNumber
+      summary: Documents by legacy doc #
+      description: |
+        The documents whose Legacy doc # equals `legacyDocNumber` exactly
+        (same case, no wildcards), that the caller can read and that are
+        published to the caller, lowest doc # first. In one page. The number
+        is never read as a doc #. A missing or blank `legacyDocNumber` is
+        `400`.
+      tags: [Documents]
+      parameters:
+        - name: legacyDocNumber
+          in: query
+          required: true
+          description: The legacy doc # to find.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: The documents, none if none match
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/search:
+    get:
+      operationId: search
+      summary: Search, as the search box does
+      description: |
+        Runs the old web page's searches. The hits are only what the caller
+        can read and what is published to the caller. `total` is always
+        `null`: a page with fewer than `limit` items is the last one.
+
+        - `documents`: documents, without emails. A `q` like `#1234`, `#1234.2`
+          or `#1234v2` returns just that document, as the old web page does.
+        - `emails`: emails only.
+        - `all`: full text, documents and emails.
+        - `folders`: folders inside Stores whose name contains `q`, in any case.
+        - `matters`: matters by `998.1`-style number, a number, or name text.
+        - `clients`: the matters of every client matching by number or name.
+
+        The full-text scopes (`documents`, `emails`, `all`) take Lucene
+        syntax. A `q` that can't be parsed, such as an unbalanced `"` or `)`,
+        is `400 bad-request`. A search that fails in the database is
+        `500 server-error`; a failure inside the full-text engine itself can
+        show as no results.
+
+        A leading wildcard, such as `*report` or `?ar`, is accepted.
+
+        The full-text scopes (`documents`, `emails`, `all`) get at most about
+        1000 hits from the search engine, which is its own limit; hits the
+        caller can't see are dropped from those, so a page can come up short
+        of the full count. The other scopes look at the first 10,000 hits.
+        Pages are filled from the hits that follow the ones skipped.
+      tags: [Search]
+      parameters:
+        - name: scope
+          in: query
+          required: false
+          description: Where to search. `documents` by default; any other value is `400`.
+          schema:
+            type: string
+            enum: [documents, emails, all, folders, matters, clients]
+            default: documents
+        - name: q
+          in: query
+          required: true
+          description: What to look for. A blank `q` is `400`. Encode a `#` as `%23`.
+          schema:
+            type: string
+            minLength: 1
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The hits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/lookup:
+    get:
+      operationId: lookupDocNumber
+      summary: Resolve a typed doc #
+      description: |
+        Resolves `#1234`, `#1234.2`, `#1234v2` and `#1234.2.1` to the document
+        and version. Input that isn't a doc # is `400`. A document that
+        doesn't exist, can't be read by the caller, isn't published to the
+        caller, or has no such version is `404` with the old web page's
+        message, such as "No document #1234".
+      tags: [Search]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: What was typed, starting with `#`. Encode the `#` as `%23`.
+          schema:
+            type: string
+            minLength: 1
+      responses:
+        '200':
+          description: The document and version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LookupView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/recent:
+    get:
+      operationId: listRecentDocuments
+      summary: Recent documents
+      description: |
+        The documents the caller filed, changed, checked in or out, or
+        downloaded lately and can still read, newest first. "Lately" is the
+        `recentmatters.days` setting, 30 days by default. At most 50, in one
+        page.
+      tags: [Documents]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}:
+    get:
+      operationId: getDocument
+      summary: A document
+      description: |
+        Addressed by its doc #. A document the caller can't read, one that
+        isn't published to them, one outside the Stores (like the folders
+        there) and one that doesn't exist are all `404` with the same answer.
+        Lists, search and lookup leave out the same documents.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/content:
+    get:
+      operationId: getDocumentContent
+      summary: A document's file
+      description: |
+        The current file, or with `version` the file of that version, as
+        saved. Needs the Download permission on top of reading: without it
+        the answer is `403 forbidden`. A version the document doesn't have
+        is `404`. The download is recorded in the document's history, as the
+        old web page records it, once per 30 seconds.
+
+        A document protected by a password is `403 forbidden` too, unless
+        the signed-in session has unlocked it in the web page. A document whose file is missing from storage
+        is `500 server-error`.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - name: version
+          in: query
+          required: false
+          description: A version from the document's timeline, such as `1.0`. The current file by default.
+          schema:
+            type: string
+            examples: ['1.0']
+      responses:
+        '200':
+          description: The file
+          headers:
+            Content-Disposition:
+              description: |
+                `attachment` with the file name, as an ASCII `filename` and
+                RFC 5987's `filename*` with the real name.
+              required: true
+              schema:
+                type: string
+            Content-Length:
+              description: The file's size in bytes
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            '*/*':
+              schema:
+                type: string
+                contentMediaType: application/octet-stream
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/versions:
+    get:
+      operationId: listVersions
+      summary: A document's timeline
+      description: |
+        Every version, newest first. A version is a whole number (`2.0`);
+        the numbers between are snapshots (`1.1`).
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The versions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/recent:
+    get:
+      operationId: listRecentFolders
+      summary: Recent folders
+      description: |
+        The folders inside matters where the caller created or changed a
+        document lately, that the caller can still read, newest first.
+        "Lately" is the `recentmatters.days` setting, 30 days by default. At
+        most 20, in one page.
+      tags: [Folders]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{id}:
+    get:
+      operationId: getFolder
+      summary: A folder inside a Store
+      description: |
+        A Store, a matter's workspace, a folder or a search folder. Folders
+        outside the Stores (the root, the Default workspace, the Templates
+        Store and what is in them), aliases, folders the caller can't read,
+        and folders that don't exist are all `404` with the same answer.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+      responses:
+        '200':
+          description: The folder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/{id}/children:
+    get:
+      operationId: listFolderChildren
+      summary: What is in a folder
+      description: |
+        A matter's workspace or a folder gives the subfolders the caller can
+        read (by name, ignoring case), then the documents the caller can read
+        (by name). Hidden folders and aliases are left out, and an alias
+        asked for by its own id is `404`. A search folder
+        gives its documents, newest change first, at most 1000. `total` is
+        the full count.
+
+        A Store gives `409 not-browsable` and lists nothing: find a matter by
+        search, My Matters or Recent Matters.
+      tags: [Folders]
+      parameters:
+        - $ref: '#/components/parameters/FolderId'
+        - name: type
+          in: query
+          required: false
+          description: '`folder` for the subfolders alone. Anything else is `400`.'
+          schema:
+            type: string
+            const: folder
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The children
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderChildPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/matters/{id}:
+    get:
+      operationId: getMatter
+      summary: A matter
+      description: |
+        A matter whose workspace the caller can't read and one that doesn't
+        exist are both `404` with the same answer. `lastChange` is null here.
+      tags: [Matters]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The matter's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '200':
+          description: The matter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/matters/mine:
+    get:
+      operationId: listMyMatters
+      summary: My Matters
+      description: |
+        The matters the caller added, that the caller can still read, by
+        client number then matter number. All of them, in one page.
+        `lastChange` is null.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/matters/recent:
+    get:
+      operationId: listRecentMatters
+      summary: Recent Matters
+      description: |
+        The matters the caller changed documents in lately, that the caller
+        can still read, newest first, with `lastChange`. At most 20, in one
+        page.
+      tags: [Matters]
+      responses:
+        '200':
+          description: The matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/stores:
+    get:
+      operationId: listStores
+      summary: The Stores
+      description: |
+        Every Store by name, not LogicalDOC's Default workspace or the
+        Templates Store. Administrators only: anyone else gets
+        `403 forbidden` and learns nothing about the Stores.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreRefPage'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/stores/{id}/matters:
+    get:
+      operationId: listStoreMatters
+      summary: The matters in a Store
+      description: |
+        The Store's live matters by client number, then matter number, with
+        the total. Administrators only: anyone else gets `403 forbidden`. An
+        id that isn't a Store is `404`.
+      tags: [Stores]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The Store's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterPage'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
 components:
+  parameters:
+    FolderId:
+      name: id
+      in: path
+      required: true
+      description: The folder's id
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    DocNumber:
+      name: docNumber
+      in: path
+      required: true
+      description: The document's doc #
+      schema:
+        type: integer
+        format: int64
+        minimum: 0
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: How many items to skip. Default 0.
+      schema:
+        type: integer
+        minimum: 0
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: The most items to return, 1 to 200. Default 50.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
   securitySchemes:
     bearerAuth:
       type: http
@@ -205,7 +674,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, refused, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, refused, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
@@ -395,4 +864,302 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/UserHit'
+      unevaluatedProperties: false
+    FolderRef:
+      type: object
+      description: A folder named in another object
+      additionalProperties: false
+      required: [id, name, kind]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [store, matter, folder, searchFolder]
+          description: '`matter` is a matter''s own top folder.'
+    MatterRef:
+      type: object
+      description: A matter named in another object
+      additionalProperties: false
+      required: [id, display]
+      properties:
+        id:
+          type: integer
+          format: int64
+        display:
+          type: string
+          description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
+    HoldView:
+      type: object
+      description: Who has a document checked out or locked
+      additionalProperties: false
+      required: [kind, by, since]
+      properties:
+        kind:
+          type: string
+          enum: [checkout, lock]
+        by:
+          $ref: '#/components/schemas/UserRef'
+        since:
+          type: [string, 'null']
+          format: date-time
+    DocumentView:
+      type: object
+      additionalProperties: false
+      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, dateFiled, lastModified, hold, canEdit]
+      properties:
+        type:
+          type: string
+          const: document
+        docNumber:
+          type: integer
+          format: int64
+        name:
+          type: string
+          description: The file name
+        size:
+          type: integer
+          format: int64
+          description: The current file's size in bytes
+        version:
+          type: string
+          description: CE's version, which moves on property edits, moves and renames too
+          examples: ['2.1']
+        fileVersion:
+          type: string
+          description: The version the file's content was last saved as
+          examples: ['2.1']
+        reference:
+          type: string
+          description: The doc # and the file version, such as `1234.2.1`
+        folder:
+          $ref: '#/components/schemas/FolderRef'
+        matter:
+          oneOf:
+            - $ref: '#/components/schemas/MatterRef'
+            - type: 'null'
+        dateFiled:
+          type: string
+          format: date-time
+        lastModified:
+          type: string
+          format: date-time
+        hold:
+          oneOf:
+            - $ref: '#/components/schemas/HoldView'
+            - type: 'null'
+          description: Null when the document is free
+        canEdit:
+          type: boolean
+          description: Whether the caller may check the document out and save to it
+    VersionView:
+      type: object
+      additionalProperties: false
+      required: [version, fileVersion, kind, date, by, comment, event]
+      properties:
+        version:
+          type: string
+          examples: ['1.1']
+        fileVersion:
+          type: string
+        kind:
+          type: string
+          enum: [version, snapshot]
+        date:
+          type: string
+          format: date-time
+        by:
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+        comment:
+          type: [string, 'null']
+        event:
+          type: [string, 'null']
+          description: What produced the version, as CE keys it
+          examples: [event.checkedin]
+    VersionPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/VersionView'
+      unevaluatedProperties: false
+    StoreRef:
+      type: object
+      description: A Store named in another object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+    ClientRef:
+      type: object
+      description: A client named in another object
+      additionalProperties: false
+      required: [id, number, name]
+      properties:
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+        name:
+          type: string
+    FolderView:
+      type: object
+      additionalProperties: false
+      required: [type, id, name, kind, matter, store, path, canFile]
+      properties:
+        type:
+          type: string
+          const: folder
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [store, matter, folder, searchFolder]
+          description: '`matter` is a matter''s own top folder.'
+        matter:
+          oneOf:
+            - $ref: '#/components/schemas/MatterRef'
+            - type: 'null'
+          description: Null for a Store
+        store:
+          $ref: '#/components/schemas/StoreRef'
+        path:
+          type: array
+          description: From the Store down to the folder itself
+          items:
+            $ref: '#/components/schemas/FolderRef'
+        canFile:
+          type: boolean
+          description: Whether the caller may file documents into the folder. Only a folder inside a matter can be filed into.
+    MatterView:
+      type: object
+      additionalProperties: false
+      required: [type, id, number, display, name, description, client, store, folderId, lastChange]
+      properties:
+        type:
+          type: string
+          const: matter
+        id:
+          type: integer
+          format: int64
+        number:
+          type: integer
+          format: int64
+          description: The number within its client
+        display:
+          type: string
+          description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
+        name:
+          type: string
+        description:
+          type: [string, 'null']
+        client:
+          $ref: '#/components/schemas/ClientRef'
+        store:
+          $ref: '#/components/schemas/StoreRef'
+        folderId:
+          type: integer
+          format: int64
+          description: The matter's workspace folder, to open with `/v1/folders/{id}`
+        lastChange:
+          type: [string, 'null']
+          format: date-time
+          description: The caller's latest change in the matter. Only Recent Matters knows it.
+    MatterPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/MatterView'
+      unevaluatedProperties: false
+    FolderPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/FolderView'
+      unevaluatedProperties: false
+    DocumentPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/DocumentView'
+      unevaluatedProperties: false
+    StoreRefPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/StoreRef'
+      unevaluatedProperties: false
+    LookupView:
+      type: object
+      additionalProperties: false
+      required: [docNumber, version]
+      properties:
+        docNumber:
+          type: integer
+          format: int64
+        version:
+          type: string
+          description: The version the input names, or the current version when it names none
+          examples: ['2.1']
+    SearchPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                oneOf:
+                  - $ref: '#/components/schemas/DocumentView'
+                  - $ref: '#/components/schemas/FolderView'
+                  - $ref: '#/components/schemas/MatterView'
+                discriminator:
+                  propertyName: type
+                  mapping:
+                    document: '#/components/schemas/DocumentView'
+                    folder: '#/components/schemas/FolderView'
+                    matter: '#/components/schemas/MatterView'
+      unevaluatedProperties: false
+    FolderChildPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                oneOf:
+                  - $ref: '#/components/schemas/FolderView'
+                  - $ref: '#/components/schemas/DocumentView'
+                discriminator:
+                  propertyName: type
+                  mapping:
+                    folder: '#/components/schemas/FolderView'
+                    document: '#/components/schemas/DocumentView'
       unevaluatedProperties: false

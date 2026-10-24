@@ -60,8 +60,8 @@ public class ApiServlet extends CXFNonSpringServlet {
 	/**
 	 * Serves a request with nothing signed in on the thread before it, and
 	 * nothing left after it, whatever happens: Tomcat's threads serve one
-	 * request after another. {@link TokenFilter} clears it too, when CXF gets
-	 * as far as the response filters.
+	 * request after another. Only here is it cleared, so that a streamed body
+	 * (a document's content) still has its caller.
 	 */
 	@Override
 	protected void invoke(HttpServletRequest request, HttpServletResponse response) throws ServletException {

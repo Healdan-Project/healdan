@@ -53,6 +53,8 @@ public final class Contract {
 			checkProblem(method, path, response);
 			return;
 		}
+		if (String.valueOf(response.header("Content-Type")).startsWith("application/problem+json"))
+			checkProblem(method, path, response);
 		if (report.hasErrors())
 			fail("%s %s answered %d, which openapi.yaml doesn't allow:%n%s%nBody: %s".formatted(method, path,
 					response.status(), report.getMessages().stream().map(m -> m.getKey() + ": " + m.getMessage())
@@ -67,8 +69,8 @@ public final class Contract {
 	private static void checkProblem(String method, String path, ApiResponse response) {
 		if ("OPTIONS".equals(method) && response.status() == 204 && response.body().length == 0)
 			return;
-		String where = method + " " + path + ", which openapi.yaml doesn't describe,";
-		assertTrue(where + " answered " + response.status(), response.status() >= 400);
+		String where = method + " " + path + ",";
+		assertTrue(where + " answered " + response.status() + " with a problem", response.status() >= 400);
 		assertTrue(where + " answered with " + response.header("Content-Type"),
 				String.valueOf(response.header("Content-Type")).startsWith("application/problem+json"));
 		JsonNode problem = response.json();
@@ -76,6 +78,8 @@ public final class Contract {
 				problem.path("status").asInt());
 		for (String field : List.of("type", "title", "detail", "code"))
 			assertTrue(where + " answered a problem without " + field, problem.path(field).isTextual());
+		assertEquals(where + " answered a problem whose type doesn't follow its code",
+				"https://healdan.com/problems/" + problem.path("code").textValue(), problem.path("type").textValue());
 	}
 
 	private static SimpleResponse toValidatorResponse(ApiResponse response) {

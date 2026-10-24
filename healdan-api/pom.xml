@@ -35,6 +35,13 @@
 			<artifactId>cxf-rt-transports-http</artifactId>
 			<scope>provided</scope>
 		</dependency>
+		<!-- Parses full-text searches ahead of the engine (SearchResource); the WAR has it through Solr, at this version -->
+		<dependency>
+			<groupId>org.apache.lucene</groupId>
+			<artifactId>lucene-queryparser</artifactId>
+			<version>8.11.4</version>
+			<scope>provided</scope>
+		</dependency>
 		<!-- Only to switch off the WADL it generates (see ApiServer) -->
 		<dependency>
 			<groupId>org.apache.cxf</groupId>
