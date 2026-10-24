@@ -22,6 +22,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.healdan.setting.HealdanSettings;
 
 /**
  * {@code GET /v1/search} (spec section 6.3): the old search box's scopes, the
@@ -190,5 +191,92 @@ public class SearchResourceTest extends ApiTestCase {
 	public void testNeedsSignIn() {
 		assertEquals(401, get("/api/v1/search?q=x").send().status());
 		assertEquals(401, get("/api/v1/lookup?q=%231").send().status());
+	}
+
+	@Test
+	public void testUnparsableFullTextIs400() {
+		String token = signIn(clerk);
+		for (String q : new String[] { "%22unbalanced", "a)", "%28a" }) {
+			for (String scope : new String[] { "documents", "emails", "all" }) {
+				ApiResponse response = get("/api/v1/search?scope=" + scope + "&q=" + q).token(token).send();
+				assertEquals(scope + " " + q + " " + response, 400, response.status());
+				assertEquals("bad-request", response.json().path("code").textValue());
+				assertEquals("That search can't be understood. Check its quotes and brackets.",
+						response.json().path("detail").textValue());
+			}
+		}
+		// Only full text is parsed
+		assertEquals(200, get("/api/v1/search?scope=folders&q=a)").token(token).send().status());
+	}
+
+	@Test
+	public void testFolderPagesFillDespiteFoldersTheApiDoesNotShow() throws Exception {
+		// Sorts before the matters' Documents folders, in the Templates Store the API doesn't show
+		fx.folder(FolderDAO.get().findById(HealdanSettings.get().templatesStoreId()), "A Documents");
+		String token = signInAdmin();
+
+		JsonNode first = get("/api/v1/search?scope=folders&q=docu&limit=1").token(token).send().json();
+		JsonNode second = get("/api/v1/search?scope=folders&q=docu&offset=1&limit=1").token(token).send().json();
+		JsonNode both = get("/api/v1/search?scope=folders&q=docu&limit=2").token(token).send().json();
+		JsonNode third = get("/api/v1/search?scope=folders&q=docu&offset=2&limit=1").token(token).send().json();
+
+		assertEquals(1, first.path("items").size());
+		assertEquals(1, second.path("items").size());
+		assertEquals(2, both.path("items").size());
+		assertEquals(0, third.path("items").size());
+		long one = first.path("items").get(0).path("id").asLong();
+		long two = second.path("items").get(0).path("id").asLong();
+		assertTrue(one < two);
+		assertEquals(one, both.path("items").get(0).path("id").asLong());
+		assertEquals(two, both.path("items").get(1).path("id").asLong());
+		assertEquals("Documents", both.path("items").get(0).path("name").textValue());
+	}
+
+	@Test
+	public void testDocumentNamedLikeAFolderStaysADocument() throws Exception {
+		Document d = file("x.folder", "Odd " + DOCX_WORD);
+
+		JsonNode found = items("scope=all&q=" + DOCX_WORD, clerk);
+		assertEquals(1, found.size());
+		assertEquals("document", found.get(0).path("type").textValue());
+		assertEquals(number(d), found.get(0).path("docNumber").asLong());
+	}
+
+	@Test
+	public void testSearchIsRecordedOnce() throws Exception {
+		fx.folder(FolderDAO.get().findById(HealdanSettings.get().templatesStoreId()), "A Documents");
+		String token = signInAdmin();
+		long before = searches();
+
+		get("/api/v1/search?scope=folders&q=docu&limit=1").token(token).send();
+
+		// The window grew and the search ran again, but it is one search
+		assertEquals(before + 1, searches());
+	}
+
+	private long searches() {
+		return jdbc().queryForObject("select count(*) from ld_user_history where ld_event = ?", Long.class,
+				"event.user.search");
+	}
+
+	@Test
+	public void testSearchFailureIs500() {
+		String token = signIn(clerk);
+		// FolderSearch joins ld_template
+		jdbc().execute("alter table ld_template rename to ld_template_gone");
+
+		ApiResponse response = get("/api/v1/search?scope=folders&q=docu").token(token).send();
+
+		assertEquals(response.toString(), 500, response.status());
+		assertEquals("server-error", response.json().path("code").textValue());
+	}
+
+	@Test
+	public void testHugeOffsetIsAnEmptyPage() {
+		ApiResponse response = get("/api/v1/search?scope=clients&q=healdan&offset=2147483647&limit=200")
+				.token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(0, response.json().path("items").size());
 	}
 }

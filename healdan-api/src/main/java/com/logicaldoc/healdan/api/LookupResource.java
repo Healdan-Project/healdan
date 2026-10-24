@@ -32,8 +32,8 @@ public class LookupResource {
 	public LookupView lookup(@QueryParam("q") String q) {
 		User user = Caller.current().user();
 		try {
-			LookupResult found = DocNumberLookup.lookup(q, user.getId());
-			if (!DocNumberQuery.looksLikeNumber(q))
+			LookupResult found = DocNumberLookup.lookup(q == null ? null : q.strip(), user.getId());
+			if (!DocNumberQuery.looksLikeNumber(q == null ? null : q.strip()))
 				throw ApiProblem.badRequest(found.message());
 			if (!found.found())
 				throw ApiProblem.notFound(found.message());

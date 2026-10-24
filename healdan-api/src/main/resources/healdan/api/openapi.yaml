@@ -231,7 +231,14 @@ paths:
         - `matters`: matters by `998.1`-style number, a number, or name text.
         - `clients`: the matters of every client matching by number or name.
 
-        A search that fails is `500 server-error`, not an empty page.
+        The full-text scopes (`documents`, `emails`, `all`) take Lucene
+        syntax. A `q` that can't be parsed, such as an unbalanced `"` or `)`,
+        is `400 bad-request`. A search that fails in the database is
+        `500 server-error`; a failure inside the full-text engine itself can
+        show as no results.
+
+        The search looks at the first 10,000 hits only. Hits the caller can't
+        see are skipped, and pages are filled from the hits that follow.
       tags: [Search]
       parameters:
         - name: scope

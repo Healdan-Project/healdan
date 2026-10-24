@@ -83,6 +83,14 @@ public class LookupTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testStripsTheInput() {
+		ApiResponse response = get("/api/v1/lookup?q=%20%23" + number(doc) + "%20").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(number(doc), response.json().path("docNumber").asLong());
+	}
+
+	@Test
 	public void testNotFound() {
 		long n = number(doc);
 		ApiResponse unknown = lookup("#999999");
