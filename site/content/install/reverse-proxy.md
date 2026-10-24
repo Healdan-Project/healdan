@@ -11,9 +11,13 @@ Whichever proxy you use:
 - **Set `LOGICALDOC_PUBLIC_URL`** in `.env` to the public HTTPS address, so links and emails use it.
 - **Forwarded headers.** The proxy sends `X-Forwarded-For` and `X-Forwarded-Proto`. Tomcat trusts them only from
   private, loopback and link-local addresses, so Healdan sees HTTPS and each user's real IP address only when the
-  proxy reaches it from one of those.
+  proxy reaches it from one of those. The sign-in throttle counts failures by that address: see
+  [The Sign-In Throttle Behind a Proxy](#the-sign-in-throttle-behind-a-proxy).
 - **WebSockets and large uploads.** The proxy must forward WebSockets (Healdan pushes live updates at
   `/wk-event`) and allow large uploads and long requests.
+- **Office add-ins need HTTPS.** Office loads an add-in's pages over HTTPS, and those pages can't call a plain HTTP
+  address. So an add-in that uses Healdan's [API](../../developer/api/) needs Healdan behind the proxy, with a
+  certificate the computer running Office trusts.
 
 {{< tabs >}}
 
@@ -110,7 +114,8 @@ app publishes its port on the Healdan host's LAN address, and NPM forwards to th
 - Tomcat trusts forwarded headers only from `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `100.64.0.0/10`
   (which includes Tailscale's addresses), loopback, link-local and private IPv6 addresses.
   - If NPM reaches the Healdan host from a public address, Healdan sees plain HTTP, and it records NPM's address as
-    every user's IP. With brute-force prevention on, one person's failed sign-ins then block everyone.
+    every user's IP. The sign-in throttle then blocks everyone after 20 failed sign-ins in a row, whoever made
+    them.
   - Use a VPN rather than publishing port 8080 to the internet.
 
 | Symptom | Cause |
@@ -177,3 +182,23 @@ firewall rule, and which addresses Tomcat trusts forwarded headers from.
 {{< /tab >}}
 
 {{< /tabs >}}
+
+## The Sign-In Throttle Behind a Proxy
+
+Healdan blocks a network address for 15 minutes after 20 failed sign-ins in a row from it, and a username after five
+wrong passwords ([Healdan Settings](../../admin/healdan-settings/#the-sign-in-throttle) has the details). The
+address is the one Tomcat works out from `X-Forwarded-For`, so:
+
+- **Each person needs their own address.** Behind a proxy that reaches Healdan from a public address, everyone has
+  the proxy's, and one person's mistyped passwords block everyone. Have the proxy reach Healdan over a private
+  network or a VPN instead.
+- **Known limitation: a machine on a private network can claim any address.** Tomcat trusts `X-Forwarded-For` from
+  every private, loopback and link-local address, not just from your proxy. nginx and NPM also pass on a header
+  the client made up, with the client's own address added at the end. So a machine on your LAN or VPN can send a
+  false address, through such a proxy or straight to the app's port, and Healdan believes it.
+  - It can claim a new address for each attempt, and never meet the per-address limit. The per-username limit
+    still holds.
+  - It can claim `127.0.0.1`. LogicalDOC never blocks the `admin` account signing in from that address, so it can
+    try `admin`'s password without any limit.
+  - So give `admin` a long password that isn't used anywhere else, and keep the app's port reachable only from the
+    proxy, as the NPM on Another Machine tab describes.

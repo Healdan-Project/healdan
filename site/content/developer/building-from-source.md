@@ -21,25 +21,34 @@ builds it for you. This page is for working on the code.
 ```bash
 mvn -B -ntp -DskipTests install                            # the whole build, as the Docker image runs it
 mvn -B -ntp -pl logicaldoc-webapp -am -DskipTests package  # the deployable WAR, in logicaldoc-webapp/target/
-mvn -pl healdan-core test                                  # Healdan's tests
+mvn -pl healdan-core test                                  # healdan-core's tests
 mvn -pl healdan-core test -Dtest=FilingRulesTest           # one test class
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder'  # one test method
+mvn -pl healdan-core -DskipTests install                   # healdan-core, with the test-jar healdan-api's tests use
+mvn -pl healdan-api test                                   # the API's tests
 ```
 
 A module's tests run against the installed jars of the modules it uses, so install those first.
+
+- **`healdan-api`'s tests need `healdan-core` installed,** including its test-jar: they reuse `healdan-core`'s base
+  test case and fixtures. Install it again after changing `healdan-core`.
+- **`-DskipTests` and `-Dmaven.test.skip=true` differ here.** `-DskipTests` compiles the tests without running them,
+  so it still builds and installs `healdan-core`'s test-jar. `-Dmaven.test.skip=true` doesn't compile them, so
+  there's no test-jar. `healdan-api`'s `with-tests` profile then leaves the test-jar out, and the build still
+  works, but `healdan-api`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
 
 ## Skipping the GWT Compile
 
 `logicaldoc-gui` runs a GWT compile for each GWT module (frontend, login and setup), which is slow. When you
 aren't changing the UI, skip it with `-Dgwt.skipCompilation=true`. The module's Java still compiles, which
-`healdan-core` needs.
+Healdan's modules need.
 
 - Up to `test`, that's enough.
 - For `package` or `install`, also add `-Dmaven.antrun.skip=true` and `-pl '!logicaldoc-webapp'`, as CI's
   `build` check does. The GUI's antrun step fails without the GWT output, and skipping it leaves every plugin zip
   unfinished, so a WAR built from them is broken.
 - After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module before running
-  `healdan-core`'s tests:
+  `healdan-core`'s or `healdan-api`'s tests:
 
   ```bash
   mvn -pl logicaldoc-gui -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install

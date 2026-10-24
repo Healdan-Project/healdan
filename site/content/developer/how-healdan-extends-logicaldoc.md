@@ -46,7 +46,18 @@ learn from.
     hooks in upstream's GUI classes.
   - Its servlets register with `@WebServlet`. Its RPC paths are `/frontend/healdan*` and its data paths
     `/data/healdan*`.
-  - Its listeners enforce Healdan's rules on every route into the server: the web UI, the API, WebDAV and CMIS.
+  - Its listeners enforce Healdan's rules on every route into the server: the web UI, Healdan's API, LogicalDOC's
+    web services, WebDAV and CMIS.
+- **`healdan-api`** is Healdan's [API](../api/), a plugin of its own that requires `healdan-core`. Its code is under
+  `com.logicaldoc.healdan.api`, where `healdan-core`'s Spring scan finds it.
+  - `ApiServlet` serves `/api/*`, and registers with `@WebServlet`. It runs CXF's JAX-RS on a CXF bus of its own,
+    so LogicalDOC's services under `/services/` don't show up under `/api` too.
+  - Spring Security leaves `/api/**` alone (`security="none"`). The API signs each request in from its device
+    token, and from nothing else.
+  - `openapi.yaml`, in `src/main/resources/healdan/api/`, is written by hand. It's the contract the tests check
+    every answer against, so a new endpoint goes into it with the code.
+  - The rules and data it uses, such as device tokens and where a property's value comes from, stay in
+    `healdan-core`, so code outside the API can use them too.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.
