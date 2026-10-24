@@ -26,9 +26,9 @@ public class ProfileSchema {
 
 	/** Attributes that belong to a document alone and never pass down */
 	private static final Set<String> DOCUMENT_ONLY = Set.of(HealdanConstants.ATTR_AUTHOR,
-			HealdanConstants.ATTR_TYPIST, HealdanConstants.ATTR_LEGACYDOCNUM, HealdanConstants.ATTR_EMAILFROM,
-			HealdanConstants.ATTR_EMAILTO, HealdanConstants.ATTR_EMAILCC, HealdanConstants.ATTR_EMAILSUBJECT,
-			HealdanConstants.ATTR_EMAILSENT, HealdanConstants.ATTR_EMAILRECEIVED);
+			HealdanConstants.ATTR_TYPIST, HealdanConstants.ATTR_COMMENTS, HealdanConstants.ATTR_LEGACYDOCNUM,
+			HealdanConstants.ATTR_EMAILFROM, HealdanConstants.ATTR_EMAILTO, HealdanConstants.ATTR_EMAILCC,
+			HealdanConstants.ATTR_EMAILSUBJECT, HealdanConstants.ATTR_EMAILSENT, HealdanConstants.ATTR_EMAILRECEIVED);
 
 	private static final Set<String> FIXED = Set.of(HealdanConstants.ATTR_CLIENT, HealdanConstants.ATTR_MATTER);
 

@@ -33,7 +33,7 @@ import com.logicaldoc.util.spring.Context;
 public class ProfileSeedTest extends AbstractHealdanTestCase {
 
 	private static final List<String> NAMES = List.of("client", "matter", "author", "typist", "docclass",
-			"docsubclass", "legacydocnum", "emailfrom", "emailto", "emailcc", "emailsubject", "emailsent",
+			"docsubclass", "comments", "legacydocnum", "emailfrom", "emailto", "emailcc", "emailsubject", "emailsent",
 			"emailreceived");
 
 	private JdbcTemplate jdbc() {
@@ -55,11 +55,11 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testTemplateHasThirteenAttributesInOrder() throws Exception {
+	public void testTemplateHasFourteenAttributesInOrder() throws Exception {
 		Template t = template();
 		assertNotNull(t);
 		assertEquals(t.getId(), HealdanSettings.get().profileTemplateId().longValue());
-		assertEquals(13, t.getTemplateAttributes().size());
+		assertEquals(14, t.getTemplateAttributes().size());
 		for (int i = 0; i < NAMES.size(); i++)
 			assertEquals(NAMES.get(i), nameAt(t, i));
 
@@ -85,16 +85,19 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 		assertEquals(Attribute.EDITOR_LISTBOX, sub.getEditor());
 		assertEquals("docclass", sub.getDependsOn());
 		assertFalse(sub.isMandatory());
-		assertEquals("Legacy doc #", at(t, 6).getLabel());
+		assertEquals("Comments", at(t, 6).getLabel());
+		assertEquals(Attribute.TYPE_STRING, at(t, 6).getType());
+		assertFalse(at(t, 6).isMandatory());
+		assertEquals("Legacy doc #", at(t, 7).getLabel());
 
 		assertEquals(List.of("From", "To", "CC", "Subject"),
-				List.of(at(t, 7).getLabel(), at(t, 8).getLabel(), at(t, 9).getLabel(), at(t, 10).getLabel()));
-		for (int i = 7; i <= 10; i++)
+				List.of(at(t, 8).getLabel(), at(t, 9).getLabel(), at(t, 10).getLabel(), at(t, 11).getLabel()));
+		for (int i = 8; i <= 11; i++)
 			assertEquals(Attribute.TYPE_STRING, at(t, i).getType());
-		assertEquals("Sent", at(t, 11).getLabel());
-		assertEquals("Received", at(t, 12).getLabel());
-		assertEquals(Attribute.TYPE_DATE, at(t, 11).getType());
+		assertEquals("Sent", at(t, 12).getLabel());
+		assertEquals("Received", at(t, 13).getLabel());
 		assertEquals(Attribute.TYPE_DATE, at(t, 12).getType());
+		assertEquals(Attribute.TYPE_DATE, at(t, 13).getType());
 	}
 
 	@Test
@@ -121,13 +124,13 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 		Attribute extra = new Attribute();
 		extra.setType(Attribute.TYPE_STRING);
 		extra.setLabel("Office");
-		extra.setPosition(13);
+		extra.setPosition(14);
 		t.getTemplateAttributes().put("office", extra);
 		TemplateDAO.get().store(t);
 		assertTrue(schema.inheritable().contains("office"));
 		assertEquals(Set.of("client", "matter", "docclass", "docsubclass", "office"),
 				schema.inheritable().stream().collect(Collectors.toSet()));
-		assertEquals(14, schema.template().getTemplateAttributes().size());
+		assertEquals(15, schema.template().getTemplateAttributes().size());
 	}
 
 	@Test
@@ -161,7 +164,7 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 				"select count(*) from ld_extoption where ld_attribute = 'docclass' and ld_value = 'Docs'",
 				Integer.class).intValue());
 		assertEquals(id, HealdanSettings.get().profileTemplateId().longValue());
-		assertEquals(13, template().getTemplateAttributes().size());
+		assertEquals(14, template().getTemplateAttributes().size());
 	}
 
 	@Test
