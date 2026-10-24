@@ -934,7 +934,7 @@ Expected: PASS; the menu-bar icon shows, nothing appears in the Dock, and the li
 
 - [ ] **Step 2: Run them to see them fail**
 
-- [ ] **Step 3: Build the windows to the mockups the owner reviewed** (spec §5.8)
+- [ ] **Step 3: Build the windows to the mockups the owner reviewed** (spec §5.8; `docs/superpowers/specs/2026-10-24-m3-mockups/`, whose README lists what changed after the review)
 
 **Save to Healdan:**
 - the scope picker, with search `within`;

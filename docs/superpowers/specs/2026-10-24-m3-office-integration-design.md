@@ -295,7 +295,7 @@ Both the check-in and the release are refused if this computer no longer holds t
 
 ### 5.8 The windows (owner: drawn by the helper)
 
-Each window is an Avalonia window that comes to the front over the app, and hands the focus back when it closes (§5.1).
+Each window is an Avalonia window that comes to the front over the app, and hands the focus back when it closes (§5.1). The mockups the owner reviewed are in [`2026-10-24-m3-mockups/`](2026-10-24-m3-mockups/README.md), with what changed after the review.
 
 **Save to Healdan** (mockup reviewed 2026-10-24, modelled on iManage's):
 
