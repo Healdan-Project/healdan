@@ -40,6 +40,14 @@ public class SearchResourceTest extends ApiTestCase {
 
 	private Folder documents;
 
+	private Folder workspace;
+
+	private Folder store;
+
+	private Folder otherWorkspace;
+
+	private Folder otherDocuments;
+
 	@Before
 	public void createLayout() throws Exception {
 		// Ids restart with each test's database, so files and hits of earlier tests would be read unseen
@@ -49,11 +57,12 @@ public class SearchResourceTest extends ApiTestCase {
 
 		clerk = fx.user("clerk");
 		outsider = fx.user("outsider");
-		Folder store = fx.store("Client Work");
+		store = fx.store("Client Work");
 		fx.grant(store, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
 		var client = fx.client(998, "Healdan");
-		Folder workspace = FolderDAO.get().findById(fx.matter(client, 1, "Demo", store, "Documents").getFolderId());
-		fx.matter(client, 2, "Other", store, "Documents");
+		workspace = FolderDAO.get().findById(fx.matter(client, 1, "Demo", store, "Documents").getFolderId());
+		otherWorkspace = FolderDAO.get().findById(fx.matter(client, 2, "Other", store, "Documents").getFolderId());
+		otherDocuments = FolderDAO.get().findByName(otherWorkspace, "Documents", Tenant.DEFAULT_ID, true).get(0);
 		documents = FolderDAO.get().findByName(workspace, "Documents", Tenant.DEFAULT_ID, true).get(0);
 	}
 
@@ -137,6 +146,94 @@ public class SearchResourceTest extends ApiTestCase {
 		List<Long> ids = List.of(found.get(0).path("id").asLong(), found.get(1).path("id").asLong());
 		assertTrue(ids.contains(documents.getId()));
 		assertEquals(0, items("scope=folders&q=docu", outsider).size());
+	}
+
+	@Test
+	public void testFoldersWithin() throws Exception {
+		Folder mine = fx.folder(documents, "Drafts");
+		Folder deep = fx.folder(fx.folder(documents, "Deeper"), "More drafts");
+		fx.folder(otherDocuments, "Drafts");
+
+		List<Long> all = ids(items("scope=folders&q=draft", clerk));
+		assertEquals(3, all.size());
+
+		List<Long> within = ids(items("scope=folders&q=draft&within=" + workspace.getId(), clerk));
+		assertEquals(2, within.size());
+		assertTrue(within.contains(mine.getId()));
+		assertTrue(within.contains(deep.getId()));
+		// The place itself isn't inside itself
+		assertEquals(List.of(), ids(items("scope=folders&q=documents&within=" + documents.getId(), clerk)));
+		assertEquals(1, items("scope=folders&q=documents&within=" + workspace.getId(), clerk).size());
+	}
+
+	@Test
+	public void testDocumentsWithin() throws Exception {
+		Document mine = file("mine.docx", "Mine " + DOCX_WORD);
+		Document other = fx.upload(otherDocuments, "other.docx", "Other " + DOCX_WORD, clerk);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_startpublishing = ? where ld_id = ?",
+				new java.sql.Timestamp(System.currentTimeMillis() - 24L * 60 * 60 * 1000), other.getId());
+		SearchEngine.get().addHit(DocumentDAO.get().findById(other.getId(), true), "Other " + DOCX_WORD);
+
+		assertEquals(2, items("scope=documents&q=" + DOCX_WORD, clerk).size());
+		assertEquals(List.of(number(mine)),
+				docNumbers(items("scope=documents&q=" + DOCX_WORD + "&within=" + workspace.getId(), clerk)));
+		assertEquals(List.of(number(mine)),
+				docNumbers(items("scope=documents&q=" + DOCX_WORD + "&within=" + documents.getId(), clerk)));
+		assertEquals(List.of(number(other)),
+				docNumbers(items("q=" + DOCX_WORD + "&within=" + otherWorkspace.getId(), clerk)));
+	}
+
+	@Test
+	public void testDocNumberWithin() throws Exception {
+		Document mine = file("mine.docx", "Mine");
+		Document other = fx.upload(otherDocuments, "other.docx", "Other", clerk);
+		awaitAsyncWork();
+
+		assertEquals(List.of(number(mine)),
+				docNumbers(items("q=%23" + number(mine) + "&within=" + workspace.getId(), clerk)));
+		assertEquals(List.of(number(mine)),
+				docNumbers(items("q=%23" + number(mine) + "&within=" + documents.getId(), clerk)));
+		// The document is real and readable, but not in the place
+		assertEquals(0, items("q=%23" + number(other) + "&within=" + workspace.getId(), clerk).size());
+		assertEquals(List.of(number(other)), docNumbers(items("q=%23" + number(other), clerk)));
+	}
+
+	@Test
+	public void testWithinUnreadable404() throws Exception {
+		ApiResponse unreadable = get("/api/v1/search?scope=folders&q=docu&within=" + workspace.getId())
+				.token(signIn(outsider)).send();
+		ApiResponse unknown = get("/api/v1/search?scope=folders&q=docu&within=99999").token(signIn(clerk)).send();
+
+		assertEquals(unreadable.toString(), 404, unreadable.status());
+		assertEquals("not-found", unreadable.code());
+		assertEquals(404, unknown.status());
+	}
+
+	@Test
+	public void testWithinStore409() throws Exception {
+		for (String scope : new String[] { "folders", "documents" }) {
+			ApiResponse response = get("/api/v1/search?scope=" + scope + "&q=docu&within=" + store.getId())
+					.token(signIn(clerk)).send();
+			assertEquals(response.toString(), 409, response.status());
+			assertEquals("not-browsable", response.code());
+		}
+	}
+
+	@Test
+	public void testWithinIgnoredForMatters() throws Exception {
+		for (String scope : new String[] { "matters", "clients", "emails", "all" }) {
+			ApiResponse response = get("/api/v1/search?scope=" + scope + "&q=998&within=" + workspace.getId())
+					.token(signIn(clerk)).send();
+			assertEquals(response.toString(), 400, response.status());
+			assertEquals("bad-request", response.code());
+		}
+	}
+
+	private static List<Long> ids(JsonNode items) {
+		List<Long> ids = new ArrayList<>();
+		items.forEach(i -> ids.add(i.path("id").asLong()));
+		return ids;
 	}
 
 	@Test

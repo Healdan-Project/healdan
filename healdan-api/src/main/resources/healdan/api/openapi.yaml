@@ -404,6 +404,12 @@ paths:
         caller can't see are dropped from those, so a page can come up short
         of the full count. The other scopes look at the first 10,000 hits.
         Pages are filled from the hits that follow the ones skipped.
+
+        With `within`, the `folders` and `documents` scopes return only what
+        is inside that folder, at any depth. A `#` lookup in the `documents`
+        scope keeps its document only if it is inside `within`. A folder the
+        caller can't read, or that the API doesn't show, is `404`; a Store is
+        `409 not-browsable`. The other scopes with `within` are `400`.
       tags: [Search]
       parameters:
         - name: scope
@@ -421,6 +427,17 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: within
+          in: query
+          required: false
+          description: |
+            A folder to search inside, at any depth, such as the matter's
+            workspace or one of its folders. Only for the `documents` and
+            `folders` scopes.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -867,6 +884,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders:
+    post:
+      operationId: createFolder
+      summary: Create a folder
+      description: |
+        Creates a subfolder in `parentId`, as the old web page does, through
+        the same rules. The caller needs the Add permission on the parent
+        (`403` without it). The new folder inherits its parent's properties
+        and permissions. A `/` in the name is dropped and markup is cleaned
+        from it; a name that is empty after that is `422 validation` with
+        `required`, and one over 255 characters `too-long`. A parent the
+        caller can't read, or that the API doesn't show, is `404`. A Store is
+        `409 not-browsable` and a search folder `409 filing-rule`. A matter's
+        top level is `409 refused` unless the caller is an administrator, as
+        are the other structure rules. The answer is `201` with the folder,
+        and its address as `Location`.
+      tags: [Folders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewFolder'
+      responses:
+        '201':
+          description: The new folder
+          headers:
+            Location:
+              description: The folder's address, such as `/api/v1/folders/1234`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderView'
         default:
           $ref: '#/components/responses/Problem'
   /v1/folders/{id}:
@@ -1649,6 +1704,18 @@ components:
         docNumber:
           type: [integer, 'null']
           format: int64
+    NewFolder:
+      type: object
+      additionalProperties: false
+      required: [parentId, name]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+          description: The folder to create the new folder in
+        name:
+          type: string
+          description: The new folder's name; at most 255 characters
     DocumentPage:
       allOf:
         - $ref: '#/components/schemas/Page'
