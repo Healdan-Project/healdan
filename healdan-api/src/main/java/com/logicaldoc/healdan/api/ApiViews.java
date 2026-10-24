@@ -19,6 +19,7 @@ import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.ClientRef;
 import com.logicaldoc.healdan.api.model.DocumentView;
@@ -84,17 +85,17 @@ public final class ApiViews {
 	/**
 	 * @param d a document the caller may read
 	 * @param caller the signed-in user, with its groups
-	 * @return the document's view
+	 * @return the document's view; {@code canEdit} also asks that the current
+	 *         request's session may open the document ({@link #opens})
 	 * @throws PersistenceException error at data layer
 	 */
 	public static DocumentView document(Document d, User caller) throws PersistenceException {
 		long folderId = d.getFolder().getId();
 		FolderPosition position = MatterLocator.get().locate(folderId);
 		HoldView hold = hold(d);
-		boolean ownCheckout = hold != null && "checkout".equals(hold.kind()) && d.getLockUserId() != null
-				&& d.getLockUserId() == caller.getId();
+		// As the check-out and the save decide: no one else's hold, and no lock at all (spec correction 10)
 		boolean canEdit = AccessChecks.allowed(caller, Permission.WRITE, d) && !d.isImmutable()
-				&& (hold == null || ownCheckout);
+				&& (hold == null || checkedOutBy(d, caller)) && opens(d, Caller.current().session());
 		long docNumber = Long.parseLong(d.getCustomId());
 		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
@@ -104,7 +105,31 @@ public final class ApiViews {
 
 	/**
 	 * @param d a document
-	 * @return who holds it and since when, or null if it's free
+	 * @param user a user
+	 * @return true if the document is checked out to the user; a lock isn't a
+	 *         check-out
+	 */
+	public static boolean checkedOutBy(Document d, User user) {
+		return d.getStatus() == DocumentStatus.CHECKEDOUT && d.getLockUserId() != null
+				&& d.getLockUserId() == user.getId();
+	}
+
+	/**
+	 * As every CE download path asks: a document protected by a password opens
+	 * only for a session that gave the password in the web page.
+	 *
+	 * @param d a document
+	 * @param session the caller's CE session
+	 * @return true if the session may open the document
+	 */
+	public static boolean opens(Document d, Session session) {
+		return !d.isPasswordProtected() || session.getUnprotectedDocs().containsKey(d.getId());
+	}
+
+	/**
+	 * @param d a document
+	 * @return who holds it and since when, or null if it's free; the holder is
+	 *         null when CE's data doesn't say who it is
 	 * @throws PersistenceException error at data layer
 	 */
 	public static HoldView hold(Document d) throws PersistenceException {

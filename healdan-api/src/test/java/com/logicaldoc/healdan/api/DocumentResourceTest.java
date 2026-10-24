@@ -23,6 +23,7 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
@@ -143,6 +144,33 @@ public class DocumentResourceTest extends ApiTestCase {
 		JsonNode mine = get("/api/v1/documents/" + number(d)).token(signIn(boss)).send().json();
 		assertEquals("checkout", mine.path("hold").path("kind").textValue());
 		assertTrue(mine.path("canEdit").booleanValue());
+	}
+
+	@Test
+	public void testLockShown() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		// As the old UI's Lock action does
+		DocumentHistory locked = fx.documentHistory(boss);
+		locked.setEvent(DocumentEvent.LOCKED);
+		DocumentManager.get().lock(d.getId(), DocumentStatus.LOCKED, locked);
+
+		JsonNode doc = get("/api/v1/documents/" + number(d)).token(signIn(clerk)).send().json();
+
+		JsonNode hold = doc.path("hold");
+		assertEquals("lock", hold.path("kind").textValue());
+		assertEquals(boss.getId(), hold.path("by").path("id").asLong());
+		assertTrue(hold.path("since").textValue().endsWith("Z"));
+		assertFalse(doc.path("canEdit").booleanValue());
+		// A lock is a hold even for the one who locked it
+		assertFalse(get("/api/v1/documents/" + number(d)).token(signIn(boss)).send().json().path("canEdit")
+				.booleanValue());
+
+		// A hold that doesn't say who has it, which CE's data can have
+		jdbc().update("update ld_document set ld_lockuserid = null, ld_lockuser = null where ld_id = ?", d.getId());
+		ApiResponse nobody = get("/api/v1/documents/" + number(d)).token(signIn(clerk)).send();
+		assertEquals(nobody.toString(), 200, nobody.status());
+		assertEquals("lock", nobody.json().path("hold").path("kind").textValue());
+		assertTrue(nobody.json().path("hold").path("by").isNull());
 	}
 
 	@Test

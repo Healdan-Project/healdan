@@ -469,6 +469,59 @@ paths:
                 contentMediaType: application/octet-stream
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/checkout:
+    post:
+      operationId: checkOutDocument
+      summary: Check a document out
+      description: |
+        Checks the document out to the caller, so nobody else can save to it
+        until it's checked in or released, and returns it. A document the
+        caller has checked out already is returned as it is. The checks run
+        in this order:
+
+        1. `404 not-found` for a document the caller can't read.
+        2. `403 forbidden` without the Write permission, and for a document
+           protected by a password that the signed-in session hasn't given in
+           the web page.
+        3. `409 checked-out` when someone else has it checked out, and
+           `409 locked` when it's locked with the web page's Lock action, by
+           anyone, the caller included. Both add the `hold`.
+        4. `409 refused` for an immutable document.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The document, checked out to the caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: releaseDocument
+      summary: Release a check-out or a lock
+      description: |
+        Releases the document's check-out or lock without saving anything,
+        and returns the document. The user who holds it can, and so can an
+        administrator; the release is recorded in the history. An
+        administrator's release also makes an immutable document mutable
+        again, as the web page's does. Anyone else gets `409 checked-out` or
+        `409 locked`, with the `hold`. A free document is returned as it is,
+        and one the caller can't read is `404`.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The document, free
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/versions:
     get:
       operationId: listVersions
@@ -488,6 +541,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionPage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: saveVersion
+      summary: Save new content
+      description: |
+        Saves the file as the document's new content and returns the
+        document. `kind: snapshot` is an ordinary save (2.1 becomes 2.2);
+        `kind: version` is "Save as new version" (2.2 becomes 3.0). A free
+        document is checked out to the caller, saved and checked in again;
+        with `keepCheckedOut: true`, the save while editing, it's checked out
+        to the caller again afterwards, and the history shows a check-in
+        followed by a check-out. The web page can take the document in the
+        moment between them: the save stands, and the answer's `hold` shows
+        who has it. Two saves of one document are applied one after the
+        other.
+
+        Nothing is saved unless every check passes. They run in this order,
+        and the first that fails gives the answer:
+
+        1. `400 bad-request` for a `version` part that is missing or isn't
+           the JSON expected (a missing or unknown `kind` included), and for
+           a missing `file` part.
+        2. `404 not-found` for a document the caller can't read.
+        3. `403 forbidden` without the Write permission, and for a document
+           protected by a password that the signed-in session hasn't given in
+           the web page.
+        4. `409 checked-out` when someone else has it checked out,
+           administrators included: nobody saves over another person's open
+           edit. An administrator releases the hold first
+           (`DELETE /v1/documents/{docNumber}/checkout`). `409 locked` when
+           it's locked with the web page's Lock action, by anyone, the caller
+           included. Both add the `hold`.
+        5. `409 refused` for an immutable document.
+        6. The name: the file part's name (RFC 5987's `filename*` first), or
+           the document's when the part has none. It may change, but its
+           extension may not: compared in any case, it must be the
+           document's, and it keeps the document's spelling (`Lease.DOCX`
+           saved over `Lease.docx` keeps `Lease.docx`).
+        7. The file: `413 too-large` over the upload limit; `422` when it's
+           empty. A file more than 1 MB over the limit is refused while it's
+           sent, before anything else.
+
+        One `422 validation` lists what is wrong with `file`: `extension` for
+        another extension, `invalid` for a name with `/`, `\` or a control
+        character, `disallowed` for an extension the `upload.disallow`
+        setting lists, and `empty`.
+
+        A rule that refuses the check-in itself is `409 refused`. A check-in
+        that is refused or fails leaves the document checked out to the
+        caller, even if it was free before, with its content as it was: send
+        the save again, or release it.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [version, file]
+              properties:
+                version:
+                  $ref: '#/components/schemas/NewVersion'
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The new content. The part's `Content-Disposition` names
+                    it, with `filename` or RFC 5987's `filename*`.
+            encoding:
+              version:
+                contentType: application/json
+      responses:
+        '201':
+          description: The document, as saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentView'
         default:
           $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/properties:
@@ -1106,7 +1240,10 @@ components:
           type: string
           enum: [checkout, lock]
         by:
-          $ref: '#/components/schemas/UserRef'
+          oneOf:
+            - $ref: '#/components/schemas/UserRef'
+            - type: 'null'
+          description: Who holds it; null when the server's data doesn't say
         since:
           type: [string, 'null']
           format: date-time
@@ -1158,7 +1295,11 @@ components:
           description: Null when the document is free
         canEdit:
           type: boolean
-          description: Whether the caller may check the document out and save to it
+          description: |
+            Whether the caller may check the document out and save to it: the
+            Write permission, not immutable, not protected by a password the
+            session hasn't given, and no hold but the caller's own check-out
+            (a lock is a hold even for the user who took it).
     VersionView:
       type: object
       additionalProperties: false
@@ -1173,8 +1314,9 @@ components:
           type: string
           enum: [version, snapshot]
         date:
-          type: string
+          type: [string, 'null']
           format: date-time
+          description: When the version was saved; null when the server's data doesn't say
         by:
           oneOf:
             - $ref: '#/components/schemas/UserRef'
@@ -1518,3 +1660,25 @@ components:
             `true` to check the document out to the caller once it's filed,
             when it stays open in Word after "Save to Healdan". `false` by
             default.
+    NewVersion:
+      type: object
+      additionalProperties: false
+      description: The `version` part of `saveVersion`.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [snapshot, version]
+          description: |
+            `snapshot` for an ordinary save (2.1 becomes 2.2), `version` for
+            "Save as new version" (2.2 becomes 3.0).
+        comment:
+          type: [string, 'null']
+          description: The comment saved with the version.
+          examples: [Sent to the client]
+        keepCheckedOut:
+          type: [boolean, 'null']
+          description: |
+            `true` for a save while editing, which leaves the document
+            checked out to the caller; `false` by default, the save on
+            closing, which checks it in.

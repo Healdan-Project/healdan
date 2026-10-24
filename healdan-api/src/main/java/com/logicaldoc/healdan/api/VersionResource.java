@@ -1,32 +1,77 @@
 package com.logicaldoc.healdan.api;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.StringUtils;
+import org.apache.cxf.jaxrs.ext.multipart.Attachment;
+import org.apache.cxf.jaxrs.ext.multipart.Multipart;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
+import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.api.model.DocumentView;
+import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.api.model.NewVersion;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.VersionView;
+import com.logicaldoc.healdan.security.AccessChecks;
 
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 
 /**
- * {@code GET /v1/documents/{docNumber}/versions}: a document's timeline (spec
- * section 6.4).
+ * A document's timeline, {@code GET /v1/documents/{docNumber}/versions}
+ * (spec section 6.4), and saving new content to it with {@code POST} (section
+ * 6.6).
  */
 @Component
 @Path("/v1/documents/{docNumber: [0-9]+}/versions")
 @Produces(MediaType.APPLICATION_JSON)
 public class VersionResource {
+
+	private static final Logger log = LoggerFactory.getLogger(VersionResource.class);
+
+	/** The kinds of save: an ordinary one, and "Save as new version" */
+	private static final String SNAPSHOT = "snapshot";
+
+	private static final String VERSION = "version";
+
+	/** The request field the new content comes in */
+	private static final String FILE = "file";
+
+	private static final String EXTENSION = "extension";
+
+	private final DocumentLocks locks;
+
+	@Autowired
+	public VersionResource(DocumentLocks locks) {
+		this.locks = locks;
+	}
 
 	/**
 	 * @param docNumber the doc #
@@ -51,8 +96,168 @@ public class VersionResource {
 		}
 	}
 
+	/**
+	 * Saves new content to the document (spec section 6.6), through CE's
+	 * check-in as the old UI does. It runs under the document's
+	 * {@link DocumentLocks lock}, so two saves of one document are applied one
+	 * after the other. The checks run in this order, and the first that fails
+	 * gives the answer:
+	 * <ol>
+	 * <li>{@code 400} for a {@code version} part that's missing or isn't the
+	 * JSON expected, or a missing {@code file} part;</li>
+	 * <li>{@code 404} for a document the caller can't read;</li>
+	 * <li>{@code 403} without the Write permission, or for a document
+	 * protected by a password the session hasn't given;</li>
+	 * <li>{@code 409 checked-out} for someone else's check-out, administrators
+	 * included, and {@code 409 locked} for any lock, the caller's own too;</li>
+	 * <li>{@code 409 refused} for an immutable document;</li>
+	 * <li>the name ({@code 422}): it must keep the document's extension;</li>
+	 * <li>the file: {@code 413 too-large} over the upload limit, {@code 422}
+	 * when it's empty.</li>
+	 * </ol>
+	 * A free document is then checked out to the caller, checked in with the
+	 * file, and with {@code keepCheckedOut} checked out again. A check-in that
+	 * is refused or fails leaves the document checked out to the caller, with
+	 * its content as it was: CE writes nothing when a rule refuses the
+	 * check-in, and puts the document back when the file can't be stored.
+	 *
+	 * @param docNumber the doc #
+	 * @param version the {@code version} part, as JSON ({@link NewVersion})
+	 * @param file the {@code file} part
+	 * @return {@code 201} with the document
+	 */
+	@POST
+	@Consumes(MediaType.MULTIPART_FORM_DATA)
+	public Response save(@PathParam("docNumber") long docNumber,
+			@Multipart(value = "version", required = false) String version,
+			@Multipart(value = "file", required = false) Attachment file) {
+		NewVersion request = parse(version);
+		if (file == null)
+			throw ApiProblem.badRequest("Send the file in a part named file.");
+		Caller caller = Caller.current();
+		String failure = "Can't save document #" + docNumber;
+		try {
+			long id = DocumentResource.readable(docNumber, caller.user()).getId();
+			DocumentView saved = locks.withLock(id, failure, () -> save(docNumber, request, file, caller));
+			return Response.status(Response.Status.CREATED).entity(saved).build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException(failure, e);
+		}
+	}
+
+	/**
+	 * The save itself, under the document's lock
+	 */
+	private static DocumentView save(long docNumber, NewVersion request, Attachment file, Caller caller)
+			throws Exception {
+		User user = caller.user();
+		Session session = caller.session();
+		// Read again: another request may have changed it while this one waited
+		Document document = DocumentResource.readable(docNumber, user);
+		if (!AccessChecks.allowed(user, Permission.WRITE, document))
+			throw ApiProblem.forbidden("You may not save to document #%d.".formatted(docNumber));
+		DocumentResource.refuseProtected(document, session, docNumber);
+		// Never over someone else's hold, administrators included (spec section 6.6)
+		CheckoutResource.refuseHolds(document, user, docNumber);
+		CheckoutResource.refuseImmutable(document, docNumber);
+
+		List<FieldError> errors = new ArrayList<>();
+		String name = name(file, document.getFileName(), errors);
+		File upload = null;
+		try {
+			upload = Uploads.toTempFile(file);
+			if (errors.isEmpty() && upload.length() > Uploads.maxBytes())
+				throw Uploads.tooLarge();
+			FieldError empty = Uploads.emptyError(upload, FILE);
+			if (empty != null)
+				errors.add(empty);
+			if (!errors.isEmpty())
+				throw ApiProblem.validation(errors);
+
+			// The checks above leave it free or checked out to the caller
+			if (!ApiViews.checkedOutBy(document, user))
+				DocumentManager.get().checkout(document.getId(),
+						CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
+			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
+			checkin.setComment(request.comment());
+			// Waits for CE's version record, so the timeline shows the save at once
+			DocumentManager.get()
+					.checkin(document.getId(), upload, name, VERSION.equals(request.kind()), null, checkin).get();
+
+			if (Boolean.TRUE.equals(request.keepCheckedOut()))
+				checkOutAgain(document.getId(), session, docNumber);
+			return ApiViews.document(DocumentDAO.get().findById(document.getId()), user);
+		} finally {
+			FileUtils.deleteQuietly(upload);
+		}
+	}
+
+	/**
+	 * CE's check-in always releases the check-out, so a save while editing
+	 * checks the document out again. The old web page can take it in the
+	 * moment between (spec section 6.6): the save stands, and the answer's
+	 * {@code hold} shows who has the document.
+	 */
+	private static void checkOutAgain(long docId, Session session, long docNumber) {
+		try {
+			DocumentManager.get().checkout(docId, CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
+		} catch (PersistenceException e) {
+			log.warn("Saved document #{} but couldn't check it out again: {}", docNumber, e.getMessage());
+		}
+	}
+
+	/**
+	 * @param file the {@code file} part
+	 * @param current the document's name
+	 * @param errors where to add what's wrong with the name, as for a new
+	 *        document's, but for its extension: it must be the document's
+	 * @return the name to save under: the file part's, or the document's when
+	 *         the part has none; an extension that differs only in case keeps
+	 *         the document's spelling, as Word may send {@code Lease.DOCX} for
+	 *         {@code Lease.docx}
+	 */
+	private static String name(Attachment file, String current, List<FieldError> errors) {
+		String sent = StringUtils.strip(Uploads.fileName(file));
+		String name = StringUtils.isBlank(sent) ? current : sent;
+		Uploads.checkName(name, FILE, errors);
+		errors.removeIf(error -> EXTENSION.equals(error.code()));
+
+		String extension = Uploads.extension(current);
+		String sentExtension = Uploads.extension(name);
+		if (!sentExtension.equalsIgnoreCase(extension)) {
+			errors.add(new FieldError(FILE, EXTENSION,
+					extension.isEmpty() ? "The file's name can't have an extension, as the document's has none."
+							: "The file's name must end in .%s, as the document's does.".formatted(extension)));
+			return name;
+		}
+		return name.substring(0, name.length() - sentExtension.length()) + extension;
+	}
+
+	/**
+	 * @return the {@code version} part
+	 * @throws ApiProblem {@code 400} if it's missing, isn't the JSON expected
+	 *         or doesn't say which kind of save it is
+	 */
+	private static NewVersion parse(String version) {
+		if (version == null)
+			throw ApiProblem.badRequest("Send the save's details as JSON in a part named version.");
+		NewVersion request;
+		try {
+			request = ApiJson.mapper().readValue(version, NewVersion.class);
+		} catch (JsonProcessingException e) {
+			throw ApiProblem.badRequest(ProblemMapper.describe(e));
+		}
+		if (request == null)
+			throw ApiProblem.badRequest("The version part must be a JSON object.");
+		if (!SNAPSHOT.equals(request.kind()) && !VERSION.equals(request.kind()))
+			throw ApiProblem.badRequest("Say what to save with kind: snapshot or version.");
+		return request;
+	}
+
 	private static VersionView view(Version v) {
-		return new VersionView(v.getVersion(), v.getFileVersion(), kind(v.getVersion()), v.getVersionDate(),
+		// CE's data can lack a version date; the version's own date stands in
+		Date date = v.getVersionDate() != null ? v.getVersionDate() : v.getDate();
+		return new VersionView(v.getVersion(), v.getFileVersion(), kind(v.getVersion()), date,
 				v.getUserId() == 0L ? null : ApiViews.userRef(v.getUserId(), v.getUsername()), v.getComment(),
 				v.getEvent());
 	}

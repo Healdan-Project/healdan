@@ -298,10 +298,7 @@ public class DocumentResource {
 			if (!AccessChecks.allowed(caller.user(), Permission.DOWNLOAD, document))
 				throw ApiProblem.forbidden("You may not download document #%d.".formatted(docNumber));
 
-			// As every CE download path: a protected document opens only for a session that unprotected it
-			if (document.isPasswordProtected() && !caller.session().getUnprotectedDocs().containsKey(document.getId()))
-				throw ApiProblem.forbidden(
-						"Document #%d is protected by a password. Open it in Healdan's web page.".formatted(docNumber));
+			refuseProtected(document, caller.session(), docNumber);
 
 			String fileVersion = document.getFileVersion();
 			String fileName = document.getFileName();
@@ -347,6 +344,17 @@ public class DocumentResource {
 	static Document readable(long docNumber, User caller) throws PersistenceException {
 		return AccessChecks.readableDocument(docNumber, caller)
 				.orElseThrow(() -> ApiProblem.notFound("No document #" + docNumber));
+	}
+
+	/**
+	 * @throws ApiProblem {@code 403} if the document is protected by a password
+	 *         that the caller's session hasn't given in the web page
+	 *         ({@link ApiViews#opens})
+	 */
+	static void refuseProtected(Document document, Session session, long docNumber) {
+		if (!ApiViews.opens(document, session))
+			throw ApiProblem.forbidden(
+					"Document #%d is protected by a password. Open it in Healdan's web page.".formatted(docNumber));
 	}
 
 	/**

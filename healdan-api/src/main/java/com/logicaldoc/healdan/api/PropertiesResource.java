@@ -113,12 +113,7 @@ public class PropertiesResource {
 		HoldView hold = ApiViews.hold(document);
 		if (hold == null || (document.getLockUserId() != null && document.getLockUserId() == user.getId()))
 			return;
-		String holder = hold.by() != null && hold.by().name() != null ? hold.by().name() : "someone else";
-		if ("checkout".equals(hold.kind()))
-			throw ApiProblem.conflict("checked-out", "Document #%d is checked out to %s.".formatted(docNumber, holder))
-					.with("hold", hold);
-		throw ApiProblem.conflict("locked", "Document #%d is locked by %s.".formatted(docNumber, holder)).with("hold",
-				hold);
+		throw CheckoutResource.conflict(hold, docNumber, user);
 	}
 
 	/**
