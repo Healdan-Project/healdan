@@ -15,4 +15,5 @@ weight: 9
 - **No list of signed-in devices.** The web page doesn't show the devices a person has signed in on through the
   API. Changing their password or disabling them signs every one out. For a lost device, also delete any LogicalDOC
   API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
-  change. See [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
+  change. Sessions already open in the web page or with a key stay open until an administrator kills them. See
+  [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).

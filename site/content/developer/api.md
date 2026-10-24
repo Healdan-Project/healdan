@@ -75,7 +75,8 @@ apart; a blank name is "Unnamed device".
 - **Changing your password signs out every device.** For a lost device, do that, then delete any LogicalDOC API
   keys you don't recognise: in the web page, under the person icon in the top bar, **Security → API Keys**,
   right-click a key and choose **Delete**. A device token can't make a key, but whoever had the device may have had
-  the web page too, and a key outlasts a password change.
+  the web page too, and a key outlasts a password change. Then ask an administrator to end your open sessions
+  (see [Healdan Settings](../../admin/healdan-settings/#device-sign-ins)).
 - **Signing out** is `DELETE /auth/tokens/current`, which revokes the token making the request.
 - **Your devices:** `GET /auth/tokens` lists your tokens that still work, newest first, never the tokens themselves.
   `current` marks the one making the request. `DELETE /auth/tokens/{id}` revokes one of them.
