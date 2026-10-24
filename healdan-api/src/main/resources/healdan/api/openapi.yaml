@@ -237,8 +237,13 @@ paths:
         `500 server-error`; a failure inside the full-text engine itself can
         show as no results.
 
-        The search looks at the first 10,000 hits only. Hits the caller can't
-        see are skipped, and pages are filled from the hits that follow.
+        A leading wildcard, such as `*report` or `?ar`, is accepted.
+
+        The full-text scopes (`documents`, `emails`, `all`) get at most about
+        1000 hits from the search engine, which is its own limit; hits the
+        caller can't see are dropped from those, so a page can come up short
+        of the full count. The other scopes look at the first 10,000 hits.
+        Pages are filled from the hits that follow the ones skipped.
       tags: [Search]
       parameters:
         - name: scope
@@ -301,8 +306,9 @@ paths:
       summary: Recent documents
       description: |
         The documents the caller filed, changed, checked in or out, or
-        downloaded in the last 30 days and can still read, newest first. At
-        most 50, in one page.
+        downloaded lately and can still read, newest first. "Lately" is the
+        `recentmatters.days` setting, 30 days by default. At most 50, in one
+        page.
       tags: [Documents]
       responses:
         '200':
@@ -343,6 +349,10 @@ paths:
         the answer is `403 forbidden`. A version the document doesn't have
         is `404`. The download is recorded in the document's history, as the
         old web page records it, once per 30 seconds.
+
+        A document protected by a password is `403 forbidden` too, unless
+        the signed-in session has unlocked it in the web page. A document whose file is missing from storage
+        is `500 server-error`.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -404,8 +414,9 @@ paths:
       summary: Recent folders
       description: |
         The folders inside matters where the caller created or changed a
-        document in the last 30 days, that the caller can still read, newest
-        first. At most 20, in one page.
+        document lately, that the caller can still read, newest first.
+        "Lately" is the `recentmatters.days` setting, 30 days by default. At
+        most 20, in one page.
       tags: [Folders]
       responses:
         '200':
@@ -423,8 +434,8 @@ paths:
       description: |
         A Store, a matter's workspace, a folder or a search folder. Folders
         outside the Stores (the root, the Default workspace, the Templates
-        Store and what is in them), folders the caller can't read, and
-        folders that don't exist are all `404` with the same answer.
+        Store and what is in them), aliases, folders the caller can't read,
+        and folders that don't exist are all `404` with the same answer.
       tags: [Folders]
       parameters:
         - $ref: '#/components/parameters/FolderId'
@@ -444,7 +455,8 @@ paths:
       description: |
         A matter's workspace or a folder gives the subfolders the caller can
         read (by name, ignoring case), then the documents the caller can read
-        (by name). Hidden folders and aliases are left out. A search folder
+        (by name). Hidden folders and aliases are left out, and an alias
+        asked for by its own id is `404`. A search folder
         gives its documents, newest change first, at most 1000. `total` is
         the full count.
 
@@ -661,7 +673,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, refused, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, refused, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:

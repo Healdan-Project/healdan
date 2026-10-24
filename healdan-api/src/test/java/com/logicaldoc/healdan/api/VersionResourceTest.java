@@ -102,6 +102,19 @@ public class VersionResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testSameSecondVersionsComeNewestFirst() throws Exception {
+		jdbc().update("update ld_version set ld_versiondate = '2024-05-06 07:08:09' where ld_documentid = ?", doc.getId());
+		String path = "/api/v1/documents/" + doc.getCustomId() + "/versions";
+
+		for (int round = 0; round < 3; round++) {
+			JsonNode items = get(path).token(signIn(clerk)).send().json().path("items");
+			assertEquals("2.0", items.get(0).path("version").textValue());
+			assertEquals("1.1", items.get(1).path("version").textValue());
+			assertEquals("1.0", items.get(2).path("version").textValue());
+		}
+	}
+
+	@Test
 	public void testUnreadable() throws Exception {
 		ApiResponse response = get("/api/v1/documents/" + doc.getCustomId() + "/versions").token(signIn(outsider))
 				.send();

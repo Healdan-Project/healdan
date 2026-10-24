@@ -151,6 +151,7 @@ public class FolderResource {
 		// One batched permission check for the folder, not one per document
 		List<Document> readable = new ArrayList<>(AccessChecks.readableDocuments(folder,
 				DocumentDAO.get().findByFolder(folder.getId(), null), caller));
+		readable.removeIf(d -> !ApiViews.hasDocNumber(d));
 		readable.sort(Comparator.comparing(Document::getFileName, String.CASE_INSENSITIVE_ORDER)
 				.thenComparing(Document::getFileName).thenComparingLong(Document::getId));
 		return readable;
@@ -172,7 +173,8 @@ public class FolderResource {
 		List<Document> documents = new ArrayList<>();
 		for (Long docId : ids) {
 			Document d = byId.get(docId);
-			if (d != null && d.getDeleted() == 0 && AccessChecks.visible(d, caller))
+			if (d != null && d.getDeleted() == 0 && AccessChecks.visible(d, caller)
+					&& ApiViews.hasDocNumber(d))
 				documents.add(d);
 			if (documents.size() == SEARCH_FOLDER_CAP)
 				break;

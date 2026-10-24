@@ -128,7 +128,7 @@ public class SearchResource {
 			parser.setAllowLeadingWildcard(true);
 			parser.parse(q);
 		} catch (ParseException e) {
-			throw ApiProblem.badRequest("That search can't be understood. Check its quotes and brackets.");
+			throw ApiProblem.badRequest("That search can't be understood. Check its quotes and brackets, or put the words in quotes.");
 		}
 	}
 
@@ -181,7 +181,8 @@ public class SearchResource {
 						&& MatterLocator.get().locate(folder.get()).isUnderAStore())
 					shown.add(folder.get());
 			} else {
-				AccessChecks.readableDocument(DocumentDAO.get().findById(hit.getId()), user).ifPresent(shown::add);
+				AccessChecks.readableDocument(DocumentDAO.get().findById(hit.getId()), user)
+						.filter(ApiViews::hasDocNumber).ifPresent(shown::add);
 			}
 		}
 		return shown;

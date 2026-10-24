@@ -1,6 +1,7 @@
 package com.logicaldoc.healdan.api;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Component;
 
@@ -39,8 +40,11 @@ public class VersionResource {
 		Paging paging = Paging.of(offset, limit);
 		try {
 			Document document = DocumentResource.readable(docNumber, Caller.current().user());
-			List<VersionView> all = VersionDAO.get().findByDocId(document.getId()).stream()
-					.map(VersionResource::view).toList();
+			// CE's findByDocId orders by date alone, and a date has one-second precision
+			List<VersionView> all = VersionDAO.get()
+					.findByWhere("_entity.docId = :docId", Map.of("docId", document.getId()),
+							"_entity.versionDate desc, _entity.id desc", null)
+					.stream().map(VersionResource::view).toList();
 			return paging.slice(all);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the versions of document #" + docNumber, e);

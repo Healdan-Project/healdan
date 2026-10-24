@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
@@ -41,6 +43,8 @@ import com.logicaldoc.healdan.security.AccessChecks;
  */
 public final class ApiViews {
 
+	private static final Logger log = LoggerFactory.getLogger(ApiViews.class);
+
 	private ApiViews() {
 	}
 
@@ -61,6 +65,20 @@ public final class ApiViews {
 	 */
 	public static UserRef userRef(Long id, String name) {
 		return id == null ? null : new UserRef(id, name);
+	}
+
+	/**
+	 * @param d a document
+	 * @return whether it has a numeric doc #. Lists leave out one that
+	 *         hasn't, rather than fail the page.
+	 */
+	public static boolean hasDocNumber(Document d) {
+		String customId = d.getCustomId();
+		boolean numbered = customId != null && !customId.isEmpty() && customId.length() <= 18
+				&& customId.chars().allMatch(c -> c >= '0' && c <= '9');
+		if (!numbered)
+			log.debug("Leaving document {} out of a list: its doc # '{}' isn't a number", d.getId(), customId);
+		return numbered;
 	}
 
 	/**

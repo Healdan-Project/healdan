@@ -275,9 +275,24 @@ public class FolderResourceTest extends ApiTestCase {
 		Folder search = fx.searchFolder(workspace, "Recent");
 		SearchFolderRuleDAO.get().save(new SearchFolderRule(search.getId(), 7, false, SearchFolderRule.Kind.ALL, null, null));
 		fx.upload(documents, "a.docx", "aa", boss);
-		fx.upload(documents, "b.docx", "bb", boss);
+		Document hidden = fx.upload(documents, "b.docx", "bb", boss);
 		awaitAsyncWork();
 
+		// Unpublished: the search folder lists it for admins and publishers only
+		Document current = DocumentDAO.get().findById(hidden.getId(), true);
+		current.setPublished(false);
+		DocumentDAO.get().store(current, fx.documentHistory(boss));
+		ApiResponse bossSees = get("/api/v1/folders/" + search.getId() + "/children").token(signIn(boss)).send();
+		assertEquals(bossSees.toString(), 200, bossSees.status());
+		assertEquals(bossSees.text(), 2, bossSees.json().path("total").asInt());
+
+		JsonNode only = get("/api/v1/folders/" + search.getId() + "/children").token(signIn(clerk)).send().json();
+		assertEquals(1, only.path("total").asInt());
+		assertEquals("a.docx", only.path("items").get(0).path("name").textValue());
+
+		current = DocumentDAO.get().findById(hidden.getId(), true);
+		current.setPublished(true);
+		DocumentDAO.get().store(current, fx.documentHistory(boss));
 		JsonNode page = get("/api/v1/folders/" + search.getId() + "/children").token(signIn(clerk)).send().json();
 
 		assertEquals(2, page.path("total").asInt());
@@ -291,6 +306,21 @@ public class FolderResourceTest extends ApiTestCase {
 		// Only folders asked for: none
 		assertEquals(0, get("/api/v1/folders/" + search.getId() + "/children?type=folder").token(signIn(clerk)).send()
 				.json().path("total").asInt());
+	}
+
+	@Test
+	public void testDocumentWithoutNumberIsLeftOutOfLists() throws Exception {
+		Document odd = fx.upload(documents, "odd.docx", "oo", boss);
+		fx.upload(documents, "fine.docx", "ff", boss);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_customid = 'ABC' where ld_id = ?", odd.getId());
+		DocumentDAO.get().evict(Document.class, odd.getId());
+
+		ApiResponse response = get("/api/v1/folders/" + documents.getId() + "/children").token(signIn(clerk)).send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(1, response.json().path("total").asInt());
+		assertEquals("fine.docx", response.json().path("items").get(0).path("name").textValue());
 	}
 
 	@Test

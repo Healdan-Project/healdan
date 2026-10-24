@@ -70,6 +70,7 @@ public class DocumentResource {
 			List<Document> found = new ArrayList<>();
 			for (long id : LegacyDocNumbers.find(legacy, caller.getTenantId()))
 				AccessChecks.readableDocument(DocumentDAO.get().findById(id), caller).ifPresent(found::add);
+			found.removeIf(d -> !ApiViews.hasDocNumber(d));
 			found.sort(Comparator.comparingLong(d -> Long.parseLong(d.getCustomId())));
 			List<DocumentView> views = new ArrayList<>();
 			for (Document document : found)
@@ -92,7 +93,7 @@ public class DocumentResource {
 			List<DocumentView> views = new ArrayList<>();
 			for (RecentDocument recent : RecentDocuments.get().list(caller.getId())) {
 				Document document = DocumentDAO.get().findById(recent.docId());
-				if (document != null)
+				if (document != null && ApiViews.hasDocNumber(document))
 					views.add(ApiViews.document(document, caller));
 			}
 			return Page.whole(views);

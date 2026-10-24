@@ -201,7 +201,7 @@ public class SearchResourceTest extends ApiTestCase {
 				ApiResponse response = get("/api/v1/search?scope=" + scope + "&q=" + q).token(token).send();
 				assertEquals(scope + " " + q + " " + response, 400, response.status());
 				assertEquals("bad-request", response.json().path("code").textValue());
-				assertEquals("That search can't be understood. Check its quotes and brackets.",
+				assertEquals("That search can't be understood. Check its quotes and brackets, or put the words in quotes.",
 						response.json().path("detail").textValue());
 			}
 		}
