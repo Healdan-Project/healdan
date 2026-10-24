@@ -44,9 +44,9 @@ public class GUIBranding implements Serializable {
 
 	private String product = "Healdan";
 
-	private String help = "https://docs.logicaldoc.com";
-
 	// Healdan: the defaults below match HealdanSystemInfo's
+	private String help = "https://docs.healdan.com";
+
 	private String bugs = "https://github.com/Healdan-Project/healdan/issues";
 
 	private String url = "https://github.com/Healdan-Project/healdan";

@@ -13,7 +13,8 @@ builds it for you. This page is for working on the code.
 - **Maven 3.9 or newer.**
 - **Two extra Maven repositories.** Some dependencies aren't on Maven Central. They come from
   `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`.
-  `.github/workflows/build-logicaldoc.yml` writes them into `~/.m2/settings.xml`; copy that block for local builds.
+  `docker/maven-settings.xml` lists them. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there
+  for local builds.
 - **`~/logicaldoc-dev.properties`.** Spring-based tests fail in `setUp` without it. An empty file works.
 
 ## Commands
