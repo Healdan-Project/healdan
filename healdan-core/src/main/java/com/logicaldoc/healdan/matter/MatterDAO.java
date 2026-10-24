@@ -54,4 +54,22 @@ public interface MatterDAO extends PersistentObjectDAO<Matter> {
 	 * @throws PersistenceException error at data layer
 	 */
 	public List<Matter> findLive() throws PersistenceException;
+
+	/**
+	 * @param storeId the id of a Store
+	 * @param offset how many matters to skip
+	 * @param limit the most matters to return
+	 * @return the live matters (matter and workspace folder not deleted) whose
+	 *         workspace is directly in the Store, by client number, then matter
+	 *         number
+	 * @throws PersistenceException error at data layer
+	 */
+	public List<Matter> findByStore(long storeId, int offset, int limit) throws PersistenceException;
+
+	/**
+	 * @param storeId the id of a Store
+	 * @return how many matters {@link #findByStore} finds in all
+	 * @throws PersistenceException error at data layer
+	 */
+	public long countByStore(long storeId) throws PersistenceException;
 }

@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.api;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
@@ -23,6 +25,9 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.api.model.DocumentView;
+import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.navigation.RecentDocuments;
+import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.util.MimeType;
 
@@ -48,6 +53,27 @@ public class DocumentResource {
 
 	/** As in {@code ServletUtil.saveHistory}: a download within this many seconds of the last is not recorded again */
 	private static final int DEDUPLICATE_SECONDS = 30;
+
+	/**
+	 * @return the documents the caller filed, changed, checked out or
+	 *         downloaded lately and can still read, newest first; at most 50
+	 */
+	@GET
+	@Path("recent")
+	public Page<DocumentView> recent() {
+		User caller = Caller.current().user();
+		try {
+			List<DocumentView> views = new ArrayList<>();
+			for (RecentDocument recent : RecentDocuments.get().list(caller.getId())) {
+				Document document = DocumentDAO.get().findById(recent.docId());
+				if (document != null)
+					views.add(ApiViews.document(document, caller));
+			}
+			return Page.whole(views);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't list recent documents", e);
+		}
+	}
 
 	/**
 	 * @param docNumber the doc #

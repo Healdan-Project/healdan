@@ -19,6 +19,8 @@ import com.logicaldoc.healdan.api.model.FolderView;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.navigation.RecentFolders;
+import com.logicaldoc.healdan.navigation.RecentFolders.RecentFolder;
 import com.logicaldoc.healdan.searchfolder.SearchFolderService;
 import com.logicaldoc.healdan.security.AccessChecks;
 
@@ -41,6 +43,27 @@ public class FolderResource {
 
 	/** The most documents a search folder shows */
 	static final int SEARCH_FOLDER_CAP = 1000;
+
+	/**
+	 * @return the folders inside matters the caller changed a document in
+	 *         lately, newest first, that the caller can still read; at most 20
+	 */
+	@GET
+	@Path("recent")
+	public Page<FolderView> recent() {
+		User caller = Caller.current().user();
+		try {
+			List<FolderView> views = new ArrayList<>();
+			for (RecentFolder recent : RecentFolders.get().list(caller.getId())) {
+				Folder folder = FolderDAO.get().findById(recent.folderId());
+				if (folder != null)
+					ApiViews.folder(folder, caller).ifPresent(views::add);
+			}
+			return Page.whole(views);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't list recent folders", e);
+		}
+	}
 
 	/**
 	 * @param id the folder's id

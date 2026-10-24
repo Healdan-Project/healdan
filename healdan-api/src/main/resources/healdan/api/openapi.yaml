@@ -144,6 +144,23 @@ paths:
                 $ref: '#/components/schemas/UserView'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/me/checkouts:
+    get:
+      operationId: listCheckouts
+      summary: Documents you've checked out
+      description: |
+        The documents the caller has checked out and can still read, the
+        latest check-out first (`hold.since`). In one page.
+      tags: [Users]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/users:
     get:
       operationId: findUsers
@@ -167,6 +184,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserHitPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/documents/recent:
+    get:
+      operationId: listRecentDocuments
+      summary: Recent documents
+      description: |
+        The documents the caller filed, changed, checked in or out, or
+        downloaded in the last 30 days and can still read, newest first. At
+        most 50, in one page.
+      tags: [Documents]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentPage'
         default:
           $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}:
@@ -252,6 +287,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders/recent:
+    get:
+      operationId: listRecentFolders
+      summary: Recent folders
+      description: |
+        The folders inside matters where the caller created or changed a
+        document in the last 30 days, that the caller can still read, newest
+        first. At most 20, in one page.
+      tags: [Folders]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderPage'
         default:
           $ref: '#/components/responses/Problem'
   /v1/folders/{id}:
@@ -369,6 +422,62 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MatterPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/stores:
+    get:
+      operationId: listStores
+      summary: The Stores
+      description: |
+        Every Store by name, not LogicalDOC's Default workspace or the
+        Templates Store. Administrators only: anyone else gets
+        `403 forbidden` and learns nothing about the Stores.
+      tags: [Stores]
+      parameters:
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StoreRefPage'
+        '403':
+          $ref: '#/components/responses/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/stores/{id}/matters:
+    get:
+      operationId: listStoreMatters
+      summary: The matters in a Store
+      description: |
+        The Store's live matters by client number, then matter number, with
+        the total. Administrators only: anyone else gets `403 forbidden`. An
+        id that isn't a Store is `404`.
+      tags: [Stores]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The Store's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - $ref: '#/components/parameters/Offset'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: The matters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatterPage'
+        '403':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
         default:
           $ref: '#/components/responses/Problem'
 components:
@@ -858,6 +967,33 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/MatterView'
+      unevaluatedProperties: false
+    FolderPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/FolderView'
+      unevaluatedProperties: false
+    DocumentPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/DocumentView'
+      unevaluatedProperties: false
+    StoreRefPage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/StoreRef'
       unevaluatedProperties: false
     FolderChildPage:
       allOf:
