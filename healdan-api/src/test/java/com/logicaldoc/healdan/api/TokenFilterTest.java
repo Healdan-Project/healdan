@@ -180,6 +180,23 @@ public class TokenFilterTest extends ApiTestCase {
 		assertEquals("unauthenticated", deleted.code());
 	}
 
+	// An expiry date passes with no save, so no listener revokes the token: the filter checks the user as CE's
+	// sign-in does
+	@Test
+	public void testExpiredAccount() throws Exception {
+		User clerk = fx.user("clerk");
+		String token = signIn(clerk);
+		assertEquals(200, get(ME).token(token).send().status());
+		jdbc().update("update ld_user set ld_expire = ? where ld_id = ?", new Date(System.currentTimeMillis() - DAY),
+				clerk.getId());
+		UserDAO.get().evict(User.class, clerk.getId());
+
+		assertTrue(SessionManager.get().isOpen(boundSid(token)));
+		ApiResponse expired = get(ME).token(token).send();
+		assertEquals(expired.toString(), 401, expired.status());
+		assertEquals("unauthenticated", expired.code());
+	}
+
 	@Test
 	public void testExpiredToken() throws Exception {
 		String token = signIn(fx.user("clerk"));
@@ -232,6 +249,20 @@ public class TokenFilterTest extends ApiTestCase {
 					.json(Map.of("username", "clerk", "password", "Not-the-password-" + i)).send().status());
 		assertEquals(429, post("/api/v1/auth/tokens")
 				.json(Map.of("username", "clerk", "password", HealdanFixtures.PASSWORD)).send().status());
+		SessionManager.get().kill(boundSid(token));
+
+		ApiResponse response = get(ME).token(token).send();
+
+		assertEquals(response.toString(), 200, response.status());
+	}
+
+	// A new session for a token has no username: failures for one typed as "null" mustn't block it
+	@Test
+	public void testUsernameCalledNullKeepsTokensWorking() throws Exception {
+		String token = signIn(fx.user("clerk"));
+		for (int i = 0; i < 5; i++)
+			assertEquals(401, post("/api/v1/auth/tokens")
+					.json(Map.of("username", "null", "password", "Not-the-password-" + i)).send().status());
 		SessionManager.get().kill(boundSid(token));
 
 		ApiResponse response = get(ME).token(token).send();

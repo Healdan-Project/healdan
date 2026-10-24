@@ -35,6 +35,7 @@ mvn -pl logicaldoc-core test                              # one module's tests (
 mvn -pl logicaldoc-core test -Dtest=DocumentManagerTest   # one test class
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one method
 mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or one class of them
+mvn -pl healdan-api test                                  # the API's tests (install healdan-core first)
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
@@ -42,7 +43,8 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or 
   - Up to `test` that's enough. For `package` or `install`, add `-Dmaven.antrun.skip=true` and `-pl '!logicaldoc-webapp'`, as CI's `build` check does. The GUI's antrun step fails without the GWT output, and skipping antrun leaves every plugin zip unfinished, so the WAR built from them is broken.
 - Spring-based tests fail in `setUp` unless `~/logicaldoc-dev.properties` exists. An empty file works; CI creates one.
 - `healdan-core`'s tests run against the installed jars of the modules it uses. After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module (`-pl <module> -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install`) before running them.
-- CI's `build` check compiles every module except the WAR and skips the GWT compile. It runs the `healdan-core` tests, then the upstream tests named in its `-Dtest` list, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
+- `healdan-api`'s tests reuse `healdan-core`'s test-jar (its base test case and fixtures) and its test `context.properties`. `-Dmaven.test.skip=true` doesn't build that test-jar, so `healdan-api` leaves the dependency out then (the `with-tests` profile); `-DskipTests` still builds it.
+- CI's `build` check compiles every module except the WAR and skips the GWT compile. It runs the `healdan-core` and `healdan-api` tests, then the upstream tests named in its `-Dtest` list, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. The Docker image CI does the GWT compile and the WAR. Upstream modules' other tests don't run in CI. Its Maven repository cache falls back to master's newest copy, and only master saves it, so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
 - Pull requests that change only `docs/`, `site/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
@@ -113,6 +115,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - Its GUI code is in `logicaldoc-gui` under `com.logicaldoc.gui.frontend.client.healdan`, reached from one-line hooks in upstream GUI classes.
   - Its servlets register with `@WebServlet`, never `addServlet`, because the Docker image rebuilds `web.xml`. RPC paths are `/frontend/healdan*` and data paths `/data/healdan*`.
   - Its listeners enforce the rules on every route. Extension ids in its `plugin.xml` must be unique: JPF silently drops the whole plugin on a duplicate.
+- **`healdan-api`** is Healdan's JSON API at `/api/*` (JPF id `healdan-api`, which requires `healdan-core`; M2's spec is `docs/superpowers/specs/2026-10-23-m2-api-foundation-design.md`). It's CXF JAX-RS on a bus of its own behind `ApiServlet` (`@WebServlet`), and `/api/**` is outside Spring Security, so only an `Authorization: Bearer` device token signs a request in. `openapi.yaml` describes every route, and its tests check each response against it. Device tokens and the sign-in throttle's settings live in `healdan-core`.
 - **Flyway owns the `hd_` tables, and only those.**
   - Scripts are `healdan-core/src/main/resources/healdan/db/migration/{mariadb,hsqldb}/V<n>__<name>.sql`, and the history table is `hd_schema_history`.
   - A change ships as a new script; never edit one that has shipped.

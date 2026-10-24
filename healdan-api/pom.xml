@@ -16,13 +16,6 @@
 		<swagger-ui.version>5.32.15</swagger-ui.version>
 	</properties>
 	<dependencies>
-		<!-- Swagger UI ships inside the plugin zip (see assemblyplugin.xml) and is served at /api/docs/ -->
-		<dependency>
-			<groupId>org.webjars</groupId>
-			<artifactId>swagger-ui</artifactId>
-			<version>${swagger-ui.version}</version>
-		</dependency>
-
 		<!-- Healdan's domain code, shipped by its own plugin -->
 		<dependency>
 			<groupId>com.logicaldoc</groupId>
@@ -268,6 +261,40 @@
 			</testResource>
 		</testResources>
 		<plugins>
+			<!-- Swagger UI's files go into this jar under healdan/api/swagger-ui/, and DocsResource serves them at
+				/api/docs/. Not the webjar itself: Tomcat would serve its META-INF/resources, demo page included, at
+				/webjars/ -->
+			<plugin>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>unpack-swagger-ui</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>unpack</goal>
+						</goals>
+						<configuration>
+							<artifactItems>
+								<artifactItem>
+									<groupId>org.webjars</groupId>
+									<artifactId>swagger-ui</artifactId>
+									<version>${swagger-ui.version}</version>
+									<fileMappers>
+										<org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
+											<pattern>^META-INF/resources/webjars/swagger-ui/[^/]+/</pattern>
+											<replacement>healdan/api/swagger-ui/</replacement>
+										</org.codehaus.plexus.components.io.filemappers.RegExpFileMapper>
+									</fileMappers>
+								</artifactItem>
+							</artifactItems>
+							<includes>META-INF/resources/webjars/swagger-ui/${swagger-ui.version}/**</includes>
+							<!-- The demo page and the script that loads its description from the internet -->
+							<excludes>**/index.html,**/swagger-initializer.js</excludes>
+							<outputDirectory>${project.build.outputDirectory}</outputDirectory>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>

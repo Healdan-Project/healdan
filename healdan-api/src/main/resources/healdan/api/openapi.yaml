@@ -192,7 +192,7 @@ components:
       properties:
         type:
           type: string
-          description: '`https://healdan.org/problems/<code>`; it needn''t resolve.'
+          description: '`https://healdan.com/problems/<code>`; it needn''t resolve.'
         title:
           type: string
         status:

@@ -9,7 +9,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons, compiles every module except the WAR without the GWT compile, then runs `healdan-core`'s tests and the upstream tests in its `-Dtest` list, which cover Healdan's edits to upstream code |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons, compiles every module except the WAR without the GWT compile, then runs `healdan-core`'s and `healdan-api`'s tests and the upstream tests in its `-Dtest` list, which cover Healdan's edits to upstream code |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources and its internal links, and on pushes to `master` publishes it |
 

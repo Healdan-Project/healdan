@@ -124,7 +124,7 @@ Errors use **RFC 9457 problem details** (`application/problem+json`):
 
 ```json
 {
-  "type": "https://healdan.org/problems/checked-out",
+  "type": "https://healdan.com/problems/checked-out",
   "title": "Checked out",
   "status": 409,
   "detail": "Document #1234 is checked out to Jane Smith.",
@@ -197,7 +197,7 @@ Lists take `offset` (default 0) and `limit` (default 50, at most 200), and retur
 
 1. **Signing in** calls `SessionManager.newSession(username, password, client)`. The whole CE chain applies: disabled and expired accounts, password expiry, and later LDAP or anything else added to the chain. §5.7 adds the throttle. On success, Healdan creates the token and binds it to the CE session that sign-in created.
 2. **Each request:**
-   - The API's filter hashes the bearer token and finds its row. An unknown, expired or revoked token gets `401 unauthenticated`, and so does a token whose user has since been deleted or disabled. The filter checks the user on every request, because deleting a user fires no listener (§3.1).
+   - The API's filter hashes the bearer token and finds its row. An unknown, expired or revoked token gets `401 unauthenticated`, and so does a token whose user has since been deleted, disabled or refused by CE's other sign-in checks (an expired account or password, working hours). The filter checks the user on every request, as the chain does, because deleting a user fires no listener (§3.1) and an expiry date passes with no save.
    - If the token's CE session is still open, the filter renews it. Otherwise it opens a new one with `SessionManager.newSession` and the token as the key, which runs the chain again, so a user disabled since sign-in is refused here. Healdan declares a new `Authentication` extension for this, `HealdanTokenAuthenticator`, which claims only keys starting with `hd_`.
    - For the length of the request, the filter puts an `LDAuthenticationToken` with that session's ID in `SecurityContextHolder`, so CE code that asks for the current session finds it, and clears it afterwards.
 3. **Result:** the API makes about one CE session per device per working session. History, audit and "who's online" show API activity as ordinary sessions with the client's address.
@@ -205,7 +205,7 @@ Lists take `offset` (default 0) and `limit` (default 50, at most 200), and retur
 ### 5.4 Expiry and revocation
 
 - **Idle expiry:** a token unused for **30 days** stops working. (call)
-- **Absolute expiry:** every token stops working **365 days** after sign-in. (call) The add-in then asks for the password again.
+- **Absolute expiry:** every token stops working **365 days** after sign-in. (call) The add-in then asks for the password again. Lowering the maximum in Settings shortens the tokens already issued too.
 - **Revoked automatically** when the user changes their password or is disabled (a Healdan `UserListener`). A deleted user's tokens stop working at once through the per-request check (§5.3). Changing your password is therefore the simple way to sign out a lost laptop until M6 has a "Signed-in devices" screen.
 - Revoking a token also closes its CE session.
 - `lastUsed` is written at most once every few minutes per token, not on every request. The builder chooses the interval.
@@ -234,7 +234,9 @@ OIDC sign-in (M4) ends the same way: the provider's pop-up signs the user in, th
 - The account is **never disabled** (`throttle.username.disableuser = false`). A block simply runs out.
 
 **How (calls):**
-- **One hook for every route.** Every sign-in ends in `SessionManager.newSession`: the old UI's form login, WebDAV, CMIS and REST through `LDAuthenticationProvider`, SOAP's `SoapAuthService`, `X-API-KEY` through `SessionFilter`, and the API. A small upstream edit calls CE's existing `LoginThrottle.checkLoginThrottle(username, key, address)` at the start of the two `newSession` methods the others delegate to, and `LoginThrottle.clearFailures(username, address)` when a sign-in succeeds. Today only the form login's `LDAuthenticationProvider` clears them, so a success through SOAP or the API would leave old failures counting. Clearing on success is what makes the limit "5 in a row".
+- **One hook for every route.** Every sign-in ends in `SessionManager.newSession`: the old UI's form login, WebDAV, CMIS and REST through `LDAuthenticationProvider`, SOAP's `SoapAuthService`, `X-API-KEY` through `SessionFilter`, and the API. A small upstream edit calls CE's existing `LoginThrottle.checkLoginThrottle(username, key, address)` at the start of the two `newSession` methods the others delegate to, and `LoginThrottle.clearFailures(username, address)` when a sign-in succeeds. Today only the form login's `LDAuthenticationProvider` clears them, so a success through SOAP or the API would leave old failures counting. Clearing on success is what makes the limit "5 in a row". The new code is in a fork-owned `HealdanThrottle` beside `SessionManager`.
+- **One count per account.** The throttle counts the account whose password the chain checks: the name before an impersonation's `>`, trimmed, and in lower case when `login.ignorecase` is on. Otherwise `victim>a`, `victim>b` and so on would each get a fresh count. A key sign-in has no account and checks none (not the count of a user called `null`).
+- **Only a password clears the counts.** A sign-in that presented a key may have used an API key or a device token instead of the password, so it clears nothing. A success clears the address's count only once its last failure is older than the wait, so that one account's success can't reset an attack on others from the same address.
 - **A blocked attempt isn't another failure.** The check runs before CE's failure recording, so an add-in retrying during a block doesn't push the block further out.
 - Nothing else in the throttle changes: CE already counts failures, blocks, and emails `throttle.alert.recipients` (admin) about a suspected attack.
 - **Turned on by a seed step.** CE reads the throttle from `context.properties`, which ships `throttle.enabled = false`, and DockerInit never overwrites an existing value. So a new Healdan seed step writes `throttle.enabled = true`, `throttle.username.max = 5`, `throttle.username.wait = 15`, `throttle.ip.max = 20`, `throttle.ip.wait = 15` and `throttle.username.disableuser = false` into the install's `context.properties`, as CE's own settings screen does. It runs once per install, fresh or upgraded, so an admin can change the values afterwards and they stay.
@@ -452,11 +454,13 @@ New `hd_setting` defaults (§5.5) ship as a new seed step, per CLAUDE.md's rule 
 | File | Edit | Why |
 |---|---|---|
 | `logicaldoc-webapp/src/main/resources/context-security.xml` | one `security="none"` line for `/api/**` | §10.3 |
-| `logicaldoc-core/src/main/java/com/logicaldoc/core/security/SessionManager.java` | in the two `newSession` methods the others delegate to: a `LoginThrottle.checkLoginThrottle` call before the chain, and `LoginThrottle.clearFailures` on success | §5.7 |
+| `logicaldoc-core/src/main/java/com/logicaldoc/core/security/SessionManager.java` | in the two `newSession` methods the others delegate to: calls to the fork-owned `HealdanThrottle` that check the throttle before the chain and clear the counts on success, and the failure recorded under the account `HealdanThrottle` names | §5.7 |
+| `logicaldoc-core/src/main/java/com/logicaldoc/core/security/LoginThrottle.java` | `recordFailure`'s history write moved into a public `recordFailedLogin`, which `HealdanThrottle` also calls for a blocked attempt | §5.7 |
+| `logicaldoc-core/src/main/java/com/logicaldoc/core/security/spring/LDAuthenticationProvider.java` | its `LoginThrottle.clearFailures` call removed: it ran without checking a password whenever the request already carried a session, so anyone with a session could reset someone else's count. `SessionManager` clears them now | §5.7 |
 | `pom.xml` (root) | the `healdan-api` module | §10.1 |
 | `logicaldoc-webapp/pom.xml` | an `artifactItem` for `healdan-api`'s plugin zip | CLAUDE.md's plugin pattern |
 
-Fork-owned files it changes: `.github/workflows/build-logicaldoc.yml` (run `healdan-api`'s tests), `docker/smoke-test.sh` (the flow in §14.1), `docker/README.md` (the API and its docs page), and the Healdan Settings dialog.
+Fork-owned files it changes: `logicaldoc-core/src/main/java/com/logicaldoc/core/security/HealdanThrottle.java` (new), `.github/workflows/build-logicaldoc.yml` (run `healdan-api`'s tests), `docker/smoke-test.sh` (the flow in §14.1), `docker/README.md` (the API and its docs page), and the Healdan Settings dialog.
 
 ## 14. Verification
 

@@ -23,10 +23,13 @@ mvn -B -ntp -DskipTests install                            # the whole build, as
 mvn -B -ntp -pl logicaldoc-webapp -am -DskipTests package  # the deployable WAR, in logicaldoc-webapp/target/
 mvn -pl healdan-core test                                  # Healdan's tests
 mvn -pl healdan-core test -Dtest=FilingRulesTest           # one test class
+mvn -pl healdan-api test                                   # the API's tests
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder'  # one test method
 ```
 
 A module's tests run against the installed jars of the modules it uses, so install those first.
+`healdan-api`'s tests also use `healdan-core`'s test-jar, its base test case and fixtures. `-DskipTests` builds
+that jar, but `-Dmaven.test.skip=true` doesn't, so `healdan-api` leaves it out then.
 
 ## Skipping the GWT Compile
 

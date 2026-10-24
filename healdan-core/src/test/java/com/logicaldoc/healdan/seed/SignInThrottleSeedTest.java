@@ -35,9 +35,12 @@ public class SignInThrottleSeedTest extends AbstractHealdanTestCase {
 	@Override
 	public void tearDown() throws IOException {
 		ContextProperties config = Context.get().getConfig();
+		// A key the test configuration lacks goes again, rather than keeping this test's value
 		saved.forEach((k, v) -> {
 			if (v != null)
 				config.setProperty(k, v);
+			else
+				config.remove(k);
 		});
 		super.tearDown();
 	}
