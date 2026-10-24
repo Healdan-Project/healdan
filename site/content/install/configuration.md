@@ -17,6 +17,7 @@ is required. After changing `.env`, run `docker compose up -d`.
 | `LOGICALDOC_PUBLIC_URL` | unset | The public HTTPS address when Healdan is behind a proxy, for example `https://docs.example.org`. Used in links and emails |
 | `LOGICALDOC_BIND` | `127.0.0.1` | The host address the app is published on. `127.0.0.1` means this machine only |
 | `LOGICALDOC_PORT` | `8080` | The host port the app is published on |
+| `LOGICALDOC_TRUSTED_PROXIES` | the app's Docker networks | The IP addresses or ranges Healdan believes `X-Forwarded-For` and `X-Forwarded-Proto` from, separated by commas: your reverse proxy's. Set it when the proxy runs on another machine. See [Reverse Proxy](../reverse-proxy/) |
 | `CATALINA_OPTS` | `-Xmx2g` | Java options, such as the memory limit |
 | `TZ` | `UTC` | The time zone |
 | `DB_WAIT_SECONDS` | `60` | How long the app waits for the database when it starts |

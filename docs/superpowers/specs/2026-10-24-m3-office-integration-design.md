@@ -170,7 +170,7 @@ The LibreOffice extension supports LibreOffice 26.2 and later (call).
 ### 3.3 Network and signing
 
 - **HTTPS.** Production servers sit behind Nginx Proxy Manager with a Let's Encrypt certificate (owner). The helper refuses plain HTTP to anything but `localhost`, so development stacks still work, and it never skips certificate checks (call).
-- **The owner's semi-production server** comes before phase 2 (owner, 2026-10-24). The M2 follow-up "Harden the sign-in throttle behind the proxy" said to land before any production deployment; it's open as [Healdan-Project/healdan#68](https://github.com/Healdan-Project/healdan/pull/68).
+- **The owner's semi-production server** comes before phase 2 (owner, 2026-10-24). The M2 follow-up "Harden the sign-in throttle behind the proxy" said to land before any production deployment; it landed in [Healdan-Project/healdan#68](https://github.com/Healdan-Project/healdan/pull/68). With NPM on another machine, that server's `.env` sets `LOGICALDOC_TRUSTED_PROXIES` to NPM's address (the docs site's Reverse Proxy page).
 - **Apple signing.** The owner has an Apple Developer account, so CI signs and notarises the macOS helper (owner). Builds without the secrets, such as pull requests, are unsigned. The trial signed with the owner's Developer ID certificate on the owner's Mac.
 
 ## 4. The pieces
