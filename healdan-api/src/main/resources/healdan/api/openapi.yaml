@@ -601,9 +601,19 @@ paths:
         None of these refusals changes anything. A rule that refuses the
         check-in itself is `409 refused`: the document is left as it was, but
         checked out to the caller, even if it was free before. Send the save
-        again, or release it. A `500 server-error` may come after the save
-        was applied: read the versions (`listVersions`) before sending it
-        again.
+        again, or release it.
+
+        `201` means the save is stored: the document has a new version, and
+        the version is in its timeline. When the server can't store it, the
+        answer is `500 server-error`, and its `detail` says what's left and
+        whether the document is still checked out to the caller. Either the
+        document is as it was, or its content is the file sent, as a version
+        that isn't in its timeline (`listVersions`), which `?version=` can't
+        fetch. Either way the previous versions and their files can still be
+        read, and sending the save again stores it as the next version. Any
+        other `500` may also come after the document's content became the
+        file sent: read the document and its versions before sending the
+        save again.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'

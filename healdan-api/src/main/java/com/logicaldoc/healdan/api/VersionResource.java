@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -130,9 +131,13 @@ public class VersionResource {
 	 * {@code keepCheckedOut} checked out again. A rule that refuses the
 	 * check-in ({@code 409 refused}) leaves the document as it was, but
 	 * checked out to the caller: CE writes nothing when a rule refuses it. A
-	 * failure ({@code 500}) may come before CE stores the file, which CE then
-	 * puts back, or after, when the save is applied: the client reads the
-	 * versions before it sends the save again.
+	 * save CE didn't store is a {@code 500} ({@link #confirmStored}) that says
+	 * what's left: the document as it was, or its content the file sent as a
+	 * version missing from its timeline; either way the previous version and
+	 * its file can still be read. Any other failure ({@code 500}) may come
+	 * before CE stores the file, which CE then puts back, or after, when the
+	 * document's content is the file sent: the client reads the document and
+	 * its versions before it sends the save again.
 	 *
 	 * @param docNumber the doc #
 	 * @param version the {@code version} part, as JSON ({@link NewVersion})
@@ -199,9 +204,11 @@ public class VersionResource {
 						CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
 			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
 			checkin.setComment(comment);
+			String before = document.getVersion();
 			// Waits for CE's version record, so the timeline shows the save at once
 			DocumentManager.get()
 					.checkin(document.getId(), upload, name, VERSION.equals(request.kind()), null, checkin).get();
+			confirmStored(document.getId(), docNumber, before, user);
 
 			if (Boolean.TRUE.equals(request.keepCheckedOut()))
 				checkOutAgain(document.getId(), session, docNumber);
@@ -209,6 +216,40 @@ public class VersionResource {
 		} finally {
 			FileUtils.deleteQuietly(upload);
 		}
+	}
+
+	/**
+	 * Makes sure CE stored the save before the API says it did. CE writes the
+	 * version record after the check-in returns, and when that write fails it
+	 * logs the failure and returns the document all the same. Its own record
+	 * may then have moved to the new version or not, so the answer says which
+	 * (spec section 6.6, PR C review concern 4).
+	 *
+	 * @param docId the document's id
+	 * @param docNumber its doc #
+	 * @param before its version before the save
+	 * @param user the caller
+	 * @throws ApiProblem {@code 500 server-error} unless the document moved to
+	 *         a new version and that version has its record
+	 * @throws PersistenceException error at data layer
+	 */
+	private static void confirmStored(long docId, long docNumber, String before, User user)
+			throws PersistenceException {
+		Document after = DocumentDAO.get().findById(docId);
+		boolean moved = after != null && !Objects.equals(before, after.getVersion());
+		if (moved && VersionDAO.get().findByVersion(docId, after.getVersion()) != null)
+			return;
+
+		log.error("The save of document #{} (id {}) wasn't stored: the document is at version {}, which {}", docNumber,
+				docId, after != null ? after.getVersion() : null,
+				moved ? "has no version record" : "is the version before the save");
+		String stored = moved
+				? ("Document #%d's save wasn't stored completely: its content is the file sent, as version %s, but that "
+						+ "version isn't in its timeline.").formatted(docNumber, after.getVersion())
+				: "Document #%d's save wasn't stored: its content is as it was.".formatted(docNumber);
+		String hold = after != null && ApiViews.checkedOutBy(after, user) ? " It's still checked out to you."
+				: " It isn't checked out to you.";
+		throw new ApiProblem(500, "server-error", stored + hold + " Send the save again.");
 	}
 
 	/**

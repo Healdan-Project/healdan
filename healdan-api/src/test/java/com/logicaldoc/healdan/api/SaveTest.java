@@ -254,6 +254,83 @@ public class SaveTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testUnrecordedVersionIsAnError() throws Exception {
+		// Concern 4: CE writes the version record after the check-in returns, and only logs a failure. Here the
+		// document is checked in, but its version record can't be written
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+
+		ApiResponse failed = saveFailing(token, d, List.of("ld_version"), version("snapshot", "Sent to the client", true));
+
+		assertEquals(failed.toString(), 500, failed.status());
+		assertEquals("server-error", failed.code());
+		assertEquals(("Document #%d's save wasn't stored completely: its content is the file sent, as version 1.1, but "
+				+ "that version isn't in its timeline. It isn't checked out to you. Send the save again.")
+				.formatted(number(d)), failed.json().path("detail").textValue());
+		// What the client sees: the document at 1.1 with the file sent, free; no 1.1 in the timeline; 1.0 as it was
+		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
+		assertEquals("1.1", doc.path("fileVersion").textValue());
+		assertTrue(doc.path("hold").isNull());
+		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+		assertArrayEquals(bytes("two"), content(token, d, null));
+		assertArrayEquals(bytes("one"), content(token, d, "1.0"));
+		assertEquals(404,
+				get("/api/v1/documents/" + number(d) + "/content?version=1.1").token(token).send().status());
+
+		// Sent again, the save is recorded
+		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", true), "a.docx", "two");
+		assertEquals(again.toString(), 201, again.status());
+		assertEquals("1.2", again.json().path("fileVersion").textValue());
+		assertEquals(List.of("1.2 snapshot", "1.0 version"),
+				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+	}
+
+	@Test
+	public void testUnstoredSaveIsAnError() throws Exception {
+		// Concern 4: here the document's own record can't be written either, so nothing changes
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+
+		ApiResponse failed = saveFailing(token, d, List.of("ld_version", "ld_document"),
+				version("snapshot", "Sent to the client", null));
+
+		assertEquals(failed.toString(), 500, failed.status());
+		assertEquals("server-error", failed.code());
+		assertEquals("Document #%d's save wasn't stored: its content is as it was. It's still checked out to you. "
+				.formatted(number(d)) + "Send the save again.", failed.json().path("detail").textValue());
+		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
+		assertEquals("1.0", doc.path("fileVersion").textValue());
+		assertEquals("checkout", doc.path("hold").path("kind").textValue());
+		assertEquals(clerk.getId(), doc.path("hold").path("by").path("id").asLong());
+		assertEquals(List.of("1.0 version"), versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+		assertArrayEquals(bytes("one"), content(token, d, null));
+
+		// Sent again, the save is stored
+		ApiResponse again = save(token, d, version("snapshot", "Sent to the client", null), "a.docx", "two");
+		assertEquals(again.toString(), 201, again.status());
+		assertEquals("1.1", again.json().path("fileVersion").textValue());
+		assertTrue(again.json().path("hold").isNull());
+		assertEquals(List.of("1.1 snapshot", "1.0 version"),
+				versionsAndKinds(get(path(d)).token(token).send().json().path("items")));
+		assertArrayEquals(bytes("two"), content(token, d, null));
+	}
+
+	/**
+	 * Saves "two" while the tables' comment column takes five characters, so that a comment the API accepts can't
+	 * be written there
+	 */
+	private ApiResponse saveFailing(String token, Document d, List<String> tables, String version) {
+		for (String table : tables)
+			jdbc().execute("alter table " + table + " alter column ld_comment set data type varchar(5)");
+		try {
+			return save(token, d, version, "a.docx", "two");
+		} finally {
+			for (String table : tables)
+				jdbc().execute("alter table " + table + " alter column ld_comment set data type varchar(1000)");
+		}
+	}
+
+	@Test
 	public void testHeldByOthersEvenForAdmins() throws Exception {
 		Document d = file("a.docx");
 		checkout(d, clerk);
