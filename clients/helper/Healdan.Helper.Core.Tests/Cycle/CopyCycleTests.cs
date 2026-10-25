@@ -489,7 +489,7 @@ public sealed class CopyCycleTests : IDisposable
         await cycle.OpenAsync(5, false);
         await cycle.OpenAsync(6, false);
         var (edited, untouched) = (_app.Opened[0], _app.Opened[1]);
-        await Task.Delay(Fast.LockPoll * 4); // the windows stay open long enough for their lock files to be seen
+        await Wait.Until(() => _app.LockSeen(edited) && _app.LockSeen(untouched), "both lock files seen");
 
         FakeApp.Write(edited, "saved just before closing");
         FakeApp.Close(edited);
@@ -588,6 +588,7 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Equal("downloaded", _server.Doc(5).Content);
 
         // Closing the window keeps it too: a check-in would be refused the same way.
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
         FakeApp.Close(path);
         await Task.Delay(Quiet);
         Assert.True(File.Exists(path));
@@ -656,7 +657,7 @@ public sealed class CopyCycleTests : IDisposable
     public async Task AMovedVersionStillHeldHereIsReleased(bool saveAsNewDocument)
     {
         var (cycle, path) = await OpenAsync();
-        await Task.Delay(Fast.LockPoll * 4); // the window has been open long enough for its lock file to be seen
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
         // Newer content was stored while the check-out stayed this computer's, as from the web page.
         _server.Change(5, d =>
         {
@@ -720,6 +721,7 @@ public sealed class CopyCycleTests : IDisposable
         await Task.Delay(Fast.Settle * 4);
         Assert.Empty(_server.Saves);
 
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
         FakeApp.Close(path);
         await Wait.Until(() => _server.Doc(5).Hold is null, "released when the window closes");
         Assert.Equal("more edits", File.ReadAllText(path));
@@ -729,17 +731,24 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task ACloseWhoseFileCantBeReadYetStillChecksItIn()
     {
-        if (OperatingSystem.IsWindows())
-            return;
-        var (_, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromSeconds(30) });
-        await Task.Delay(Fast.LockPoll * 4);
+        var (cycle, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromSeconds(30) });
         FakeApp.Write(path, "the last save");
-        File.SetUnixFileMode(path, UnixFileMode.None); // can't be read for now
-        FakeApp.Close(path);
+        // Something else holds the file exclusively, so it can't be read for now, whoever the tests run as.
+        var holder = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+        try
+        {
+            Assert.ThrowsAny<IOException>(() => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete));
+            FakeApp.Close(path);
+            await cycle.ClosedAsync(path); // the extension's close event: the close is under way now, not after a poll
 
-        await Wait.Until(() => _events.Waits.Contains(1), "the check-in waiting to read the file");
-        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout")); // not released in place of the save
-        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            await Wait.Until(() => _events.Waits.Contains(1), "the check-in waiting to read the file");
+            Assert.Equal(0, _server.Count("DELETE /documents/5/checkout")); // not released in place of the save
+            Assert.Empty(_server.Saves);
+        }
+        finally
+        {
+            holder.Dispose();
+        }
 
         await Wait.Until(() => !File.Exists(path), "the copy deleted after the check-in");
         var save = Assert.Single(_server.Saves);
@@ -751,21 +760,24 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task ACloseAfterTheFileWentSendsTheWaitingSave()
     {
-        var (_, path) = await OpenAsync();
-        await Task.Delay(Fast.LockPoll * 4);
+        var (cycle, path) = await OpenAsync();
         _server.HoldSaves();
         FakeApp.Write(path, "A");
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        // B waits behind A. Marked as a new version, its kind shows in the record once it's queued, so the test
+        // knows B is waiting rather than guessing how long its settling takes.
         FakeApp.Write(path, "B");
-        await Task.Delay(Fast.Settle * 3); // B settles and waits behind A
+        cycle.MarkNextVersion(path);
+        await Wait.Until(() => Store.Find(path)?.Item2.PendingKind == "version", "B waiting behind A");
         File.Delete(path);
         FakeApp.Close(path);
-        await Task.Delay(Fast.LockPoll * 6); // the close is noticed while A is still going up
+        await cycle.ClosedAsync(path); // the window closes while A is still going up
         _server.OpenSaves();
 
         await Wait.Until(() => _server.Doc(5).Hold is null, "checked in");
         Assert.Equal(["A", "B"], _server.Saves.Select(s => s.Content));
-        Assert.False(_server.Saves[1].KeepCheckedOut);
+        Assert.False(_server.Saves[1].KeepCheckedOut); // B went up with the check-in
+        Assert.Equal("version", _server.Saves[1].Kind);
         Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
         await Wait.Until(() => Store.Find(path) is null, "the record gone with the check-in");
     }
@@ -849,12 +861,11 @@ public sealed class CopyCycleTests : IDisposable
     public async Task AWindowClosedWhileARefusedSaveWasGoingUp(bool stillHeldHere)
     {
         var (cycle, path) = await OpenAsync();
-        await Task.Delay(Fast.LockPoll * 4);
         _server.HoldSaves();
         FakeApp.Write(path, "A");
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
         FakeApp.Close(path);
-        await Task.Delay(Fast.LockPoll * 6); // the close is noticed; its check-in waits behind A
+        await cycle.ClosedAsync(path); // the window closes while A is going up; its check-in waits behind A
         if (stillHeldHere) // newer content was stored, with the check-out still this computer's: version-moved
             _server.Change(5, d =>
             {

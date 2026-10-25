@@ -54,6 +54,7 @@ public sealed class StackCycleTests : IDisposable
                 await Wait.Until(() => events.LastTitle(path)?.EndsWith(" v1.1") == true, "v1.1", Patience);
                 FakeApp.Write(path, "the second save");
                 await Wait.Until(() => events.LastTitle(path)?.EndsWith(" v1.2") == true, "v1.2", Patience);
+                await Wait.Until(() => app.LockSeen(path), "the lock file seen", Patience);
                 FakeApp.Close(path);
                 await Wait.Until(() => !File.Exists(path), "the copy deleted after the check-in", Patience);
 

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using Healdan.Helper.Core.Cycle;
 
@@ -11,6 +12,7 @@ public sealed class FakeApp : IOfficeApp
 {
     private readonly object _lock = new();
     private readonly List<string> _opened = [];
+    private readonly ConcurrentDictionary<string, bool> _lockSeen = new(StringComparer.Ordinal);
     private volatile bool _running;
 
     public string Name => "LibreOffice";
@@ -40,6 +42,7 @@ public sealed class FakeApp : IOfficeApp
             throw new IOException("LibreOffice didn't start (fake).");
         lock (_lock)
             _opened.Add(path);
+        _lockSeen.TryRemove(path, out _);
         _running = true;
         // LibreOffice locks a file it opens for editing; a read-only copy gets no lock file.
         if (OperatingSystem.IsWindows() || (File.GetUnixFileMode(path) & UnixFileMode.UserWrite) != 0)
@@ -48,7 +51,20 @@ public sealed class FakeApp : IOfficeApp
 
     public bool IsRunning() => _running;
 
-    public bool LockExists(string path) => File.Exists(LockPath(path));
+    public bool LockExists(string path)
+    {
+        var exists = File.Exists(LockPath(path));
+        if (exists)
+            _lockSeen[path] = true;
+        return exists;
+    }
+
+    /// <summary>
+    /// True once the cycle has asked about the copy's lock file and found it, since this app last opened the copy.
+    /// Only then does the close watcher count the lock file going as the window closing, so a test that closes the
+    /// window by removing the lock file waits for this first rather than for a fixed time.
+    /// </summary>
+    public bool LockSeen(string path) => _lockSeen.ContainsKey(path);
 
     public static string LockPath(string path) =>
         Path.Combine(Path.GetDirectoryName(path)!, $".~lock.{Path.GetFileName(path)}#");
