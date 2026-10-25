@@ -47,25 +47,48 @@ class CodeChangedTest(unittest.TestCase):
         subprocess.run(["bash", str(SCRIPT)], cwd=self.repo, env=env, check=True, capture_output=True)
         return output.read_text(encoding="utf-8").strip()
 
+    def outputs(self, event="pull_request"):
+        return self.code(event).splitlines()
+
     def test_site_only_is_docs(self):
         self.change("site/hugo.yaml", "site/static/favicon.svg")
-        self.assertEqual("code=false", self.code())
+        self.assertEqual(["code=false", "clients=false"], self.outputs())
 
     def test_site_and_java_is_code(self):
         self.change("site/hugo.yaml", "healdan-core/src/main/java/A.java")
-        self.assertEqual("code=true", self.code())
+        self.assertEqual(["code=true", "clients=false"], self.outputs())
 
     def test_docs_only_still_docs(self):
         self.change("docs/x.md")
-        self.assertEqual("code=false", self.code())
+        self.assertEqual(["code=false", "clients=false"], self.outputs())
 
     def test_markdown_under_src_is_code(self):
         self.change("logicaldoc-core/src/test/resources/README.md")
-        self.assertEqual("code=true", self.code())
+        self.assertEqual(["code=true", "clients=false"], self.outputs())
 
     def test_push_is_code(self):
         self.change("site/hugo.yaml")
-        self.assertEqual("code=true", self.code(event="push"))
+        self.assertEqual(["code=true", "clients=true"], self.outputs(event="push"))
+
+    def test_clients_only_is_not_code(self):
+        self.change("clients/helper/x.cs", "clients/libreoffice/src/y.py")
+        self.assertEqual(["code=false", "clients=true"], self.outputs())
+
+    def test_clients_and_java_is_both(self):
+        self.change("clients/helper/x.cs", "healdan-core/src/main/java/A.java")
+        self.assertEqual(["code=true", "clients=true"], self.outputs())
+
+    def test_java_only_is_not_clients(self):
+        self.change("healdan-core/src/main/java/A.java")
+        self.assertEqual(["code=true", "clients=false"], self.outputs())
+
+    def test_push_is_both(self):
+        self.change("clients/helper/x.cs")
+        self.assertEqual(["code=true", "clients=true"], self.outputs(event="push"))
+
+    def test_clients_and_docs_is_not_code(self):
+        self.change("clients/helper/x.cs", "docs/x.md")
+        self.assertEqual(["code=false", "clients=true"], self.outputs())
 
 
 if __name__ == "__main__":
