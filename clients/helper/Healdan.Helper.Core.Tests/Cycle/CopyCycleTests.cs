@@ -43,7 +43,7 @@ public sealed class CopyCycleTests : IDisposable
     private CopyCycle Cycle(CycleTimings? timings = null)
     {
         var api = new HealdanApi(new Uri("https://healdan.test"), _server) { Token = "hd_test" };
-        var cycle = new CopyCycle(api, new CopyStore(Paths), _app, FakeApi.HereName, _events, timings ?? Fast);
+        var cycle = new CopyCycle(api, new CopyStore(Paths), _app, FakeApi.HereDevice, _events, timings ?? Fast);
         _cycles.Add(cycle);
         return cycle;
     }
@@ -620,6 +620,202 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Equal("someone else's", _server.Doc(5).Content);
         Assert.Equal("B", File.ReadAllText(path));
         Assert.True(Store.HasUnconfirmedChanges(path));
+    }
+
+    [Fact]
+    public async Task VersionMovedAfterARenameKeepsTheNewName()
+    {
+        var (_, path) = await OpenAsync();
+        // Renamed in the web page while it's open here: the version moves, the file doesn't.
+        _server.Change(5, d =>
+        {
+            d.Name = "Signed lease.docx";
+            d.Version = "1.1";
+        });
+        FakeApp.Write(path, "A");
+
+        await Wait.Until(() => _events.LastTitle(path) is not null, "the resent save");
+        var saves = _server.Saves;
+        Assert.Equal(["version-moved", "stored 1.2"], saves.Select(s => s.Outcome));
+        Assert.Equal(["Lease agreement.docx", "Signed lease.docx"], saves.Select(s => s.Name));
+        Assert.Equal("Signed lease.docx", _server.Doc(5).Name); // the save didn't undo the rename
+        Assert.Equal("Signed lease #5 v1.2", _events.LastTitle(path));
+        Assert.Equal(CopyPath("Lease agreement #5 v1.0.docx"), path); // R19: the open copy keeps its name
+        Assert.Equal("Signed lease.docx", Store.Find(path)!.Value.Item2.DocumentName);
+
+        FakeApp.Write(path, "B");
+        await Wait.Until(() => _events.LastTitle(path) == "Signed lease #5 v1.3", "the next save");
+        Assert.Equal("Signed lease.docx", _server.Saves[^1].Name);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AMovedVersionStillHeldHereIsReleased(bool saveAsNewDocument)
+    {
+        var (cycle, path) = await OpenAsync();
+        await Task.Delay(Fast.LockPoll * 4); // the window has been open long enough for its lock file to be seen
+        // Newer content was stored while the check-out stayed this computer's, as from the web page.
+        _server.Change(5, d =>
+        {
+            d.Files["1.1"] = "from the web page"u8.ToArray();
+            d.Version = d.FileVersion = "1.1";
+        });
+        FakeApp.Write(path, "mine");
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+        Assert.True(Store.Find(path)!.Value.Item2.CheckedOutHere); // still this computer's, so it's released later
+        Assert.Equal(FakeApi.Here(), _server.Doc(5).Hold);
+
+        if (saveAsNewDocument)
+        {
+            var temp = Path.Combine(_root, "mine.docx");
+            File.WriteAllText(temp, "mine");
+            var state = await cycle.AdoptNewAsync(temp, new NewDocument(9, "Mine.docx", new JsonObject(), true), path);
+            await Wait.Until(() => _server.Doc(5).Hold is null, "#5 released");
+            FakeApp.Write(state.Path, "mine");
+            await Wait.Until(() => !File.Exists(path), "the original copy deleted once the app has adopted the new one");
+        }
+        else
+        {
+            FakeApp.Close(path);
+            await Wait.Until(() => _server.Doc(5).Hold is null, "released when the window closes");
+            await Task.Delay(Quiet);
+            Assert.Equal("mine", File.ReadAllText(path)); // kept: its changes never went up
+            Assert.False(Store.Find(path)!.Value.Item2.CheckedOutHere);
+        }
+        Assert.Equal("from the web page", _server.Doc(5).Content);
+        Assert.Equal("version-moved", Assert.Single(_server.Saves).Outcome);
+        Assert.Equal(1, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
+    public async Task OpenFindsAKeptCopyBehindTheServer()
+    {
+        // The app crashed with a save not yet sent; then the web page released the document and newer content
+        // was stored.
+        var (first, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromSeconds(30) });
+        FakeApp.Write(path, "my unsent edits");
+        _app.Crash();
+        first.Dispose();
+        _server.Change(5, d =>
+        {
+            d.Hold = null;
+            d.Files["1.1"] = "newer"u8.ToArray();
+            d.Version = d.FileVersion = "1.1";
+        });
+
+        var cycle = Cycle();
+        await cycle.OpenAsync(5, false);
+
+        // The kept copy opens as it is, never downloaded over, and is marked ended rather than saved over 1.1.
+        Assert.Equal([path, path], _app.Opened);
+        Assert.Equal(1, _server.Count("GET /documents/5/content"));
+        Assert.Contains(path, _events.Ended);
+        Assert.Equal("my unsent edits", File.ReadAllText(path));
+        Assert.Equal(FakeApi.Here(), _server.Doc(5).Hold); // the open's check-out, held until the copy closes
+        FakeApp.Write(path, "more edits");
+        await Task.Delay(Fast.Settle * 4);
+        Assert.Empty(_server.Saves);
+
+        FakeApp.Close(path);
+        await Wait.Until(() => _server.Doc(5).Hold is null, "released when the window closes");
+        Assert.Equal("more edits", File.ReadAllText(path));
+        Assert.Equal("newer", _server.Doc(5).Content);
+    }
+
+    [Fact]
+    public async Task ACloseWhoseFileCantBeReadYetStillChecksItIn()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        var (_, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromSeconds(30) });
+        await Task.Delay(Fast.LockPoll * 4);
+        FakeApp.Write(path, "the last save");
+        File.SetUnixFileMode(path, UnixFileMode.None); // can't be read for now
+        FakeApp.Close(path);
+
+        await Wait.Until(() => _events.Waits.Contains(1), "the check-in waiting to read the file");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout")); // not released in place of the save
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+
+        await Wait.Until(() => !File.Exists(path), "the copy deleted after the check-in");
+        var save = Assert.Single(_server.Saves);
+        Assert.False(save.KeepCheckedOut);
+        Assert.Equal("the last save", save.Content);
+        Assert.Null(_server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task ACloseAfterTheFileWentSendsTheWaitingSave()
+    {
+        var (_, path) = await OpenAsync();
+        await Task.Delay(Fast.LockPoll * 4);
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        FakeApp.Write(path, "B");
+        await Task.Delay(Fast.Settle * 3); // B settles and waits behind A
+        File.Delete(path);
+        FakeApp.Close(path);
+        await Task.Delay(Fast.LockPoll * 6); // the close is noticed while A is still going up
+        _server.OpenSaves();
+
+        await Wait.Until(() => _server.Doc(5).Hold is null, "checked in");
+        Assert.Equal(["A", "B"], _server.Saves.Select(s => s.Content));
+        Assert.False(_server.Saves[1].KeepCheckedOut);
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        await Wait.Until(() => Store.Find(path) is null, "the record gone with the check-in");
+    }
+
+    [Fact]
+    public async Task AHoldIsThisComputersByItsDeviceIdNotItsName()
+    {
+        var (_, path) = await OpenAsync();
+        // version-moved, with the content unchanged, but held by another computer that has this one's name.
+        _server.AnswerNextSaveVersionMoved(FakeApi.Here() with { DeviceId = "dev-twin" });
+        FakeApp.Write(path, "A");
+
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+        await Task.Delay(Quiet);
+        Assert.Equal("version-moved (canned)", Assert.Single(_server.Saves).Outcome); // not resent
+        Assert.False(Store.Find(path)!.Value.Item2.CheckedOutHere); // and not this computer's to release
+    }
+
+    [Fact]
+    public async Task AThrowingHandlerDoesntStopTheNextSave()
+    {
+        var (_, path) = await OpenAsync();
+        _events.ThrowOnConfirmed = true;
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _events.LastTitle(path) is not null, "A confirmed");
+
+        FakeApp.Write(path, "B");
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v1.2", "B confirmed");
+        Assert.Equal(["A", "B"], _server.Saves.Select(s => s.Content));
+        Assert.Contains(_events.Errors, e => e.Contains("couldn't show an update"));
+        Assert.False(Store.HasUnconfirmedChanges(path));
+    }
+
+    [Fact]
+    public async Task ShutdownDuringADownloadReleasesTheCheckOut()
+    {
+        _server.HoldDownloads();
+        var cycle = Cycle();
+        var opening = cycle.OpenAsync(5, false);
+        await Wait.Until(() => _server.Count("GET /documents/5/content") == 1, "the download under way");
+        cycle.Dispose();
+        await opening; // reported, not thrown
+
+        await Wait.Until(() => _server.Doc(5).Hold is null, "released on the way out");
+        Assert.Empty(_app.Opened);
+        Assert.NotNull(Store.All().SingleOrDefault().Record); // what ResumeAsync releases if that hadn't got through
+
+        // The record, and a temporary file a download left, are tidied at the next start.
+        File.WriteAllText(Path.Combine(Paths.Copies, ".healdan-0123456789abcdef0123456789abcdef.part"), "half");
+        await Cycle().ResumeAsync();
+        await Wait.Until(() => CopiesFolder().Length == 0, "nothing left in the folder");
+        Assert.Null(_server.Doc(5).Hold);
     }
 
     [Fact]

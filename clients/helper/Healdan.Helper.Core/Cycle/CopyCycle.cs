@@ -25,7 +25,7 @@ public sealed class CopyCycle : IDisposable
     private readonly HealdanApi _api;
     private readonly CopyStore _store;
     private readonly IOfficeApp _app;
-    private readonly string _deviceName;
+    private readonly string _deviceId;
     private readonly ICycleEvents _events;
     private readonly CycleTimings _timings;
 
@@ -38,14 +38,17 @@ public sealed class CopyCycle : IDisposable
     private readonly CancellationTokenSource _stop = new();
     private bool _signInAsked;
 
-    /// <param name="deviceName">This computer's name as its token has it, which a hold's <c>device.name</c> shows.</param>
+    /// <param name="deviceId">
+    /// This computer's device id, the one its token signed in with: a hold whose <c>device.id</c> is this one is this
+    /// computer's. Names aren't compared, as two computers can share one.
+    /// </param>
     /// <param name="timings">The trial's timings by default (<see cref="CycleTimings.Default"/>).</param>
-    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceName, ICycleEvents events, CycleTimings? timings = null)
+    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceId, ICycleEvents events, CycleTimings? timings = null)
     {
         _api = api;
         _store = store;
         _app = app;
-        _deviceName = deviceName;
+        _deviceId = deviceId;
         _events = events;
         _timings = timings ?? CycleTimings.Default;
         store.EnsureFolders();
@@ -57,12 +60,12 @@ public sealed class CopyCycle : IDisposable
     private sealed class Session
     {
         public Session(string path, long docNumber, bool readOnly, Func<Session, SaveJob, CancellationToken, Task<SaveOutcome>> send,
-            CycleTimings timings, Action<string, bool> waiting)
+            CycleTimings timings, Action<string, bool> waiting, Action<Exception> failed)
         {
             Path = path;
             DocNumber = docNumber;
             ReadOnly = readOnly;
-            Queue = new SaveQueue((job, ct) => send(this, job, ct), timings, w => waiting(path, w));
+            Queue = new SaveQueue((job, ct) => send(this, job, ct), timings, w => waiting(path, w), failed);
         }
 
         public string Path { get; }
@@ -188,6 +191,18 @@ public sealed class CopyCycle : IDisposable
     /// </summary>
     public Task ResumeAsync()
     {
+        // A download the helper stopped in the middle of leaves its temporary file; nothing else makes these.
+        foreach (var part in Directory.EnumerateFiles(_store.Folder, ".healdan-*.part"))
+        {
+            try
+            {
+                File.Delete(part);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Tried again at the next start.
+            }
+        }
         var running = SafeIsRunning();
         foreach (var (path, record) in _store.All())
         {
@@ -221,7 +236,7 @@ public sealed class CopyCycle : IDisposable
             if (!record.CheckedOutHere)
             {
                 if (unconfirmed)
-                    _events.CheckoutEnded(path);
+                    Raise(ev => ev.CheckoutEnded(path));
                 else if (!_app.LockExists(path))
                     _store.Delete(path);
                 continue;
@@ -237,7 +252,7 @@ public sealed class CopyCycle : IDisposable
             if (!running)
             {
                 s.Crashed = true;
-                _events.Crashed(path);
+                Raise(ev => ev.Crashed(path));
             }
             if (unconfirmed && TryRead(path) is { } content)
                 Enqueue(s, new SaveJob { Content = content.Bytes, Hash = content.Hash, Kind = record.PendingKind ?? Snapshot });
@@ -299,11 +314,11 @@ public sealed class CopyCycle : IDisposable
             // The user asked for this open, so they hear about it every time, unlike a save waiting in the background.
             lock (_gate)
                 _signInAsked = true;
-            _events.SignInNeeded();
+            Raise(ev => ev.SignInNeeded());
         }
         catch (ApiException e)
         {
-            _events.Error($"#{docNumber} couldn't be opened: {e.Detail}");
+            Raise(ev => ev.Error($"#{docNumber} couldn't be opened: {e.Detail}"));
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
@@ -311,7 +326,7 @@ public sealed class CopyCycle : IDisposable
         }
         catch (Exception e)
         {
-            _events.Error($"#{docNumber} couldn't be opened: {e.Message}");
+            Raise(ev => ev.Error($"#{docNumber} couldn't be opened: {e.Message}"));
         }
     }
 
@@ -346,8 +361,8 @@ public sealed class CopyCycle : IDisposable
                 catch (ApiException e) when (e.Code == "held-elsewhere")
                 {
                     var problem = ProblemOf(e);
-                    _events.HeldElsewhere(null, n, problem?.Hold?.Device?.Name ?? "another computer", problem?.Hold?.Device?.App,
-                        problem?.LastSaved);
+                    Raise(ev => ev.HeldElsewhere(null, n, problem?.Hold?.Device?.Name ?? "another computer",
+                        problem?.Hold?.Device?.App, problem?.LastSaved));
                     return;
                 }
                 catch (ApiException e) when (e.Code is "checked-out" or "locked")
@@ -370,10 +385,12 @@ public sealed class CopyCycle : IDisposable
         {
             (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, ct);
         }
-        catch (Exception e) when (e is not OperationCanceledException)
+        catch (Exception e)
         {
+            // Shutting down mid-download releases too, within a few seconds; if that doesn't get through, the
+            // record the download left makes ResumeAsync release it.
             if (checkedOut && !hadCopy)
-                await ReleaseQuietlyAsync(n);
+                await ReleaseQuietlyAsync(n, shuttingDown: e is OperationCanceledException && _stop.IsCancellationRequested);
             throw;
         }
 
@@ -388,9 +405,31 @@ public sealed class CopyCycle : IDisposable
             if (fresh)
                 _store.Delete(path); // just downloaded: Healdan has every byte of it
             if (checkedOut && !hadCopy)
-                await ReleaseQuietlyAsync(n);
+                await ReleaseQuietlyAsync(n, shuttingDown: false);
             throw;
         }
+        if (!fresh && !readOnly)
+            CarryOnWithKeptCopy(session, doc);
+    }
+
+    /// <summary>
+    /// A kept copy was reopened for editing. If Healdan has newer content than the version the copy started from, and
+    /// no save of the copy's is still unanswered (which may be what moved it on), its changes must not go over that:
+    /// it's open as it is, but marked ended, and <see cref="ICycleEvents.CheckoutEnded"/> lets the app offer Save as
+    /// New Document. A check-out this open took stays recorded, so closing the copy releases it. Otherwise the
+    /// copy's unconfirmed changes are sent now, as <see cref="ResumeAsync"/> sends them.
+    /// </summary>
+    private void CarryOnWithKeptCopy(Session s, DocumentView doc)
+    {
+        if (Record(s.Path) is not { } record)
+            return;
+        if (record.FileVersion != doc.FileVersion && record.PendingHash is null)
+        {
+            EndCheckout(s, heldHere: record.CheckedOutHere);
+            return;
+        }
+        if (_store.HasUnconfirmedChanges(s.Path) && TryRead(s.Path) is { } content)
+            Enqueue(s, new SaveJob { Content = content.Bytes, Hash = content.Hash, Kind = record.PendingKind ?? Snapshot });
     }
 
     /// <summary>
@@ -416,6 +455,9 @@ public sealed class CopyCycle : IDisposable
         }
 
         var forCopy = version is null ? doc : doc with { Version = version, FileVersion = version };
+        // A confirmed copy already at the target path holds this same version's content: its hash stands until the
+        // download replaces it, so a helper stopped mid-way never takes it for unsent changes.
+        var previous = Record(Path.Combine(_store.Folder, CopyNames.FileName(forCopy.Name, forCopy.DocNumber, forCopy.FileVersion, readOnly)));
         var (path, record, existing) = _store.Create(forCopy, readOnly, _app.Name);
         if (existing)
         {
@@ -423,13 +465,27 @@ public sealed class CopyCycle : IDisposable
                 Update(path, r => r with { CheckedOutHere = true });
             return (path, false, record.ReadOnly);
         }
+        // The record says the check-out is held before the download starts, so if the helper stops mid-way, the record
+        // (with no file) tells ResumeAsync to release it.
+        var hadFile = File.Exists(path);
+        Update(path, r => r with
+        {
+            CheckedOutHere = checkedOut,
+            ConfirmedHash = hadFile ? previous?.ConfirmedHash : null,
+            PendingKind = null,
+            PendingHash = null
+        });
         try
         {
             await _api.DownloadAsync(doc.DocNumber, path, version, ct);
             if (readOnly && !OperatingSystem.IsWindows())
                 File.SetUnixFileMode(path, UnixFileMode.UserRead);
             var hash = HashOf(path);
-            Update(path, r => r with { ConfirmedHash = hash, CheckedOutHere = checkedOut, PendingKind = null, PendingHash = null });
+            Update(path, r => r with { ConfirmedHash = hash });
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested && !hadFile && checkedOut)
+        {
+            throw; // keep the record: there's no file, and ResumeAsync releases its check-out
         }
         catch
         {
@@ -452,20 +508,23 @@ public sealed class CopyCycle : IDisposable
             }
         }
         if (closing)
-            _events.Error($"#{live.DocNumber} is still being checked in. Open it again once that's done.");
+            Raise(ev => ev.Error($"#{live.DocNumber} is still being checked in. Open it again once that's done."));
         else
             _app.Open(live.Path);
     }
 
-    private async Task ReleaseQuietlyAsync(long n)
+    /// <summary>Releases a check-out a failed open took. While shutting down it gets a few seconds of its own.</summary>
+    private async Task ReleaseQuietlyAsync(long n, bool shuttingDown)
     {
+        using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {
-            await _api.ReleaseAsync(n, _stop.Token);
+            await _api.ReleaseAsync(n, shuttingDown ? shutdown.Token : _stop.Token);
         }
         catch (Exception e) when (e is ApiException || IsTransient(e))
         {
-            _events.Error($"#{n} is still checked out to you: releasing it failed.");
+            if (!shuttingDown)
+                Raise(ev => ev.Error($"#{n} is still checked out to you: releasing it failed."));
         }
     }
 
@@ -480,7 +539,7 @@ public sealed class CopyCycle : IDisposable
                 s = old;
             else
             {
-                s = new Session(path, n, readOnly, SendAsync, _timings, SetWaiting);
+                s = new Session(path, n, readOnly, SendAsync, _timings, SetWaiting, SaveFailed);
                 _sessions[Name(path)] = s;
             }
             (s.HoldBy, s.Adopting, s.Ended, s.Crashed, s.NextKind) = (holdBy, adopting, false, false, null);
@@ -506,7 +565,7 @@ public sealed class CopyCycle : IDisposable
         _closes.Unwatch(s.Path);
         s.Queue.Dispose();
         if (waiting is { } count)
-            _events.Waiting(count);
+            Raise(ev => ev.Waiting(count));
     }
 
     // --- Saving --------------------------------------------------------------------------------------------------
@@ -579,6 +638,8 @@ public sealed class CopyCycle : IDisposable
     {
         try
         {
+            if (job.ReadAtSend && !TakeClosedFile(s, job))
+                return SaveOutcome.Retry; // the file is there but can't be read yet
             if (job.ReleaseOnly || (job.CheckIn && job.Content is null))
                 return await ReleaseAsync(s, job, ct);
             var record = Record(s.Path);
@@ -599,7 +660,7 @@ public sealed class CopyCycle : IDisposable
         catch (Exception e)
         {
             // Not expected; the copy and its record stay, and the next save tries again.
-            _events.Error($"#{s.DocNumber} couldn't be saved to Healdan: {e.Message}");
+            Raise(ev => ev.Error($"#{s.DocNumber} couldn't be saved to Healdan: {e.Message}"));
             return SaveOutcome.Done;
         }
     }
@@ -651,6 +712,32 @@ public sealed class CopyCycle : IDisposable
         return SaveOutcome.Done;
     }
 
+    /// <summary>
+    /// For a close's check-in: takes the file's bytes, or the waiting save's when the file is gone. False when the file
+    /// is there but can't be read (or is still changing), to try again later. A copy that closed before the app's
+    /// adoption had settled takes that write as its starting point, not a save.
+    /// </summary>
+    private bool TakeClosedFile(Session s, SaveJob job)
+    {
+        if (TryRead(s.Path) is { } content)
+            (job.Content, job.Hash) = (content.Bytes, content.Hash);
+        else if (File.Exists(s.Path))
+            return false;
+        else
+            (job.Content, job.Hash) = (job.FallbackContent, job.FallbackHash);
+        job.ReadAtSend = false;
+        lock (_gate)
+        {
+            if (s.Adopting && job.Content is not null)
+            {
+                s.Adopting = false;
+                Update(s.Path, r => r with { ConfirmedHash = job.Hash });
+                s.Adopted.TrySetResult();
+            }
+        }
+        return true;
+    }
+
     /// <summary>Records the confirmed save and says so; false when the copy has gone meanwhile.</summary>
     private bool Confirm(Session s, SaveJob job, DocumentView doc)
     {
@@ -659,6 +746,7 @@ public sealed class CopyCycle : IDisposable
         {
             record = Update(s.Path, r => r with
             {
+                DocumentName = doc.Name,
                 Version = doc.Version,
                 FileVersion = doc.FileVersion,
                 ConfirmedHash = job.Hash,
@@ -671,7 +759,7 @@ public sealed class CopyCycle : IDisposable
         if (record is null)
             return false;
         var state = StateOf(s.Path, record, s.HoldBy);
-        _events.Confirmed(s.Path, state);
+        Raise(ev => ev.Confirmed(s.Path, state));
         CompleteWaiters(s, state);
         return true;
     }
@@ -686,45 +774,59 @@ public sealed class CopyCycle : IDisposable
         switch (e.Code)
         {
             case "held-elsewhere" or "not-held" or "checked-out" or "locked":
-                EndCheckout(s);
+                EndCheckout(s, heldHere: false);
+                if (job.CheckIn)
+                    Forget(s);
                 return SaveOutcome.Done;
             case "version-moved":
                 var moved = ProblemOf(e)?.Document;
-                if (!job.Resent && moved is not null && moved.FileVersion == record.FileVersion && HoldIsHere(moved.Hold))
+                var heldHere = HoldIsHere(moved?.Hold);
+                if (!job.Resent && moved is not null && moved.FileVersion == record.FileVersion && heldHere)
                 {
                     // Only its properties or name changed since the copy's version, so nobody stored newer content:
-                    // send it once more from the version as it is now (spec §5.10). Nothing was stored, so the saveId stays.
+                    // send it once more from the version as it is now (spec §5.10), under the document's name as it
+                    // is now, so the save doesn't undo a rename. Nothing was stored, so the saveId stays.
                     job.Resent = true;
                     job.IfVersion = moved.Version;
-                    var again = Update(s.Path, r => r with { Version = moved.Version }) ?? record;
+                    var again = Update(s.Path, r => r with { Version = moved.Version, DocumentName = moved.Name }) ?? record;
                     return await SaveAsync(s, job, again, ct);
                 }
-                EndCheckout(s);
+                // Newer content was stored: the copy's changes don't go over it. A check-out still held here stays
+                // recorded, so closing the copy or Save as New Document releases it.
+                EndCheckout(s, heldHere);
+                if (job.CheckIn)
+                {
+                    if (heldHere)
+                        return await ReleaseAsync(s, new SaveJob { CheckIn = true }, ct);
+                    Forget(s);
+                }
                 return SaveOutcome.Done;
         }
         if (e.Status >= 500 || e.Status is 408 or 429)
             return SaveOutcome.Retry;
         // Refused for good (403, 404, 413, 422, refused): nothing was stored, and the copy keeps the changes.
         Update(s.Path, r => r with { PendingHash = null });
-        _events.Error($"Healdan refused the save of {Title(record)}: {e.Detail}");
+        Raise(ev => ev.Error($"Healdan refused the save of {Title(record)}: {e.Detail}"));
         if (job.CheckIn)
             Forget(s);
         return SaveOutcome.Done;
     }
 
-    /// <summary>The check-out ended here (spec §5.10): nothing more is sent, and the copy is kept for Save as New Document.</summary>
-    private void EndCheckout(Session s)
+    /// <summary>
+    /// The copy's changes can't go to the document any more (spec §5.10): its check-out ended here, or newer content
+    /// was stored. Nothing more is sent, and the copy is kept for Save as New Document. With
+    /// <paramref name="heldHere"/>, the check-out is still this computer's, and stays recorded so it's released later.
+    /// </summary>
+    private void EndCheckout(Session s, bool heldHere)
     {
         lock (_gate)
         {
             s.Ended = true;
             s.Queue.DropQueued();
-            Update(s.Path, r => r with { CheckedOutHere = false, PendingHash = null });
+            Update(s.Path, r => r with { CheckedOutHere = heldHere, PendingHash = null });
         }
-        _events.CheckoutEnded(s.Path);
+        Raise(ev => ev.CheckoutEnded(s.Path));
         CompleteWaiters(s, StateOf(s.Path));
-        if (s.Closing)
-            Forget(s);
     }
 
     // --- Closing -------------------------------------------------------------------------------------------------
@@ -732,19 +834,29 @@ public sealed class CopyCycle : IDisposable
     private void Close(string path)
     {
         Session? s;
+        SaveJob? waiting;
+        string kind;
         lock (_gate)
         {
             s = Find(path);
             if (s is null || s.Closing)
                 return;
             s.Closing = true;
+            waiting = s.Queue.Queued;
             s.Queue.DropQueued(); // the check-in carries the newest content
+            kind = s.NextKind ?? waiting?.Kind ?? Snapshot;
         }
         _saves.Unwatch(s.Path);
         _closes.Unwatch(s.Path);
         CompleteWaiters(s, StateOf(s.Path));
 
         var record = Record(s.Path);
+        if (record is { ReadOnly: false, CheckedOutHere: true } && !s.ReadOnly && s.Ended)
+        {
+            // Its changes can't go up, but this computer still holds the check-out: release it, and keep the copy.
+            Enqueue(s, new SaveJob { CheckIn = true });
+            return;
+        }
         if (record is null || s.ReadOnly || record.ReadOnly || s.Ended)
         {
             Forget(s);
@@ -752,20 +864,16 @@ public sealed class CopyCycle : IDisposable
                 _store.Delete(s.Path);
             return;
         }
-        var content = TryRead(s.Path);
-        string kind;
-        lock (_gate)
+        // The file is read when the check-in is sent: if it can't be read then, it's tried again; if it's gone, the
+        // save that was waiting goes up instead of being lost with the release.
+        Enqueue(s, new SaveJob
         {
-            kind = s.NextKind ?? Snapshot;
-            if (s.Adopting && content is { } adopted)
-            {
-                // Closed before the adoption had settled: that write is still the starting point, not a save.
-                s.Adopting = false;
-                Update(s.Path, r => r with { ConfirmedHash = adopted.Hash });
-                s.Adopted.TrySetResult();
-            }
-        }
-        Enqueue(s, new SaveJob { Content = content?.Bytes, Hash = content?.Hash, Kind = kind, CheckIn = true });
+            Kind = kind,
+            CheckIn = true,
+            ReadAtSend = true,
+            FallbackContent = waiting?.Content,
+            FallbackHash = waiting?.Hash
+        });
     }
 
     /// <summary>Releases the check-out: on closing with nothing new to send, or for Save as New Document's original.</summary>
@@ -790,12 +898,10 @@ public sealed class CopyCycle : IDisposable
             catch (ApiException e) when (!job.ReleaseOnly)
             {
                 if (e.Code is "held-elsewhere" or "not-held" or "checked-out" or "locked")
-                    EndCheckout(s);
+                    EndCheckout(s, heldHere: false);
                 else
-                {
-                    _events.Error($"Healdan refused to release {Title(record)}: {e.Detail}");
-                    Forget(s);
-                }
+                    Raise(ev => ev.Error($"Healdan refused to release {Title(record)}: {e.Detail}"));
+                Forget(s);
                 return SaveOutcome.Done;
             }
             catch (ApiException)
@@ -815,10 +921,10 @@ public sealed class CopyCycle : IDisposable
     private void Finish(Session s)
     {
         Forget(s);
-        if (_store.HasUnconfirmedChanges(s.Path))
-            _events.Error($"#{s.DocNumber} changed after it was checked in; its copy is kept.");
-        else
+        if (!_store.HasUnconfirmedChanges(s.Path))
             _store.Delete(s.Path);
+        else if (!s.Ended) // an ended copy's changes were never going up, and CheckoutEnded has said so
+            Raise(ev => ev.Error($"#{s.DocNumber} changed after it was checked in; its copy is kept."));
     }
 
     private void Replace(string path, Task adopted)
@@ -837,7 +943,7 @@ public sealed class CopyCycle : IDisposable
         {
             if (Record(path) is not { } record)
                 return;
-            old = new Session(path, record.DocNumber, record.ReadOnly, SendAsync, _timings, SetWaiting) { Closing = true };
+            old = new Session(path, record.DocNumber, record.ReadOnly, SendAsync, _timings, SetWaiting, SaveFailed) { Closing = true };
             lock (_gate)
                 _sessions[Name(path)] = old;
         }
@@ -851,13 +957,17 @@ public sealed class CopyCycle : IDisposable
         try
         {
             await adopted.WaitAsync(_stop.Token);
+            Forget(original);
+            _store.Delete(original.Path);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
         {
-            return;
+            // Shutting down: the original copy stays, and ResumeAsync tidies it.
         }
-        Forget(original);
-        _store.Delete(original.Path);
+        catch (Exception e)
+        {
+            Raise(ev => ev.Error($"#{original.DocNumber}'s old copy couldn't be removed: {e.Message}"));
+        }
     }
 
     private void OnCrashed(string path)
@@ -870,7 +980,7 @@ public sealed class CopyCycle : IDisposable
                 return;
             s.Crashed = true;
         }
-        _events.Crashed(s.Path);
+        Raise(ev => ev.Crashed(s.Path));
     }
 
     // --- Helpers -------------------------------------------------------------------------------------------------
@@ -883,7 +993,7 @@ public sealed class CopyCycle : IDisposable
                 return;
             _signInAsked = true;
         }
-        _events.SignInNeeded();
+        Raise(ev => ev.SignInNeeded());
     }
 
     private void SetWaiting(string path, bool waiting)
@@ -895,7 +1005,7 @@ public sealed class CopyCycle : IDisposable
                 return;
             count = _waiting.Count;
         }
-        _events.Waiting(count);
+        Raise(ev => ev.Waiting(count));
     }
 
     private void CompleteWaiters(Session s, CopyState state)
@@ -929,8 +1039,8 @@ public sealed class CopyCycle : IDisposable
         }
     }
 
-    private bool HoldIsHere(HoldView? hold) =>
-        hold is { Kind: "checkout" } && (hold.Device is null || hold.Device.Name == _deviceName);
+    /// <summary>The hold is this computer's check-out. A hold with no device can't be told from someone else's, so it isn't.</summary>
+    private bool HoldIsHere(HoldView? hold) => hold is { Kind: "checkout", Device: { } device } && device.Id == _deviceId;
 
     private bool SafeIsRunning()
     {
@@ -953,7 +1063,33 @@ public sealed class CopyCycle : IDisposable
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
-            _events.Error("The helper hit a problem watching its copies: " + e.Message);
+            Raise(ev => ev.Error("The helper hit a problem watching its copies: " + e.Message));
+        }
+    }
+
+    private void SaveFailed(Exception e) =>
+        Raise(ev => ev.Error("The helper hit a problem sending a save; the copy keeps it: " + e.Message));
+
+    /// <summary>
+    /// Tells the app something. A handler that throws is reported through <see cref="ICycleEvents.Error"/> once, and
+    /// never stops a copy's saves, its watchers or a close.
+    /// </summary>
+    private void Raise(Action<ICycleEvents> raise)
+    {
+        try
+        {
+            raise(_events);
+        }
+        catch (Exception e)
+        {
+            try
+            {
+                _events.Error("The helper couldn't show an update: " + e.Message);
+            }
+            catch (Exception)
+            {
+                // The app can't be told anything; the cycle goes on regardless.
+            }
         }
     }
 

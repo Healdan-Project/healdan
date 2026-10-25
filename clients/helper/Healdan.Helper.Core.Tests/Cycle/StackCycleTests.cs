@@ -33,9 +33,9 @@ public sealed class StackCycleTests : IDisposable
     public async Task OpenSaveCloseAgainstStack()
     {
         var api = new HealdanApi(new Uri(Env("HEALDAN_STACK_URL")!));
-        const string deviceName = "Healdan Helper stack test";
-        await api.SignInAsync(Env("HEALDAN_STACK_USER") ?? "admin", Env("HEALDAN_STACK_PASSWORD") ?? "admin", deviceName,
-            Guid.NewGuid().ToString());
+        var deviceId = Guid.NewGuid().ToString();
+        await api.SignInAsync(Env("HEALDAN_STACK_USER") ?? "admin", Env("HEALDAN_STACK_PASSWORD") ?? "admin",
+            "Healdan Helper stack test", deviceId);
         try
         {
             var filed = await FileADocumentAsync(api);
@@ -43,7 +43,7 @@ public sealed class StackCycleTests : IDisposable
 
             var events = new RecordingEvents();
             var app = new FakeApp();
-            using (var cycle = new CopyCycle(api, new CopyStore(HelperPaths.For(_root)), app, deviceName, events, Timings))
+            using (var cycle = new CopyCycle(api, new CopyStore(HelperPaths.For(_root)), app, deviceId, events, Timings))
             {
                 await cycle.OpenAsync(filed.DocNumber, false);
                 Assert.Empty(events.Errors);

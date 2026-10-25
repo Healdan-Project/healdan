@@ -25,7 +25,15 @@ public sealed class RecordingEvents : ICycleEvents
 
     public int SignIns => Volatile.Read(ref _signIns);
 
-    public void Confirmed(string path, CopyState state) => Confirmations.Enqueue((path, state));
+    /// <summary>When set, <see cref="Confirmed"/> throws after recording, as a broken window might.</summary>
+    public bool ThrowOnConfirmed { get; set; }
+
+    public void Confirmed(string path, CopyState state)
+    {
+        Confirmations.Enqueue((path, state));
+        if (ThrowOnConfirmed)
+            throw new InvalidOperationException("The window broke (fake).");
+    }
 
     public void HeldElsewhere(string? path, long docNumber, string deviceName, string? app, DateTimeOffset? lastSaved) =>
         HeldElsewheres.Enqueue(new HeldElsewhereEvent(path, docNumber, deviceName, app, lastSaved));

@@ -17,10 +17,21 @@ internal enum SaveOutcome
 internal sealed class SaveJob
 {
     /// <summary>The file as it settled; null for a release, or a close that found no file.</summary>
-    public byte[]? Content { get; init; }
+    public byte[]? Content { get; set; }
 
     /// <summary>SHA-256 (hex) of <see cref="Content"/>.</summary>
-    public string? Hash { get; init; }
+    public string? Hash { get; set; }
+
+    /// <summary>
+    /// The close's check-in reads the file when it's first sent, as the app has finished with it, and tries again
+    /// later if it can't be read yet. If the file is gone, it sends <see cref="FallbackContent"/>: the newest save
+    /// that was waiting when the window closed.
+    /// </summary>
+    public bool ReadAtSend { get; set; }
+
+    public byte[]? FallbackContent { get; init; }
+
+    public string? FallbackHash { get; init; }
 
     /// <summary><c>snapshot</c> or <c>version</c>.</summary>
     public string Kind { get; init; } = "snapshot";
@@ -59,18 +70,22 @@ internal sealed class SaveQueue : IDisposable
     private readonly Func<SaveJob, CancellationToken, Task<SaveOutcome>> _send;
     private readonly CycleTimings _timings;
     private readonly Action<bool> _waiting;
+    private readonly Action<Exception> _failed;
     private readonly CancellationTokenSource _stop = new();
     private SaveJob? _queued;
     private bool _looping;
     private TaskCompletionSource _wake = NewWake();
 
-    /// <param name="send">Sends a job once. It reports refusals itself; only a cancelled send throws.</param>
+    /// <param name="send">Sends a job once. It reports refusals itself; only a cancelled send should throw.</param>
     /// <param name="waiting">Called with true when a job starts waiting for a retry, and false once it's done.</param>
-    public SaveQueue(Func<SaveJob, CancellationToken, Task<SaveOutcome>> send, CycleTimings timings, Action<bool> waiting)
+    /// <param name="failed">Told of a send that threw anyway; the job then counts as done, and the queue goes on.</param>
+    public SaveQueue(Func<SaveJob, CancellationToken, Task<SaveOutcome>> send, CycleTimings timings, Action<bool> waiting,
+        Action<Exception> failed)
     {
         _send = send;
         _timings = timings;
         _waiting = waiting;
+        _failed = failed;
     }
 
     /// <summary>Queues the job behind the one running, replacing a queued one that hasn't started.</summary>
@@ -161,7 +176,18 @@ internal sealed class SaveQueue : IDisposable
                 var waiting = false;
                 for (var attempt = 0; ; attempt++)
                 {
-                    if (await _send(job, ct) == SaveOutcome.Done)
+                    SaveOutcome outcome;
+                    try
+                    {
+                        outcome = await _send(job, ct);
+                    }
+                    catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
+                    {
+                        // Never let one job stop the copy's saves: the copy keeps its changes, and the next save goes.
+                        _failed(e);
+                        outcome = SaveOutcome.Done;
+                    }
+                    if (outcome == SaveOutcome.Done)
                         break;
                     if (!waiting)
                     {

@@ -59,6 +59,8 @@ public sealed class FakeApi : HttpMessageHandler
     private long _nextNumber = 100;
     private int _dropAnswers;
     private TaskCompletionSource? _saveGate;
+    private TaskCompletionSource? _downloadGate;
+    private FakeHold? _cannedVersionMovedHold;
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
 
@@ -122,6 +124,24 @@ public sealed class FakeApi : HttpMessageHandler
         gate?.TrySetResult();
     }
 
+    /// <summary>Holds every download open, its answer unsent, until the request is cancelled.</summary>
+    public void HoldDownloads()
+    {
+        lock (_lock)
+            _downloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    /// <summary>
+    /// Answers the next save <c>version-moved</c> with the document as it is, its version one on and its file version
+    /// the same, but shown held by <paramref name="hold"/>: what no real server sends for another device's hold, to
+    /// check the helper tells this computer's hold by its device id.
+    /// </summary>
+    public void AnswerNextSaveVersionMoved(FakeHold hold)
+    {
+        lock (_lock)
+            _cannedVersionMovedHold = hold;
+    }
+
     public IReadOnlyList<FakeSave> Saves
     {
         get
@@ -179,7 +199,7 @@ public sealed class FakeApi : HttpMessageHandler
             ("GET", "") => Ok(Doc(n)),
             ("POST", "checkout") => await CheckOutAsync(n, request, ct),
             ("DELETE", "checkout") => Release(n),
-            ("GET", "content") => Content(n, request.RequestUri),
+            ("GET", "content") => await ContentAsync(n, request.RequestUri, ct),
             ("POST", "versions") => await SaveAsync(n, request, ct),
             _ => Problem(404, "not-found", "No such route in the fake.")
         };
@@ -218,8 +238,13 @@ public sealed class FakeApi : HttpMessageHandler
         }
     }
 
-    private HttpResponseMessage Content(long n, Uri uri)
+    private async Task<HttpResponseMessage> ContentAsync(long n, Uri uri, CancellationToken ct)
     {
+        TaskCompletionSource? gate;
+        lock (_lock)
+            gate = _downloadGate;
+        if (gate is not null)
+            await gate.Task.WaitAsync(ct);
         var version = uri.Query.StartsWith("?version=") ? Uri.UnescapeDataString(uri.Query["?version=".Length..]) : null;
         byte[] bytes;
         lock (_lock)
@@ -258,7 +283,14 @@ public sealed class FakeApi : HttpMessageHandler
         lock (_lock)
         {
             var doc = _docs[n];
-            if (saveId is not null && saveId == doc.LastSaveId)
+            if (_cannedVersionMovedHold is { } shown)
+            {
+                _cannedVersionMovedHold = null;
+                var view = View(doc) with { Version = Next(doc.Version, "snapshot"), Hold = Hold(shown) };
+                (answer, outcome) = (Problem(409, "version-moved", "The document moved on.",
+                    new JsonObject { ["document"] = JsonSerializer.SerializeToNode(view, Json) }), "version-moved (canned)");
+            }
+            else if (saveId is not null && saveId == doc.LastSaveId)
                 (answer, outcome) = (Ok(doc, HttpStatusCode.Created), "repeat");
             else if (doc.Hold is { } h && h.ById != MyId)
                 (answer, outcome) = (Problem(409, "checked-out", "Checked out by someone else.", HoldJson(h)), "checked-out");
@@ -274,6 +306,8 @@ public sealed class FakeApi : HttpMessageHandler
                 var number = Next(doc.Version, kind);
                 doc.Files[number] = file;
                 doc.Version = doc.FileVersion = number;
+                if (name is not null)
+                    doc.Name = name; // a save may rename the document, as the real server's does
                 doc.LastSaveId = saveId;
                 doc.LastSaved = DateTimeOffset.UtcNow;
                 doc.Hold = keep ? Here(doc.Hold?.App) : null;

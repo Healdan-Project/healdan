@@ -15,7 +15,12 @@ public interface ICycleEvents
     /// </summary>
     void HeldElsewhere(string? path, long docNumber, string deviceName, string? app, DateTimeOffset? lastSaved);
 
-    /// <summary>The check-out ended here, so the copy's saves are refused; the copy is kept, and the app offers Save as New Document.</summary>
+    /// <summary>
+    /// The copy's changes can't go to the document any more: its check-out ended here, or Healdan has newer content
+    /// than the version the copy started from (spec §5.10). Nothing more of it is sent; the copy is kept, and the app
+    /// offers Save as New Document. If this computer still holds the check-out, closing the copy or saving it as a new
+    /// document releases it.
+    /// </summary>
     void CheckoutEnded(string path);
 
     /// <summary>The app went away with the copy open; the copy and its check-out are kept, and the app offers Reopen.</summary>
