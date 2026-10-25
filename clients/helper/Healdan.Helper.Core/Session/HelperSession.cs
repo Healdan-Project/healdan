@@ -180,6 +180,39 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>The documents open, for the menu.</summary>
     public IReadOnlyList<CopyState> OpenCopies() => Cycle?.OpenCopies() ?? [];
 
+    /// <summary>
+    /// Spec §5.4: the copies whose changes can't go to Healdan, kept once their window closed, for the menu's Not Yet in
+    /// Healdan (<see cref="CopyCycle.KeptCopies"/>).
+    /// </summary>
+    public IReadOnlyList<CopyState> KeptCopies() => Cycle?.KeptCopies() ?? [];
+
+    /// <summary>
+    /// The menu's click on a copy Not Yet in Healdan: opens it as it is, with no check-out or download, and says how
+    /// to file its changes.
+    /// </summary>
+    public void OpenKept(CopyState copy)
+    {
+        var cycle = Cycle;
+        if (cycle is null)
+            return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                cycle.OpenKept(copy.Path);
+                _log.Info($"Opened the kept copy of {copy.DocRef}, which isn't in Healdan yet");
+                _notifier.Notify(copy.Title, "Your changes to it aren't in Healdan yet: use Save as New Document to file them.");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException
+                                           or System.ComponentModel.Win32Exception)
+            {
+                _log.Warn($"Couldn't open the kept copy of {copy.DocRef}: {e.Message}");
+                _notifier.Notify(copy.Title, $"It couldn't be opened: {e.Message}");
+            }
+            RaiseChanged();
+        });
+    }
+
     /// <summary>Whether the app went away with this copy open, and it hasn't been reopened since.</summary>
     public bool HasCrashed(CopyState copy)
     {

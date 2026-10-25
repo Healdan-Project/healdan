@@ -80,6 +80,24 @@ public sealed class LinkHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task OpensOnlyDocumentsSpreadsheetsAndPresentations()
+    {
+        // Spec 5.11's kinds; anything else a matter holds opens only from the Open window (the final review's C2).
+        _server.Add(7, "Run me.command", "#!/bin/sh");
+        var opener = new FakeOpener();
+        using var cycle = new CopyCycle(new HealdanApi(Server, _server) { Token = "hd_test" }, new CopyStore(HelperPaths.For(_root)), _app,
+            FakeApi.HereDevice, _events, Fast, opener);
+        await _links.Ready(Server, cycle);
+
+        await _links.Handle("healdan://open/7?server=healdan.test");
+
+        Assert.Empty(opener.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Equal(0, _server.Count("GET /documents/7/content"));
+        Assert.Contains("Open it from the web page, or from Open from Healdan", Assert.Single(_events.Errors));
+    }
+
+    [Fact]
     public async Task RefusesAnotherServerNamingItsOwn()
     {
         await _links.Ready(Server, _cycle);

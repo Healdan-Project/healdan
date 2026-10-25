@@ -10,7 +10,13 @@ namespace Healdan.Helper.Core.Cycle;
 /// <param name="ReadOnly">Opened without a check-out.</param>
 /// <param name="Path">The copy's path.</param>
 /// <param name="HoldBy">For a read-only copy, who has the document checked out, when someone has; null otherwise.</param>
-public sealed record CopyState(bool Known, long DocNumber, string Title, string DocRef, bool ReadOnly, string Path, string? HoldBy)
+/// <param name="Pending">
+/// The copy has changes still on their way to Healdan: a save queued, going up or waiting for the server, or one the
+/// app wrote that hasn't settled yet. False once Healdan has them, and for a copy nothing more is sent for. The
+/// extension asks <c>/v1/saved</c> again while it's true, so the title moves on however long the server takes.
+/// </param>
+public sealed record CopyState(bool Known, long DocNumber, string Title, string DocRef, bool ReadOnly, string Path, string? HoldBy,
+    bool Pending = false)
 {
     /// <summary>The state of a path the helper has no copy at.</summary>
     public static CopyState Unknown(string path) => new(false, 0, "", "", false, path, null);

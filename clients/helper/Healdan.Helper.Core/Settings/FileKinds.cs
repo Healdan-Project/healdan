@@ -11,6 +11,15 @@ public static class FileKinds
 
     public static readonly IReadOnlyList<FileKind> All = [Documents, Spreadsheets, Presentations];
 
+    /// <summary>
+    /// The kind of a file by its own extension, or null. Links and the cycle go by this: a name with no extension, such
+    /// as <c>docx</c>, has no kind, as in the web page's Open in App.
+    /// </summary>
+    public static FileKind? OfFile(string fileName) =>
+        Path.GetExtension(fileName) is { Length: > 1 } ext
+            ? All.FirstOrDefault(k => k.Extensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            : null;
+
     /// <summary>The kind of the file or extension, or null for a file no office app opens.</summary>
     public static FileKind? Of(string nameOrExtension)
     {

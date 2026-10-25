@@ -107,7 +107,8 @@ public sealed class ChannelHandlerTests : IDisposable
                 ["docRef"] = "#5 v1.0",
                 ["readOnly"] = false,
                 ["path"] = path,
-                ["holdBy"] = null
+                ["holdBy"] = null,
+                ["pending"] = false
             }.ToJsonString(),
             state.ToJsonString());
     }
@@ -131,6 +132,92 @@ public sealed class ChannelHandlerTests : IDisposable
         Assert.Equal("Lease agreement #5 v1.1", (string?)state["title"]);
         Assert.Equal("#5 v1.1", (string?)state["docRef"]);
         Assert.Equal("edited", _server.Doc(5).Content);
+    }
+
+    [Fact]
+    public async Task SavedAfterTwoQuickSavesEndsOnTheLast()
+    {
+        var path = await OpenAsync();
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        var afterA = Call("saved", PathBody(path));
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        FakeApp.Write(path, "B");
+        var afterB = Call("saved", PathBody(path));
+        await Task.Delay(Fast.Settle * 3);
+        _server.OpenSaves();
+
+        foreach (var answer in new[] { await afterA, await afterB })
+        {
+            Assert.Equal("Lease agreement #5 v1.2", (string?)answer["title"]); // the title ends on the last save
+            Assert.Equal("#5 v1.2", (string?)answer["docRef"]);
+            Assert.False((bool?)answer["pending"]);
+        }
+        Assert.Equal("B", _server.Doc(5).Content);
+    }
+
+    [Fact]
+    public async Task SavedAfterSaveAsNewVersionGivesTheVersion()
+    {
+        var path = await OpenAsync();
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        var afterSave = Call("saved", PathBody(path));
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        await Call("new-version", PathBody(path)); // with no unsaved changes: the file as it is goes as a version
+        var afterVersion = Call("saved", PathBody(path));
+        _server.OpenSaves();
+
+        Assert.Equal("Lease agreement #5 v2.0", (string?)(await afterVersion)["title"]);
+        Assert.Equal("Lease agreement #5 v2.0", (string?)(await afterSave)["title"]);
+        Assert.Equal("2.0", _server.Doc(5).Version);
+    }
+
+    [Fact]
+    public async Task SavedThroughAnOutageLongerThanItsWaitMovesTheTitleOnceHealdanIsBack()
+    {
+        var paths = HelperPaths.For(_root);
+        var handler = new ChannelHandler(_cycle, new LinkHandler(_windows, _notifier, new HelperLog(paths.Log)), _windows, _notifier,
+            new HelperLog(paths.Log), paths, savedWait: TimeSpan.FromMilliseconds(400)); // 120 s in the helper
+        var path = await OpenAsync();
+        _server.Down = true;
+        FakeApp.Write(path, "written while Healdan is down");
+
+        var during = (await handler.HandleAsync("saved", PathBody(path)))!.AsObject();
+        Assert.Equal("#5 v1.0", (string?)during["docRef"]);
+        Assert.True((bool?)during["pending"]); // the extension asks again
+
+        _server.Down = false;
+        var after = (await handler.HandleAsync("saved", PathBody(path)))!.AsObject();
+        Assert.Equal("Lease agreement #5 v1.1", (string?)after["title"]);
+        Assert.Equal("#5 v1.1", (string?)after["docRef"]);
+        Assert.False((bool?)after["pending"]);
+    }
+
+    [Fact]
+    public async Task AdoptedThenAQuickSaveReachesHealdan()
+    {
+        var filed = await Call("file", FileBody(TempFile("the window's content")));
+        var path = (string)filed["path"]!;
+
+        FakeApp.Write(path, "the window, as LibreOffice stored it"); // storeAsURL
+        var adopted = await Call("adopted", PathBody(path));
+        Assert.True((bool?)adopted["known"]);
+        Assert.Equal("Memo #100 v1.0", (string?)adopted["title"]);
+        FakeApp.Write(path, "typed straight after, and saved"); // within the settle of the adoption
+        var saved = await Call("saved", PathBody(path));
+
+        Assert.Equal("Memo #100 v1.1", (string?)saved["title"]);
+        Assert.Equal("typed straight after, and saved", _server.Doc(100).Content);
+        Assert.Equal(["typed straight after, and saved"], _server.Saves.Select(s => s.Content));
+    }
+
+    [Fact]
+    public async Task AdoptedOfAFileThatIsntACopyIsUnknown()
+    {
+        var answer = await Call("adopted", PathBody(Path.Combine(_root, "elsewhere.odt")));
+
+        Assert.Equal("""{"known":false}""", answer.ToJsonString());
     }
 
     [Fact]

@@ -934,22 +934,335 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task SavedAnswersOnceTheSaveIsConfirmed()
     {
+        // As the extension asks: after the app has written the save.
         var (cycle, path) = await OpenAsync();
-        var waiting = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
         FakeApp.Write(path, "A");
-        Assert.Equal("Lease agreement #5 v1.1", (await waiting).Title);
+        var waited = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+        Assert.Equal("Lease agreement #5 v1.1", waited.Title);
+        Assert.False(waited.Pending);
 
-        // A save of the same bytes has nothing to send: it answers once the file has settled.
+        // A save of the same bytes has nothing to send: it answers at once.
         var started = DateTime.UtcNow;
-        var unchanged = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
         FakeApp.Write(path, "A");
-        Assert.Equal("Lease agreement #5 v1.1", (await unchanged).Title);
+        var unchanged = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+        Assert.Equal("Lease agreement #5 v1.1", unchanged.Title);
+        Assert.False(unchanged.Pending);
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5));
 
-        // With no save at all it gives up after the time given, with the current state.
-        var none = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromMilliseconds(300));
+        // So does a call with no save at all.
+        var none = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
         Assert.Equal("Lease agreement #5 v1.1", none.Title);
+        Assert.False(none.Pending);
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5));
         Assert.Single(_server.Saves);
+    }
+
+    [Fact]
+    public async Task SavedAfterTwoQuickSavesEndsOnTheLast()
+    {
+        // The final review's probe, in the extension's order: each /v1/saved comes after its save is written.
+        var (cycle, path) = await OpenAsync();
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        var first = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10)); // the extension's /v1/saved after save A
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        FakeApp.Write(path, "B");
+        var second = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10)); // and after save B
+        await Task.Delay(Fast.Settle * 3);
+        _server.OpenSaves();
+
+        var (afterA, afterB) = (await first, await second);
+        Assert.Equal("Lease agreement #5 v1.2", afterB.Title); // what the extension sets as the title after save B
+        Assert.Equal("Lease agreement #5 v1.2", afterA.Title); // and A's answer never puts it back a version
+        Assert.False(afterA.Pending);
+        Assert.False(afterB.Pending);
+        Assert.Equal(["A", "B"], _server.Saves.Select(s => s.Content));
+    }
+
+    [Fact]
+    public async Task SavedAfterSaveAsNewVersionGivesTheVersion()
+    {
+        var (cycle, path) = await OpenAsync();
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        cycle.MarkNextVersion(path); // Save as New Version with nothing unsaved, while A goes up
+        var answer = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+        _server.OpenSaves();
+
+        Assert.Equal("Lease agreement #5 v2.0", (await answer).Title);
+        Assert.Equal(["snapshot", "version"], _server.Saves.Select(s => s.Kind));
+    }
+
+    [Fact]
+    public async Task SavedDuringAnOutageSaysItsPendingThenMovesOn()
+    {
+        var (cycle, path) = await OpenAsync();
+        _server.Down = true;
+        FakeApp.Write(path, "A");
+
+        // The wait runs out while Healdan can't be reached: the answer says a save is still to go.
+        var during = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromMilliseconds(400));
+        Assert.Equal("Lease agreement #5 v1.0", during.Title);
+        Assert.True(during.Pending);
+
+        // The extension asks again while that's so; once Healdan is back, the answer moves the title on.
+        _server.Down = false;
+        var after = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+        Assert.Equal("Lease agreement #5 v1.1", after.Title);
+        Assert.False(after.Pending);
+        Assert.False(cycle.StateOf(path).Pending);
+    }
+
+    [Fact]
+    public async Task ASaveJustAfterAdoptionReachesHealdan()
+    {
+        // The final review's probe (C1): a save within the settle after storeAsURL used to fold into the baseline.
+        var cycle = Cycle();
+        var temp = Path.Combine(_root, "new.odt");
+        File.WriteAllText(temp, "filed");
+        var state = await cycle.AdoptNewAsync(temp, new NewDocument(9, "Letter.odt", new JsonObject(), false), null);
+
+        FakeApp.Write(state.Path, "adopted by the app"); // storeAsURL
+        File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
+        var adopted = cycle.Adopted(state.Path); // the extension's /v1/adopted, before the window takes input again
+        Assert.Equal("Letter #100 v1.0", adopted.Title);
+        await Task.Delay(Fast.Settle / 2);
+        FakeApp.Write(state.Path, "adopted, then the user typed and pressed Cmd+S"); // a save within the settle
+        await Wait.Until(() => _events.LastTitle(state.Path) == "Letter #100 v1.1", "the save confirmed");
+        await Wait.Until(() => _app.LockSeen(state.Path), "lock seen");
+        FakeApp.Close(state.Path); // closed with nothing more to save
+        await Wait.Until(() => _server.Doc(100).Hold is null, "#100 checked in or released");
+        await Wait.Until(() => !File.Exists(state.Path), "the copy deleted once Healdan has it");
+        await Task.Delay(Quiet);
+
+        Assert.Equal("adopted, then the user typed and pressed Cmd+S", _server.Doc(100).Content);
+        Assert.Equal(["adopted, then the user typed and pressed Cmd+S"], _server.Saves.Select(s => s.Content)); // the adoption isn't one
+    }
+
+    [Fact]
+    public async Task ARestartWhileAdoptingDoesntSendTheAdoption()
+    {
+        var first = Cycle();
+        var temp = Path.Combine(_root, "new.odt");
+        File.WriteAllText(temp, "filed");
+        var state = await first.AdoptNewAsync(temp, new NewDocument(9, "Letter.odt", new JsonObject(), false), null);
+        FakeApp.Write(state.Path, "adopted by the app");
+        File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
+        first.Dispose(); // stopped before the adoption had settled, and before /v1/adopted
+        _app.Running = true;
+
+        await Cycle().ResumeAsync();
+        await Task.Delay(Fast.Settle * 4);
+
+        Assert.Empty(_server.Saves); // not sent as an identical version
+        Assert.False(Store.HasUnconfirmedChanges(state.Path));
+        FakeApp.Write(state.Path, "a real save");
+        await Wait.Until(() => _server.Doc(100).Content == "a real save", "the next save");
+    }
+
+    [Fact]
+    public async Task ARestartWhileAdoptingStillSendsALaterSave()
+    {
+        // The helper stopped while adopting, and the user saved again a while later, while it was down: that save
+        // may be anything, so it goes up rather than being taken for the adoption.
+        var first = Cycle();
+        var temp = Path.Combine(_root, "new.odt");
+        File.WriteAllText(temp, "filed");
+        var state = await first.AdoptNewAsync(temp, new NewDocument(9, "Letter.odt", new JsonObject(), false), null);
+        first.Dispose();
+        FakeApp.Write(state.Path, "saved while the helper was down");
+        File.SetLastWriteTimeUtc(state.Path, DateTime.UtcNow + TimeSpan.FromMinutes(2));
+        File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
+        _app.Running = true;
+
+        await Cycle().ResumeAsync();
+
+        await Wait.Until(() => _server.Doc(100).Content == "saved while the helper was down", "the save sent");
+    }
+
+    [Fact]
+    public async Task KeptCopiesListsACopyWhoseChangesCantGoUp()
+    {
+        var (cycle, path) = await OpenAsync();
+        Assert.Empty(cycle.KeptCopies()); // open: the cycle looks after it
+        _server.Change(5, d => d.Hold = FakeApi.OtherDevice());
+        FakeApp.Write(path, "my edits");
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+        Assert.Empty(cycle.KeptCopies()); // still open in the app
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
+
+        FakeApp.Close(path);
+        await Wait.Until(() => cycle.OpenCopies().Count == 0, "the window's close done");
+
+        var kept = Assert.Single(cycle.KeptCopies());
+        Assert.Equal((path, "Lease agreement #5 v1.0", 5L), (kept.Path, kept.Title, kept.DocNumber));
+
+        // And after a restart, from the record alone.
+        cycle.Dispose();
+        var restarted = Cycle();
+        await restarted.ResumeAsync();
+        Assert.Equal(path, Assert.Single(restarted.KeptCopies()).Path);
+    }
+
+    [Fact]
+    public async Task KeptCopiesLeavesOutWhatHealdanHas()
+    {
+        _server.Add(6, "Notes.odt", "notes");
+        var (cycle, path) = await OpenAsync();
+        await cycle.OpenAsync(6, true);
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _events.LastTitle(path) is not null, "A confirmed");
+
+        Assert.Empty(cycle.KeptCopies()); // open copies, confirmed or not, and read-only ones
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
+        FakeApp.Close(path);
+        await Wait.Until(() => !File.Exists(path), "checked in and deleted");
+        Assert.Empty(cycle.KeptCopies());
+    }
+
+    [Fact]
+    public async Task AKeptCopyOpensWithNoCheckOutOrDownload()
+    {
+        var (cycle, path) = await OpenAsync();
+        _server.Change(5, d => d.Hold = null); // the web page released it
+        FakeApp.Write(path, "my edits");
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
+        FakeApp.Close(path);
+        await Wait.Until(() => cycle.KeptCopies().Count == 1, "listed");
+        var calls = _server.Calls.Count;
+
+        cycle.OpenKept(path);
+
+        Assert.Equal([path, path], _app.Opened);
+        Assert.Equal(calls, _server.Calls.Count);
+        Assert.Equal("my edits", File.ReadAllText(path));
+
+        // Save as New Document from it files the changes, and the kept copy goes.
+        var temp = Path.Combine(_root, "mine.docx");
+        File.WriteAllText(temp, "my edits");
+        var state = await cycle.AdoptNewAsync(temp, new NewDocument(9, "Mine.docx", new JsonObject(), true), path);
+        FakeApp.Write(state.Path, "my edits");
+        cycle.Adopted(state.Path);
+        await Wait.Until(() => !File.Exists(path), "the kept copy deleted once the new one is adopted");
+        Assert.Empty(cycle.KeptCopies());
+        Assert.Null(_server.Doc(5).Hold); // nothing taken back
+        Assert.Equal("downloaded", _server.Doc(5).Content);
+    }
+
+    [Fact]
+    public async Task ACheckInAnsweredWithAnotherComputersHoldIsntTakenForThisOnes()
+    {
+        // The check-in is stored but its answer lost; before the retry, the user checks it out on another computer.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RetryDelays = [TimeSpan.FromMinutes(5)] });
+        await Wait.Until(() => _app.LockSeen(path), "the lock file seen");
+        FakeApp.Write(path, "the last save");
+        await Wait.Until(() => _events.LastTitle(path) is not null, "the save confirmed");
+        _server.DropAnswers(1);
+        FakeApp.Write(path, "checked in");
+        FakeApp.Close(path);
+        await cycle.ClosedAsync(path);
+        await Wait.Until(() => _server.Saves.Count == 2, "the check-in stored, its answer lost");
+        _server.Change(5, d => d.Hold = FakeApi.OtherDevice());
+
+        cycle.RetryNow(); // the repeat's 201 shows the other computer's hold, with its device
+
+        await Wait.Until(() => !File.Exists(path), "the copy deleted: Healdan has the check-in");
+        await Task.Delay(Quiet);
+        Assert.Equal(["stored 1.1", "stored 1.2", "repeat"], _server.Saves.Select(s => s.Outcome));
+        Assert.Empty(_events.Ended); // the check-in went up: nothing is kept or offered
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Equal(FakeApi.OtherDevice(), _server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task ASecondOpenWhileTheFirstIsUnderWayDownloadsNothing()
+    {
+        _server.HoldDownloads();
+        var cycle = Cycle();
+        var first = cycle.OpenAsync(5, false);
+        await Wait.Until(() => _server.Count("GET /documents/5/content") == 1, "the first download under way");
+
+        var second = cycle.OpenAsync(5, false); // a double-click on Open in App
+        Assert.Same(second, await Task.WhenAny(second, Task.Delay(TimeSpan.FromSeconds(5))));
+        Assert.Equal(1, _server.Count("POST /documents/5/checkout"));
+        Assert.Equal(1, _server.Count("GET /documents/5/content"));
+
+        _server.OpenDownloads();
+        await first;
+        Assert.Equal([CopyPath("Lease agreement #5 v1.0.docx")], _app.Opened);
+        Assert.Equal("downloaded", File.ReadAllText(_app.Opened[0]));
+        Assert.Equal(1, _server.Count("GET /documents/5/content"));
+        Assert.Empty(_events.Errors);
+
+        // Once it's done, the document opens again as usual.
+        await cycle.OpenAsync(5, false);
+        Assert.Equal(2, _app.Opened.Count);
+    }
+
+    [Fact]
+    public async Task ALinkOpensOnlyOfficeKinds()
+    {
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener);
+
+        await cycle.OpenLinkAsync(7, false);
+
+        Assert.Empty(_opener.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Equal(0, _server.Count("GET /documents/7/content"));
+        Assert.Empty(CopiesFolder());
+        Assert.Contains("Open it from the web page, or from Open from Healdan", Assert.Single(_events.Errors));
+
+        // An office kind still opens from a link.
+        await cycle.OpenLinkAsync(5, false);
+        Assert.Equal([CopyPath("Lease agreement #5 v1.0.docx")], _app.Opened);
+    }
+
+    [Theory]
+    [InlineData("Invoice.command")]
+    [InlineData("Invoice.app")]
+    [InlineData("Invoice.pkg")]
+    [InlineData("Invoice.terminal")]
+    [InlineData("Invoice.WebLoc")]
+    [InlineData("Invoice.sh")]
+    public async Task TheDefaultAppNeverGetsAFileThatCanRunPrograms(string name)
+    {
+        _server.Add(8, name, "#!/bin/sh");
+        var cycle = Cycle(otherFiles: _opener);
+
+        await cycle.OpenAsync(8, false);
+
+        Assert.Empty(_opener.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Equal(0, _server.Count("GET /documents/8/content")); // not even downloaded
+        Assert.Empty(CopiesFolder());
+        Assert.Contains("never opens", Assert.Single(_events.Errors));
+    }
+
+    [Fact]
+    public async Task ACopyForTheDefaultAppIsQuarantined()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return; // Gatekeeper's attribute is macOS's
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener);
+
+        await cycle.OpenAsync(7, false);
+
+        var path = Assert.Single(_opener.Opened);
+        AssertReadOnlyFile(path);
+        var xattr = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("xattr")
+        {
+            ArgumentList = { "-p", "com.apple.quarantine", path },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        })!;
+        var value = (await xattr.StandardOutput.ReadToEndAsync()).Trim();
+        await xattr.WaitForExitAsync();
+        Assert.Equal(0, xattr.ExitCode);
+        Assert.Matches("^0081;[0-9a-f]{8};Healdan Helper;$", value);
     }
 
     [Fact]

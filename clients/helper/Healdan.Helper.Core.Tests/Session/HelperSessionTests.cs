@@ -218,6 +218,33 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task ACopyNotYetInHealdanIsListedForTheMenuAndOpensFromIt()
+    {
+        // Spec 5.4: once its window has closed, a copy whose changes can't go up is still reachable from the menu.
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        _server.Change(5, d => d.Hold = FakeApi.OtherDevice());
+        FakeApp.Write(path, "an edit that can't go up");
+        await Wait.Until(() => _notifier.All.Contains("can't be saved to Healdan any more"), "the notice");
+        Assert.Empty(session.KeptCopies()); // still open: it's among the documents open
+        FakeApp.Close(path);
+        await Wait.Until(() => session.OpenCopies().Count == 0, "the window's close done");
+
+        var kept = Assert.Single(session.KeptCopies());
+        Assert.Equal("Lease agreement #5 v1.0", kept.Title);
+        session.OpenKept(kept);
+
+        await Wait.Until(() => _app.Opened.Count == 2, "opened again from the menu");
+        Assert.Equal(path, _app.Opened[^1]);
+        Assert.Equal(1, _server.Count("GET /documents/5/content")); // no download, and no check-out taken
+        Assert.Equal(1, _server.Count("POST /documents/5/checkout"));
+        await Wait.Until(() => _notifier.All.Contains("aren't in Healdan yet"), "how to file it");
+        Assert.Contains("Save as New Document", _notifier.All);
+    }
+
+    [Fact]
     public async Task ARefusedTokenAsksForTheSignInAgain()
     {
         SignedInBefore();

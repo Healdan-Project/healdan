@@ -124,11 +124,22 @@ public sealed class FakeApi : HttpMessageHandler
         gate?.TrySetResult();
     }
 
-    /// <summary>Holds every download open, its answer unsent, until the request is cancelled.</summary>
+    /// <summary>Holds every download open, its answer unsent, until <see cref="OpenDownloads"/> or the request is cancelled.</summary>
     public void HoldDownloads()
     {
         lock (_lock)
             _downloadGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public void OpenDownloads()
+    {
+        TaskCompletionSource? gate;
+        lock (_lock)
+        {
+            gate = _downloadGate;
+            _downloadGate = null;
+        }
+        gate?.TrySetResult();
     }
 
     /// <summary>

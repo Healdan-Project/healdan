@@ -14,6 +14,7 @@ import logging
 import os
 import re
 import sys
+import time
 import unicodedata
 import urllib.parse
 
@@ -68,6 +69,10 @@ WINDOW_TIMEOUT = 3600.0
 FILE_TIMEOUT = 660.0
 SAVED_TIMEOUT = 135.0
 QUICK_TIMEOUT = 10.0
+
+# Seconds between /v1/saved calls while the helper says a save is still on its way ("pending", as while Healdan can't
+# be reached), the last repeating: each call itself waits up to 120 s for Healdan.
+FOLLOW_BACKOFF = (2.0, 5.0, 15.0, 30.0, 60.0)
 
 # What the user is told (British English).
 HELPER_DOWN_BOX = ("Healdan Helper isn't running, so LibreOffice's own box is shown. "
@@ -405,13 +410,15 @@ class Flows:
     own command answered when it ran that.
     """
 
-    def __init__(self, channel, copies, ui, log=None):
+    def __init__(self, channel, copies, ui, log=None, sleep=None):
         self.channel = channel
         self.copies = copies
         self.ui = ui
         self.log = log or _LOG
+        self._sleep = sleep or time.sleep  # in the background, between /v1/saved calls
         self._told_down = False
         self._states = {}  # the latest state the helper gave for each copy, by its path
+        self._following = {}  # the newest save followed for each copy, by its path: an older follow stops
         self._windows_asked = 0  # window routes asked for, so a surprise knows whether the user saw one
         # Windows whose document the helper filed but that never became its local copy, as (doc.model, doc ID):
         # saving one again mustn't file it a second time.
@@ -562,6 +569,7 @@ class Flows:
         if path is None:
             return
         self._states.pop(_norm(path), None)
+        self._following.pop(_norm(path), None)
         if still_open:
             return
 
@@ -630,8 +638,9 @@ class Flows:
 
         filing = {"tempPath": temp, "folderId": answer.get("folderId"), "name": answer.get("name"), "format": fmt,
                   "properties": answer.get("properties") or {}, "app": APP, "replaces": original}
-        # Typing while it's filed would land in the copy as its starting point, which the helper doesn't send. Notices
-        # and LibreOffice's own box come once the window takes input again.
+        # Typing while it's filed, or before the helper hears the copy is adopted, would land in the copy's
+        # starting point, which the helper doesn't send. Notices and LibreOffice's own box come once the window
+        # takes input again.
         failed = None
         with doc.locked():
             try:
@@ -654,6 +663,8 @@ class Flows:
                     except Exception as e:
                         self.log.warning("Saving the window as its copy failed: %s", e)
                         failed = ADOPT_FAILED.format(ref=ref or "The document", it=ref or "it", error=said(e))
+                    else:
+                        state = self._adopted(path, state)
         if failed == "unreachable":
             _remove(temp)
             self._down(doc, HELPER_DOWN_BOX)
@@ -672,6 +683,19 @@ class Flows:
             self.log.warning("The new copy's title couldn't be set: %s", e)  # it's filed and saved all the same
         return True
 
+    def _adopted(self, path, state):
+        """
+        Tells the helper this window is now the new document's copy, while it still takes no input (final review C1):
+        the file as it is now is the copy's starting point, so a save straight after counts as one. An older helper,
+        or one that can't be reached, takes the first write that settles instead. Answers the copy's state.
+        """
+        try:
+            answer = self.ui.wait(lambda: self.channel.call("adopted", {"path": path}, QUICK_TIMEOUT))
+        except (ChannelUnreachable, ChannelError) as e:
+            self.log.warning("/v1/adopted: %s", e)
+            return state
+        return answer if answer.get("known") and same_file(answer.get("path"), path) else state
+
     def _window(self, route, body, doc, down_notice):
         """A window route: the helper's window, waited for; None when the helper can't be reached or refused."""
         self._windows_asked += 1
@@ -688,9 +712,21 @@ class Flows:
         return answer
 
     def _follow(self, doc, path):
-        """After a save: the helper's confirmation, waited for in the background, moves the title and footer on."""
+        """
+        After a save: the helper's answer once Healdan has it, waited for in the background, moves the title and footer
+        on (final review I1). While the helper says a save is still on its way (pending, as while Healdan can't be
+        reached), it's asked again after a pause that grows to a minute, so the title moves on once Healdan has the
+        save, however long that takes. A newer save of the copy takes the following over, and closing it ends it.
+        """
+        key = _norm(path)
+        generation = self._following.get(key, 0) + 1
+        self._following[key] = generation
+        self._poll(doc, path, key, generation, 0)
 
+    def _poll(self, doc, path, key, generation, round_):
         def work():
+            if round_:
+                self._sleep(FOLLOW_BACKOFF[min(round_, len(FOLLOW_BACKOFF)) - 1])
             try:
                 state = self.channel.call("saved", {"path": path}, SAVED_TIMEOUT)
             except ChannelUnreachable:
@@ -698,7 +734,15 @@ class Flows:
             except ChannelError as e:
                 self.log.warning("/v1/saved: %s", e)
                 return None
-            return lambda: self._apply(doc, path, state, confirmed=True)
+
+            def then():
+                # Each answer's version is what Healdan has, pending or not: the title and footer show it.
+                self._apply(doc, path, state, confirmed=True)
+                if state.get("pending") is True and self._following.get(key) == generation and doc.alive \
+                        and same_file(self._copy_path(doc), path):
+                    self._poll(doc, path, key, generation, round_ + 1)
+
+            return then
 
         self.ui.later(work)
 
