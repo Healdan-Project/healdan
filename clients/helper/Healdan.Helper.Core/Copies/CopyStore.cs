@@ -20,20 +20,26 @@ public sealed class CopyStore(HelperPaths paths)
     /// no usable record, a record with no confirmed hash is written for it, so it counts as unconfirmed and is kept.
     /// Otherwise the record is written, carrying <c>CheckedOutHere</c> and <c>LastSaveId</c> over from a record already
     /// at that path. Other copies of the document, at other paths, are left alone.
+    /// <para><c>Existing</c> is true when the path already holds a copy the helper must keep (one with unconfirmed
+    /// changes, or an unrecorded file): the caller reopens it and must not download over it. It is false for a new copy,
+    /// and for a path whose copy Healdan had confirmed, which is safe to refresh.</para>
     /// </summary>
-    public (string Path, CopyRecord Record) Create(Api.DocumentView doc, bool readOnly, string app)
+    public (string Path, CopyRecord Record, bool Existing) Create(Api.DocumentView doc, bool readOnly, string app)
     {
         EnsureFolders();
         var unconfirmed = All().FirstOrDefault(c => c.Record.DocNumber == doc.DocNumber && HasUnconfirmedChanges(c.Path));
         if (unconfirmed.Path is not null)
-            return unconfirmed;
+            return (unconfirmed.Path, unconfirmed.Record, true);
 
         var record = new CopyRecord(doc.DocNumber, doc.Name, doc.Version, doc.FileVersion, readOnly, false, null, null, app, null);
         var path = PathOf(record);
+        var existing = false;
         if (Find(path) is (_, var old))
             record = record with { CheckedOutHere = old.CheckedOutHere, LastSaveId = old.LastSaveId };
+        else
+            existing = File.Exists(path); // a file with no usable record: protect it, report it
         Save(record);
-        return (path, record);
+        return (path, record, existing);
     }
 
     /// <summary>Writes the record whole, through a temporary file renamed over the old one, so a crash leaves either.</summary>
@@ -84,6 +90,8 @@ public sealed class CopyStore(HelperPaths paths)
         var target = PathOf(renamed);
         if (target == path)
             return path;
+        if (File.Exists(target) || Directory.Exists(target) || File.Exists(RecordPath(target)))
+            throw new IOException("Another copy already has that name.");
         // The record first: a crash between the two steps must never leave the file under a name with no record.
         Save(renamed);
         try

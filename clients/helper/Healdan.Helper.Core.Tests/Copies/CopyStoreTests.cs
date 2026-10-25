@@ -32,7 +32,8 @@ public class CopyStoreTests : IDisposable
     [Fact]
     public void RecordSurvivesReload()
     {
-        var (path, rec) = Store().Create(Doc(1234), false, "LibreOffice");
+        var (path, rec, isExisting) = Store().Create(Doc(1234), false, "LibreOffice");
+        Assert.False(isExisting);
         Assert.Equal(Path.Combine(Paths.Copies, "Lease agreement #1234 v2.1.docx"), path);
 
         var found = Assert.Single(Store().All());
@@ -47,7 +48,7 @@ public class CopyStoreTests : IDisposable
     [Fact]
     public void RecordIsAHiddenFileBesideTheCopy()
     {
-        var (path, _) = Store().Create(Doc(1), false, "LibreOffice");
+        var (path, _, _) = Store().Create(Doc(1), false, "LibreOffice");
         Assert.True(File.Exists(Path.Combine(Paths.Copies, ".Lease agreement #1 v2.1.docx.healdan.json")));
         Assert.False(File.Exists(path), "Create doesn't write the copy's content");
         Assert.Empty(Directory.GetFiles(Paths.Copies, "*.tmp*"));
@@ -68,8 +69,8 @@ public class CopyStoreTests : IDisposable
     public void DeleteLeavesOthers()
     {
         var store = Store();
-        var (a, _) = store.Create(Doc(1), false, "LibreOffice");
-        var (b, _) = store.Create(Doc(2, "Other.docx"), false, "LibreOffice");
+        var (a, _, _) = store.Create(Doc(1), false, "LibreOffice");
+        var (b, _, _) = store.Create(Doc(2, "Other.docx"), false, "LibreOffice");
         File.WriteAllText(a, "a");
         File.WriteAllText(b, "b");
         File.WriteAllText(Path.Combine(Paths.Copies, $".~lock.{Path.GetFileName(a)}#"), "lock");
@@ -91,7 +92,7 @@ public class CopyStoreTests : IDisposable
     public void DeleteRemovesWordOwnerFiles()
     {
         var store = Store();
-        var (a, _) = store.Create(Doc(1), false, "Word");
+        var (a, _, _) = store.Create(Doc(1), false, "Word");
         File.WriteAllText(a, "a");
         var name = Path.GetFileName(a);
         var owner = Path.Combine(Paths.Copies, "~$" + name[2..]);
@@ -104,7 +105,7 @@ public class CopyStoreTests : IDisposable
     public void UnconfirmedChanges()
     {
         var store = Store();
-        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, rec, _) = store.Create(Doc(1), false, "LibreOffice");
         Assert.False(store.HasUnconfirmedChanges(path), "no copy file yet");
 
         File.WriteAllText(path, "downloaded");
@@ -122,7 +123,7 @@ public class CopyStoreTests : IDisposable
     public void ACopyWithNoConfirmedHashCountsAsUnconfirmed()
     {
         var store = Store();
-        var (path, _) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, _, _) = store.Create(Doc(1), false, "LibreOffice");
         File.WriteAllText(path, "something");
         Assert.True(store.HasUnconfirmedChanges(path));
     }
@@ -131,11 +132,12 @@ public class CopyStoreTests : IDisposable
     public void CreateKeepsAnExistingCopyWithUnconfirmedChanges()
     {
         var store = Store();
-        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, rec, _) = store.Create(Doc(1), false, "LibreOffice");
         File.WriteAllText(path, "mine");
         store.Save(rec with { PendingKind = "minor" });
 
-        var (again, record) = store.Create(Doc(1, fileVersion: "2.2"), false, "LibreOffice");
+        var (again, record, kept) = store.Create(Doc(1, fileVersion: "2.2"), false, "LibreOffice");
+        Assert.True(kept);
 
         Assert.Equal(path, again);
         Assert.Equal("minor", record.PendingKind);
@@ -147,11 +149,12 @@ public class CopyStoreTests : IDisposable
     public void CreateLeavesAConfirmedCopyOfTheSameDocumentAlone()
     {
         var store = Store();
-        var (old, rec) = store.Create(Doc(1), true, "LibreOffice");
+        var (old, rec, _) = store.Create(Doc(1), true, "LibreOffice");
         File.WriteAllText(old, "old");
         store.Save(rec with { ConfirmedHash = Hash(old), CheckedOutHere = true, LastSaveId = "s1" });
 
-        var (fresh, _) = store.Create(Doc(1, fileVersion: "2.2"), false, "LibreOffice");
+        var (fresh, _, isExisting) = store.Create(Doc(1, fileVersion: "2.2"), false, "LibreOffice");
+        Assert.False(isExisting);
 
         Assert.EndsWith("Lease agreement #1 v2.2.docx", fresh);
         Assert.True(File.Exists(old));
@@ -169,7 +172,8 @@ public class CopyStoreTests : IDisposable
         var target = Path.Combine(Paths.Copies, "Lease agreement #1 v2.1.docx");
         File.WriteAllText(target, "the user's work");
 
-        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, rec, unrecorded) = store.Create(Doc(1), false, "LibreOffice");
+        Assert.True(unrecorded);
 
         Assert.Equal(target, path);
         Assert.Null(rec.ConfirmedHash);
@@ -181,11 +185,12 @@ public class CopyStoreTests : IDisposable
     public void CreateOverAConfirmedRecordKeepsCheckOutAndSaveId()
     {
         var store = Store();
-        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, rec, _) = store.Create(Doc(1), false, "LibreOffice");
         File.WriteAllText(path, "x");
         store.Save(rec with { ConfirmedHash = Hash(path), CheckedOutHere = true, LastSaveId = "s9" });
 
-        var (again, record) = store.Create(Doc(1), false, "LibreOffice");
+        var (again, record, confirmedAgain) = store.Create(Doc(1), false, "LibreOffice");
+        Assert.False(confirmedAgain);
 
         Assert.Equal(path, again);
         Assert.True(record.CheckedOutHere);
@@ -209,7 +214,7 @@ public class CopyStoreTests : IDisposable
     public void RenameWritesTheNewRecordBeforeMovingTheFile()
     {
         var store = Store();
-        var (path, _) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, _, _) = store.Create(Doc(1), false, "LibreOffice");
         File.WriteAllText(path, "x");
         // Make the move fail: a directory already sits at the new name.
         Directory.CreateDirectory(Path.Combine(Paths.Copies, "Lease agreement #1 v2.2.docx"));
@@ -225,7 +230,7 @@ public class CopyStoreTests : IDisposable
     public void RenameMovesRecord()
     {
         var store = Store();
-        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+        var (path, rec, _) = store.Create(Doc(1), false, "LibreOffice");
         File.WriteAllText(path, "x");
         store.Save(rec with { ConfirmedHash = Hash(path) });
 
@@ -242,10 +247,31 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void RenameOntoAnotherCopyIsRefusedAndChangesNothing()
+    {
+        var store = Store();
+        var (a, recA, _) = store.Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(a, "a");
+        store.Save(recA with { ConfirmedHash = Hash(a), CheckedOutHere = true });
+        var (b, recB, _) = store.Create(Doc(1, fileVersion: "2.2"), false, "LibreOffice");
+        File.WriteAllText(b, "b");
+        store.Save(recB with { ConfirmedHash = Hash(b), LastSaveId = "s7" });
+
+        Assert.Throws<IOException>(() => store.Rename(a, "2.2"));
+
+        Assert.Equal("a", File.ReadAllText(a));
+        Assert.Equal("b", File.ReadAllText(b));
+        Assert.True(store.Find(a)!.Value.Item2.CheckedOutHere);
+        Assert.Equal("s7", store.Find(b)!.Value.Item2.LastSaveId);
+        Assert.Equal("2.1", store.Find(a)!.Value.Item2.FileVersion);
+        Assert.Equal(2, store.All().Count);
+    }
+
+    [Fact]
     public void RenameKeepsReadOnlyMark()
     {
         var store = Store();
-        var (path, _) = store.Create(Doc(1), true, "LibreOffice");
+        var (path, _, _) = store.Create(Doc(1), true, "LibreOffice");
         File.WriteAllText(path, "x");
         Assert.EndsWith("v2.2 (read-only).docx", store.Rename(path, "2.2"));
     }
@@ -264,7 +290,7 @@ public class CopyStoreTests : IDisposable
     [Fact]
     public void LongNamesGetRecordsThatFit()
     {
-        var (path, _) = Store().Create(Doc(7, new string('x', 400) + ".docx"), false, "LibreOffice");
+        var (path, _, _) = Store().Create(Doc(7, new string('x', 400) + ".docx"), false, "LibreOffice");
         File.WriteAllText(path, "x");
         Assert.Single(Store().All());
         Assert.True(File.Exists(Path.Combine(Paths.Copies, "." + Path.GetFileName(path) + ".healdan.json")));
