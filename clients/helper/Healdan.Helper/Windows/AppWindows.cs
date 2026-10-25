@@ -182,7 +182,11 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths));
+        var settings = HelperSettings.Load(paths);
+        var extension = ExtensionInstaller.BundledOxt is { } oxt && File.Exists(oxt)
+            ? settings.Extension?.Describe() ?? "Not installed yet."
+            : "Not in this build: the installed app installs it.";
+        var window = new SettingsWindow(server, Session?.SignedIn == true, settings, LoginItem.Describe(), extension);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

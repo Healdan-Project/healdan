@@ -34,6 +34,33 @@ internal static class MacPlatform
     /// </summary>
     public static bool InAppBundle => OperatingSystem.IsMacOS() && Bundled.Value;
 
+    /// <summary>
+    /// A display is on to draw on. Avalonia can't start without one (Task 16: CVReturn -6661, while the display
+    /// sleeps), so <see cref="Program"/> waits for one. Elsewhere, and if CoreGraphics can't say, it's taken as on.
+    /// </summary>
+    public static bool HasActiveDisplay()
+    {
+        if (!OperatingSystem.IsMacOS())
+            return true;
+        try
+        {
+            return CGGetActiveDisplayList(0, IntPtr.Zero, out var count) != 0 || count > 0;
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>An <c>NSError</c>'s description, as macOS gives it, or null for none.</summary>
+    public static string? ErrorText(IntPtr error)
+    {
+        if (error == IntPtr.Zero)
+            return null;
+        var text = Send(Send(error, Selector("localizedDescription")), Selector("UTF8String"));
+        return text == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(text);
+    }
+
     public static IntPtr Class(string name) => objc_getClass(name);
 
     public static IntPtr Selector(string name) => sel_registerName(name);
@@ -103,4 +130,8 @@ internal static class MacPlatform
 
     [DllImport(ObjC)]
     private static extern IntPtr sel_registerName([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+
+    /// <summary>With no list, the number of active displays; 0 is <c>kCGErrorSuccess</c>.</summary>
+    [DllImport("/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics")]
+    private static extern int CGGetActiveDisplayList(uint maxDisplays, IntPtr activeDisplays, out uint displayCount);
 }

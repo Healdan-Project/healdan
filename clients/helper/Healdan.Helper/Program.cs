@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Platform;
 
 namespace Healdan.Helper;
 
@@ -25,7 +26,22 @@ internal static class Program
             Log.Info("Another Healdan Helper is running for this user, so this one quits");
             return 0;
         }
+        WaitForDisplay();
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
+    }
+
+    /// <summary>
+    /// Avalonia can't start while no display is on (Task 16: CVReturn -6661), as when the helper is started while the
+    /// display sleeps, so the start waits for one instead of crashing.
+    /// </summary>
+    private static void WaitForDisplay()
+    {
+        if (MacPlatform.HasActiveDisplay())
+            return;
+        Log.Info("No display is on, so the start waits for one");
+        while (!MacPlatform.HasActiveDisplay())
+            Thread.Sleep(TimeSpan.FromSeconds(2));
+        Log.Info("A display is on, so the start goes on");
     }
 
     public static AppBuilder BuildAvaloniaApp() =>

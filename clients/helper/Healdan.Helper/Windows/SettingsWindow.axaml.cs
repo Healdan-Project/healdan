@@ -6,15 +6,18 @@ namespace Healdan.Helper.Windows;
 /// <summary>
 /// Settings (spec §5.8, §5.11): the server the helper signs in to, and the app that opens each kind of file. One
 /// server per helper (spec §5.1), so the address changes only by signing out and in again. In M3 every kind opens in
-/// LibreOffice, so the choice is shown but fixed.
+/// LibreOffice, so the choice is shown but fixed. Below them, read-only: whether the helper starts at sign-in, and
+/// its LibreOffice extension's version and which way it went in (spec §5.12).
 /// </summary>
 public partial class SettingsWindow : Window
 {
     /// <summary>For the XAML loader; the helper always opens it with the settings.</summary>
     public SettingsWindow() => InitializeComponent();
 
-    internal SettingsWindow(string? server, bool signedIn, HelperSettings settings) : this()
+    internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, string loginItem, string extension) : this()
     {
+        LoginItemLine.Text = loginItem;
+        ExtensionLine.Text = extension;
         ServerBox.Text = server ?? "Not set yet";
         ServerNote.Text = signedIn
             ? "To use another server, sign out from the Healdan Helper menu, then sign in with its address."

@@ -42,6 +42,7 @@ dotnet test clients/helper/Healdan.Helper.sln             # the desktop helper's
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain" # the real macOS keychain, by hand on a Mac
 python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice extension's tests (standard library only)
 clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt (reproducible)
+clients/helper/packaging/mac/package.sh 1.2.3             # Healdan Helper.app and its .dmg, on a Mac; signed only with SIGN_IDENTITY set
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
@@ -59,6 +60,8 @@ clients/libreoffice/build.sh                              # the LibreOffice exte
   - `code` is false when it changes only `docs/`, `site/`, Markdown files outside `src/` and `clients/`. Both Java and Docker workflows then skip their build steps and still report the required checks.
   - `clients` is true when it changes anything under `clients/` or `clients.yml`. `clients.yml` otherwise skips its test jobs.
 - `.github/workflows/clients.yml` runs the helper's `dotnet test` on `ubuntu-24.04` and `macos-15`, and the extension's Python tests on `ubuntu-24.04`. Its `Clients` job passes when they did, or were skipped because nothing under `clients/` changed. `Clients` goes into master's ruleset after its first green run.
+  - A `helper-v1.2.3` tag (or a run by hand) also runs `package-mac`, which packages the macOS helper with `clients/helper/packaging/mac/package.sh`, and `release-mac`, which attaches the notarised `.dmg` to the tag's release. They never run for pull requests, and `Clients` doesn't need them.
+  - Signing and notarising need six secrets (`APPLE_DEVELOPER_ID_P12`, `APPLE_DEVELOPER_ID_PASSWORD`, `APPLE_TEAM_ID`, `NOTARY_KEY`, `NOTARY_KEY_ID`, `NOTARY_ISSUER`; the Developer Guide's CI page says what each holds). Without them the package is built unsigned and only uploaded as an artifact.
 - Helper tests with `[Trait("Category", "Stack")]` need `HEALDAN_STACK_URL` and skip without it. `docker/smoke-test.sh` step 5d runs them against the smoke stack, only with `SMOKE_HELPER_TEST=1` (CI sets it, after setting up .NET), and fails unless one passed and none skipped. A `clients/`-only pull request doesn't build the image, so that test runs on master after the merge and on pull requests that change the server.
 - `logicaldoc-webservicesamples` isn't in the reactor.
 

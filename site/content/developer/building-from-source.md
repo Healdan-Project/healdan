@@ -73,7 +73,12 @@ dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain"  #
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=Stack"        # needs HEALDAN_STACK_URL
 python3 -m unittest discover -s clients/libreoffice/tests -v                   # the extension's tests
 clients/libreoffice/build.sh                                                   # the extension's healdan.oxt
+clients/helper/packaging/mac/package.sh 1.2.3                                  # the macOS app and disk image, on a Mac
 ```
+
+`package.sh` signs only with `SIGN_IDENTITY` set (see
+[Releasing the macOS Helper](../continuous-integration/#releasing-the-macos-helper)). Without it, the app gets only
+an ad-hoc signature, which Gatekeeper refuses on any other Mac.
 
 Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
 `http://localhost:8080`. Start a throwaway stack with the smoke fixture overlay first (see

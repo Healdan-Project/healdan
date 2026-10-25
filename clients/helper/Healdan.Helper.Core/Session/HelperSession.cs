@@ -480,9 +480,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return $"{server.Authority} couldn't be reached: {e.Message}";
         }
 
-        var settings = HelperSettings.Load(_paths);
-        settings.Server = Address(server);
-        settings.Save(_paths);
+        HelperSettings.Update(_paths, s => s.Server = Address(server));
         SetSignedIn(api, await UserNameAsync(api));
         _log.Info($"Signed in to {LinkName(api)} as {user.Trim()}");
         if (Live is { } running)

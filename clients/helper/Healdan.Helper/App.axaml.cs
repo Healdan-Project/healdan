@@ -23,9 +23,11 @@ public partial class App : Application
 {
     private readonly HelperLog _log = Program.Log;
     private readonly List<PosixSignalRegistration> _signals = [];
+    private readonly CancellationTokenSource _stopping = new();
     private HelperSession? _session;
     private TrayMenu? _tray;
     private bool _stopped;
+    private int _afterStart;
 
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
@@ -59,6 +61,12 @@ public partial class App : Application
         var session = new HelperSession(paths, Keychain(), device, new LibreOfficeApp(), windows, notifier, _log, otherFiles: new DefaultApp());
         _session = session;
         windows.Session = session;
+        var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);
+        session.Changed += () =>
+        {
+            if (session.Started)
+                AfterFirstStart(extension);
+        };
 
         // Subscribed before the run loop starts, so the link that started the helper isn't missed; the session holds
         // it until it has started.
@@ -89,6 +97,39 @@ public partial class App : Application
         });
     }
 
+    /// <summary>
+    /// Once per run, after the first start that signed in: start at sign-in (macOS's login item) and the LibreOffice
+    /// extension's install or update (spec §5.12). Both run off the UI thread, and a failure is only logged.
+    /// </summary>
+    private void AfterFirstStart(ExtensionInstaller extension)
+    {
+        if (Interlocked.Exchange(ref _afterStart, 1) == 1)
+            return;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                LoginItem.EnsureRegistered(Program.Paths, _log);
+            }
+            catch (Exception e)
+            {
+                _log.Error("Start at sign-in couldn't be set up", e);
+            }
+            try
+            {
+                _log.Info($"LibreOffice extension check: {await extension.EnsureCurrentAsync(_stopping.Token)}");
+            }
+            catch (OperationCanceledException) when (_stopping.IsCancellationRequested)
+            {
+                _log.Info("Quit during the LibreOffice extension check");
+            }
+            catch (Exception e)
+            {
+                _log.Error("The LibreOffice extension check failed", e);
+            }
+        });
+    }
+
     private void OnActivated(object? sender, ActivatedEventArgs e)
     {
         if (e is not ProtocolActivatedEventArgs { Uri: { } uri } || _session is not { } session)
@@ -115,6 +156,7 @@ public partial class App : Application
         if (_stopped)
             return;
         _stopped = true;
+        _stopping.Cancel();
         _session?.Dispose();
         _tray?.Dispose();
         foreach (var signal in _signals)
