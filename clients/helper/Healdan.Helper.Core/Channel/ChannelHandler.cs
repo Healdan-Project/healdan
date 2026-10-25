@@ -37,9 +37,10 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
             case "open-dialog":
                 return await windows.OpenDialogAsync(body);
             case "save-new":
-                return await windows.SaveNewAsync(body);
+                return await windows.SaveNewAsync(WithCopy(body, required: false) ?? body);
             case "properties":
-                return await windows.PropertiesAsync(body);
+                // A document that isn't in Healdan has no properties there: the caller runs Save to Healdan instead.
+                return WithCopy(body, required: true) is { } copy ? await windows.PropertiesAsync(copy) : WindowAnswers.File();
             case "file":
                 return await FileAsync(body);
             case "saved":
@@ -205,6 +206,31 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
         static bool Same(string a, string b) =>
             string.Equals(Path.TrimEndingDirectorySeparator(a).Normalize(NormalizationForm.FormC),
                 Path.TrimEndingDirectorySeparator(Path.GetFullPath(b)).Normalize(NormalizationForm.FormC), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The window's request, with the copy's doc # added when <c>path</c> names a local copy (Save as New Document,
+    /// Properties). A path that isn't one is dropped, so Save to Healdan treats the document as new; when the copy is
+    /// <paramref name="required"/>, that's null instead.
+    /// </summary>
+    private JsonObject? WithCopy(JsonObject body, bool required)
+    {
+        var request = (JsonObject)body.DeepClone();
+        request.Remove("docNumber"); // only ever the helper's own
+        var path = Optional(body, "path");
+        var state = path is not null && InCopies(path) ? cycle.StateOf(path) : null;
+        if (state is { Known: true })
+        {
+            request["path"] = state.Path;
+            request["docNumber"] = state.DocNumber;
+            return request;
+        }
+        if (path is not null)
+            log.Info("A window was asked about a file that isn't a local copy");
+        if (required)
+            return null;
+        request["path"] = null;
+        return request;
     }
 
     /// <summary>The body's copy path, or null (logged) when the path isn't a local copy's.</summary>

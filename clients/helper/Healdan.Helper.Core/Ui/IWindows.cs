@@ -20,11 +20,18 @@ public interface IWindows
 
     /// <summary>
     /// <c>/v1/save-new</c>: Save to Healdan, or Save as New Document when <c>path</c> is set. Answers
-    /// <c>{"action": "save" | "local" | "cancel", "folderId", "name", "format", "properties", "tempPath"}</c>.
+    /// <c>{"action": "save" | "local" | "cancel", "folderId", "name", "format", "properties", "tempPath"}</c>, where
+    /// <c>tempPath</c> is a new file in the helper's Temp folder for the extension to write the document to
+    /// (<see cref="WindowAnswers.TempPath"/>). The channel has checked <c>path</c>: it's a local copy's, with the
+    /// copy's <c>docNumber</c> added, or null.
     /// </summary>
     Task<JsonObject> SaveNewAsync(JsonObject request);
 
-    /// <summary><c>/v1/properties</c>: the open document's properties. Answers <c>{"action": "saved" | "cancel" | "file"}</c>.</summary>
+    /// <summary>
+    /// <c>/v1/properties</c>: the open document's properties. Answers <c>{"action": "saved" | "cancel"}</c>. The
+    /// channel has checked <c>path</c> is a local copy's and added its <c>docNumber</c>; for a file that isn't, it
+    /// answers <c>{"action": "file"}</c> itself, without a window.
+    /// </summary>
     Task<JsonObject> PropertiesAsync(JsonObject request);
 
     /// <summary>

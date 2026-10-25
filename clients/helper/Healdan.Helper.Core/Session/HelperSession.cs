@@ -330,6 +330,22 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         });
     }
 
+    /// <summary>
+    /// After a Crash's Send and Check In (spec §5.10): the kept copy's changes go up with the check-in, as when its
+    /// window closes, and the copy goes once Healdan has them. A read-only copy is just let go.
+    /// </summary>
+    public void SendAndCheckIn(CopyState copy)
+    {
+        var cycle = Cycle;
+        if (cycle is null)
+            return;
+        lock (_gate)
+            _crashed.Remove(copy.Path);
+        _log.Info($"Checking in {copy.DocRef} after it closed unexpectedly");
+        _ = cycle.ClosedAsync(copy.Path);
+        RaiseChanged();
+    }
+
     /// <summary>Quit: stops the channel (removing <c>channel.json</c>) and the cycle. Copies and their records stay for the next start.</summary>
     public void Dispose()
     {

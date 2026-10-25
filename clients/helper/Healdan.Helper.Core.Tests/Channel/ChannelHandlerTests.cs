@@ -231,13 +231,82 @@ public sealed class ChannelHandlerTests : IDisposable
     [Fact]
     public async Task WindowRoutesGoToTheWindows()
     {
-        foreach (var route in new[] { "open-dialog", "save-new", "properties" })
+        foreach (var route in new[] { "open-dialog", "save-new" })
         {
             var request = new JsonObject { ["app"] = "LibreOffice", ["path"] = null };
             var answer = await Call(route, request);
             Assert.Equal("""{"action":"cancel"}""", answer.ToJsonString());
         }
-        Assert.Equal(["open-dialog", "save-new", "properties"], _windows.Asked.Select(a => a.Route));
+        Assert.Equal(["open-dialog", "save-new"], _windows.Asked.Select(a => a.Route));
+    }
+
+    [Fact]
+    public async Task PropertiesOfAFileThatIsntInHealdanFilesIt()
+    {
+        File.WriteAllText(Path.Combine(_root, "Local memo.odt"), "a file of the user's own");
+
+        var answer = await Call("properties", PathBody(Path.Combine(_root, "Local memo.odt")));
+
+        Assert.Equal("""{"action":"file"}""", answer.ToJsonString());
+        Assert.Empty(_windows.Asked); // the caller runs Save to Healdan
+    }
+
+    [Fact]
+    public async Task PropertiesOfAFileNamedAsACopyOutsideTheCopiesFolderFilesIt()
+    {
+        var copy = await OpenAsync();
+        var lookalike = Path.Combine(_root, Path.GetFileName(copy));
+        File.WriteAllText(lookalike, "not the copy");
+
+        var answer = await Call("properties", PathBody(lookalike));
+
+        Assert.Equal("""{"action":"file"}""", answer.ToJsonString());
+        Assert.Empty(_windows.Asked);
+    }
+
+    [Fact]
+    public async Task PropertiesOfACopyGoToTheWindowWithItsDocNumber()
+    {
+        var path = await OpenAsync();
+        _windows.Answer = new JsonObject { ["action"] = "saved" };
+
+        var answer = await Call("properties", PathBody(path));
+
+        Assert.Equal("""{"action":"saved"}""", answer.ToJsonString());
+        var (route, request) = Assert.Single(_windows.Asked);
+        Assert.Equal("properties", route);
+        Assert.Equal(5, (long?)request["docNumber"]);
+        Assert.Equal(path, (string?)request["path"]);
+    }
+
+    [Fact]
+    public async Task SaveAsNewDocumentNamesTheOriginalsDocNumber()
+    {
+        var path = await OpenAsync();
+
+        await Call("save-new", new JsonObject
+        {
+            ["app"] = "LibreOffice", ["name"] = "Lease agreement", ["formats"] = new JsonArray("odt", "docx"), ["path"] = path
+        });
+
+        var (route, request) = Assert.Single(_windows.Asked);
+        Assert.Equal("save-new", route);
+        Assert.Equal(5, (long?)request["docNumber"]);
+        Assert.Equal(path, (string?)request["path"]);
+    }
+
+    [Fact]
+    public async Task SaveNewFromAFileThatIsntACopyIsANewDocument()
+    {
+        await Call("save-new", new JsonObject
+        {
+            ["app"] = "LibreOffice", ["name"] = "Local memo", ["formats"] = new JsonArray("odt", "docx"),
+            ["path"] = Path.Combine(_root, "Local memo.odt")
+        });
+
+        var (_, request) = Assert.Single(_windows.Asked);
+        Assert.Null(request["path"]);
+        Assert.Null(request["docNumber"]);
     }
 
     [Fact]

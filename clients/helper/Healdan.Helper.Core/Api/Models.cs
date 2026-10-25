@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 namespace Healdan.Helper.Core.Api;
@@ -68,4 +69,69 @@ internal sealed record DeviceRef(string Id);
 internal sealed record CheckoutBody(bool Move, string App);
 
 [Schema("PropertyPatch")]
-internal sealed record PropertyPatchBody(System.Text.Json.JsonElement Values);
+internal sealed record PropertyPatchBody(JsonElement Values);
+
+// The windows' (Task 17).
+
+[Schema("StoreRef")]
+public sealed record StoreRef(long Id, string Name);
+
+[Schema("ClientRef")]
+public sealed record ClientRef(long Id, long Number, string Name);
+
+[Schema("FolderView")]
+public sealed record FolderView(string Type, long Id, string Name, string Kind, MatterRef? Matter, StoreRef Store, List<FolderRef> Path, bool CanFile);
+
+[Schema("MatterView")]
+public sealed record MatterView(
+    string Type,
+    long Id,
+    long Number,
+    string Display,
+    string Name,
+    string? Description,
+    ClientRef Client,
+    StoreRef Store,
+    long FolderId,
+    DateTimeOffset? LastChange);
+
+/// <summary>A favourite: a folder or a document (<see cref="Type"/>), with the bookmark's id for removing it.</summary>
+[Schema("FavoriteView")]
+public sealed record FavoriteView(long Id, string Type, JsonElement Item)
+{
+    public FolderView? Folder() => Type == "folder" ? Item.Deserialize<FolderView>(HealdanApi.Json) : null;
+
+    public DocumentView? Document() => Type == "document" ? Item.Deserialize<DocumentView>(HealdanApi.Json) : null;
+}
+
+[Schema("VersionView")]
+public sealed record VersionView(string Version, string FileVersion, string Kind, DateTimeOffset? Date, UserRef? By, string? Comment, string? Event);
+
+[Schema("LookupView")]
+public sealed record LookupView(long DocNumber, string Version);
+
+[Schema("UserHit")]
+public sealed record UserHit(long Id, string Username, string Name);
+
+/// <summary>One property of a document or of the filing form; <see cref="Value"/> is as the API sends it.</summary>
+[Schema("ProfileField")]
+public sealed record ProfileField(
+    string Name,
+    string Label,
+    string Type,
+    bool Required,
+    bool Editable,
+    JsonElement Value,
+    string? Source,
+    FolderRef? InheritedFrom,
+    List<Option>? Options);
+
+/// <summary>A value to pick; a Subclass's names the Class it belongs to.</summary>
+[Schema("Option")]
+public sealed record Option(string Value, string Label, string? Class);
+
+[Schema("NewFavorite")]
+internal sealed record NewFavoriteBody(long? FolderId, long? DocNumber);
+
+[Schema("NewFolder")]
+internal sealed record NewFolderBody(long ParentId, string Name);

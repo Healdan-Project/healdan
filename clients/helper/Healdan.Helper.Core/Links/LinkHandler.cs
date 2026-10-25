@@ -116,11 +116,14 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
         log.Info($"Opening #{n}{(readOnly ? " read-only" : "")} from a link");
         await Task.Run(() => cycle.OpenAsync(n, readOnly));
         if (!readOnly)
-            SayIfReadOnly(cycle, n);
+            SayIfReadOnly(cycle, n, notifier);
     }
 
-    /// <summary>Spec §5.5: an open the user didn't ask to be read-only says so, and who has the document checked out.</summary>
-    private void SayIfReadOnly(CopyCycle cycle, long n)
+    /// <summary>
+    /// Spec §5.5: an open the user didn't ask to be read-only says so, and who has the document checked out. For a
+    /// link's open and Open from Healdan's alike.
+    /// </summary>
+    public static void SayIfReadOnly(CopyCycle cycle, long n, INotifier notifier)
     {
         var copies = cycle.OpenCopies().Where(c => c.DocNumber == n).ToList();
         if (copies.Count == 0 || copies.Any(c => !c.ReadOnly))

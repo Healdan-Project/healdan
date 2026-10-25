@@ -417,4 +417,26 @@ public sealed class HelperSessionTests : IDisposable
         Assert.False(File.Exists(Paths.Channel));
         Assert.Contains("local copies", _notifier.All);
     }
+
+    [Fact]
+    public async Task SendAndCheckInAfterACrashChecksTheKeptCopyIn()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        FakeApp.Write(path, "saved just before the crash");
+        await Task.Delay(Fast.CrashPoll * 2); // the crash check has seen the app running
+        _app.Crash();
+        await Wait.Until(() => !_windows.Crashes.IsEmpty, "the crash window");
+        var copy = Assert.Single(_windows.Crashes);
+        Assert.True(session.HasCrashed(copy));
+
+        session.SendAndCheckIn(copy);
+
+        await Wait.Until(() => !File.Exists(path), "the copy checked in and deleted");
+        Assert.False(session.HasCrashed(copy));
+        Assert.Null(_server.Doc(5).Hold);
+        Assert.Equal("saved just before the crash", _server.Doc(5).Content);
+    }
 }

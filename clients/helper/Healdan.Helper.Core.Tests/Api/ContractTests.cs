@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Browse;
 using YamlDotNet.Serialization;
 
 namespace Healdan.Helper.Core.Tests.Api;
@@ -21,7 +22,35 @@ public class ContractTests
         { "post", "/v1/documents/{docNumber}/versions" },
         { "post", "/v1/documents" },
         { "patch", "/v1/documents/{docNumber}/properties" },
+        // The windows' (Task 17).
+        { "get", "/v1/me" },
+        { "get", "/v1/me/checkouts" },
+        { "get", "/v1/me/favorites" },
+        { "post", "/v1/me/favorites" },
+        { "delete", "/v1/me/favorites/{id}" },
+        { "get", "/v1/documents/recent" },
+        { "get", "/v1/matters/recent" },
+        { "get", "/v1/matters/mine" },
+        { "get", "/v1/folders/recent" },
+        { "get", "/v1/folders/{id}" },
+        { "get", "/v1/folders/{id}/children" },
+        { "post", "/v1/folders" },
+        { "get", "/v1/folders/{folderId}/form" },
+        { "get", "/v1/search" },
+        { "get", "/v1/lookup" },
+        { "get", "/v1/users" },
+        { "get", "/v1/documents/{docNumber}/properties" },
+        { "get", "/v1/documents/{docNumber}/versions" },
+        { "get", "/v1/documents/{docNumber}/thumbnail" },
     };
+
+    [Fact]
+    public void EveryPlaceInTheLeftPanesIsARouteTheClientCalls()
+    {
+        var routes = Routes.Select(r => ((string)r[0], (string)r[1])).ToHashSet();
+        foreach (var place in Place.ForSave.Concat(Place.ForOpen).Where(p => p.Path is not null))
+            Assert.Contains(("get", "/" + place.Path), routes);
+    }
 
     private static readonly Lazy<Dictionary<object, object>> Contract = new(() =>
     {
