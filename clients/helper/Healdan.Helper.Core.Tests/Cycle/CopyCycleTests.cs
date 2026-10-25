@@ -189,22 +189,26 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task PartialWriteNotSent()
     {
-        // The file grows every 200 ms for 2 s; the settle time must be longer than the gaps.
-        var timings = Fast with { Settle = TimeSpan.FromMilliseconds(600), SizePoll = TimeSpan.FromMilliseconds(100) };
+        // The file grows every 50 ms for 2 s. The settle time is 30 times the gap, so a slow runner that stalls the
+        // writer for over a second still doesn't let the file look finished; and the growth outlasts the settle, so a
+        // cycle that sent after one settle from the first change would still fail.
+        const int pieces = 40;
+        var timings = Fast with { Settle = TimeSpan.FromMilliseconds(1500), SizePoll = TimeSpan.FromMilliseconds(100) };
         var (_, path) = await OpenAsync(timings: timings);
 
-        await FakeApp.GrowAsync(path, pieces: 11, every: TimeSpan.FromMilliseconds(200));
+        await FakeApp.GrowAsync(path, pieces: pieces, every: TimeSpan.FromMilliseconds(50));
 
         await Wait.Until(() => _server.Saves.Count == 1, "the save");
         await Task.Delay(Quiet * 2);
         var save = Assert.Single(_server.Saves);
-        Assert.Equal(string.Concat(Enumerable.Range(0, 11).Select(i => $"piece {i};")), save.Content);
+        Assert.Equal(string.Concat(Enumerable.Range(0, pieces).Select(i => $"piece {i};")), save.Content);
     }
 
     [Fact]
     public async Task TwoSavesInOrder()
     {
-        var (_, path) = await OpenAsync();
+        // A settle far longer than the gap between D and E below, so a stalled runner can't split them
+        var (_, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromMilliseconds(500) });
         _server.HoldSaves();
         FakeApp.Write(path, "A");
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
@@ -224,7 +228,7 @@ public sealed class CopyCycleTests : IDisposable
 
         // Cmd+S twice within the settle time is one save, of the last.
         FakeApp.Write(path, "D");
-        await Task.Delay(Fast.Settle / 3);
+        await Task.Delay(TimeSpan.FromMilliseconds(20));
         FakeApp.Write(path, "E");
         await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v1.3", "the title after a double save");
         await Task.Delay(Quiet);
