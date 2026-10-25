@@ -93,7 +93,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 	public void testNewDocumentInDocuments() throws Exception {
 		List<ProfileField> fields = ProfileView.get().forNewDocument(documents.getId(), clerk);
 
-		assertEquals(List.of("client", "matter", "author", "typist", "docclass", "docsubclass", "legacydocnum",
+		assertEquals(List.of("client", "matter", "author", "typist", "docclass", "docsubclass", "comments", "legacydocnum",
 				"emailfrom", "emailto", "emailcc", "emailsubject", "emailsent", "emailreceived"),
 				fields.stream().map(ProfileField::name).toList());
 
@@ -219,18 +219,18 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		court.setLabel("Court");
 		court.setType(Attribute.TYPE_STRING);
 		court.setMandatory(true);
-		court.setPosition(13);
+		court.setPosition(14);
 		profile.getTemplateAttributes().put("court", court);
 		Attribute secret = new Attribute();
 		secret.setLabel("Secret");
 		secret.setType(Attribute.TYPE_STRING);
 		secret.setHidden(true);
-		secret.setPosition(14);
+		secret.setPosition(15);
 		profile.getTemplateAttributes().put("secret", secret);
 		Attribute section = new Attribute();
 		section.setLabel("More");
 		section.setType(Attribute.TYPE_SECTION);
-		section.setPosition(15);
+		section.setPosition(16);
 		profile.getTemplateAttributes().put("more", section);
 		TemplateDAO.get().store(profile);
 
@@ -244,7 +244,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		assertNull(last.value());
 		assertNull(last.source());
 		// Hidden attributes and sections aren't fields
-		assertEquals(14, fields.size());
+		assertEquals(15, fields.size());
 
 		// A document filed before the attribute existed shows it empty
 		ProfileField onBefore = field(ProfileView.get().forDocument(reload(before)), "court");

@@ -6,8 +6,9 @@ import java.util.regex.Pattern;
 
 /**
  * A doc # as a user types it (spec 6.5): {@code #1234}, {@code #1234.2} or
- * {@code #1234v2}, {@code #1234.2.1} or {@code #1234v2.1}. Spaces may follow
- * the {@code #} and end the input.
+ * {@code #1234v2}, {@code #1234.2.1} or {@code #1234v2.1}, and the title
+ * bar's {@code #1234 v2.1}. Spaces may follow the {@code #}, come before the
+ * {@code v}, and end the input.
  *
  * @param number the doc #
  * @param major the version's major number, null for the current version
@@ -16,8 +17,8 @@ import java.util.regex.Pattern;
  */
 public record DocNumberQuery(long number, Integer major, Integer minor) {
 
-	/** {@code ^#\s*\d+(?:[.vV]\d+(?:\.\d+)?)?\s*$}, with groups */
-	private static final Pattern NUMBER = Pattern.compile("^#\\s*(\\d+)(?:[.vV](\\d+)(?:\\.(\\d+))?)?\\s*$");
+	/** {@code ^#\s*\d+(?:(?:\s*[vV]|\.)\d+(?:\.\d+)?)?\s*$}, with groups */
+	private static final Pattern NUMBER = Pattern.compile("^#\\s*(\\d+)(?:(?:\\s*[vV]|\\.)(\\d+)(?:\\.(\\d+))?)?\\s*$");
 
 	/**
 	 * @param input what the user typed

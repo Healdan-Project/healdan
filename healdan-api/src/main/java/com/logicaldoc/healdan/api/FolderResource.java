@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.commons.lang.StringUtils;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
@@ -14,8 +15,13 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderEvent;
+import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.FolderView;
+import com.logicaldoc.healdan.api.model.NewFolder;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.MatterLocator;
@@ -24,12 +30,19 @@ import com.logicaldoc.healdan.navigation.RecentFolders.RecentFolder;
 import com.logicaldoc.healdan.searchfolder.SearchFolderService;
 import com.logicaldoc.healdan.security.AccessChecks;
 
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 
 /**
  * Folders inside Stores and what is in them (spec sections 4.2 and 6.2). A
@@ -62,6 +75,62 @@ public class FolderResource {
 			return Page.whole(views);
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't list recent folders", e);
+		}
+	}
+
+	/**
+	 * Creates a subfolder, as the old web page does: through CE's folder DAO,
+	 * so Healdan's listeners apply the structure rules. The folder inherits
+	 * its parent's properties and permissions.
+	 *
+	 * @param body the parent and the name
+	 * @param uri the request's addresses
+	 * @return {@code 201} with the folder, and its address as {@code Location}
+	 */
+	@POST
+	@Consumes(MediaType.APPLICATION_JSON)
+	public Response create(NewFolder body, @Context UriInfo uri) {
+		if (body == null || body.parentId() == null)
+			throw ApiProblem.badRequest("Say which folder to create the new folder in with parentId.");
+		Caller caller = Caller.current();
+		User user = caller.user();
+		try {
+			FolderView parentView = view(body.parentId(), user);
+			if ("store".equals(parentView.kind()))
+				throw ApiProblem.conflict("not-browsable",
+						"A Store holds matters, not folders. Create the folder inside a matter.");
+			if ("searchFolder".equals(parentView.kind()))
+				throw ApiProblem.conflict("filing-rule", "A search folder can't hold folders.");
+			Folder parent = FolderDAO.get().findById(body.parentId());
+			if (!AccessChecks.allowed(user, Permission.ADD, parent))
+				throw ApiProblem.forbidden("You may not create folders in folder %d.".formatted(parent.getId()));
+
+			// As the old web page cleans it; the DAO sanitizes the rest
+			String name = body.name() == null ? "" : body.name().replace("/", "");
+			if (StringUtils.isBlank(name))
+				throw ApiProblem.validation(
+						List.of(new FieldError("name", "required", "Give the folder a name.")));
+			if (name.length() > Uploads.MAX_NAME_LENGTH)
+				throw ApiProblem.validation(List.of(new FieldError("name", Uploads.TOO_LONG,
+						"A name can't be longer than %d characters.".formatted(Uploads.MAX_NAME_LENGTH))));
+
+			Folder vo = new Folder();
+			vo.setName(name);
+			vo.setType(Folder.TYPE_DEFAULT);
+			vo.setTenantId(user.getTenantId());
+			FolderHistory transaction = new FolderHistory();
+			transaction.setSession(caller.session());
+			transaction.setEvent(FolderEvent.CREATED);
+			// A veto of Healdan's listeners is answered 409 refused by the ProblemMapper
+			Folder created = FolderDAO.get().create(parent, vo, true, transaction);
+
+			FolderView view = view(created.getId(), user);
+			String location = UriBuilder.fromPath(uri.getBaseUri().getRawPath()).path("v1/folders/{id}")
+					.build(created.getId()).toString();
+			return Response.status(Response.Status.CREATED).header(HttpHeaders.LOCATION, location).entity(view)
+					.build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't create a folder", e);
 		}
 	}
 

@@ -27,11 +27,19 @@ import com.logicaldoc.util.spring.Context;
  * Healdan) keeps none: the stored value wins and no number is invented for it. A
  * document with a preset id and no row yet is new and takes a number. CE creates it by reflection, hence the public no-arg
  * constructor.
+ * <p>
+ * A route that must know a new document's number before CE stores it, such
+ * as filing a file that shows its doc ID (M3 spec section 9.7), takes it from
+ * the counter with {@link #reserveNext()} and hands it to the create with
+ * {@link #useReserved(long)}; the number still comes only from the counter.
  */
 public class DocNumberListener implements DocumentListener {
 
 	/** CE's suffix on a deleted document's customId: {@code <customId>.<id>} */
 	private static final Pattern DELETED = Pattern.compile("^(\\d+)\\.(\\d+)$");
+
+	/** The number reserved for the next new document stored on this thread */
+	private static final ThreadLocal<Long> RESERVED = new ThreadLocal<>();
 
 	public DocNumberListener() {
 		// Instantiated by CE
@@ -50,8 +58,53 @@ public class DocNumberListener implements DocumentListener {
 		}
 
 		// New, or inserted with a preset id and no row yet
-		if (document.getDocRef() == null)
-			document.setCustomId(Long.toString(DocNumberCounter.get().next()));
+		if (document.getDocRef() == null) {
+			Long reserved = RESERVED.get();
+			RESERVED.remove();
+			document.setCustomId(Long.toString(reserved != null ? reserved : DocNumberCounter.get().next()));
+		}
+	}
+
+	/**
+	 * Takes the counter's next number for a document about to be created, so
+	 * that the caller can write it into the file before CE stores it. Like
+	 * any number taken, it is never given again: one whose create fails is
+	 * lost, as a deleted document's is.
+	 *
+	 * @return the number
+	 */
+	public static long reserveNext() {
+		return DocNumberCounter.get().next();
+	}
+
+	/**
+	 * Has the next new document stored on this thread take a number from
+	 * {@link #reserveNext()} instead of the counter's next. Use it around
+	 * CE's create alone, in a try-with-resources: closing it drops the number
+	 * if the create failed before taking it, so that it can't go to another
+	 * document stored later on the thread.
+	 *
+	 * @param number the reserved number
+	 * @return what drops the number when closed
+	 */
+	public static Reservation useReserved(long number) {
+		RESERVED.set(number);
+		return new Reservation();
+	}
+
+	/**
+	 * A number handed to the next create on this thread; see
+	 * {@link #useReserved(long)}
+	 */
+	public static final class Reservation implements AutoCloseable {
+
+		private Reservation() {
+		}
+
+		@Override
+		public void close() {
+			RESERVED.remove();
+		}
 	}
 
 	/**

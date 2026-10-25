@@ -42,6 +42,7 @@ import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
+import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
@@ -49,6 +50,8 @@ import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.ProfileView;
 import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.stamp.DocIdStamper;
+import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.util.MimeType;
 
 import jakarta.ws.rs.Consumes;
@@ -85,6 +88,12 @@ public class DocumentResource {
 	private static final String NAME = "name";
 
 	private static final String FILE = "file";
+
+	/** CE's {@code Version.DEFAULT_START_VERSION} */
+	private static final String DEFAULT_FIRST_VERSION = "1.0";
+
+	/** The media type of a thumbnail, as CE's {@code ThumbnailManager} makes it */
+	private static final String PNG = "image/png";
 
 	/** As in {@code ServletUtil.saveHistory}: a download within this many seconds of the last is not recorded again */
 	private static final int DEDUPLICATE_SECONDS = 30;
@@ -136,6 +145,12 @@ public class DocumentResource {
 	 * </ol>
 	 * One {@code 422} lists every field that's wrong: the name, the file, then
 	 * the properties.
+	 * <p>
+	 * Only then is the doc # taken from Healdan's counter, and a Word or
+	 * LibreOffice file that carries the {@code Healdan Doc ID} property is
+	 * stamped with it and version 1.0 before CE's create stores it (M3 spec
+	 * section 9.7, plan correction 2). A create that fails then leaves a gap
+	 * in the doc #s, as a deleted document does.
 	 *
 	 * @param document the {@code document} part, as JSON
 	 *        ({@link NewDocument})
@@ -184,8 +199,20 @@ public class DocumentResource {
 			DocumentHistory transaction = new DocumentHistory();
 			transaction.setSession(caller.session());
 			transaction.setEvent(DocumentEvent.STORED);
-			Document created = DocumentManager.get().create(upload, vo, transaction).getDocument();
+
+			// Every check has passed: the number is taken now, so that the file can carry it (M3 spec section 9.7)
+			long docNumber = DocNumberListener.reserveNext();
+			String docId = DocIdStamper.value(docNumber, firstVersion());
+			boolean stamped = DocIdStamper.stamp(upload.toPath(), Uploads.extension(name), docId);
+			Document created;
+			// A create that fails leaves a gap in the doc #s, as a deleted document does
+			try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(docNumber)) {
+				created = DocumentManager.get().create(upload, vo, transaction).getDocument();
+			}
 			long id = created.getId();
+			if (stamped && !docId.equals(DocIdStamper.value(Long.parseLong(created.getCustomId()),
+					created.getFileVersion())))
+				log.warn("Document #{} v{} was stamped {}", created.getCustomId(), created.getFileVersion(), docId);
 			// CE swallows a failed write of the version record, as it does on a save
 			VersionResource.confirmStored(id, Long.parseLong(created.getCustomId()), null, user);
 
@@ -194,6 +221,8 @@ public class DocumentResource {
 				checkout.setSession(caller.session());
 				checkout.setEvent(DocumentEvent.CHECKEDOUT);
 				DocumentManager.get().checkout(id, checkout);
+				// Held on the device that filed it, as by any check-out through the API; filing names no app
+				DeviceHolds.get().record(DocumentDAO.get().findById(id), caller.token(), null);
 			}
 
 			DocumentView filed = ApiViews.document(DocumentDAO.get().findById(id), user);
@@ -207,6 +236,23 @@ public class DocumentResource {
 			throw new IllegalStateException("Can't read the uploaded file", e);
 		} finally {
 			FileUtils.deleteQuietly(upload);
+		}
+	}
+
+	/**
+	 * @return the version CE gives a new document, from
+	 *         {@code document.startversion} as CE reads it (its own reader
+	 *         isn't public): {@code 1.0} by default
+	 */
+	static String firstVersion() {
+		String start = com.logicaldoc.util.spring.Context.get().getConfig().getString("document.startversion",
+				DEFAULT_FIRST_VERSION);
+		try {
+			String[] parts = start.split("\\.");
+			return start.contains(".") ? "%d.%d".formatted(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]))
+					: "%d.0".formatted(Integer.parseInt(start));
+		} catch (RuntimeException e) {
+			return DEFAULT_FIRST_VERSION;
 		}
 	}
 
@@ -339,6 +385,46 @@ public class DocumentResource {
 					.header(HttpHeaders.CONTENT_DISPOSITION, disposition(fileName)).build();
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't read the content of document #" + docNumber, e);
+		}
+	}
+
+	/**
+	 * The current file's thumbnail (M3 spec section 9.8), read through the
+	 * same checks as its content, and not recorded as a download. Healdan
+	 * makes thumbnails in the background, so a new file has none for a
+	 * while.
+	 *
+	 * @param docNumber the doc #
+	 * @return the thumbnail, a PNG
+	 * @throws ApiProblem {@code 404} for a document the caller can't read and
+	 *         one without a thumbnail yet, {@code 403} without the Download
+	 *         permission and for a document protected by a password
+	 */
+	@GET
+	@Path("{docNumber: [0-9]+}/thumbnail")
+	@Produces(MediaType.WILDCARD)
+	public Response thumbnail(@PathParam("docNumber") long docNumber) {
+		Caller caller = Caller.current();
+		try {
+			Document document = readable(docNumber, caller.user());
+			if (!AccessChecks.allowed(caller.user(), Permission.DOWNLOAD, document))
+				throw ApiProblem.forbidden("You may not download document #%d.".formatted(docNumber));
+			refuseProtected(document, caller.session(), docNumber);
+
+			// Where CE's ThumbnailManager puts it
+			StoreResource resource = StoreResource.builder().docId(document.getId())
+					.fileVersion(document.getFileVersion()).suffixThumbnail().build();
+			if (!Store.get().exists(resource))
+				throw ApiProblem.notFound("Document #%d has no thumbnail yet.".formatted(docNumber));
+			long size = Store.get().size(resource);
+			StreamingOutput body = out -> {
+				try (InputStream in = Store.get().getStream(resource)) {
+					in.transferTo(out);
+				}
+			};
+			return Response.ok(body, PNG).header(HttpHeaders.CONTENT_LENGTH, size).build();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read the thumbnail of document #" + docNumber, e);
 		}
 	}
 

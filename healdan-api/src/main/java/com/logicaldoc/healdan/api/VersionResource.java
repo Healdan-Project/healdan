@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -34,6 +35,9 @@ import com.logicaldoc.healdan.api.model.NewVersion;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.VersionView;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.stamp.DocIdStamper;
+import com.logicaldoc.healdan.token.DeviceHolds;
+import com.logicaldoc.healdan.token.HoldDevice;
 import com.logicaldoc.util.html.HTMLSanitizer;
 
 import jakarta.ws.rs.Consumes;
@@ -72,8 +76,19 @@ public class VersionResource {
 
 	private static final String EXTENSION = "extension";
 
+	private static final String SAVE_ID = "saveId";
+
+	/** The codes of a save whose precondition failed (M3 spec section 9.5) */
+	static final String NOT_HELD = "not-held";
+
+	static final String VERSION_MOVED = "version-moved";
+
 	/** The longest comment CE stores ({@code ld_version.ld_comment}) */
 	private static final int MAX_COMMENT_LENGTH = 1000;
+
+	/** A save's id, in any case; {@code hd_hold_device.hd_lastsaveid} holds 64 characters */
+	private static final Pattern UUID = Pattern
+			.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
 	private final DocumentLocks locks;
 
@@ -115,22 +130,36 @@ public class VersionResource {
 	 * <li>{@code 400} for a {@code version} part that's missing or isn't the
 	 * JSON expected, or a missing {@code file} part;</li>
 	 * <li>{@code 404} for a document the caller can't read;</li>
+	 * <li>a {@code saveId} that's the last one stored for the document is a
+	 * save sent again after its answer was lost: {@code 201} with the
+	 * document as it is, storing nothing, whatever happened to it since;</li>
 	 * <li>{@code 403} without the Write permission, or for a document
 	 * protected by a password, which the API never opens;</li>
 	 * <li>{@code 409 checked-out} for someone else's check-out, administrators
-	 * included, and {@code 409 locked} for any lock, the caller's own too;</li>
+	 * included, and {@code 409 locked} for any lock, the caller's own too;
+	 * {@code 409 held-elsewhere} for the caller's own check-out on another of
+	 * their devices;</li>
+	 * <li>the preconditions ({@link #refusePreconditions}): {@code 409
+	 * not-held}, then {@code 409 version-moved};</li>
 	 * <li>{@code 409 refused} for an immutable or archived document;</li>
 	 * <li>the name ({@code 422}): it must keep the document's extension;</li>
 	 * <li>the file: {@code 413 too-large} over the upload limit, {@code 422}
 	 * when it's empty;</li>
 	 * <li>the comment ({@code 422}), cleaned of markup as the old UI's
-	 * check-in cleans it, over 1000 characters.</li>
+	 * check-in cleans it, over 1000 characters; the {@code saveId}
+	 * ({@code 422}) when it isn't a UUID.</li>
 	 * </ol>
 	 * None of these leaves anything behind. A free document is then checked
 	 * out to the caller, checked in with the file, and with
-	 * {@code keepCheckedOut} checked out again. A rule that refuses the
-	 * check-in ({@code 409 refused}) leaves the document as it was, but
-	 * checked out to the caller: CE writes nothing when a rule refuses it. A
+	 * {@code keepCheckedOut} checked out again, held on the caller's device;
+	 * the check-in on closing ends the device's hold. A Word or LibreOffice
+	 * file that carries the {@code Healdan Doc ID} property is stamped, after
+	 * every check, with the doc # and the version it's stored as (M3 spec
+	 * section 9.7). Once the save is
+	 * stored, its {@code saveId} is kept, in the same write as the device. A
+	 * rule that refuses the check-in ({@code 409 refused}) leaves the
+	 * document as it was, but checked out to the caller: CE writes nothing
+	 * when a rule refuses it. A
 	 * save CE didn't store is a {@code 500} ({@link #confirmStored}) that says
 	 * what's left: the document as it was, or its content the file sent as a
 	 * version missing from its timeline; either way the previous version and
@@ -172,11 +201,17 @@ public class VersionResource {
 		Session session = caller.session();
 		// Read again: another request may have changed it while this one waited
 		Document document = DocumentResource.readable(docNumber, user);
+		DeviceHolds devices = DeviceHolds.get();
+		// Sent again after its answer was lost (Review Focus 1): it's stored, whatever happened to the document since
+		if (request.saveId() != null && request.saveId().equals(devices.lastSaveId(document)))
+			return ApiViews.document(document, user);
 		if (!AccessChecks.allowed(user, Permission.WRITE, document))
 			throw ApiProblem.forbidden("You may not save to document #%d.".formatted(docNumber));
 		DocumentResource.refuseProtected(document, session, docNumber);
-		// Never over someone else's hold, administrators included (spec section 6.6)
+		// Never over someone else's hold, administrators included (spec section 6.6), nor the caller's elsewhere
 		CheckoutResource.refuseHolds(document, user, docNumber);
+		CheckoutResource.refuseElsewhere(document, caller, docNumber);
+		refusePreconditions(document, request, user, docNumber);
 		CheckoutResource.refuseImmutable(document, user, false, docNumber);
 		CheckoutResource.refuseArchived(document, docNumber);
 
@@ -195,27 +230,92 @@ public class VersionResource {
 			if (comment != null && comment.length() > MAX_COMMENT_LENGTH)
 				errors.add(new FieldError(COMMENT, Uploads.TOO_LONG,
 						"The comment can't be longer than %d characters.".formatted(MAX_COMMENT_LENGTH)));
+			// Stored after the save, so it must fit
+			if (request.saveId() != null && !UUID.matcher(request.saveId()).matches())
+				errors.add(new FieldError(SAVE_ID, "invalid", "The save's id must be a UUID."));
 			if (!errors.isEmpty())
 				throw ApiProblem.validation(errors);
 
-			// The checks above leave it free or checked out to the caller
-			if (!ApiViews.checkedOutBy(document, user))
+			// The file carries the number it's stored as (M3 spec section 9.7), after every check
+			boolean major = VERSION.equals(request.kind());
+			String next = nextVersion(document, major);
+			String docId = next != null ? DocIdStamper.value(docNumber, next) : null;
+			boolean stamped = docId != null && DocIdStamper.stamp(upload.toPath(), Uploads.extension(name), docId);
+
+			// The checks above leave it free or checked out to the caller, held here if on any device
+			String app = devices.current(document).map(HoldDevice::getApp).orElse(null);
+			if (!ApiViews.checkedOutBy(document, user)) {
 				DocumentManager.get().checkout(document.getId(),
 						CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
+				// So that if the check-in is refused, the check-out it leaves is this device's
+				devices.record(DocumentDAO.get().findById(document.getId()), caller.token(), app);
+			}
 			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
 			checkin.setComment(comment);
 			String before = document.getVersion();
 			// Waits for CE's version record, so the timeline shows the save at once
-			DocumentManager.get()
-					.checkin(document.getId(), upload, name, VERSION.equals(request.kind()), null, checkin).get();
+			DocumentManager.get().checkin(document.getId(), upload, name, major, null, checkin).get();
 			confirmStored(document.getId(), docNumber, before, user);
 
 			if (Boolean.TRUE.equals(request.keepCheckedOut()))
 				checkOutAgain(document.getId(), session, docNumber);
-			return ApiViews.document(DocumentDAO.get().findById(document.getId()), user);
+			Document saved = DocumentDAO.get().findById(document.getId());
+			// The web page can change the properties in the moment before the check-in, which moves version on
+			if (stamped && !docId.equals(DocIdStamper.value(docNumber, saved.getFileVersion())))
+				log.warn("Document #{} v{} was stamped {}", docNumber, saved.getFileVersion(), docId);
+			/*
+			 * The first save through the API records the device, and the check-in on closing ends its hold. The same
+			 * write keeps the save's id, now that the save is stored: under the document's lock, so a request
+			 * repeating it that waited for the lock finds it.
+			 */
+			if (ApiViews.checkedOutBy(saved, user))
+				devices.record(saved, caller.token(), app, request.saveId());
+			else
+				devices.clear(saved, request.saveId());
+			return ApiViews.document(saved, user);
 		} finally {
 			FileUtils.deleteQuietly(upload);
 		}
+	}
+
+	/**
+	 * @return the version the save will store the file as, as CE's check-in
+	 *         counts it: from {@code version}, not {@code fileVersion} (spec
+	 *         section 6.6), a snapshot adding 1 to the minor number and a
+	 *         version taking the next major number with minor 0; null if
+	 *         CE's version can't be read, when the file isn't stamped
+	 */
+	static String nextVersion(Document document, boolean major) {
+		if (StringUtils.isEmpty(document.getVersion()))
+			return DocumentResource.firstVersion();
+		try {
+			return Version.calculateNewVersion(document.getVersion(), major);
+		} catch (RuntimeException e) {
+			log.warn("Cannot tell the next version of document {} from {}", document.getId(), document.getVersion());
+			return null;
+		}
+	}
+
+	/**
+	 * The save's preconditions (M3 spec section 9.5). They come after the
+	 * holds, so another person's hold stays {@code 409 checked-out}, and the
+	 * caller's on another device {@code 409 held-elsewhere}.
+	 *
+	 * @throws ApiProblem with {@code ifHeld}, {@code 409 not-held} for a
+	 *         document not checked out to the caller, such as one released or
+	 *         checked in from the web page; then {@code 409 version-moved},
+	 *         with the {@code document} as it is, when its {@code version}
+	 *         isn't {@code ifVersion}
+	 */
+	private static void refusePreconditions(Document document, NewVersion request, User user, long docNumber)
+			throws PersistenceException {
+		if (Boolean.TRUE.equals(request.ifHeld()) && !ApiViews.checkedOutBy(document, user))
+			throw ApiProblem.conflict(NOT_HELD, "Document #%d isn't checked out to you.".formatted(docNumber));
+		if (request.ifVersion() != null && !request.ifVersion().equals(document.getVersion()))
+			throw ApiProblem.conflict(VERSION_MOVED,
+					"Document #%d changed since the version this save started from: it's at version %s now."
+							.formatted(docNumber, document.getVersion()))
+					.with("document", ApiViews.document(document, user));
 	}
 
 	/**

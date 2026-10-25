@@ -22,6 +22,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.zaxxer.hikari.HikariDataSource;
 
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentManager;
@@ -56,6 +57,8 @@ public class DocNumberTest extends AbstractHealdanTestCase {
 
 	private Folder documents;
 
+	private Folder store;
+
 	@Override
 	protected List<String> getDatabaseScripts() {
 		return List.of("sql/logicaldoc-core.sql", "sql/logicaldoc-webservice.sql", "data.sql");
@@ -66,7 +69,7 @@ public class DocNumberTest extends AbstractHealdanTestCase {
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		documentDao = DocumentDAO.get();
 		admin = fx.admin();
-		Folder store = fx.store("Main");
+		store = fx.store("Main");
 		documents = FolderDAO.get().findByName(
 				FolderDAO.get().findById(fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents").getFolderId()),
 				"Documents", Tenant.DEFAULT_ID, true).get(0);
@@ -306,5 +309,45 @@ public class DocNumberTest extends AbstractHealdanTestCase {
 			pool.getHikariConfigMXBean().setConnectionTimeout(timeout);
 		}
 		assertEquals(expected + 1, counter.peekNext());
+	}
+
+	/**
+	 * Filing knows its number before CE's create (M3 spec section 9.7): the
+	 * reserved number is the new document's, and no second one is taken
+	 */
+	@Test
+	public void testReservedNumberIsTheNewDocuments() throws Exception {
+		DocNumberCounter counter = Context.get(DocNumberCounter.class);
+		long reserved = DocNumberListener.reserveNext();
+		assertEquals(1L, reserved);
+		assertEquals(2L, counter.peekNext());
+
+		Document doc;
+		try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(reserved)) {
+			doc = upload("a.txt");
+		}
+
+		assertEquals("1", customId(doc.getId()));
+		assertEquals(2L, counter.peekNext());
+		assertEquals("2", customId(upload("b.txt").getId()));
+	}
+
+	/**
+	 * A create that fails before it takes its reserved number (here Healdan's
+	 * rules refuse it, before the doc # listener runs) doesn't hand the number
+	 * to the next document stored on the same thread (task 7's ruling R8):
+	 * the number is lost, as a deleted document's is
+	 */
+	@Test
+	public void testFailedCreateDoesNotPassItsNumberOn() throws Exception {
+		long reserved = DocNumberListener.reserveNext();
+
+		try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(reserved)) {
+			assertThrows(HealdanVetoException.class, () -> fx.upload(store, "a.txt", "text", admin));
+		}
+
+		assertEquals(Long.toString(reserved + 1), customId(upload("b.txt").getId()));
+		assertEquals(0, jdbc.queryForObject("select count(*) from ld_document where ld_customid = ?", Integer.class,
+				Long.toString(reserved)).intValue());
 	}
 }

@@ -54,6 +54,8 @@ public final class HealdanConstants {
 
 	public static final String ATTR_DOCSUBCLASS = "docsubclass";
 
+	public static final String ATTR_COMMENTS = "comments";
+
 	public static final String ATTR_LEGACYDOCNUM = "legacydocnum";
 
 	public static final String ATTR_EMAILFROM = "emailfrom";

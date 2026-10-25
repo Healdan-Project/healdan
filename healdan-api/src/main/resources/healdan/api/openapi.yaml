@@ -73,7 +73,14 @@ paths:
         sign-ins; the detail says when to try again. `422 validation` with
         the field `name` is a device name over 100 characters (`too-long`),
         or one with characters the database can't store, such as emoji
-        (`invalid`); it's checked before the password.
+        (`invalid`); with the field `device.id`, a device id that's missing
+        (`required`), over 64 characters (`too-long`), or has characters
+        other than letters, digits and hyphens (`invalid`). Both are checked
+        before the password.
+
+        A client on a computer sends that computer's `device`, the same each
+        time it signs in: the documents it has checked out stay its own when
+        it signs in again (see `checkOutDocument`).
       tags: [Sign-in]
       security: []
       requestBody:
@@ -166,6 +173,72 @@ paths:
                 $ref: '#/components/schemas/DocumentPage'
         default:
           $ref: '#/components/responses/Problem'
+  /v1/me/favorites:
+    get:
+      operationId: listFavorites
+      summary: Your Favorites
+      description: |
+        The caller's bookmarks in LogicalDOC, except those on matters'
+        workspaces, which are My Matters (`GET /v1/matters/mine`). Folders
+        first, then documents, each by name. What the caller can't read, or
+        the API doesn't show, is left out. In one page.
+      tags: [Users]
+      responses:
+        '200':
+          description: The list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoritePage'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: addFavorite
+      summary: Add a folder or a document to your Favorites
+      description: |
+        Send exactly one of `folderId` and `docNumber`; neither or both is
+        `400`. A folder or document the caller can't read, that doesn't
+        exist or that the API doesn't show is `404`. A matter's workspace is
+        `400`: it belongs in My Matters. Adding what is already a favorite
+        answers `201` with the existing one.
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewFavorite'
+      responses:
+        '201':
+          description: The favorite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FavoriteView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/me/favorites/{id}:
+    delete:
+      operationId: removeFavorite
+      summary: Remove a favorite
+      description: |
+        `404` if the caller has no such favorite, which includes another
+        user's.
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The favorite's id
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+      responses:
+        '204':
+          description: Removed
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/users:
     get:
       operationId: findUsers
@@ -229,8 +302,9 @@ paths:
         as the document's own. Author and Typist are the caller unless sent.
         An email (`.eml` or `.msg`) gets its From, To, CC, Subject, Sent and
         Received from the message, and is named after its subject. With
-        `checkOut: true` the document is checked out to the caller too. The
-        answer is `201` with the document, and its address as `Location`.
+        `checkOut: true` the document is checked out to the caller too, held
+        on the caller's device as by `checkOutDocument`. The answer is `201`
+        with the document, and its address as `Location`.
 
         Nothing is stored unless every check passes. They run in this order,
         and the first that fails gives the answer:
@@ -266,6 +340,18 @@ paths:
           A value sent as the folder's form shows it
           (`GET /v1/folders/{folderId}/form`) is ignored, so a client can send
           the whole form back.
+
+        Only once every check has passed is the doc # taken. A Word or
+        LibreOffice file (`.docx`, `.docm`, `.dotx`, `.dotm`, `.odt` or
+        `.ott`) that carries the document property `Healdan Doc ID` is then
+        stamped before it's stored: the property becomes the new doc # and
+        version 1.0 in the title's form (`#1234 v1.0`), and so does the
+        shown text of each field that displays it, so the stored file, its
+        preview and every download show the number. Nothing else in the file
+        changes. Any other file, and one the server can't read as such, is
+        stored as sent, byte for byte. A filing refused by a check takes no
+        number; one that fails while it's being stored leaves a gap in the
+        doc #s, as a deleted document does.
 
         `201` means the document is stored with its version 1.0 in its
         timeline. When the server stores the document but not that version,
@@ -338,6 +424,12 @@ paths:
         caller can't see are dropped from those, so a page can come up short
         of the full count. The other scopes look at the first 10,000 hits.
         Pages are filled from the hits that follow the ones skipped.
+
+        With `within`, the `folders` and `documents` scopes return only what
+        is inside that folder, at any depth. A `#` lookup in the `documents`
+        scope keeps its document only if it is inside `within`. A folder the
+        caller can't read, or that the API doesn't show, is `404`; a Store is
+        `409 not-browsable`. The other scopes with `within` are `400`.
       tags: [Search]
       parameters:
         - name: scope
@@ -355,6 +447,17 @@ paths:
           schema:
             type: string
             minLength: 1
+        - name: within
+          in: query
+          required: false
+          description: |
+            A folder to search inside, at any depth, such as the matter's
+            workspace or one of its folders. Only for the `documents` and
+            `folders` scopes.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
         - $ref: '#/components/parameters/Offset'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -484,27 +587,89 @@ paths:
                 contentMediaType: application/octet-stream
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/thumbnail:
+    get:
+      operationId: getDocumentThumbnail
+      summary: A document's thumbnail
+      description: |
+        A small image of the current file's first page, as a PNG. It's read
+        through the same checks as the content (`getDocumentContent`):
+        `403 forbidden` without the Download permission, and for a document
+        protected by a password. Viewing it isn't recorded as a download.
+
+        The server makes thumbnails in the background after each save, so a
+        document whose thumbnail hasn't been made yet, like one whose file
+        has none, is `404 not-found`: show a placeholder, and ask again
+        later.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The thumbnail
+          headers:
+            Content-Length:
+              description: The image's size in bytes
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            image/png:
+              schema:
+                type: string
+                contentMediaType: image/png
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/checkout:
     post:
       operationId: checkOutDocument
       summary: Check a document out
       description: |
         Checks the document out to the caller, so nobody else can save to it
-        until it's checked in or released, and returns it. A document the
-        caller has checked out already is returned as it is. The checks run
-        in this order:
+        until it's checked in or released, and returns it.
 
-        1. `404 not-found` for a document the caller can't read.
-        2. `403 forbidden` without the Write permission, and for a document
+        The check-out is held on the caller's device, the `device` the token
+        signed in with, and the answer's `hold.device` names it. Saves,
+        check-ins, releases and changes of properties through the API from
+        the caller's other devices are then `409 held-elsewhere`, and so is
+        a check-out from them, unless it asks with `move: true` to move the
+        check-out to its own device; the move is recorded in the history as
+        a check-out. A
+        token that signed in with no device holds no device's check-out, and
+        nor does the web page: such a check-out works from any of the
+        caller's devices until a check-out or a save through the API records
+        one. The web page itself is never refused for a device.
+
+        A document the caller has checked out already is returned as it is,
+        and from then on held on the caller's device, if the token has one
+        and no other device holds it. The checks run in this order:
+
+        1. `400 bad-request` for a body that isn't the JSON expected (`415`
+           for one that isn't sent as JSON), and `422 validation` with the
+           field `app` for an app's name over 100 characters (`too-long`) or
+           with characters the database can't store (`invalid`). The body is
+           optional.
+        2. `404 not-found` for a document the caller can't read.
+        3. `403 forbidden` without the Write permission, and for a document
            protected by a password, which is always refused through the API:
            open it in Healdan's web page.
-        3. `409 checked-out` when someone else has it checked out, and
-           `409 locked` when it's locked with the web page's Lock action, by
-           anyone, the caller included. Both add the `hold`.
-        4. `409 refused` for an immutable or an archived document.
+        4. `409 held-elsewhere` when the caller has it checked out on another
+           device, without `move: true`, with the `hold` and `lastSaved`.
+        5. `409 checked-out` when someone else has it checked out, with or
+           without `move`, and `409 locked` when it's locked with the web
+           page's Lock action, by anyone, the caller included. Both add the
+           `hold`.
+        6. `409 refused` for an immutable or an archived document.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
       responses:
         '200':
           description: The document, checked out to the caller
@@ -519,8 +684,9 @@ paths:
       summary: Release a check-out or a lock
       description: |
         Releases the document's check-out or lock without saving anything,
-        and returns the document. The user who holds it can, and so can an
-        administrator; the release is recorded in the history. An
+        and returns the document. The user who holds it can, from the device
+        that holds the check-out (`409 held-elsewhere` from another), and so
+        can an administrator; the release is recorded in the history. An
         administrator's release also makes an immutable document mutable
         again, as the web page's does. Anyone else gets `409 checked-out` or
         `409 locked`, with the `hold`. A free document is returned as it is,
@@ -581,15 +747,20 @@ paths:
         that writes the number into the file before it sends it, such as a
         doc ID footer, works it out from the `version` it last read, and
         reads the document again if anything may have changed it since.
+        The server stamps that number itself: a Word or LibreOffice file
+        that carries the `Healdan Doc ID` property is stored with it in the
+        property and in the shown text of the fields that display it, as for
+        `fileDocument`, once every check below has passed. Any other file is
+        stored as sent.
 
         A free
         document is checked out to the caller, saved and checked in again;
         with `keepCheckedOut: true`, the save while editing, it's checked out
-        to the caller again afterwards, and the history shows a check-in
-        followed by a check-out. The web page can take the document in the
-        moment between them: the save stands, and the answer's `hold` shows
-        who has it. Two saves of one document are applied one after the
-        other.
+        to the caller again afterwards, held on the caller's device, and the
+        history shows a check-in followed by a check-out. The web page can
+        take the document in the moment between them: the save stands, and
+        the answer's `hold` shows who has it. Two saves of one document are
+        applied one after the other.
 
         Nothing is saved unless every check passes. They run in this order,
         and the first that fails gives the answer:
@@ -598,17 +769,35 @@ paths:
            the JSON expected (a missing or unknown `kind` included), and for
            a missing `file` part.
         2. `404 not-found` for a document the caller can't read.
-        3. `403 forbidden` without the Write permission, and for a document
+        3. A `saveId` that is the last one stored for the document is the
+           same save sent again after its answer was lost: the answer is
+           `201` with the document as it is now, and nothing is stored. That
+           holds whatever happened to the document since, a check-in by the
+           save itself included, so a client that didn't hear back sends
+           the save again unchanged.
+        4. `403 forbidden` without the Write permission, and for a document
            protected by a password, which is always refused through the API:
            open it in Healdan's web page.
-        4. `409 checked-out` when someone else has it checked out,
+        5. `409 checked-out` when someone else has it checked out,
            administrators included: nobody saves over another person's open
            edit. An administrator releases the hold first
            (`DELETE /v1/documents/{docNumber}/checkout`). `409 locked` when
            it's locked with the web page's Lock action, by anyone, the caller
-           included. Both add the `hold`.
-        5. `409 refused` for an immutable or an archived document.
-        6. The name: the version part's `name`, or else the file part's name
+           included. Both add the `hold`. `409 held-elsewhere` when the
+           caller has it checked out on another device (see
+           `checkOutDocument`), with the `hold` and `lastSaved`.
+        6. The preconditions. With `ifHeld: true`, `409 not-held` when the
+           document isn't checked out to the caller, which after step 5
+           means it's free: its check-out was released, or checked in from
+           the web page. Then
+           `409 version-moved` when the document's `version` isn't
+           `ifVersion`, with the `document` as it is now: someone changed
+           its properties or name, or saved it, after the version the save
+           started from. When its `fileVersion` is still the one the client
+           started from, nobody stored newer content, and the client may
+           send the save again with the new `ifVersion`.
+        7. `409 refused` for an immutable or an archived document.
+        8. The name: the version part's `name`, or else the file part's name
            (RFC 5987's `filename*` first), or the document's when neither
            gives one. It may change, but its extension may not: compared in
            any case, it must be the document's, and it keeps the document's
@@ -616,18 +805,20 @@ paths:
            `Lease.docx`). A browser names a file part it has no name for
            `blob`, which has no extension, so a client in a browser, such as
            an Office add-in, sends `name`: the document's name to keep it.
-        7. The file: `413 too-large` over the upload limit; `422` when it's
+        9. The file: `413 too-large` over the upload limit; `422` when it's
            empty. A file more than 1 MB over the limit is refused while it's
            sent, before anything else.
-        8. The comment, which is cleaned of markup as the web page's check-in
-           cleans it: `<img src=x onerror=...>` goes, `a < b & c` stays.
+        10. The comment, which is cleaned of markup as the web page's check-in
+            cleans it: `<img src=x onerror=...>` goes, `a < b & c` stays; and
+            the `saveId`.
 
         One `422 validation` lists what is wrong. For the name, the field is
         `name` when it came from `name`, and `file` otherwise: `extension`
         for another extension, `too-long` over 255 characters, `invalid` for
         a name with `/`, `\` or a control character, and `disallowed` for an
         extension the `upload.disallow` setting lists. For `file`: `empty`.
-        For `comment`: `too-long` over 1000 characters once cleaned.
+        For `comment`: `too-long` over 1000 characters once cleaned. For
+        `saveId`: `invalid` when it isn't a UUID.
 
         None of these refusals changes anything. A rule that refuses the
         check-in itself is `409 refused`: the document is left as it was, but
@@ -635,7 +826,8 @@ paths:
         again, or release it.
 
         `201` means the save is stored: the document has a new version, and
-        the version is in its timeline. When the server can't store it, the
+        the version is in its timeline, and its `saveId`, if it had one, is
+        the document's last. When the server can't store it, the
         answer is `500 server-error`, and its `detail` says what's left and
         whether the document is still checked out to the caller. Either the
         document is as it was, or its content is the file sent, as a version
@@ -692,10 +884,11 @@ paths:
         A property is `editable` when `setProperties` would take a change to
         it. So none is when the caller may not change the document's
         properties at all: without the Write permission, when someone else
-        has it checked out or anyone has it locked, when it's immutable and
-        the caller isn't an administrator, or when it's protected by a
-        password. A client can grey out the form instead of finding out from
-        a `403` or `409`.
+        has it checked out or anyone has it locked, when the caller has it
+        checked out on another device, when it's immutable and the caller
+        isn't an administrator, or when it's protected by a password. A
+        client can grey out the form instead of finding out from a `403` or
+        `409`.
       tags: [Documents]
       parameters:
         - $ref: '#/components/parameters/DocNumber'
@@ -742,6 +935,8 @@ paths:
         3. `409 checked-out` when someone else has it checked out, and
            `409 locked` when it's locked with the web page's Lock action, by
            anyone, the caller included. Both add the `hold`.
+           `409 held-elsewhere` when the caller has it checked out on another
+           device (see `checkOutDocument`), with the `hold` and `lastSaved`.
         4. `409 refused` for an immutable document, unless the caller is an
            administrator.
 
@@ -801,6 +996,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/FolderPage'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/folders:
+    post:
+      operationId: createFolder
+      summary: Create a folder
+      description: |
+        Creates a subfolder in `parentId`, as the old web page does, through
+        the same rules. The caller needs the Add permission on the parent
+        (`403` without it). The new folder inherits its parent's properties
+        and permissions. A `/` in the name is dropped and markup is cleaned
+        from it; a name that is empty after that is `422 validation` with
+        `required`, and one over 255 characters `too-long`. A parent the
+        caller can't read, or that the API doesn't show, is `404`. A Store is
+        `409 not-browsable` and a search folder `409 filing-rule`. A matter's
+        top level is `409 refused` unless the caller is an administrator, as
+        are the other structure rules. The answer is `201` with the folder,
+        and its address as `Location`.
+      tags: [Folders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewFolder'
+      responses:
+        '201':
+          description: The new folder
+          headers:
+            Location:
+              description: The folder's address, such as `/api/v1/folders/1234`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderView'
         default:
           $ref: '#/components/responses/Problem'
   /v1/folders/{id}:
@@ -1065,7 +1298,8 @@ components:
       type: object
       description: |
         An RFC 9457 problem. Some codes add members: `validation` adds
-        `fields`, and `checked-out` and `locked` add `hold`.
+        `fields`, `checked-out` and `locked` add `hold`, `held-elsewhere`
+        adds `hold` and `lastSaved`, and `version-moved` adds `document`.
       required: [type, title, status, detail, code]
       properties:
         type:
@@ -1083,13 +1317,26 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
             $ref: '#/components/schemas/FieldError'
         hold:
           $ref: '#/components/schemas/HoldView'
+        lastSaved:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            For `held-elsewhere`: when the document's content was last stored
+            (its latest save, or its filing), so a client can warn that what
+            the other device hasn't sent since isn't in Healdan. Null when
+            the server's data doesn't say.
+        document:
+          $ref: '#/components/schemas/DocumentView'
+          description: |
+            For `version-moved`: the document as it is now, so a client can
+            tell from its `fileVersion` whether anyone stored newer content.
     FieldError:
       type: object
       additionalProperties: false
@@ -1172,6 +1419,25 @@ components:
           maxLength: 100
           description: What the device is called, so you can tell your devices apart. Blank is "Unnamed device".
           examples: [Word on MacBook]
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceRef'
+            - type: 'null'
+          description: |
+            The computer signing in. Its check-outs are held on it, whichever
+            of its tokens made them. Null or left out for none.
+    DeviceRef:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          pattern: '^[A-Za-z0-9-]{1,64}$'
+          description: |
+            The computer's device id, the same on every sign-in from it, such
+            as a random UUID the client keeps.
+          examples: [3f2b8c1e-9d4a-4f7e-b6a2-0c5d8e1f2a3b]
     SignedIn:
       type: object
       additionalProperties: false
@@ -1307,7 +1573,7 @@ components:
       type: object
       description: Who has a document checked out or locked
       additionalProperties: false
-      required: [kind, by, since]
+      required: [kind, by, since, device]
       properties:
         kind:
           type: string
@@ -1323,8 +1589,54 @@ components:
           description: |
             The latest check-out or lock event. A save with
             `keepCheckedOut: true` checks the document in and out again, so
-            it moves `since` to that save. Null when the server's data
-            doesn't say.
+            it moves `since` to that save, and moving the check-out to
+            another device moves it too. Null when the server's data doesn't
+            say.
+        device:
+          oneOf:
+            - $ref: '#/components/schemas/DeviceView'
+            - type: 'null'
+          description: |
+            The computer that holds the check-out, shown only to the user who
+            holds it. Null for anyone else, for a lock, and when no device
+            holds it: a check-out from the web page, or from a token with no
+            device.
+    DeviceView:
+      type: object
+      description: The computer that holds a check-out
+      additionalProperties: false
+      required: [id, name, app]
+      properties:
+        id:
+          type: string
+          description: Its device id
+        name:
+          type: string
+          description: |
+            What it's called: the name of the token it last wrote through,
+            such as `Healdan Helper on MacBook`.
+        app:
+          type: [string, 'null']
+          description: The app its check-out named, or null
+          examples: [LibreOffice]
+    CheckoutRequest:
+      type: object
+      additionalProperties: false
+      description: The optional body of `checkOutDocument`.
+      properties:
+        move:
+          type: [boolean, 'null']
+          description: |
+            `true` to move the caller's check-out from another of their
+            devices to this one. Edits on the other device that it hasn't
+            saved yet won't be in Healdan. On a free document it checks it
+            out as usual, and on the device that holds it already it changes
+            nothing.
+        app:
+          type: [string, 'null']
+          maxLength: 100
+          description: The app the document is opened in
+          examples: [LibreOffice]
     DocumentView:
       type: object
       additionalProperties: false
@@ -1385,7 +1697,8 @@ components:
             Write permission, not immutable, not archived, not protected by a
             password (always refused through the API), and no hold but the
             caller's own check-out (a lock is a hold even for the user who
-            took it). It isn't the test for changing the properties, which an
+            took it), and that not held on another of the caller's devices.
+            It isn't the test for changing the properties, which an
             administrator may do to an immutable document: see
             `ProfileField.editable`.
     VersionView:
@@ -1546,6 +1859,55 @@ components:
               items:
                 $ref: '#/components/schemas/FolderView'
       unevaluatedProperties: false
+    FavoriteView:
+      type: object
+      additionalProperties: false
+      required: [id, type, item]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: The bookmark's id, for removing it
+        type:
+          type: string
+          enum: [folder, document]
+        item:
+          oneOf:
+            - $ref: '#/components/schemas/FolderView'
+            - $ref: '#/components/schemas/DocumentView'
+          description: A `FolderView` for a `folder`, a `DocumentView` for a `document`
+    FavoritePage:
+      allOf:
+        - $ref: '#/components/schemas/Page'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/FavoriteView'
+      unevaluatedProperties: false
+    NewFavorite:
+      type: object
+      additionalProperties: false
+      description: Exactly one of the two
+      properties:
+        folderId:
+          type: [integer, 'null']
+          format: int64
+        docNumber:
+          type: [integer, 'null']
+          format: int64
+    NewFolder:
+      type: object
+      additionalProperties: false
+      required: [parentId, name]
+      properties:
+        parentId:
+          type: integer
+          format: int64
+          description: The folder to create the new folder in
+        name:
+          type: string
+          description: The new folder's name; at most 255 characters
     DocumentPage:
       allOf:
         - $ref: '#/components/schemas/Page'
@@ -1803,3 +2165,28 @@ components:
             `true` for a save while editing, which leaves the document
             checked out to the caller; `false` by default, the save on
             closing, which checks it in.
+        ifVersion:
+          type: [string, 'null']
+          description: |
+            The document's `version` the save started from: the save is
+            `409 version-moved` when the document is at another, and nothing
+            is stored. Left out, the save is made whatever the version.
+          examples: ['2.1']
+        ifHeld:
+          type: [boolean, 'null']
+          description: |
+            `true` when the save is only to be made while the document is
+            checked out to the caller: it's `409 not-held` when it's free,
+            and nothing is stored. A check-out held on another of the
+            caller's devices is `409 held-elsewhere`, with or without
+            this. `false` by default, which checks a free document out to
+            the caller for the save.
+        saveId:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            A UUID the client makes for this save, and sends again unchanged
+            when it sends the save again. The server keeps the last one
+            stored for each document, and a save repeating it is answered
+            `201` with the document as it is, storing nothing.
+          examples: ['0b0c5f8e-3f4c-4d39-9a52-0d1e2f3a4b5c']

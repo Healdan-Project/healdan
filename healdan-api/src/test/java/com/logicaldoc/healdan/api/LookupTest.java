@@ -2,6 +2,8 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -12,6 +14,9 @@ import org.junit.Test;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
@@ -80,6 +85,23 @@ public class LookupTest extends ApiTestCase {
 			assertEquals(n, response.json().path("docNumber").asLong());
 			assertEquals(typed, "1.0", response.json().path("version").textValue());
 		}
+	}
+
+	/** The title bar shows {@code #1234 v1.1} */
+	@Test
+	public void testTitleForm() throws Exception {
+		DocumentHistory history = fx.documentHistory(boss);
+		history.setEvent(DocumentEvent.CHECKEDOUT);
+		DocumentManager.get().checkout(doc.getId(), history);
+		DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream("Second".getBytes(StandardCharsets.UTF_8)),
+				doc.getFileName(), false, null, fx.documentHistory(boss)).get();
+		awaitAsyncWork();
+
+		ApiResponse response = lookup("#" + number(doc) + " v1.1");
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(number(doc), response.json().path("docNumber").asLong());
+		assertEquals("1.1", response.json().path("version").textValue());
 	}
 
 	@Test

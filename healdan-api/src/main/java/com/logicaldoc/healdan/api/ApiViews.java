@@ -23,6 +23,7 @@ import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.model.ClientRef;
+import com.logicaldoc.healdan.api.model.DeviceView;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FolderRef;
 import com.logicaldoc.healdan.api.model.FolderView;
@@ -39,6 +40,7 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.token.DeviceHolds;
 
 /**
  * Turns CE's and Healdan's objects into the API's views.
@@ -117,11 +119,13 @@ public final class ApiViews {
 	static DocumentView document(Document d, User caller, String folderKind, MatterRef matter)
 			throws PersistenceException {
 		long folderId = d.getFolder().getId();
-		HoldView hold = hold(d);
-		// As the check-out and the save decide: no one else's hold, and no lock at all (spec correction 10)
+		HoldView hold = hold(d, caller);
+		Caller current = Caller.current();
+		// As the check-out and the save decide: no one else's hold, no lock at all (spec correction 10), and not
+		// the caller's on another device (M3 spec section 9.4)
 		boolean canEdit = AccessChecks.allowed(caller, Permission.WRITE, d) && !d.isImmutable()
-				&& d.getStatus() != DocumentStatus.ARCHIVED && (hold == null || checkedOutBy(d, caller))
-				&& opens(d, Caller.current().session());
+				&& d.getStatus() != DocumentStatus.ARCHIVED
+				&& (hold == null || checkedOutBy(d, caller) && heldHere(hold, current)) && opens(d, current.session());
 		long docNumber = Long.parseLong(d.getCustomId());
 		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
@@ -154,8 +158,35 @@ public final class ApiViews {
 
 	/**
 	 * @param d a document
+	 * @param caller the signed-in user
+	 * @return who holds it and since when, or null if it's free, as
+	 *         {@link #hold(Document)}; for the user who has it checked out,
+	 *         also the device that holds the check-out, if one does
+	 * @throws PersistenceException error at data layer
+	 */
+	public static HoldView hold(Document d, User caller) throws PersistenceException {
+		HoldView hold = hold(d);
+		if (hold == null || !checkedOutBy(d, caller))
+			return hold;
+		DeviceHolds devices = DeviceHolds.get();
+		return devices.current(d).map(row -> new HoldView(hold.kind(), hold.by(), hold.since(),
+				new DeviceView(row.getDevice(), devices.deviceName(row), row.getApp()))).orElse(hold);
+	}
+
+	/**
+	 * @param hold the holder's view of a document's hold ({@link #hold(Document, User)})
+	 * @param caller the signed-in caller
+	 * @return false if another of the caller's devices holds the check-out
+	 */
+	static boolean heldHere(HoldView hold, Caller caller) {
+		return hold.device() == null || hold.device().id().equals(caller.token().getDevice());
+	}
+
+	/**
+	 * @param d a document
 	 * @return who holds it and since when, or null if it's free; the holder is
-	 *         null when CE's data doesn't say who it is
+	 *         null when CE's data doesn't say who it is. It never says which
+	 *         device: see {@link #hold(Document, User)}.
 	 * @throws PersistenceException error at data layer
 	 */
 	public static HoldView hold(Document d) throws PersistenceException {
@@ -181,7 +212,7 @@ public final class ApiViews {
 			if (!latest.isEmpty())
 				since = latest.get(0).getDate();
 		}
-		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since);
+		return new HoldView(kind, userRef(d.getLockUserId(), d.getLockUser()), since, null);
 	}
 
 	/**

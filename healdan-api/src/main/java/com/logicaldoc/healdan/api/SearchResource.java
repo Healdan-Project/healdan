@@ -17,6 +17,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.searchengine.FulltextSearchOptions;
 import com.logicaldoc.core.searchengine.Hit;
 import com.logicaldoc.core.searchengine.Search;
@@ -62,24 +63,36 @@ public class SearchResource {
 	 * @param q what to look for
 	 * @param offset how many hits to skip
 	 * @param limit the most hits to return
+	 * @param within a folder to search inside, at any depth; only for the
+	 *        {@code folders} and {@code documents} scopes
 	 * @return the hits as documents, folders or matters, best first; the total
 	 *         is not known, and a page shorter than {@code limit} is the last
 	 */
 	@GET
 	public Page<Object> search(@QueryParam("scope") String scope, @QueryParam("q") String q,
-			@QueryParam("offset") Integer offset, @QueryParam("limit") Integer limit) {
+			@QueryParam("offset") Integer offset, @QueryParam("limit") Integer limit,
+			@QueryParam("within") Long within) {
 		Paging paging = Paging.of(offset, limit);
 		String chosen = StringUtils.isEmpty(scope) ? "documents" : scope;
 		if (!List.of("documents", "emails", "all", "folders", "matters", "clients").contains(chosen))
 			throw ApiProblem.badRequest("The scope must be documents, emails, all, folders, matters or clients.");
 		if (StringUtils.isBlank(q))
 			throw ApiProblem.badRequest("Say what to search for with q.");
+		if (within != null && !List.of("documents", "folders").contains(chosen))
+			throw ApiProblem.badRequest("Only the documents and folders scopes can search within a folder.");
 
 		Caller caller = Caller.current();
 		User user = caller.user();
 		String text = q.strip();
 		try {
+			if (within != null && "store".equals(FolderResource.view(within, user).kind()))
+				throw ApiProblem.conflict("not-browsable",
+						"A Store can't be searched as a place. Search without it, or search within one of its matters.");
 			SearchOptions options = options(chosen, text, user);
+			if (within != null && !(options instanceof FolderSearchOptions)) {
+				options.setFolderId(within);
+				options.setSearchInSubPath(true);
+			}
 			if (options instanceof FulltextSearchOptions)
 				checkSyntax(text);
 			options.setUserId(user.getId());
@@ -101,7 +114,7 @@ public class SearchResource {
 			while (true) {
 				options.setMaxHits((int) window);
 				List<Hit> hits = search.search();
-				shown = shown(hits, options.getType(), user, wanted, checked);
+				shown = shown(hits, options.getType(), user, wanted, checked, within);
 				if (shown.size() >= wanted || hits.size() < window || window >= MAX_WINDOW)
 					break;
 				window = Math.min(window * 2, MAX_WINDOW);
@@ -170,19 +183,20 @@ public class SearchResource {
 	 * @param wanted how many to find; the hits after them aren't checked
 	 * @param checked what earlier windows found for each hit, by id; this
 	 *        window's answers are added
+	 * @param within the folder the hits must be inside, or null
 	 * @return what of the hits the caller may see, as the matters, folders or
 	 *         documents themselves, in the hits' order, at most {@code wanted};
 	 *         the views come later, for the page alone
 	 */
 	private static List<Object> shown(List<Hit> hits, int type, User user, long wanted,
-			Map<Long, Optional<Object>> checked) throws PersistenceException {
+			Map<Long, Optional<Object>> checked, Long within) throws PersistenceException {
 		List<Object> shown = new ArrayList<>();
 		for (Hit hit : hits) {
 			if (shown.size() >= wanted)
 				break;
 			Optional<Object> found = checked.get(hit.getId());
 			if (found == null) {
-				found = check(hit, type, user);
+				found = check(hit, type, user, within);
 				checked.put(hit.getId(), found);
 			}
 			found.ifPresent(shown::add);
@@ -192,9 +206,10 @@ public class SearchResource {
 
 	/**
 	 * @return the matter, folder or document the hit is, if the caller may see
-	 *         it
+	 *         it and, with {@code within}, it is inside that folder at any
+	 *         depth
 	 */
-	private static Optional<Object> check(Hit hit, int type, User user) throws PersistenceException {
+	private static Optional<Object> check(Hit hit, int type, User user, Long within) throws PersistenceException {
 		if (type == HealdanConstants.SEARCH_MATTERS || type == HealdanConstants.SEARCH_CLIENTS) {
 			Matter matter = MatterDAO.get().findByFolderId(hit.getId());
 			return matter != null && AccessChecks.readableFolder(hit.getId(), user).isPresent() ? Optional.of(matter)
@@ -204,11 +219,22 @@ public class SearchResource {
 			Optional<Folder> folder = AccessChecks.readableFolder(hit.getId(), user);
 			// The API shows folders inside Stores only, and no aliases
 			return folder.isPresent() && folder.get().getDeleted() == 0 && folder.get().getType() != Folder.TYPE_ALIAS
-					&& MatterLocator.get().locate(folder.get()).isUnderAStore() ? Optional.of(folder.get())
+					&& MatterLocator.get().locate(folder.get()).isUnderAStore()
+					&& (within == null || folder.get().getId() != within
+							&& FolderDAO.get().isInPath(within, folder.get().getId()))
+							? Optional.of(folder.get())
 							: Optional.empty();
 		}
 		Optional<Document> document = AccessChecks.readableDocument(DocumentDAO.get().findById(hit.getId()), user);
-		return document.isPresent() && ApiViews.shows(document.get()) ? Optional.of(document.get()) : Optional.empty();
+		// The full-text searches are limited to the folder already; the doc # lookup is not
+		boolean inside = within == null || type != HealdanConstants.SEARCH_DOC_NUMBER
+				|| document.isPresent() && inside(document.get().getFolder().getId(), within);
+		return document.isPresent() && inside && ApiViews.shows(document.get()) ? Optional.of(document.get())
+				: Optional.empty();
+	}
+
+	private static boolean inside(long folderId, long within) throws PersistenceException {
+		return folderId == within || FolderDAO.get().isInPath(within, folderId);
 	}
 
 	private static Optional<Object> view(Object found, User user) throws PersistenceException {

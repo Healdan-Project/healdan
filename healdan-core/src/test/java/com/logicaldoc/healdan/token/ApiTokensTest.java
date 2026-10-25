@@ -47,7 +47,9 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 	@Test
 	public void testIssueStoresOnlyTheHash() throws Exception {
 		User clerk = fx.user("clerk");
+		long before = System.currentTimeMillis();
 		ApiTokens.Issued issued = tokens().issue(clerk, "Laptop", null);
+		long after = System.currentTimeMillis();
 
 		assertTrue(issued.token(), issued.token().matches("^hd_[A-Za-z0-9_-]{43}$"));
 		assertEquals(ApiTokens.hash(issued.token()), issued.row().getHash());
@@ -58,9 +60,20 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		for (Object value : row.values())
 			assertFalse(String.valueOf(value).contains(issued.token()));
 
-		Date created = (Date) row.get("LD_CREATION");
-		Date expires = (Date) row.get("HD_EXPIRES");
-		assertEquals(365 * DAY, expires.getTime() - created.getTime(), 1000);
+		// Read the dates back through Hibernate, as the application does: the raw JDBC read above uses the JVM's
+		// zone, while Hibernate writes in hibernate.jdbc.time_zone (Europe/Rome in the tests), so two dates on
+		// either side of a DST change would differ by an hour
+		ApiToken stored = ApiTokenDAO.get().findById(issued.row().getId());
+		Date expires = stored.getExpires();
+		// The expiry is 365 days after the moment the token was issued, which falls between the two clock reads
+		// around the call. It isn't measured against the stored creation date: the DAO stamps that when it saves,
+		// after issue() fixed the expiry, so on a slow runner the two differ by however long that took. The
+		// column keeps whole milliseconds at best, and the slack covers a database that rounds to the second
+		assertTrue(expires + " is before " + new Date(before + 365 * DAY),
+				expires.getTime() >= before + 365 * DAY - 1000);
+		assertTrue(expires + " is after " + new Date(after + 365 * DAY), expires.getTime() <= after + 365 * DAY + 1000);
+		// and the token was created no earlier than the call, so the expiry can't have been taken from a later clock
+		assertTrue(stored.getCreation().getTime() >= before - 1000);
 	}
 
 	@Test

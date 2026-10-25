@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -20,6 +21,8 @@ import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.folder.FolderEvent;
+import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
@@ -60,7 +63,7 @@ public class FolderResourceTest extends ApiTestCase {
 		outsider = fx.user("outsider");
 		boss = fx.user("boss", "admin");
 		store = fx.store("Client Work");
-		fx.grant(store, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
+		fx.grant(store, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.ADD, Permission.DOWNLOAD);
 		fx.grant(store, reader.getUserGroup(), Permission.READ);
 		workspace = FolderDAO.get()
 				.findById(fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents").getFolderId());
@@ -163,6 +166,112 @@ public class FolderResourceTest extends ApiTestCase {
 		assertEquals(404, get("/api/v1/folders/" + secret.getId() + "/children").token(token).send().status());
 		// Outsider has no grant at all
 		assertEquals(404, get("/api/v1/folders/" + documents.getId()).token(signIn(outsider)).send().status());
+	}
+
+	private ApiResponse create(User as, Folder parent, String name) {
+		return post("/api/v1/folders").token(signIn(as)).json(Map.of("parentId", parent.getId(), "name", name))
+				.send();
+	}
+
+	@Test
+	public void testCreateSubfolder() throws Exception {
+		Folder current = FolderDAO.get().findById(documents.getId(), true);
+		current.setValue("docclass", "Letters");
+		FolderHistory transaction = fx.folderHistory(boss);
+		transaction.setEvent(FolderEvent.CHANGED);
+		FolderDAO.get().store(current, transaction);
+		ApiResponse response = create(clerk, documents, "Board packs");
+
+		assertEquals(response.toString(), 201, response.status());
+		JsonNode created = response.json();
+		assertEquals("folder", created.path("type").textValue());
+		assertEquals("Board packs", created.path("name").textValue());
+		assertEquals("folder", created.path("kind").textValue());
+		assertEquals("/api/v1/folders/" + created.path("id").asLong(), response.header("Location"));
+		assertEquals(documents.getId(), created.path("path").get(created.path("path").size() - 2).path("id").asLong());
+
+		Folder stored = FolderDAO.get().findById(created.path("id").asLong());
+		assertEquals(documents.getId(), stored.getParentId());
+		// Documents shares the workspace's permissions, so the new folder shares them too
+		assertEquals(FolderDAO.get().findById(documents.getId()).getSecurityRef(), stored.getSecurityRef());
+		JsonNode docclass = null;
+		for (JsonNode field : get("/api/v1/folders/" + stored.getId() + "/form").token(signIn(clerk)).send().json()
+				.path("items"))
+			if ("docclass".equals(field.path("name").textValue()))
+				docclass = field;
+		assertEquals("Letters", docclass.path("value").textValue());
+		assertEquals("inherited", docclass.path("source").textValue());
+		assertEquals(1, jdbc().queryForObject(
+				"select count(*) from ld_folder_history where ld_event = 'event.folder.created' and ld_folderid = ?",
+				Integer.class, stored.getId()).intValue());
+	}
+
+	@Test
+	public void testTopLevelRefusedForNonAdmin() throws Exception {
+		ApiResponse refused = create(clerk, workspace, "Extras");
+
+		assertEquals(refused.toString(), 409, refused.status());
+		assertEquals("refused", refused.code());
+		assertTrue(FolderDAO.get().findByName(workspace, "Extras", Tenant.DEFAULT_ID, true).isEmpty());
+		assertEquals(201, create(boss, workspace, "Extras").status());
+	}
+
+	@Test
+	public void testSearchFolderRefused() throws Exception {
+		Folder search = fx.searchFolder(workspace, "Recent");
+		ApiResponse response = create(clerk, search, "Nope");
+
+		assertEquals(response.toString(), 409, response.status());
+		assertEquals("filing-rule", response.code());
+	}
+
+	@Test
+	public void testStoreRefused() throws Exception {
+		ApiResponse response = create(clerk, store, "Nope");
+
+		assertEquals(response.toString(), 409, response.status());
+		assertEquals("not-browsable", response.code());
+	}
+
+	@Test
+	public void testWithoutAdd403() throws Exception {
+		ApiResponse response = create(reader, documents, "Nope");
+
+		assertEquals(response.toString(), 403, response.status());
+		assertEquals("forbidden", response.code());
+		assertTrue(FolderDAO.get().findByName(documents, "Nope", Tenant.DEFAULT_ID, true).isEmpty());
+		// Unreadable is not found, whatever the permission
+		assertEquals(404, create(outsider, documents, "Nope").status());
+	}
+
+	@Test
+	public void testBadBodies() throws Exception {
+		String token = signIn(clerk);
+
+		assertEquals(400, post("/api/v1/folders").token(token).json(Map.of("name", "x")).send().status());
+		assertEquals(400, post("/api/v1/folders").token(token).json(Map.of("parentId", documents.getId(), "other", 1))
+				.send().status());
+		ApiResponse blank = create(clerk, documents, " ");
+		assertEquals(blank.toString(), 422, blank.status());
+		assertEquals("required", blank.json().path("fields").path(0).path("code").textValue());
+	}
+
+	@Test
+	public void testNameRules() throws Exception {
+		ApiResponse tooLong = create(clerk, documents, "x".repeat(256));
+		assertEquals(tooLong.toString(), 422, tooLong.status());
+		assertEquals("name", tooLong.json().path("fields").path(0).path("field").textValue());
+		assertEquals("too-long", tooLong.json().path("fields").path(0).path("code").textValue());
+		assertEquals(201, create(clerk, documents, "x".repeat(255)).status());
+
+		ApiResponse markup = create(clerk, documents, "<b>x</b>");
+		assertEquals(markup.toString(), 201, markup.status());
+		String name = markup.json().path("name").textValue();
+		// As the old page: the slash goes, and the DAO cleans the rest
+		assertFalse(name, name.contains("/"));
+		assertEquals(name, FolderDAO.get().findById(markup.json().path("id").asLong()).getName());
+
+		assertEquals("ab", create(clerk, documents, "a/b").json().path("name").textValue());
 	}
 
 	@Test
