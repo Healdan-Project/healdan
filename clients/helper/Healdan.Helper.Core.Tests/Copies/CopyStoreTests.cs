@@ -144,18 +144,81 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
-    public void CreateReplacesAConfirmedOldCopyOfTheSameDocument()
+    public void CreateLeavesAConfirmedCopyOfTheSameDocumentAlone()
     {
         var store = Store();
-        var (old, rec) = store.Create(Doc(1), false, "LibreOffice");
+        var (old, rec) = store.Create(Doc(1), true, "LibreOffice");
         File.WriteAllText(old, "old");
-        store.Save(rec with { ConfirmedHash = Hash(old) });
+        store.Save(rec with { ConfirmedHash = Hash(old), CheckedOutHere = true, LastSaveId = "s1" });
 
-        var (fresh, _) = store.Create(Doc(1, fileVersion: "2.2"), true, "LibreOffice");
+        var (fresh, _) = store.Create(Doc(1, fileVersion: "2.2"), false, "LibreOffice");
 
-        Assert.EndsWith("Lease agreement #1 v2.2 (read-only).docx", fresh);
-        Assert.False(File.Exists(old));
-        Assert.Equal(fresh, Assert.Single(store.All()).Path);
+        Assert.EndsWith("Lease agreement #1 v2.2.docx", fresh);
+        Assert.True(File.Exists(old));
+        var kept = store.Find(old)!.Value.Item2;
+        Assert.True(kept.CheckedOutHere);
+        Assert.Equal("s1", kept.LastSaveId);
+        Assert.Equal(2, store.All().Count);
+    }
+
+    [Fact]
+    public void CreateKeepsAnUnrecordedFileAtTheTargetPath()
+    {
+        var store = Store();
+        Directory.CreateDirectory(Paths.Copies);
+        var target = Path.Combine(Paths.Copies, "Lease agreement #1 v2.1.docx");
+        File.WriteAllText(target, "the user's work");
+
+        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+
+        Assert.Equal(target, path);
+        Assert.Null(rec.ConfirmedHash);
+        Assert.Equal("the user's work", File.ReadAllText(target));
+        Assert.True(store.HasUnconfirmedChanges(target));
+    }
+
+    [Fact]
+    public void CreateOverAConfirmedRecordKeepsCheckOutAndSaveId()
+    {
+        var store = Store();
+        var (path, rec) = store.Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(path, "x");
+        store.Save(rec with { ConfirmedHash = Hash(path), CheckedOutHere = true, LastSaveId = "s9" });
+
+        var (again, record) = store.Create(Doc(1), false, "LibreOffice");
+
+        Assert.Equal(path, again);
+        Assert.True(record.CheckedOutHere);
+        Assert.Equal("s9", record.LastSaveId);
+        Assert.Equal("x", File.ReadAllText(path));
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"docNumber\":1}")]
+    [InlineData("[]")]
+    public void AnIncompleteRecordIsSkipped(string body)
+    {
+        var store = Store();
+        store.Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(Path.Combine(Paths.Copies, ".Partial #9 v1.0.docx.healdan.json"), body);
+        Assert.Single(store.All());
+    }
+
+    [Fact]
+    public void RenameWritesTheNewRecordBeforeMovingTheFile()
+    {
+        var store = Store();
+        var (path, _) = store.Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(path, "x");
+        // Make the move fail: a directory already sits at the new name.
+        Directory.CreateDirectory(Path.Combine(Paths.Copies, "Lease agreement #1 v2.2.docx"));
+
+        Assert.ThrowsAny<IOException>(() => store.Rename(path, "2.2"));
+
+        Assert.True(File.Exists(path));
+        Assert.NotNull(store.Find(path));
+        Assert.Single(store.All());
     }
 
     [Fact]

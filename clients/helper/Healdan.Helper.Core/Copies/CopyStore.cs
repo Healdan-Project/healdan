@@ -15,22 +15,25 @@ public sealed class CopyStore(HelperPaths paths)
 
     /// <summary>
     /// Writes the record for a new copy and returns the path the copy will have; the content is the caller's to put there.
-    /// If a copy of this document is already here and has changes Healdan hasn't confirmed, nothing is touched and that
-    /// copy is returned instead. Copies of it with no such changes are removed first, so one document has one copy.
+    /// It never deletes anything: removing a copy is the caller's decision. If this document already has a copy with
+    /// changes Healdan hasn't confirmed, that copy is returned untouched. If a file already sits at the target path with
+    /// no usable record, a record with no confirmed hash is written for it, so it counts as unconfirmed and is kept.
+    /// Otherwise the record is written, carrying <c>CheckedOutHere</c> and <c>LastSaveId</c> over from a record already
+    /// at that path. Other copies of the document, at other paths, are left alone.
     /// </summary>
     public (string Path, CopyRecord Record) Create(Api.DocumentView doc, bool readOnly, string app)
     {
         EnsureFolders();
-        var existing = All().Where(c => c.Record.DocNumber == doc.DocNumber).ToList();
-        var unconfirmed = existing.FirstOrDefault(c => HasUnconfirmedChanges(c.Path));
+        var unconfirmed = All().FirstOrDefault(c => c.Record.DocNumber == doc.DocNumber && HasUnconfirmedChanges(c.Path));
         if (unconfirmed.Path is not null)
             return unconfirmed;
-        foreach (var (path, _) in existing)
-            Delete(path);
 
         var record = new CopyRecord(doc.DocNumber, doc.Name, doc.Version, doc.FileVersion, readOnly, false, null, null, app, null);
+        var path = PathOf(record);
+        if (Find(path) is (_, var old))
+            record = record with { CheckedOutHere = old.CheckedOutHere, LastSaveId = old.LastSaveId };
         Save(record);
-        return (PathOf(record), record);
+        return (path, record);
     }
 
     /// <summary>Writes the record whole, through a temporary file renamed over the old one, so a crash leaves either.</summary>
@@ -81,9 +84,18 @@ public sealed class CopyStore(HelperPaths paths)
         var target = PathOf(renamed);
         if (target == path)
             return path;
-        if (File.Exists(path))
-            File.Move(path, target, overwrite: false);
+        // The record first: a crash between the two steps must never leave the file under a name with no record.
         Save(renamed);
+        try
+        {
+            if (File.Exists(path))
+                File.Move(path, target, overwrite: false);
+        }
+        catch
+        {
+            File.Delete(RecordPath(target));
+            throw;
+        }
         File.Delete(RecordPath(path));
         return target;
     }
@@ -110,9 +122,16 @@ public sealed class CopyStore(HelperPaths paths)
         var record = Read(RecordPath(path));
         if (record?.ConfirmedHash is null)
             return true;
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-        var hash = Convert.ToHexString(SHA256.HashData(stream));
-        return !hash.Equals(record.ConfirmedHash, StringComparison.OrdinalIgnoreCase);
+        try
+        {
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var hash = Convert.ToHexString(SHA256.HashData(stream));
+            return !hash.Equals(record.ConfirmedHash, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return true; // unreadable: keep it
+        }
     }
 
     private string PathOf(CopyRecord r) =>
@@ -125,9 +144,14 @@ public sealed class CopyStore(HelperPaths paths)
     {
         try
         {
-            return JsonSerializer.Deserialize<CopyRecord>(File.ReadAllText(recordPath), Json);
+            var r = JsonSerializer.Deserialize<CopyRecord>(File.ReadAllText(recordPath), Json);
+            // A body like {} parses but leaves the fields the copy's name needs null.
+            if (r is null || r.DocumentName is null || r.FileVersion is null || r.Version is null || r.App is null)
+                return null;
+            _ = CopyNames.FileName(r.DocumentName, r.DocNumber, r.FileVersion, r.ReadOnly);
+            return r;
         }
-        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or ArgumentException or NullReferenceException)
         {
             return null;
         }
