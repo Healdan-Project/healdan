@@ -20,10 +20,14 @@ public sealed class HealdanApi
     public HealdanApi(Uri server, HttpMessageHandler? handler = null)
     {
         RequireHttps(server);
+        Server = server;
         _http = handler is null ? new HttpClient() : new HttpClient(handler, disposeHandler: false);
         _http.BaseAddress = new Uri(server.GetLeftPart(UriPartial.Path).TrimEnd('/') + "/api/");
         _http.Timeout = TimeSpan.FromMinutes(10);
     }
+
+    /// <summary>The server's address as given.</summary>
+    public Uri Server { get; }
 
     /// <summary>The device token. Never logged.</summary>
     public string? Token { get; set; }
