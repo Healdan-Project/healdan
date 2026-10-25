@@ -1,0 +1,5 @@
+bin/
+obj/
+*.oxt
+__pycache__/
+TestResults/
