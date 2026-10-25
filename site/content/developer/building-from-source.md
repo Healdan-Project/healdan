@@ -55,6 +55,27 @@ Healdan's modules need.
   mvn -pl logicaldoc-gui -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install
   ```
 
+## The Desktop Clients
+
+The desktop clients are under `clients/`, and build separately from Maven.
+
+- **The helper's core** is a .NET project in `clients/helper/Healdan.Helper.Core`, with its tests in
+  `clients/helper/Healdan.Helper.Core.Tests`. You need the .NET 10 SDK; `clients/helper/global.json` pins the
+  version, and `clients/helper/nuget.config` restores packages from nuget.org only.
+- **The LibreOffice extension's tests** are Python's `unittest`, in `clients/libreoffice/tests`. You need Python 3
+  and nothing else: the tests use the standard library only.
+
+```bash
+dotnet test clients/helper/Healdan.Helper.sln                                  # the helper's tests
+dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain"  # the real macOS keychain, on a Mac
+dotnet test clients/helper/Healdan.Helper.sln --filter "Category=Stack"        # needs HEALDAN_STACK_URL
+python3 -m unittest discover -s clients/libreoffice/tests -v                   # the extension's tests
+```
+
+Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
+`http://localhost:8080`. Start a throwaway stack with the smoke fixture overlay first (see
+[Tests](../tests/)). Tests marked `MacKeychain` touch your real keychain, so they run only when you ask for them.
+
 ## Good to Know
 
 - `logicaldoc-parent` is a module of the build, and the root POM inherits from it, so dependency and plugin

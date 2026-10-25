@@ -38,6 +38,9 @@ mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder' # one
 mvn -pl healdan-core test -Dtest=FilingRulesTest          # Healdan's tests, or one class of them
 mvn -pl healdan-core -DskipTests install                  # healdan-core with its test-jar, which healdan-api's tests need
 mvn -pl healdan-api test -Dtest=FolderResourceTest        # the API's tests, or one class of them
+dotnet test clients/helper/Healdan.Helper.sln             # the desktop helper's tests (.NET 10 SDK; global.json pins it)
+dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain" # the real macOS keychain, by hand on a Mac
+python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice extension's tests (standard library only)
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
@@ -51,7 +54,11 @@ mvn -pl healdan-api test -Dtest=FolderResourceTest        # the API's tests, or 
   - The tests are every test class in a `healdan-*` module (found without a list) and the upstream tests named in the workflow's `UPSTREAM_TESTS`, which cover Healdan's edits to upstream code. Add a test class there when a change edits upstream code. A name no upstream module has fails the check.
   - The `checks` job runs the quick checks, then `.github/scripts/test-shards.py` splits the tests into shards of about five minutes (at most eight). Each class weighs its time in the newest successful run, which the `test-times` job caches, or 3 s per `@Test` until it has one. Each `Tests (n of N)` job installs the modules, without javadoc or plugin zips, and runs its share. The `build` job, the check master requires, passes when they all did, or when a docs-only pull request skipped them.
   - Its Maven repository cache falls back to master's newest copy, and only master saves it (from one shard), so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
-- Pull requests that change only `docs/`, `site/` or Markdown files outside `src/` skip the build steps in both CI workflows and still report the required checks (`.github/scripts/code-changed.sh`).
+- `.github/scripts/code-changed.sh` writes two outputs for a pull request (a push gets both true):
+  - `code` is false when it changes only `docs/`, `site/`, Markdown files outside `src/` and `clients/`. Both Java and Docker workflows then skip their build steps and still report the required checks.
+  - `clients` is true when it changes anything under `clients/` or `clients.yml`. `clients.yml` otherwise skips its test jobs.
+- `.github/workflows/clients.yml` runs the helper's `dotnet test` on `ubuntu-24.04` and `macos-15`, and the extension's Python tests on `ubuntu-24.04`. Its `Clients` job passes when they did, or were skipped because nothing under `clients/` changed. `Clients` goes into master's ruleset after its first green run.
+- Helper tests with `[Trait("Category", "Stack")]` need `HEALDAN_STACK_URL` and skip without it. `docker/smoke-test.sh` step 5d runs them against the smoke stack, only with `SMOKE_HELPER_TEST=1` (CI sets it, after setting up .NET), and fails unless one passed and none skipped. A `clients/`-only pull request doesn't build the image, so that test runs on master after the merge and on pull requests that change the server.
 - `logicaldoc-webservicesamples` isn't in the reactor.
 
 ## Docker
@@ -136,6 +143,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - Each step writes a `seed.<name>` marker to `hd_setting` and never runs again. Healdan's settings live in `hd_setting` too.
   - A shipped step never changes: new defaults or fixes ship as a new step name.
   - A failed seed stops startup. To re-run a step on a test stack, delete its marker row and restart.
+- **Healdan's clients** live under `clients/`. The .NET helper's window-free core is `clients/helper/Healdan.Helper.Core` (API client, local copies, the open-save-close cycle, sign-in, keychain, device id), with its xUnit tests in `clients/helper/Healdan.Helper.Core.Tests` (solution: `Healdan.Helper.sln`). The LibreOffice extension's Python tests are in `clients/libreoffice/tests`.
 - **`HealdanHooks`** (`logicaldoc-core/.../core/HealdanHooks.java`, fork-owned) lets CE code that bypasses the listeners call Healdan before it writes. Examples are the JDBC restores, `deleteTree` and `applySecurityToTree`, and the moves, renames, updates, merges and copies that write before a listener could refuse. `healdan-core` registers the implementation.
   - Every Healdan veto throws `HealdanVetoException` or a subclass. The document and folder DAOs roll back on it alone; a plain `PersistenceException` still commits.
 - **Upstream edits.** Each milestone's spec lists every upstream file it edits, with the reason: §13 of `docs/superpowers/specs/2026-10-17-m1-move-in-design.md` for M1, §9 of the M1.5 spec and §13 of `docs/superpowers/specs/2026-10-23-m2-api-foundation-design.md` for M2. Keep each edit a small hook into new code, and list it in the milestone's spec.

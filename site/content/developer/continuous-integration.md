@@ -10,7 +10,8 @@ weight: 4
 | Check | Workflow | What it does |
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`) and for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test, `SMOKE_HELPER_TEST=1`) included |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
+| `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, and the LibreOffice extension's Python tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
 ## How `build` Runs
@@ -37,11 +38,57 @@ the newest successful run, the pull request's own or else `master`'s, or 3 secon
 one. The log of `checks`' plan step lists each shard's classes with their times. A failing shard doesn't stop the
 others, so one run shows every failing test.
 
-## Docs-Only Pull Requests
+## What a Pull Request Runs
 
-A pull request that changes only `docs/`, `site/` or Markdown outside a `src/` folder skips the test shards and the
-Docker build steps, but still reports `build`, `Test (amd64)` and `Test (arm64)`, which `master` requires.
-`.github/scripts/code-changed.sh` decides. Pushes to `master` that change only those files don't rebuild the image.
+`.github/scripts/code-changed.sh` lists the files a pull request changes and writes two answers. `code` is false
+when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and `clients/`. It
+gates the Java build's test shards and the Docker build steps. `clients` is true when the pull request changes
+anything under `clients/`, or `clients.yml` itself. It gates the client test jobs. A push always gets both true.
+
+Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
+them all.
+
+| The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
+|---|---|---|---|
+| Only `clients/` | Skipped | Skipped | Run |
+| Only the server, or anything outside `clients/` and the docs | Run | Run | Skipped |
+| Only docs | Skipped | Skipped | Skipped |
+| Docs and `clients/` | Skipped | Skipped | Run |
+| The server and `clients/` | Run | Run | Run |
+
+Pushes to `master` that change only docs or `clients/` don't rebuild the image.
+
+## The Clients Check
+
+`clients.yml` has no paths filter, so every pull request runs it and the check can be required. It has four jobs:
+
+1. **`changes`** runs `code-changed.sh`.
+2. **`Helper (ubuntu-24.04)`** and **`Helper (macos-15)`** run `dotnet test clients/helper/Healdan.Helper.sln`, with
+   the .NET SDK that `clients/helper/global.json` pins.
+3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`.
+4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
+   nothing under `clients/` changed. A cancelled run fails it.
+
+`Clients` is not yet in `master`'s ruleset. The repository owner adds it after its first green run.
+
+The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan stack and skip here, because
+`HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac.
+
+### The Helper's Stack Test in the Image CI
+
+`docker/smoke-test.sh` has a step 5d, after the API's add-in flow, that runs the helper's stack test
+(`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to the smoke
+stack). It signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves and closes
+it through the helper's cycle with a fake LibreOffice.
+
+- It runs only when `SMOKE_HELPER_TEST=1`, which `docker-image.yml` sets. The workflow sets up the .NET SDK and
+  builds the helper's tests first, so a build failure shows on its own. Run locally without the variable, the
+  smoke test skips the step.
+- `dotnet test` passes when no test ran, so the step passes only if its summary shows at least one passed test and
+  none skipped.
+
+A pull request that changes only `clients/` doesn't build the image, so this test doesn't run on it. It runs on
+`master` after the merge, and on pull requests that change the server. That gap is accepted.
 
 ## Things That Catch Upstream Syncs
 
