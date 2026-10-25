@@ -15,6 +15,7 @@ import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIAutomationRoutine;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIFolder;
+import com.logicaldoc.gui.common.client.healdan.HealdanOpenInApp;
 import com.logicaldoc.gui.common.client.beans.GUIMenu;
 import com.logicaldoc.gui.common.client.beans.GUIVersion;
 import com.logicaldoc.gui.common.client.controllers.DocumentController;
@@ -381,9 +382,8 @@ public class ContextMenu extends Menu {
             GUIAccessControlEntry enabledPermissions,
             List<GUIDocument> selection,
             boolean justOneSelected) {
-        office.setEnabled(justOneSelected && Feature.enabled(Feature.OFFICE) && enabledPermissions.isWrite()
-                && enabledPermissions.isDownload() && Util.isOfficeFile(grid.getSelectedDocument().getFileName())
-                && checkStatusInSelection(Constants.DOC_UNLOCKED, selection));
+        office.setEnabled(justOneSelected && Feature.enabled(Feature.OFFICE) && enabledPermissions.isDownload()
+                && HealdanOpenInApp.handles(grid.getSelectedDocument().getFileName()));
     }
 
     private void applyDownloadSecurity(

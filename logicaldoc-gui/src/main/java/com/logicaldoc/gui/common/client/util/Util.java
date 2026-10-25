@@ -27,6 +27,7 @@ import com.logicaldoc.gui.common.client.Feature;
 import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.beans.GUIInfo;
 import com.logicaldoc.gui.common.client.beans.GUIParameter;
+import com.logicaldoc.gui.common.client.healdan.HealdanOpenInApp;
 import com.logicaldoc.gui.common.client.controllers.FolderController;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.log.EventPanel;
@@ -825,14 +826,7 @@ public abstract class Util {
     }
 
     public static void openEditWithOffice(long docId) {
-        uninstallCloseWindowAlert();
-        try {
-            WindowUtils.openUrl("ldedit:" + GWT.getHostPageBaseURL() + "ldedit?action=edit&sid="
-                    + Session.get().getSid() + "&docId=" + docId);
-            ToastNotification.showNotification(I18N.message("officeaddinhintlauncher"));
-        } finally {
-            installCloseWindowAlert();
-        }
+        HealdanOpenInApp.open(docId);
     }
 
     public static void openScan() {

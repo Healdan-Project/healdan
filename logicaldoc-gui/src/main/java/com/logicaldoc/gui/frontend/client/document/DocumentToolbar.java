@@ -15,6 +15,7 @@ import com.logicaldoc.gui.common.client.beans.GUIAttendee;
 import com.logicaldoc.gui.common.client.beans.GUICalendarEvent;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIFolder;
+import com.logicaldoc.gui.common.client.healdan.HealdanOpenInApp;
 import com.logicaldoc.gui.common.client.beans.GUIReminder;
 import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.gui.common.client.controllers.FolderController;
@@ -478,7 +479,7 @@ public class DocumentToolbar extends ToolStrip implements FolderObserver {
 				setFeatureDisabled(office);
 
 			office.addClickHandler(click -> checkPermissionsAndRun(
-					new String[] { GUIAccessControlEntry.PERMISSION_DOWNLOAD, GUIAccessControlEntry.PERMISSION_WRITE },
+					new String[] { GUIAccessControlEntry.PERMISSION_DOWNLOAD },
 					() -> Util.openEditWithOffice(document.getId())));
 		}
 	}
@@ -687,14 +688,8 @@ public class DocumentToolbar extends ToolStrip implements FolderObserver {
 		addCalendarEvent.setDisabled(!document.hasPermission(GUIAccessControlEntry.PERMISSION_CALENDAR)
 				|| !Feature.enabled(Feature.CALENDAR));
 
-		boolean isOfficeFile = false;
-		if (document.getFileName() != null)
-			isOfficeFile = Util.isOfficeFile(document.getFileName());
-		else if (document.getType() != null)
-			isOfficeFile = Util.isOfficeFileType(document.getType());
-
-		office.setDisabled(!Feature.enabled(Feature.OFFICE) || !isOfficeFile || !document.isDownload()
-				|| !document.isWrite() || document.getStatus() != Constants.DOC_UNLOCKED);
+		office.setDisabled(!Feature.enabled(Feature.OFFICE) || !HealdanOpenInApp.handles(document.getFileName())
+				|| !document.isDownload());
 		onlyoffice.setDisabled(!Feature.enabled(Feature.ONLYOFFICE) || !Menu.enabled(Menu.ONLYOFFICE)
 				|| !document.isDownload() || !document.isWrite() || document.getStatus() != Constants.DOC_UNLOCKED);
 	}
