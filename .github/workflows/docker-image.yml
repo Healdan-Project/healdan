@@ -4,7 +4,8 @@ name: Docker image
 # full speed on both. Hosted runners give it 16 GB of memory, enough for the Maven build's two GWT workers.
 #
 # - Every pull request and push that changes more than docs: per architecture, the init tool's unit tests
-#   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml.
+#   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml. Its step 5d
+#   runs the helper's stack test (clients/helper) against the smoke stack, with the .NET SDK set up beforehand.
 #   A docs-only pull request runs the test job with those steps skipped, so it still reports the required checks.
 #   The Maven build gets its dependencies from an actions/cache copy instead of downloading them each time.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
@@ -150,11 +151,29 @@ jobs:
           # pull request that changed code rebuilds the Maven stage even if it only touches docker/.
           cache-to: ${{ github.event_name == 'push' && format('type=gha,scope={0},mode=max,ignore-error=true', matrix.arch) || '' }}
 
+      # The smoke test's step 5d runs the helper's stack test (clients/helper, StackCycleTests) against the smoke stack
+      # while it's up, as smoke-test.sh removes the stack when it ends. Built first so a build failure shows on its own.
+      - name: Set up .NET
+        if: steps.changes.outputs.code == 'true'
+        uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: clients/helper/global.json
+
+      - name: Build the helper's tests
+        if: steps.changes.outputs.code == 'true'
+        env:
+          DOTNET_NOLOGO: '1'
+          DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+        run: dotnet build clients/helper/Healdan.Helper.sln
+
       - name: Smoke test
         if: steps.changes.outputs.code == 'true'
         env:
           LOGICALDOC_IMAGE: logicaldoc-community:ci
           SMOKE_BUILD: '0'
+          SMOKE_HELPER_TEST: '1'
+          DOTNET_NOLOGO: '1'
+          DOTNET_CLI_TELEMETRY_OPTOUT: '1'
         run: bash docker/smoke-test.sh
 
   publish:

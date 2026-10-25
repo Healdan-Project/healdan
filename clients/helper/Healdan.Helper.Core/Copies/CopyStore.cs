@@ -15,8 +15,9 @@ public sealed class CopyStore(HelperPaths paths)
 
     /// <summary>
     /// Writes the record for a new copy and returns the path the copy will have; the content is the caller's to put there.
-    /// It never deletes anything: removing a copy is the caller's decision. If this document already has a copy with
-    /// changes Healdan hasn't confirmed, that copy is returned untouched. If a file already sits at the target path with
+    /// It never deletes anything: removing a copy is the caller's decision. If this document already has a copy of the
+    /// same kind (read-only, or for editing) with changes Healdan hasn't confirmed, that copy is returned untouched; a
+    /// read-only open never hands back the user's edited copy. If a file already sits at the target path with
     /// no usable record, a record with no confirmed hash is written for it, so it counts as unconfirmed and is kept.
     /// Otherwise the record is written, carrying <c>CheckedOutHere</c> and <c>LastSaveId</c> over from a record already
     /// at that path. Other copies of the document, at other paths, are left alone.
@@ -27,11 +28,13 @@ public sealed class CopyStore(HelperPaths paths)
     public (string Path, CopyRecord Record, bool Existing) Create(Api.DocumentView doc, bool readOnly, string app)
     {
         EnsureFolders();
-        var unconfirmed = All().FirstOrDefault(c => c.Record.DocNumber == doc.DocNumber && HasUnconfirmedChanges(c.Path));
+        var unconfirmed = All().FirstOrDefault(c =>
+            c.Record.DocNumber == doc.DocNumber && c.Record.ReadOnly == readOnly && HasUnconfirmedChanges(c.Path));
         if (unconfirmed.Path is not null)
             return (unconfirmed.Path, unconfirmed.Record, true);
 
-        var record = new CopyRecord(doc.DocNumber, doc.Name, doc.Version, doc.FileVersion, readOnly, false, null, null, app, null);
+        var record = new CopyRecord(doc.DocNumber, doc.Name, doc.Version, doc.FileVersion, readOnly, false, null, null, app, null,
+            CopyNames.FileName(doc.Name, doc.DocNumber, doc.FileVersion, readOnly));
         var path = PathOf(record);
         var existing = false;
         if (Find(path) is (_, var old))
@@ -42,9 +45,15 @@ public sealed class CopyStore(HelperPaths paths)
         return (path, record, existing);
     }
 
-    /// <summary>Writes the record whole, through a temporary file renamed over the old one, so a crash leaves either.</summary>
+    /// <summary>
+    /// Writes the record whole, through a temporary file renamed over the old one, so a crash leaves either. It goes
+    /// beside the copy named by <see cref="CopyRecord.FileName"/>, whatever the record's versions say.
+    /// </summary>
     public void Save(CopyRecord r)
     {
+        if (string.IsNullOrEmpty(r.FileName) || r.FileName != System.IO.Path.GetFileName(r.FileName)
+            || r.FileName is "." or ".." || r.FileName.IndexOfAny(['/', '\\', '\0']) >= 0)
+            throw new ArgumentException("A copy's file name is a plain file name.", nameof(r));
         EnsureFolders();
         var target = RecordPath(PathOf(r));
         var temp = System.IO.Path.Combine(paths.Copies, $".{Guid.NewGuid():N}.tmp");
@@ -82,11 +91,18 @@ public sealed class CopyStore(HelperPaths paths)
         return record is null ? null : (path, record);
     }
 
-    /// <summary>Moves the copy and its record to the name for <paramref name="newFileVersion"/> and returns the new path.</summary>
+    /// <summary>
+    /// Moves the copy and its record to the name for <paramref name="newFileVersion"/> and returns the new path. Only for
+    /// a copy no app has open (R19); an open copy keeps its name, and its record's versions move on without it.
+    /// </summary>
     public string Rename(string path, string newFileVersion)
     {
         var (_, record) = Find(path) ?? throw new FileNotFoundException("No record for this copy.");
-        var renamed = record with { FileVersion = newFileVersion };
+        var renamed = record with
+        {
+            FileVersion = newFileVersion,
+            FileName = CopyNames.FileName(record.DocumentName, record.DocNumber, newFileVersion, record.ReadOnly)
+        };
         var target = PathOf(renamed);
         if (target == path)
             return path;
@@ -142,12 +158,18 @@ public sealed class CopyStore(HelperPaths paths)
         }
     }
 
-    private string PathOf(CopyRecord r) =>
-        System.IO.Path.Combine(paths.Copies, CopyNames.FileName(r.DocumentName, r.DocNumber, r.FileVersion, r.ReadOnly));
+    /// <summary>The folder holding every copy.</summary>
+    internal string Folder => paths.Copies;
+
+    private string PathOf(CopyRecord r) => System.IO.Path.Combine(paths.Copies, r.FileName);
 
     private string RecordPath(string copyPath) =>
         System.IO.Path.Combine(paths.Copies, CopyNames.RecordName(System.IO.Path.GetFileName(copyPath)));
 
+    /// <summary>
+    /// Reads a record. The copy it belongs to is the one its own file name names (<c>.&lt;copy&gt;.healdan.json</c>),
+    /// which can't point outside the folder, so that wins over the <c>fileName</c> written inside it.
+    /// </summary>
     private static CopyRecord? Read(string recordPath)
     {
         try
@@ -157,7 +179,11 @@ public sealed class CopyStore(HelperPaths paths)
             if (r is null || r.DocumentName is null || r.FileVersion is null || r.Version is null || r.App is null)
                 return null;
             _ = CopyNames.FileName(r.DocumentName, r.DocNumber, r.FileVersion, r.ReadOnly);
-            return r;
+            var recordName = System.IO.Path.GetFileName(recordPath);
+            const string suffix = ".healdan.json";
+            if (recordName.Length <= suffix.Length + 1 || !recordName.EndsWith(suffix, StringComparison.Ordinal))
+                return null;
+            return r with { FileName = recordName[1..^suffix.Length] };
         }
         catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException or ArgumentException or NullReferenceException)
         {
@@ -166,7 +192,7 @@ public sealed class CopyStore(HelperPaths paths)
     }
 
     /// <summary>Creates the folders private from the start, rather than narrowing them after.</summary>
-    private void EnsureFolders()
+    internal void EnsureFolders()
     {
         if (OperatingSystem.IsWindows())
             Directory.CreateDirectory(paths.Copies);

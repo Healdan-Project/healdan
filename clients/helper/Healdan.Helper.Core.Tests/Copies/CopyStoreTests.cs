@@ -146,6 +146,23 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void CreateReadOnlyLeavesAnEditedCopyAlone()
+    {
+        var store = Store();
+        var (edited, rec, _) = store.Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(edited, "unsent edits");
+        store.Save(rec with { CheckedOutHere = true });
+
+        var (path, record, existing) = store.Create(Doc(1), true, "LibreOffice");
+
+        Assert.False(existing);
+        Assert.EndsWith("Lease agreement #1 v2.1 (read-only).docx", path);
+        Assert.True(record.ReadOnly);
+        Assert.Equal("unsent edits", File.ReadAllText(edited));
+        Assert.Equal(2, store.All().Count);
+    }
+
+    [Fact]
     public void CreateLeavesAConfirmedCopyOfTheSameDocumentAlone()
     {
         var store = Store();
@@ -265,6 +282,25 @@ public class CopyStoreTests : IDisposable
         Assert.Equal("s7", store.Find(b)!.Value.Item2.LastSaveId);
         Assert.Equal("2.1", store.Find(a)!.Value.Item2.FileVersion);
         Assert.Equal(2, store.All().Count);
+    }
+
+    [Fact]
+    public void AConfirmedSaveKeepsTheCopyAtItsPath()
+    {
+        // R19: the app has the copy open under the name it was opened with, so a save moves the record's versions on
+        // but never the file.
+        var store = Store();
+        var (path, rec, _) = store.Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(path, "saved as 2.2");
+        store.Save(rec with { Version = "2.2", FileVersion = "2.2", ConfirmedHash = Hash(path), CheckedOutHere = true });
+
+        Assert.Equal(Path.Combine(Paths.Copies, "Lease agreement #1 v2.1.docx"), path);
+        var found = Assert.Single(store.All());
+        Assert.Equal(path, found.Path);
+        Assert.Equal("2.2", found.Record.FileVersion);
+        Assert.Equal("2.2", store.Find(path)!.Value.Item2.Version);
+        Assert.False(store.HasUnconfirmedChanges(path));
+        Assert.False(File.Exists(Path.Combine(Paths.Copies, ".Lease agreement #1 v2.2.docx.healdan.json")));
     }
 
     [Fact]

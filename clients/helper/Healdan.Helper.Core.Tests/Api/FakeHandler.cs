@@ -29,6 +29,8 @@ public sealed class FakeHandler : HttpMessageHandler
         _answers.Enqueue(() => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(body) });
     }
 
+    public void EnqueueResponse(Func<HttpResponseMessage> answer) => _answers.Enqueue(answer);
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         var body = request.Content is null ? [] : await request.Content.ReadAsByteArrayAsync(cancellationToken);

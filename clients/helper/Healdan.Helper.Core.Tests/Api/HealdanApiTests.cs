@@ -106,6 +106,53 @@ public class HealdanApiTests : IDisposable
     }
 
     [Fact]
+    public async Task ADownloadThatBreaksOffLeavesNoFile()
+    {
+        _handler.EnqueueResponse(() => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(new BreakingStream([1, 2, 3, 4]))
+        });
+        var path = Path.Combine(_dir, "Lease.docx");
+
+        var ex = await Assert.ThrowsAnyAsync<Exception>(() => Api().DownloadAsync(1234, path));
+
+        Assert.True(ex is IOException or HttpRequestException, ex.ToString());
+        Assert.Empty(Directory.GetFileSystemEntries(_dir));
+    }
+
+    [Fact]
+    public async Task ADownloadReplacesTheFileWhole()
+    {
+        var path = Path.Combine(_dir, "Lease.docx");
+        await File.WriteAllBytesAsync(path, [9, 9, 9, 9, 9, 9]);
+        _handler.EnqueueBytes([1, 2]);
+
+        await Api().DownloadAsync(1234, path);
+
+        Assert.Equal([1, 2], await File.ReadAllBytesAsync(path));
+        Assert.Single(Directory.GetFileSystemEntries(_dir));
+    }
+
+    /// <summary>Gives its bytes, then fails as a dropped connection does.</summary>
+    private sealed class BreakingStream(byte[] first) : MemoryStream(first)
+    {
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = base.Read(buffer, offset, count);
+            return n > 0 ? n : throw new IOException("The connection broke off.");
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            var n = await base.ReadAsync(buffer, cancellationToken);
+            return n > 0 ? n : throw new IOException("The connection broke off.");
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+    }
+
+    [Fact]
     public async Task SaveSendsMultipartWithNameAndPreconditions()
     {
         _handler.Enqueue(HttpStatusCode.Created, DocJson);

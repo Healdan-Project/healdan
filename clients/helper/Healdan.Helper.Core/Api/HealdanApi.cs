@@ -8,6 +8,7 @@ namespace Healdan.Helper.Core.Api;
 /// <summary>The helper's client for Healdan's JSON API (<c>/api/v1</c>). Calls are signed with <see cref="Token"/>.</summary>
 public sealed class HealdanApi
 {
+    /// <summary>The API's JSON: camelCase, nulls left out of requests. Also reads problems' members (<see cref="Problem"/>).</summary>
     internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -64,20 +65,36 @@ public sealed class HealdanApi
     public Task<DocumentView> ReleaseAsync(long n, CancellationToken ct = default) =>
         SendJsonAsync<DocumentView>(HttpMethod.Delete, $"v1/documents/{n}/checkout", null, ct);
 
-    /// <summary>Downloads the current file, or that of <paramref name="version"/>, to <paramref name="path"/>.</summary>
+    /// <summary>
+    /// Downloads the current file, or that of <paramref name="version"/>, to <paramref name="path"/>. It's written to a
+    /// hidden temporary file beside it first and moved into place whole, so a download that breaks off never leaves a
+    /// partial file at <paramref name="path"/>, nor replaces one that was there.
+    /// </summary>
     public async Task DownloadAsync(long n, string path, string? version = null, CancellationToken ct = default)
     {
         var url = $"v1/documents/{n}/content" + (version is null ? "" : "?version=" + Uri.EscapeDataString(version));
         using var response = await SendAsync(HttpMethod.Get, url, null, ct);
-        await using var file = File.Create(path);
-        await response.Content.CopyToAsync(file, ct);
+        var temp = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(path))!, $".healdan-{Guid.NewGuid():N}.part");
+        try
+        {
+            await using (var file = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                await response.Content.CopyToAsync(file, ct);
+            File.Move(temp, path, overwrite: true);
+        }
+        finally
+        {
+            File.Delete(temp); // nothing left once it has been moved
+        }
     }
 
     /// <summary>Saves the file at <paramref name="path"/>. It's read into memory first, as the app may write it meanwhile.</summary>
-    public async Task<DocumentView> SaveAsync(long n, string path, SaveRequest request, CancellationToken ct = default)
+    public async Task<DocumentView> SaveAsync(long n, string path, SaveRequest request, CancellationToken ct = default) =>
+        await SaveAsync(n, await File.ReadAllBytesAsync(path, ct), Path.GetFileName(path), request, ct);
+
+    /// <summary>Saves <paramref name="content"/>, so the caller knows exactly which bytes it sent (and can send them again).</summary>
+    public async Task<DocumentView> SaveAsync(long n, byte[] content, string fileName, SaveRequest request, CancellationToken ct = default)
     {
-        var bytes = await File.ReadAllBytesAsync(path, ct);
-        using var form = Multipart("version", request, bytes, Path.GetFileName(path));
+        using var form = Multipart("version", request, content, fileName);
         return await SendJsonAsync<DocumentView>(HttpMethod.Post, $"v1/documents/{n}/versions", form, ct);
     }
 

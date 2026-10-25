@@ -198,6 +198,27 @@ api_started=$SECONDS
 check "the add-in flow through the API" env BASE="$BASE" bash docker/tests/test-api.sh
 echo "step 5c took $((SECONDS - api_started)) s"
 
+echo "== 5d. the helper's open-save-close cycle (clients/helper, StackCycleTests)"
+# Signs in through /api/v1 as admin with a device id, files a document in the Smoke Matter, and opens it, saves it twice
+# and closes it through the helper's cycle with a fake LibreOffice. It runs after 5c, whose wrong passwords block only
+# other usernames and leave this address well under the throttle's limit. Needs the .NET SDK clients/helper/global.json
+# names, so it runs only with SMOKE_HELPER_TEST=1, which CI sets.
+# dotnet test passes when no test ran, so its summary must show one passed and none skipped.
+helper_stack_test() {
+  local out
+  out=$(HEALDAN_STACK_URL="$BASE" dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack 2>&1) \
+    || { tail -40 <<<"$out"; return 1; }
+  grep -E 'Passed!|Failed!' <<<"$out" || true
+  grep -Eq 'Passed: +[1-9]' <<<"$out" && grep -Eq 'Skipped: +0,' <<<"$out"
+}
+if [ "${SMOKE_HELPER_TEST:-0}" = 1 ]; then
+  helper_started=$SECONDS
+  check "the helper's cycle against the stack" helper_stack_test
+  echo "step 5d took $((SECONDS - helper_started)) s"
+else
+  echo "skipped: set SMOKE_HELPER_TEST=1 to run it"
+fi
+
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \
   'MYSQL_PWD="$MARIADB_PASSWORD" mariadb -u"$MARIADB_USER" "$MARIADB_DATABASE" -Nse "select 1 from ld_webservicecall where 1=0"'
