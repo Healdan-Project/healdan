@@ -1,0 +1,26 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Healdan.Helper.Windows.SignInWindow"
+        Title="Sign In to Healdan"
+        Width="420"
+        SizeToContent="Height"
+        CanResize="False"
+        CanMinimize="False"
+        CanMaximize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- A plain window for now; the next task restyles it with the helper's other windows (spec §5.8). -->
+  <StackPanel Margin="24" Spacing="6">
+    <TextBlock Text="Sign In to Healdan" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10" />
+    <TextBlock Text="Server Address" />
+    <TextBox x:Name="Server" PlaceholderText="https://healdan.example" />
+    <TextBlock Text="Username" Margin="0,6,0,0" />
+    <TextBox x:Name="User" />
+    <TextBlock Text="Password" Margin="0,6,0,0" />
+    <TextBox x:Name="Password" PasswordChar="&#x2022;" />
+    <TextBlock x:Name="Problem" Foreground="#C42B1C" TextWrapping="Wrap" IsVisible="False" Margin="0,6,0,0" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,0">
+      <Button x:Name="CancelButton" Content="Cancel" IsCancel="True" />
+      <Button x:Name="SignInButton" Content="Sign In" IsDefault="True" Classes="accent" />
+    </StackPanel>
+  </StackPanel>
+</Window>

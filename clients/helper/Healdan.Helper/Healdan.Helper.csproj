@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The menu-bar app (spec §5.1) on top of the window-free core. Everything testable is in Healdan.Helper.Core. -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Healdan.Helper</RootNamespace>
+    <!-- The binary the packages start (Task 19's bundle, Task 22's /opt/healdan-helper/HealdanHelper). -->
+    <AssemblyName>HealdanHelper</AssemblyName>
+    <!-- Notifications call the Objective-C runtime with a block, which needs a function pointer. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <AvaloniaResource Include="Assets/**" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Healdan.Helper.Core/Healdan.Helper.Core.csproj" />
+  </ItemGroup>
+</Project>

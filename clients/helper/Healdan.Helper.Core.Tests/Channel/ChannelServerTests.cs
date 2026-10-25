@@ -196,6 +196,9 @@ public sealed class ChannelServerTests : IDisposable
             }
             return new JsonObject();
         });
+        // The first requests pay for the JIT and the listener's warm-up, which a CI runner can stretch past 200 ms.
+        (await Send(HttpMethod.Get, "/v1/ping", null, null)).Dispose();
+        (await Send(HttpMethod.Post, "/v1/state", """{"path":"warm-up"}""")).Dispose();
         var watch = Stopwatch.StartNew();
         var response = await Send(HttpMethod.Post, "/v1/link", """{"url":"healdan://x"}""");
         Assert.True(watch.ElapsedMilliseconds < 200, $"took {watch.ElapsedMilliseconds} ms");

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Healdan.Helper.Core.Logging;
 
 namespace Healdan.Helper.Core.Security;
 
@@ -19,8 +20,9 @@ public sealed partial record DeviceIdentity(string Id, string Name)
     /// <summary>
     /// Reads the id, or makes and keeps one. A file that can't be read is renamed to <c>device.json.bad</c> and a new
     /// id made, so it is never silently overwritten; check-outs held under the old id then read as another computer's.
+    /// That is noted in <paramref name="log"/>.
     /// </summary>
-    public static DeviceIdentity Load(HelperPaths paths, string? computerName = null)
+    public static DeviceIdentity Load(HelperPaths paths, string? computerName = null, HelperLog? log = null)
     {
         var name = Cut("Healdan Helper on " + (computerName ?? ComputerName()));
         var id = ReadId(paths.Device);
@@ -29,7 +31,7 @@ public sealed partial record DeviceIdentity(string Id, string Name)
             if (File.Exists(paths.Device))
             {
                 File.Move(paths.Device, paths.Device + ".bad", overwrite: true);
-                Console.Error.WriteLine("Healdan Helper: device.json was unreadable; kept as device.json.bad and made a new device id.");
+                log?.Warn("device.json was unreadable; kept as device.json.bad and made a new device id");
             }
             id = Guid.NewGuid().ToString();
             Directory.CreateDirectory(paths.Support);
