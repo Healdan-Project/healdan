@@ -44,6 +44,11 @@ out=$(init -e DB_PASSWORD= 2>&1) && rc=0 || rc=$?
 check "exits 1" test "$rc" = 1
 check "names DB_PASSWORD" grep -q 'DB_PASSWORD is not set' <<<"$out"
 
+echo "== 1b. LOGICALDOC_TRUSTED_PROXIES with a host name, refused before the database wait"
+out=$(init -e LOGICALDOC_TRUSTED_PROXIES=192.168.1.10,npm 2>&1) && rc=0 || rc=$?
+check "exits 1" test "$rc" = 1
+check "names the setting and the entry" grep -q "LOGICALDOC_TRUSTED_PROXIES: 'npm'" <<<"$out"
+
 echo "== 2. database starts after the app; conf left unseeded by run 1 is seeded now"
 log2=$(mktemp)
 init -e DB_WAIT_SECONDS=180 >"$log2" 2>&1 &

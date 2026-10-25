@@ -30,8 +30,12 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.logicaldoc.core.AbstractCoreTestCase;
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.communication.MessageTemplate;
+import com.logicaldoc.core.communication.MessageTemplateDAO;
 import com.logicaldoc.core.security.apikey.ApiKey;
 import com.logicaldoc.core.security.apikey.ApiKeyDAO;
+import com.logicaldoc.core.security.authentication.ApiKeyBlockedException;
 import com.logicaldoc.core.security.authentication.IPBlockedException;
 import com.logicaldoc.core.security.authentication.UsernameBlockedException;
 import com.logicaldoc.core.security.authentication.WrongPasswordException;
@@ -54,7 +58,14 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	private static final String PASSWORD = "Thr0ttle-Test!";
 
 	private static final String[] KEYS = { "throttle.enabled", "throttle.username.max", "throttle.username.wait",
-			"throttle.ip.max", "throttle.ip.wait", "throttle.username.disableuser", "login.ignorecase" };
+			"throttle.ip.max", "throttle.ip.wait", "throttle.apikey.max", "throttle.apikey.wait",
+			"throttle.username.disableuser", "throttle.alert.recipients", "login.ignorecase" };
+
+	// How long an alert takes at most: CE sends it from a task scheduled 500 ms ahead
+	private static final long ALERT_WAIT_MS = 10000L;
+
+	// How long to wait for an alert that mustn't come
+	private static final long SETTLE_MS = 1500L;
 
 	private final Map<String, String> saved = new HashMap<>();
 
@@ -75,6 +86,19 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		config.setProperty("throttle.ip.max", "20");
 		config.setProperty("throttle.ip.wait", "15");
 		config.setProperty("throttle.username.disableuser", "false");
+		config.setProperty("throttle.alert.recipients", "admin");
+
+		// CE ships no alert template; this one names what it's about
+		MessageTemplate template = new MessageTemplate();
+		template.setName("bfa.alert");
+		template.setLanguage("en");
+		template.setSubject("alert:$!suspectedUsername:$!suspectedIp:$!suspectedApiKey");
+		template.setBody("$!suspectedUsername");
+		try {
+			MessageTemplateDAO.get().store(template);
+		} catch (PersistenceException e) {
+			throw new IllegalStateException(e);
+		}
 
 		outside = new Client("c1", "10.0.0.9", "host");
 		server = new Client("c2", "127.0.0.1", "localhost");
@@ -163,6 +187,41 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 	private String lastFailure(long userId) throws SQLException {
 		List<String> comments = failures(userId);
 		return comments.isEmpty() ? null : comments.get(comments.size() - 1);
+	}
+
+	// The subjects of the alerts sent so far, oldest first
+	private List<String> alerts() throws SQLException {
+		List<String> subjects = new ArrayList<>();
+		try (Connection con = getConnection();
+				PreparedStatement ps = con.prepareStatement(
+						"select ld_subject from ld_systemmessage where ld_subject like 'alert:%' order by ld_id")) {
+			try (ResultSet rs = ps.executeQuery()) {
+				while (rs.next())
+					subjects.add(rs.getString(1));
+			}
+		}
+		return subjects;
+	}
+
+	// The alerts once there are at least that many, or after the alert wait
+	private List<String> awaitAlerts(int expected) throws SQLException, InterruptedException {
+		long deadline = System.currentTimeMillis() + ALERT_WAIT_MS;
+		while (alerts().size() < expected && System.currentTimeMillis() < deadline)
+			Thread.sleep(100);
+		Thread.sleep(SETTLE_MS);
+		return alerts();
+	}
+
+	private String body(String subject) throws SQLException {
+		try (Connection con = getConnection();
+				PreparedStatement ps = con
+						.prepareStatement("select ld_messagetext from ld_systemmessage where ld_subject = ?")) {
+			ps.setString(1, subject);
+			try (ResultSet rs = ps.executeQuery()) {
+				assertTrue(rs.next());
+				return rs.getString(1);
+			}
+		}
 	}
 
 	// A failed sign-in of any kind, such as for an unknown username
@@ -411,6 +470,93 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 
 		fail("author", outside);
 		assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+	}
+
+	// One alert when the block starts, not one per blocked attempt
+	@Test
+	public void testOneAlertWhenAUsernameBlockStarts() throws Exception {
+		for (int i = 0; i < 4; i++)
+			fail("author", outside);
+		assertEquals(List.of(), awaitAlerts(0));
+
+		fail("author", outside);
+		for (int i = 0; i < 3; i++)
+			assertThrows(UsernameBlockedException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(List.of("alert:author::"), awaitAlerts(1));
+	}
+
+	@Test
+	public void testOneAlertWhenAnAddressBlockStarts() throws Exception {
+		failFrom(outside, 19);
+		assertEquals(List.of(), awaitAlerts(0));
+
+		failAny("u19", outside);
+		for (int i = 0; i < 3; i++)
+			assertThrows(IPBlockedException.class, () -> signIn("author", PASSWORD, outside));
+
+		assertEquals(List.of("alert::10.0.0.9:"), awaitAlerts(1));
+	}
+
+	// A block that lifted and started again is a new block
+	@Test
+	public void testAnotherAlertWhenABlockStartsAgain() throws Exception {
+		for (int i = 0; i < 5; i++)
+			fail("author", outside);
+		assertEquals(1, awaitAlerts(1).size());
+		age(LoginThrottle.LOGINFAIL_USERNAME + "author", 16);
+
+		for (int i = 0; i < 5; i++)
+			fail("author", outside);
+
+		assertEquals(List.of("alert:author::", "alert:author::"), awaitAlerts(2));
+	}
+
+	// The username is whatever the client typed, and the alert is HTML. (No '>': the chain would read the name
+	// before it as an impersonation's account.)
+	@Test
+	public void testAlertEscapesTheUsername() throws Exception {
+		for (int i = 0; i < 5; i++)
+			failAny("<img src=x onerror=alert(1) &", outside);
+
+		List<String> alerts = awaitAlerts(1);
+		assertEquals(List.of("alert:&lt;img src=x onerror=alert(1) &amp;::"), alerts);
+		assertEquals("&lt;img src=x onerror=alert(1) &amp;", body(alerts.get(0)));
+	}
+
+	// ld_sequence never holds a key: its counter is named after the key's SHA-256, as ld_apikey stores it
+	@Test
+	public void testKeyCounterIsNamedByTheKeysDigest() throws Exception {
+		String key = "ld-0123456789abcdef0123456789abcdef";
+		assertThrows(com.logicaldoc.core.security.authentication.AuthenticationException.class,
+				() -> SessionManager.get().newSession(key, outside));
+
+		assertEquals(-1L, count(LoginThrottle.LOGINFAIL_APIKEY + key));
+		assertEquals(1L, count(LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encryptSHA256(key)));
+	}
+
+	@Test
+	public void testRepeatedWrongKeyIsBlocked() throws Exception {
+		Context.get().getConfig().setProperty("throttle.apikey.max", "3");
+		Context.get().getConfig().setProperty("throttle.apikey.wait", "15");
+		String key = "ld-0123456789abcdef0123456789abcdef";
+		for (int i = 0; i < 3; i++)
+			assertThrows(com.logicaldoc.core.security.authentication.AuthenticationException.class,
+					() -> SessionManager.get().newSession(key, outside));
+
+		assertThrows(ApiKeyBlockedException.class, () -> SessionManager.get().newSession(key, outside));
+		// Never the key itself, which the alert's email would carry
+		assertEquals(List.of("alert:::unknown"), awaitAlerts(1));
+	}
+
+	// The API Keys screen's label for a key of this install, so an admin can tell which one
+	@Test
+	public void testKeyLabel() throws Exception {
+		ApiKey key = new ApiKey(4L, "AuthorKey");
+		ApiKeyDAO.get().store(key);
+
+		assertEquals(key.getLabel(), HealdanThrottle.keyLabel(key.getDecodedKey()));
+		assertEquals("unknown", HealdanThrottle.keyLabel("ld-0123456789abcdef0123456789abcdef"));
 	}
 
 	@Test
