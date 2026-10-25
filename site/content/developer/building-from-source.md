@@ -65,6 +65,7 @@ The desktop clients are under `clients/`, and build separately from Maven.
 - **The LibreOffice extension** is Python, in `clients/libreoffice`. Its tests are Python's `unittest`, in
   `clients/libreoffice/tests`. You need Python 3 and nothing else: the tests use the standard library only.
   `build.sh` packages the extension as `clients/libreoffice/healdan.oxt`, which the tests also build and check.
+  The same sources give the same bytes; `SOURCE_DATE_EPOCH`, when set, is the time every entry carries.
 
 ```bash
 dotnet test clients/helper/Healdan.Helper.sln                                  # the helper's tests

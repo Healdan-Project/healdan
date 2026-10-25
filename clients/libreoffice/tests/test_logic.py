@@ -322,7 +322,10 @@ class ChannelTest(unittest.TestCase):
     def test_channel_with_damaged_info_is_unreachable(self):
         path = os.path.join(self.support.name, "channel.json")
         for content in ("", "{", "[]", '{"port": 0, "secret": "s", "pid": 1}', '{"port": 1, "secret": "", "pid": 1}',
-                        '{"port": "1", "secret": "s", "pid": 1}', '{"port": 1, "secret": "s", "pid": true}'):
+                        '{"port": "1", "secret": "s", "pid": 1}', '{"port": 1, "secret": "s", "pid": true}',
+                        json.dumps({"port": 1, "secret": "x" * 48, "pid": os.getpid()}),
+                        json.dumps({"port": 1, "secret": "ab" * 23, "pid": os.getpid()}),
+                        json.dumps({"port": 1, "secret": "ab" * 24 + "\r\nX-Other: 1", "pid": os.getpid()})):
             with open(path, "w") as f:
                 f.write(content)
             with self.assertRaises(logic.ChannelUnreachable, msg=content):
@@ -345,6 +348,16 @@ class ChannelTest(unittest.TestCase):
         self.write_info(port)
         with self.assertRaises(logic.ChannelUnreachable):
             logic.Channel(self.support.name).call("state", {}, timeout=2)
+
+    def test_a_header_http_client_refuses_is_unreachable_and_never_quoted(self):
+        port = self.serve()
+        bad = "ab" * 24 + "\r\nX-Other: 1"
+        channel = logic.Channel(self.support.name)
+        channel.info = lambda: {"port": port, "secret": bad, "pid": os.getpid()}
+        with self.assertRaises(logic.ChannelUnreachable) as raised:
+            channel.call("state", {}, timeout=5)
+        self.assertNotIn("ab" * 24, str(raised.exception))
+        self.assertEqual([], _Recorder.seen)
 
     def test_channel_error_answer_is_an_error(self):
         port = self.serve()
@@ -416,6 +429,7 @@ class FakeDoc:
     def __init__(self, log, url="", kind="writer", title="Untitled 1", read_only=False, modified=True,
                  has_doc_id=False):
         self.log = log
+        self.model = object()
         self.url = url
         self.kind = kind
         self.title = title
@@ -671,6 +685,144 @@ class FlowsTest(unittest.TestCase):
         channel = FakeChannel(save_new=self.save_answer(), file=self.state("Lease agreement #1234 v1.0.odt"))
         self.assertFalse(logic.Flows(channel, self.copies, self.ui, QUIET).command(".uno:Save", doc, self.original()))
         self.assertEqual([False], told)
+
+    def test_a_surprise_before_any_window_runs_libreoffices_own_command(self):
+        class Broken(FakeDoc):
+            @property
+            def kind(self):
+                raise RuntimeError("boom")
+
+            @kind.setter
+            def kind(self, value):
+                pass
+
+        channel = FakeChannel()
+        doc = Broken(self.log)
+        self.assertEqual("own", self.flows(channel).command(".uno:Save", doc, self.original("own")))
+        self.assertEqual(["original"], self.log)
+        self.assertEqual([logic.FAILED_BEFORE.format(error="boom")], self.ui.told)
+        self.assertEqual([], channel.calls)
+
+    def test_a_surprise_after_a_window_is_told_and_runs_nothing_more(self):
+        class Breaks(FakeDoc):
+            broken = False
+
+            @property
+            def alive(self):
+                if self.broken:
+                    raise RuntimeError("gone wrong")
+                return True
+
+            @alive.setter
+            def alive(self, value):
+                pass
+
+        doc = Breaks(self.log)
+        channel = FakeChannel(save_new=self.save_answer())
+        answer = channel.call
+
+        def breaking(route, body=None, timeout=None):
+            doc.broken = True  # after the helper's window
+            return answer(route, body, timeout)
+
+        channel.call = breaking
+        self.assertFalse(self.flows(channel).command(".uno:Save", doc, self.original()))
+        self.assertNotIn("original", self.log)
+        self.assertEqual([logic.FAILED_AFTER.format(error="gone wrong")], self.ui.told)
+
+    def test_libreoffices_own_command_failing_isnt_run_twice(self):
+        runs = []
+
+        def failing():
+            runs.append(1)
+            raise RuntimeError("LibreOffice said no")
+
+        with self.assertRaises(RuntimeError):
+            self.flows(FakeChannel()).command(".uno:Save", FakeDoc(self.log, url="file:///Users/rob/a.odt"), failing)
+        self.assertEqual([1], runs)
+        self.assertEqual([], self.ui.told)
+
+    def test_buttons(self):
+        channel = FakeChannel(open_dialog={"action": "cancel"}, save_new={"action": "cancel"},
+                              properties={"action": "cancel"}, new_version={}, saved={"known": False})
+        flows = self.flows(channel)
+        copy = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"), title="Lease #1 v1.0", modified=False)
+        self.assertFalse(flows.button("OpenFromHealdan", None, self.original(), self.original()))
+        self.assertFalse(flows.button("SaveToHealdan", None, self.original(), self.original()))
+        self.assertFalse(flows.button("SaveAsNewDocument", copy, self.original(), self.original()))
+        self.assertTrue(flows.button("SaveAsNewVersion", copy, self.original(), self.original()))
+        self.assertFalse(flows.button("Properties", copy, self.original(), self.original()))
+        self.assertTrue(flows.button("InsertDocId", copy, self.original(), self.original()))
+        self.assertFalse(flows.button("Nonsense", copy, self.original(), self.original()))
+        self.assertEqual(["open-dialog", "save-new", "new-version", "saved", "properties"], channel.routes())
+        self.assertEqual("#1 v1.0", copy.doc_id)
+
+    def test_a_surprise_in_a_button(self):
+        doc = FakeDoc(self.log)
+        doc.fail["insert_doc_id"] = RuntimeError("no footer")
+        boxes = []
+        flows = self.flows(FakeChannel())
+        self.assertFalse(flows.button("InsertDocId", doc, lambda: boxes.append("open"), lambda: boxes.append("save as")))
+        self.assertEqual([], boxes)  # nothing of LibreOffice's to run instead
+        self.assertEqual([logic.FAILED_AFTER.format(error="no footer")], self.ui.told)
+
+        class Broken(FakeDoc):
+            kind = property(lambda d: (_ for _ in ()).throw(RuntimeError("boom")), lambda d, v: None)
+
+        self.ui.told.clear()
+        flows.button("SaveToHealdan", Broken(self.log), lambda: boxes.append("open"), lambda: boxes.append("save as"))
+        self.assertEqual(["save as"], boxes)
+        self.assertEqual([logic.FAILED_BEFORE.format(error="boom")], self.ui.told)
+
+    def test_a_filing_with_no_copy_is_told_and_never_filed_twice(self):
+        channel = FakeChannel(save_new=self.save_answer(), file={"known": True, "docNumber": 1234, "docRef": "#1234 v1.0"})
+        doc = FakeDoc(self.log)
+        flows = self.flows(channel)
+        self.assertFalse(flows.command(".uno:Save", doc, self.original()))
+        self.assertEqual([logic.NO_COPY.format(ref="#1234 v1.0", it="#1234 v1.0")], self.ui.told)
+        self.assertNotIn("original", self.log)
+        # The next Save on that window keeps the changes on this computer instead of filing it again.
+        self.assertTrue(flows.command(".uno:Save", doc, self.original()))
+        self.assertTrue(flows.save_to_healdan(doc, self.original()))
+        self.assertEqual(["save-new", "file"], channel.routes())
+        self.assertEqual(2, self.log.count("original"))
+        self.assertIn("already filed in Healdan as #1234 v1.0", self.ui.told[1])
+        # Another window is filed as usual, and so is this one's document once its window has closed.
+        flows.command(".uno:Save", FakeDoc(self.log), self.original())
+        self.assertEqual(["save-new", "file", "save-new", "file"], channel.routes())
+        flows.window_closed(doc.model)
+        channel.answers["save-new"] = {"action": "cancel"}
+        flows.command(".uno:Save", doc, self.original())
+        self.assertEqual(["save-new", "file", "save-new", "file", "save-new"], channel.routes())
+
+    def test_a_filing_with_an_unknown_state_names_no_number(self):
+        channel = FakeChannel(save_new=self.save_answer(), file={"known": False})
+        doc = FakeDoc(self.log)
+        flows = self.flows(channel)
+        self.assertFalse(flows.command(".uno:Save", doc, self.original()))
+        self.assertEqual([logic.NO_COPY.format(ref="The document", it="it")], self.ui.told)
+        flows.command(".uno:SaveAs", doc, self.original())
+        self.assertEqual(["save-new", "file"], channel.routes())
+        self.assertIn("already filed in Healdan, but", self.ui.told[1])
+
+    def test_a_window_that_couldnt_adopt_its_copy_isnt_filed_twice(self):
+        channel = FakeChannel(save_new=self.save_answer(), file=self.state("Lease agreement #1234 v1.0.odt"))
+        doc = FakeDoc(self.log)
+        doc.fail["adopt"] = IOError("no room")
+        flows = self.flows(channel)
+        flows.command(".uno:Save", doc, self.original())
+        flows.command(".uno:Save", doc, self.original())
+        self.assertEqual(["save-new", "file"], channel.routes())
+
+    def test_a_title_that_cant_be_set_still_counts_as_filed(self):
+        state = self.state("Lease agreement #1234 v1.0.odt")
+        channel = FakeChannel(save_new=self.save_answer(), file=state)
+        doc = FakeDoc(self.log)
+        doc.fail["set_title"] = RuntimeError("no title")
+        self.assertTrue(self.flows(channel).command(".uno:Save", doc, self.original()))
+        self.assertEqual([], self.ui.told)
+        self.assertNotIn("original", self.log)
+        self.assertTrue(logic.is_copy(doc.url, self.copies))
 
     def test_save_new_adopt_failure_is_told(self):
         channel = FakeChannel(save_new=self.save_answer(), file=self.state("Lease agreement #1234 v1.0.odt"))

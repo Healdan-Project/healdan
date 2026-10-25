@@ -81,9 +81,18 @@ NOT_FILED_DOC_ID = ("This document gets its doc ID once it's saved to Healdan, a
 WRITE_FAILED = "LibreOffice couldn't write the document for Healdan ({error}), so LibreOffice's own Save As box is shown."
 STORE_FAILED = "LibreOffice couldn't save this document ({error})."
 ADOPT_FAILED = ("{ref} is filed in Healdan, but LibreOffice couldn't save this window as its local copy ({error}). "
-                "Close this window without saving, and open {ref} from Healdan.")
+                "Close this window without saving, and open {it} from Healdan.")
+NO_COPY = ("{ref} is filed in Healdan, but Healdan Helper gave no local copy to save this window as. "
+           "Close this window without saving, and open {it} from Healdan.")
+ALREADY_FILED = ("This window's document is already filed in Healdan{as_ref}, but the window isn't its local copy, so "
+                 "LibreOffice's own Save As box is shown to keep your changes on this computer. Open {it} from "
+                 "Healdan to go on there.")
+FAILED_BEFORE = "The Healdan extension hit a problem ({error}), so LibreOffice's own command runs instead."
+FAILED_AFTER = "The Healdan extension hit a problem ({error}). Its log has the details."
 
 _LOG = logging.getLogger("healdan")
+
+_SECRET = re.compile(r"[0-9a-fA-F]{48}")
 
 
 # --- Commands --------------------------------------------------------------------------------------------------------
@@ -325,7 +334,8 @@ class Channel:
         if not isinstance(data, dict):
             return None
         port, secret, pid = data.get("port"), data.get("secret"), data.get("pid")
-        if not (_whole(port, 1) and port < 65536 and isinstance(secret, str) and secret and _whole(pid, 1)):
+        if not (_whole(port, 1) and port < 65536 and isinstance(secret, str) and _SECRET.fullmatch(secret)
+                and _whole(pid, 1)):
             return None
         return {"port": port, "secret": secret, "pid": pid}
 
@@ -345,7 +355,8 @@ class Channel:
             })
             response = connection.getresponse()
             status, raw = response.status, response.read()
-        except (OSError, http.client.HTTPException) as e:
+        except (OSError, http.client.HTTPException, ValueError) as e:
+            # Only the exception's type: http.client's ValueError for a bad header would quote the secret.
             raise ChannelUnreachable("Healdan Helper didn't answer /v1/%s (%s)" % (route, type(e).__name__))
         finally:
             connection.close()
@@ -381,6 +392,7 @@ class Flows:
       tell(doc, text, warning=True)   a short notice in the document's window (doc None: the Start Center)
 
     doc (None for the Start Center):
+      model                       the document, compared with == (UNO's own for LibreOffice's)
       url, kind, title, read_only, modified, alive
       store(), write_to(path, filter_name) (storeToURL), adopt(path, filter_name) (storeAsURL)
       set_title(title)
@@ -400,11 +412,61 @@ class Flows:
         self.log = log or _LOG
         self._told_down = False
         self._states = {}  # the latest state the helper gave for each copy, by its path
+        self._windows_asked = 0  # window routes asked for, so a surprise knows whether the user saw one
+        # Windows whose document the helper filed but that never became its local copy, as (doc.model, doc ID):
+        # saving one again mustn't file it a second time.
+        self._filed = []
 
     # -- the commands LibreOffice sends
 
     def command(self, command, doc, original):
         """An intercepted command; original() runs LibreOffice's own."""
+        return self._guarded(doc, original, lambda own: self._command(command, doc, own), fall_back=True)
+
+    def button(self, name, doc, open_box, save_as_box):
+        """A Healdan menu or toolbar command; open_box and save_as_box run LibreOffice's own Open and Save As."""
+        if name == "OpenFromHealdan":
+            return self._guarded(doc, open_box, lambda own: self.open_from_healdan(doc, own), fall_back=True)
+        if doc is None:
+            return False
+        flows = {
+            "SaveToHealdan": (self.save_to_healdan, True),
+            "SaveAsNewDocument": (self.save_as_new_document, True),
+            "SaveAsNewVersion": (self.save_as_new_version, False),
+            "Properties": (self.properties, False),
+            "InsertDocId": (lambda d, own: self.insert_doc_id(d), False),
+        }
+        if name not in flows:
+            return False
+        flow, fall_back = flows[name]
+        return self._guarded(doc, save_as_box, lambda own: flow(doc, own), fall_back)
+
+    def _guarded(self, doc, box, run, fall_back):
+        """
+        run(own), where own runs LibreOffice's own command (box), with surprises caught so the user is never left
+        with nothing: an unexpected exception before any helper window was asked for runs LibreOffice's own command
+        instead (when fall_back), and either way the user is told briefly. LibreOffice's own command is never run
+        twice: an exception from it goes on to the caller.
+        """
+        asked, ran = self._windows_asked, []
+
+        def own():
+            ran.append(True)
+            return box()
+
+        try:
+            return run(own)
+        except Exception as e:
+            if ran:
+                raise
+            self.log.exception("A Healdan command failed")
+            if fall_back and self._windows_asked == asked:
+                self.ui.tell(doc, FAILED_BEFORE.format(error=said(e)))
+                return own()
+            self.ui.tell(doc, FAILED_AFTER.format(error=said(e)))
+            return False
+
+    def _command(self, command, doc, original):
         command = _main(command)
         if command in OPENS:
             return self.open_from_healdan(doc, original)
@@ -527,7 +589,7 @@ class Flows:
             return True
         except Exception as e:
             self.log.warning("Storing a copy failed: %s", e)
-            self.ui.tell(doc, STORE_FAILED.format(error=_said(e)))
+            self.ui.tell(doc, STORE_FAILED.format(error=said(e)))
             return False
 
     def _save_new(self, doc, save_as_box, original):
@@ -537,6 +599,10 @@ class Flows:
         """
         kinds = formats(doc.kind)
         if not kinds:
+            return save_as_box()
+        filed = self._filed_as(doc)
+        if filed is not None:
+            self.ui.tell(doc, ALREADY_FILED.format(as_ref=" as " + filed if filed else "", it=filed or "it"))
             return save_as_box()
         body = {"app": APP, "name": document_name(doc.title, doc.url), "formats": kinds, "path": original}
         answer = self._window("save-new", body, doc, HELPER_DOWN_BOX)
@@ -559,7 +625,7 @@ class Flows:
         except Exception as e:
             self.log.warning("Writing the temporary file failed: %s", e)
             _remove(temp)  # the helper deletes it only after /v1/file
-            self.ui.tell(doc, WRITE_FAILED.format(error=_said(e)))
+            self.ui.tell(doc, WRITE_FAILED.format(error=said(e)))
             return save_as_box()
 
         filing = {"tempPath": temp, "folderId": answer.get("folderId"), "name": answer.get("name"), "format": fmt,
@@ -580,14 +646,14 @@ class Flows:
                 path, ref = state.get("path"), state.get("docRef") or ""
                 if not state.get("known") or not isinstance(path, str) or not path:
                     self.log.warning("Filing answered no copy to save as")
-                    failed = "no copy"
+                    failed = NO_COPY.format(ref=ref or "The document", it=ref or "it")
                 else:
                     try:
                         doc.set_doc_id(ref)
                         doc.adopt(path, filter_name)
                     except Exception as e:
                         self.log.warning("Saving the window as its copy failed: %s", e)
-                        failed = ADOPT_FAILED.format(ref=ref or "The document", error=_said(e))
+                        failed = ADOPT_FAILED.format(ref=ref or "The document", it=ref or "it", error=said(e))
         if failed == "unreachable":
             _remove(temp)
             self._down(doc, HELPER_DOWN_BOX)
@@ -595,15 +661,20 @@ class Flows:
         if failed == "refused":
             return save_as_box()
         if failed is not None:
-            if failed != "no copy":
-                self.ui.tell(doc, failed)
+            # Filed and checked out in Healdan, but this window isn't its copy.
+            self._filed.append((doc.model, ref))
+            self.ui.tell(doc, failed)
             return False
         self._remember(path, state)
-        doc.set_title(state.get("title"))
+        try:
+            doc.set_title(state.get("title"))
+        except Exception as e:
+            self.log.warning("The new copy's title couldn't be set: %s", e)  # it's filed and saved all the same
         return True
 
     def _window(self, route, body, doc, down_notice):
         """A window route: the helper's window, waited for; None when the helper can't be reached or refused."""
+        self._windows_asked += 1
         try:
             answer = self.ui.wait(lambda: self.channel.call(route, body, WINDOW_TIMEOUT))
         except ChannelUnreachable as e:
@@ -674,6 +745,28 @@ class Flows:
             return None
         return url_to_path(doc.url)
 
+    def _filed_as(self, doc):
+        """The doc ID ("" when unknown) of the document the helper filed from this window, which isn't its copy; None."""
+        for model, ref in self._filed:
+            try:
+                if model == doc.model:
+                    return ref
+            except Exception:
+                continue
+        return None
+
+    def window_closed(self, model):
+        """A document's window closed: nothing more to remember about it."""
+        kept = []
+        for known, ref in self._filed:
+            try:
+                if known == model:
+                    continue
+            except Exception:
+                continue
+            kept.append((known, ref))
+        self._filed = kept
+
     def _down(self, doc, text):
         """Tells the user once that the helper isn't running, until it has answered again."""
         if not self._told_down:
@@ -684,7 +777,7 @@ class Flows:
         self._told_down = False
 
 
-def _said(e):
+def said(e):
     """An exception as a few words for the user."""
     text = str(getattr(e, "Message", "") or e).strip()
     return text.splitlines()[0][:200] if text else type(e).__name__

@@ -448,6 +448,7 @@ class Extension:
 
     def _unloaded(self, model):
         url = _url_of(model)
+        self.flows.window_closed(model)
         if logic.is_copy(url, self.copies):
             # A moment later: File > Reload unloads the old document after loading the new one, which isn't among the
             # desktop's documents yet. The helper checks a copy in and deletes it when told it closed, so a copy still
@@ -581,27 +582,14 @@ class Extension:
         return self.flows.command(command, self.doc_for(frame), original)
 
     def button(self, name, frame):
-        doc = self.doc_for(frame)
         self.log.info("Healdan command %s", name)
+        return self.flows.button(name, self.doc_for(frame), lambda: self.own_command(frame, logic.OPENS[0]),
+                                 lambda: self.own_command(frame, logic.SAVE_AS))
 
-        def save_as():
-            return self.own_command(frame, logic.SAVE_AS)
-
-        if name == "OpenFromHealdan":
-            return self.flows.open_from_healdan(doc, lambda: self.own_command(frame, logic.OPENS[0]))
-        if doc is None:
-            return False
-        if name == "SaveToHealdan":
-            return self.flows.save_to_healdan(doc, save_as)
-        if name == "SaveAsNewVersion":
-            return self.flows.save_as_new_version(doc, save_as)
-        if name == "SaveAsNewDocument":
-            return self.flows.save_as_new_document(doc, save_as)
-        if name == "Properties":
-            return self.flows.properties(doc, save_as)
-        if name == "InsertDocId":
-            return self.flows.insert_doc_id(doc)
-        return False
+    def failed(self, frame, command, error):
+        """What escapes the flows is LibreOffice's own command failing: logged, and told briefly."""
+        self.log.error("%s failed: %s", command, logic.said(error))
+        self.ui.tell(self.doc_for(frame), logic.FAILED_AFTER.format(error=logic.said(error)))
 
     # -- Recent Documents
 
@@ -703,9 +691,12 @@ class Dispatch(unohelper.Base, XNotifyingDispatch):
         try:
             result = self.ext.command(url.Complete, self.frame, lambda: _run_own(self.own, url, args))
             state = _state(result)
-        except Exception:
-            self.ext.log.exception("%s failed", url.Complete)
+        except Exception as e:
             state = FAILURE
+            try:
+                self.ext.failed(self.frame, url.Complete, e)
+            except Exception:
+                pass
         finally:
             if listener is not None:
                 try:
@@ -741,7 +732,10 @@ class Handler(unohelper.Base, XDispatchProvider, XDispatch, XInitialization):
         try:
             ext = extension(self.ctx)
             ext.attach(self.frame)
-            ext.button(logic.button(url.Complete), self.frame)
+            try:
+                ext.button(logic.button(url.Complete), self.frame)
+            except Exception as e:
+                ext.failed(self.frame, url.Complete, e)
         except Exception:
             logging.getLogger("healdan").exception("%s failed", url.Complete)
 

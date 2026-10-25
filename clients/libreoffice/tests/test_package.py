@@ -6,6 +6,7 @@ LibreOffice says little when an extension's XML is wrong (a menu is missing, a j
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,7 +58,8 @@ class PackageTest(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.oxt = os.path.join(cls.tmp.name, "healdan.oxt")
-        subprocess.run(["sh", str(HERE / "build.sh"), cls.oxt], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(["sh", str(HERE / "build.sh"), cls.oxt], check=True, stdout=subprocess.DEVNULL,
+                       env=cls.environment(None))
         cls.zip = zipfile.ZipFile(cls.oxt)
         cls.files = {name for name in cls.zip.namelist() if not name.endswith("/")}
 
@@ -71,6 +73,49 @@ class PackageTest(unittest.TestCase):
 
     def source(self):
         return self.zip.read("healdan.py").decode("utf-8")
+
+    def test_the_same_sources_build_the_same_bytes(self):
+        with tempfile.TemporaryDirectory() as root:
+            tree = os.path.join(root, "libreoffice")
+            os.makedirs(tree)
+            shutil.copy2(HERE / "build.sh", tree)
+            shutil.copy2(HERE / "healdan_logic.py", tree)
+            shutil.copytree(HERE / "healdan", os.path.join(tree, "healdan"))
+            first, second = os.path.join(root, "first.oxt"), os.path.join(root, "second.oxt")
+            subprocess.run(["sh", os.path.join(tree, "build.sh"), first], check=True, stdout=subprocess.DEVNULL,
+                           env=self.environment(None))
+            # Other times and permissions on the sources change nothing.
+            for folder, _, files in os.walk(tree):
+                for name in files:
+                    path = os.path.join(folder, name)
+                    os.utime(path, (1_000_000_000, 1_000_000_000))
+                    os.chmod(path, 0o600)
+            subprocess.run(["sh", os.path.join(tree, "build.sh"), second], check=True, stdout=subprocess.DEVNULL,
+                           env=self.environment(None))
+            with open(first, "rb") as a, open(second, "rb") as b:
+                self.assertEqual(a.read(), b.read())
+
+    @staticmethod
+    def environment(epoch):
+        env = {key: value for key, value in os.environ.items() if key != "SOURCE_DATE_EPOCH"}
+        if epoch is not None:
+            env["SOURCE_DATE_EPOCH"] = str(epoch)
+        return env
+
+    def test_entries_are_sorted_with_one_time_and_mode(self):
+        names = [entry.filename for entry in self.zip.infolist()]
+        self.assertEqual(sorted(names), names)
+        for entry in self.zip.infolist():
+            self.assertEqual((1980, 1, 1, 0, 0, 0), entry.date_time, entry.filename)
+            self.assertEqual(0o100644, entry.external_attr >> 16, entry.filename)
+            self.assertEqual(zipfile.ZIP_DEFLATED, entry.compress_type, entry.filename)
+
+    def test_source_date_epoch_sets_the_time(self):
+        out = os.path.join(self.tmp.name, "dated.oxt")
+        subprocess.run(["sh", str(HERE / "build.sh"), out], check=True, stdout=subprocess.DEVNULL,
+                       env=self.environment(1_700_000_000))
+        with zipfile.ZipFile(out) as dated:
+            self.assertEqual({(2023, 11, 14, 22, 13, 20)}, {entry.date_time for entry in dated.infolist()})
 
     def test_every_xml_file_parses(self):
         for name in self.files:
