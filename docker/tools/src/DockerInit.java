@@ -22,8 +22,9 @@ import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.dbinit.DBInit;
 
 /**
- * Container init, run by entrypoint.sh before Tomcat starts: applies the container-managed context.properties
- * keys, waits for the database and creates the schema on first boot with the setup wizard's own DBInit.
+ * Container init, run by entrypoint.sh before Tomcat starts: works out the trusted proxies, applies the
+ * container-managed context.properties keys, waits for the database and creates the schema on first boot with the
+ * setup wizard's own DBInit.
  */
 public final class DockerInit {
 
@@ -58,6 +59,10 @@ public final class DockerInit {
     }
 
     static void run(Map<String, String> env) throws Exception {
+        String proxies = TrustedProxies.resolve(env, TrustedProxies.dockerNetworks());
+        TrustedProxies.write(TrustedProxies.FILE, proxies);
+        log("Tomcat believes X-Forwarded-For and X-Forwarded-Proto from " + (proxies.isEmpty() ? "no address" : proxies));
+
         Map<String, String> envKeys = ConfigPlan.envKeys(env);
         int waitSeconds = ConfigPlan.dbWaitSeconds(env);
         boolean seeded = applyConfig(CONFIG, DEFAULTS, envKeys);

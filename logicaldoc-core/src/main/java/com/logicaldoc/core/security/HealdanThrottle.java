@@ -1,5 +1,6 @@
 package com.logicaldoc.core.security;
 
+import java.security.NoSuchAlgorithmException;
 import java.util.Date;
 import java.util.Locale;
 
@@ -9,11 +10,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.apikey.ApiKey;
+import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.user.HibernateUserDAO;
 import com.logicaldoc.core.sequence.Sequence;
 import com.logicaldoc.core.sequence.SequenceDAO;
 import com.logicaldoc.util.config.ContextProperties;
+import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -80,6 +84,59 @@ final class HealdanThrottle {
             return;
         String address = client != null ? client.getAddress() : null;
         LoginThrottle.clearFailures(account, failedRecently(address) ? null : address);
+    }
+
+    /**
+     * The failure counter of an API key. It's named after the key's SHA-256,
+     * which is also what {@code ld_apikey} stores, so that {@code ld_sequence}
+     * never holds a key.
+     *
+     * @param key the key presented
+     *
+     * @return the counter's name
+     */
+    static String keyCounter(String key) {
+        try {
+            return LoginThrottle.LOGINFAIL_APIKEY + Encrypter.encryptSHA256(key);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
+     * How an alert or the log names an API key, never with the key itself: the
+     * label the API Keys screen shows when it's a key of this install.
+     *
+     * @param key the key presented
+     *
+     * @return the key's label, or {@code unknown}
+     */
+    static String keyLabel(String key) {
+        try {
+            ApiKey apiKey = ApiKeyDAO.get().findByKey(key);
+            if (apiKey != null)
+                return apiKey.getLabel();
+        } catch (PersistenceException | NoSuchAlgorithmException e) {
+            log.warn(e.getMessage(), e);
+        }
+        return "unknown";
+    }
+
+    /**
+     * Whether a failure just counted starts a block, which the checks then
+     * enforce: it's the limit's own count, and the limit is on. CE alerted on
+     * every blocked attempt; Healdan alerts once, when a block starts.
+     *
+     * @param limit {@code username}, {@code ip} or {@code apikey}, as in the
+     *        {@code throttle.<limit>.max} setting
+     * @param count the counter's value after this failure
+     *
+     * @return true when the alert is due
+     */
+    static boolean startsBlock(String limit, long count) {
+        ContextProperties config = Context.get().getConfig();
+        int max = config.getInt("throttle." + limit + ".max", 0);
+        return max > 0 && config.getInt("throttle." + limit + ".wait", 0) > 0 && count == max;
     }
 
     private static boolean failedRecently(String address) {

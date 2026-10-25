@@ -58,18 +58,17 @@ services.
 - **The account is never disabled,** so nobody has to unlock it.
 - **People see** "Your username is temporarily blocked. Try after 15 minutes." on the sign-in page, or "Your IP is
   temporarily blocked. Try after 15 minutes." for a blocked address. The API answers `429 too-many-attempts`.
-- **Alerts.** Each blocked attempt sends the users in `throttle.alert.recipients` (`admin` to begin with) a message
-  in Healdan, and an email too if [outgoing email](../system/outgoing-email/) is set up.
+- **Alerts.** When a username, an address or an API key gets blocked, the users in `throttle.alert.recipients`
+  (`admin` to begin with) get one message in Healdan about it, and an email too if
+  [outgoing email](../system/outgoing-email/) is set up. Attempts during the block don't send more.
 - **`admin` and the server's own address.** LogicalDOC never blocks the `admin` account signing in from
-  `127.0.0.1` or `::1`. Only a request from inside the app's container really comes from that address. But
-  anything Tomcat trusts to forward addresses can claim it: the Docker host, which reaches the app through Docker's
-  network, and the machines on your network when the app is published there or behind nginx or NPM. So the throttle
-  doesn't protect `admin` from those. Give `admin` a long password that isn't used anywhere else. See
-  [Reverse Proxy](../../install/reverse-proxy/#the-sign-in-throttle-behind-a-proxy).
+  `127.0.0.1` or `::1`. Only a request from inside the app's container comes from that address, and Healdan believes
+  a forwarded `127.0.0.1` only from a proxy it trusts. Give `admin` a long password that isn't used anywhere else
+  all the same.
 
 Behind a reverse proxy, Healdan has to see each person's own address. See
-[Reverse Proxy](../../install/reverse-proxy/#the-sign-in-throttle-behind-a-proxy), which also has the limitation
-above in full.
+[Reverse Proxy](../../install/reverse-proxy/#the-sign-in-throttle-behind-a-proxy), which says which proxies
+Healdan trusts and how to set yours.
 
 ### Changing the Limits
 
