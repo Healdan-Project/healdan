@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
@@ -20,6 +21,9 @@ namespace Healdan.Helper.Core.Channel;
 public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows windows, INotifier notifier, HelperLog log,
     HelperPaths paths, TimeSpan? savedWait = null) : IChannelHandler
 {
+    /// <summary>Knows the local copies by name, so a file named as one is never deleted as a temporary file.</summary>
+    private readonly CopyStore _store = new(paths);
+
     /// <summary><c>/v1/saved</c> answers with the next confirmation, or after this with the copy's state as it is.</summary>
     public static readonly TimeSpan SavedWait = TimeSpan.FromSeconds(120);
 
@@ -60,7 +64,7 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
     /// <summary>
     /// Save to Healdan and Save as New Document: files the window's content, which the extension wrote to
     /// <c>tempPath</c>, and answers the copy the app is to save the window as. The temporary file is deleted afterwards,
-    /// whether the filing worked or not, but only from the system's temporary folder or the helper's own. A failed
+    /// whether the filing worked or not, but only from the system's temporary folder or the helper's Temp folder. A failed
     /// filing is told to the user and thrown, so the caller falls back to the app's own save.
     /// </summary>
     private async Task<JsonNode> FileAsync(JsonObject body)
@@ -119,10 +123,10 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
     {
         try
         {
-            if (Disposable(path, paths) is { } file)
+            if (Disposable(path, paths, _store) is { } file)
                 File.Delete(file);
             else if (File.Exists(path))
-                log.Warn("The temporary file to file wasn't in the temporary folder or the helper's, so it was left in place");
+                log.Warn("Left the filed file in place: it isn't a temporary file in the temporary folder or the helper's Temp folder");
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -132,9 +136,12 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
 
     /// <summary>
     /// The file to delete for <paramref name="path"/>: the file itself, found through any links in its folders, when it
-    /// is a plain file in the system's temporary folder or the helper's own folders. Null for anything else.
+    /// is a plain file in the system's temporary folder or the helper's own Temp folder (<see cref="HelperPaths.Temp"/>,
+    /// where the extension writes). Never anything else of the helper's (a local copy, its record, the settings, the
+    /// device id), even when the helper's folder is itself in the temporary folder; never a file named as a local copy.
+    /// Null for anything that isn't to be deleted.
     /// </summary>
-    internal static string? Disposable(string path, HelperPaths paths)
+    internal static string? Disposable(string path, HelperPaths paths, CopyStore store)
     {
         if (!Path.IsPathFullyQualified(path))
             return null;
@@ -145,15 +152,20 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
         var info = new FileInfo(file);
         if (!info.Exists || info.LinkTarget is not null)
             return null;
-        List<string> roots = [Path.GetTempPath(), paths.Support];
-        if (!OperatingSystem.IsWindows())
-            roots.Add("/tmp");
-        foreach (var root in roots)
-            if (RealPath(root) is { Length: > 1 } real // never a root that resolves to "/", which would take in everything
-                && (folder == real || folder.StartsWith(real.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
-                return file;
-        return null;
+        var temp = RealPath(paths.Temp);
+        if (Under(folder, RealPath(paths.Copies)) || (Under(folder, RealPath(paths.Support)) && !Under(folder, temp)))
+            return null;
+        if (store.Find(file) is not null)
+            return null;
+        if (Under(folder, temp) || Under(folder, RealPath(Path.GetTempPath())))
+            return file;
+        return !OperatingSystem.IsWindows() && Under(folder, RealPath("/tmp")) ? file : null;
     }
+
+    /// <summary>The folder is the root or inside it. Never a root that resolves to "/", which would take in everything.</summary>
+    private static bool Under(string folder, string? root) =>
+        root is { Length: > 1 }
+        && (folder == root || folder.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal));
 
     /// <summary>The path with every link in it followed (<c>/tmp</c> is <c>/private/tmp</c> on macOS), or null if a part is missing.</summary>
     private static string? RealPath(string path, int depth = 0)

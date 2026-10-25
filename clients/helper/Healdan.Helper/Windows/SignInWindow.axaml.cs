@@ -12,6 +12,7 @@ namespace Healdan.Helper.Windows;
 public partial class SignInWindow : Window
 {
     private readonly SignInPrompt? _prompt;
+    private bool _closed;
 
     /// <summary>For the XAML loader; the helper always opens it with a prompt.</summary>
     public SignInWindow() => InitializeComponent();
@@ -23,6 +24,7 @@ public partial class SignInWindow : Window
         Server.IsReadOnly = prompt.ServerFixed;
         SignInButton.Click += OnSignIn;
         CancelButton.Click += (_, _) => Close();
+        Closed += (_, _) => _closed = true;
         Opened += (_, _) => (string.IsNullOrEmpty(Server.Text) ? Server : string.IsNullOrEmpty(User.Text) ? User : Password).Focus();
     }
 
@@ -45,6 +47,8 @@ public partial class SignInWindow : Window
         {
             problem = "Signing in failed: " + ex.Message;
         }
+        if (_closed)
+            return; // closed while signing in: a sign-in that worked starts the helper all the same
         SetBusy(false);
         if (problem is null)
         {

@@ -7,10 +7,12 @@ namespace Healdan.Helper.Core.Links;
 /// <summary>
 /// Acts on the web page's links (spec §5.3), from an Apple event or the channel's <c>/v1/link</c>. A link only opens,
 /// and only from the server the helper is signed in to; one naming another server, or none, is refused with a notice
-/// saying which server the helper is signed in to. Until the helper is <see cref="Ready"/> (signed in, and its copies
-/// resumed, so no open runs before the stale downloads are swept), the first link is held and opened then, even while
-/// the Sign In window waits; later ones are dropped. Once it's ready, links are dropped while one of the helper's
-/// windows waits for an answer.
+/// saying which server the helper is signed in to. The link that started the helper is held until it's first
+/// <see cref="Ready"/> (signed in, and its copies resumed, so no open runs before the stale downloads are swept), even
+/// while the Sign In window waits; later ones are dropped. Only that cold-start link is ever held: once the helper has
+/// been ready, or the start-up Sign In was dismissed, a link while it isn't signed in is dropped with a notice, so
+/// signing in hours later never checks out a document nobody asked for then. Once it's ready, links are dropped while
+/// one of the helper's windows waits for an answer.
 /// </summary>
 public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog log)
 {
@@ -20,6 +22,7 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
     private Uri? _server;
     private CopyCycle? _cycle;
     private string? _held;
+    private bool _holding = true; // until the first Ready or NotReady: the cold-start link
     private string? _notReadyNotice;
 
     /// <summary>
@@ -32,17 +35,26 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
         lock (_gate)
         {
             (_server, _cycle, _notReadyNotice) = (server, cycle, null);
-            (held, _held) = (_held, null);
+            (held, _held, _holding) = (_held, null, false);
         }
         log.Info("Accepting links");
         return held is null ? Task.CompletedTask : Handle(held);
     }
 
-    /// <summary>Links are held again, as after Sign Out. <paramref name="notice"/>, if given, is said to whoever clicks one.</summary>
+    /// <summary>
+    /// Links stop opening, as after Sign Out or a dismissed start-up Sign In, and a link held from the start is dropped.
+    /// <paramref name="notice"/>, if given, is said to whoever clicks one.
+    /// </summary>
     public void NotReady(string? notice = null)
     {
+        string? dropped;
         lock (_gate)
+        {
             (_server, _cycle, _notReadyNotice) = (null, null, notice);
+            (dropped, _held, _holding) = (_held, null, false);
+        }
+        if (dropped is not null)
+            log.Info("Dropped the link held from the start: the helper isn't signed in");
     }
 
     /// <summary>
@@ -65,13 +77,13 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
             (signedIn, cycle) = (_server, _cycle);
             if (cycle is null)
             {
-                if (_held is null)
+                if (_holding && _held is null)
                 {
                     _held = url;
                     log.Info($"Holding a link to #{n} until the helper is ready");
                 }
                 else
-                    log.Info($"Dropped a link to #{n}: another is waiting for the helper to be ready");
+                    log.Info($"Dropped a link to #{n}: the helper isn't ready");
                 notReady = _notReadyNotice;
             }
         }

@@ -16,15 +16,13 @@ namespace Healdan.Helper.Core.Session;
 /// token, or the Sign In window), then the copies' resume, which sweeps the downloads a stop left half done, and only
 /// then the channel and links, so no open runs before the sweep. It also turns the cycle's events into what the user
 /// is told (spec §5.1, §5.10): quiet when things work, a notice when something needs them, a window when it needs an
-/// answer. Nothing here logs a token, a password or a file's contents.
+/// answer. Every API client it makes reports a refused token, whichever call met it, so a <c>401</c> anywhere asks
+/// for the password again (spec §5.2). Nothing here logs a token, a password or a file's contents.
 /// </summary>
 public sealed class HelperSession : ICycleEvents, IDisposable
 {
     private const string Helper = "Healdan Helper";
     private const string SignInToOpen = "Sign in to Healdan Helper to open documents.";
-
-    /// <summary>Sign Out sends waiting saves first, for this long, before it gives up and keeps the sign-in.</summary>
-    private static readonly TimeSpan SignOutFlush = TimeSpan.FromSeconds(30);
 
     /// <summary>The Sign In window waits this long for the server, not the API client's ten minutes.</summary>
     private static readonly TimeSpan SignInTimeout = TimeSpan.FromSeconds(30);
@@ -36,8 +34,11 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private readonly IWindows _windows;
     private readonly INotifier _notifier;
     private readonly HelperLog _log;
-    private readonly HttpMessageHandler? _http;
     private readonly CycleTimings? _timings;
+    private readonly TimeSpan _signOutFlush;
+
+    /// <summary>Under every API client: tells <see cref="TokenRefused"/> of a 401 to a call that carried the token.</summary>
+    private readonly RefusedTokenHandler _http;
 
     /// <summary>Guards the fields below. Nothing waits or raises an event while holding it.</summary>
     private readonly object _gate = new();
@@ -47,19 +48,28 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     private readonly HashSet<string> _crashed = new(StringComparer.Ordinal);
     private HealdanApi? _api;
+
+    /// <summary>The cycle while its copies are resumed: its events need it, but the menu and windows don't see it yet.</summary>
+    private CopyCycle? _resuming;
+
+    /// <summary>The cycle once its copies are resumed.</summary>
     private CopyCycle? _cycle;
+
     private ChannelServer? _channel;
     private bool _signedIn;
     private bool _started;
+    private bool _startFailed;
+    private bool _signingOut;
     private string? _userName;
     private int _waiting;
     private int _asking;
     private bool _disposed;
 
-    /// <param name="http">The HTTP handler every API client uses; the system's by default (tests pass a fake server).</param>
+    /// <param name="http">The HTTP handler under every API client; the system's by default (tests pass a fake server).</param>
     /// <param name="timings">The cycle's timings; the trial's by default.</param>
+    /// <param name="signOutFlush">How long Sign Out waits for unsent saves before it gives up and keeps the sign-in; 30 s by default.</param>
     public HelperSession(HelperPaths paths, IKeychain keychain, DeviceIdentity device, IOfficeApp app, IWindows windows,
-        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null)
+        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null)
     {
         _paths = paths;
         _keychain = keychain;
@@ -68,8 +78,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         _windows = windows;
         _notifier = notifier;
         _log = log;
-        _http = http;
         _timings = timings;
+        _signOutFlush = signOutFlush ?? TimeSpan.FromSeconds(30);
+        _http = new RefusedTokenHandler(TokenRefused) { InnerHandler = http ?? new SocketsHttpHandler() };
         Links = new LinkHandler(windows, notifier, log);
     }
 
@@ -86,6 +97,19 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             lock (_gate)
                 return _api?.Server;
+        }
+    }
+
+    /// <summary>
+    /// The API client once the helper has started, for the windows (Task 17's Open and Save). A <c>401</c> it meets
+    /// asks for the password again, as the cycle's do.
+    /// </summary>
+    public HealdanApi? Api
+    {
+        get
+        {
+            lock (_gate)
+                return _started ? _api : null;
         }
     }
 
@@ -119,6 +143,16 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
     }
 
+    /// <summary>The copies couldn't be resumed, so the helper hasn't started; the user has been told.</summary>
+    public bool StartFailed
+    {
+        get
+        {
+            lock (_gate)
+                return _startFailed;
+        }
+    }
+
     /// <summary>How many copies have a save waiting for the server.</summary>
     public int SavesWaiting
     {
@@ -129,7 +163,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
     }
 
-    /// <summary>The cycle while the helper has started, for the windows (Task 17's Open, Save and crash windows).</summary>
+    /// <summary>The cycle once its copies are resumed, for the menu and the windows (Task 17's Open, Save and crash windows).</summary>
     public CopyCycle? Cycle
     {
         get
@@ -149,9 +183,28 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return _crashed.Contains(copy.Path);
     }
 
+    /// <summary>The cycle running, resumed or not: what the events and the sign-in go by.</summary>
+    private CopyCycle? Live
+    {
+        get
+        {
+            lock (_gate)
+                return _cycle ?? _resuming;
+        }
+    }
+
+    private bool Disposed
+    {
+        get
+        {
+            lock (_gate)
+                return _disposed;
+        }
+    }
+
     /// <summary>
     /// Starts: signs in with the kept token, or asks with the Sign In window; then resumes the copies; then starts the
-    /// channel and opens links. If the user closes the Sign In window, nothing starts until Sign In from the menu.
+    /// channel and opens links. If the user closes the Sign In window, nothing starts until they sign in from the menu.
     /// </summary>
     public async Task StartAsync()
     {
@@ -185,21 +238,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             Uri? server;
             bool running;
             lock (_gate)
-                (server, running) = (_api?.Server, _cycle is not null);
-            if (!await AskSignInAsync(running ? Address(server!) : HelperSettings.Load(_paths).Server, serverFixed: running))
-                return;
-            if (running)
-                return; // TrySignInAsync has sent the waiting saves on their way
-            await _lifecycle.WaitAsync();
-            try
-            {
-                if (Cycle is null && !_disposed)
-                    await BeginAsync();
-            }
-            finally
-            {
-                _lifecycle.Release();
-            }
+                (server, running) = (_api?.Server, (_cycle ?? _resuming) is not null);
+            if (await AskSignInAsync(running ? Address(server!) : HelperSettings.Load(_paths).Server, serverFixed: running) && !running)
+                await EnsureStartedAsync();
         }
         finally
         {
@@ -208,9 +249,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     /// <summary>
-    /// Sign Out (spec §5.2): sends the waiting saves first, then revokes the token and stops. Copies stay on this
-    /// computer for the next sign-in. If saves are still waiting after a while, or the token can't be revoked, the user
-    /// is told and stays signed in.
+    /// Sign Out (spec §5.2): sends every unsent save first, settling ones and those going up included, then revokes the
+    /// token and stops. Copies stay on this computer for the next sign-in. If saves are still unsent after a while, or
+    /// the token can't be revoked, the user is told and stays signed in; a Quit meanwhile keeps the sign-in too.
     /// </summary>
     public async Task SignOutAsync()
     {
@@ -220,12 +261,20 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             HealdanApi? api;
             CopyCycle? cycle;
             lock (_gate)
+            {
                 (api, cycle) = (_api, _cycle);
-            if (api?.Token is null)
-                return;
+                if (api?.Token is null || _disposed)
+                    return;
+                _signingOut = true; // its own 401s (a token already refused) are expected
+            }
             try
             {
                 await new SignIn(api, _keychain, _device).SignOutAsync(() => FlushAsync(cycle));
+            }
+            catch (OperationCanceledException) when (Disposed)
+            {
+                _log.Info("Quit during Sign Out: the sign-in is kept, and the next start sends what's unsent");
+                return;
             }
             catch (Exception e) when (e is InvalidOperationException or ApiException or HttpRequestException or TaskCanceledException or IOException)
             {
@@ -234,6 +283,11 @@ public sealed class HelperSession : ICycleEvents, IDisposable
                     ? e.Message
                     : "Healdan Helper couldn't sign out, as Healdan can't be reached. You're still signed in.");
                 return;
+            }
+            finally
+            {
+                lock (_gate)
+                    _signingOut = false;
             }
             _log.Info("Signed out");
             Stop(SignInToOpen);
@@ -346,7 +400,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     /// <summary>
     /// The Sign In window's button (spec §5.2): null once signed in, else the reason, as the window shows it. The
-    /// password is passed on for the one call and never kept.
+    /// password is passed on for the one call and never kept. A sign-in that works always carries on to a full start,
+    /// even when the user closed the window while it ran, so the helper is never signed in but not started.
     /// </summary>
     private async Task<string?> TrySignInAsync(string address, string user, string password)
     {
@@ -362,7 +417,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             HealdanApi? current;
             lock (_gate)
             {
-                if (_cycle is not null && _api is not null && !SameServer(_api.Server, server))
+                if ((_cycle ?? _resuming) is not null && _api is not null && !SameServer(_api.Server, server))
                     return $"Healdan Helper is signed in to {LinkName(_api)}. Sign out first to use another server.";
                 current = _api is not null && SameServer(_api.Server, server) ? _api : null;
             }
@@ -410,9 +465,58 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         settings.Save(_paths);
         SetSignedIn(api, await UserNameAsync(api));
         _log.Info($"Signed in to {LinkName(api)} as {user.Trim()}");
-        Cycle?.RetryNow(); // after a 401: the saves that waited go now
+        if (Live is { } running)
+            running.RetryNow(); // after a 401: the saves that waited go now
+        else
+            _ = Task.Run(EnsureStartedAsync); // a no-op when the window's caller starts the helper itself
         RaiseChanged();
         return null;
+    }
+
+    /// <summary>Starts the helper once signed in, unless it has started, its start failed, or it's quitting.</summary>
+    private async Task EnsureStartedAsync()
+    {
+        await _lifecycle.WaitAsync();
+        try
+        {
+            bool start;
+            lock (_gate)
+                start = !_disposed && !_startFailed && _signedIn && (_cycle ?? _resuming) is null;
+            if (start)
+                await BeginAsync();
+        }
+        catch (Exception e)
+        {
+            _log.Error("Starting after the sign-in failed", e);
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    /// <summary>
+    /// Healdan refused the token, on any call that carried it (spec §5.2): the menu offers Sign In, the user hears it
+    /// once, and the Sign In window asks for the password with the server fixed. Saves wait meanwhile. Before the helper
+    /// has started, during Sign Out and while quitting, the caller deals with it.
+    /// </summary>
+    private void TokenRefused()
+    {
+        bool wasSignedIn;
+        lock (_gate)
+        {
+            if ((_cycle ?? _resuming) is null || _signingOut || _disposed)
+                return;
+            (wasSignedIn, _signedIn) = (_signedIn, false);
+        }
+        if (wasSignedIn)
+        {
+            _log.Warn("Healdan refused the token: asking for the sign-in again");
+            _notifier.Notify(Helper, "Sign in to Healdan again. Your saves wait on this computer until you do.");
+            RaiseChanged();
+        }
+        if (Volatile.Read(ref _asking) == 0)
+            _ = Task.Run(SignInAgainAsync);
     }
 
     private void SetSignedIn(HealdanApi api, string? userName)
@@ -458,28 +562,72 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     // --- Starting and stopping -------------------------------------------------------------------------------------
 
-    /// <summary>Under <see cref="_lifecycle"/>: the copies' resume, then the channel, then links.</summary>
+    /// <summary>
+    /// Under <see cref="_lifecycle"/>: the copies' resume, then the channel, then links. The menu and windows see the
+    /// cycle only once its resume has finished; a resume that fails is told to the user, and nothing starts.
+    /// </summary>
     private async Task BeginAsync()
     {
         HealdanApi api;
         lock (_gate)
         {
-            if (_disposed)
-                return; // quit while the Sign In window was up
+            if (_disposed || (_cycle ?? _resuming) is not null)
+                return; // quit while the Sign In window was up, or started already
             api = _api!;
+            _startFailed = false;
         }
-        var cycle = new CopyCycle(api, new CopyStore(_paths), _app, _device.Id, this, _timings);
+
+        CopyCycle? cycle = null;
+        try
+        {
+            cycle = new CopyCycle(api, new CopyStore(_paths), _app, _device.Id, this, _timings);
+            lock (_gate)
+                _resuming = cycle; // its events name copies by their title
+            await cycle.ResumeAsync();
+        }
+        catch (Exception e)
+        {
+            lock (_gate)
+                (_resuming, _startFailed) = (null, true);
+            cycle?.Dispose();
+            _log.Error("The local copies couldn't be resumed, so the helper hasn't started", e);
+            _notifier.Notify(Helper, $"Healdan Helper couldn't look after its local copies, so it hasn't started: {e.Message} Quit and start it again.");
+            RaiseChanged();
+            return;
+        }
+        bool quit;
         lock (_gate)
-            _cycle = cycle; // before the resume, whose events name copies by their title
-        await cycle.ResumeAsync();
+        {
+            quit = _disposed;
+            _resuming = null;
+            if (!quit)
+                _cycle = cycle;
+        }
+        if (quit)
+        {
+            cycle.Dispose();
+            return;
+        }
         _log.Info($"Copies resumed: {cycle.OpenCopies().Count} looked after");
+
+        try
+        {
+            // The extension writes a window's content here for Save to Healdan; the helper deletes it once filed.
+            if (OperatingSystem.IsWindows())
+                Directory.CreateDirectory(_paths.Temp);
+            else
+                Directory.CreateDirectory(_paths.Temp, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn("The temporary folder couldn't be made: " + e.Message);
+        }
 
         var channel = new ChannelServer(_paths, new ChannelHandler(cycle, Links, _windows, _notifier, _log, _paths));
         try
         {
             channel.Start();
             _log.Info($"Channel listening on 127.0.0.1:{ChannelInfo.Read(_paths)?.Port}");
-            bool quit;
             lock (_gate)
             {
                 quit = _disposed;
@@ -512,8 +660,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         CopyCycle? cycle;
         lock (_gate)
         {
-            (channel, cycle) = (_channel, _cycle);
-            (_channel, _cycle, _signedIn, _started, _userName, _waiting) = (null, null, false, false, null, 0);
+            (channel, cycle) = (_channel, _cycle ?? _resuming);
+            (_channel, _cycle, _resuming, _signedIn, _started, _userName, _waiting) = (null, null, null, false, false, null, 0);
             _crashed.Clear();
         }
         channel?.Stop();
@@ -521,16 +669,29 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         RaiseChanged();
     }
 
-    /// <summary>Sign Out's flush: the waiting saves are tried now, and given a while to go up.</summary>
+    /// <summary>
+    /// Sign Out's flush: every unsent save is tried now (<see cref="CopyCycle.Unsent"/>: queued, going up, waiting to
+    /// retry, or still settling) and given a while to go up. Throws to keep the sign-in when some are still unsent, or
+    /// when the helper is quitting meanwhile.
+    /// </summary>
     private async Task FlushAsync(CopyCycle? cycle)
     {
-        if (cycle is null || SavesWaiting == 0)
+        if (cycle is null)
             return;
         cycle.RetryNow();
-        var deadline = DateTime.UtcNow + SignOutFlush;
-        while (SavesWaiting > 0 && DateTime.UtcNow < deadline)
-            await Task.Delay(200);
-        var left = SavesWaiting;
+        var deadline = DateTime.UtcNow + _signOutFlush;
+        int left;
+        while (true)
+        {
+            if (Disposed)
+                throw new OperationCanceledException("Quitting during Sign Out.");
+            left = cycle.Unsent();
+            if (left == 0 || DateTime.UtcNow >= deadline)
+                break;
+            await Task.Delay(100);
+        }
+        if (Disposed)
+            throw new OperationCanceledException("Quitting during Sign Out."); // a disposed cycle has nothing open, not nothing unsent
         if (left > 0)
             throw new InvalidOperationException(left == 1
                 ? "A save is still waiting to go to Healdan, so you're still signed in. Sign out once it has gone."
@@ -557,7 +718,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     void ICycleEvents.Crashed(string path)
     {
-        var copy = Cycle?.StateOf(path);
+        var copy = Live?.StateOf(path);
         if (copy is not { Known: true })
             return;
         lock (_gate)
@@ -585,19 +746,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         RaiseChanged();
     }
 
-    void ICycleEvents.SignInNeeded()
-    {
-        lock (_gate)
-        {
-            if (_cycle is null)
-                return; // signed out or quitting: a save that was going up meanwhile waits for the next start
-            _signedIn = false;
-        }
-        _log.Warn("Healdan refused the token: asking for the sign-in again");
-        _notifier.Notify(Helper, "Sign in to Healdan again. Your saves wait on this computer until you do.");
-        RaiseChanged();
-        _ = Task.Run(SignInAgainAsync);
-    }
+    void ICycleEvents.SignInNeeded() => TokenRefused();
 
     void ICycleEvents.Error(string message)
     {
@@ -606,7 +755,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     private string TitleOf(string path) =>
-        Cycle?.StateOf(path) is { Known: true } state ? state.Title : Path.GetFileNameWithoutExtension(path);
+        Live?.StateOf(path) is { Known: true } state ? state.Title : Path.GetFileNameWithoutExtension(path);
 
     private void RaiseChanged()
     {

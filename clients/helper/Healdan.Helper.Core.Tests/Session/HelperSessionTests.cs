@@ -1,3 +1,7 @@
+using System.Net;
+using System.Text;
+using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
@@ -40,15 +44,18 @@ public sealed class HelperSessionTests : IDisposable
     {
         foreach (var session in _sessions)
             session.Dispose();
+        _server.OpenSaves();
+        _http.HoldSignIns?.TrySetResult();
         Directory.Delete(_root, true);
     }
 
     private HelperPaths Paths => HelperPaths.For(_root);
 
-    private HelperSession Make()
+    private HelperSession Make(TimeSpan? signOutFlush = null)
     {
         var device = new DeviceIdentity(FakeApi.HereDevice, FakeApi.HereName);
-        var session = new HelperSession(Paths, _keychain, device, _app, _windows, _notifier, new HelperLog(Paths.Log), _http, Fast);
+        var session = new HelperSession(Paths, _keychain, device, _app, _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
+            signOutFlush);
         _sessions.Add(session);
         return session;
     }
@@ -58,6 +65,29 @@ public sealed class HelperSessionTests : IDisposable
         new HelperSettings { Server = Account }.Save(Paths);
         _keychain.Items[Account] = "hd_kept_token";
     }
+
+    /// <summary>A request to the running helper's channel, as the extension sends it.</summary>
+    private async Task<HttpResponseMessage> PostChannel(string route, JsonObject body)
+    {
+        var info = ChannelInfo.Read(Paths)!;
+        using var http = new HttpClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{info.Port}/v1/{route}")
+        {
+            Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add(ChannelInfo.SecretHeader, info.Secret);
+        return await http.SendAsync(request);
+    }
+
+    private async Task<string> OpenAsync(HelperSession session)
+    {
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(_app.Opened);
+        await Wait.Until(() => _app.LockSeen(path), "the close watcher sees the lock file");
+        return path;
+    }
+
+    private bool Revoked() => _http.Calls.Contains("DELETE healdan.test/api/v1/auth/tokens/current");
 
     private string[] LogLines() => File.Exists(Paths.Log) ? File.ReadAllLines(Paths.Log) : [];
 
@@ -259,5 +289,132 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(File.Exists(Paths.Channel));
         Assert.Equal("hd_kept_token", _keychain.Items[Account]);
         Assert.Empty(_windows.SignIns);
+    }
+
+    [Fact]
+    public async Task ARefusedTokenWhileFilingAsksForTheSignInAgain()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var asked = new TaskCompletionSource<SignInPrompt>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _windows.OnSignIn = prompt =>
+        {
+            asked.TrySetResult(prompt);
+            return Task.FromResult(false);
+        };
+        var temp = Path.Combine(Path.GetTempPath(), $"healdan-save-{Guid.NewGuid():N}.odt");
+        File.WriteAllText(temp, "the window's content");
+        _server.Unauthorized = true;
+
+        using var answer = await PostChannel("file",
+            new JsonObject { ["tempPath"] = temp, ["folderId"] = 9, ["name"] = "Memo", ["format"] = "odt" });
+
+        Assert.Equal(HttpStatusCode.InternalServerError, answer.StatusCode); // the extension falls back to its own save
+        var prompt = await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(prompt.ServerFixed);
+        Assert.Equal(Account, prompt.Server);
+        Assert.False(session.SignedIn); // the menu offers Sign In, not Sign Out
+        Assert.False(File.Exists(temp));
+    }
+
+    [Fact]
+    public async Task SignOutSendsASaveStillSettlingBeforeRevokingTheToken()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+
+        FakeApp.Write(path, "saved just before Sign Out");
+        await session.SignOutAsync(); // well within the settle time
+
+        Assert.Equal("saved just before Sign Out", _server.Doc(5).Content);
+        var calls = _http.Calls.ToList();
+        var save = calls.IndexOf("POST healdan.test/api/v1/documents/5/versions");
+        var revoke = calls.IndexOf("DELETE healdan.test/api/v1/auth/tokens/current");
+        Assert.True(save >= 0 && revoke > save, string.Join("\n", calls));
+        Assert.Empty(_keychain.Items);
+        Assert.False(session.Started);
+    }
+
+    [Fact]
+    public async Task SignOutKeepsTheSignInWhileASaveCantGoUp()
+    {
+        SignedInBefore();
+        var session = Make(signOutFlush: TimeSpan.FromMilliseconds(500));
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        _server.HoldSaves();
+        FakeApp.Write(path, "an edit still going up");
+        await Wait.Until(() => _server.SavesReceived == 1, "the save going up");
+
+        await session.SignOutAsync();
+
+        Assert.False(Revoked());
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.True(session.SignedIn);
+        Assert.True(session.Started);
+        Assert.Contains("still waiting to go to Healdan", _notifier.All);
+    }
+
+    [Fact]
+    public async Task QuittingWhileSignOutWaitsForASaveKeepsTheSignIn()
+    {
+        SignedInBefore();
+        var session = Make(signOutFlush: TimeSpan.FromSeconds(10));
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        _server.HoldSaves();
+        FakeApp.Write(path, "an edit still going up");
+        await Wait.Until(() => _server.SavesReceived == 1, "the save going up");
+
+        var signOut = session.SignOutAsync();
+        await Task.Delay(300);
+        Assert.False(signOut.IsCompleted, "Sign Out waits for the save");
+        session.Dispose(); // Quit
+        await signOut.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(Revoked());
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]); // the next start carries on, and sends the save
+    }
+
+    [Fact]
+    public async Task ASignInThatFinishesAfterItsWindowClosedStillStarts()
+    {
+        _http.HoldSignIns = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task<string?>? late = null;
+        _windows.OnSignIn = prompt =>
+        {
+            late = prompt.SignInAsync(Account, "robert", Password);
+            return Task.FromResult(false); // the user closed the window while the call was running
+        };
+        var session = Make();
+        await session.StartAsync();
+        Assert.False(session.Started);
+
+        _http.HoldSignIns.SetResult();
+
+        Assert.Null(await late!.WaitAsync(TimeSpan.FromSeconds(10)));
+        await Wait.Until(() => session.Started, "the start after the late sign-in", TimeSpan.FromSeconds(5));
+        Assert.True(session.SignedIn);
+        Assert.True(File.Exists(Paths.Channel));
+    }
+
+    [Fact]
+    public async Task AFailedResumeIsReportedAndNothingStarts()
+    {
+        SignedInBefore();
+        File.WriteAllText(Paths.Copies, "a file where the copies folder goes");
+        var session = Make();
+
+        await session.StartAsync();
+
+        Assert.False(session.Started);
+        Assert.True(session.StartFailed);
+        Assert.Null(session.Cycle);
+        Assert.Empty(session.OpenCopies());
+        Assert.False(File.Exists(Paths.Channel));
+        Assert.Contains("local copies", _notifier.All);
     }
 }

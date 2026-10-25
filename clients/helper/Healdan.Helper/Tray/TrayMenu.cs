@@ -86,8 +86,8 @@ internal sealed class TrayMenu : IDisposable
     {
         var server = _session.Server is { } s ? HealdanLink.HostAndPort(s) : null;
         if (_session.SignedIn)
-            return _session.Started
-                ? $"Signed in as {_session.UserName ?? "you"} on {server}"
+            return _session.Started ? $"Signed in as {_session.UserName ?? "you"} on {server}"
+                : _session.StartFailed ? $"Couldn't start on {server}: quit and start again"
                 : $"Starting on {server}…";
         return server is null ? "Not signed in" : $"Not signed in to {server}";
     }

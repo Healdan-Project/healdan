@@ -255,4 +255,35 @@ public sealed class ChannelHandlerTests : IDisposable
         await Assert.ThrowsAnyAsync<ArgumentException>(() => Call("state", new JsonObject()));
         await Assert.ThrowsAnyAsync<ArgumentException>(() => Call("saved", new JsonObject { ["path"] = 5 }));
     }
+
+    [Fact]
+    public async Task FileNeverDeletesALocalCopy()
+    {
+        // The system's temporary folder holds the tests' copies folder, so only the copies rule keeps this one.
+        var copy = await OpenAsync();
+
+        var state = await Call("file", FileBody(copy));
+
+        Assert.Equal(100, (long?)state["docNumber"]); // filed
+        Assert.True(File.Exists(copy));
+        Assert.Equal("downloaded", File.ReadAllText(copy));
+    }
+
+    [Fact]
+    public async Task FileDeletesFromTheHelpersTempFolderButNothingElseOfItsOwn()
+    {
+        var paths = HelperPaths.For(_root);
+        Directory.CreateDirectory(paths.Temp);
+        var temp = Path.Combine(paths.Temp, "Memo.odt");
+        File.WriteAllText(temp, "the window's content");
+        var own = Path.Combine(paths.Support, "Memo.odt");
+        File.WriteAllText(own, "a file of the helper's own");
+
+        await Call("file", FileBody(temp));
+        await Call("file", FileBody(own));
+
+        Assert.False(File.Exists(temp));
+        Assert.True(File.Exists(own));
+        Assert.True(File.Exists(paths.Log));
+    }
 }

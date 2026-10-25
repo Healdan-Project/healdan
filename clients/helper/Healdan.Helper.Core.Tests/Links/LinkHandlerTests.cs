@@ -170,11 +170,26 @@ public sealed class LinkHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task HoldsLinksAgainOnceNotReady()
+    public async Task DropsLinksAfterSignOut()
     {
         await _links.Ready(Server, _cycle);
         _links.NotReady("Sign in to Healdan Helper to open documents."); // signed out
         await _links.Handle("healdan://open/5?server=healdan.test");
+
+        Assert.Contains("Sign in", _notifier.All);
+        await _links.Ready(Server, _cycle); // signed in again, maybe hours later: the link isn't opened then
+        Assert.Empty(_app.Opened);
+        Assert.Empty(_server.Calls);
+    }
+
+    [Fact]
+    public async Task DropsTheHeldLinkWhenTheStartUpSignInIsDismissed()
+    {
+        await _links.Handle("healdan://open/5?server=healdan.test"); // the link that started the helper
+        _links.NotReady("Sign in to Healdan Helper to open documents."); // the user closed Sign In
+
+        await _links.Handle("healdan://open/6?server=healdan.test");
+        await _links.Ready(Server, _cycle); // signing in from the menu later opens neither
 
         Assert.Empty(_app.Opened);
         Assert.Empty(_server.Calls);

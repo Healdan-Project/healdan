@@ -17,6 +17,9 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
     private readonly object _lock = new();
     private readonly List<string> _calls = [];
 
+    /// <summary>When set, sign-ins wait for it: received, but unanswered.</summary>
+    public TaskCompletionSource? HoldSignIns { get; set; }
+
     public IReadOnlyList<string> Calls
     {
         get
@@ -45,6 +48,8 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
                     $$"""{"product":"{{product}}","version":"9.3.1","apiVersion":"{{apiVersion}}","labels":{"matter":"Matter","matters":"Matters"},"signIn":["password"]}""");
             case ("POST", "/api/v1/auth/tokens"):
                 var body = JsonNode.Parse(await request.Content!.ReadAsStringAsync(ct))!;
+                if (HoldSignIns is { } gate)
+                    await gate.Task.WaitAsync(ct);
                 if ((string?)body["password"] == WrongPassword)
                     return Json(HttpStatusCode.Unauthorized,
                         """{"type":"about:blank","title":"Unauthorized","status":401,"detail":"The username or password is wrong.","code":"sign-in-failed"}""");

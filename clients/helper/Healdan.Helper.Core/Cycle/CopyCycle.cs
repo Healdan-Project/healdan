@@ -287,6 +287,43 @@ public sealed class CopyCycle : IDisposable
         return [.. paths.Select(StateOf).Where(state => state.Known)];
     }
 
+    /// <summary>
+    /// How many open copies have changes on their way to Healdan: a save queued, going up or waiting to retry, a Save
+    /// as New Version still to send, or a write the app made that hasn't settled into a save yet. A copy whose changes
+    /// can't go up (its check-out ended), or whose last save Healdan refused for good, isn't counted: nothing more will
+    /// be sent for it. Sign Out waits for this to be 0 before it revokes the token.
+    /// </summary>
+    public int Unsent()
+    {
+        List<(Session Session, string? LastHash, bool Version)> open;
+        lock (_gate)
+            open = [.. _sessions.Values.Where(s => !s.ReadOnly && !s.Ended).Select(s => (s, s.LastHash, s.NextKind is not null))];
+        var unsent = 0;
+        foreach (var (s, last, version) in open)
+        {
+            if (!s.Queue.Idle || version)
+            {
+                unsent++;
+                continue;
+            }
+            if (s.Closing || Record(s.Path) is not { } record || !File.Exists(s.Path))
+                continue;
+            string hash;
+            try
+            {
+                hash = HashOf(s.Path);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                unsent++; // being written: it settles into a save
+                continue;
+            }
+            if (!SameHash(hash, record.ConfirmedHash) && !SameHash(hash, last))
+                unsent++;
+        }
+        return unsent;
+    }
+
     /// <summary>Retries every waiting save now, as once the user has signed in again.</summary>
     public void RetryNow()
     {

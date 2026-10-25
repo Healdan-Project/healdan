@@ -123,13 +123,24 @@ internal static unsafe class MacNotifications
         return (IntPtr)block;
     }
 
+    /// <summary>
+    /// Called by macOS on a thread of its own. An exception leaving an <c>UnmanagedCallersOnly</c> method ends the
+    /// process, so nothing may: the state is set first, and the rest is only logging.
+    /// </summary>
     [UnmanagedCallersOnly]
     private static void OnAnswer(IntPtr block, byte granted, IntPtr error)
     {
-        Volatile.Write(ref _state, granted != 0 ? Granted : Unavailable);
-        _log?.Info(granted != 0
-            ? "macOS notifications allowed"
-            : "macOS notifications weren't allowed, so notices go to the log and the menu's status line" + Reason(error));
+        try
+        {
+            Volatile.Write(ref _state, granted != 0 ? Granted : Unavailable);
+            _log?.Info(granted != 0
+                ? "macOS notifications allowed"
+                : "macOS notifications weren't allowed, so notices go to the log and the menu's status line" + Reason(error));
+        }
+        catch (Exception)
+        {
+            // Nothing can be told from here; the state is what matters.
+        }
     }
 
     /// <summary>The <c>NSError</c>'s description, as macOS gives it (such as an unsigned bundle's refusal).</summary>
