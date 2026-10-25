@@ -4,6 +4,7 @@ import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.rpc.AsyncCallback;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.healdan.HealdanOpenInApp;
+import com.logicaldoc.gui.common.client.log.EventPanel;
 import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.common.client.util.Util;
 import com.logicaldoc.gui.common.client.util.WindowUtils;
@@ -24,6 +25,9 @@ public final class HealdanDocumentOpener {
 	/** The notice shown after the link is opened */
 	public static final String NOTICE = "If nothing opened, <a href=\"" + INSTALL_URL
 			+ "\" target=\"_blank\">install the Healdan Helper</a>.";
+
+	/** The same notice as plain text, for the status line */
+	public static final String PLAIN_NOTICE = "If nothing opened, install the Healdan Helper: " + INSTALL_URL;
 
 	private static boolean registered = false;
 
@@ -58,7 +62,9 @@ public final class HealdanDocumentOpener {
 		Util.uninstallCloseWindowAlert();
 		try {
 			WindowUtils.openUrl(link);
-			ToastNotification.showNotification(NOTICE);
+			// The toast shows HTML but the event line shows its text as it is
+			new ToastNotification(NOTICE).show();
+			EventPanel.get().info(PLAIN_NOTICE, null);
 		} finally {
 			Util.installCloseWindowAlert();
 		}
