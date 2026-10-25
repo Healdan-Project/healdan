@@ -12,7 +12,7 @@ using Healdan.Helper.Core.Ui;
 namespace Healdan.Helper.Core.Channel;
 
 /// <summary>
-/// What the channel's routes do (plan: "The channel's routes"). <c>link</c>, <c>file</c>, <c>saved</c>,
+/// What the channel's routes do (plan: "The channel's routes"). <c>link</c>, <c>file</c>, <c>adopted</c>, <c>saved</c>,
 /// <c>new-version</c>, <c>closed</c> and <c>state</c> need no window and run on the cycle; <c>open-dialog</c>,
 /// <c>save-new</c> and <c>properties</c> are the windows' (<see cref="IWindows"/>). A path the routes take must be a
 /// local copy's, in the copies folder: the cycle finds copies by file name, and a local file that happens to share a
@@ -24,7 +24,10 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
     /// <summary>Knows the local copies by name, so a file named as one is never deleted as a temporary file.</summary>
     private readonly CopyStore _store = new(paths);
 
-    /// <summary><c>/v1/saved</c> answers with the next confirmation, or after this with the copy's state as it is.</summary>
+    /// <summary>
+    /// <c>/v1/saved</c> answers once Healdan has every save written so far, or after this with the copy's state as it
+    /// is, <c>pending</c> while a save is still to go.
+    /// </summary>
     public static readonly TimeSpan SavedWait = TimeSpan.FromSeconds(120);
 
     public async Task<JsonNode?> HandleAsync(string route, JsonObject body)
@@ -54,6 +57,10 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
                 if (Copy(body, route) is { } closed)
                     await cycle.ClosedAsync(closed);
                 return new JsonObject();
+            case "adopted":
+                // Save to Healdan's window has just been saved as the new document's copy: its starting point.
+                var adopted = Text(body, "path");
+                return Json(InCopies(adopted) ? cycle.Adopted(adopted) : CopyState.Unknown(adopted));
             case "state":
                 var path = Text(body, "path");
                 return Json(InCopies(path) ? cycle.StateOf(path) : CopyState.Unknown(path));
@@ -254,7 +261,8 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
             ["docRef"] = s.DocRef,
             ["readOnly"] = s.ReadOnly,
             ["path"] = s.Path,
-            ["holdBy"] = s.HoldBy
+            ["holdBy"] = s.HoldBy,
+            ["pending"] = s.Pending
         };
 
     private static string Text(JsonObject body, string key) =>

@@ -25,4 +25,15 @@ public class FileKindsTests
         Assert.Equal(FileKinds.Documents, FileKinds.Of("Lease.DOCX"));
         Assert.Null(FileKinds.Of("Signed NDA.pdf"));
     }
+
+    [Fact]
+    public void AFilesKindIsItsOwnExtensions()
+    {
+        // What links and the cycle go by: the name's own extension, never a bare name that looks like one.
+        Assert.Equal(FileKinds.Spreadsheets, FileKinds.OfFile("Budget.XLSX"));
+        Assert.Equal(FileKinds.Documents, FileKinds.OfFile("/Copies/Lease #5 v1.0.odt"));
+        Assert.Null(FileKinds.OfFile("docx"));
+        Assert.Null(FileKinds.OfFile("Signed NDA.pdf"));
+        Assert.Null(FileKinds.OfFile("Run me.command"));
+    }
 }

@@ -12,7 +12,8 @@ namespace Healdan.Helper.Tray;
 
 /// <summary>
 /// The menu-bar icon and its menu (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
-/// Open from Healdan (once the helper has started), Install the LibreOffice Extension while it isn't installed
+/// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), Open from Healdan (once the helper
+/// has started), Install the LibreOffice Extension while it isn't installed
 /// (spec §5.12, R22), Settings, Sign In or Sign Out, and Quit. When native notifications
 /// can't be shown, the last notice is the menu's status line. The menu is rebuilt when it opens and whenever the
 /// session changes.
@@ -80,6 +81,14 @@ internal sealed class TrayMenu : IDisposable
         var waiting = _session.SavesWaiting;
         if (waiting > 0)
             items.Add(Label(waiting == 1 ? "1 save waiting to be sent" : $"{waiting} saves waiting to be sent"));
+        var kept = _session.KeptCopies();
+        if (kept.Count > 0)
+        {
+            items.Add(new NativeMenuItemSeparator());
+            items.Add(Label("Not Yet in Healdan"));
+            foreach (var copy in kept)
+                items.Add(Item(copy.Title, () => _session.OpenKept(copy)));
+        }
         items.Add(new NativeMenuItemSeparator());
 
         var open = Item("Open from Healdan…", _windows.OpenFromMenu);

@@ -86,6 +86,22 @@ public sealed class ChannelServerTests : IDisposable
     }
 
     [Fact]
+    public async Task EveryRouteOfThePlansTableReachesTheHandler()
+    {
+        var seen = new List<string>();
+        Start((route, _) =>
+        {
+            lock (seen)
+                seen.Add(route);
+            return Task.FromResult<JsonNode?>(new JsonObject());
+        });
+        string[] routes = ["open-dialog", "save-new", "file", "saved", "new-version", "properties", "closed", "state", "adopted"];
+        foreach (var route in routes)
+            Assert.Equal(HttpStatusCode.OK, (await Send(HttpMethod.Post, "/v1/" + route, """{"path":"/x"}""")).StatusCode);
+        Assert.Equal(routes, seen);
+    }
+
+    [Fact]
     public async Task WrongMethod405()
     {
         Start();

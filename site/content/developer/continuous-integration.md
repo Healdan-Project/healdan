@@ -43,7 +43,9 @@ others, so one run shows every failing test.
 `.github/scripts/code-changed.sh` lists the files a pull request changes and writes two answers. `code` is false
 when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and `clients/`. It
 gates the Java build's test shards and the Docker build steps. `clients` is true when the pull request changes
-anything under `clients/`, or `clients.yml` itself. It gates the client test jobs. A push always gets both true.
+anything under `clients/`, `clients.yml` itself, or the API contract,
+`healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It gates the client
+test jobs. A push always gets both true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
 them all.
@@ -51,7 +53,8 @@ them all.
 | The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
 |---|---|---|---|
 | Only `clients/` | Skipped | Skipped | Run |
-| Only the server, or anything outside `clients/` and the docs | Run | Run | Skipped |
+| The API contract, `openapi.yaml` | Run | Run | Run |
+| Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped |
 | Only docs | Skipped | Skipped | Skipped |
 | Docs and `clients/` | Skipped | Skipped | Run |
 | The server and `clients/` | Run | Run | Run |
@@ -69,7 +72,7 @@ are:
 3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`,
    which also builds the extension's `.oxt` and checks that its parts agree.
 4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
-   nothing under `clients/` changed. A cancelled run fails it.
+   nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 
 `Clients` is not yet in `master`'s ruleset. The repository owner adds it after its first green run.
 

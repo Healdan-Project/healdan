@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import com.google.gwt.core.client.GWT;
 import com.google.gwt.user.client.Window;
 import com.logicaldoc.gui.common.client.Constants;
 import com.logicaldoc.gui.common.client.CookiesManager;
@@ -31,7 +30,6 @@ import com.logicaldoc.gui.common.client.util.LD;
 import com.logicaldoc.gui.common.client.util.SecurityUtil;
 import com.logicaldoc.gui.common.client.util.Util;
 import com.logicaldoc.gui.common.client.util.ValuesCallback;
-import com.logicaldoc.gui.common.client.util.WindowUtils;
 import com.logicaldoc.gui.frontend.client.ai.robot.RobotTray;
 import com.logicaldoc.gui.frontend.client.chatgpt.ChatGPTTray;
 import com.logicaldoc.gui.frontend.client.docusign.DocuSignSettings;
@@ -486,8 +484,8 @@ public class MainMenu extends ToolStrip implements FolderObserver, DocumentObser
             if (document == null)
                 return;
 
-            WindowUtils.openUrl("ldedit:" + GWT.getHostPageBaseURL() + "ldedit?action=edit&sid="
-                    + Session.get().getSid() + "&docId=" + document.getId());
+            // Healdan: Open in App, through the helper, with no session id in a link (M3 spec 8)
+            Util.openEditWithOffice(document.getId());
         });
 
         menu.setItems(edit);

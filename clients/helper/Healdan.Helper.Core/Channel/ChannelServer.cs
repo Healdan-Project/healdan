@@ -189,7 +189,7 @@ public sealed class ChannelServer(HelperPaths paths, IChannelHandler handler) : 
 
     private static readonly HashSet<string> Routes =
     [
-        "link", "open-dialog", "save-new", "file", "saved", "new-version", "properties", "closed", "state",
+        "link", "open-dialog", "save-new", "file", "saved", "new-version", "properties", "closed", "state", "adopted",
     ];
 
     private static bool IsRoute(string route) => Routes.Contains(route);
