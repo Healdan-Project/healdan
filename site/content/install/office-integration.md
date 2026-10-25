@@ -58,6 +58,14 @@ by the words in it.
   id or password, unlike LogicalDOC's "Edit with Office" links. The helper uses its own sign-in.
 - **A link can only open a document,** and only from the helper's own server. It never saves, files, releases or
   checks in anything, and it's ignored while one of the helper's windows is waiting for an answer.
+- **Links open only what LibreOffice edits:** documents, spreadsheets and presentations. A link to any other kind of
+  file is refused with a notice, before anything is downloaded, so a page can't hand a file someone put in a matter
+  to whatever app the Mac has for it.
+- **Other files** open only from the helper's Open from Healdan window, where the person chose them, read-only in the
+  Mac's default app. Each copy is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
+  it as it does a browser's downloads. The helper never downloads or opens a kind of file that runs a program or
+  changes the Mac when opened: apps, installers and disk images, scripts, Automator and Shortcuts files, internet
+  location files, kernel extensions and configuration profiles. People download those from the web page.
 - **The risk that's left.** Opening a document someone can edit checks it out to them, with no extra question.
   Browsers ask before a site hands a link to an app, and remember the answer per site. So a page the person has
   allowed could open, and check out, documents they can edit, though it can't change them. Their next close checks
@@ -66,9 +74,11 @@ by the words in it.
   under `/api`.
 - **Local copies** are in `~/Library/Application Support/Healdan Helper/Copies/`, readable only by the person signed
   in to the Mac. Read-only copies, and copies once checked in, are deleted. A copy with changes that haven't
-  reached Healdan stays until they have. Turn on FileVault on laptops.
+  reached Healdan stays until they have, or until the person files it as a new document; the helper's menu lists
+  those it can't send. Turn on FileVault on laptops.
 - **LibreOffice talks to the helper** over `127.0.0.1` only, with a secret in a file only the person can read, so
   nobody else on the Mac can drive it.
 - **Stamping.** When it stores a Word or LibreOffice file that carries the `Healdan Doc ID` property, through the
-  API, Healdan updates that property and the fields showing it to the stored version's doc ID. Nothing else in the
-  file changes, and files without the property are stored as they arrive.
+  API, Healdan updates that property and the fields showing it to the stored version's doc ID. The rest of the
+  content stays as it was, though the parts Healdan rewrites may change form, and a signed file loses its signature:
+  see [Known Limitations](../known-limitations/). Files without the property are stored as they arrive.

@@ -26,7 +26,7 @@ Press **⌘S**, or **File › Save**, as you always would.
   the title bar moves on: `v2.1` becomes `v2.2`.
 - **A Word, Excel or PowerPoint file** saves in its own format, without LibreOffice asking whether to keep it.
 - **Saves close together** go to Healdan in order. If a newer save is waiting before an older one has started, only
-  the newer one goes, as it holds everything.
+  the newer one goes, as it holds everything. The title bar ends on your last save.
 - **If Healdan can't be reached,** the save waits on your Mac until it can. See
   [When Things Go Wrong](../when-things-go-wrong/#healdan-cant-be-reached).
 
@@ -87,5 +87,6 @@ The helper keeps the copies in `~/Library/Application Support/Healdan Helper/Cop
 `Lease agreement #1234 v2.1.docx`. A copy keeps the name it was opened with while it's open, even as the title moves
 on. Leave the folder to the helper: opening, moving or renaming a copy yourself would cut it off from Healdan.
 
-A copy with changes Healdan hasn't confirmed is never deleted, even after a crash or a refused save. See
-[When Things Go Wrong](../when-things-go-wrong/).
+A copy with changes Healdan hasn't confirmed is never deleted, even after a crash or a refused save. Once its window
+has closed, the helper's menu lists it under **Not Yet in Healdan** until you file it. See
+[When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended).

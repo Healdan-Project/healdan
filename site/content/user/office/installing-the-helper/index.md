@@ -44,8 +44,8 @@ Healdan's icon appears in the menu bar. The helper has no Dock icon, and shows a
 
 ### Sign In
 
-The Sign In to Healdan window opens: see [Signing In](#signing-in). Once you're signed in, LibreOffice asks to add
-Healdan's extension: see [Adding Healdan to LibreOffice](#adding-healdan-to-libreoffice).
+The Sign In to Healdan window opens: see [The Sign In Window](#the-sign-in-window). Once you're signed in,
+LibreOffice asks to add Healdan's extension: see [Adding Healdan to LibreOffice](#adding-healdan-to-libreoffice).
 
 {{% /steps %}}
 
@@ -53,7 +53,7 @@ Healdan's extension: see [Adding Healdan to LibreOffice](#adding-healdan-to-libr
 The helper for Ubuntu isn't ready yet. Until it is, Healdan works in LibreOffice on macOS only.
 {{< /callout >}}
 
-## Signing In
+## The Sign In Window
 
 ![The Sign In to Healdan window: Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
 
@@ -113,6 +113,7 @@ Click Healdan's icon in the menu bar.
 | A notice | When notifications are off, the helper's latest notice. Choose it to clear it |
 | The documents you have open | Each by its title, such as `Lease agreement #1234 v2.1`. Choose one to bring its window to the front. "(closed unexpectedly)" after a crash: see [When Things Go Wrong](../when-things-go-wrong/) |
 | "1 save waiting to be sent" | Saves Healdan couldn't take yet. The helper keeps trying |
+| Not Yet in Healdan | Copies with changes Healdan can't take, such as after your check-out ended, kept once their window closed. Choose one to open it as it is, then use Save as New Document: see [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended) |
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
 | Install the LibreOffice Extension… | Only while the extension isn't installed |
 | Settings… | See [Settings](#settings) |
@@ -142,7 +143,7 @@ Choose **Sign Out** in the helper's menu.
 
 ## Removing the Helper
 
-1. Check the helper's menu: no documents open, and no saves waiting.
+1. Check the helper's menu: no documents open, no saves waiting, and nothing Not Yet in Healdan.
 2. Remove the extension from LibreOffice: **Tools › Extensions**, select **Healdan**, then **Remove**.
 3. Choose **Sign Out**, then **Quit Healdan Helper**, and drag **Healdan Helper** from Applications to the Bin.
 

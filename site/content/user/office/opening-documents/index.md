@@ -16,7 +16,8 @@ document opens in LibreOffice, and the helper's menu lists it.
 
 - **It's on** for one document at a time, of a kind LibreOffice edits: `.doc`, `.docx`, `.docm`, `.dotx`, `.dotm`,
   `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm` and `.odp`. You need permission
-  to download it.
+  to download it. The helper opens only these kinds from the web page: a link to any other file is refused, with a
+  notice (see [Other Kinds of File](#other-kinds-of-file)).
 - **It's on while the document is checked out** too, so you can reopen your own, and others get a read-only copy.
 - **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
   remember, if there is one.
@@ -47,7 +48,8 @@ in the Start Center, and **Healdan › Open from Healdan…**. So does **Open fr
 
 At the bottom:
 
-- **Open Read-Only** opens a copy you can read but not save to Healdan, even if you could edit it.
+- **Open Read-Only:** tick it, then choose **Open**, for a copy you can read but not save to Healdan, even if you
+  could edit it.
 - **An older version** always opens read-only: choose it in the versions list.
 - **Open from Local Computer** shows LibreOffice's own Open box, for a file on your Mac.
 
@@ -57,7 +59,8 @@ If you can edit the document and nobody else has it checked out, the helper chec
 downloads it and opens it. The title bar shows its doc # and version: `Lease agreement #1234 v2.1`. Each save goes
 to Healdan, and closing checks it back in: see [Editing and Versions](../editing-and-versions/).
 
-A document you already have open comes to the front instead of opening twice.
+A document you already have open comes to the front instead of opening twice, and clicking Open in App twice opens
+it once.
 
 ## Read-Only Copies
 
@@ -65,7 +68,7 @@ A document opens as a read-only copy when:
 
 - someone else has it checked out, or it's locked in the web page;
 - you may read it but not edit it;
-- you chose Open Read-Only, or an older version.
+- you ticked Open Read-Only, or chose an older version.
 
 Its title ends in "(read-only)", and a notice says why, such as "Opened read-only: Jane Smith has it checked out."
 LibreOffice opens it read-only. Nothing you do to it reaches the document: saving it shows Save as New Document
@@ -90,6 +93,15 @@ A document checked out in the web page isn't held on any computer, so it opens f
 
 A PDF, an image or any other file LibreOffice doesn't edit opens read-only in your Mac's usual app for it, from the
 Open from Healdan window. It isn't checked out.
+
+- **Only from Open from Healdan.** Open in App, and any other link, opens only documents, spreadsheets and
+  presentations. A link to another kind of file says "… wasn't opened: a link opens only documents, spreadsheets and
+  presentations". Open it from the Open from Healdan window, or download it from the web page.
+- **Your Mac checks it.** The helper marks the copy as downloaded from the internet, so macOS checks it as it would
+  any download.
+- **Never apps, installers or scripts.** A file that can run a program or change your Mac when opened, such as
+  `.app`, `.command`, `.pkg`, `.dmg`, `.sh` or `.mobileconfig`, isn't downloaded or opened: the helper says it never
+  opens that kind of file. If you need it, download it from the web page.
 
 ## What Can't Be Opened
 

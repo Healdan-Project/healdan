@@ -17,7 +17,7 @@ You're offline, or the server is down, when you save.
 - **The helper keeps trying.** A notice says "A save is waiting for Healdan", and the helper's menu shows how many
   saves are waiting.
 - **When Healdan is back,** the helper sends them, in order, and says "Your saves have reached Healdan." The title
-  bar moves on.
+  bar moves on to your last save, however long Healdan was away.
 - **Restarting is safe.** If your Mac restarts first, the helper finds the waiting saves when it starts again and
   sends them.
 
@@ -57,8 +57,11 @@ Your next save, or closing the window, is then refused, so it can't land on a do
 "It can't be saved to Healdan any more. Your copy is kept: use Save as New Document to file your changes."
 
 - **While it's open:** choose **Healdan › Save as New Document…** to file your changes as a new document.
-- **If you've closed it:** open the document again from Healdan. The helper opens your kept copy instead of
-  downloading over it, and says the same. Then choose Save as New Document.
+- **If you've closed it:** the helper's menu lists it under **Not Yet in Healdan**. Choose it there to open your kept
+  copy as it is, with no check-out, then choose Save as New Document. Opening the document again from Healdan opens
+  the kept copy too, rather than downloading over it.
+
+The copy stays on your Mac, and in that list, until you've filed it or its changes have reached Healdan.
 
 ## Someone Changed It in the Web Page
 
@@ -88,6 +91,9 @@ When Open in App doesn't open anything:
 - **One of the helper's windows is waiting for you,** such as Save to Healdan. The helper ignores links meanwhile,
   and brings that window to the front: finish with it, then click Open in App again.
 - **"#1234 is still being checked in":** you closed it moments ago. Open it again once the check-in is done.
+- **"… wasn't opened: a link opens only documents, spreadsheets and presentations":** the link was to a PDF or another
+  kind of file. Open it from **Open from Healdan…**, or download it from the web page. See
+  [Other Kinds of File](../opening-documents/#other-kinds-of-file).
 
 ## Asking for Help
 

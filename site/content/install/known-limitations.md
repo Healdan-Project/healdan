@@ -22,6 +22,10 @@ weight: 10
   version of the helper brings a newer extension.
 - **The doc ID footer is Writer's only.** Calc and Impress show the doc # and version in the title bar, but have no
   footer field.
+- **Stamping removes a signature.** A Word or LibreOffice file with a digital signature that carries
+  `Healdan Doc ID` loses its signature when a save through the helper or the API stamps it, as the stamp changes
+  the signed content. The parts Healdan rewrites can also change form, such as the order of attributes, though not
+  what they say. File signed documents without the property, or through the web page, which doesn't stamp.
 - **Only saves through the helper update the doc ID.** Healdan writes the doc ID into files stored through its API,
   as the helper's are. A document with the footer that's uploaded or checked in through the web page keeps the
   number its footer had, until its next save through the helper.

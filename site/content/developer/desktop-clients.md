@@ -41,12 +41,21 @@ app.
 
 - **Opening:** `GET /documents/{n}`; a check-out with `{"app": "LibreOffice"}` when the user can edit it, else a
   read-only copy; the download into `Copies/`, through a temporary file; then LibreOffice. If the open fails after
-  the check-out, the check-out is released, unless this computer already had a copy.
+  the check-out, the check-out is released, unless this computer already had a copy. One open of a document runs at
+  a time: a second while one is under way, such as a double-clicked Open in App, is dropped.
+- **Other kinds of file** (not spec §5.11's, by the file's own extension) open read-only in the system's default app
+  (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`). On
+  macOS the copy gets `com.apple.quarantine` (`Platform/Quarantine.cs`), so Gatekeeper checks it, and
+  `DefaultApp.RefusedExtensions` (apps, installers, scripts and the like) are never downloaded or handed over.
 - **Saving:** the helper watches the folder, so it works whether or not the extension took the save over. A save
   counts once the file's size has stopped changing for 1.2 seconds, checked every 300 ms, and its content differs
   from the last sent. It goes up as a snapshot with `keepCheckedOut: true`, the document's own `name`, `ifVersion`,
   `ifHeld: true` and a fresh `saveId`, which a retry repeats. Saves queue in order, and a newer one replaces a queued
   older one.
+- **A new document's copy:** the extension's `/v1/adopted`, called right after `storeAsURL` while the window takes no
+  input, makes the file as it is then the copy's starting point, so the next write is a save, however soon. Without
+  it (an older extension), the first write that settles is. The record keeps `adoptingSince` until then: at a restart
+  in between, a file written within 10 seconds of the filing is the starting point, and one written later is sent.
 - **Closing:** the extension's `/v1/closed`, or LibreOffice's lock file, `.~lock.<copy>#`, gone at two polls a second
   apart. Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
 - **A crash:** while a copy is open, the helper checks every 5 seconds that `soffice` is running.
@@ -69,6 +78,9 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 - **A copy keeps the name it was opened with** while it's open. The record holds its file name and the version it
   holds, and the title comes from the record.
 - **A copy with unconfirmed changes is never deleted** by the helper, and `CopyStore.Create` never deletes anything.
+  Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
+  under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
+  (`OpenKept`).
 
 ### The Helper's Files
 
@@ -97,20 +109,29 @@ The extension calls the helper over HTTP on `127.0.0.1`, at the port in `channel
 | `POST /v1/open-dialog` | `{"app"}` | `{"action": "opened" \| "local" \| "cancel"}`, once the window closes |
 | `POST /v1/save-new` | `{"app", "name", "formats", "path"}` | `{"action": "save" \| "local" \| "cancel", "folderId", "name", "format", "properties", "tempPath"}`; `path` is the copy for Save as New Document |
 | `POST /v1/file` | `{"tempPath", "folderId", "name", "format", "properties", "app", "replaces"}` | the new copy's state |
-| `POST /v1/saved` | `{"path"}` | the copy's state once its next save is confirmed, within 120 s, else as it is |
+| `POST /v1/adopted` | `{"path"}` | the copy's state; the file as it is now is the new copy's starting point |
+| `POST /v1/saved` | `{"path"}` | the copy's state once Healdan has every save written so far, at once when nothing is on its way, else after 120 s as it is |
 | `POST /v1/new-version` | `{"path"}` | `{}`; the copy's next save goes up as a version |
 | `POST /v1/properties` | `{"path"}` | `{"action": "saved" \| "cancel" \| "file"}`; `file` means it isn't in Healdan, so the caller runs Save to Healdan |
 | `POST /v1/closed` | `{"path"}` | `{}` |
 | `POST /v1/state` | `{"path"}` | the copy's state, or `{"known": false}` |
 
-A copy's state is `{"known": true, "docNumber", "title", "docRef", "readOnly", "path", "holdBy"}`.
+A copy's state is `{"known": true, "docNumber", "title", "docRef", "readOnly", "path", "holdBy", "pending"}`.
+`pending` is true while the copy has changes on their way to Healdan: a save queued, going up or waiting for the
+server, a Save as New Version still to go, or a write that hasn't settled.
+
+- **Following a save:** the extension calls `/v1/saved` after each save, and sets the title and footer from the
+  answer. A confirmation answers only once nothing newer is on its way, so the title never stops a version behind.
+  While the answer says `pending`, the extension asks again after 2, 5, 15, 30, then every 60 seconds, so the title
+  moves on once Healdan is back, however long it was away.
 
 - **The window routes** answer when the user closes the window, which can take minutes, so their callers mustn't time
   out. A second request while one of a window is open is answered `cancel`, and brings the open one up.
 - **Save to Healdan:** `save-new` answers a `tempPath` in `<support>/Temp/`. The extension writes the document there
   in the chosen format, then calls `file` with the answer's values unchanged. `name` has no extension. The helper
   deletes the temporary file afterwards, and only ever deletes one in `<support>/Temp/` or the system's temporary
-  folder.
+  folder. Then the extension saves the window as the answer's `path` (`storeAsURL`) and calls `adopted`, both before
+  the window takes input again.
 
 ## The LibreOffice Extension
 
