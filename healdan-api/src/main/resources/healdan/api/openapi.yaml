@@ -2176,9 +2176,10 @@ components:
           type: [boolean, 'null']
           description: |
             `true` when the save is only to be made while the document is
-            checked out to the caller (on this device, when the check-out
-            names one): it's `409 not-held` when it isn't, and nothing is
-            stored. `false` by default, which checks a free document out to
+            checked out to the caller: it's `409 not-held` when it's free,
+            and nothing is stored. A check-out held on another of the
+            caller's devices is `409 held-elsewhere`, with or without
+            this. `false` by default, which checks a free document out to
             the caller for the save.
         saveId:
           type: [string, 'null']

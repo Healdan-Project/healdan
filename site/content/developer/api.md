@@ -81,6 +81,10 @@ apart; a blank name is "Unnamed device".
 - **Your devices:** `GET /auth/tokens` lists your tokens that still work, newest first, never the tokens themselves.
   `current` marks the one making the request. `DELETE /auth/tokens/{id}` revokes one of them.
 - **A token that no longer works** gets `401 unauthenticated`. Ask for the password and sign in again.
+- **A computer says who it is** with `device` in the sign-in: `{"id": "…"}`, 1 to 64 letters, digits and hyphens,
+  such as a random UUID the client keeps. Send the same id on every sign-in from that computer. A bad id is
+  `422 validation` with the field `device.id`. A token with no `device` belongs to no computer (see
+  [Check-Outs and Devices](#check-outs-and-devices)).
 
 ## Errors
 
@@ -108,6 +112,9 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 403 | `forbidden` | You can see the object, but may not do this to it |
 | 404 | `not-found` | It doesn't exist, **or you can't read it**: the two get the same answer |
 | 409 | `checked-out`, `locked` | Someone else has the document checked out, or anyone has it locked with the web page's Lock action. The problem adds the `hold` |
+| 409 | `held-elsewhere` | You have the document checked out on another of your devices. The problem adds the `hold` and `lastSaved` |
+| 409 | `not-held` | A save with `ifHeld: true` found the document free: its check-out was released |
+| 409 | `version-moved` | A save with `ifVersion` found the document at another version. The problem adds the `document` |
 | 409 | `filing-rule` | The folder can't hold documents: a Store, a matter's top folder or a search folder |
 | 409 | `not-browsable` | A Store's contents were asked for. Find a matter by search, My Matters or Recent Matters instead |
 | 409 | `refused` | Another of Healdan's rules refused it. `detail` says which |
@@ -146,6 +153,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   search results mix them, so switch on it.
 - **Field names are camelCase.** A field with no value is `null`, never left out. Timestamps are ISO 8601 in UTC,
   such as `2026-10-23T14:05:00Z`.
+- **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.
 - **Nothing caches the answers:** Healdan sends them with `no-store` in `Cache-Control`.
 
 ## What's There
@@ -154,12 +162,103 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 |---|---|
 | The server and you | `GET /server`, `GET /me`, `GET /users?q=` for user fields such as Author |
 | Signing in | `POST /auth/tokens`, `GET /auth/tokens`, `DELETE /auth/tokens/current`, `DELETE /auth/tokens/{id}` |
-| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`; `GET /stores` and `/stores/{id}/matters` for administrators only |
-| Finding | `GET /search?scope=&q=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
+| Matters and folders | `GET /matters/{id}`, `/matters/mine`, `/matters/recent`, `GET /folders/{id}`, `/folders/{id}/children`, `/folders/recent`, `POST /folders`; `GET /stores` and `/stores/{id}/matters` for administrators only |
+| Finding | `GET /search?scope=&q=&within=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
-| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `GET` and `PATCH /properties`; `GET /documents/recent` |
+| A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent` |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
+
+The sections below say more about the parts a client needs to know before it starts.
+
+## Finding
+
+- **A typed doc #.** `GET /lookup?q=` takes what a person types and returns the document and version it names:
+  `#1234`, `#1234.2`, `#1234v2`, `#1234.2.1`, and the title bar's `#1234 v2.1`, which may have spaces after the
+  `#` and before the `v`. Encode the `#` as `%23`. Input that isn't a doc # is `400`; a document the caller can't
+  read, or a version it hasn't got, is `404`.
+- **Searching inside a folder.** `GET /search` takes `within`, the id of a folder, usually a matter's workspace
+  (its `folderId`) or one of its folders. The `documents` and `folders` scopes then return only what is inside it,
+  at any depth, and a `#` lookup keeps its document only if it is in there. A Store as `within` is
+  `409 not-browsable`; the other scopes with `within` are `400`.
+- **Comments.** Every document has a Comments property (`comments`), free text of up to 4000 characters that comes
+  after Subclass in the form and the properties. The `documents` search scope finds a document by its Comments: it
+  matches those whose Comments contain every word of `q`, in any case, along with the full-text hits.
+
+## Creating a Folder
+
+`POST /folders` with `{"parentId": 1234, "name": "Drafts"}` creates a folder, as the web page's New Folder does,
+and answers `201` with the folder and its address in `Location`. The new folder inherits its parent's properties
+and permissions. It needs the Add permission on the parent (`403` without it). A Store is `409 not-browsable`, a
+search folder is `409 filing-rule`, and a matter's top level is `409 refused` unless the caller is an
+administrator. A name is cleaned of `/` and markup; one that is empty then is `422 validation`.
+
+## Favorites
+
+The user's bookmarks in LogicalDOC, apart from those on matters' workspaces, which are My Matters.
+`GET /me/favorites` lists them in one page, folders first, then documents, each by name. `POST /me/favorites` takes
+exactly one of `folderId` and `docNumber`, and answers `201`; adding a favorite twice answers `201` with the
+existing one. `DELETE /me/favorites/{id}` takes the bookmark's `id` from the list. A matter's workspace is `400`,
+and what the user can't read is `404`.
+
+## Check-Outs and Devices
+
+A check-out is held on a **device**: the `device` the token signed in with. A client that edits a local copy needs
+this, because the same person may have the document open on two computers.
+
+- **The hold names its device.** `hold.device` (`id`, `name`, `app`) is shown only to the user who holds the
+  check-out. It is `null` for anyone else, for a lock, and when no device holds it: a check-out from the web page,
+  or from a token that signed in with no device.
+- **`POST /documents/{docNumber}/checkout`** takes an optional body: `{"app": "LibreOffice"}` records the app the
+  document is opened in, and `{"move": true}` moves your own check-out from another of your devices to this one.
+  The move is recorded in the history as a check-out. Edits the other device hasn't saved are not in Healdan.
+- **`409 held-elsewhere`** is the answer, from any of your other devices, to a check-out without `move`, a save, a
+  check-in, a release and a change of properties on a document you have checked out on one device. The problem
+  carries the `hold` and `lastSaved`, when the content was last stored, so a client can warn that what the other
+  device hasn't sent is not in Healdan. The web page itself is never refused for a device.
+- **A check-out with no device** (from the web page, or from a token that signed in with none) works from any of
+  your devices until a check-out or a save through the API records one.
+- **A free document** is checked out for a save, saved and checked in again, so a client needn't check out
+  first. A client that edits for a while checks out when it opens the file.
+
+## Saving Safely
+
+`POST /documents/{docNumber}/versions` takes three optional members in its `version` part, so that a client
+working from a local copy doesn't overwrite something it hasn't seen, and can send a save again after a lost
+answer.
+
+- **`ifVersion`**, the document's `version` the save started from, such as `"2.1"`. A document at another version
+  is `409 version-moved`, nothing is stored, and the problem carries the `document` as it is now. If its
+  `fileVersion` is still the one the client started from, nobody stored newer content: someone changed its
+  properties or name, and the client may send the save again with the new `ifVersion`.
+- **`ifHeld: true`** makes the save apply only while the document is checked out to you. A free document is
+  `409 not-held`, because its check-out was released or checked in from the web page. Without it, a free document
+  is checked out for the save. Another device's check-out is `409 held-elsewhere` either way.
+- **`saveId`**, a UUID the client makes for a save and sends again, unchanged, if it didn't hear the answer. The
+  server keeps the last one stored for each document: a save that repeats it is answered `201` with the document as
+  it is now, and stores nothing. A `saveId` that isn't a UUID is `422 validation`.
+
+The checks run in a fixed order, which the docs page lists, and nothing is stored unless all pass.
+
+## Doc IDs in Word and LibreOffice Files
+
+A Word or LibreOffice file (`.docx`, `.docm`, `.dotx`, `.dotm`, `.odt` or `.ott`) that carries the document
+property **`Healdan Doc ID`** has it filled in by the server when it stores the file: on filing (`POST
+/documents`) and on every save. The property becomes the doc ID of the version being stored, such as `#1234 v2.1`,
+and so does the shown text of each field in the file that displays it, so that the stored file, its preview and
+every download show the number.
+
+- **Only files that carry the property** are changed, and nothing else in them. Any other file, and one the server
+  can't read as such, is stored as sent, byte for byte.
+- **A client that stamps its own copy,** to show the number before the save, works it out from the `version` it
+  last read: a save's new number counts from `version` (see [Conventions](#conventions)).
+
+## Thumbnails
+
+`GET /documents/{docNumber}/thumbnail` returns a small PNG of the current file's first page. It needs the Download
+permission, as the content does, and isn't recorded as a download. The server makes thumbnails in the background
+after each save, so a document whose thumbnail isn't ready yet, like one whose file has none, is `404`: show a
+placeholder, and ask again later.
 
 The docs page has each one's fields, rules and errors. Every endpoint makes the checks the web page makes, so a
 document you can't read through the web page doesn't exist through the API either.
@@ -204,7 +303,9 @@ certificate the computer running Office trusts.
   [Running a Development Stack](../development-stack/#a-matter-to-upload-into). Open `/api/docs/` on it.
 - **A worked example.** `docker/tests/test-api.sh` runs an Office add-in's whole flow with `curl`: sign in, find a
   matter, file a `.docx`, check it out, save twice, download two of its versions, check that LogicalDOC's services
-  refuse the token, and sign out. The smoke test runs it.
+  refuse the token, and sign out. It also covers M3's additions: searching inside a folder, creating a folder,
+  favorites, a stamped `.docx`, a second device, moving a check-out, `ifVersion` and `saveId`, and the
+  `#1234 v2.1` lookup. The smoke test runs it.
 
 ## LogicalDOC's Web Services and API Keys
 
