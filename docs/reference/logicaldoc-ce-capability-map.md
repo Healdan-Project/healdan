@@ -3,6 +3,7 @@
 - **Date:** 2026-10-16
 - **Method.** Three read-only code surveys of this repository, run during the roadmap session (see [`docs/ROADMAP.md`](../ROADMAP.md)). Nothing was run against a live server. Claims marked **✔ checked** were re-read in the source by hand. Treat everything else as a well-sourced lead and confirm it before relying on it.
 - **Upstream merges.** This reflects the code at merge `1c2389e3d` (upstream `3085e45c3`). Line numbers will drift.
+- **M3.** Updated on 2026-10-25, when M3's first phase was built: §2.3 adds Healdan's Comments property and how it's searched, §2.6 the API's favourites, and §5.1 Open in App and the Healdan Helper. The [M3 plan](../superpowers/plans/2026-10-24-m3-office-integration.md) has the rulings and follow-ups.
 - **M2.** Updated on 2026-10-24, when M2 was built: the sign-in throttle is **Fixed** (§5.4, §6), §4.1 points to Healdan's own API, and §6 adds what the build found.
 - **M1.** Updated on 2026-10-21, when M1 was built (`4d1b2ca2d`). The CE gaps M1 fixed are marked **Fixed in M1**, and §6 adds the CE defects M1 fixed or found. The [M1 plan](../superpowers/plans/2026-10-17-m1-move-in.md) has the details: its rulings (R1–R131), decision log (D1–D8) and follow-ups.
 
@@ -118,6 +119,9 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
   - The GUI offers `ext_` fields only after a template has been picked.
 - **Parametric search (SQL, type 2).** The GUI has `ParametricForm`, gated by 62. The server has nothing.
 - **Folders are the one working attribute-query path,** through `FolderSearch`.
+- **Healdan's Comments (M3).** A free-text string attribute, `comments`, of at most 4000 characters, after Subclass in the Healdan profile. The `profile-comments` seed adds it to the template, and it belongs to one document: it doesn't pass down (`ProfileSchema.DOCUMENT_ONLY`). Like any text attribute it's indexed only as one exact value, so Healdan's Documents search (`DocumentsOnlySearch`, the old UI's Documents scope and the API's) adds, after the full-text hits, the documents whose Comments contain every word of the query, in any case (`healdan-core/.../search/CommentsMatch.java`).
+  - **The cost:** a `LIKE '%word%'` scan of `ld_document_ext.ld_stringvalue` for `ld_name = 'comments'`, one condition per word, with no index that helps. It's capped at 1000 candidates (`COMMENTS_WINDOW`), newest first, before the access checks, so a user who can read few of more than 1000 matches loses hits.
+  - The matches honour the search's folder (`within` in the API), but not its other filters, such as dates or template.
 
 ### 2.4 Document IDs
 
@@ -164,6 +168,7 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
   - RPC `DocumentService.addBookmarks`, `deleteBookmarks`, `updateBookmark`.
   - `/data/bookmarks.xml`.
   - Folder bookmarks can back "My Matters" with no new storage. M1's My Matters is built on them.
+- **The API's favourites (M3).** `GET`, `POST /me/favorites` and `DELETE /me/favorites/{id}` are these bookmarks, apart from those on matter workspaces (My Matters), through `BookmarkDAO`, and leave out what the user can't read. The old UI's Bookmarks list (`/data/bookmarks.xml`) hides deleted targets but doesn't check read access.
 - **Folder bookmarks: Fixed in M1** (Task 20). `DocumentServiceImpl.addBookmarks` looked for an existing bookmark by document ID even for a folder, so a folder could be bookmarked twice. It now looks a folder up by folder (`findByUserIdAndFolderId`), and skips a folder that is missing, deleted or unreadable (`DocumentServiceImplTest.testFolderBookmarkNotDuplicated`). The M1 spec also suspected that `/data/bookmarks.xml` listed deleted folders. It doesn't: `@SQLRestriction("ld_deleted=0")` hides them, and `BookmarksDataServletTest` guards that (M1 plan, D8).
 
 ## 3. Containers, storage, tenants, security
@@ -295,11 +300,13 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 
 ### 5.1 Office
 
-- The GUI's "Edit with Office" (20) opens an `ldedit:` URL. No `/ldedit` servlet exists.
+- The GUI's "Edit with Office" (20) opens an `ldedit:` URL, with the CE session id in it. No `/ldedit` servlet exists.
+  - **Open in App (M3).** `healdan-core`'s `plugin.xml` declares feature 20, so the toolbar button and the right-click item show, labelled "Open in App" in the English bundles. `Util.openEditWithOffice` calls Healdan's hook (`common.client.healdan.HealdanOpenInApp`), which opens `healdan://open/<doc #>?server=<host>` with no credentials, and shows a notice linking to the helper's install page. It's on for one document of the kinds the helper opens, that the user can download, checked out or not. The Tools menu item stays hidden: it also needs menu −1090, which has no `ld_menu` row.
+- **The Healdan Helper (M3).** `clients/helper/` is a .NET app on each user's computer, with a LibreOffice extension in `clients/libreoffice/` (Python, UNO). It signs in to `/api` with a device token, keeps local copies, checks documents out on open and in on close, and sends each save as a snapshot. It's what "Edit with Office" now opens, for LibreOffice on macOS; Linux comes in M3's second phase, and Microsoft Office in M3.5. See the M3 spec.
 - The `OnlyOfficeService` interface has no implementation.
 - Nothing refers to WOPI.
-- No add-in code is in the repository.
-- The usable server endpoints are SOAP/REST checkout, checkin, lock, unlock, getContent, upload and create.
+- No Office add-in code is in the repository.
+- The usable server endpoints were SOAP/REST checkout, checkin, lock, unlock, getContent, upload and create. Healdan's own API (§4.1) has replaced them for Healdan's clients.
 
 ### 5.2 Email
 
