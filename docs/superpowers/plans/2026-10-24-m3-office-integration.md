@@ -24,7 +24,7 @@
 - **macOS packaging:** `codesign`, `notarytool`, `stapler` and `hdiutil`.
 - **Linux packaging (phase 2):** `dpkg-deb` in an `ubuntu:26.04` container.
 
-**Status:** the owner approved this plan on 2026-10-24, and chose subagent-driven execution.
+**Status:** the owner approved this plan on 2026-10-24, and chose subagent-driven execution. Tasks 1–20 were built on 2026-10-24 and 2026-10-25, in PR A [Healdan-Project/healdan#70](https://github.com/Healdan-Project/healdan/pull/70) (Tasks 1–8), PR B [#71](https://github.com/Healdan-Project/healdan/pull/71) (Task 9), PR C [#72](https://github.com/Healdan-Project/healdan/pull/72) (Tasks 10–14), PR D [#73](https://github.com/Healdan-Project/healdan/pull/73) (Tasks 15–19) and PR E [#74](https://github.com/Healdan-Project/healdan/pull/74) (Task 20). A final review of the whole branch then found a few problems; one fix wave, in PR D with its records in PR E, fixed them (the decision log's last rows). Task 21, the owner's acceptance of phase 1, is next. Phase 2 (Tasks 22–23) starts once the owner's semi-production server is running.
 
 **Spec:** [`docs/superpowers/specs/2026-10-24-m3-office-integration-design.md`](../specs/2026-10-24-m3-office-integration-design.md), approved by the owner on 2026-10-24. Every § below points into it.
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
@@ -45,6 +45,7 @@ Every task's requirements include these.
   - `logicaldoc-gui/.../common/client/util/Util.java`;
   - `logicaldoc-gui/.../frontend/client/document/grid/ContextMenu.java`;
   - `logicaldoc-gui/.../frontend/client/document/DocumentToolbar.java`;
+  - `logicaldoc-gui/.../frontend/client/menu/MainMenu.java` (added by the final review's M3);
   - `logicaldoc-i18n/src/main/resources/i18n/messages.properties` (ASCII, one line).
 - **Java sources are ASCII.** Check with `LC_ALL=C grep -nP '[^\x00-\x7F]' <files>`.
 - **Schema.**
@@ -98,13 +99,14 @@ Every task's requirements include these.
 | `POST /v1/open-dialog` | `{"app"}` | `{"action": "opened" \| "local" \| "cancel"}` |
 | `POST /v1/save-new` | `{"app", "name", "formats": ["odt","docx"], "path": null \| "<copy>"}` | `{"action": "save" \| "local" \| "cancel", "folderId", "name", "format", "properties", "tempPath"}`; `path` is set for Save as New Document |
 | `POST /v1/file` | `{"tempPath", "folderId", "name", "format", "properties", "app", "replaces": null \| "<copy path>"}` | the copy's state |
-| `POST /v1/saved` | `{"path"}` | the copy's state once the next confirmation arrives (at most 120 s), else its current state |
+| `POST /v1/adopted` | `{"path"}` | the copy's state; called right after `storeAsURL`, before the window takes input, it makes the file as it is the new copy's starting point (added by the final review's C1) |
+| `POST /v1/saved` | `{"path"}` | the copy's state once Healdan has every save written so far, at once when nothing is on its way, else after at most 120 s as it is, with `pending` (changed by the final review's I1: it answered on the next confirmation) |
 | `POST /v1/new-version` | `{"path"}` | `{}`; the next save of that copy goes up as `kind: version` |
 | `POST /v1/properties` | `{"path"}` | `{"action": "saved" \| "cancel" \| "file"}`; `file` means the document isn't in Healdan, so the caller runs Save to Healdan |
 | `POST /v1/closed` | `{"path"}` | `{}` |
 | `POST /v1/state` | `{"path"}` | the copy's state, or `{"known": false}` |
 
-A copy's state is `{"known": true, "docNumber", "title", "docRef", "readOnly", "path", "holdBy"}`, where `title` is the spec §5.7 title and `docRef` the doc ID value.
+A copy's state is `{"known": true, "docNumber", "title", "docRef", "readOnly", "path", "holdBy", "pending"}`, where `title` is the spec §5.7 title, `docRef` the doc ID value, and `pending` (added by the final review's I1) true while the copy has changes on their way to Healdan; the extension asks `/v1/saved` again while it is.
 
 ## Review Focus
 
@@ -127,7 +129,7 @@ The owner hears about 1, 2 and 7 when this plan is handed over. Task 20 folds th
 5. **`hold.device.app`** is what the helper sends as `app` in the check-out's body (`"LibreOffice"`). A check-out from the old web page has none.
 6. **The Open in App hook lives in GWT's common module** (`common.client.healdan.HealdanOpenInApp`), because `Util` is in common and can't see the frontend's `DocumentService`. The frontend registers the code that finds the doc # from CE's id.
 7. **The `Clients` check should be required.** The new workflow reports one `Clients` job, which passes trivially when nothing under `clients/` changed. The owner adds it to master's ruleset after the first green run.
-8. **`code-changed.sh` gets a second output,** `clients`. `code` becomes false for a pull request that changes only `clients/`, docs or both. `clients` is true for any change under `clients/`, and on every push.
+8. **`code-changed.sh` gets a second output,** `clients`. `code` becomes false for a pull request that changes only `clients/`, docs or both. `clients` is true for any change under `clients/`, and on every push. (The final review's I3 added `healdan-api`'s `openapi.yaml`, which the helper's contract tests read: this correction had left it out.)
 
 ## Conventions
 
@@ -150,7 +152,7 @@ All target `master`; stack each on the one before, as the stacked-PR convention 
   - the clients workflow, `code-changed.sh` and the helper's core with its tests;
   - no app yet, but the core runs against the stack in CI.
 - **PR D, Tasks 15–19:** the helper app, its windows, the LibreOffice extension and the signed macOS package.
-- **PR E, Task 20:** docs, CLAUDE.md, the capability map, the inventory, the spec's corrections and the roadmap.
+- **PR E, Task 20** ([#74](https://github.com/Healdan-Project/healdan/pull/74)): docs, CLAUDE.md, the capability map, the inventory, the spec's corrections and the roadmap.
 - **Task 21:** the owner's acceptance of phase 1.
 - **Phase 2, after the owner's semi-production server:**
   - **PR F, Task 22:** the Linux package and the Linux specifics;
@@ -1171,7 +1173,102 @@ Every call made while building, in order. "Where" is the task or review that rai
 
 | Date | Where | Decision | Why | Cost if wrong |
 |---|---|---|---|---|
+| 2026-10-24 | Pre-flight (R1) | `hd_hold_device.hd_device` is nullable in V4. A check-out or save through a token with no device holds the document device-free, as the web page's does. `DeviceHolds.clear` nulls the device, token and app, but keeps the row and `hd_lastsaveid`, and the `saveId` repeat check runs first | the plan's `not null` would refuse M2's deviceless clients, and clearing the row on check-in would lose the `saveId` a retried close needs (Review Focus 1) | one column's nullability and the clear's meaning: a small V5 or code change. |
+| 2026-10-24 | Pre-flight (R2) | when the caller holds the check-out on another device, every write answers `409 held-elsewhere` (with the `hold`), ahead of `ifHeld`'s `not-held`, which is for a document not checked out to the caller at all | spec §14.1 step 5 said `not-held`, plan Task 8 and spec §9.4 `held-elsewhere`. The helper treats both alike (Task 13), and `held-elsewhere` names the device | swapping expected codes in tests. |
+| 2026-10-24 | Pre-flight (R3) | Comments hits honour the search's folder scope, so `within` (Task 4) limits them too. A doc # query in the documents scope with `within` keeps its hit only when it's inside | otherwise `within` would leak documents outside the place shown | a filter to remove. |
+| 2026-10-24 | Pre-flight (R4) | Task 3's `testSameAsOldUi` checks the favourites against `BookmarkDAO`, read the way `BookmarksDataServlet` reads it, not through the servlet | `healdan-api` has no `logicaldoc-webapp` dependency, and gains none | the test is a step removed from the old UI's output. |
+| 2026-10-24 | Pre-flight (R5) | `DeviceIdentity` is a record `(string Id, string Name)` with `static DeviceIdentity Load(HelperPaths p)` | Task 14's text had both a tuple and an instance | a rename. |
+| 2026-10-24 | Pre-flight (R6) | Task 16's `ChannelHandler` implements the routes that need no window, and answers `{"action":"cancel"}` for `open-dialog`, `save-new` and `properties` until Task 17 wires them to its windows | Task 16 comes before the windows | nothing beyond Task 17's wiring. |
+| 2026-10-24 | Pre-flight (R7) | `ICycleEvents.HeldElsewhere(string? path, long docNumber, string deviceName, string? app, DateTimeOffset? lastSaved)`, with `path` null when it fires from an open | the plan left the parameters unspecified | a signature change in Tasks 16 and 17. |
+| 2026-10-24 | Pre-flight (R8) | `DocNumberListener.useReserved`'s thread-local is cleared in a `finally` around CE's create | a failed create could otherwise hand its number to the next document stored on that pooled thread | nothing. |
+| 2026-10-24 | Pre-flight (R9) | the link's `server` is `window.location.host` (host and port), and the helper compares host and port case-insensitively | Tasks 9 and 16 must agree, and development stacks run on non-default ports | links refused on a non-default port. |
+| 2026-10-24 | Pre-flight (R10) | no computer use or screen capture in these sessions: the by-hand checks on the Mac (Task 9 step 4, Task 16 step 4, Task 17 step 4, Task 18 steps 4–5, Task 19 steps 3, 5 and 6) and Task 20's screenshots are batched into a checklist the owner runs, and everything automated proceeds | the memory note on Mac GUI trials | a check found late means a fix after the next task started. |
+| 2026-10-24 | Pre-flight (R11) | each PR (A: Tasks 1–8, B: 9, C: 10–14, D: 15–19, E: 20) is pushed and opened, stacked with `--base master`, once its tasks pass review; auto-merge is never turned on | the plan's PRs section | an unwanted PR, closed in a click. |
+| 2026-10-24 | Task 5 review | filing with `checkOut: true` records the filing token's device, with a null app | without it, a second computer's check-out could claim a new document its creator is still editing; `NewDocument` carries no app, as Task 11's interface has it | another computer's warning reads "on MacBook" without "(LibreOffice)" for a filed document's hold, until it's next checked out (Known Limitations). |
+| 2026-10-24 | After Task 7 (R12) | PR A carries its own API docs: Task 8 also updates `site/content/developer/api.md` for Tasks 1–7. Task 20 still writes the helper's pages | CLAUDE.md says docs change in the same PR as the code, and PR E alone would leave PR A's endpoints undocumented on master | one docs section moved between PRs. |
+| 2026-10-24 | Before Task 8 (R13) | Task 6's deferred minor, `ifHeld`'s descriptions in `NewVersion.java` and `openapi.yaml` saying `not-held` for another device's hold, is fixed in Task 8 with the API docs | under R2 that's `held-elsewhere`, and PR A's contract mustn't contradict itself | nothing: a description line. |
+| 2026-10-24 | Task 9's stack check (R14) | `editwithoffice=Open in App` goes into `messages_en.properties` and `messages_en_US.properties` too, one CRLF line each, beyond spec §13.1's one bundle | they override `messages.properties` for English, so the label still read "Edit with Office"; spec §8 says "the English messages", and Healdan's "Show Doc # everywhere" change edited the same two bundles | two lines to revert at a sync. |
+| 2026-10-24 | PR A's suite (R15) | `ApiTokensTest`'s date check is fixed in PR A, in its own commit: it compares the dates as Hibernate stores and reads them, not by raw JDBC | the test context writes with `hibernate.jdbc.time_zone=Europe/Rome`, so from 2026-10-25 01:00 UTC for a week it failed on master's CI too, and blocked PR A's | a test-only commit to move. |
+| 2026-10-24 | Before Task 10 (R16) | correction 7's one `Clients` job is an aggregating job that needs the matrix jobs (the helper on `macos-15` and `ubuntu-24.04`, the extension on `ubuntu-24.04`), and passes when they passed or were skipped for lack of client changes, as `build` aggregates its shards | a single job can't run on two systems | renaming jobs before the owner adds the required check. |
+| 2026-10-24 | After Task 10 (R17) | PR C carries its own CI docs: CLAUDE.md's `code-changed.sh` and CI bullets, and the CI and Building from Source pages for the clients workflow and the helper's core. Task 20 still writes Desktop Clients and the user pages | as R12, so master's docs match its CI | docs moved between PRs. |
+| 2026-10-24 | Before Task 12 (R18) | a copy's file name is cut to at most 241 bytes in UTF-8, so the record beside it (14 bytes more) and LibreOffice's lock file (8 more) fit in 255 | the plan's 255-byte cut would let a copy exist with no record and no lock file | names 14 bytes shorter than necessary. |
+| 2026-10-24 | Task 12 review | `CopyStore.Create` never deletes anything; deleting a copy is the cycle's decision. It returns an existing copy unchanged when the doc # has one with unconfirmed changes or an unrecorded file sits at the target path, which it records as unconfirmed; otherwise it writes the record, carrying `CheckedOutHere` and `LastSaveId` over from a record at the same path | the review found that `Create` deleted other confirmed copies of the doc #, which may be open, and ignored a file it would then download over | Task 13 adapts its open. |
+| 2026-10-24 | Task 12 review | two minors join the fix: `Rename` saves the new record before moving the file, and `HasUnconfirmedChanges` treats an I/O error as unconfirmed | both guard the anti-goal Task 13 builds on: never lose a save | nothing. |
+| 2026-10-24 | Before Task 13 (R19) | a copy keeps the file name it was opened with while the app has it open. The record holds the copy's file name and moves its `FileVersion` and version on after each confirmed save, and the title comes from the record | LibreOffice's title moves on without a rename (spec §5.7), so `CopyStore` deriving a copy's path from its content would lose the file after the first save; Word's rename after save is M3.5's | a `CopyStore` change in Task 13. |
+| 2026-10-24 | Task 13 review | four minors join fix round 1: a close whose file read fails releases anyway (or retries the read); the cycle recognises this computer's hold by `hold.device.id`, not the name; a handler's exception can't stop a copy's save loop; and a shutdown that cancels a download keeps enough record for the next start to release the check-out | each strands a check-out or a save on a path the anti-goals cover, and the fixes touch the same code | nothing: they're local. |
+| 2026-10-24 | Task 13 re-review | three more join a fix round 2: a release queued from a record reads the document first and releases only this computer's hold; a close during a refused save releases and ends its session; and the `Uncertain` resend sends the current name | a blind release could take back a check-out that isn't this computer's (spec §2.4), and the other two strand a check-out or undo a rename | one more short round. |
+| 2026-10-24 | Before Task 16 (R20) | Task 16 includes a plain Sign In window (server address, username, password and the error line), and Task 17 restyles it with the others | the app can't start usefully without one, and Task 16 says "or the Sign In window" while the window is in Task 17's list | one window written twice. |
+| 2026-10-25 | Task 16 review | five minors join fix round 1: a link is held only before the first start, not until some later sign-in; closing Sign In mid-call can't leave a half-signed-in helper; the notification callback can't throw; the cycle isn't exposed until `ResumeAsync` has finished; and `/v1/file` deletes a `tempPath` only in `<support>/Temp` or the system's temporary folder, never a copy | each guards an anti-goal or a surprising check-out | nothing. |
+| 2026-10-25 | Task 17 review | Save as New Document chooses the copy's own format when it's offered, beyond "the app's own format first" | a `.docx` saved as new stays `.docx` unless the user picks otherwise | a default flipped. |
+| 2026-10-25 | Task 17 review | a short fix round anyway: Save as New Document's name is the original's without its extension; the crash window doesn't count as waiting, and a dropped link brings the waiting window up; Save before the helper is ready answers `local` and asks for sign-in; a window's counters are set only once it's shown; a typed name ending in another offered format's extension has it replaced. Plus spec §5.11's gap: other files open read-only in the system's default app, with no check-out | the next tasks or the owner's acceptance would hit each; the plan's cycle had left §5.11's other files out | one more short round. |
+| 2026-10-25 | Task 18 review | four minors go into a short fix round: an unexpected error before a helper window was shown falls back to LibreOffice's own command and says so, and `Channel.info()` accepts only a 48-hex secret; `build.sh` writes a reproducible `.oxt`; a filing answer with no copy path tells the user; and a title failure after a filing doesn't report the save as failed | the owner's acceptance runs through each | nothing. |
+| 2026-10-25 | Before Task 19 (R21) | the macOS helper registers itself as a login item with `SMAppService.mainApp` after its first successful sign-in, logging a failure, and Settings shows whether it's on | spec §5.1 says the helper runs from sign-in to the computer until quit, but Task 19 had no step for it on macOS | one small class to remove. |
+| 2026-10-25 | Task 19 | no install through a headless LibreOffice running a macro: the one-click fallback stays, as spec §5.12 says | it would place a script in the user's LibreOffice profile and approve an extension on their behalf | one click per install. |
+| 2026-10-25 | Task 19 review (R22) | on macOS the helper never runs `unopkg`. It reads LibreOffice's user registry to see what's installed, opens the bundled `.oxt` in LibreOffice for the user to accept once per helper version, and after that offers Install the LibreOffice Extension… in its menu, with a notice at each start, until it's installed. `unopkg` stays for Linux | every macOS measurement (the trial, Tasks 18 and 19) failed, and the check could run `unopkg` beside a LibreOffice the helper had just opened; spec §5.12 lets the plan settle for the `.oxt` | one click per install or upgrade on macOS; the `unopkg` code to turn back on if a later LibreOffice fixes it. |
+| 2026-10-25 | Task 19 review | four minors join the fix round: `release-mac` publishes only for a pushed `helper-v*` tag; `package.sh` fails when `SIGN_IDENTITY` is set but not found, and "notarised" is set only after `xcrun stapler validate`; no login item from the disk image or a translocated path, and re-registering when macOS has lost it; and a clear message for a notary answer that isn't JSON | they're about publishing and the first run's safety | nothing. |
+| 2026-10-25 | Before Task 20 (R23) | Task 20's pictures are offscreen renders of the helper's real windows, which Task 17's scratch renderer drew with test data, and the owner may swap in screenshots during acceptance | nobody in these sessions can capture the screen (R10) | pictures to replace. |
+| 2026-10-25 | Task 20 | the Settings picture is drawn again from the current code, with Start at Sign-In and the LibreOffice extension's line, and the renders are halved to the site's 1× size. The User Guide's interim Checking Out and Checking In and Bookmarks pages are written in full, and the site's tests pin the install page's address to the one `HealdanDocumentOpener` links to | Task 17's Settings render predates Task 19's two lines; the spec's changes to those two pages need the pages, and the roadmap says the feature PR that touches an interim page replaces it | two pages to trim. |
+| 2026-10-25 | Final review (C1) | a new channel route, `POST /v1/adopted {"path"}`, answering the copy state: the extension calls it inside the window lock right after `storeAsURL`, and the helper takes the file as it is then as the new copy's starting point. Without it (an older extension), the first settled write stays the starting point, and later different content is a save. The record keeps `AdoptingSince` until then | a save within the 1.2 s settle after `storeAsURL` folded into the starting point, and closing then deleted it unsent (spec §2.4); a restart sent the adoption as an identical version | a route and a record field to remove. |
+| 2026-10-25 | Final review fix (C1) | at a restart while adopting, the file is the starting point only if it was written within 10 seconds of the filing; a later one is sent as a save. The ruling said only that a restart mustn't send the adoption | a save the user made while the helper was down would otherwise be folded into the starting point and lost at close, though the extension tells them it will go up | an identical version, at worst, after a restart in a sub-second window. |
+| 2026-10-25 | Final review (C2) | links open only spec §5.11's kinds and refuse others with a notice; copies handed to the default app get `com.apple.quarantine`; and the default app is never given the review's 24 kinds that run programs or change the system, which aren't downloaded either | a page's link reached the default-app path, so an insider's `.terminal` or `.pkg` in a matter opened in its handler, unquarantined, in one click | a check and a list to loosen. |
+| 2026-10-25 | Final review (I1) | `/v1/saved` answers only once nothing newer is on its way, and its answer and every copy state carry `pending`; the extension asks again while it's true, after 2, 5, 15, 30, then every 60 s | it answered on the first confirmation, so two quick saves or Save as New Version after a save left the title a version behind, and an outage over 120 s never moved it | a field and a loop to remove. |
+| 2026-10-25 | Final review fix (I1) | a waiter is answered once the file is what Healdan has confirmed, which holds every write made before the call, rather than "only by a confirmation of content read after it", and at once when nothing is on its way | under the strict reading, each repeat call during an outage would wait the full 120 s, though the save it follows was confirmed meanwhile; the two readings agree on every case the review raised | waits answered sooner than the strict rule would. |
+| 2026-10-25 | Final review (I2) | the menu lists copies with unconfirmed changes that nothing looks after under Not Yet in Healdan, and choosing one opens it as it is, with no check-out or download | spec §5.4's rule; Task 16 had dropped it, so such work was reachable only by reopening the document or through Finder | a menu section. |
+| 2026-10-25 | Final review (I3) | `code-changed.sh` sets `clients=true` for `healdan-api/src/main/resources/healdan/api/openapi.yaml` too | the helper's `ContractTests` read it, so a server pull request could break them unseen; the owner makes `Clients` required before PR D merges | client tests on some server pull requests. |
+| 2026-10-25 | Final review (M1–M3) | a check-in's repeated answer tells this computer's hold by `HoldIsHere`, not any device; one open of a document runs at a time, a second dropped; and `MainMenu`'s hidden Microsoft Office item goes through Open in App, a fifth GUI upstream edit (spec §13.1) | another computer's hold was recorded and released as this one's; a double-click downloaded twice; the menu item still built an `ldedit:` link with the session id | nothing: they're local. |
+| 2026-10-25 | Final review fix | the LibreOffice extension stays at version 0.1.0, though `healdan_logic.py` changed | nothing has been released; a Mac with a pre-release build installed reinstalls the extension by hand for the acceptance | a version bump, if a pre-release is in use. |
+
+### What the final review found in this plan
+
+- **Review Focus 2's test sat at the cycle layer.** Task 13's `TwoSavesInOrder` checked only `ICycleEvents.Confirmed`, so `/v1/saved` answering a version behind (I1) went unseen. The fix's tests are at the channel level as well.
+- **Task 16 dropped spec §5.4's menu rule:** the menu listed open copies only, not those kept with unconfirmed changes (I2).
+- **Correction 8 left out the contract file:** `clients` didn't cover `openapi.yaml`, which the helper's contract tests read (I3).
 
 ## Follow-ups
 
-Filled in as the build finds them, under the same headings as M2's.
+Filled in as the build found them, under the same headings as M2's, with one more for the clients' robustness. Left open when Tasks 1–20 and the final review's fixes were built; none blocks phase 1's acceptance. The reviews' style points are left out.
+
+**Security and sign-in**
+- A signed Word or LibreOffice package (`_xmlsignatures/`, `META-INF/documentsignatures.xml`) that carries `Healdan Doc ID` is stamped, and loses its signature. Skip signed packages (Task 7). The Install pages' Known Limitations now say so (final review M4).
+- `hd_lastsaveid` survives saves that send no `saveId` (the web page, M2's clients), so a late retry of an old `saveId` is answered `201` over newer content. Overwrite it, null included, on every API save, and perhaps compare the upload's digest on a repeat (Task 6).
+- The same, seen from the helper: a lost answer, then a check-in and a fresh check-out in the web page (final review M5; narrow).
+  1. The helper sends save A with `saveId` S. It's stored as v1.1, but the answer is lost, and the retry waits.
+  2. Meanwhile the user checks the document in from the web page with other content, v1.2, which sends no `saveId`, so `hd_lastsaveid` stays S. Then they check it out again there, with no device.
+  3. The retry repeats S, and its `201` gives the document as it stands, v1.2. The helper records v1.2 as its starting point, with A's bytes as confirmed.
+  4. The next save, B, goes with `ifVersion: 1.2` and `ifHeld`, which the web page's hold by the same person passes, so B lands over the web page's v1.2 that the helper never saw.
+
+  Overwriting `hd_lastsaveid` on every save closes it, as would comparing the upload's digest on a repeat (the item above).
+- Paths the helper hands the extension (`tempPath`, `state.path`) aren't checked against `<support>/Temp` and `Copies/` there (Task 18).
+- `security import -P` shows the `.p12`'s password in `ps` on the (short-lived) runner, as GitHub's recipe does. A GitHub Environment limited to `helper-v*` tags would also stop a run by hand from signing any branch: the owner's call (Task 19).
+- `ExtensionCheck`'s registry read uses `XDocument.Load`, which parses a DTD with no resolver; `DtdProcessing.Prohibit` is tidier (Task 19).
+- A keychain write that fails after sign-in leaves the issued token unrevoked on the server (Task 14).
+
+**Rules outside the API (pre-existing, recorded in the capability map)**
+- Comments matches honour only the search's folder, not its other filters, such as dates and template (Task 2).
+- The Comments seed moves the template's attributes down one, but not existing documents' own `ld_document_ext` positions (Task 2).
+- Open in App does nothing, silently, for a document with no doc #, and other languages keep "Edit with Office" (Task 9).
+- Stamping happens only through the API, and date properties show a day early west of UTC in the old web page (Known Limitations).
+
+**For phase 2 and M3.5**
+- Linux: the default app's refused kinds are macOS's (final review C2), and `xdg-open` has its own runnable ones, such as `.desktop`; `SecretToolKeychain` has no time limit and throws a raw `Win32Exception` when `secret-tool` is missing, and a locked or missing keyring reads as "no sign-in"; `unopkg`'s path is hard-coded; Quit doesn't wait for a killed `unopkg`; the extension's `_alive` treats `EPERM` as alive (Tasks 14, 18, 19).
+- Windows, later: `DefaultApp` uses `UseShellExecute` on the file, and `CopyNames` doesn't replace Windows-only characters (Tasks 12, 17).
+- Word (M3.5): its rename after each save (R19), and a check of the stamper's rewritten parts, whose lexical form changes (attribute order, empty elements, non-BMP characters) though their content doesn't; LibreOffice reads them (Task 7).
+- `.uno:SaveAll` isn't intercepted, so it may ask "Keep current format"; Save as New Version with the helper down goes up as a snapshot without saying so (Task 18).
+- LibreOffice is looked for only in `/Applications` and `~/Applications`, and a custom `UserInstallation`, a shared install or a turned-off extension reads as not installed, with a notice at each start (Task 19).
+
+**Performance, before M6**
+- Comments matching checks at most 1000 candidates (`COMMENTS_WINDOW`) before the access checks, one `findById` each, so a user who can read few of more than 1000 matches loses hits (Task 2).
+- About three more queries per checked-out row in lists, for the device (Task 5).
+- During Sign Out's wait, the helper hashes every idle open copy every 100 ms (Task 16).
+
+**Robustness and tests (the clients)**
+- A `5xx` that lasts is retried every 60 s with only the waiting count to show, never an error, and blocks reopening the document as "still being checked in" (Task 13).
+- `CopyStore`: no NFC normalisation in `Find`, no lock around a record's read-modify-save, no `fsync`, and a huge `fileVersion` can push a name past 241 bytes; `<support>/Temp` leftovers are never swept (Tasks 12, 17).
+- The channel answers a bad body `500`, not `400` (Task 16); Sign Out shows no progress during its 30-second wait with the server down (Task 16).
+- Untested: `#1234 v 2` refused (Task 1); a favourite on a deleted or unreadable target (Task 3); the `saveId` repeat beating `checked-out`, `held-elsewhere` and `403` (Task 6); several of the stamper's rewrite branches (Task 7); the cycle's `5xx` answers and a close during a save in flight (Task 13); Save as New Document's `replaces`, and quitting during start (Task 16).
+- The test context writes with `hibernate.jdbc.time_zone=Europe/Rome` against a UTC JVM, which makes reads fail for an hour on the night the clocks change (Task 7). R15 fixed one test of it; find the rest.
+- `CopyCycle.cs` is about 1,500 lines; split it.
+
+**Docs**
+- The helper's pictures on the docs site are renders, and the Properties page's Ext. Properties screenshot predates Comments: replace them with screenshots during the acceptance (Task 20).
+- `openapi.yaml`'s `lookupDocNumber` description doesn't give the `#1234 v2.1` form, though the lookup takes it (Task 8).

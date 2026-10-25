@@ -2,7 +2,7 @@
 
 - **Milestone:** M3 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-24
-- **Status:** approved by the owner on 2026-10-24. Implementation plan: [`docs/superpowers/plans/2026-10-24-m3-office-integration.md`](../plans/2026-10-24-m3-office-integration.md); its "Spec corrections and calls" section lists where the build departs from this spec.
+- **Status:** built on 2026-10-24 and 2026-10-25, following the implementation plan named below, in five pull requests: [Healdan-Project/healdan#70](https://github.com/Healdan-Project/healdan/pull/70) (PR A: the API's additions), [#71](https://github.com/Healdan-Project/healdan/pull/71) (PR B: Open in App in the web page), [#72](https://github.com/Healdan-Project/healdan/pull/72) (PR C: the helper's core, and CI for the clients), [#73](https://github.com/Healdan-Project/healdan/pull/73) (PR D: the helper app, its windows, the LibreOffice extension and the macOS package) and [#74](https://github.com/Healdan-Project/healdan/pull/74) (PR E: the docs, and these records). A final review of the whole branch then found a few problems, fixed in PR D and recorded in PR E: the "final review" notes below. Where the build departs from this spec, the section says "changed in the build". Phase 1's acceptance (§14.2, the plan's Task 21) is pending, and phase 2 starts once the owner's semi-production server is running. Approved by the owner on 2026-10-24. Implementation plan: [`docs/superpowers/plans/2026-10-24-m3-office-integration.md`](../plans/2026-10-24-m3-office-integration.md); its "Spec corrections and calls" section and decision log list where the build departs from this spec.
   - **Builder check.** A reviewer who hadn't seen the design conversation found nine statements the code contradicts, all now corrected (§3.1), and eleven gaps. Two of the gaps were the owner's to answer: the file format at first save, and a Comments property (§5.6, §9.9).
   - **Trial build (§12).** It ran on 2026-10-24 on the owner's Mac, before approval as the owner decided, and answered the questions marked "(the trial)" (§12.5).
   - **Deferred rows.** The owner deferred the trial's Ubuntu rows and its Word add-in rows: "we have proven the concept". The Ubuntu rows wait for the owner's semi-production server; the Word rows go with Microsoft Office, which comes later (§2.1).
@@ -190,7 +190,7 @@ The name "Healdan Helper" is a call; the owner may rename it.
 ### 5.1 What it is
 
 - **C# on .NET, with Avalonia for its windows (owner).** .NET 10, the current long-term release, and Avalonia 12, the current one; the trial built with .NET 10 and Avalonia 12.1.4 for macOS (arm64) and Linux (x64 and arm64). The plan pins both (call).
-- **Runs in the menu bar (macOS) or the top bar's tray (Ubuntu)**, from sign-in to the computer until quit.
+- **Runs in the menu bar (macOS) or the top bar's tray (Ubuntu)**, from sign-in to the computer until quit. (changed in the build: on macOS the helper registers itself as a login item, with `SMAppService`, after its first successful sign-in. It doesn't while it runs from the disk image or from where macOS runs a downloaded app until it's moved (App Translocation), and re-registers if macOS has lost it. Settings shows whether it's on. R21.)
   - **Its menu:** who is signed in, the documents open, any saves waiting to be sent, Open from Healdan, Settings, Sign Out and Quit (call).
   - **On macOS it stays out of the Dock,** and after each of its windows closes it hands the focus back to the app the user was in (the trial).
 - **One server per helper** (call). A person with two Healdan servers isn't a case M3 serves.
@@ -205,15 +205,15 @@ The name "Healdan Helper" is a call; the owner may rename it.
 - **The device id** is a random id the helper makes once per computer and user, and keeps beside its settings. It isn't a secret. Signing in again, after a `401`, a password change or Sign Out, sends the same id, so the documents this computer holds stay its own (call).
 - **The token lives in the system keychain:** the macOS Keychain through Security.framework, and the Secret Service (GNOME Keyring) on Ubuntu. Never in a file. On macOS the signed helper reads it back with no prompt at every start, including after a rebuild signed with the same Developer ID (the trial).
 - A `401` at any time means the token has expired or been revoked; the helper asks for the password again and keeps any saves waiting meanwhile.
-- Sign Out revokes the token (`DELETE /auth/tokens/current`), after the helper has sent any waiting saves or the user has chosen to leave them as local copies.
+- Sign Out revokes the token (`DELETE /auth/tokens/current`), after the helper has sent any waiting saves or the user has chosen to leave them as local copies. (changed in the build: Sign Out asks nothing. It tries every unsent save at once, waits up to 30 seconds for them, and keeps the sign-in, with a notice, if any is still unsent; quitting meanwhile keeps it too. After Sign Out the channel stops, so the extension falls back to LibreOffice's own commands, §6.2.)
 - M4 replaces the password with the identity provider's pop-up, ending in the same device token (M2 §5.6).
 
 ### 5.3 Links from the web page
 
 - **The form:** `healdan://open/<docNumber>?server=<host>`, with `&readonly=1` for a read-only copy (call).
 - **No credentials in a link,** unlike CE's `ldedit:` links, which carried the CE session id. The helper uses its own token.
-- **The helper acts only on its own server.** A link naming another host is refused with a message, so a link can never open #1234 from the wrong server (call).
-- **A link can only open.** It never saves, files, releases or checks anything in, and while one of the helper's windows is waiting for an answer, further links are dropped (call).
+- **The helper acts only on its own server.** A link naming another host is refused with a message, so a link can never open #1234 from the wrong server (call). (changed in the build: `server` is the web page's `window.location.host`, so the host and any port, compared with the helper's server case-insensitively. R9.)
+- **A link can only open.** It never saves, files, releases or checks anything in, and while one of the helper's windows is waiting for an answer, further links are dropped (call). (changed in the build, final review C2: a link opens only §5.11's kinds, by the file's own extension, and refuses any other kind, before downloading it, with a notice to open it from the web page or the Open window. A page can make a link to any document, and anyone who can add files to a matter could otherwise have a click hand, say, a `.command` file to its handler.) (changed in the build: a dropped link brings the waiting window to the front. After a Crash and Settings don't count as waiting. A link that arrives while the helper is first starting is held until it has signed in; one that arrives while it's signed out is dropped with a notice.)
 - **No extra confirmation (call).** Opening checks the document out, as the owner's flow wants. Browsers ask before a site hands a link to an app (Safari did in the trial), and remember the answer per site, so a hostile page can't fire links silently; the server in the link must also match. The residual risk is that a page the user has allowed could check out documents the user may edit. It's recorded in the Install page's security notes.
 - **How a link arrives:**
   - **macOS:** the app bundle registers `healdan:` and receives links as Apple events, started or not. It opened a document within a fraction of a second in the trial.
@@ -223,12 +223,12 @@ The name "Healdan Helper" is a call; the owner may rename it.
 
 - **One folder, for every app (call, from the trial).** Word's sandbox needs access to the folder it saves into, and asks once per folder. So every local copy lives directly in one per-user folder, `Copies` beside the helper's settings, that only the user can read. Word asks for it once, the first time it saves there, and never again; the trial showed exactly that. The Install page explains the prompt, and M3.5 decides whether the helper's first run triggers it.
 - **The file name is the title bar (owner):** `<name> #<doc #> v<version>.<ext>`, for example `Lease agreement #1234 v2.1.docx`.
-  - `<name>` is the document's name without its extension, with characters the file system can't hold replaced, and shortened so the whole name fits.
-  - `<version>` is the version of the content the user is editing: `fileVersion` after each confirmed save.
+  - `<name>` is the document's name without its extension, with characters the file system can't hold replaced, and shortened so the whole name fits. (changed in the build: `/`, `:`, `\` and control characters become `-`, and the name is cut so the whole file name is at most 241 bytes in UTF-8, not 255, so that the record beside it, `.<file name>.healdan.json`, and LibreOffice's lock file, `.~lock.<file name>#`, fit as well. R18.)
+  - `<version>` is the version of the content the user is editing: `fileVersion` after each confirmed save. (changed in the build: that's the version when the copy is opened. A copy keeps the file name it was opened with while the app has it open: in LibreOffice the extension moves the title on instead (§5.7), and the record beside the copy holds its file name and the version it holds. Word's rename after each save (§5.7) is M3.5's. R19.)
   - The doc # makes each name unique in the shared folder. A read-only copy adds ` (read-only)`.
 - **Saves send the document's own name** (`name`), so the `#1234 v2.1` in the local file's name never becomes the document's name (§3.1).
 - **A record beside each copy** says which document and version it is, whether it's checked out on this computer, and whether it has changes the server hasn't confirmed. It's a hidden file in the same folder, and survives the helper restarting (call).
-- **When a copy goes:** a read-only copy when its window closes; an edited copy once the server has confirmed the check-in. The helper deletes only that copy's own files, never the folder. A copy with unconfirmed changes is never deleted by the helper; the menu lists it until the user sends it or files it (owner).
+- **When a copy goes:** a read-only copy when its window closes; an edited copy once the server has confirmed the check-in. The helper deletes only that copy's own files, never the folder. A copy with unconfirmed changes is never deleted by the helper; the menu lists it until the user sends it or files it (owner). (as built, after the final review's I2, which found the plan had dropped this: the menu's Not Yet in Healdan lists each such copy nothing looks after any more, once its window has closed, and choosing one opens it as it is, with no check-out or download, for Save as New Document.)
 
 ### 5.5 Opening, saving and closing (owner, with calls on the mechanics)
 
@@ -242,16 +242,16 @@ The name "Healdan Helper" is a call; the owner may rename it.
 
 **Saving while editing:**
 
-- Each save in the app writes the local copy as usual, and the helper sends it as a snapshot (`POST …/versions`, `kind: snapshot`, `keepCheckedOut: true`, with `name`, `ifVersion` and `ifHeld`, §9.5).
+- Each save in the app writes the local copy as usual, and the helper sends it as a snapshot (`POST …/versions`, `kind: snapshot`, `keepCheckedOut: true`, with `name`, `ifVersion` and `ifHeld`, §9.5). (changed in the build: and a `saveId`, which the helper keeps with the copy and repeats if it sends the save again, so a save whose answer was lost isn't stored twice, nor refused as `version-moved`. Plan correction 1.)
 - The app never waits for the server: the user's save is finished as soon as the local file is (call). In the trial the title bar moved on about 2.7 s after Cmd+S: a 1.2 s pause to let the file settle, then the server's save.
 - The helper notices saves by watching the folder, so it works the same whether or not the app's add-in took the save over. It sends a file only once it has stopped changing, once per save, and compares contents, so the app reopening or adopting the file isn't sent as a save.
-- When the server confirms, the title bar and the footer on screen move on (§5.7, §5.9). Saves made while one is being sent are queued and sent in order; a newer save waiting can replace an older one that hasn't started (call).
+- When the server confirms, the title bar and the footer on screen move on (§5.7, §5.9). Saves made while one is being sent are queued and sent in order; a newer save waiting can replace an older one that hasn't started (call). (changed in the build, final review I1: they move on to the last save. The extension's wait after a save is answered only once nothing newer is on its way, and its answer says `pending` while a save is still to go, as during an outage, so the extension asks again until Healdan has it.)
 
 **Save as New Version** (a button): if the app has unsaved changes, the button saves them first, and the helper sends that save as `kind: version` instead of a snapshot. Without changes, it sends the current file as a version. The title bar moves to `v3.0`.
 
 **Save as New Document** (a button, and the app's Save As on a Healdan document, §6.2):
 
-1. The Save to Healdan window opens with the current folder and properties filled in.
+1. The Save to Healdan window opens with the current folder and properties filled in. (changed in the build: titled Save as New Document. Its name is the original document's, without its extension, never the copy's file name or the window's title, and the copy's own format is chosen when it's among those offered.)
 2. Saving files the current content as a new document (`POST /documents`, `checkOut: true`). The server stamps the new document's own number into it (§9.7).
 3. The helper releases the original without saving anything to it; the original keeps its last saved version.
 4. The open window becomes the new document, with its own title and file (call).
@@ -280,7 +280,7 @@ Both the check-in and the release are refused if this computer no longer holds t
 
    The choice is only offered here, because a document's format can't change later (§3.1).
 4. On Save, the app writes the document in the chosen format to a temporary file, and the helper files that file (`POST /documents`, `checkOut: true`). The server gives it its doc # and stamps it (§9.7).
-5. The open document becomes the local copy: the app saves it under the local copy's name, so the title bar reads `Lease agreement #1234 v1.0`. The helper takes that first write as the copy's starting point, not as a save, and later saves are noticed like any other.
+5. The open document becomes the local copy: the app saves it under the local copy's name, so the title bar reads `Lease agreement #1234 v1.0`. The helper takes that first write as the copy's starting point, not as a save, and later saves are noticed like any other. (changed in the build, final review C1: taking the first write that settles as the starting point folded a save made within 1.2 s of it into it, unsent. The extension now tells the helper, over the channel's `/v1/adopted`, right after `storeAsURL` and before the window takes input again, and the file as it is then is the starting point; an older extension leaves the first settled write as it was. At a restart before either, the file is the starting point only when it was written within 10 seconds of the filing; one written later may hold a save, so it's sent.)
    - In LibreOffice the extension does this (`storeAsURL` with the format's filter).
    - In Word the helper asks Word through AppleScript to save the open document under that name (M3.5).
 6. "Save to local computer" in the window drops back to the app's own save box, with one click (the trial found a double window when the extension had attached itself twice; §6.2 attaches once).
@@ -328,7 +328,7 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 
 **After a crash** (the trial's window): "<title> closed unexpectedly. It's still checked out to you, and your local copy is kept." with Reopen and Send and Check In.
 
-**Sign In** and **Settings** (the server's address, which app opens each kind of file, §5.11) (call).
+**Sign In** and **Settings** (the server's address, which app opens each kind of file, §5.11) (call). (changed in the build: the server's address is read-only in Settings, which says to sign out and in again to change it, as there's one server per helper. Settings also says whether the helper starts at sign-in, and which version of the LibreOffice extension is installed and how.)
 
 ### 5.9 The doc ID footer
 
@@ -336,7 +336,7 @@ Each window is an Avalonia window that comes to the front over the app, and hand
   - sets the document property `Healdan Doc ID` to the title's form, `#1234 v2.1`;
   - puts a field in the footer that shows it.
 
-  This replaces M1's `# 1234.2.1` form for the footer, so the footer, the title bar and the search box agree (owner, 2026-10-24).
+  This replaces M1's `# 1234.2.1` form for the footer, so the footer, the title bar and the search box agree (owner, 2026-10-24). (changed in the build: on a document that isn't in Healdan yet, the field goes in empty, with a notice, and the server stamps the property when it's filed. The field goes into the current page style's footer, which is turned on if need be, and into its left and first-page footers when they're separate.)
 - **The stored file is always right (call).** The server stamps each file it stores through the API with the doc # and version it's stored as (§9.7), so Healdan's copy, its preview and every download show the right number, whoever opens them. That covers:
   - a new document, whose number only the server knows;
   - Save as New Document, whose content arrives with the old document's number.
@@ -354,13 +354,15 @@ Each window is an Avalonia window that comes to the front over the app, and hand
   - The next save, check-in or release from this computer is refused (`409 not-held` or `held-elsewhere`, §9.4, §9.5).
   - The helper keeps your copy and offers Save as New Document.
 - **Checked out to you on another computer** (owner, with the warning the owner added):
-  - The helper says "#1234 is checked out to you on MacBook (LibreOffice)", when it was last saved to Healdan, and that edits on that computer which haven't reached Healdan won't be in this copy.
+  - The helper says "#1234 is checked out to you on MacBook (LibreOffice)", when it was last saved to Healdan, and that edits on that computer which haven't reached Healdan won't be in this copy. (changed in the build: a document filed with `checkOut: true` is held with no app, §9.4, so for it the window says "on MacBook" until it's next checked out.)
   - The choices are Open Read-Only, Edit Here Instead (which moves the check-out to this computer, §9.4) and Cancel.
   - The other computer keeps its copy, and its next save or close is refused as above.
 - **The version moved on** (`409 version-moved`, §9.5). Someone with Write changed the document's properties or name in the web page while you held it.
-  - When the document is still checked out to this computer and its `fileVersion` is still the one the copy started from, nobody has stored newer content, so the helper re-reads the version and resends once (call).
+  - When the document is still checked out to this computer and its `fileVersion` is still the one the copy started from, nobody has stored newer content, so the helper re-reads the version and resends once (call). (changed in the build: the resend carries the document's name as it is now, so it never undoes a rename made in the web page.)
   - Otherwise it keeps the copy, tells the user, and offers Save as New Document.
 - **The token expired or was revoked:** the helper asks for the password again, and saves wait meanwhile. The device id is kept, so the documents this computer holds stay its own (§5.2).
+
+(changed in the build) **Which holds are this computer's.** The helper recognises this computer's check-out by `hold.device.id`, its own device id, and never by the device's name, as two computers can share one. A hold with no device can't be told from another computer's, so it isn't treated as this one's. Every release the helper queues, after a restart included, first reads the document and releases only this computer's hold.
 
 ### 5.11 Which app opens a file
 
@@ -369,7 +371,7 @@ Each window is an Avalonia window that comes to the front over the app, and hand
   - spreadsheets: `.xls`, `.xlsx`, `.xlsm`, `.ods`;
   - presentations: `.ppt`, `.pptx`, `.pptm`, `.odp`.
 
-  Other files open read-only in the system's default app, with no check-out.
+  Other files open read-only in the system's default app, with no check-out. (changed in the build: the plan's cycle left these out, and the build added them: `open` on macOS, `xdg-open` on Linux, from the Open window, since Open in App is offered only for the kinds above (§8). The default app keeps no lock file, so such a copy is deleted at the helper's next start, unless it changed. Final review C2: they open only from the Open window, never from a link; each copy gets macOS's `com.apple.quarantine`, so Gatekeeper checks it; and kinds that run a program or change the system when opened (apps, installers, disk images, scripts, Automator and Shortcuts files, internet location files, kernel extensions, configuration profiles: 24 extensions) are never downloaded or handed over, with a notice.)
 - **In M3 every kind opens in LibreOffice.** From M3.5, Settings choose LibreOffice or Microsoft Office for each kind on macOS, with the system's default app as the default. Ubuntu has only LibreOffice (call).
 
 ### 5.12 Packaging and releases (call, with the owner's signing)
@@ -384,10 +386,10 @@ Each window is an Avalonia window that comes to the front over the app, and hand
   - **The tray icon** needs Ubuntu's AppIndicator extension, which is on by default, and a light icon for GNOME's dark top bar.
 - **The extension comes with the helper.** On first run, and after each upgrade, the helper installs or updates the LibreOffice extension for the user:
   - **on Ubuntu,** with `unopkg` while LibreOffice is closed;
-  - **on macOS,** where `unopkg` failed in the trial, by opening the `.oxt` in LibreOffice for the user to accept, followed by a restart. The plan tries `unopkg` with a short temporary folder, or with LibreOffice running headless, before settling for that.
+  - **on macOS,** where `unopkg` failed in the trial, by opening the `.oxt` in LibreOffice for the user to accept, followed by a restart. The plan tries `unopkg` with a short temporary folder, or with LibreOffice running headless, before settling for that. (changed in the build: on macOS the helper never runs `unopkg`. It failed in the build as in the trial, `TMPDIR=/tmp` included, it hangs beside a running LibreOffice, and installing through a headless LibreOffice would have meant placing a script in the user's profile that approves the extension. Instead the helper reads LibreOffice's user registry, which runs nothing, to see what's installed. When the bundled extension is newer, or none is installed, it opens the `.oxt` in LibreOffice once per helper version, with a notice to click OK and restart. After that it doesn't start LibreOffice again: each start gives a notice, and the menu offers Install the LibreOffice Extension… until it's installed. A turned-off extension counts as missing. On Ubuntu, `unopkg` stays. R22.)
 - **Releases.** Healdan has no release tags of its own yet; the repository holds upstream's.
   - **Versioning:** the helper is versioned on its own (`1.2.3`, valid as a macOS bundle version and a Debian version), from `helper-v*` tags.
-  - **What's attached:** CI attaches the disk image and both `.deb` files to that tag's GitHub release.
+  - **What's attached:** CI attaches the disk image and both `.deb` files to that tag's GitHub release. (changed in the build: only for a pushed `helper-v*` tag, and only once `xcrun stapler validate` has found the disk image's ticket. A run by hand packages any branch and uploads the disk image as an artifact, attaching nothing. The bundle is `com.healdan.helper`, for macOS 26 and later.)
 - **The helper and the server.** The helper checks `GET /server`'s `apiVersion` and refuses a server it doesn't speak. There are no compatibility promises until the roadmap is complete (M2 §4.1), but the helper lives in the same repository, so a change that would break it updates it in the same pull request, and a new helper release follows.
 
 ## 6. The LibreOffice extension
@@ -410,7 +412,9 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 - **Keeps local copies out of LibreOffice's Recent Documents.** The extension removes Healdan's copies from that list as each one closes, on LibreOffice's own thread.
   - The trial's first try ran on a background thread and never took effect. The second, on LibreOffice's own events, wasn't rechecked before the trial ended, so the plan makes it a checked task.
   - The alternative is opening copies through the extension with LibreOffice's `PickListEntry` set to false, so they never enter the list.
-- **Sets the title bar** and refreshes the footer when the helper confirms a save (§5.7, §5.9). It learns about the confirmation by waiting on the helper's channel after each save, in the background.
+  - (changed in the build) The extension removes every Healdan copy from LibreOffice's list (the PickList's `ItemList` and `OrderList`) in the job that runs as each copy closes, on LibreOffice's own thread, and again at start, for anything a crash left. A headless LibreOffice 26.8.1 confirmed the list it leaves; the owner's acceptance checks the Start Center and File › Recent Documents on screen, and `PickListEntry` stays the fallback.
+- (changed in the build) **When the helper can't be reached** (it isn't running, or is signed out), Open, Save and Save As fall back to LibreOffice's own, with one notice until the helper answers again. A copy's save is still stored, and the helper sends it once it's back. An unexpected error in a Healdan command before any of the helper's windows was shown also falls back to LibreOffice's own command, and says so.
+- **Sets the title bar** and refreshes the footer when the helper confirms a save (§5.7, §5.9). It learns about the confirmation by waiting on the helper's channel after each save, in the background. (changed in the build, final review I1: while the answer says `pending`, it asks again after 2, 5, 15, 30, then every 60 seconds, so an outage longer than the helper's 120-second wait still moves the title on once Healdan is back.)
 - **Tells the helper when a document closes** (its close event), and the helper also watches the lock file (§5.5).
 
 ## 7. The Office add-in (M3.5)
@@ -443,12 +447,12 @@ Microsoft Office on the Mac comes after M3 (owner, §2.1). This section records 
 
 - **Feature 20 is declared** in `healdan-core`'s `plugin.xml`, which shows CE's "Edit with Office" toolbar button and right-click item.
 - **The Tools menu item stays hidden.** It also needs menu −1090, which has no row (§3.1), and the toolbar and right-click item are enough (call).
-- **The label becomes "Open in App"** in the English messages (call).
+- **The label becomes "Open in App"** in the English messages (call). (changed in the build: in `messages.properties`, `messages_en.properties` and `messages_en_US.properties`, as the last two override the first for English. Other languages keep "Edit with Office". R14.)
 - **They open the helper.**
-  - `Util.openEditWithOffice(docId)` calls a Healdan hook. Callers pass CE's id, so the hook finds the document's doc # from it.
-  - The hook opens `healdan://open/<docNumber>?server=<host>`, with no session id in the link.
-  - Every caller goes through `Util`, `TaskDetailsDialog`'s included.
-  - If nothing seems to happen, the hook's message points to the docs page for installing the helper (§13.2).
+  - `Util.openEditWithOffice(docId)` calls a Healdan hook. Callers pass CE's id, so the hook finds the document's doc # from it. (changed in the build: the hook, `common.client.healdan.HealdanOpenInApp`, is in GWT's common module, because `Util` is there and can't see the frontend's `DocumentService`. The frontend registers `HealdanDocumentOpener`, which finds the doc #. Plan correction 6.)
+  - The hook opens `healdan://open/<docNumber>?server=<host>`, with no session id in the link. (changed in the build: `<host>` is the page's host and port, R9.)
+  - Every caller goes through `Util`, `TaskDetailsDialog`'s included. (changed in the build: so does `MainMenu`'s hidden Microsoft Office item, which still built an `ldedit:` link with the session id until the final review's M3, §13.1.)
+  - If nothing seems to happen, the hook's message points to the docs page for installing the helper (§13.2). (as built: every Open in App shows the notice "If nothing opened, install the Healdan Helper", linked to `https://docs.healdan.com/user/office/installing-the-helper/`, which the docs site's tests keep in step.)
 - **On for anything the helper opens, including while checked out.** CE turns the items off unless the document is unlocked and the user has Write. Healdan's conditions are:
   - one document;
   - of the kinds in §5.11, from Healdan's list rather than `Util.isOfficeFile`'s;
@@ -480,26 +484,28 @@ Every endpoint goes into `openapi.yaml` in the same change, with tests, as M2's 
 - `GET /me/favorites`: the user's bookmarks except those on matter workspaces (which are My Matters), each a folder or a document in the same shape as elsewhere, leaving out what the user can't read.
 - `POST /me/favorites` with `{ "folderId" }` or `{ "docNumber" }` adds one; `DELETE /me/favorites/{id}` removes one.
 - Built on `BookmarkDAO` in `healdan-core`, beside `navigation.MyMatters`, so they're the same bookmarks the old web page shows. The inventory's bookmark entries move from M6 to M3.
+- (changed in the build) The routes are on `MeResource`, not a resource of their own, because CXF lets a shorter root path swallow a longer one (M2). Adding a favourite that exists answers `201` with it, and a matter's workspace is `400`. Plan correction 3.
 
 ### 9.4 Which computer holds a check-out (owner)
 
 - **A device is a computer's device id** (§5.2), not a token, so signing in again on the same computer keeps its check-outs. `POST /auth/tokens` takes an optional `device` (`{ "id" }`), and each token carries it.
-- **The server records the device** whose token checked a document out through the API, in a new table (`hd_hold_device`, Flyway `V4`), with the app the helper named when checking it out. A check-out from the old web page has no device.
+- **The server records the device** whose token checked a document out through the API, in a new table (`hd_hold_device`, Flyway `V4`), with the app the helper named when checking it out. A check-out from the old web page has no device. (changed in the build: the app is the `app` in the check-out's body, `"LibreOffice"`, plan correction 5. Filing with `checkOut: true` records the filing token's device with no app, as `POST /documents` takes none. A token that signed in with no device, as M2's clients may, holds a document with no device, so `hd_device` is nullable, R1.)
 - **`hold.device`** (`{ id, name, app }`, the name being the token's) is added to a document's `hold` when the caller is the holder, so the helper can say "on MacBook (LibreOffice)". Others still see only who holds it.
 - **From another of the holder's devices,** `POST …/checkout` answers `409 held-elsewhere` with the `hold`. Sending it again with `{ "move": true }` moves the check-out to the caller's device, recorded in the history.
-- **Saves, check-ins, releases and property changes** from a device that doesn't hold the check-out are `409 held-elsewhere`. A hold with no device (the old web page's) works from any of the holder's devices, as in M2, and the first save through the API records the device.
+- **Saves, check-ins, releases and property changes** from a device that doesn't hold the check-out are `409 held-elsewhere`. A hold with no device (the old web page's) works from any of the holder's devices, as in M2, and the first save through the API records the device. (changed in the build: `held-elsewhere` comes before `ifHeld`'s `not-held` (§9.5), which is only for a document that isn't checked out to the caller at all. The helper treats the two alike, and `held-elsewhere` names the device. R2.)
 - **Only the API checks devices (call).**
   - Device holds keep one person's computers from overwriting each other through the helper.
   - The web page acts for the person whichever computer they're at, so its check-in, unlock and saves aren't device-checked, and no upstream file changes for this.
   - When the web page ends a check-out, the helper's next save is `not-held` (§9.5).
-- A record whose check-out has since ended or changed hands never blocks anything; only the current hold counts. The builder chooses how stale records are cleared.
+- A record whose check-out has since ended or changed hands never blocks anything; only the current hold counts. The builder chooses how stale records are cleared. (changed in the build: when a check-out ends, its row stays with the device, token and app cleared, and keeps the document's last `saveId` (§9.5), so a check-in sent again after its answer was lost is still recognised. R1.)
 
 ### 9.5 Preconditions on saves
 
 The JSON part of `POST …/versions` takes two optional preconditions. The helper always sends both.
 
 - **`ifVersion`:** when the document's `version` isn't that value, the save is `409 version-moved`, and nothing is stored.
-- **`ifHeld: true`:** when the document isn't checked out to the caller (on this device, if the hold has one), the save is `409 not-held`, and nothing is stored. Without it, M2's behaviour stays: a free document is checked out and saved.
+- **`ifHeld: true`:** when the document isn't checked out to the caller (on this device, if the hold has one), the save is `409 not-held`, and nothing is stored. Without it, M2's behaviour stays: a free document is checked out and saved. (changed in the build: the caller's hold on another device is `409 held-elsewhere` with or without `ifHeld`, §9.4, and someone else's is `409 checked-out`, so `not-held` means the document is free: released, or checked in from the web page. R2.)
+- (changed in the build) **`saveId`,** a UUID the client makes for each save and sends again unchanged with a retry. The server keeps the last `saveId` stored for each document, and a save repeating it is answered `201` with the document as it stands, storing nothing. The repeat is checked first, after read access, so a retry is recognised whatever has happened to the document since, its own check-in included; the preconditions alone would refuse it as `version-moved`. A `saveId` that isn't a UUID is `422`. Plan correction 1.
 
 ### 9.6 The title's `#` form
 
@@ -513,7 +519,7 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
 - **Filing** knows the new document's number before the file is stored, so version 1.0 carries its own number with no extra version. The builder chooses how, as long as the number:
   - still comes only from Healdan's counter (`DocNumberListener`);
   - is never reused;
-  - isn't taken for a filing that fails before it's stored.
+  - isn't taken for a filing that fails before it's stored. (changed in the build: the API takes the number from the counter only once every API check has passed, immediately before CE's create. A failure inside CE's create leaves a gap in the doc #s, as a deleted document does, and the number is never reused. The reservation is cleared however the create ends, so it can't pass to the next document stored on that thread. Plan correction 2, R8.)
 - **The response** carries the stored `fileVersion` as always, which the helper uses for the title and the on-screen footer.
 - The stamping code is in `healdan-core` (call), so a later route (the new web interface's uploads, say) can use it.
 
@@ -527,7 +533,7 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
   - It's optional, editable, free text of up to 4000 characters, shown after Subclass.
   - A new seed step adds it (a shipped seed never changes, CLAUDE.md), so existing installs get it too.
   - The old web page and the API's form show it like any other property.
-- **Searchable by its words:** the Documents search finds a document by a word in its Comments. Text properties are indexed only as exact fields today (§3.1), so the builder chooses how, for example by indexing Comments with the document's text (call).
+- **Searchable by its words:** the Documents search finds a document by a word in its Comments. Text properties are indexed only as exact fields today (§3.1), so the builder chooses how, for example by indexing Comments with the document's text (call). (changed in the build: Healdan's own Documents search, `DocumentsOnlySearch`, adds after the full-text hits the readable documents whose Comments contain every word of `q`, in any case, by a `LIKE` scan of `ld_document_ext` (`CommentsMatch`). They honour the search's folder, so `within` (§9.1) limits them too (R3). It's the old web page's Documents scope as well as the API's. Plan correction 4; the capability map records the cost. Comments belongs to one document, and doesn't pass down from folders.)
 - iManage's Comments field in its Save dialog is the model (owner).
 
 ### 9.10 Answers to M2's open questions
@@ -547,13 +553,13 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
 - **The token** is only ever in the system keychain and in memory, and never in a log.
 - **The channel between the add-ins and the helper.**
   - **What it is:** HTTP on `127.0.0.1`, at a port the helper picks at start. The port and a random secret are in a file only the user can read, and every request carries the secret, so other users of the computer can't drive the helper. The trial's extension used exactly this.
-  - **What an add-in may ask:** to show a window, to save or open the document it has, or to set its title. It can't read the token.
+  - **What an add-in may ask:** to show a window, to save or open the document it has, or to set its title. It can't read the token. (as built: the routes are the plan's table, "The channel's routes". The final review added `POST /v1/adopted {"path"}`, which marks a new document's copy as adopted (§5.6) and answers its state, and `pending` in every copy state, true while the copy has changes on their way to Healdan.)
   - **What a web add-in still needs** (M3.5): it can't read the file, so it pairs with the helper once instead. The trial's shortcut, putting the secret in the add-in's page, isn't acceptable.
-- **Links** carry no credentials, can only open documents, and only from the helper's own server (§5.3).
+- **Links** carry no credentials, can only open documents, and only from the helper's own server (§5.3). (changed in the build: only §5.11's kinds; other files open only from the Open window, quarantined, and never the kinds that run programs. Final review C2.)
 - **Local copies** are in a folder only the user can read. Read-only and checked-in copies are deleted when done; copies with unconfirmed changes stay until the user decides (§5.4).
 - **HTTPS only,** apart from `localhost`, with the system's certificate checks (§3.3).
 - **CE's `ldedit:` links put the session id in the URL;** Healdan's replacement doesn't (§8).
-- **Stamping changes only the one property and the text of the fields showing it,** in files that already carry the property (§9.7).
+- **Stamping changes only the one property and the text of the fields showing it,** in files that already carry the property (§9.7). (found in the build: a signed package loses its signature when it's stamped, and the parts the stamper rewrites change form, though not content. The Install pages' Known Limitations say so; the plan's follow-ups keep the fix.)
 - **No more permissions than it needs.** In M3 the helper needs only the Keychain. The "access data from other apps" permission was only for sideloading into Word's container, which didn't work (§3.1); M3.5 adds Automation, and Word's one-time folder grant.
 
 ## 11. Code organisation (calls)
@@ -563,8 +569,8 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
   - `clients/libreoffice/`: the extension's Python code, its tests and its packaging;
   - `clients/office/`: the Office add-in, from M3.5.
 - **The API client** is written against `openapi.yaml`. Whether its models are generated from the file or written by hand is the builder's choice, as long as a test fails when the helper calls an operation or reads a field the file doesn't describe.
-- **CI** gets a workflow for `clients/`. It builds and tests on Ubuntu and macOS for pull requests, and signs, notarises and attaches the packages for `helper-v*` tags.
-  - `code-changed.sh` learns that a pull request touching only `clients/` needs no Java build, and one touching only the server needs no client build, so neither waits for the other (the owner wants CI's wait short). The required checks still report.
+- **CI** gets a workflow for `clients/`. It builds and tests on Ubuntu and macOS for pull requests, and signs, notarises and attaches the packages for `helper-v*` tags. (changed in the build: `clients.yml` runs the helper's tests on `ubuntu-24.04` and `macos-15` and the extension's on `ubuntu-24.04`, and one aggregating `Clients` job passes when they passed, or were skipped because nothing under `clients/` changed. `Clients` should be required: the owner adds it to master's ruleset after its first green run. Plan correction 7, R16.)
+  - `code-changed.sh` learns that a pull request touching only `clients/` needs no Java build, and one touching only the server needs no client build, so neither waits for the other (the owner wants CI's wait short). The required checks still report. (changed in the build: it gets a second output, `clients`, true for any change under `clients/` or to `clients.yml`, and on every push. `code` is false for a pull request that changes only `clients/`, docs or both. Plan correction 8.)
   - So a pull request that changes only `clients/` doesn't build the Docker image. The helper's test against the real server (§14.1) runs on master after the merge, and on pull requests that change the server. Its fake-server tests run on every client change. (accepted gap)
 - **Server code** goes where M2's does: endpoints in `healdan-api`; domain code (favourites, device holds, stamping, the Comments seed) in `healdan-core`.
 
@@ -652,7 +658,10 @@ The fallbacks the trial needed are now the design: one copies folder (T6 on Word
 | `logicaldoc-gui/src/main/java/com/logicaldoc/gui/common/client/util/Util.java` | `openEditWithOffice` (~827) calls Healdan's Open in App hook instead of building an `ldedit:` link | §8 |
 | `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/document/grid/ContextMenu.java` | `applyOfficeSecurity` (~384): Healdan's conditions (§8) | §8 |
 | `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/document/DocumentToolbar.java` | the button's click handler (~480) and its enabling (~696): Healdan's conditions | §8 |
+| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/menu/MainMenu.java` | `getOfficeMenuItem`'s click handler (~487) calls `Util.openEditWithOffice` instead of building an `ldedit:` link with the session id, and the two imports that left unused go (changed in the build: added by the final review's M3; the item stays hidden, as menu −1090 has no row) | §8, §10 |
 | `logicaldoc-i18n/src/main/resources/i18n/messages.properties` | `editwithoffice=Open in App` | §8 |
+| `logicaldoc-i18n/src/main/resources/i18n/messages_en.properties` | `editwithoffice=Open in App` (changed in the build: added, R14) | §8: overrides `messages.properties` for English |
+| `logicaldoc-i18n/src/main/resources/i18n/messages_en_US.properties` | `editwithoffice=Open in App` (changed in the build: added, R14) | §8: overrides it for US English |
 
 There are no server-side upstream edits. The GUI edits are client code, which CI's tests don't cover, so `UPSTREAM_TESTS` is unchanged. CE's `officeaddinhintlauncher` message, which the docs-site work pointed at docs.healdan.com in all 34 bundles, is no longer shown, because Healdan's hook shows its own; the bundles stay as they are.
 
@@ -660,7 +669,7 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
 
 - `healdan-core`: `plugin.xml` (feature 20), `DocNumberQuery` (§9.6), favourites, device holds and Flyway `V4`, stamping and how filing knows its number (`DocNumberListener` if the builder needs it), the Comments seed step and its search;
 - `healdan-api`: the endpoints and `openapi.yaml`;
-- Healdan's GUI package: the Open in App hook;
+- Healdan's GUI packages: the Open in App hook (changed in the build: `common.client.healdan.HealdanOpenInApp`, and `frontend.client.healdan.HealdanDocumentOpener`, which the frontend registers, §8);
 - `docker/tests/test-api.sh` (§14.1), `.github/workflows/` (the clients workflow, and the helper's test in the Docker image workflow) and `.github/scripts/code-changed.sh`;
 - `CLAUDE.md`, `docs/reference/healdan-api-inventory.md` (tags and endpoints) and `docs/reference/logicaldoc-ce-capability-map.md` (§5.1: Open in App and the helper; §2.3: Comments).
 
@@ -693,6 +702,8 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
 - `user/finding-documents/finding-by-doc-number/index.md`: the `#1234 v2.1` form.
 - `user/working-with-matters/properties/`: Comments, and finding a document by it.
 
+(changed in the build) The user pages with pictures are page bundles (`installing-the-helper/index.md` and so on), so their addresses are the same. The pictures are offscreen renders of the helper's real windows, to be replaced with screenshots at acceptance. Checking Out and Checking In and Bookmarks were interim pages, so they were written in full. Searching (Comments in the Documents scope), the Developer Guide's Tests and Building from Source, and the three manuals' landing pages changed too. PR A and PR C wrote the API page's and the CI pages' parts with their code (R12, R17).
+
 ## 14. Verification
 
 ### 14.1 Automated
@@ -710,12 +721,13 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
   - a stale record not blocking;
 - the preconditions:
   - `version-moved` for a stale `ifVersion`;
-  - `not-held` for `ifHeld` on a released document, one checked in from the web page, and one someone else holds;
+  - `not-held` for `ifHeld` on a released document, one checked in from the web page, and one someone else holds (changed in the build: someone else's hold is `409 checked-out`, which comes first, §9.5);
+  - a repeated `saveId` answered `201`, storing nothing (changed in the build);
 - stamping:
   - a `.docx` and an `.odt` with the property, filed and saved, carry their own number and version in the property and in the field's shown text;
   - a Save as New Document's file carries the new number;
   - a file without the property is stored byte for byte;
-  - a filing that fails takes no number;
+  - a filing that fails takes no number (changed in the build: a filing the API refuses takes none, and one that fails inside CE's create leaves a gap, §9.7);
 - the thumbnail, and `404` before one exists;
 - the Comments seed on a fresh and an existing database, and the Documents search finding a word in it;
 - `#1234 v2.1` in `DocNumberQuery`, `/lookup` and `/search`;
@@ -727,8 +739,10 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
 2. create a folder and add it to favourites;
 3. file a stamped `.docx` into it and check its number;
 4. check it out from one device, then get `held-elsewhere` from a second device of the same user;
-5. move the check-out, then get `not-held` from the first device;
+5. move the check-out, then get `not-held` from the first device (changed in the build: `held-elsewhere`, R2);
 6. save with a stale `ifVersion` (`409`), then make a good save.
+
+(changed in the build) These are steps 20 to 28 of `test-api.sh`, which also send a good save again with its `saveId`, look the document up in the title's form, `#n v<version>`, and leave nothing checked out.
 
 **The helper's core** (no windows), in the clients workflow on Ubuntu and macOS (call):
 
@@ -747,7 +761,7 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
 
 **The helper against the real server** (call): the core's cycle run against the Docker stack after the smoke test, in the Docker image workflow, with a fake app (§11 says when it runs).
 
-**The extension's** Python logic has unit tests. Whether a headless LibreOffice runs in CI to test the interception, the attach-once rule and the Recent Documents cleanup is the plan's call.
+**The extension's** Python logic has unit tests. Whether a headless LibreOffice runs in CI to test the interception, the attach-once rule and the Recent Documents cleanup is the plan's call. (changed in the build: none runs in CI. The tests drive `healdan_logic.py`'s flows with fakes for LibreOffice, and build the `.oxt` and check its parts agree. The UNO layer was checked once in a headless LibreOffice 26.8.1 with a scratch profile and a fake helper, and the rest is in the owner's acceptance.)
 
 ### 14.2 Manual acceptance (owner)
 

@@ -330,7 +330,8 @@ class SiteBuild(unittest.TestCase):
         pages = {"quick-start": "Quick Start", "what-runs": "What Runs", "configuration": "Configuration",
                  "reverse-proxy": "Reverse Proxy", "backup-and-restore": "Backup and Restore",
                  "upgrading": "Upgrading", "host-folders": "Host Folders Instead of Volumes",
-                 "troubleshooting": "Troubleshooting", "known-limitations": "Known Limitations"}
+                 "troubleshooting": "Troubleshooting", "known-limitations": "Known Limitations",
+                 "office-integration": "Office Integration"}
         for slug, title in pages.items():
             self.assertEqual(f"{title} – Healdan Documentation", self.text(self.html(f"/install/{slug}/"), "title"))
         for page in (self.public / "install").rglob("*.html"):
@@ -342,7 +343,8 @@ class SiteBuild(unittest.TestCase):
         pages = {"building-from-source": "Building from Source", "development-stack": "Running a Development Stack",
                  "tests": "Tests", "continuous-integration": "Continuous Integration",
                  "how-healdan-extends-logicaldoc": "How Healdan Extends LogicalDOC",
-                 "upstream-syncs": "Upstream Syncs", "writing-docs": "Writing Docs"}
+                 "upstream-syncs": "Upstream Syncs", "writing-docs": "Writing Docs",
+                 "desktop-clients": "Desktop Clients"}
         for slug, title in pages.items():
             self.assertEqual(f"{title} – Healdan Documentation",
                              self.text(self.html(f"/developer/{slug}/"), "title"))
@@ -379,6 +381,29 @@ class SiteBuild(unittest.TestCase):
         page = self.html("/developer/continuous-integration/")
         self.assertIn("check-fontawesome-icons.py", checks)
         self.assertEqual([], sorted(name for name in checks if name not in page))
+
+    # M3
+
+    OFFICE_PAGES = {"": "Working in LibreOffice", "installing-the-helper/": "Installing the Healdan Helper",
+                    "saving-to-healdan/": "Saving to Healdan", "opening-documents/": "Opening Documents",
+                    "editing-and-versions/": "Editing and Versions", "doc-id-footer/": "The Doc ID Footer",
+                    "when-things-go-wrong/": "When Things Go Wrong"}
+
+    def test_office_pages_written(self):
+        for slug, title in self.OFFICE_PAGES.items():
+            page = self.html(f"/user/office/{slug}")
+            self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
+            self.assertNotIn("healdan-interim", page, slug)
+        for page in ("documents/checking-out-and-checking-in", "documents/bookmarks"):
+            self.assertNotIn("healdan-interim", self.html(f"/user/{page}/"), page)
+
+    def test_open_in_apps_notice_links_to_the_install_page(self):
+        # The web page's Open in App notice links here, so the page must keep its address
+        opener = _scripts.REPO / ("logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/healdan/"
+                                  "HealdanDocumentOpener.java")
+        url = re.search(r'INSTALL_URL = "([^"]+)"', opener.read_text(encoding="utf-8")).group(1)
+        self.assertEqual(BASE_URL + "user/office/installing-the-helper/", url)
+        self.assertIn("Installing the Healdan Helper", self.text(self.html(url[len(BASE_URL) - 1:]), "title"))
 
     def test_sources_and_links_pass(self):
         for script, arg in (("check-site-sources.py", SITE), ("check-site-links.py", self.public)):

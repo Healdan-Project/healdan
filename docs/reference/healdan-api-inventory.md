@@ -3,11 +3,12 @@
 - **What:** every server call the old GWT UI makes, with the milestone that first needs it in the new JSON API, and where it lands there.
 - **Written:** 2026-10-23, for the [M2 design](../superpowers/specs/2026-10-23-m2-api-foundation-design.md) (§12), from the code at `808d5395b`.
 - **Kept current:** each milestone that adds endpoints updates its entries' tags and endpoints in the same pull request.
+- **M3 built** its endpoints on 2026-10-24 (§0.2): the bookmarks, `FolderService.create` and `/thumbnail` moved from M6 to M3, and the rest of M3's additions have no old call behind them.
 - **M2 built** every `M2` endpoint named here on 2026-10-23 and 2026-10-24 (§0.1). Its `openapi.yaml` (`healdan-api/src/main/resources/healdan/api/openapi.yaml`) is the reference for what they do; this file only maps the old calls to them.
 
 **Tags.** The milestone that first needs the call: `M2` (the add-in slice), `M3`, `M5`, `M6` (the User app), `M7` (walls), `Admin` (the backlog's Admin app), or `none`. `none` covers enterprise stubs with no server code (marked **NO IMPL**) and CE features Healdan doesn't use. Tags are judgements, and a milestone's design session can move them.
 
-**Lands in.** `M2` entries name the endpoint that replaces them (§0.1, and the M2 spec §6). Everything else names only the resource area it will probably land in: a hint for that milestone's design, not a designed endpoint. Paths are under `/api/v1`.
+**Lands in.** `M2` and `M3` entries name the endpoint that replaces them (§0.1 and the M2 spec §6, §0.2 and the M3 spec §9). Everything else names only the resource area it will probably land in: a hint for that milestone's design, not a designed endpoint. Paths are under `/api/v1`.
 
 **Purposes** were inferred from names, signatures and spot-checked implementations, not from reading every method body.
 
@@ -23,9 +24,9 @@
 | Tag | RPC methods | Data servlets | Other | Total |
 |---|---:|---:|---:|---:|
 | M2 | 31 | 6 | 3 | 40 |
-| M3 | 0 | 0 | 0 | 0 |
+| M3 | 3 | 1 | 1 | 5 |
 | M5 | 0 | 0 | 0 | 0 |
-| M6 | 99 | 21 | 11 | 131 |
+| M6 | 96 | 20 | 10 | 126 |
 | M7 | 0 | 0 | 0 | 0 |
 | Admin | 122 | 20 | 3 | 145 |
 | none | 223 | 5 | 6 | 234 |
@@ -65,7 +66,22 @@ M2 built every endpoint in this table. The rows marked "(none: …)" are endpoin
 | (none: the matter admin RPCs read a matter by its workspace, for admins only) | `GET /matters/{id}` |
 | (none: the description file is new) | `GET /openapi.yaml`, and the docs page at `/api/docs/` |
 
-### 0.2 Per service
+### 0.2 What M3 adds (built in M3)
+
+M3 built every endpoint in this table, for the Healdan Helper's windows and saves ([M3 spec](../superpowers/specs/2026-10-24-m3-office-integration-design.md) §9). The rows marked "(none: …)" have no old call behind them.
+
+| Old call | M3 endpoint |
+|---|---|
+| `DocumentService.addBookmarks`, `deleteBookmarks`; `/data/bookmarks.xml` | `GET /me/favorites`, `POST /me/favorites`, `DELETE /me/favorites/{id}`: the bookmarks, apart from My Matters |
+| `FolderService.create` | `POST /folders` |
+| `/thumbnail` | `GET /documents/{docNumber}/thumbnail` |
+| (none: searching inside a folder is new) | `GET /search?within=` |
+| (none: which computer holds a check-out is new) | `device` on `POST /auth/tokens`; `app` and `move` on `POST /documents/{docNumber}/checkout`; `hold.device`; `409 held-elsewhere` |
+| (none: save preconditions are new) | `ifVersion`, `ifHeld` and `saveId` on `POST /documents/{docNumber}/versions` |
+| (none: stamping is new) | the `Healdan Doc ID` property filled in by `POST /documents` and `POST /documents/{docNumber}/versions` |
+| `HealdanLookupService.lookup` (the title's form) | `GET /lookup?q=` and `/search` take `#1234 v2.1` |
+
+### 0.3 Per service
 
 | Service | Methods | M2 | M3 | M5 | M6 | M7 | Admin | none |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -86,9 +102,9 @@ M2 built every endpoint in this table. The rows marked "(none: …)" are endpoin
 | ContactService | 5 |  |  |  |  |  |  | 5 |
 | DashletService | 7 |  |  |  | 4 |  | 3 |  |
 | DocuSignService | 6 |  |  |  |  |  |  | 6 |
-| DocumentService | 72 | 12 |  |  | 39 |  | 7 | 14 |
+| DocumentService | 72 | 12 | 2 |  | 37 |  | 7 | 14 |
 | EmailAccountService | 8 |  |  |  |  |  |  | 8 |
-| FolderService | 27 | 2 |  |  | 18 |  | 7 |  |
+| FolderService | 27 | 2 | 1 |  | 17 |  | 7 |  |
 | FormService | 6 |  |  |  |  |  |  | 6 |
 | ImpexService | 12 |  |  |  |  |  |  | 12 |
 | ImportFolderService | 8 |  |  |  |  |  |  | 8 |
@@ -336,8 +352,8 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/DocumentService.java`; RPC URL `/frontend/document` (`@RemoteServiceRelativePath("document")`)
 - Server impl: **DocumentServiceImpl**
-- Methods: 72 (M2 12, M6 39, Admin 7, none 14)
-- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/documents/{docNumber}/…` for notes, links, tickets, permissions and bookmarks, and `/trash` (M6); `/admin/documents` (Admin)
+- Methods: 72 (M2 12, M3 2, M6 37, Admin 7, none 14)
+- Lands in: `/documents/{docNumber}`, `/documents/{docNumber}/checkout`, `/documents/{docNumber}/versions`, `/documents/{docNumber}/properties`, `POST /documents` (M2); `/me/favorites` (M3); `/documents/{docNumber}/…` for notes, links, tickets and permissions, a favourite's name, and `/trash` (M6); `/admin/documents` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
@@ -362,7 +378,8 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 | `getAllowedPermissions` | Effective permissions of the user over a set of documents (enables/disables actions). The API returns it as `canEdit`. | M2 |
 | `saveACL`, `applyParentFolderSecurity` | Edit a document's ACL; reset to the folder's. | M6 |
 | `makeImmutable` | Make documents immutable (read-only forever). | M6 |
-| `addBookmarks`, `deleteBookmarks`, `updateBookmark` | Favorites (bookmarks). Healdan uses folder bookmarks as My Matters. | M6 |
+| `addBookmarks`, `deleteBookmarks` | Favorites (bookmarks). Healdan uses folder bookmarks as My Matters. Built as `POST` and `DELETE /me/favorites`. | M3 |
+| `updateBookmark` | A bookmark's own name and description. | M6 |
 | `linkDocuments`, `deleteLinks`, `updateLink`, `replaceAlias` | Document links; turn an alias into a real document. | M6 |
 | `saveNote`, `getNotes`, `getNote`, `saveNotes`, `deleteNotes` | Annotations/notes on a document or version. | M6 |
 | `createTicket`, `setTicketPassword`, `deleteTickets`, `enableTickets`, `disableTickets` | Download/view tickets (shareable links; served by /download-ticket). | M6 |
@@ -392,14 +409,15 @@ Transport: each interface is bound to a servlet by `@RemoteServiceRelativePath`;
 
 - Interface: `gui/frontend/client/services/FolderService.java`; RPC URL `/frontend/folder` (`@RemoteServiceRelativePath("folder")`)
 - Server impl: **FolderServiceImpl**
-- Methods: 27 (M2 2, M6 18, Admin 7)
-- Lands in: `/folders/{id}` (M2); `/folders/{id}/…` for create, move, copy, permissions and trash (M6); `/admin/folders` (Admin)
+- Methods: 27 (M2 2, M3 1, M6 17, Admin 7)
+- Lands in: `/folders/{id}` (M2); `POST /folders` (M3); `/folders/{id}/…` for move, copy, permissions and trash (M6); `/admin/folders` (Admin)
 
 | Method(s) | Purpose | First needed by |
 |---|---|---|
 | `getFolder` | Folder bean (path, permissions, template/attributes, counts) with optional path/doc count/subfolder count. The browse call. | M2 |
 | `getAllowedPermissions` | Effective permissions over a set of folders (can I add/write here). | M2 |
-| `create`, `createAlias`, `save`, `rename` | Create, alias, update properties, rename a folder. (Healdan restricts Client/Matter structure.) | M6 |
+| `create` | Create a folder. (Healdan restricts Client/Matter structure.) Built as `POST /folders`, New Folder in the helper's Save window. | M3 |
+| `createAlias`, `save`, `rename` | Alias, update properties, rename a folder. | M6 |
 | `delete`, `restore`, `deleteFromTrash` | Delete to trash, restore, purge. | M6 |
 | `move`, `merge`, `copyFolders`, `paste`, `pasteAsAlias` | Move/merge/copy folders; paste documents (copy/cut, links, notes, security options). | M6 |
 | `saveACL`, `inheritACL` | Edit folder ACL (optionally to subfolders); inherit from another folder. | M6 |
@@ -755,7 +773,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/data/documenthistory.xml` | DocumentHistoryDataServlet | docId (plus max, locale) | Audit events for one document (author, event, version, date, comment). Possible source for "recent documents". | M6 | `/documents/{docNumber}/history` |
 | `/data/folderhistory.xml` | FolderHistoryDataServlet | id | Audit events for one folder. | M6 | `/folders/{id}/history` |
 | `/data/acl.xml` | AclDataServlet | id, type (document/folder/menu/template) | Access control list entries (groups, users, permission flags) of an object. | M6 | `/documents/{docNumber}/permissions`, `/folders/{id}/permissions` |
-| `/data/bookmarks.xml` | BookmarksDataServlet | (none)  | The user's bookmarks (documents and folders). Healdan stores My Matters as folder bookmarks. | M6 | `/me/favorites` |
+| `/data/bookmarks.xml` | BookmarksDataServlet | (none)  | The user's bookmarks (documents and folders). Healdan stores My Matters as folder bookmarks. | M3 | `GET /me/favorites` (built; leaves out My Matters and what the user can't read) |
 | `/data/notes.xml` | NotesDataServlet | docId, userId, page | Notes/annotations of a document or by a user. | M6 | `/documents/{docNumber}/notes` |
 | `/data/links.xml` | LinksDataServlet | docId, parent | Links of a document, or children of a link/metadata group. | M6 | `/documents/{docNumber}/links` |
 | `/data/documentaliases.xml` | DocumentAliasesDataServlet | docId | Aliases (shortcuts) pointing to a document. | M6 | – (shortcuts are refused inside Stores) |
@@ -807,7 +825,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/download, /download/*` | DownloadServlet | docId, versionId, version, fileVersion, suffix, fileName, downloadText, pluginId+resourcePath | Download a document's current/old file, a suffix rendition (thumb, conversion), the indexed text, or a plugin resource. Check-out needs this to get bytes. | M2 | `/documents/{docNumber}/content` |
 | `/download-ticket` | TicketDownload | ticketId, suffix, password, behavior, control; Basic Authorization header | Public (security=none) download/preview via a ticket; checks expiry, counters, password. | M6 | stays as it is (public ticket links) |
 | `/download-attachment` | DownloadAttachmentServlet | docId, fileVersion, attachmentFileName | Download an attachment inside an email document. | M6 | `/documents/{docNumber}/attachments` |
-| `/thumbnail` | ThumbnailServlet | docId, version, fileVersion, suffix | Image rendition (thumbnail / preview image); generated on demand. | M6 | `/documents/{docNumber}/thumbnail` |
+| `/thumbnail` | ThumbnailServlet | docId, version, fileVersion, suffix | Image rendition (thumbnail / preview image); generated on demand. | M3 | `GET /documents/{docNumber}/thumbnail` (built: the current thumbnail, `404` until M1.5 has made it) |
 | `/convertpdf/*` | ConvertPdf | docId, version, fileVersion | Convert (if needed) and stream a PDF for viewing. | M6 | `/documents/{docNumber}/preview` |
 | `/zip-export` | ExportZip | folderId, level (and doc ids); GET/POST | Zip a folder tree or selected docs for download. | M6 | `/folders/{id}/zip` |
 | `/avatar` | AvatarServlet | userId | User picture image. | M6 | `/users/{id}/avatar` |

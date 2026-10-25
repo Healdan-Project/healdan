@@ -57,7 +57,8 @@ Healdan's modules need.
 
 ## The Desktop Clients
 
-The desktop clients are under `clients/`, and build separately from Maven.
+The desktop clients are under `clients/`, and build separately from Maven. [Desktop Clients](../desktop-clients/)
+describes how they work.
 
 - **The helper's core** is a .NET project in `clients/helper/Healdan.Helper.Core`, with its tests in
   `clients/helper/Healdan.Helper.Core.Tests`. You need the .NET 10 SDK; `clients/helper/global.json` pins the

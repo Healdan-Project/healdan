@@ -43,6 +43,7 @@ dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain" # 
 python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice extension's tests (standard library only)
 clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt (reproducible)
 clients/helper/packaging/mac/package.sh 1.2.3             # Healdan Helper.app and its .dmg, on a Mac; signed only with SIGN_IDENTITY set
+HEALDAN_HELPER_DEV_ROOT=/tmp/hh dotnet run --project clients/helper/Healdan.Helper # a Debug helper with its files apart; no links, notifications or .oxt
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.
@@ -57,7 +58,7 @@ clients/helper/packaging/mac/package.sh 1.2.3             # Healdan Helper.app a
   - The `checks` job runs the quick checks, then `.github/scripts/test-shards.py` splits the tests into shards of about five minutes (at most eight). Each class weighs its time in the newest successful run, which the `test-times` job caches, or 3 s per `@Test` until it has one. Each `Tests (n of N)` job installs the modules, without javadoc or plugin zips, and runs its share. The `build` job, the check master requires, passes when they all did, or when a docs-only pull request skipped them.
   - Its Maven repository cache falls back to master's newest copy, and only master saves it (from one shard), so a POM edit downloads only what it adds (`logicaldoc.sourceforge.net` sometimes refuses requests).
 - `.github/scripts/code-changed.sh` writes two outputs for a pull request (a push gets both true):
-  - `code` is false when it changes only `docs/`, `site/`, Markdown files outside `src/` and `clients/`. Both Java and Docker workflows then skip their build steps and still report the required checks.
+  - `code` is false when it changes only docs (`docs/`, `site/`, Markdown outside `src/`), `clients/`, or both. The Java and Docker workflows then skip their build steps and still report the required checks.
   - `clients` is true when it changes anything under `clients/`, `clients.yml`, or the API contract (`healdan-api`'s `openapi.yaml`, which the helper's contract tests read). `clients.yml` otherwise skips its test jobs.
 - `.github/workflows/clients.yml` runs the helper's `dotnet test` on `ubuntu-24.04` and `macos-15`, and the extension's Python tests on `ubuntu-24.04`. Its `Clients` job passes when they did, or were skipped because nothing under `clients/` changed. `Clients` goes into master's ruleset after its first green run.
   - A `helper-v1.2.3` tag (or a run by hand) also runs `package-mac`, which packages the macOS helper with `clients/helper/packaging/mac/package.sh`, and `release-mac`, which attaches the `.dmg` to the tag's release, only for a pushed tag and once `xcrun stapler validate` passes on it. They never run for pull requests, and `Clients` doesn't need them.
@@ -147,10 +148,12 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - Each step writes a `seed.<name>` marker to `hd_setting` and never runs again. Healdan's settings live in `hd_setting` too.
   - A shipped step never changes: new defaults or fixes ship as a new step name.
   - A failed seed stops startup. To re-run a step on a test stack, delete its marker row and restart.
-- **Healdan's clients** live under `clients/`. The .NET helper's window-free core is `clients/helper/Healdan.Helper.Core` (API client, local copies, the open-save-close cycle, sign-in, keychain, device id), with its xUnit tests in `clients/helper/Healdan.Helper.Core.Tests` (solution: `Healdan.Helper.sln`). The LibreOffice extension's Python tests are in `clients/libreoffice/tests`.
+- **Healdan's clients** live under `clients/`: the Healdan Helper (`clients/helper/`, .NET 10) and the LibreOffice extension (`clients/libreoffice/`, Python with UNO and the standard library only). The Developer Guide's Desktop Clients page (`site/content/developer/desktop-clients.md`) has how they work: the cycle, the local copies, the channel and its routes. M3's spec is `docs/superpowers/specs/2026-10-24-m3-office-integration-design.md`.
+  - Put anything testable in `Healdan.Helper.Core`, which has no windows and which `Healdan.Helper.Core.Tests` drives, and the extension's logic in `healdan_logic.py`, which the tests run without LibreOffice.
+  - On macOS the helper never runs `unopkg`, which can't install the extension there: it opens its `.oxt` in LibreOffice for the user to accept.
 - **`HealdanHooks`** (`logicaldoc-core/.../core/HealdanHooks.java`, fork-owned) lets CE code that bypasses the listeners call Healdan before it writes. Examples are the JDBC restores, `deleteTree` and `applySecurityToTree`, and the moves, renames, updates, merges and copies that write before a listener could refuse. `healdan-core` registers the implementation.
   - Every Healdan veto throws `HealdanVetoException` or a subclass. The document and folder DAOs roll back on it alone; a plain `PersistenceException` still commits.
-- **Upstream edits.** Each milestone's spec lists every upstream file it edits, with the reason: §13 of `docs/superpowers/specs/2026-10-17-m1-move-in-design.md` for M1, §9 of the M1.5 spec and §13 of `docs/superpowers/specs/2026-10-23-m2-api-foundation-design.md` for M2. Keep each edit a small hook into new code, and list it in the milestone's spec.
+- **Upstream edits.** Each milestone's spec lists every upstream file it edits, with the reason: §13 of `docs/superpowers/specs/2026-10-17-m1-move-in-design.md` for M1, §9 of the M1.5 spec, §13 of `docs/superpowers/specs/2026-10-23-m2-api-foundation-design.md` for M2, and §13.1 of `docs/superpowers/specs/2026-10-24-m3-office-integration-design.md` for M3 (GUI hooks for Open in App, and its label in three English bundles; no server-side edits). Keep each edit a small hook into new code, and list it in the milestone's spec.
 - **Credits.** The login page and About credit LogicalDOC as well as Healdan (`logicaldoc-gui/.../common/client/healdan/HealdanCredits.java`). Keep LogicalDOC's credit through any rebrand, and never call Healdan a registered trademark: it isn't one.
 
 ## Tests

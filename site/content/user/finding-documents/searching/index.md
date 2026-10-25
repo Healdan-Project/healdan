@@ -13,7 +13,7 @@ unless you change it. It remembers your choice until you close the browser.
 | Scope | Type | Finds |
 |---|---|---|
 | Documents | `#1234` | that document. See [Finding a Document by Doc #](../finding-by-doc-number/) |
-| Documents | words | documents containing them, without emails |
+| Documents | words | documents containing them, or whose Comments contain them all, without emails |
 | Emails | words | emails containing them |
 | Docs & Emails | words | documents and emails containing them |
 | Folders | words | folders whose names contain them |
