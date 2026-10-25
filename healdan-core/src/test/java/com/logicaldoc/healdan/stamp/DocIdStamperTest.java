@@ -188,6 +188,81 @@ public class DocIdStamperTest {
 		assertEquals(List.of("a.docx"), List.of(dir.list()));
 	}
 
+	/**
+	 * The review's case at full size: a file of a few kilobytes whose thirty
+	 * header parts each inflate to a megabyte of padding around a field. It
+	 * is stored as sent, and quickly: the parts read count against the
+	 * file's budget
+	 */
+	@Test
+	public void testInflatingPartsLeaveTheFile() throws Exception {
+		Map<String, byte[]> parts = StampFixtures.docxParts("#999 v9.9", true);
+		byte[] padded = padded(1024 * 1024);
+		for (int i = 1; i <= 30; i++)
+			parts.put("word/header%d.xml".formatted(i), padded);
+		byte[] original = StampFixtures.zip(parts, Set.of());
+		assertTrue(Integer.toString(original.length), original.length < 200 * 1024);
+		Path file = write("a.docx", original);
+
+		assertFalse(DocIdStamper.stamp(file, "docx", VALUE));
+
+		assertArrayEquals(original, Files.readAllBytes(file));
+		assertEquals(List.of("a.docx"), List.of(dir.list()));
+	}
+
+	/**
+	 * Parts each well within the part limit and the file's ratio, that
+	 * together inflate past what may be read of one file
+	 */
+	@Test
+	public void testReadBoundedAcrossParts() throws Exception {
+		byte[] original = withPaddedHeaders(8, 64 * 1024);
+		Path file = write("a.docx", original);
+		DocIdStamper.Limits defaults = DocIdStamper.Limits.DEFAULT;
+
+		assertFalse(DocIdStamper.stamp(file, "docx", VALUE,
+				new DocIdStamper.Limits(defaults.maxPart(), 1_000_000L, 256 * 1024, defaults.maxHeld())));
+
+		assertArrayEquals(original, Files.readAllBytes(file));
+		// Within the limits, the same file is stamped
+		assertTrue(DocIdStamper.stamp(file, "docx", VALUE,
+				new DocIdStamper.Limits(defaults.maxPart(), 1_000_000L, 1024 * 1024, defaults.maxHeld())));
+	}
+
+	/**
+	 * Stamped parts that together come to more than may be held until the
+	 * copy is written
+	 */
+	@Test
+	public void testHeldBoundedAcrossParts() throws Exception {
+		byte[] original = withPaddedHeaders(4, 64 * 1024);
+		Path file = write("a.docx", original);
+		DocIdStamper.Limits defaults = DocIdStamper.Limits.DEFAULT;
+
+		assertFalse(DocIdStamper.stamp(file, "docx", VALUE,
+				new DocIdStamper.Limits(defaults.maxPart(), 1_000_000L, defaults.maxRead(), 128 * 1024)));
+
+		assertArrayEquals(original, Files.readAllBytes(file));
+		assertTrue(DocIdStamper.stamp(file, "docx", VALUE,
+				new DocIdStamper.Limits(defaults.maxPart(), 1_000_000L, defaults.maxRead(), 1024 * 1024)));
+	}
+
+	/** The Word document, with headers that each pad a field showing the property */
+	private static byte[] withPaddedHeaders(int headers, int padding) {
+		Map<String, byte[]> parts = StampFixtures.docxParts("#999 v9.9", true);
+		byte[] padded = padded(padding);
+		for (int i = 1; i <= headers; i++)
+			parts.put("word/header%d.xml".formatted(i), padded);
+		return StampFixtures.zip(parts, Set.of());
+	}
+
+	/** A header part: spaces, which deflate a thousandfold, and a field showing the property */
+	private static byte[] padded(int padding) {
+		return ("<w:hdr xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" + " ".repeat(padding)
+				+ "<w:p><w:fldSimple w:instr=\" DOCPROPERTY &quot;Healdan Doc ID&quot; \"><w:r><w:t>#999 v9.9</w:t>"
+				+ "</w:r></w:fldSimple></w:p></w:hdr>").getBytes(StandardCharsets.UTF_8);
+	}
+
 	@Test
 	public void testValue() {
 		assertEquals("#1234 v2.1", DocIdStamper.value(1234L, "2.1"));

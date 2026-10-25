@@ -76,8 +76,11 @@ import org.xml.sax.SAXParseException;
  * Stamping never makes a store fail (M3 plan, task 7). A file that isn't a
  * readable zip is left alone. So is a zip whose parts it can't read (one that
  * isn't well-formed, has a DTD, is over 32 MB or isn't in an encoding it
- * writes back), that inflates past 100 times its size or whose copy can't be
- * written, with a warning.
+ * writes back) or whose copy can't be written, with a warning. Its memory is
+ * bounded across the file's parts ({@link Limits}): a zip whose parts read
+ * inflate past 100 times its size or 256 MB, whose stamped parts come to more
+ * than 64 MB, or whose copy inflates past 100 times its size, is left alone
+ * too.
  */
 public final class DocIdStamper {
 
@@ -122,11 +125,7 @@ public final class DocIdStamper {
 
 	private static final List<byte[]> ODF_MARKERS = List.of(ascii("user-defined"));
 
-	/** The largest part parsed */
-	private static final int MAX_PART = 32 * 1024 * 1024;
-
-	/** The most the copy may inflate to, as a multiple of the file's size (as {@code MarkupPreparer}) */
-	private static final long MAX_RATIO = 100;
+	private static final int MEGABYTE = 1024 * 1024;
 
 	private static final byte[] UTF8_BOM = { (byte) 0xef, (byte) 0xbb, (byte) 0xbf };
 
@@ -139,6 +138,43 @@ public final class DocIdStamper {
 			Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
 	private DocIdStamper() {
+	}
+
+	/**
+	 * How much of one file a stamp reads and holds, so that a small file
+	 * that inflates to gigabytes can't take the server's memory: past any of
+	 * them the file is stored as sent. The tests lower them.
+	 *
+	 * @param maxPart the largest part read
+	 * @param maxRatio the most the parts read, and then the copy written,
+	 *        may inflate to, as a multiple of the file's size (as
+	 *        {@code MarkupPreparer})
+	 * @param maxRead the most the parts read may inflate to, whatever the
+	 *        file's size
+	 * @param maxHeld the most the stamped parts may come to, which are held
+	 *        until the copy is written
+	 */
+	record Limits(int maxPart, long maxRatio, long maxRead, long maxHeld) {
+
+		static final Limits DEFAULT = new Limits(32 * MEGABYTE, 100, 256L * MEGABYTE, 64L * MEGABYTE);
+	}
+
+	/** What a stamp has read and holds of one file, within its {@link Limits} */
+	private static final class Budget {
+
+		final Limits limits;
+
+		/** The most the parts read may inflate to */
+		final long readable;
+
+		long read;
+
+		long held;
+
+		Budget(Limits limits, long fileSize) {
+			this.limits = limits;
+			this.readable = Math.min(limits.maxRead(), limits.maxRatio() * Math.max(1L, fileSize));
+		}
 	}
 
 	/**
@@ -161,7 +197,7 @@ public final class DocIdStamper {
 		if (format == null)
 			return false;
 		try (ZipFile zip = open(file)) {
-			return zip != null && property(zip, format) != null;
+			return zip != null && property(zip, format, new Budget(Limits.DEFAULT, Files.size(file))) != null;
 		} catch (Unstampable | IOException | RuntimeException e) {
 			log.debug("Cannot read the properties of {}: {}", file.getFileName(), e.getMessage());
 			return false;
@@ -180,6 +216,13 @@ public final class DocIdStamper {
 	 *         can't be stamped
 	 */
 	public static boolean stamp(Path file, String extension, String value) {
+		return stamp(file, extension, value, Limits.DEFAULT);
+	}
+
+	/**
+	 * As {@link #stamp(Path, String, String)}, within the given limits
+	 */
+	static boolean stamp(Path file, String extension, String value, Limits limits) {
 		Objects.requireNonNull(value);
 		Format format = format(extension);
 		if (format == null)
@@ -191,11 +234,12 @@ public final class DocIdStamper {
 		Path copy = null;
 		try {
 			try (ZipFile in = zip) {
-				Map<String, byte[]> replaced = stamped(in, format, value);
+				long size = Files.size(file);
+				Map<String, byte[]> replaced = stamped(in, format, value, new Budget(limits, size));
 				if (replaced.isEmpty())
 					return false;
 				copy = Files.createTempFile(file.toAbsolutePath().getParent(), "healdan-stamp-", ".tmp");
-				write(in, replaced, copy, MAX_RATIO * Math.max(1L, Files.size(file)));
+				write(in, replaced, copy, limits.maxRatio(), limits.maxRatio() * Math.max(1L, size));
 			}
 			replace(copy, file);
 			log.debug("Stamped {} into {}", value, file.getFileName());
@@ -238,29 +282,44 @@ public final class DocIdStamper {
 	 * @return the parts to replace, with their stamped content; none if the
 	 *         file doesn't carry the property or already shows the value
 	 */
-	private static Map<String, byte[]> stamped(ZipFile zip, Format format, String value)
+	private static Map<String, byte[]> stamped(ZipFile zip, Format format, String value, Budget budget)
 			throws Unstampable, IOException {
-		Property property = property(zip, format);
+		Property property = property(zip, format, budget);
 		if (property == null)
 			return Map.of();
 
 		Map<String, byte[]> replaced = new LinkedHashMap<>();
 		if (format.setProperty(property.element(), value))
-			replaced.put(format.propertyPart, serialize(property.element().getOwnerDocument(), property.content()));
+			hold(replaced, format.propertyPart, serialize(property.element().getOwnerDocument(), property.content()),
+					budget);
 
 		Enumeration<? extends ZipEntry> entries = zip.entries();
 		while (entries.hasMoreElements()) {
 			ZipEntry entry = entries.nextElement();
 			if (entry.isDirectory() || !format.hasFields(entry.getName()))
 				continue;
-			byte[] content = read(zip, entry);
+			byte[] content = read(zip, entry, budget);
 			if (format.markers.stream().noneMatch(marker -> contains(content, marker)))
 				continue;
 			Document part = parse(content, entry.getName());
 			if (format.setFields(part, value))
-				replaced.put(entry.getName(), serialize(part, content));
+				hold(replaced, entry.getName(), serialize(part, content), budget);
 		}
 		return replaced;
+	}
+
+	/**
+	 * Keeps a stamped part until the copy is written
+	 *
+	 * @throws Unstampable once the stamped parts come to more than
+	 *         {@link Limits#maxHeld()}
+	 */
+	private static void hold(Map<String, byte[]> replaced, String part, byte[] content, Budget budget)
+			throws Unstampable {
+		budget.held += content.length;
+		if (budget.held > budget.limits.maxHeld())
+			throw new Unstampable("its stamped parts come to more than %d bytes".formatted(budget.limits.maxHeld()));
+		replaced.put(part, content);
 	}
 
 	/** The property's element, and the content of the part it's in */
@@ -270,20 +329,30 @@ public final class DocIdStamper {
 	/**
 	 * @return the property, null if the file doesn't carry it
 	 */
-	private static Property property(ZipFile zip, Format format) throws Unstampable, IOException {
+	private static Property property(ZipFile zip, Format format, Budget budget) throws Unstampable, IOException {
 		ZipEntry entry = zip.getEntry(format.propertyPart);
 		if (entry == null || entry.isDirectory())
 			return null;
-		byte[] content = read(zip, entry);
+		byte[] content = read(zip, entry, budget);
 		Element element = format.findProperty(parse(content, entry.getName()));
 		return element != null ? new Property(element, content) : null;
 	}
 
-	private static byte[] read(ZipFile zip, ZipEntry entry) throws Unstampable, IOException {
+	/**
+	 * @return the part's content, counted against the file's budget
+	 * @throws Unstampable if the part is larger than {@link Limits#maxPart()},
+	 *         or the parts read so far inflate past what the budget allows
+	 */
+	private static byte[] read(ZipFile zip, ZipEntry entry, Budget budget) throws Unstampable, IOException {
+		int maxPart = budget.limits.maxPart();
+		// Never more than the budget has left, so the bytes held never pass it
+		int room = (int) Math.min(maxPart, budget.readable - budget.read);
 		try (InputStream in = zip.getInputStream(entry)) {
-			byte[] content = in.readNBytes(MAX_PART + 1);
-			if (content.length > MAX_PART)
-				throw new Unstampable("%s is larger than %d bytes".formatted(entry.getName(), MAX_PART));
+			byte[] content = in.readNBytes(room + 1);
+			if (content.length > room)
+				throw new Unstampable(room == maxPart ? "%s is larger than %d bytes".formatted(entry.getName(), maxPart)
+						: "its parts inflate to more than %d bytes".formatted(budget.readable));
+			budget.read += content.length;
 			return content;
 		}
 	}
@@ -684,7 +753,8 @@ public final class DocIdStamper {
 	 * Copies every entry in its order, with the given parts replaced, failing
 	 * once more than {@code budget} bytes have been written
 	 */
-	private static void write(ZipFile in, Map<String, byte[]> replaced, Path target, long budget) throws IOException {
+	private static void write(ZipFile in, Map<String, byte[]> replaced, Path target, long ratio, long budget)
+			throws IOException {
 		long written = 0;
 		byte[] buffer = new byte[8192];
 		try (OutputStream file = Files.newOutputStream(target);
@@ -697,13 +767,13 @@ public final class DocIdStamper {
 				byte[] replacement = replaced.get(entry.getName());
 				out.putNextEntry(copy(entry, replacement));
 				if (replacement != null) {
-					written = count(written, replacement.length, budget);
+					written = count(written, replacement.length, ratio, budget);
 					out.write(replacement);
 				} else {
 					try (InputStream data = in.getInputStream(entry)) {
 						int read;
 						while ((read = data.read(buffer)) > 0) {
-							written = count(written, read, budget);
+							written = count(written, read, ratio, budget);
 							out.write(buffer, 0, read);
 						}
 					}
@@ -741,10 +811,10 @@ public final class DocIdStamper {
 		return copy;
 	}
 
-	private static long count(long written, int more, long budget) throws IOException {
+	private static long count(long written, int more, long ratio, long budget) throws IOException {
 		long total = written + more;
 		if (total > budget)
-			throw new IOException("it inflates to more than " + MAX_RATIO + " times its size");
+			throw new IOException("it inflates to more than " + ratio + " times its size");
 		return total;
 	}
 
