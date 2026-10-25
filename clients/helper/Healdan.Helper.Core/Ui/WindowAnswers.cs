@@ -34,6 +34,20 @@ public static class WindowAnswers
     public static JsonObject File() => Action("file");
 
     /// <summary>
+    /// The answer when the helper isn't signed in or hasn't started, so no window can read Healdan: Save and Open fall
+    /// back to the app's own box, so the user's Cmd+S still saves, on this computer; Properties has nothing to show.
+    /// </summary>
+    public static JsonObject NotReady(string route) => route == "properties" ? Cancel() : Local();
+
+    /// <summary>What the user is told alongside <see cref="NotReady"/>, as the Sign In window opens.</summary>
+    public static string NotReadyNotice(string route) => route switch
+    {
+        "save-new" => "Healdan Helper isn't signed in, so this document is saved on this computer. Sign in to save to Healdan.",
+        "open-dialog" => "Healdan Helper isn't signed in, so LibreOffice's own Open box is shown. Sign in to open from Healdan.",
+        _ => "Sign in to Healdan Helper to see the document's properties."
+    };
+
+    /// <summary>
     /// A new path for the extension to write a new document's content to, in the helper's Temp folder, which only the
     /// user can read and from which <c>/v1/file</c> deletes it once filed. The file isn't made here.
     /// </summary>

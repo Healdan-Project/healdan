@@ -42,6 +42,13 @@ public sealed class FakeWindows : IWindows
 
     public void Crashed(CopyState copy) => Crashes.Enqueue(copy);
 
+    /// <summary>How many times a dropped link brought the waiting window up.</summary>
+    public int Brought => Volatile.Read(ref _brought);
+
+    private int _brought;
+
+    public void BringWaiting() => Interlocked.Increment(ref _brought);
+
     private Task<JsonObject> Ask(string route, JsonObject request)
     {
         Asked.Enqueue((route, request));

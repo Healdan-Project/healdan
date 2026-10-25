@@ -24,6 +24,7 @@ public sealed class CopyCycleTests : IDisposable
     private readonly FakeApi _server = new();
     private readonly FakeApp _app = new();
     private readonly RecordingEvents _events = new();
+    private readonly FakeOpener _opener = new();
     private readonly List<CopyCycle> _cycles = [];
 
     public CopyCycleTests() => _server.Add(5, "Lease agreement.docx", "downloaded");
@@ -40,10 +41,10 @@ public sealed class CopyCycleTests : IDisposable
 
     private CopyStore Store => new(Paths);
 
-    private CopyCycle Cycle(CycleTimings? timings = null)
+    private CopyCycle Cycle(CycleTimings? timings = null, IOfficeApp? otherFiles = null)
     {
         var api = new HealdanApi(new Uri("https://healdan.test"), _server) { Token = "hd_test" };
-        var cycle = new CopyCycle(api, new CopyStore(Paths), _app, FakeApi.HereDevice, _events, timings ?? Fast);
+        var cycle = new CopyCycle(api, new CopyStore(Paths), _app, FakeApi.HereDevice, _events, timings ?? Fast, otherFiles);
         _cycles.Add(cycle);
         return cycle;
     }
@@ -949,5 +950,51 @@ public sealed class CopyCycleTests : IDisposable
         var none = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromMilliseconds(300));
         Assert.Equal("Lease agreement #5 v1.1", none.Title);
         Assert.Single(_server.Saves);
+    }
+
+    [Fact]
+    public async Task AFileNoOfficeAppEditsOpensReadOnlyInTheDefaultApp()
+    {
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener);
+
+        await cycle.OpenAsync(7, false);
+
+        var path = CopyPath("Signed NDA #7 v1.0 (read-only).pdf");
+        Assert.Equal([path], _opener.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Empty(_events.Errors);
+        Assert.DoesNotContain(_server.Calls, c => c.Contains("/checkout", StringComparison.Ordinal)); // spec 5.11: no check-out
+        Assert.Null(_server.Doc(7).Hold);
+        Assert.Equal("a pdf", File.ReadAllText(path));
+        AssertReadOnlyFile(path);
+        Assert.Empty(cycle.OpenCopies()); // it keeps no lock file and is never saved, so nothing watches it
+    }
+
+    [Fact]
+    public async Task AnOfficeDocumentStillOpensInItsApp()
+    {
+        var cycle = Cycle(otherFiles: _opener);
+
+        await cycle.OpenAsync(5, false);
+
+        Assert.Equal([CopyPath("Lease agreement #5 v1.0.docx")], _app.Opened);
+        Assert.Empty(_opener.Opened);
+        Assert.NotNull(_server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task TheDefaultAppsCopiesGoAtTheNextStart()
+    {
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        await Cycle(otherFiles: _opener).OpenAsync(7, false);
+        var path = CopyPath("Signed NDA #7 v1.0 (read-only).pdf");
+        Assert.True(File.Exists(path));
+
+        _app.Running = true; // LibreOffice being open makes no difference: it never had this copy
+        await Cycle(otherFiles: _opener).ResumeAsync();
+
+        Assert.False(File.Exists(path)); // read-only and Healdan's own bytes: nothing is lost
+        Assert.Empty(CopiesFolder()); // its record went with it
     }
 }

@@ -16,23 +16,29 @@ namespace Healdan.Helper.Windows;
 
 /// <summary>
 /// The helper's windows (spec §5.8). Each comes to the front over the app (<see cref="MacPlatform.Activate"/>), and
-/// once the last one closes the focus goes back to the app (<see cref="MacPlatform.GiveBackFocus"/>). While one is open
-/// it's waiting for an answer, and links are dropped (spec §5.3); Settings asks nothing, so it doesn't count.
+/// once the last one closes the focus goes back to the app (<see cref="MacPlatform.GiveBackFocus"/>).
+/// <para>A window that asks what the user started (Sign In, Save, Open, Properties, Checked Out on Another Computer)
+/// waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link brings it to the front. One the
+/// user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links back
+/// (<see cref="OpenWindows"/>).</para>
 /// <para>One of each window at a time: a second request for one that's open brings it to the front and is answered
 /// Cancel. The windows read Healdan through the session's API client, whose refused token asks for the sign-in again,
-/// and open documents through its cycle once they've closed, so the app never waits on a window for a download.</para>
+/// and open documents through its cycle once they've closed, so the app never waits on a window for a download.
+/// Before the helper is signed in and started, Save and Open answer with the app's own box and Sign In opens.</para>
 /// </summary>
 internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths paths) : IWindows
 {
+    private readonly OpenWindows _open = new();
     private readonly Dictionary<string, Window> _single = [];
     private readonly HashSet<string> _crashShown = new(StringComparer.Ordinal);
-    private int _waiting;
     private Task<bool>? _signIn;
 
     /// <summary>The running helper, set once it's made (it needs these windows to be made first).</summary>
     public HelperSession? Session { get; set; }
 
-    public bool Waiting => Volatile.Read(ref _waiting) > 0;
+    public bool Waiting => _open.Waiting;
+
+    public void BringWaiting() => Dispatcher.UIThread.Post(_open.BringWaiting);
 
     // --- Sign In ---------------------------------------------------------------------------------------------------
 
@@ -42,7 +48,8 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             return open;
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var window = new SignInWindow(prompt);
-        Show(window, waits: true, () => done.TrySetResult(window.SignedIn));
+        if (!Show(window, waits: true, () => done.TrySetResult(window.SignedIn)))
+            return Task.FromResult(false);
         log.Info("Sign In window shown");
         return _signIn = done.Task;
     });
@@ -57,15 +64,12 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     public Task<JsonObject> SaveNewAsync(JsonObject request)
     {
 #if DEBUG
-        if (DevAnswers.Load(log) is { } dev && Session?.Api is { } devApi)
+        if (DevAnswers.Load(log) is { } dev && Session is { SignedIn: true, Api: { } devApi })
             return dev.SaveNewAsync(request, devApi, paths);
 #endif
-        return OnUi(() =>
-        {
-            if (Api("Save to Healdan") is not { } api)
-                return Task.FromResult(WindowAnswers.Cancel());
-            return Answering("save", () => new SaveWindow(SaveNewRequest.From(request), api, paths), w => w.Answer);
-        });
+        return OnUi(() => Ready("save-new") is { } api
+            ? Answering("save", () => new SaveWindow(SaveNewRequest.From(request), api, paths), w => w.Answer)
+            : Task.FromResult(WindowAnswers.NotReady("save-new")));
     }
 
     public Task<JsonObject> PropertiesAsync(JsonObject request)
@@ -74,13 +78,13 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         var docNumber = request["docNumber"] is JsonValue n && long.TryParse(n.ToJsonString(), out var d) ? d : 0;
         var path = request["path"] is JsonValue p && p.TryGetValue<string>(out var text) ? text : "";
 #if DEBUG
-        if (DevAnswers.Load(log) is { } dev && Session?.Api is { } devApi)
+        if (DevAnswers.Load(log) is { } dev && Session is { SignedIn: true, Api: { } devApi })
             return dev.PropertiesAsync(docNumber, devApi);
 #endif
         return OnUi(() =>
         {
-            if (Api("Properties") is not { } api)
-                return Task.FromResult(WindowAnswers.Cancel());
+            if (Ready("properties") is not { } api)
+                return Task.FromResult(WindowAnswers.NotReady("properties"));
             var title = Session?.Cycle?.StateOf(path) is { Known: true } copy ? copy.Title : $"#{docNumber}";
             return Answering("properties", () => new PropertiesWindow(api, docNumber, title), w => w.Answer);
         });
@@ -94,8 +98,8 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
 #endif
         return OnUi(() =>
         {
-            if (Api("Open from Healdan") is not { } api)
-                return Task.FromResult(WindowAnswers.Cancel());
+            if (Ready("open-dialog") is not { } api)
+                return Task.FromResult(WindowAnswers.NotReady("open-dialog"));
             return Answering("open", () => new OpenWindow(api, fromApp), window =>
             {
                 if (window.Chosen is { } chosen && Session?.Cycle is { } cycle)
@@ -115,6 +119,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
 
     // --- The cycle's warnings --------------------------------------------------------------------------------------
 
+    /// <summary>The user's own open asks first, so it waits like the window they opened it from.</summary>
     public void HeldElsewhere(long docNumber, string deviceName, string? app, DateTimeOffset? lastSaved) => Dispatcher.UIThread.Post(() =>
     {
         var key = $"held-{docNumber}";
@@ -122,7 +127,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             return;
         var window = new HeldElsewhereWindow(Warnings.HeldElsewhere(docNumber, deviceName, app, lastSaved, DateTimeOffset.Now));
         _single[key] = window;
-        Show(window, waits: true, () =>
+        var shown = Show(window, waits: true, () =>
         {
             _single.Remove(key);
             if (Session?.Cycle is not { } cycle)
@@ -139,14 +144,17 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
                     break;
             }
         });
+        if (!shown)
+            _single.Remove(key);
     });
 
+    /// <summary>Nobody asked for it, and it may sit behind the browser: it holds no links back.</summary>
     public void Crashed(CopyState copy) => Dispatcher.UIThread.Post(() =>
     {
         if (!_crashShown.Add(copy.Path))
             return; // its window is up already
         var window = new CrashWindow(copy);
-        Show(window, waits: true, () =>
+        var shown = Show(window, waits: false, () =>
         {
             _crashShown.Remove(copy.Path);
             switch (window.Choice)
@@ -159,6 +167,11 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
                     break;
             }
         });
+        if (!shown)
+        {
+            _crashShown.Remove(copy.Path);
+            notifier.Notify(copy.Title, Warnings.Crashed(copy.Title, copy.ReadOnly) + " Choose it in the Healdan Helper menu to reopen it.");
+        }
     });
 
     // --- Settings --------------------------------------------------------------------------------------------------
@@ -171,7 +184,8 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
         var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths));
         _single["settings"] = window;
-        Show(window, waits: false, () => _single.Remove("settings"));
+        if (!Show(window, waits: false, () => _single.Remove("settings")))
+            _single.Remove("settings");
     });
 
     // --- Showing windows -------------------------------------------------------------------------------------------
@@ -187,7 +201,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         var window = make();
         var done = new TaskCompletionSource<JsonObject>(TaskCreationOptions.RunContinuationsAsynchronously);
         _single[key] = window;
-        Show(window, waits: true, () =>
+        var shown = Show(window, waits: true, () =>
         {
             _single.Remove(key);
             JsonObject result;
@@ -203,6 +217,11 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             log.Info($"{window.Title}: {result["action"]}");
             done.TrySetResult(result);
         });
+        if (!shown)
+        {
+            _single.Remove(key);
+            return Task.FromResult(WindowAnswers.Cancel());
+        }
         log.Info($"{window.Title} window shown");
         return done.Task;
     }
@@ -217,28 +236,50 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         return true;
     }
 
-    /// <summary>The API client for a window, or null (said to the user) before the helper has signed in and started.</summary>
-    private HealdanApi? Api(string window)
+    /// <summary>
+    /// The API client for a window, once the helper is signed in and started. Before, or after Healdan refused the
+    /// token, the user is told and the Sign In window opens; the caller answers <see cref="WindowAnswers.NotReady"/>.
+    /// </summary>
+    private HealdanApi? Ready(string route)
     {
-        if (Session?.Api is { } api)
+        if (Session is { SignedIn: true, Api: { } api })
             return api;
-        log.Warn($"{window} was asked for before the helper had started");
-        notifier.Notify("Healdan Helper", "Sign in to Healdan Helper first, from its menu.");
+        log.Warn($"/v1/{route} was asked for before the helper was signed in and started");
+        notifier.Notify("Healdan Helper", WindowAnswers.NotReadyNotice(route));
+        if (Session is { } session)
+            _ = Task.Run(session.SignInAgainAsync);
         return null;
     }
 
-    /// <summary>UI thread: shows a window over the app, and hands the focus back once the last one closes.</summary>
-    private void Show(Window window, bool waits, Action closed)
+    /// <summary>
+    /// UI thread: shows a window over the app, and hands the focus back once the last one closes. A window is counted
+    /// only once it's shown; one that fails to show is logged, counts for nothing, and returns false.
+    /// </summary>
+    private bool Show(Window window, bool waits, Action closed)
     {
-        if (waits)
-            Interlocked.Increment(ref _waiting);
-        Interlocked.Increment(ref _shown);
+        Func<bool> close;
+        try
+        {
+            close = _open.Show(() =>
+            {
+                MacPlatform.Activate();
+                window.Show();
+                window.Activate();
+            }, waits, bring: () =>
+            {
+                MacPlatform.Activate();
+                window.Activate();
+            });
+        }
+        catch (Exception e)
+        {
+            log.Error($"The {window.Title} window couldn't be shown", e);
+            return false;
+        }
         window.Closed += (_, _) =>
         {
             // No longer waiting before the answer goes out, so a link the answer lets through isn't dropped.
-            if (waits)
-                Interlocked.Decrement(ref _waiting);
-            var last = Interlocked.Decrement(ref _shown) == 0;
+            var last = close();
             try
             {
                 closed();
@@ -250,12 +291,8 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             if (last)
                 MacPlatform.GiveBackFocus();
         };
-        MacPlatform.Activate();
-        window.Show();
-        window.Activate();
+        return true;
     }
-
-    private int _shown;
 
     /// <summary>Runs <paramref name="show"/> on the UI thread, from any thread, and returns what it returns.</summary>
     private static Task<T> OnUi<T>(Func<Task<T>> show)

@@ -78,7 +78,14 @@ public partial class SaveWindow : Window
             {
                 var doc = _api!.DocumentAsync(n);
                 var properties = _api.PropertiesAsync(n);
-                folderId = (await doc).Folder.Id;
+                var original = await doc;
+                folderId = original.Folder.Id;
+                // Named after the original as Healdan has it, not the window's title, unless the user has typed meanwhile.
+                if (NameBox.Text == _request.Name)
+                {
+                    NameBox.Text = _request.StartingName(original.Name);
+                    NameBox.SelectAll();
+                }
                 _original = new FormModel(await properties);
             }
             catch (Exception e)
@@ -187,7 +194,7 @@ public partial class SaveWindow : Window
 
     private bool CanSave()
     {
-        var nameProblem = DocumentNames.Problem(NameBox.Text, _format);
+        var nameProblem = DocumentNames.Problem(_request!.FinalName(NameBox.Text), _format);
         (NameProblem.Text, NameProblem.IsVisible) = (nameProblem, nameProblem is not null);
         return _target is { CanFile: true } target && _form is not null && _formFolder?.Id == target.Id && FormHost.IsVisible
             && _form.CanSave(target.CanFile) && nameProblem is null && _format is not null;
@@ -199,7 +206,7 @@ public partial class SaveWindow : Window
     {
         if (!CanSave())
             return;
-        Finish(WindowAnswers.Save(_target!.Id, NameBox.Text!.Trim(), _format!, _form!.Values(), WindowAnswers.TempPath(_paths!, _format!)));
+        Finish(WindowAnswers.Save(_target!.Id, _request!.FinalName(NameBox.Text), _format!, _form!.Values(), WindowAnswers.TempPath(_paths!, _format!)));
     }
 
     private void Finish(JsonObject answer)

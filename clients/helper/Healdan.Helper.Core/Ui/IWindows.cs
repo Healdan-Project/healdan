@@ -12,6 +12,9 @@ public interface IWindows
     /// <summary>One of the windows is waiting for the user's answer. Links are dropped meanwhile (spec §5.3).</summary>
     bool Waiting { get; }
 
+    /// <summary>A link was dropped because a window waits: that window comes to the front, so the user sees why.</summary>
+    void BringWaiting();
+
     /// <summary>The Sign In window. True once the user has signed in; false when they closed it.</summary>
     Task<bool> SignInAsync(SignInPrompt prompt);
 

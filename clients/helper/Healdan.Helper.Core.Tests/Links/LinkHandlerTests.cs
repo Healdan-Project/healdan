@@ -134,6 +134,7 @@ public sealed class LinkHandlerTests : IDisposable
         Assert.Empty(_app.Opened);
         Assert.Empty(_server.Calls);
         Assert.Empty(_notifier.Notices);
+        Assert.Equal(1, _windows.Brought); // the window that's waiting comes up, so the user sees why
 
         _windows.IsWaiting = false;
         await _links.Handle("healdan://open/5?server=healdan.test");

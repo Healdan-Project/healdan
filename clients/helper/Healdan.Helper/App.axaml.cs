@@ -56,7 +56,7 @@ public partial class App : Application
         var notifier = new Notifier(_log);
         var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
-        var session = new HelperSession(paths, Keychain(), device, new LibreOfficeApp(), windows, notifier, _log);
+        var session = new HelperSession(paths, Keychain(), device, new LibreOfficeApp(), windows, notifier, _log, otherFiles: new DefaultApp());
         _session = session;
         windows.Session = session;
 

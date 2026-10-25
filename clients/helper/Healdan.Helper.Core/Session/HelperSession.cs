@@ -31,6 +31,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private readonly IKeychain _keychain;
     private readonly DeviceIdentity _device;
     private readonly IOfficeApp _app;
+    private readonly IOfficeApp? _otherFiles;
     private readonly IWindows _windows;
     private readonly INotifier _notifier;
     private readonly HelperLog _log;
@@ -68,9 +69,12 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <param name="http">The HTTP handler under every API client; the system's by default (tests pass a fake server).</param>
     /// <param name="timings">The cycle's timings; the trial's by default.</param>
     /// <param name="signOutFlush">How long Sign Out waits for unsent saves before it gives up and keeps the sign-in; 30 s by default.</param>
+    /// <param name="otherFiles">The app for files no office app edits (<see cref="DefaultApp"/>); without one, everything opens in <paramref name="app"/>.</param>
     public HelperSession(HelperPaths paths, IKeychain keychain, DeviceIdentity device, IOfficeApp app, IWindows windows,
-        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null)
+        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null,
+        IOfficeApp? otherFiles = null)
     {
+        _otherFiles = otherFiles;
         _paths = paths;
         _keychain = keychain;
         _device = device;
@@ -596,7 +600,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         CopyCycle? cycle = null;
         try
         {
-            cycle = new CopyCycle(api, new CopyStore(_paths), _app, _device.Id, this, _timings);
+            cycle = new CopyCycle(api, new CopyStore(_paths), _app, _device.Id, this, _timings, _otherFiles);
             lock (_gate)
                 _resuming = cycle; // its events name copies by their title
             await cycle.ResumeAsync();

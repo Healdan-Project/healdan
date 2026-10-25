@@ -12,7 +12,7 @@ namespace Healdan.Helper.Core.Links;
 /// while the Sign In window waits; later ones are dropped. Only that cold-start link is ever held: once the helper has
 /// been ready, or the start-up Sign In was dismissed, a link while it isn't signed in is dropped with a notice, so
 /// signing in hours later never checks out a document nobody asked for then. Once it's ready, links are dropped while
-/// one of the helper's windows waits for an answer.
+/// one of the helper's windows waits for an answer, and that window comes to the front.
 /// </summary>
 public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog log)
 {
@@ -98,6 +98,7 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
         if (windows.Waiting)
         {
             log.Info($"Dropped a link to #{n}: a window is waiting for an answer");
+            windows.BringWaiting();
             return;
         }
 

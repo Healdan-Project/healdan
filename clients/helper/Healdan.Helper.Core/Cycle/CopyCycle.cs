@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Copies;
+using Healdan.Helper.Core.Settings;
 
 namespace Healdan.Helper.Core.Cycle;
 
@@ -25,6 +26,7 @@ public sealed class CopyCycle : IDisposable
     private readonly HealdanApi _api;
     private readonly CopyStore _store;
     private readonly IOfficeApp _app;
+    private readonly IOfficeApp? _other;
     private readonly string _deviceId;
     private readonly ICycleEvents _events;
     private readonly CycleTimings _timings;
@@ -43,11 +45,17 @@ public sealed class CopyCycle : IDisposable
     /// computer's. Names aren't compared, as two computers can share one.
     /// </param>
     /// <param name="timings">The trial's timings by default (<see cref="CycleTimings.Default"/>).</param>
-    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceId, ICycleEvents events, CycleTimings? timings = null)
+    /// <param name="otherFiles">
+    /// The app for files no office app edits (spec §5.11, <see cref="FileKinds"/>), such as <see cref="DefaultApp"/>:
+    /// they open read-only there, never checked out. Without one, every file opens in <paramref name="app"/>.
+    /// </param>
+    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceId, ICycleEvents events, CycleTimings? timings = null,
+        IOfficeApp? otherFiles = null)
     {
         _api = api;
         _store = store;
         _app = app;
+        _other = otherFiles;
         _deviceId = deviceId;
         _events = events;
         _timings = timings ?? CycleTimings.Default;
@@ -223,6 +231,14 @@ public sealed class CopyCycle : IDisposable
                 continue;
             }
             var unconfirmed = _store.HasUnconfirmedChanges(path);
+            if (_other is not null && record.App == _other.Name && record.ReadOnly)
+            {
+                // Opened in the default app, which keeps no lock file, so nothing says when it closed; its bytes
+                // are Healdan's, so the copy goes now (spec §5.11). One that changed is kept, as any read-only copy is.
+                if (!unconfirmed)
+                    _store.Delete(path);
+                continue;
+            }
             if (record.ReadOnly)
             {
                 if (unconfirmed)
@@ -396,6 +412,11 @@ public sealed class CopyCycle : IDisposable
 
         var hadCopy = _store.All().Any(c => c.Record.DocNumber == n && c.Record.CheckedOutHere);
         var doc = await _api.DocumentAsync(n, ct);
+        if (_other is not null && FileKinds.Of(doc.Name) is null)
+        {
+            await OpenOtherAsync(doc, version, ct);
+            return;
+        }
         var checkedOut = false;
         var holdBy = doc.Hold?.By?.Name;
         if (!readOnly)
@@ -432,7 +453,7 @@ public sealed class CopyCycle : IDisposable
         bool fresh;
         try
         {
-            (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, ct);
+            (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, _app.Name, ct);
         }
         catch (Exception e)
         {
@@ -488,7 +509,7 @@ public sealed class CopyCycle : IDisposable
     /// <see cref="CopyStore.Create"/>), or one checked out here whose content is still the document's.
     /// </summary>
     private async Task<(string Path, bool Fresh, bool ReadOnly)> PrepareCopyAsync(DocumentView doc, bool readOnly, string? version,
-        bool checkedOut, CancellationToken ct)
+        bool checkedOut, string appName, CancellationToken ct)
     {
         if (!readOnly)
         {
@@ -508,7 +529,7 @@ public sealed class CopyCycle : IDisposable
         // A confirmed copy already at the target path holds this same version's content: its hash stands until the
         // download replaces it, so a helper stopped mid-way never takes it for unsent changes.
         var previous = Record(Path.Combine(_store.Folder, CopyNames.FileName(forCopy.Name, forCopy.DocNumber, forCopy.FileVersion, readOnly)));
-        var (path, record, existing) = _store.Create(forCopy, readOnly, _app.Name);
+        var (path, record, existing) = _store.Create(forCopy, readOnly, appName);
         if (existing)
         {
             if (checkedOut)
@@ -543,6 +564,26 @@ public sealed class CopyCycle : IDisposable
             throw;
         }
         return (path, true, readOnly);
+    }
+
+    /// <summary>
+    /// Spec §5.11: a file no office app edits, such as a PDF, opens read-only in the system's default app, with no
+    /// check-out. That app keeps no lock file, so nothing watches the copy; <see cref="ResumeAsync"/> deletes it at the
+    /// next start, as it's read-only and holds only Healdan's bytes.
+    /// </summary>
+    private async Task OpenOtherAsync(DocumentView doc, string? version, CancellationToken ct)
+    {
+        var (path, fresh, _) = await PrepareCopyAsync(doc, readOnly: true, version, checkedOut: false, _other!.Name, ct);
+        try
+        {
+            _other.Open(path);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            if (fresh)
+                _store.Delete(path); // just downloaded: Healdan has every byte of it
+            throw;
+        }
     }
 
     private void Reopen(Session live)

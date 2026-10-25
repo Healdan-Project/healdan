@@ -14,7 +14,7 @@ public sealed class HelperSettings
     public string? Server { get; set; }
 
     /// <summary>"LibreOffice" for every kind in §5.11 (<see cref="FileKinds"/>) in M3, otherwise "Default" (the system's default app, read-only).</summary>
-    public string AppFor(string extension) => FileKinds.Of(extension) is null ? "Default" : "LibreOffice";
+    public string AppFor(string extension) => FileKinds.Of(extension) is null ? Cycle.DefaultApp.AppName : "LibreOffice";
 
     /// <summary>The saved settings, or empty ones when there are none or the file can't be read.</summary>
     public static HelperSettings Load(HelperPaths paths)

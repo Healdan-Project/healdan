@@ -51,10 +51,14 @@ internal sealed class DevAnswers(JsonObject answers, HelperLog log)
         var folderId = id.GetValue<long>();
         var folder = await api.FolderAsync(folderId);
         var form = new FormModel(await api.FormAsync(folderId));
+        var name = request.Name;
         if (request.DocNumber is { } original)
+        {
+            name = request.StartingName((await api.DocumentAsync(original)).Name);
             form.Prefill(new FormModel(await api.PropertiesAsync(original)));
+        }
         Apply(form, spec["values"] as JsonObject);
-        var name = (string?)spec["name"] ?? request.Name;
+        name = request.FinalName((string?)spec["name"] ?? name);
         var format = (string?)spec["format"] ?? request.DefaultFormat();
         if (!form.CanSave(folder.CanFile) || DocumentNames.Problem(name, format) is { } problem && problem.Length > 0 || format is null)
         {

@@ -103,4 +103,54 @@ public class SaveNewTests
         Assert.Equal("""{"action":"saved"}""", WindowAnswers.Saved().ToJsonString());
         Assert.Equal("""{"action":"file"}""", WindowAnswers.File().ToJsonString());
     }
+
+    [Fact]
+    public void SaveAsNewDocumentIsNamedAfterTheOriginalNotTheCaller()
+    {
+        // The extension may send the window's title, which carries the copy's doc # and version.
+        var request = SaveNewRequest.From(new JsonObject
+        {
+            ["name"] = "Lease agreement #1234 v2.1", ["formats"] = new JsonArray("odt", "docx"),
+            ["path"] = "/copies/Lease agreement #1234 v2.1.docx", ["docNumber"] = 1234
+        });
+
+        Assert.Equal("Lease agreement", request.Name); // before the original is read
+        Assert.Equal("Lease agreement", request.StartingName("Lease agreement.docx"));
+        Assert.Equal("v1.2 draft", request.StartingName("v1.2 draft.odt"));
+        Assert.Equal("Lease agreement", SaveNewRequest.From(new JsonObject
+        {
+            ["name"] = "Lease agreement #1234 v2.1 (read-only).docx", ["formats"] = new JsonArray("odt", "docx"), ["docNumber"] = 1234
+        }).Name);
+    }
+
+    [Fact]
+    public void ANewDocumentKeepsTheNameItCameWith()
+    {
+        var request = SaveNewRequest.From(new JsonObject { ["name"] = "Invoice #12 v2", ["formats"] = new JsonArray("odt", "docx") });
+
+        Assert.Equal("Invoice #12 v2", request.Name); // only a copy's doc # and version are dropped
+        Assert.Equal("Invoice #12 v2", request.StartingName(null));
+    }
+
+    [Theory]
+    [InlineData("Lease.docx", "Lease")]
+    [InlineData(" Lease.ODT ", "Lease")]
+    [InlineData("Lease.pdf", "Lease.pdf")]
+    [InlineData("Lease", "Lease")]
+    public void ANameTypedWithAnOfferedFormatsExtensionLosesIt(string typed, string filed)
+    {
+        var request = SaveNewRequest.From(new JsonObject { ["formats"] = new JsonArray("odt", "docx") });
+
+        Assert.Equal(filed, request.FinalName(typed));
+    }
+
+    [Fact]
+    public void BeforeTheHelperIsReadyTheAppsOwnBoxOpens()
+    {
+        Assert.Equal("""{"action":"local"}""", WindowAnswers.NotReady("save-new").ToJsonString());
+        Assert.Equal("""{"action":"local"}""", WindowAnswers.NotReady("open-dialog").ToJsonString());
+        Assert.Equal("""{"action":"cancel"}""", WindowAnswers.NotReady("properties").ToJsonString());
+        Assert.Contains("Sign in", WindowAnswers.NotReadyNotice("save-new"));
+        Assert.Contains("on this computer", WindowAnswers.NotReadyNotice("save-new"));
+    }
 }

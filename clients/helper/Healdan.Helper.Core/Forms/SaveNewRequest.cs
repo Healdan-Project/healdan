@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Healdan.Helper.Core.Forms;
 
@@ -21,9 +22,33 @@ public sealed record SaveNewRequest(string App, string Name, IReadOnlyList<strin
         // Any JSON number: a value made in code may hold an int, which TryGetValue<long> doesn't answer.
         long? docNumber = body["docNumber"] is JsonValue n && n.GetValueKind() == JsonValueKind.Number
             && long.TryParse(n.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var d) ? d : null;
-        return new SaveNewRequest(Text(body, "app") ?? "LibreOffice", DocumentNames.WithoutExtension(name, formats).Trim(), formats,
-            Text(body, "path"), docNumber);
+        name = DocumentNames.WithoutExtension(name, formats).Trim();
+        if (docNumber is not null)
+            name = CopySuffix.Replace(name, "").Trim(); // a copy's title carries its doc # and version
+        return new SaveNewRequest(Text(body, "app") ?? "LibreOffice", name, formats, Text(body, "path"), docNumber);
     }
+
+    /// <summary>
+    /// The name the window starts with. Save as New Document names the new document after the original as Healdan has
+    /// it, <paramref name="originalName"/> without its extension, whatever the caller sent: the window's title or the
+    /// copy's file name would carry the original's doc # and version into the new document's name.
+    /// </summary>
+    public string StartingName(string? originalName)
+    {
+        if (DocNumber is null || string.IsNullOrWhiteSpace(originalName))
+            return Name;
+        var dot = originalName.LastIndexOf('.');
+        return (dot > 0 ? originalName[..dot] : originalName).Trim();
+    }
+
+    /// <summary>
+    /// The name to file under, from what the user typed: an extension that's one of the offered formats' is dropped,
+    /// as the chosen format adds its own ("Lease.docx" saved as .odt is "Lease.odt", not "Lease.docx.odt").
+    /// </summary>
+    public string FinalName(string? typed) => DocumentNames.WithoutExtension((typed ?? "").Trim(), Formats).Trim();
+
+    /// <summary>A local copy's " #1234 v2.1" and " (read-only)", as its title and file name end.</summary>
+    private static readonly Regex CopySuffix = new(@"\s#\d+ v\d+(\.\d+)*( \(read-only\))?$", RegexOptions.CultureInvariant);
 
     /// <summary>The format chosen at first: the copy's own for Save as New Document when it's offered, else the app's own.</summary>
     public string? DefaultFormat()
