@@ -74,6 +74,12 @@ check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
 api_product() { curl -fsS "$BASE/api/v1/server" | jq -er .product; }
 check "GET /api/v1/server answers JSON naming Healdan" test "$(api_product)" = Healdan
 
+echo "== 2b. forwarded addresses (docker/tests/test-proxies.sh)"
+# Fails three sign-ins with made-up X-Forwarded-For headers and checks which address the throttle counted; its
+# output carries its own PASS/FAIL lines
+check "Tomcat believes forwarded addresses only from the Docker networks" env BASE="$BASE" \
+  APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" bash docker/tests/test-proxies.sh
+
 echo "== 3. REST login, default workspace and the Smoke Matter"
 sid=$(login)
 check "REST login returns a session id" grep -Eq '^[0-9a-f-]{36}$' <<<"$sid"
