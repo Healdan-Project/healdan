@@ -145,11 +145,12 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
    `healdan.oxt` inside, signs it with the Developer ID, has Apple notarise it, and wraps it in
    `Healdan-Helper-1.2.3.dmg`, signed and notarised too. It uploads the disk image as the run's artifact.
 2. **`Release (macOS)`** attaches the disk image to the tag's GitHub release, and makes the release first if
-   there isn't one (a pre-release for a version like `1.2.3-rc1`). It's the only job with write access to the
-   repository, and it sees no signing secret.
+   there isn't one (a pre-release for a version like `1.2.3-rc1`). It runs only for a pushed tag, and only once
+   `xcrun stapler validate` has found the disk image's notarisation ticket. It's the only job with write access to
+   the repository, and it sees no signing secret.
 
-Actions → Clients → Run workflow packages any branch by hand, under a version you give or `0.0.0-dev.<run>`, and
-attaches nothing.
+Actions → Clients → Run workflow packages any branch or tag by hand, under a version you give or
+`0.0.0-dev.<run>`, and attaches nothing to a release.
 
 Signing needs six repository secrets, under Settings → Secrets and variables → Actions:
 
@@ -168,7 +169,8 @@ only an ad-hoc signature, and without the last three it isn't notarised. Either 
 disk image as its artifact, and attaches nothing to the release.
 
 On a Mac with the Developer ID certificate in the login keychain, the same script builds a signed package
-(`OUT_DIR` sets where it goes, `clients/helper/packaging/mac/out/` by default):
+(`OUT_DIR` sets where it goes, `clients/helper/packaging/mac/out/` by default). A `SIGN_IDENTITY` it can't find
+in the keychains stops it, rather than building without a signature:
 
 ```bash
 SIGN_IDENTITY="Developer ID Application: <name> (<team ID>)" clients/helper/packaging/mac/package.sh 1.2.3

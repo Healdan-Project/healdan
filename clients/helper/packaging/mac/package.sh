@@ -6,8 +6,8 @@
 #
 # Environment (all optional):
 #   SIGN_IDENTITY   the Developer ID Application identity to sign with, as `security find-identity` names it. Unset,
-#                   or not in the keychains, the app gets only an ad-hoc signature: it runs on the Mac that built it,
-#                   and Gatekeeper refuses it anywhere else.
+#                   the app gets only an ad-hoc signature, which Gatekeeper refuses on any other Mac. Set but not in
+#                   the keychains, the script stops: it never falls back to ad-hoc when a signature was asked for.
 #   SIGN_KEYCHAIN   the keychain holding it (CI's temporary one); otherwise the usual search list.
 #   NOTARY_KEY      the App Store Connect API key's .p8 file, with NOTARY_KEY_ID and NOTARY_ISSUER: with all three and
 #                   a signing identity, the app and the disk image are notarised and stapled.
@@ -53,8 +53,7 @@ if [ -n "${SIGN_KEYCHAIN:-}" ]; then
 fi
 identity=${SIGN_IDENTITY:-}
 if [ -n "$identity" ] && ! security find-identity -v -p codesigning ${SIGN_KEYCHAIN:+"$SIGN_KEYCHAIN"} | grep -qF "\"$identity\""; then
-  warn "The signing identity \"$identity\" isn't in the keychains"
-  identity=
+  die "the signing identity \"$identity\" isn't in the keychains (unset SIGN_IDENTITY to build without one)"
 fi
 if [ -n "$identity" ]; then
   signer=$identity
@@ -63,7 +62,7 @@ if [ -n "$identity" ]; then
 else
   signer=-
   timestamp=--timestamp=none
-  warn "NOT SIGNED with a Developer ID: SIGN_IDENTITY is unset or not found. The app gets an ad-hoc signature only, so Gatekeeper refuses it on any other Mac, and it isn't notarised."
+  warn "NOT SIGNED with a Developer ID: SIGN_IDENTITY is unset. The app gets an ad-hoc signature only, so Gatekeeper refuses it on any other Mac, and it isn't notarised."
 fi
 notarise=false
 if [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER:-}" ]; then
@@ -127,16 +126,30 @@ codesign --verify --strict --deep --verbose=2 "$app"
 codesign --display --verbose=2 "$app" 2>&1 | grep -E '^(Identifier|Format|TeamIdentifier|Authority|Timestamp|Runtime Version|CodeDirectory)' || true
 
 if [ "$notarise" = true ]; then
+  field() { # <json> <name>: the answer's field, or nothing when the answer isn't JSON
+    python3 -I -c '
+import json, sys
+try:
+    value = json.loads(sys.argv[1]).get(sys.argv[2], "")
+except (ValueError, AttributeError):
+    value = ""
+print(value if isinstance(value, str) else "")' "$1" "$2" || true
+  }
   notarise() { # <file> <what>
     local result status id
     say "Notarising $2; Apple usually answers within a few minutes"
     result=$(xcrun notarytool submit "$1" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" \
       --wait --timeout 30m --output-format json) || true
-    status=$(python3 -I -c 'import json, sys; print(json.loads(sys.stdin.read() or "{}").get("status", ""))' <<<"$result")
-    id=$(python3 -I -c 'import json, sys; print(json.loads(sys.stdin.read() or "{}").get("id", ""))' <<<"$result")
+    status=$(field "$result" status)
+    id=$(field "$result" id)
     if [ "$status" != Accepted ]; then
-      [ -z "$id" ] || xcrun notarytool log "$id" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" >&2 || true
-      die "notarising $2 ended with '${status:-no answer}'"
+      if [ -n "$id" ]; then
+        xcrun notarytool log "$id" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" >&2 || true
+      else
+        printf 'notarytool answered:\n%s\n' "$result" >&2
+      fi
+      [ -n "$status" ] || status="an answer that isn't notarytool's JSON"
+      die "notarising $2 ended with: $status"
     fi
     say "Notarised $2 ($id)"
   }

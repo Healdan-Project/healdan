@@ -18,8 +18,14 @@ public enum ExtensionOutcome
     /// <summary>The <c>.oxt</c> was opened in LibreOffice for the user to accept; the next start checks it went in.</summary>
     OpenedInLibreOffice,
 
-    /// <summary>It was opened in LibreOffice before, and LibreOffice is running, so it can't be checked until it isn't.</summary>
+    /// <summary>Linux: it was opened in LibreOffice before, and LibreOffice is running, so it can't be checked until it isn't.</summary>
     AwaitingLibreOffice,
+
+    /// <summary>
+    /// macOS: it isn't installed, and LibreOffice was asked already for this helper version, so it isn't asked
+    /// again; the user is told, and the menu offers Install the LibreOffice Extension.
+    /// </summary>
+    NotInstalled,
 
     /// <summary>Something went wrong; the log says what, and the user was told when there's something to do.</summary>
     Failed

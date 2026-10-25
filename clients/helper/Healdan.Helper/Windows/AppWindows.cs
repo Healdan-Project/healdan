@@ -7,6 +7,7 @@ using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Forms;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Ui;
@@ -35,6 +36,9 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
 
     /// <summary>The running helper, set once it's made (it needs these windows to be made first).</summary>
     public HelperSession? Session { get; set; }
+
+    /// <summary>The LibreOffice extension's check, for Settings; set with <see cref="Session"/>.</summary>
+    public ExtensionCheck? Extension { get; set; }
 
     public bool Waiting => _open.Waiting;
 
@@ -182,11 +186,8 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var settings = HelperSettings.Load(paths);
-        var extension = ExtensionInstaller.BundledOxt is { } oxt && File.Exists(oxt)
-            ? settings.Extension?.Describe() ?? "Not installed yet."
-            : "Not in this build: the installed app installs it.";
-        var window = new SettingsWindow(server, Session?.SignedIn == true, settings, LoginItem.Describe(), extension);
+        var extension = Extension?.Describe() ?? "Not in this build: the installed app installs it.";
+        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Describe(), extension);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

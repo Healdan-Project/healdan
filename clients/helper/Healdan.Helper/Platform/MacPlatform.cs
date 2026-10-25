@@ -12,7 +12,7 @@ internal static class MacPlatform
 {
     private const string ObjC = "/usr/lib/libobjc.A.dylib";
 
-    private static readonly Lazy<bool> Bundled = new(ReadInAppBundle);
+    private static readonly Lazy<string?> Bundle = new(ReadBundlePath);
 
     /// <summary>Brings the helper to the front as a window opens.</summary>
     public static void Activate()
@@ -32,7 +32,10 @@ internal static class MacPlatform
     /// The helper runs from an app bundle with an identifier, as the package installs it, rather than as a bare
     /// executable (<c>dotnet run</c>). Some frameworks, notifications among them, throw without one.
     /// </summary>
-    public static bool InAppBundle => OperatingSystem.IsMacOS() && Bundled.Value;
+    public static bool InAppBundle => BundlePath is not null;
+
+    /// <summary>The app bundle's path, such as <c>/Applications/Healdan Helper.app</c>; null outside one.</summary>
+    public static string? BundlePath => OperatingSystem.IsMacOS() ? Bundle.Value : null;
 
     /// <summary>
     /// A display is on to draw on. Avalonia can't start without one (Task 16: CVReturn -6661, while the display
@@ -87,16 +90,17 @@ internal static class MacPlatform
 
     private static IntPtr SharedApplication() => Send(Class("NSApplication"), Selector("sharedApplication"));
 
-    private static bool ReadInAppBundle()
+    private static string? ReadBundlePath()
     {
         var pool = objc_autoreleasePoolPush();
         try
         {
             var bundle = Send(Class("NSBundle"), Selector("mainBundle"));
             if (bundle == IntPtr.Zero || Send(bundle, Selector("bundleIdentifier")) == IntPtr.Zero)
-                return false;
+                return null;
             var path = Send(bundle, Selector("bundlePath"));
-            return path != IntPtr.Zero && (Marshal.PtrToStringUTF8(Send(path, Selector("UTF8String"))) ?? "").EndsWith(".app", StringComparison.Ordinal);
+            var text = path == IntPtr.Zero ? null : Marshal.PtrToStringUTF8(Send(path, Selector("UTF8String")));
+            return text is not null && text.EndsWith(".app", StringComparison.Ordinal) ? text : null;
         }
         finally
         {

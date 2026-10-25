@@ -114,7 +114,8 @@ jobs:
 
   # The macOS package (spec §5.12), for a helper-v* tag or a run by hand, once the tests passed. With the six signing
   # secrets it's signed with the Developer ID and notarised; without them (a fork, say) it's built unsigned. Either
-  # way the disk image is uploaded as an artifact; release-mac attaches a notarised one to the tag's release.
+  # way the disk image is uploaded as an artifact; release-mac attaches it to the tag's release only from a tag push,
+  # and only once its notarisation ticket is checked.
   package-mac:
     name: Package (macos-15)
     needs: [ helper, extension ]
@@ -123,7 +124,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       version: ${{ steps.version.outputs.version }}
-      notarised: ${{ steps.secrets.outputs.signing == 'true' && steps.secrets.outputs.notary == 'true' }}
+      notarised: ${{ steps.stapled.outputs.notarised }}
 
     steps:
       - name: Checkout source
@@ -228,6 +229,19 @@ jobs:
           OUT_DIR: ${{ runner.temp }}/package
         run: clients/helper/packaging/mac/package.sh "$VERSION"
 
+      # What release-mac trusts: the disk image's own stapled ticket, not which secrets were set.
+      - name: Check the disk image is notarised
+        id: stapled
+        env:
+          DMG: ${{ runner.temp }}/package/Healdan-Helper-${{ steps.version.outputs.version }}.dmg
+        run: |
+          if xcrun stapler validate "$DMG"; then
+            echo "notarised=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The disk image isn't notarised, so it isn't attached to any release"
+            echo "notarised=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload the disk image
         uses: actions/upload-artifact@v7
         with:
@@ -244,12 +258,13 @@ jobs:
           if [ -f "$keychain" ]; then security delete-keychain "$keychain" || true; fi
           rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/notary-key.p8"
 
-  # Attaches the notarised disk image to the tag's GitHub release, making the release if there's none yet. Kept apart
-  # from package-mac so only this short job, which builds nothing and sees no signing secret, can write to the repository.
+  # Attaches the notarised disk image to the tag's GitHub release, making the release if there's none yet: only for a
+  # push of a helper-v* tag, so a run by hand (even on such a tag) attaches nothing. Kept apart from package-mac so
+  # only this short job, which builds nothing and sees no signing secret, can write to the repository.
   release-mac:
     name: Release (macOS)
     needs: package-mac
-    if: startsWith(github.ref, 'refs/tags/helper-v') && needs.package-mac.outputs.notarised == 'true'
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/helper-v') && needs.package-mac.outputs.notarised == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

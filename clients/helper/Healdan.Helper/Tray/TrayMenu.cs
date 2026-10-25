@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Healdan.Helper.Core.Links;
+using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Platform;
 using Healdan.Helper.Windows;
@@ -11,7 +12,8 @@ namespace Healdan.Helper.Tray;
 
 /// <summary>
 /// The menu-bar icon and its menu (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
-/// Open from Healdan (once the helper has started), Settings, Sign In or Sign Out, and Quit. When native notifications
+/// Open from Healdan (once the helper has started), Install the LibreOffice Extension while it isn't installed
+/// (spec §5.12, R22), Settings, Sign In or Sign Out, and Quit. When native notifications
 /// can't be shown, the last notice is the menu's status line. The menu is rebuilt when it opens and whenever the
 /// session changes.
 /// </summary>
@@ -23,13 +25,15 @@ internal sealed class TrayMenu : IDisposable
     private readonly HelperSession _session;
     private readonly Notifier _notifier;
     private readonly AppWindows _windows;
+    private readonly ExtensionCheck _extension;
     private readonly Action _quit;
     private readonly NativeMenu _menu = new();
     private readonly TrayIcon _icon;
 
-    public TrayMenu(Application app, HelperSession session, Notifier notifier, AppWindows windows, Action quit)
+    public TrayMenu(Application app, HelperSession session, Notifier notifier, AppWindows windows, ExtensionCheck extension, Action quit)
     {
         _session = session;
+        _extension = extension;
         _windows = windows;
         _notifier = notifier;
         _quit = quit;
@@ -44,6 +48,7 @@ internal sealed class TrayMenu : IDisposable
         _menu.NeedsUpdate += (_, _) => Build();
         session.Changed += Refresh;
         notifier.StatusChanged += Refresh;
+        extension.Changed += Refresh;
         Build();
     }
 
@@ -51,6 +56,7 @@ internal sealed class TrayMenu : IDisposable
     {
         _session.Changed -= Refresh;
         _notifier.StatusChanged -= Refresh;
+        _extension.Changed -= Refresh;
         _icon.IsVisible = false;
         _icon.Dispose();
     }
@@ -79,6 +85,8 @@ internal sealed class TrayMenu : IDisposable
         var open = Item("Open from Healdan…", _windows.OpenFromMenu);
         open.IsEnabled = _session.Started && _session.SignedIn;
         items.Add(open);
+        if (_extension.Refresh()) // reads LibreOffice's registry, so the item goes once the user has accepted it
+            items.Add(Item(ExtensionCheck.MenuItem, InstallExtension));
         items.Add(Item("Settings…", _windows.ShowSettings));
         items.Add(_session.SignedIn
             ? Item("Sign Out", () => Run(_session.SignOutAsync))
@@ -86,6 +94,18 @@ internal sealed class TrayMenu : IDisposable
         items.Add(new NativeMenuItemSeparator());
         items.Add(Item("Quit Healdan Helper", _quit));
     }
+
+    private void InstallExtension() => _ = Task.Run(() =>
+    {
+        try
+        {
+            _extension.InstallFromMenu();
+        }
+        catch (Exception e)
+        {
+            Program.Log.Error("Install the LibreOffice Extension failed", e);
+        }
+    });
 
     private string Who()
     {

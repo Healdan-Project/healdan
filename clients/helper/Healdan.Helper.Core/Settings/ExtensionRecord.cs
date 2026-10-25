@@ -32,6 +32,9 @@ public sealed record ExtensionRecord
     /// <summary>The bundled version the helper opened in LibreOffice for the user to accept, not yet seen installed.</summary>
     public string? OpenedFor { get; init; }
 
+    /// <summary>The helper version that last opened it in LibreOffice by itself: it does so once per helper version.</summary>
+    public string? OpenedBy { get; init; }
+
     /// <summary>The helper version whose <c>unopkg add</c> failed, so unopkg isn't tried again until the next one.</summary>
     public string? UnopkgFailedFor { get; init; }
 

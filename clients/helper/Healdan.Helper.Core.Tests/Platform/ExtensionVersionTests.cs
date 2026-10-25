@@ -222,6 +222,122 @@ public sealed class ExtensionVersionTests : IDisposable
         Assert.Throws<InvalidDataException>(() => ExtensionVersion.OfOxt(empty));
     }
 
+    /// <summary>
+    /// LibreOffice's user registry on the owner's Mac (LibreOffice 26.8.1, 2026-10-25): the bundle backend's
+    /// <c>backenddb.xml</c> after the Extension Manager installed the extension in a scratch profile, as written.
+    /// </summary>
+    private const string RegistryInstalled = """
+        <?xml version="1.0"?>
+        <ext:extension-backend-db xmlns:ext="http://openoffice.org/extensionmanager/extension-registry/2010"><ext:extension url="vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt"><ext:extension-items><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/healdan.py</ext:url><ext:media-type>application/vnd.sun.star.uno-component;type=Python</ext:media-type></ext:item><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/Addons.xcu</ext:url><ext:media-type>application/vnd.sun.star.configuration-data</ext:media-type></ext:item><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/ProtocolHandler.xcu</ext:url><ext:media-type>application/vnd.sun.star.configuration-data</ext:media-type></ext:item><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/Jobs.xcu</ext:url><ext:media-type>application/vnd.sun.star.configuration-data</ext:media-type></ext:item><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/WriterWindowState.xcu</ext:url><ext:media-type>application/vnd.sun.star.configuration-data</ext:media-type></ext:item><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/CalcWindowState.xcu</ext:url><ext:media-type>application/vnd.sun.star.configuration-data</ext:media-type></ext:item><ext:item><ext:url>vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu38484eovjwz.tmp_/healdan-0.1.0.oxt/ImpressWindowState.xcu</ext:url><ext:media-type>application/vnd.sun.star.configuration-data</ext:media-type></ext:item></ext:extension-items></ext:extension></ext:extension-backend-db>
+        """;
+
+    /// <summary>The same profile's file once the extension was removed, as the owner's own profile has it too.</summary>
+    private const string RegistryEmpty = """
+        <?xml version="1.0"?>
+        <ext:extension-backend-db xmlns:ext="http://openoffice.org/extensionmanager/extension-registry/2010"/>
+        """;
+
+    private const string InstalledFolder = "lu38484eovjwz.tmp_/healdan-0.1.0.oxt";
+
+    [Fact]
+    public void ReadsTheRegistry()
+    {
+        var user = Profile(RegistryInstalled, (InstalledFolder, Description("org.healdan.libreoffice", "0.1.0")));
+
+        Assert.Equal(new InstalledExtension("0.1.0", true), ExtensionVersion.FromRegistry(user));
+    }
+
+    [Fact]
+    public void ATurnedOffExtensionIsRevoked()
+    {
+        // Tools › Extensions › Disable marked the entry so, on the owner's Mac.
+        var revoked = RegistryInstalled.Replace("healdan-0.1.0.oxt\">", "healdan-0.1.0.oxt\" revoked=\"true\">", StringComparison.Ordinal);
+        var user = Profile(revoked, (InstalledFolder, Description("org.healdan.libreoffice", "0.1.0")));
+
+        var installed = ExtensionVersion.FromRegistry(user);
+
+        Assert.Equal(new InstalledExtension("0.1.0", false), installed);
+        Assert.Null(installed!.UsableVersion);
+    }
+
+    [Fact]
+    public void AFailedAddOrARemovedOneIsntInstalled()
+    {
+        // A failed unopkg add unpacks the folder but writes no backenddb.xml; a removal empties it and leaves the
+        // folder until LibreOffice next starts.
+        Assert.Null(ExtensionVersion.FromRegistry(Profile(null, (InstalledFolder, Description("org.healdan.libreoffice", "0.1.0")))));
+        Assert.Null(ExtensionVersion.FromRegistry(Profile(RegistryEmpty, (InstalledFolder, Description("org.healdan.libreoffice", "0.1.0")))));
+    }
+
+    [Fact]
+    public void AnUpdateIsReadFromTheFolderListed()
+    {
+        // After 0.1.0 → 0.2.0, both folders are there until LibreOffice next starts; the registry names the new one.
+        var updated = RegistryInstalled.Replace("lu38484eovjwz.tmp_/healdan-0.1.0.oxt", "lu38405eovc7r.tmp_/healdan-0.2.0.oxt", StringComparison.Ordinal);
+        var user = Profile(updated,
+            (InstalledFolder, Description("org.healdan.libreoffice", "0.1.0")),
+            ("lu38405eovc7r.tmp_/healdan-0.2.0.oxt", Description("org.healdan.libreoffice", "0.2.0")));
+
+        Assert.Equal(new InstalledExtension("0.2.0", true), ExtensionVersion.FromRegistry(user));
+    }
+
+    [Fact]
+    public void OnlyHealdansOwnEntryInsideTheCacheCounts()
+    {
+        var two = """
+            <?xml version="1.0"?>
+            <ext:extension-backend-db xmlns:ext="http://openoffice.org/extensionmanager/extension-registry/2010">
+              <ext:extension url="vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/../../../evil/healdan.oxt"/>
+              <ext:extension url="file:///tmp/healdan.oxt"/>
+              <ext:extension url="vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu1.tmp_/grammar.oxt"/>
+              <ext:extension url="vnd.sun.star.expand:$UNO_USER_PACKAGES_CACHE/uno_packages/lu2.tmp_/Healdan%20Extension.oxt"/>
+            </ext:extension-backend-db>
+            """;
+        var user = Profile(two,
+            ("lu1.tmp_/grammar.oxt", Description("org.example.grammar", "9.9.9")),
+            ("lu2.tmp_/Healdan Extension.oxt", Description("org.healdan.libreoffice", "0.3.0")));
+        Directory.CreateDirectory(Path.Combine(_dir, "evil", "healdan.oxt"));
+        File.WriteAllText(Path.Combine(_dir, "evil", "healdan.oxt", "description.xml"), Description("org.healdan.libreoffice", "9.0.0"));
+
+        Assert.Equal(new InstalledExtension("0.3.0", true), ExtensionVersion.FromRegistry(user));
+    }
+
+    [Fact]
+    public void AMissingOrUnreadableRegistryIsNothingInstalled()
+    {
+        Assert.Null(ExtensionVersion.FromRegistry(Path.Combine(_dir, "no-profile")));
+        Assert.Null(ExtensionVersion.FromRegistry(Profile("<not xml", (InstalledFolder, Description("org.healdan.libreoffice", "0.1.0")))));
+        Assert.Null(ExtensionVersion.FromRegistry(Profile(RegistryInstalled, (InstalledFolder, "<not xml"))));
+    }
+
+    /// <summary>A LibreOffice user profile with the bundle backend's registry and the unpacked extensions' folders.</summary>
+    private string Profile(string? backendDb, params (string Folder, string Description)[] extensions)
+    {
+        var user = Path.Combine(_dir, $"user-{Guid.NewGuid():N}");
+        var cache = Path.Combine(user, "uno_packages", "cache");
+        if (backendDb is not null)
+        {
+            var registry = Path.Combine(cache, "registry", "com.sun.star.comp.deployment.bundle.PackageRegistryBackend");
+            Directory.CreateDirectory(registry);
+            File.WriteAllText(Path.Combine(registry, "backenddb.xml"), backendDb);
+        }
+        foreach (var (folder, description) in extensions)
+        {
+            var unpacked = Path.Combine(cache, "uno_packages", folder);
+            Directory.CreateDirectory(unpacked);
+            File.WriteAllText(Path.Combine(unpacked, "description.xml"), description);
+        }
+        return user;
+    }
+
+    private static string Description(string identifier, string version) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <description xmlns="http://openoffice.org/extensions/description/2006">
+          <identifier value="{identifier}"/>
+          <version value="{version}"/>
+        </description>
+        """;
+
     private string Oxt(string name, string description)
     {
         var path = Path.Combine(_dir, name);

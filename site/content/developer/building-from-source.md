@@ -78,7 +78,8 @@ clients/helper/packaging/mac/package.sh 1.2.3                                  #
 
 `package.sh` signs only with `SIGN_IDENTITY` set (see
 [Releasing the macOS Helper](../continuous-integration/#releasing-the-macos-helper)). Without it, the app gets only
-an ad-hoc signature, which Gatekeeper refuses on any other Mac.
+an ad-hoc signature, which Gatekeeper refuses on any other Mac. A `SIGN_IDENTITY` that isn't in the keychains
+stops it.
 
 Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
 `http://localhost:8080`. Start a throwaway stack with the smoke fixture overlay first (see

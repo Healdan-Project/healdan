@@ -9,9 +9,11 @@ namespace Healdan.Helper.Platform;
 /// Starting at sign-in to the computer (spec §5.1: the helper runs from sign-in until quit), as a macOS login item:
 /// <c>SMAppService.mainAppService</c> (macOS 13 and later), called through the Objective-C runtime as the
 /// notifications are. The helper registers once, after its first sign-in to Healdan; after that, turning it off in
-/// System Settings is the user's choice and stands. Only the app bundle registers, never a Debug build or one run by
-/// hand. macOS starts a login item once per sign-in and doesn't restart it, so it can't crash-loop; a start before
-/// the display is on waits for it (<see cref="MacPlatform.HasActiveDisplay"/>).
+/// System Settings is the user's choice and stands, but a registration macOS has lost (<c>NotFound</c>) is made again.
+/// Only the app bundle registers, never a Debug build or one run by hand, and not while it runs from the disk image or
+/// a translocated copy (a quarantined app opened where it was downloaded), whose path goes away. macOS starts a login
+/// item once per sign-in and doesn't restart it, so it can't crash-loop; a start before the display is on waits for
+/// it (<see cref="MacPlatform.HasActiveDisplay"/>).
 /// </summary>
 internal static unsafe class LoginItem
 {
@@ -34,7 +36,10 @@ internal static unsafe class LoginItem
         }
     }
 
-    /// <summary>After a sign-in: registers, unless it has once before. A failure is logged, and tried again at the next start.</summary>
+    /// <summary>
+    /// After a sign-in: registers, unless it has once before and macOS still has it. A failure is logged, and tried
+    /// again at the next start.
+    /// </summary>
     public static void EnsureRegistered(HelperPaths paths, HelperLog log)
     {
         if (!Available)
@@ -42,12 +47,22 @@ internal static unsafe class LoginItem
             log.Info("Not the app bundle's Release build, so it isn't registered to start at sign-in");
             return;
         }
+        if (Passing() is { } where)
+        {
+            log.Info($"Running from {where} ({MacPlatform.BundlePath}), so it isn't registered to start at sign-in");
+            return;
+        }
         try
         {
             if (HelperSettings.Load(paths).LoginItemRegistered)
             {
-                log.Info($"Start at sign-in: {Status() switch { Enabled => "on", RequiresApproval => "waiting for approval", _ => "off" }}");
-                return;
+                var status = Status();
+                if (status != NotFound)
+                {
+                    log.Info($"Start at sign-in: {status switch { Enabled => "on", RequiresApproval => "waiting for approval", _ => "off" }}");
+                    return;
+                }
+                log.Warn("macOS can't find the login item any more, so it's registered again");
             }
             if (Register(out var error))
             {
@@ -70,6 +85,8 @@ internal static unsafe class LoginItem
     {
         if (!Available)
             return "Not in this build: the installed app starts when you sign in to this computer.";
+        if (Passing() is { } where)
+            return $"Off while Healdan Helper runs from {where}. Drag it to Applications, then open it from there.";
         try
         {
             return Status() switch
@@ -85,6 +102,17 @@ internal static unsafe class LoginItem
             return "Unknown: macOS didn't say.";
         }
     }
+
+    /// <summary>
+    /// Where the app runs from, when it's a place that goes away: the mounted disk image, or the read-only copy macOS
+    /// runs a quarantined app from until it's moved (App Translocation). Null from anywhere else, such as Applications.
+    /// </summary>
+    private static string? Passing() => MacPlatform.BundlePath switch
+    {
+        { } path when path.StartsWith("/Volumes/", StringComparison.Ordinal) => "the disk image",
+        { } path when path.Contains("/AppTranslocation/", StringComparison.Ordinal) => "where it was downloaded",
+        _ => null
+    };
 
     private static long Status()
     {

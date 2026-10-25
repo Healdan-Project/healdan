@@ -62,6 +62,7 @@ public partial class App : Application
         _session = session;
         windows.Session = session;
         var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);
+        windows.Extension = extension.Check;
         session.Changed += () =>
         {
             if (session.Started)
@@ -73,7 +74,7 @@ public partial class App : Application
         if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
             activatable.Activated += OnActivated;
 
-        _tray = new TrayMenu(this, session, notifier, windows, () => desktop.Shutdown());
+        _tray = new TrayMenu(this, session, notifier, windows, extension.Check, () => desktop.Shutdown());
         desktop.Exit += (_, _) => Stop();
         foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT })
             _signals.Add(PosixSignalRegistration.Create(signal, context =>

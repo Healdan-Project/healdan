@@ -7,9 +7,12 @@ using Healdan.Helper.Core.Tests.Ui;
 namespace Healdan.Helper.Core.Tests.Platform;
 
 /// <summary>
-/// Installing or updating the LibreOffice extension at start (spec §5.12): unopkg first, else the <c>.oxt</c> opened in
-/// LibreOffice for the user to accept; never unopkg beside a running LibreOffice; once per helper version unless the
-/// installed one is still older; and which way worked is recorded.
+/// Installing or updating the LibreOffice extension at start (spec §5.12), and which way worked recorded.
+/// <para>macOS (R22): never unopkg; what's installed comes from LibreOffice's registry; the <c>.oxt</c> is opened in
+/// LibreOffice at most once per helper version, and after that a notice and the menu's item offer it while it isn't
+/// installed.</para>
+/// <para>Linux (phase 2): unopkg first, else the <c>.oxt</c> opened in LibreOffice; never unopkg beside a running
+/// LibreOffice; once per helper version unless the installed one is still older.</para>
 /// </summary>
 public sealed class ExtensionCheckTests : IDisposable
 {
@@ -29,12 +32,14 @@ public sealed class ExtensionCheckTests : IDisposable
 
     public void Dispose() => Directory.Delete(_dir, true);
 
+    // --- Linux (phase 2): unopkg ---------------------------------------------------------------------------------
+
     [Fact]
     public async Task ACurrentExtensionIsLeftAloneAndRecorded()
     {
         _tools.Lists.Enqueue(Listing("0.2.0", registered: true));
 
-        Assert.Equal(ExtensionOutcome.Current, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.Current, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Empty(_tools.Added);
         Assert.Equal(0, _tools.Opened);
@@ -51,7 +56,7 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.Lists.Enqueue(Listing("0.1.0", registered: true));
         _tools.Lists.Enqueue(Listing("0.2.0", registered: true));
 
-        Assert.Equal(ExtensionOutcome.InstalledByUnopkg, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.InstalledByUnopkg, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Single(_tools.Added);
         Assert.Equal(0, _tools.Opened);
@@ -67,7 +72,7 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.AddFailure = "couldn't connect to pipe";
         _tools.Lists.Enqueue(Listing("0.2.0", registered: false)); // a failed add leaves it unregistered
 
-        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Single(_tools.Added);
         Assert.Equal(1, _tools.Removed); // so LibreOffice's own install is a plain one
@@ -86,7 +91,7 @@ public sealed class ExtensionCheckTests : IDisposable
         Save(new ExtensionRecord { OpenedFor = "0.2.0", UnopkgFailedFor = Helper });
         _tools.Lists.Enqueue(Listing("0.2.0", registered: true));
 
-        Assert.Equal(ExtensionOutcome.Current, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.Current, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Empty(_tools.Added);
         Assert.Equal(0, _tools.Opened);
@@ -102,7 +107,7 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.Lists.Enqueue(Listing(null, registered: false));
 
         // Still older (the user didn't accept it): opened again, without another unopkg attempt.
-        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Empty(_tools.Added);
         Assert.Equal(1, _tools.Opened);
@@ -113,7 +118,7 @@ public sealed class ExtensionCheckTests : IDisposable
     {
         Save(new ExtensionRecord { Version = "0.2.0", Way = "unopkg", CheckedFor = Helper });
 
-        Assert.Equal(ExtensionOutcome.Current, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.Current, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Equal(0, _tools.Listed);
         Assert.Equal(0, _tools.RunningChecks);
@@ -126,7 +131,7 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.Lists.Enqueue(Listing("0.1.0", registered: true));
         _tools.Lists.Enqueue(Listing("0.2.0", registered: true));
 
-        Assert.Equal(ExtensionOutcome.InstalledByUnopkg, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.InstalledByUnopkg, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Single(_tools.Added); // the old version's unopkg failure doesn't count for this one
     }
@@ -138,7 +143,7 @@ public sealed class ExtensionCheckTests : IDisposable
         Save(new ExtensionRecord { Version = "0.1.0", Way = "unopkg", CheckedFor = "0.1.0" });
         _tools.Running = true;
 
-        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Equal(0, _tools.Listed);
         Assert.Empty(_tools.Added);
@@ -153,7 +158,7 @@ public sealed class ExtensionCheckTests : IDisposable
         Save(new ExtensionRecord { Version = "0.1.0", OpenedFor = "0.2.0" });
         _tools.Running = true;
 
-        Assert.Equal(ExtensionOutcome.AwaitingLibreOffice, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.AwaitingLibreOffice, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Equal(0, _tools.Opened);
         Assert.Equal(0, _tools.Listed);
@@ -165,7 +170,7 @@ public sealed class ExtensionCheckTests : IDisposable
         Save(new ExtensionRecord { Version = "0.2.0", Way = "unopkg", CheckedFor = "0.1.0" });
         _tools.Running = true;
 
-        Assert.Equal(ExtensionOutcome.Current, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.Current, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Equal(0, _tools.Opened);
         Assert.Equal(Helper, Record().CheckedFor);
@@ -177,9 +182,9 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.Lists.Enqueue(Listing(null, registered: false));
         _tools.AddFailure = "couldn't connect to pipe";
         var waiting = true;
-        var check = Check(() => Volatile.Read(ref waiting));
+        var check = Linux(Oxt("0.2.0"), () => Volatile.Read(ref waiting));
 
-        var run = check.RunAsync(Oxt("0.2.0"));
+        var run = check.RunAsync();
         await Task.Delay(100);
         Assert.Equal(0, _tools.Opened);
         Volatile.Write(ref waiting, false);
@@ -193,7 +198,7 @@ public sealed class ExtensionCheckTests : IDisposable
     {
         _tools.Installed = false;
 
-        Assert.Equal(ExtensionOutcome.NoLibreOffice, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.NoLibreOffice, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Contains("LibreOffice isn't installed", _notifier.All);
         Assert.Equal(0, _tools.Listed);
@@ -202,8 +207,8 @@ public sealed class ExtensionCheckTests : IDisposable
     [Fact]
     public async Task ABuildWithoutTheOxtDoesNothing()
     {
-        Assert.Equal(ExtensionOutcome.NotBundled, await Check().RunAsync(null));
-        Assert.Equal(ExtensionOutcome.NotBundled, await Check().RunAsync(Path.Combine(_dir, "missing.oxt")));
+        Assert.Equal(ExtensionOutcome.NotBundled, await Linux(null).RunAsync());
+        Assert.Equal(ExtensionOutcome.NotBundled, await Linux(Path.Combine(_dir, "missing.oxt")).RunAsync());
 
         Assert.Equal(0, _tools.RunningChecks);
         Assert.Empty(_notifier.Notices);
@@ -216,10 +221,127 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.AddFailure = "couldn't connect to pipe";
         _tools.OpenFailure = new IOException("open exited with 1");
 
-        Assert.Equal(ExtensionOutcome.Failed, await Check().RunAsync(Oxt("0.2.0")));
+        Assert.Equal(ExtensionOutcome.Failed, await Linux(Oxt("0.2.0")).RunAsync());
 
         Assert.Contains("couldn't be installed", _notifier.All);
         Assert.Null(Record().OpenedFor);
+    }
+
+    // --- macOS (R22): one click in LibreOffice, never unopkg --------------------------------------------------------
+
+    [Fact]
+    public async Task MacNeverStartsUnopkg()
+    {
+        foreach (var (registry, running) in new (InstalledExtension?, bool)[]
+                 {
+                     (null, false), (new("0.1.0", true), false), (new("0.2.0", false), true), (new("0.2.0", true), true), (null, true)
+                 })
+        {
+            _tools.Registry = registry;
+            _tools.Running = running;
+            await Mac(Oxt("0.2.0")).RunAsync();
+            await Mac(Oxt("0.2.0"), helper: "0.3.0").RunAsync();
+        }
+
+        Assert.Equal(0, _tools.UnopkgCalls);
+        Assert.True(_tools.RegistryReads > 0);
+    }
+
+    [Fact]
+    public async Task MacOpensTheOxtAtMostOncePerHelperVersion()
+    {
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Mac(Oxt("0.2.0")).RunAsync());
+        Assert.Equal(1, _tools.Opened);
+        Assert.Equal(("0.2.0", Helper), (Record().OpenedFor, Record().OpenedBy));
+
+        // The next starts of this helper don't start LibreOffice again, even with it closed.
+        Assert.Equal(ExtensionOutcome.NotInstalled, await Mac(Oxt("0.2.0")).RunAsync());
+        _tools.Running = true;
+        Assert.Equal(ExtensionOutcome.NotInstalled, await Mac(Oxt("0.2.0")).RunAsync());
+        Assert.Equal(1, _tools.Opened);
+
+        // A new helper version asks once more.
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Mac(Oxt("0.2.0"), helper: "0.2.1").RunAsync());
+        Assert.Equal(2, _tools.Opened);
+    }
+
+    [Fact]
+    public async Task MacOffersTheMenuItemAndANoticeWhileItIsntInstalled()
+    {
+        Save(new ExtensionRecord { OpenedFor = "0.2.0", OpenedBy = Helper });
+        var check = Mac(Oxt("0.2.0"));
+        var changes = 0;
+        check.Changed += () => changes++;
+        Assert.False(check.Missing); // nothing to offer before the start's check
+
+        Assert.Equal(ExtensionOutcome.NotInstalled, await check.RunAsync());
+
+        Assert.True(check.Missing);
+        Assert.Equal(1, changes);
+        Assert.Contains(ExtensionCheck.MenuItem, _notifier.All);
+        Assert.StartsWith("Not installed.", check.Describe());
+        Assert.True(check.Refresh()); // the menu opens: still not installed
+
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, check.InstallFromMenu());
+        Assert.Equal(1, _tools.Opened);
+
+        _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
+        Assert.False(check.Refresh());
+        Assert.Equal(2, changes);
+        Assert.Equal(("0.2.0", "LibreOffice", Helper), (Record().Version, Record().Way, Record().CheckedFor));
+        Assert.StartsWith("Version 0.2.0, installed in LibreOffice on ", check.Describe());
+    }
+
+    [Fact]
+    public async Task MacSeesAnInstalledExtensionWithLibreOfficeOpenOrClosed()
+    {
+        _tools.Registry = new InstalledExtension("0.2.0", true);
+        _tools.Running = true;
+
+        Assert.Equal(ExtensionOutcome.Current, await Mac(Oxt("0.2.0")).RunAsync());
+
+        Assert.Equal(0, _tools.Opened);
+        Assert.Equal(("0.2.0", "found", Helper), (Record().Version, Record().Way, Record().CheckedFor));
+        Assert.Empty(_notifier.Notices);
+    }
+
+    [Fact]
+    public async Task MacUpdatesAnOlderOrTurnedOffExtension()
+    {
+        _tools.Registry = new InstalledExtension("0.1.0", true);
+        var check = Mac(Oxt("0.2.0"));
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await check.RunAsync());
+        Assert.True(check.Missing);
+        Assert.Contains("0.1.0 is installed", File.ReadAllText(_paths.Log));
+
+        _tools.Registry = new InstalledExtension("0.2.0", false); // turned off in LibreOffice
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await Mac(Oxt("0.2.0"), helper: "0.2.1").RunAsync());
+        Assert.Contains("0.2.0 is turned off", File.ReadAllText(_paths.Log));
+        Assert.Equal(2, _tools.Opened);
+    }
+
+    [Fact]
+    public async Task MacOpensNothingWhileAWindowWaits()
+    {
+        var waiting = true;
+        var run = Mac(Oxt("0.2.0"), () => Volatile.Read(ref waiting)).RunAsync();
+        await Task.Delay(100);
+        Assert.Equal(0, _tools.Opened);
+        Volatile.Write(ref waiting, false);
+
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await run);
+        Assert.Equal(1, _tools.Opened);
+    }
+
+    [Fact]
+    public async Task MacWithoutTheOxtOffersNothing()
+    {
+        var check = Mac(null);
+        Assert.Equal(ExtensionOutcome.NotBundled, await check.RunAsync());
+        Assert.False(check.Refresh());
+        Assert.Equal(ExtensionOutcome.NotBundled, check.InstallFromMenu());
+        Assert.Equal("Not in this build: the installed app installs it.", check.Describe());
+        Assert.Equal(0, _tools.RegistryReads);
     }
 
     [Fact]
@@ -237,8 +359,11 @@ public sealed class ExtensionCheckTests : IDisposable
         Assert.Equal("Not installed yet.", new ExtensionRecord().Describe());
     }
 
-    private ExtensionCheck Check(Func<bool>? waiting = null) =>
-        new(_tools, _paths, _notifier, _log, Helper, waiting ?? (() => false), poll: TimeSpan.FromMilliseconds(10));
+    private ExtensionCheck Linux(string? oxt, Func<bool>? waiting = null) =>
+        new(_tools, _paths, _notifier, _log, Helper, ExtensionRoute.Unopkg, oxt, waiting ?? (() => false), poll: TimeSpan.FromMilliseconds(10));
+
+    private ExtensionCheck Mac(string? oxt, Func<bool>? waiting = null, string helper = Helper) =>
+        new(_tools, _paths, _notifier, _log, helper, ExtensionRoute.OpenInLibreOffice, oxt, waiting ?? (() => false), poll: TimeSpan.FromMilliseconds(10));
 
     private ExtensionRecord Record() => HelperSettings.Load(_paths).Extension ?? new ExtensionRecord();
 
@@ -278,6 +403,20 @@ public sealed class ExtensionCheckTests : IDisposable
         public int Opened { get; private set; }
         public int RunningChecks { get; private set; }
 
+        /// <summary>What LibreOffice's registry says is installed.</summary>
+        public InstalledExtension? Registry { get; set; }
+
+        public int RegistryReads { get; private set; }
+
+        /// <summary>Every unopkg call (list, add, remove), which macOS must never make.</summary>
+        public int UnopkgCalls { get; private set; }
+
+        public InstalledExtension? ReadInstalled()
+        {
+            RegistryReads++;
+            return Registry;
+        }
+
         public bool LibreOfficeInstalled
         {
             get
@@ -295,18 +434,21 @@ public sealed class ExtensionCheckTests : IDisposable
 
         public Task<string?> ListAsync(CancellationToken cancel)
         {
+            UnopkgCalls++;
             Listed++;
             return Task.FromResult<string?>(Lists.Count > 0 ? Lists.Dequeue() : Listing(null, false));
         }
 
         public Task<string?> AddAsync(string oxt, CancellationToken cancel)
         {
+            UnopkgCalls++;
             Added.Add(oxt);
             return Task.FromResult(AddFailure);
         }
 
         public Task RemoveAsync(CancellationToken cancel)
         {
+            UnopkgCalls++;
             Removed++;
             return Task.CompletedTask;
         }
