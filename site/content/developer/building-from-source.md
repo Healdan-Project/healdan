@@ -62,15 +62,24 @@ The desktop clients are under `clients/`, and build separately from Maven.
 - **The helper's core** is a .NET project in `clients/helper/Healdan.Helper.Core`, with its tests in
   `clients/helper/Healdan.Helper.Core.Tests`. You need the .NET 10 SDK; `clients/helper/global.json` pins the
   version, and `clients/helper/nuget.config` restores packages from nuget.org only.
-- **The LibreOffice extension's tests** are Python's `unittest`, in `clients/libreoffice/tests`. You need Python 3
-  and nothing else: the tests use the standard library only.
+- **The LibreOffice extension** is Python, in `clients/libreoffice`. Its tests are Python's `unittest`, in
+  `clients/libreoffice/tests`. You need Python 3 and nothing else: the tests use the standard library only.
+  `build.sh` packages the extension as `clients/libreoffice/healdan.oxt`, which the tests also build and check.
+  The same sources give the same bytes; `SOURCE_DATE_EPOCH`, when set, is the time every entry carries.
 
 ```bash
 dotnet test clients/helper/Healdan.Helper.sln                                  # the helper's tests
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain"  # the real macOS keychain, on a Mac
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=Stack"        # needs HEALDAN_STACK_URL
 python3 -m unittest discover -s clients/libreoffice/tests -v                   # the extension's tests
+clients/libreoffice/build.sh                                                   # the extension's healdan.oxt
+clients/helper/packaging/mac/package.sh 1.2.3                                  # the macOS app and disk image, on a Mac
 ```
+
+`package.sh` signs only with `SIGN_IDENTITY` set (see
+[Releasing the macOS Helper](../continuous-integration/#releasing-the-macos-helper)). Without it, the app gets only
+an ad-hoc signature, which Gatekeeper refuses on any other Mac. A `SIGN_IDENTITY` that isn't in the keychains
+stops it.
 
 Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
 `http://localhost:8080`. Start a throwaway stack with the smoke fixture overlay first (see

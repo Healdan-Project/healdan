@@ -10,23 +10,34 @@ public sealed class HelperSettings
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
-    /// <summary>Spec §5.11: the kinds that open in LibreOffice in M3.</summary>
-    private static readonly HashSet<string> OfficeKinds = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".doc", ".docx", ".docm", ".dotx", ".dotm", ".rtf", ".odt", ".ott",
-        ".xls", ".xlsx", ".xlsm", ".ods",
-        ".ppt", ".pptx", ".pptm", ".odp"
-    };
+    /// <summary>One <see cref="Update"/> at a time in this process, so two changes can't lose each other.</summary>
+    private static readonly object Writing = new();
 
     /// <summary>The server's address, such as <c>https://healdan.example</c>.</summary>
     public string? Server { get; set; }
 
-    /// <summary>"LibreOffice" for every kind in §5.11 in M3, otherwise "Default" (the system's default app, read-only).</summary>
-    public string AppFor(string extension)
+    /// <summary>What the helper last did about its LibreOffice extension, and which way worked (spec §5.12).</summary>
+    public ExtensionRecord? Extension { get; set; }
+
+    /// <summary>
+    /// The helper has registered itself to start at sign-in (macOS's login item), which it does once, after the first
+    /// sign-in. Turning it off in System Settings is the user's choice, so it isn't registered again.
+    /// </summary>
+    public bool LoginItemRegistered { get; set; }
+
+    /// <summary>Loads the settings, changes them and saves them, with no other <see cref="Update"/> in between.</summary>
+    public static void Update(HelperPaths paths, Action<HelperSettings> change)
     {
-        var dotted = extension.StartsWith('.') ? extension : "." + extension;
-        return OfficeKinds.Contains(dotted) ? "LibreOffice" : "Default";
+        lock (Writing)
+        {
+            var settings = Load(paths);
+            change(settings);
+            settings.Save(paths);
+        }
     }
+
+    /// <summary>"LibreOffice" for every kind in §5.11 (<see cref="FileKinds"/>) in M3, otherwise "Default" (the system's default app, read-only).</summary>
+    public string AppFor(string extension) => FileKinds.Of(extension) is null ? Cycle.DefaultApp.AppName : "LibreOffice";
 
     /// <summary>The saved settings, or empty ones when there are none or the file can't be read.</summary>
     public static HelperSettings Load(HelperPaths paths)

@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LibreOffice's events, for healdan.py's Job: attaching to each window as it appears (the Start Center gets no document
+  event, so the job also looks for new windows each second from the start), a copy's title as it opens, and a copy's
+  close.
+-->
+<oor:component-data xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                    oor:name="Jobs" oor:package="org.openoffice.Office">
+  <node oor:name="Jobs">
+    <node oor:name="org.healdan.libreoffice.Job" oor:op="replace">
+      <prop oor:name="Service" oor:type="xs:string">
+        <value>org.healdan.libreoffice.Job</value>
+      </prop>
+    </node>
+  </node>
+  <node oor:name="Events">
+    <node oor:name="OnStartApp" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+    <node oor:name="onFirstVisibleTask" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+    <node oor:name="OnNew" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+    <node oor:name="OnLoad" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+    <node oor:name="OnViewCreated" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+    <node oor:name="OnUnload" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+    <node oor:name="OnCloseApp" oor:op="fuse">
+      <node oor:name="JobList">
+        <node oor:name="org.healdan.libreoffice.Job" oor:op="replace"/>
+      </node>
+    </node>
+  </node>
+</oor:component-data>

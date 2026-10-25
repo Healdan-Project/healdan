@@ -1,0 +1,252 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- The helper's windows share one look (spec §5.8; the mockups in docs/superpowers/specs/2026-10-24-m3-mockups/). -->
+  <Styles.Resources>
+    <!-- The colours, from the mockups, with a dark set for a dark menu bar and windows; and the rows' icons. -->
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <SolidColorBrush x:Key="HdWindowBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HdToolbarBrush" Color="#F7F7F9" />
+          <SolidColorBrush x:Key="HdNavBrush" Color="#FBFBFD" />
+          <SolidColorBrush x:Key="HdSeparatorBrush" Color="#F2F2F5" />
+          <SolidColorBrush x:Key="HdLineBrush" Color="#E0E0E5" />
+          <SolidColorBrush x:Key="HdSelectedBrush" Color="#E8F0FE" />
+          <SolidColorBrush x:Key="HdTextBrush" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="HdLabelBrush" Color="#6E6E73" />
+          <SolidColorBrush x:Key="HdMutedBrush" Color="#8E8E93" />
+          <SolidColorBrush x:Key="HdAccentBrush" Color="#3B5BDB" />
+          <SolidColorBrush x:Key="HdRequiredBrush" Color="#D70015" />
+          <SolidColorBrush x:Key="HdChipBrush" Color="#EEF3FC" />
+          <SolidColorBrush x:Key="HdChipTextBrush" Color="#3B5BDB" />
+          <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#F5F5F7" />
+          <SolidColorBrush x:Key="HdReadOnlyLineBrush" Color="#D1D1D6" />
+          <SolidColorBrush x:Key="HdMineBrush" Color="#1B6B2A" />
+          <SolidColorBrush x:Key="HdHeldBrush" Color="#A61E4D" />
+          <SolidColorBrush x:Key="HdWarnBrush" Color="#FFF4E6" />
+          <SolidColorBrush x:Key="HdWarnLineBrush" Color="#FFC078" />
+          <SolidColorBrush x:Key="HdWarnTextBrush" Color="#7A3E00" />
+          <SolidColorBrush x:Key="HdFolderBrush" Color="#5C7CFA" />
+          <SolidColorBrush x:Key="HdStarBrush" Color="#F59F00" />
+          <SolidColorBrush x:Key="HdProblemBrush" Color="#C42B1C" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="HdWindowBrush" Color="#1E1E1F" />
+          <SolidColorBrush x:Key="HdToolbarBrush" Color="#2A2A2C" />
+          <SolidColorBrush x:Key="HdNavBrush" Color="#252527" />
+          <SolidColorBrush x:Key="HdSeparatorBrush" Color="#2F2F31" />
+          <SolidColorBrush x:Key="HdLineBrush" Color="#3A3A3C" />
+          <SolidColorBrush x:Key="HdSelectedBrush" Color="#243B6B" />
+          <SolidColorBrush x:Key="HdTextBrush" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="HdLabelBrush" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="HdMutedBrush" Color="#98989D" />
+          <SolidColorBrush x:Key="HdAccentBrush" Color="#748FFC" />
+          <SolidColorBrush x:Key="HdRequiredBrush" Color="#FF6961" />
+          <SolidColorBrush x:Key="HdChipBrush" Color="#23314F" />
+          <SolidColorBrush x:Key="HdChipTextBrush" Color="#91A7FF" />
+          <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="HdReadOnlyLineBrush" Color="#48484A" />
+          <SolidColorBrush x:Key="HdMineBrush" Color="#69DB7C" />
+          <SolidColorBrush x:Key="HdHeldBrush" Color="#F783AC" />
+          <SolidColorBrush x:Key="HdWarnBrush" Color="#3B2A14" />
+          <SolidColorBrush x:Key="HdWarnLineBrush" Color="#A0611B" />
+          <SolidColorBrush x:Key="HdWarnTextBrush" Color="#FFD8A8" />
+          <SolidColorBrush x:Key="HdFolderBrush" Color="#748FFC" />
+          <SolidColorBrush x:Key="HdStarBrush" Color="#FCC419" />
+          <SolidColorBrush x:Key="HdProblemBrush" Color="#FF6961" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <StreamGeometry x:Key="HdFolderIcon">M0,2 C0,0.9 0.9,0 2,0 L6,0 L8,2 L14,2 C15.1,2 16,2.9 16,4 L16,11 C16,12.1 15.1,13 14,13 L2,13 C0.9,13 0,12.1 0,11 Z</StreamGeometry>
+      <StreamGeometry x:Key="HdDocumentIcon">M1,1 L8,1 L11,4 L11,14 L1,14 Z M8,1 L8,4 L11,4</StreamGeometry>
+      <StreamGeometry x:Key="HdStarIcon">M10,1 L12.6,7 L19,7.4 L14.1,11.5 L15.6,18 L10,14.5 L4.4,18 L5.9,11.5 L1,7.4 L7.4,7 Z</StreamGeometry>
+    </ResourceDictionary>
+  </Styles.Resources>
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource HdWindowBrush}" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+
+  <!-- The bars: the toolbar over the panes and the footer under them. -->
+  <Style Selector="Border.toolbar">
+    <Setter Property="Background" Value="{DynamicResource HdToolbarBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="12,8" />
+  </Style>
+  <Style Selector="Border.footer">
+    <Setter Property="Background" Value="{DynamicResource HdToolbarBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="Padding" Value="16,10" />
+  </Style>
+  <Style Selector="Border.pane">
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,1,0" />
+  </Style>
+  <Style Selector="Border.nav">
+    <Setter Property="Background" Value="{DynamicResource HdNavBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,1,0" />
+  </Style>
+  <Style Selector="Border.crumb">
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="Padding" Value="12,6" />
+  </Style>
+
+  <!-- Text: the theme's colour, except for these. -->
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource HdMutedBrush}" />
+  </Style>
+  <Style Selector="TextBlock.label">
+    <Setter Property="Foreground" Value="{DynamicResource HdLabelBrush}" />
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="TextBlock.heading">
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBlock.title">
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBlock.column">
+    <Setter Property="Foreground" Value="{DynamicResource HdLabelBrush}" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+  <Style Selector="TextBlock.required">
+    <Setter Property="Foreground" Value="{DynamicResource HdRequiredBrush}" />
+  </Style>
+  <Style Selector="TextBlock.problem">
+    <Setter Property="Foreground" Value="{DynamicResource HdProblemBrush}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+  <Style Selector="TextBlock.holder">
+    <Setter Property="Foreground" Value="{DynamicResource HdHeldBrush}" />
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="TextBlock.holder.mine">
+    <Setter Property="Foreground" Value="{DynamicResource HdMineBrush}" />
+  </Style>
+
+  <!-- "from the matter", "from Drafts". -->
+  <Style Selector="Border.chip">
+    <Setter Property="Background" Value="{DynamicResource HdChipBrush}" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="6,0" />
+    <Setter Property="Margin" Value="4,0,0,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.chip > TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdChipTextBrush}" />
+    <Setter Property="FontSize" Value="10" />
+  </Style>
+
+  <!-- A value the form shows but never sends: Client and Matter, from the matter. -->
+  <Style Selector="TextBox.readonly">
+    <Setter Property="Background" Value="{DynamicResource HdReadOnlyBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdReadOnlyLineBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource HdLabelBrush}" />
+  </Style>
+
+  <!-- The warning box of Checked Out on Another Computer. -->
+  <Style Selector="Border.warn">
+    <Setter Property="Background" Value="{DynamicResource HdWarnBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdWarnLineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="Padding" Value="10,8" />
+  </Style>
+  <Style Selector="Border.warn TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdWarnTextBrush}" />
+  </Style>
+
+  <!-- The panes' lists: rows as in the mockups, selected rows light blue. -->
+  <Style Selector="ListBox.rows">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="ListBox.rows ListBoxItem">
+    <Setter Property="Padding" Value="10,5" />
+    <Setter Property="MinHeight" Value="28" />
+  </Style>
+  <Style Selector="ListBox.places">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem">
+    <Setter Property="Padding" Value="14,9" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem.sep">
+    <Setter Property="Padding" Value="14,3" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Background" Value="{DynamicResource HdSeparatorBrush}" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem.sep TextBlock">
+    <Setter Property="FontSize" Value="10" />
+    <Setter Property="Foreground" Value="{DynamicResource HdMutedBrush}" />
+  </Style>
+
+  <!-- A selected row is the mockups' light blue, not the theme's accent. -->
+  <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.places ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdSelectedBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.places ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdSelectedBrush}" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem:selected">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+
+  <!-- Small square buttons in the toolbar: back, forward, up, the star. -->
+  <Style Selector="Button.tool">
+    <Setter Property="Padding" Value="7,3" />
+    <Setter Property="MinWidth" Value="28" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.tool:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Button.link">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource HdAccentBrush}" />
+  </Style>
+  <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource HdAccentBrush}" />
+  </Style>
+  <Style Selector="Button.footer">
+    <Setter Property="MinWidth" Value="84" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+  </Style>
+
+  <!-- Icons in the rows. -->
+  <Style Selector="Path.folder">
+    <Setter Property="Fill" Value="{DynamicResource HdFolderBrush}" />
+    <Setter Property="Width" Value="16" />
+    <Setter Property="Height" Value="13" />
+    <Setter Property="Stretch" Value="Uniform" />
+  </Style>
+  <Style Selector="Path.document">
+    <Setter Property="Stroke" Value="{DynamicResource HdLabelBrush}" />
+    <Setter Property="StrokeThickness" Value="1.2" />
+    <Setter Property="Width" Value="12" />
+    <Setter Property="Height" Value="15" />
+    <Setter Property="Stretch" Value="Uniform" />
+  </Style>
+  <Style Selector="Path.star">
+    <Setter Property="Stroke" Value="{DynamicResource HdMutedBrush}" />
+    <Setter Property="StrokeThickness" Value="1.2" />
+    <Setter Property="Width" Value="15" />
+    <Setter Property="Height" Value="15" />
+    <Setter Property="Stretch" Value="Uniform" />
+  </Style>
+  <Style Selector="Path.star.on">
+    <Setter Property="Fill" Value="{DynamicResource HdStarBrush}" />
+    <Setter Property="Stroke" Value="{DynamicResource HdStarBrush}" />
+  </Style>
+</Styles>

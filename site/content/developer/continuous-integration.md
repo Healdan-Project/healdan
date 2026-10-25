@@ -43,7 +43,9 @@ others, so one run shows every failing test.
 `.github/scripts/code-changed.sh` lists the files a pull request changes and writes two answers. `code` is false
 when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and `clients/`. It
 gates the Java build's test shards and the Docker build steps. `clients` is true when the pull request changes
-anything under `clients/`, or `clients.yml` itself. It gates the client test jobs. A push always gets both true.
+anything under `clients/`, `clients.yml` itself, or the API contract,
+`healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It gates the client
+test jobs. A push always gets both true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
 them all.
@@ -51,7 +53,8 @@ them all.
 | The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
 |---|---|---|---|
 | Only `clients/` | Skipped | Skipped | Run |
-| Only the server, or anything outside `clients/` and the docs | Run | Run | Skipped |
+| The API contract, `openapi.yaml` | Run | Run | Run |
+| Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped |
 | Only docs | Skipped | Skipped | Skipped |
 | Docs and `clients/` | Skipped | Skipped | Run |
 | The server and `clients/` | Run | Run | Run |
@@ -60,16 +63,21 @@ Pushes to `master` that change only docs or `clients/` don't rebuild the image.
 
 ## The Clients Check
 
-`clients.yml` has no paths filter, so every pull request runs it and the check can be required. It has four jobs:
+`clients.yml` has no paths filter, so every pull request runs it and the check can be required. Its four check jobs
+are:
 
 1. **`changes`** runs `code-changed.sh`.
 2. **`Helper (ubuntu-24.04)`** and **`Helper (macos-15)`** run `dotnet test clients/helper/Healdan.Helper.sln`, with
    the .NET SDK that `clients/helper/global.json` pins.
-3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`.
+3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`,
+   which also builds the extension's `.oxt` and checks that its parts agree.
 4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
-   nothing under `clients/` changed. A cancelled run fails it.
+   nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 
 `Clients` is not yet in `master`'s ruleset. The repository owner adds it after its first green run.
+
+Two more jobs package the macOS helper. They run only for a `helper-v*` tag or a run by hand, never for a pull
+request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#releasing-the-macos-helper)).
 
 The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan stack and skip here, because
 `HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac.
@@ -129,3 +137,46 @@ of the commit's hash) for one commit's build, and `v…` for a release. An insta
 `.env` to one of them and runs `docker compose pull` and `docker compose up -d`, without `--build`, which would
 build from the checkout and store the result under the published name. The Install manual gets a page for this, and
 its Upgrading page the advice on pinning tags, in the pull request that switches publishing on.
+
+## Releasing the macOS Helper
+
+The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the tag `helper-v1.2.3` runs
+`clients.yml`'s tests, then two more jobs:
+
+1. **`Package (macos-15)`** runs `clients/helper/packaging/mac/package.sh 1.2.3`, which publishes the helper as a
+   single self-contained file for Apple silicon, builds `Healdan Helper.app` with the LibreOffice extension's
+   `healdan.oxt` inside, signs it with the Developer ID, has Apple notarise it, and wraps it in
+   `Healdan-Helper-1.2.3.dmg`, signed and notarised too. It uploads the disk image as the run's artifact.
+2. **`Release (macOS)`** attaches the disk image to the tag's GitHub release, and makes the release first if
+   there isn't one (a pre-release for a version like `1.2.3-rc1`). It runs only for a pushed tag, and only once
+   `xcrun stapler validate` has found the disk image's notarisation ticket. It's the only job with write access to
+   the repository, and it sees no signing secret.
+
+Actions → Clients → Run workflow packages any branch or tag by hand, under a version you give or
+`0.0.0-dev.<run>`, and attaches nothing to a release.
+
+Signing needs six repository secrets, under Settings → Secrets and variables → Actions:
+
+| Secret | What it holds |
+|---|---|
+| `APPLE_DEVELOPER_ID_P12` | The Developer ID Application certificate and its private key, exported from Keychain Access as a `.p12` file, in base64 (`base64 -i developer-id.p12`) |
+| `APPLE_DEVELOPER_ID_PASSWORD` | The password the `.p12` file was exported with |
+| `APPLE_TEAM_ID` | The Apple developer team's ID, the 10 characters in the certificate's name |
+| `NOTARY_KEY` | An App Store Connect API key (Users and Access → Integrations → Team Keys, with the Developer role), its `.p8` file in base64 |
+| `NOTARY_KEY_ID` | That key's ID |
+| `NOTARY_ISSUER` | The issuer ID shown above the team keys |
+
+The job imports the certificate into a keychain of its own, which it deletes at the end, and decodes the key into
+the runner's temporary folder, which it also clears. Without the first three secrets, as on a fork, the app gets
+only an ad-hoc signature, and without the last three it isn't notarised. Either way the job says so, uploads the
+disk image as its artifact, and attaches nothing to the release.
+
+On a Mac with the Developer ID certificate in the login keychain, the same script builds a signed package
+(`OUT_DIR` sets where it goes, `clients/helper/packaging/mac/out/` by default). A `SIGN_IDENTITY` it can't find
+in the keychains stops it, rather than building without a signature:
+
+```bash
+SIGN_IDENTITY="Developer ID Application: <name> (<team ID>)" clients/helper/packaging/mac/package.sh 1.2.3
+```
+
+`NOTARY_KEY` (the `.p8` file's path), `NOTARY_KEY_ID` and `NOTARY_ISSUER` notarise it as well.

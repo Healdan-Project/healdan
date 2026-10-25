@@ -3,6 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Copies;
+using Healdan.Helper.Core.Platform;
+using Healdan.Helper.Core.Settings;
 
 namespace Healdan.Helper.Core.Cycle;
 
@@ -22,9 +24,17 @@ public sealed class CopyCycle : IDisposable
     private const string Snapshot = "snapshot";
     private const string NewVersion = "version";
 
+    /// <summary>
+    /// The app writes a new document's copy within moments of its filing. A copy written later than this after it,
+    /// while the helper was stopped, may hold a save of the user's, so a restart sends it rather than taking it for
+    /// the adoption.
+    /// </summary>
+    private static readonly TimeSpan AdoptionWindow = TimeSpan.FromSeconds(10);
+
     private readonly HealdanApi _api;
     private readonly CopyStore _store;
     private readonly IOfficeApp _app;
+    private readonly IOfficeApp? _other;
     private readonly string _deviceId;
     private readonly ICycleEvents _events;
     private readonly CycleTimings _timings;
@@ -33,6 +43,9 @@ public sealed class CopyCycle : IDisposable
     private readonly object _gate = new();
     private readonly Dictionary<string, Session> _sessions = new(StringComparer.Ordinal);
     private readonly HashSet<string> _waiting = new(StringComparer.Ordinal);
+
+    /// <summary>The documents being opened now: one open of a document at a time (a double-click sends two links).</summary>
+    private readonly HashSet<long> _opening = [];
     private readonly SaveWatcher _saves;
     private readonly CloseWatcher _closes;
     private readonly CancellationTokenSource _stop = new();
@@ -43,11 +56,17 @@ public sealed class CopyCycle : IDisposable
     /// computer's. Names aren't compared, as two computers can share one.
     /// </param>
     /// <param name="timings">The trial's timings by default (<see cref="CycleTimings.Default"/>).</param>
-    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceId, ICycleEvents events, CycleTimings? timings = null)
+    /// <param name="otherFiles">
+    /// The app for files no office app edits (spec §5.11, <see cref="FileKinds"/>), such as <see cref="DefaultApp"/>:
+    /// they open read-only there, never checked out. Without one, every file opens in <paramref name="app"/>.
+    /// </param>
+    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceId, ICycleEvents events, CycleTimings? timings = null,
+        IOfficeApp? otherFiles = null)
     {
         _api = api;
         _store = store;
         _app = app;
+        _other = otherFiles;
         _deviceId = deviceId;
         _events = events;
         _timings = timings ?? CycleTimings.Default;
@@ -89,6 +108,9 @@ public sealed class CopyCycle : IDisposable
         /// <summary>The hash of the newest content queued or sent, so the same bytes aren't queued twice.</summary>
         public string? LastHash { get; set; }
 
+        /// <summary>The newest save queued or sent is confirmed, and nothing has been queued since.</summary>
+        public bool Confirmed { get; set; }
+
         /// <summary>The check-out ended here: nothing more is sent, and the copy is kept.</summary>
         public bool Ended { get; set; }
 
@@ -118,7 +140,8 @@ public sealed class CopyCycle : IDisposable
     /// <summary>
     /// Save to Healdan and Save as New Document (spec §5.5, §5.6): files <paramref name="tempPath"/> as a new document,
     /// checked out here, and returns the copy the app is to save the open document as. That first write is the copy's
-    /// starting point, not a save. With <paramref name="replaces"/>, the original copy's check-out is released without
+    /// starting point, not a save: the extension says when it's done (<see cref="Adopted"/>), or else it's the first
+    /// write that settles. With <paramref name="replaces"/>, the original copy's check-out is released without
     /// saving to it, and the original copy is deleted once the app has adopted the new file: its content went into the
     /// new document. A failed filing throws, so the caller can fall back to the app's own save.
     /// </summary>
@@ -126,7 +149,14 @@ public sealed class CopyCycle : IDisposable
     {
         var doc = await _api.FileAsync(tempPath, request with { CheckOut = true }, _stop.Token);
         var (path, _, _) = _store.Create(doc, false, _app.Name);
-        Update(path, r => r with { CheckedOutHere = true, ConfirmedHash = null, PendingKind = null, PendingHash = null });
+        Update(path, r => r with
+        {
+            CheckedOutHere = true,
+            ConfirmedHash = null,
+            PendingKind = null,
+            PendingHash = null,
+            AdoptingSince = DateTimeOffset.UtcNow
+        });
         var session = Begin(path, doc.DocNumber, false, null, adopting: true);
         if (replaces is not null && Name(replaces) != Name(path))
             Replace(replaces, session.Adopted.Task);
@@ -148,8 +178,11 @@ public sealed class CopyCycle : IDisposable
     }
 
     /// <summary>
-    /// The copy's state once its next save is confirmed, or once a save has settled with nothing new to send; after
-    /// <paramref name="max"/>, its state as it is.
+    /// <c>/v1/saved</c>, which the extension calls once the app has written a save: the copy's state once Healdan has
+    /// everything written so far, so the title never stops a version behind (final review I1). A confirmation answers
+    /// only when nothing newer is still to go: no save queued after it, no Save as New Version waiting, and the file as
+    /// Healdan has it. A copy with nothing on its way answers at once. After <paramref name="max"/>, it answers its
+    /// state as it is, with <see cref="CopyState.Pending"/> set while a save is still to go, and the extension asks again.
     /// </summary>
     public async Task<CopyState> WaitForConfirmationAsync(string path, TimeSpan max)
     {
@@ -164,6 +197,9 @@ public sealed class CopyCycle : IDisposable
             return StateOf(path);
         try
         {
+            // Asked once the waiter is in the list, so a confirmation that lands meanwhile either answers it or is seen here.
+            if (!PendingOf(s))
+                return StateOf(s.Path, pending: false);
             return await waiter.Task.WaitAsync(max, _stop.Token);
         }
         catch (Exception e) when (e is TimeoutException or OperationCanceledException)
@@ -222,7 +258,17 @@ public sealed class CopyCycle : IDisposable
                     _store.Delete(path);
                 continue;
             }
+            if (record.AdoptingSince is { } since)
+                SettleAdoption(path, since); // changes only what HasUnconfirmedChanges reads
             var unconfirmed = _store.HasUnconfirmedChanges(path);
+            if (_other is not null && record.App == _other.Name && record.ReadOnly)
+            {
+                // Opened in the default app, which keeps no lock file, so nothing says when it closed; its bytes
+                // are Healdan's, so the copy goes now (spec §5.11). One that changed is kept, as any read-only copy is.
+                if (!unconfirmed)
+                    _store.Delete(path);
+                continue;
+            }
             if (record.ReadOnly)
             {
                 if (unconfirmed)
@@ -260,19 +306,129 @@ public sealed class CopyCycle : IDisposable
         return Task.CompletedTask;
     }
 
-    /// <summary>The copy's state for the channel, or an unknown one.</summary>
-    public CopyState StateOf(string path)
+    /// <summary>
+    /// <c>/v1/adopted</c> (final review C1): the extension has just saved the window as a new document's copy, and the
+    /// window takes no input until this answers. The file as it is now is the copy's starting point, so the user's
+    /// next write is a save, however soon it comes. Without this call (an older extension), the first write that
+    /// settles is the starting point, and anything that differs from it later is a save.
+    /// </summary>
+    public CopyState Adopted(string path)
     {
+        Session? s;
+        lock (_gate)
+            s = Find(path);
+        if (s is null)
+            return StateOf(path);
+        string hash;
+        try
+        {
+            hash = HashOf(s.Path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return StateOf(s.Path); // not written yet: the first write that settles is the starting point
+        }
+        bool adopted;
+        lock (_gate)
+        {
+            adopted = s.Adopting && !s.Closing;
+            if (adopted)
+            {
+                s.Adopting = false;
+                Update(s.Path, r => r with { ConfirmedHash = hash, AdoptingSince = null });
+            }
+        }
+        if (adopted)
+            s.Adopted.TrySetResult();
+        return StateOf(s.Path);
+    }
+
+    /// <summary>
+    /// Spec §5.4, for the menu's Not Yet in Healdan: the copies with changes Healdan hasn't confirmed that the cycle no
+    /// longer looks after, as their check-out ended or Healdan refused them, and their window has closed. The helper
+    /// never deletes one: each stays listed until the user files it with Save as New Document, or sends it by opening
+    /// the document again while it can still take the changes.
+    /// </summary>
+    public IReadOnlyList<CopyState> KeptCopies()
+    {
+        var kept = new List<CopyState>();
+        foreach (var (path, record) in _store.All())
+        {
+            lock (_gate)
+                if (Find(path) is not null)
+                    continue;
+            if (File.Exists(path) && _store.HasUnconfirmedChanges(path))
+                kept.Add(StateOf(path, record, null));
+        }
+        return kept;
+    }
+
+    /// <summary>
+    /// The menu's click on a kept copy (<see cref="KeptCopies"/>): opens it as it is, in the app it was opened in, with
+    /// no check-out and no download, so Save as New Document can file it. Nothing of it is sent.
+    /// </summary>
+    public void OpenKept(string path)
+    {
+        if (Record(path) is not { } record || !File.Exists(path))
+            throw new FileNotFoundException("That copy isn't on this computer any more.");
+        if (_other is not null && record.App == _other.Name)
+        {
+            if (DefaultApp.Refuses(path))
+                throw new IOException(Refused(record.DocumentName, path));
+            Quarantine.Mark(path);
+            _other.Open(path);
+        }
+        else
+            _app.Open(path);
+    }
+
+    /// <summary>
+    /// A link's open (spec §5.3), as <see cref="OpenAsync"/>, but only of spec §5.11's kinds (final review C2): a page
+    /// can make a link to any document, and anything else opens only from the Open window, where the user chose it.
+    /// </summary>
+    public Task OpenLinkAsync(long docNumber, bool readOnly) =>
+        ReportingAsync(docNumber, () => OpenCoreAsync(docNumber, readOnly, null, move: false, link: true));
+
+    /// <summary>
+    /// At start, a new document's copy whose adoption hadn't settled when the helper stopped. Written within
+    /// <see cref="AdoptionWindow"/> of its filing, the file is the app's adoption, its starting point, so it isn't sent
+    /// as an identical version. Written later, it may hold a save the user made while the helper was down, so it
+    /// stays unconfirmed and is sent (spec §2.4).
+    /// </summary>
+    private void SettleAdoption(string path, DateTimeOffset since)
+    {
+        string? start = null;
+        try
+        {
+            if (File.GetLastWriteTimeUtc(path) <= (since + AdoptionWindow).UtcDateTime)
+                start = HashOf(path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Unreadable now: it counts as unconfirmed, and is kept and sent.
+        }
+        Update(path, r => r with { ConfirmedHash = start ?? r.ConfirmedHash, AdoptingSince = null });
+    }
+
+    /// <summary>The copy's state for the channel, or an unknown one.</summary>
+    public CopyState StateOf(string path) => StateOf(path, pending: null);
+
+    /// <summary>The copy's state; <paramref name="pending"/> null works it out, which reads the file.</summary>
+    private CopyState StateOf(string path, bool? pending)
+    {
+        Session? s;
         string? holdBy;
         lock (_gate)
         {
-            var s = Find(path);
+            s = Find(path);
             holdBy = s?.HoldBy;
             if (s is not null)
                 path = s.Path;
         }
         var record = Record(path);
-        return record is null ? CopyState.Unknown(path) : StateOf(path, record, holdBy);
+        if (record is null)
+            return CopyState.Unknown(path);
+        return StateOf(path, record, holdBy) with { Pending = pending ?? (s is not null && PendingOf(s)) };
     }
 
     /// <summary>
@@ -284,7 +440,56 @@ public sealed class CopyCycle : IDisposable
         List<string> paths;
         lock (_gate)
             paths = [.. _sessions.Values.Select(s => s.Path)];
-        return [.. paths.Select(StateOf).Where(state => state.Known)];
+        return [.. paths.Select(p => StateOf(p, pending: false)).Where(state => state.Known)];
+    }
+
+    /// <summary>
+    /// How many open copies have changes on their way to Healdan: a save queued, going up or waiting to retry, a Save
+    /// as New Version still to send, or a write the app made that hasn't settled into a save yet. A copy whose changes
+    /// can't go up (its check-out ended), or whose last save Healdan refused for good, isn't counted: nothing more will
+    /// be sent for it. Sign Out waits for this to be 0 before it revokes the token.
+    /// </summary>
+    public int Unsent()
+    {
+        List<Session> open;
+        lock (_gate)
+            open = [.. _sessions.Values];
+        return open.Count(s => HasUnsent(s, sendsCount: true));
+    }
+
+    /// <summary>The copy's <see cref="CopyState.Pending"/>: a save confirmed counts as gone even while its job finishes.</summary>
+    private bool PendingOf(Session s) => HasUnsent(s, sendsCount: false);
+
+    /// <summary>
+    /// Whether the copy has changes on their way to Healdan (<see cref="Unsent"/>). With <paramref name="sendsCount"/>,
+    /// a job still running counts even once its save is confirmed, as a check-in's release can follow it, and Sign Out
+    /// mustn't revoke the token under it; without, a confirmed save counts as gone, so <c>/v1/saved</c> can answer the
+    /// moment Healdan has the content.
+    /// </summary>
+    private bool HasUnsent(Session s, bool sendsCount)
+    {
+        string? last;
+        bool version, confirmed;
+        lock (_gate)
+        {
+            if (s.ReadOnly || s.Ended)
+                return false;
+            (last, version, confirmed) = (s.LastHash, s.NextKind is not null, s.Confirmed);
+        }
+        if (version || s.Queue.Queued is not null || (!s.Queue.Idle && (sendsCount || !confirmed)))
+            return true;
+        if (s.Closing || Record(s.Path) is not { } record || !File.Exists(s.Path))
+            return false;
+        string hash;
+        try
+        {
+            hash = HashOf(s.Path);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return true; // being written: it settles into a save
+        }
+        return !SameHash(hash, record.ConfirmedHash) && !SameHash(hash, last);
     }
 
     /// <summary>Retries every waiting save now, as once the user has signed in again.</summary>
@@ -317,6 +522,9 @@ public sealed class CopyCycle : IDisposable
 
     private async Task ReportingAsync(long docNumber, Func<Task> open)
     {
+        lock (_gate)
+            if (!_opening.Add(docNumber))
+                return; // opening already (final review M2): that open brings its window up, and nothing is downloaded twice
         try
         {
             await open();
@@ -340,9 +548,14 @@ public sealed class CopyCycle : IDisposable
         {
             Raise(ev => ev.Error($"#{docNumber} couldn't be opened: {e.Message}"));
         }
+        finally
+        {
+            lock (_gate)
+                _opening.Remove(docNumber);
+        }
     }
 
-    private async Task OpenCoreAsync(long n, bool readOnly, string? version, bool move)
+    private async Task OpenCoreAsync(long n, bool readOnly, string? version, bool move, bool link = false)
     {
         var ct = _stop.Token;
         if (!readOnly && !move)
@@ -359,6 +572,20 @@ public sealed class CopyCycle : IDisposable
 
         var hadCopy = _store.All().Any(c => c.Record.DocNumber == n && c.Record.CheckedOutHere);
         var doc = await _api.DocumentAsync(n, ct);
+        if (FileKinds.OfFile(doc.Name) is null)
+        {
+            if (link)
+            {
+                Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets and presentations. "
+                    + "Open it from the web page, or from Open from Healdan."));
+                return;
+            }
+            if (_other is not null)
+            {
+                await OpenOtherAsync(doc, version, ct);
+                return;
+            }
+        }
         var checkedOut = false;
         var holdBy = doc.Hold?.By?.Name;
         if (!readOnly)
@@ -395,7 +622,7 @@ public sealed class CopyCycle : IDisposable
         bool fresh;
         try
         {
-            (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, ct);
+            (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, _app.Name, ct);
         }
         catch (Exception e)
         {
@@ -451,7 +678,7 @@ public sealed class CopyCycle : IDisposable
     /// <see cref="CopyStore.Create"/>), or one checked out here whose content is still the document's.
     /// </summary>
     private async Task<(string Path, bool Fresh, bool ReadOnly)> PrepareCopyAsync(DocumentView doc, bool readOnly, string? version,
-        bool checkedOut, CancellationToken ct)
+        bool checkedOut, string appName, CancellationToken ct)
     {
         if (!readOnly)
         {
@@ -471,7 +698,7 @@ public sealed class CopyCycle : IDisposable
         // A confirmed copy already at the target path holds this same version's content: its hash stands until the
         // download replaces it, so a helper stopped mid-way never takes it for unsent changes.
         var previous = Record(Path.Combine(_store.Folder, CopyNames.FileName(forCopy.Name, forCopy.DocNumber, forCopy.FileVersion, readOnly)));
-        var (path, record, existing) = _store.Create(forCopy, readOnly, _app.Name);
+        var (path, record, existing) = _store.Create(forCopy, readOnly, appName);
         if (existing)
         {
             if (checkedOut)
@@ -507,6 +734,41 @@ public sealed class CopyCycle : IDisposable
         }
         return (path, true, readOnly);
     }
+
+    /// <summary>
+    /// Spec §5.11: a file no office app edits, such as a PDF, opens read-only in the system's default app, with no
+    /// check-out. That app keeps no lock file, so nothing watches the copy; <see cref="ResumeAsync"/> deletes it at the
+    /// next start, as it's read-only and holds only Healdan's bytes. As anyone who can add files to a matter could
+    /// have put it there (final review C2), a kind that can run a program is never downloaded or handed over
+    /// (<see cref="DefaultApp.Refuses"/>), and the copy carries macOS's quarantine, so Gatekeeper checks it.
+    /// </summary>
+    private async Task OpenOtherAsync(DocumentView doc, string? version, CancellationToken ct)
+    {
+        var name = CopyNames.FileName(doc.Name, doc.DocNumber, version ?? doc.FileVersion, readOnly: true);
+        if (DefaultApp.Refuses(name))
+        {
+            Raise(ev => ev.Error(Refused(doc.Name, name)));
+            return;
+        }
+        var (path, fresh, _) = await PrepareCopyAsync(doc, readOnly: true, version, checkedOut: false, _other!.Name, ct);
+        try
+        {
+            if (DefaultApp.Refuses(path))
+                throw new IOException(Refused(doc.Name, path)); // a copy kept from before, under another name
+            Quarantine.Mark(path);
+            _other.Open(path);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            if (fresh)
+                _store.Delete(path); // just downloaded: Healdan has every byte of it
+            throw;
+        }
+    }
+
+    private static string Refused(string documentName, string fileName) =>
+        $"{documentName} wasn't opened: Healdan Helper never opens {Path.GetExtension(fileName)} files, as they can run "
+        + "programs on this computer. Download it from the web page if you need it.";
 
     private void Reopen(Session live)
     {
@@ -613,7 +875,7 @@ public sealed class CopyCycle : IDisposable
             return;
         }
 
-        CopyState? answer = null;
+        bool ended = false, queued = false, adopted = false;
         lock (_gate)
         {
             var record = Record(s.Path);
@@ -621,33 +883,37 @@ public sealed class CopyCycle : IDisposable
                 return;
             if (s.Adopting)
             {
-                // The app has adopted the new document's copy: its starting point, not a save (spec §5.6).
+                // No /v1/adopted came first (an older extension): the app's adoption of the new document's copy is
+                // the first write to settle, its starting point, not a save (spec §5.6). Content that differs from it
+                // later is a save.
                 s.Adopting = false;
-                Update(s.Path, r => r with { ConfirmedHash = content.Hash });
-                s.Adopted.TrySetResult();
-                answer = StateOf(s.Path, record, s.HoldBy);
+                Update(s.Path, r => r with { ConfirmedHash = content.Hash, AdoptingSince = null });
+                adopted = true;
             }
             else
             {
                 var kind = s.NextKind;
-                var idle = s.Queue.Idle;
-                var baseline = idle ? record.ConfirmedHash : s.LastHash;
+                var baseline = s.Queue.Idle ? record.ConfirmedHash : s.LastHash;
                 if (s.Ended)
-                    answer = StateOf(s.Path, record, s.HoldBy); // kept, not sent: the check-out ended here
+                    ended = true; // kept, not sent: the check-out ended here
                 else if (kind is null && SameHash(content.Hash, baseline))
                 {
-                    if (idle)
-                        answer = StateOf(s.Path, record, s.HoldBy); // a save with nothing new to send
+                    // Nothing new to send: answered below once nothing else is on its way.
                 }
                 else
                 {
                     s.NextKind = null;
                     Enqueue(s, new SaveJob { Content = content.Bytes, Hash = content.Hash, Kind = kind ?? Snapshot });
+                    queued = true;
                 }
             }
         }
-        if (answer is not null)
-            CompleteWaiters(s, answer);
+        if (adopted)
+            s.Adopted.TrySetResult();
+        if (ended)
+            CompleteWaiters(s, StateOf(s.Path, pending: false));
+        else if (!queued)
+            SettleWaiters(s);
     }
 
     /// <summary>Queues a save; its kind is written to the record first, so a restart knows what was waiting.</summary>
@@ -656,6 +922,7 @@ public sealed class CopyCycle : IDisposable
         lock (_gate)
         {
             s.LastHash = job.Hash;
+            s.Confirmed = false;
             if (job.Content is not null)
                 Update(s.Path, r => r with { PendingKind = job.Kind });
             s.Queue.Enqueue(job);
@@ -739,7 +1006,7 @@ public sealed class CopyCycle : IDisposable
         }
 
         var confirmed = Confirm(s, job, doc);
-        if (job.CheckIn && confirmed && doc.Hold?.Device is not null)
+        if (job.CheckIn && confirmed && HoldIsHere(doc.Hold))
             return await ReleaseAsync(s, job, ct); // a repeat of a save that kept it checked out to us: release it now
         if (job.CheckIn && confirmed)
             Finish(s);
@@ -765,14 +1032,17 @@ public sealed class CopyCycle : IDisposable
             if (s.Adopting && job.Content is not null)
             {
                 s.Adopting = false;
-                Update(s.Path, r => r with { ConfirmedHash = job.Hash });
+                Update(s.Path, r => r with { ConfirmedHash = job.Hash, AdoptingSince = null });
                 s.Adopted.TrySetResult();
             }
         }
         return true;
     }
 
-    /// <summary>Records the confirmed save and says so; false when the copy has gone meanwhile.</summary>
+    /// <summary>
+    /// Records the confirmed save and says so; false when the copy has gone meanwhile. <c>/v1/saved</c>'s waiters are
+    /// answered only once nothing newer is still to go (final review I1).
+    /// </summary>
     private bool Confirm(Session s, SaveJob job, DocumentView doc)
     {
         CopyRecord? record;
@@ -786,15 +1056,19 @@ public sealed class CopyCycle : IDisposable
                 ConfirmedHash = job.Hash,
                 PendingHash = null,
                 PendingKind = s.Queue.Queued?.Kind,
-                CheckedOutHere = !job.CheckIn || doc.Hold?.Device is not null // a hold's device shows only to its holder
+                // A repeated save's answer shows the hold as it is now, which may be another computer's.
+                CheckedOutHere = !job.CheckIn || HoldIsHere(doc.Hold)
             });
+            // The newest save: nothing queued behind it (a Save as New Version of the same bytes included).
+            if (record is not null && SameHash(job.Hash, s.LastHash) && s.Queue.Queued is null)
+                s.Confirmed = true;
             _signInAsked = false;
         }
         if (record is null)
             return false;
         var state = StateOf(s.Path, record, s.HoldBy);
         Raise(ev => ev.Confirmed(s.Path, state));
-        CompleteWaiters(s, state);
+        SettleWaiters(s);
         return true;
     }
 
@@ -843,6 +1117,7 @@ public sealed class CopyCycle : IDisposable
         // Refused for good (403, 404, 413, 422, refused): nothing was stored, and the copy keeps the changes.
         Update(s.Path, r => r with { PendingHash = null });
         Raise(ev => ev.Error($"Healdan refused the save of {Title(record)}: {e.Detail}"));
+        CompleteWaiters(s, StateOf(s.Path, pending: false)); // nothing more goes until the next save
         if (job.CheckIn)
             Forget(s);
         return SaveOutcome.Done;
@@ -868,7 +1143,7 @@ public sealed class CopyCycle : IDisposable
             Update(s.Path, r => r with { CheckedOutHere = heldHere, PendingHash = null });
         }
         Raise(ev => ev.CheckoutEnded(s.Path));
-        CompleteWaiters(s, StateOf(s.Path));
+        CompleteWaiters(s, StateOf(s.Path, pending: false));
     }
 
     // --- Closing -------------------------------------------------------------------------------------------------
@@ -890,7 +1165,7 @@ public sealed class CopyCycle : IDisposable
         }
         _saves.Unwatch(s.Path);
         _closes.Unwatch(s.Path);
-        CompleteWaiters(s, StateOf(s.Path));
+        CompleteWaiters(s, StateOf(s.Path, pending: false));
 
         var record = Record(s.Path);
         if (record is { ReadOnly: false, CheckedOutHere: true } && !s.ReadOnly && s.Ended)
@@ -1071,6 +1346,16 @@ public sealed class CopyCycle : IDisposable
             count = _waiting.Count;
         }
         Raise(ev => ev.Waiting(count));
+    }
+
+    /// <summary>Answers <c>/v1/saved</c>'s waiters, unless something newer is still on its way to Healdan.</summary>
+    private void SettleWaiters(Session s)
+    {
+        lock (_gate)
+            if (s.Waiters.Count == 0)
+                return;
+        if (!PendingOf(s))
+            CompleteWaiters(s, StateOf(s.Path, pending: false));
     }
 
     private void CompleteWaiters(Session s, CopyState state)

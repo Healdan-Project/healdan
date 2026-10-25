@@ -120,6 +120,83 @@ public sealed class HealdanApi
         SendJsonAsync<JsonElement>(HttpMethod.Patch, $"v1/documents/{n}/properties",
             JsonContent.Create(new PropertyPatchBody(values), options: Json), ct);
 
+    // --- The windows' calls (spec §5.8) -----------------------------------------------------------------------------
+
+    public Task<UserView> MeAsync(CancellationToken ct = default) =>
+        SendJsonAsync<UserView>(HttpMethod.Get, "v1/me", null, ct);
+
+    /// <summary>
+    /// A list of folders, documents and matters: one of the left panes' places (such as <c>v1/matters/recent</c>), a
+    /// search, or a folder's children. Items of a type the helper doesn't show are left out.
+    /// </summary>
+    public async Task<Page<ListItem>> ListAsync(string relativePath, CancellationToken ct = default)
+    {
+        var page = await GetPageAsync<JsonElement>(relativePath, ct);
+        return new Page<ListItem>([.. page.Items.Select(ListItem.From).OfType<ListItem>()], page.Offset, page.Limit, page.Total);
+    }
+
+    public Task<FolderView> FolderAsync(long id, CancellationToken ct = default) =>
+        SendJsonAsync<FolderView>(HttpMethod.Get, $"v1/folders/{id}", null, ct);
+
+    /// <summary>The folder's subfolders, then its documents (a search folder's documents), up to <paramref name="limit"/>.</summary>
+    public Task<Page<ListItem>> ChildrenAsync(long id, int limit, CancellationToken ct = default) =>
+        ListAsync($"v1/folders/{id}/children?limit={limit}", ct);
+
+    /// <summary>
+    /// The old web page's searches (<c>documents</c>, <c>folders</c>, <c>matters</c>, <c>clients</c>, ...);
+    /// <paramref name="within"/> is a folder to search inside, for <c>folders</c> and <c>documents</c> only.
+    /// </summary>
+    public Task<Page<ListItem>> SearchAsync(string scope, string q, long? within, int limit, CancellationToken ct = default) =>
+        ListAsync($"v1/search?scope={Uri.EscapeDataString(scope)}&q={Uri.EscapeDataString(q)}"
+            + (within is { } w ? $"&within={w}" : "") + $"&limit={limit}", ct);
+
+    /// <summary>Resolves a typed doc #, such as <c>#1234 v2.1</c>, to the document and version.</summary>
+    public Task<LookupView> LookupAsync(string q, CancellationToken ct = default) =>
+        SendJsonAsync<LookupView>(HttpMethod.Get, $"v1/lookup?q={Uri.EscapeDataString(q)}", null, ct);
+
+    public Task<FolderView> CreateFolderAsync(long parentId, string name, CancellationToken ct = default) =>
+        SendJsonAsync<FolderView>(HttpMethod.Post, "v1/folders", JsonContent.Create(new NewFolderBody(parentId, name), options: Json), ct);
+
+    /// <summary>Adds a folder or a document (exactly one of the two) to the user's Favorites.</summary>
+    public Task<FavoriteView> AddFavoriteAsync(long? folderId, long? docNumber, CancellationToken ct = default) =>
+        SendJsonAsync<FavoriteView>(HttpMethod.Post, "v1/me/favorites",
+            JsonContent.Create(new NewFavoriteBody(folderId, docNumber), options: Json), ct);
+
+    public async Task RemoveFavoriteAsync(long id, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(HttpMethod.Delete, $"v1/me/favorites/{id}", null, ct);
+    }
+
+    /// <summary>The properties form for filing a new document into the folder (a <c>ProfileFieldPage</c>).</summary>
+    public Task<JsonElement> FormAsync(long folderId, CancellationToken ct = default) =>
+        SendJsonAsync<JsonElement>(HttpMethod.Get, $"v1/folders/{folderId}/form", null, ct);
+
+    /// <summary>The document's properties (a <c>ProfileFieldPage</c>).</summary>
+    public Task<JsonElement> PropertiesAsync(long n, CancellationToken ct = default) =>
+        SendJsonAsync<JsonElement>(HttpMethod.Get, $"v1/documents/{n}/properties", null, ct);
+
+    /// <summary>The document's timeline, newest first, up to <paramref name="limit"/> rows.</summary>
+    public Task<Page<VersionView>> VersionsAsync(long n, int limit, CancellationToken ct = default) =>
+        GetPageAsync<VersionView>($"v1/documents/{n}/versions?limit={limit}", ct);
+
+    /// <summary>The thumbnail's PNG, or null when there's none yet or the user may not download the document.</summary>
+    public async Task<byte[]?> ThumbnailAsync(long n, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await SendAsync(HttpMethod.Get, $"v1/documents/{n}/thumbnail", null, ct);
+            return await response.Content.ReadAsByteArrayAsync(ct);
+        }
+        catch (ApiException e) when (e.Status is 404 or 403)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>People for a user field such as Author, by name or username.</summary>
+    public Task<Page<UserHit>> FindUsersAsync(string q, CancellationToken ct = default) =>
+        GetPageAsync<UserHit>($"v1/users?q={Uri.EscapeDataString(q)}", ct);
+
     private static MultipartFormDataContent Multipart<T>(string jsonPart, T json, byte[] file, string fileName)
     {
         var form = new MultipartFormDataContent();

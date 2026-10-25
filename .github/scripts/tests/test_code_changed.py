@@ -86,6 +86,16 @@ class CodeChangedTest(unittest.TestCase):
         self.change("clients/helper/x.cs")
         self.assertEqual(["code=true", "clients=true"], self.outputs(event="push"))
 
+    def test_the_api_contract_runs_the_clients(self):
+        # The helper's ContractTests read openapi.yaml, so a server change to it must run them (final review I3).
+        self.change("healdan-api/src/main/resources/healdan/api/openapi.yaml")
+        self.assertEqual(["code=true", "clients=true"], self.outputs())
+
+    def test_other_api_files_dont_run_the_clients(self):
+        self.change("healdan-api/src/main/java/com/logicaldoc/healdan/api/ApiServlet.java",
+                    "healdan-api/src/main/resources/healdan/api/other.yaml")
+        self.assertEqual(["code=true", "clients=false"], self.outputs())
+
     def test_clients_and_docs_is_not_code(self):
         self.change("clients/helper/x.cs", "docs/x.md")
         self.assertEqual(["code=false", "clients=true"], self.outputs())

@@ -3,3 +3,4 @@ obj/
 *.oxt
 __pycache__/
 TestResults/
+helper/packaging/mac/out/

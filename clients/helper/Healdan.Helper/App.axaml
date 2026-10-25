@@ -1,0 +1,15 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Healdan.Helper.App"
+             Name="Healdan Helper"
+             RequestedThemeVariant="Default">
+  <Application.Styles>
+    <FluentTheme DensityStyle="Compact">
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Light" Accent="#FF3B5BDB" />
+        <ColorPaletteResources x:Key="Dark" Accent="#FF5C7CFA" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://HealdanHelper/Windows/HelperStyles.axaml" />
+  </Application.Styles>
+</Application>

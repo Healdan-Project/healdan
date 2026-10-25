@@ -15,6 +15,12 @@ public sealed class HelperPaths
     /// <summary>The one flat folder holding every local copy and its record.</summary>
     public string Copies => Path.Combine(Support, "Copies");
 
+    /// <summary>
+    /// Where the extension writes a window's content for Save to Healdan (<c>/v1/file</c>'s <c>tempPath</c>), which the
+    /// helper deletes once filed. Only the user can read it.
+    /// </summary>
+    public string Temp => Path.Combine(Support, "Temp");
+
     public string Settings => Path.Combine(Support, "settings.json");
 
     public string Device => Path.Combine(Support, "device.json");

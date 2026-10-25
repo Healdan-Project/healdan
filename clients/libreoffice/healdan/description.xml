@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The extension's identity. Healdan Helper installs it, and compares this version with the one installed. -->
+<description xmlns="http://openoffice.org/extensions/description/2006"
+             xmlns:d="http://openoffice.org/extensions/description/2006"
+             xmlns:lo="http://libreoffice.org/extensions/description/2011"
+             xmlns:xlink="http://www.w3.org/1999/xlink">
+  <identifier value="org.healdan.libreoffice"/>
+  <version value="0.1.0"/>
+  <dependencies>
+    <lo:LibreOffice-minimal-version value="26.2" d:name="LibreOffice 26.2"/>
+  </dependencies>
+  <display-name>
+    <name lang="en">Healdan</name>
+  </display-name>
+  <publisher>
+    <name xlink:href="https://docs.healdan.com" lang="en">Healdan Project</name>
+  </publisher>
+  <extension-description>
+    <src xlink:href="description-en.txt" lang="en"/>
+  </extension-description>
+</description>

@@ -1,0 +1,98 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:b="using:Healdan.Helper.Core.Browse"
+        x:Class="Healdan.Helper.Windows.SaveWindow"
+        Title="Save to Healdan"
+        Width="1000" Height="660" MinWidth="820" MinHeight="460"
+        CanMinimize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- Save to Healdan (spec §5.8; mockup save-to-healdan.html, with the README's changes): places on the left, the place's
+       contents in the middle, the new document's properties and its format on the right. -->
+  <DockPanel>
+    <Border Classes="toolbar" DockPanel.Dock="Top">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
+        <Button x:Name="BackButton" Classes="tool" Content="←" />
+        <Button x:Name="ForwardButton" Grid.Column="1" Classes="tool" Content="→" />
+        <Button x:Name="UpButton" Grid.Column="2" Classes="tool" Content="↑" />
+        <ComboBox x:Name="ScopePicker" Grid.Column="3" MinWidth="112" Margin="10,0,0,0" />
+        <TextBox x:Name="SearchBox" Grid.Column="4" Margin="6,0,0,0" />
+      </Grid>
+    </Border>
+    <Border Classes="footer" DockPanel.Dock="Bottom">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+        <Button x:Name="LocalButton" Classes="link" Content="Save to Local Computer" VerticalAlignment="Center" />
+        <Button x:Name="CancelButton" Grid.Column="2" Classes="footer" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+        <Button x:Name="SaveButton" Grid.Column="3" Classes="footer accent" Content="Save" IsDefault="True" />
+      </Grid>
+    </Border>
+    <Grid ColumnDefinitions="170,*,290">
+      <Border x:Name="PlacesHost" Classes="nav" />
+
+      <Border Grid.Column="1" Classes="pane">
+        <DockPanel>
+          <Border Classes="crumb" DockPanel.Dock="Top">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True" />
+              <Button x:Name="StarButton" Grid.Column="1" Classes="tool">
+                <Path x:Name="StarIcon" Classes="star" Data="{StaticResource HdStarIcon}" />
+              </Button>
+              <Button x:Name="NewFolderButton" Grid.Column="2" Content="New Folder" Margin="6,0,0,0" />
+            </Grid>
+          </Border>
+          <Border x:Name="NewFolderBar" Classes="crumb" DockPanel.Dock="Top" IsVisible="False">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+              <TextBox x:Name="NewFolderName" PlaceholderText="The new folder's name" />
+              <Button x:Name="NewFolderCreate" Grid.Column="1" Classes="accent" Content="Create" Margin="6,0,0,0" />
+              <Button x:Name="NewFolderCancel" Grid.Column="2" Content="Cancel" Margin="6,0,0,0" />
+            </Grid>
+          </Border>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="24,*,60,64,92" Margin="10,6,10,4">
+            <TextBlock Grid.Column="1" Classes="column" Text="Title" />
+            <TextBlock Grid.Column="2" Classes="column" Text="Version" />
+            <TextBlock Grid.Column="3" Classes="column" Text="Doc #" />
+            <TextBlock Grid.Column="4" Classes="column" Text="Edited" />
+          </Grid>
+          <TextBlock x:Name="NoticeText" DockPanel.Dock="Bottom" Classes="muted" Margin="12,6" TextWrapping="Wrap" IsVisible="False" />
+          <ListBox x:Name="EntryList" Classes="rows">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="b:Entry">
+                <Grid ColumnDefinitions="24,*,60,64,92">
+                  <Path Classes="folder" Data="{StaticResource HdFolderIcon}" IsVisible="{Binding IsFolder}" VerticalAlignment="Top" Margin="0,2,0,0" HorizontalAlignment="Left" />
+                  <Path Classes="document" Data="{StaticResource HdDocumentIcon}" IsVisible="{Binding IsDocument}" VerticalAlignment="Top" Margin="2,1,0,0" HorizontalAlignment="Left" />
+                  <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Holder}" IsVisible="{Binding HasHolder}" Classes="holder" Classes.mine="{Binding HeldByMe}" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" Text="{Binding Version}" />
+                  <TextBlock Grid.Column="3" Text="{Binding DocNumber}" />
+                  <TextBlock Grid.Column="4" Text="{Binding Edited}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" Text="New Document Properties" Classes="heading" HorizontalAlignment="Center" Margin="0,10,0,8" />
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="14,0,14,14" Spacing="9">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                <TextBlock Text="Name" Classes="label" />
+                <TextBlock Text=" *" Classes="label required" />
+              </StackPanel>
+              <TextBox x:Name="NameBox" />
+              <TextBlock x:Name="NameProblem" Classes="problem" IsVisible="False" />
+            </StackPanel>
+            <ContentControl x:Name="FormHost" />
+            <TextBlock x:Name="FormNotice" Classes="muted" TextWrapping="Wrap" IsVisible="False" />
+            <StackPanel x:Name="FormatPanel" Spacing="2" Margin="0,4,0,0">
+              <TextBlock Text="Format" Classes="label" Margin="0,0,0,2" />
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Grid>
+  </DockPanel>
+</Window>
