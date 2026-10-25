@@ -54,17 +54,18 @@ public partial class App : Application
 
         var paths = Program.Paths;
         var notifier = new Notifier(_log);
-        var windows = new AppWindows(notifier, _log);
+        var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
         var session = new HelperSession(paths, Keychain(), device, new LibreOfficeApp(), windows, notifier, _log);
         _session = session;
+        windows.Session = session;
 
         // Subscribed before the run loop starts, so the link that started the helper isn't missed; the session holds
         // it until it has started.
         if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
             activatable.Activated += OnActivated;
 
-        _tray = new TrayMenu(this, session, notifier, () => desktop.Shutdown());
+        _tray = new TrayMenu(this, session, notifier, windows, () => desktop.Shutdown());
         desktop.Exit += (_, _) => Stop();
         foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT })
             _signals.Add(PosixSignalRegistration.Create(signal, context =>

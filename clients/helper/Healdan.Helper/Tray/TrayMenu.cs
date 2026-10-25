@@ -5,13 +5,15 @@ using Avalonia.Threading;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Platform;
+using Healdan.Helper.Windows;
 
 namespace Healdan.Helper.Tray;
 
 /// <summary>
 /// The menu-bar icon and its menu (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
-/// Open from Healdan, Settings, Sign In or Sign Out, and Quit. When native notifications can't be shown, the last
-/// notice is the menu's status line. The menu is rebuilt when it opens and whenever the session changes.
+/// Open from Healdan (once the helper has started), Settings, Sign In or Sign Out, and Quit. When native notifications
+/// can't be shown, the last notice is the menu's status line. The menu is rebuilt when it opens and whenever the
+/// session changes.
 /// </summary>
 internal sealed class TrayMenu : IDisposable
 {
@@ -20,13 +22,15 @@ internal sealed class TrayMenu : IDisposable
 
     private readonly HelperSession _session;
     private readonly Notifier _notifier;
+    private readonly AppWindows _windows;
     private readonly Action _quit;
     private readonly NativeMenu _menu = new();
     private readonly TrayIcon _icon;
 
-    public TrayMenu(Application app, HelperSession session, Notifier notifier, Action quit)
+    public TrayMenu(Application app, HelperSession session, Notifier notifier, AppWindows windows, Action quit)
     {
         _session = session;
+        _windows = windows;
         _notifier = notifier;
         _quit = quit;
         // Black on transparent, used as a template image so the menu bar tints it; GNOME's dark top bar takes the light one.
@@ -72,9 +76,10 @@ internal sealed class TrayMenu : IDisposable
             items.Add(Label(waiting == 1 ? "1 save waiting to be sent" : $"{waiting} saves waiting to be sent"));
         items.Add(new NativeMenuItemSeparator());
 
-        // The Open and Settings windows are the next task's (spec §5.8).
-        items.Add(Label("Open from Healdan…"));
-        items.Add(Label("Settings…"));
+        var open = Item("Open from Healdan…", _windows.OpenFromMenu);
+        open.IsEnabled = _session.Started && _session.SignedIn;
+        items.Add(open);
+        items.Add(Item("Settings…", _windows.ShowSettings));
         items.Add(_session.SignedIn
             ? Item("Sign Out", () => Run(_session.SignOutAsync))
             : Item("Sign In…", () => Run(_session.SignInAgainAsync)));

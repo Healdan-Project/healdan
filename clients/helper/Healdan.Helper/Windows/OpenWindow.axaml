@@ -1,0 +1,103 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:b="using:Healdan.Helper.Core.Browse"
+        x:Class="Healdan.Helper.Windows.OpenWindow"
+        Title="Open from Healdan"
+        Width="1000" Height="600" MinWidth="820" MinHeight="440"
+        CanMinimize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- Open from Healdan (spec §5.8; mockup open-from-healdan.html): the same three panes as Save, defaulting to the
+       Documents scope, with a document's thumbnail, properties and versions on the right. -->
+  <DockPanel>
+    <Border Classes="toolbar" DockPanel.Dock="Top">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
+        <Button x:Name="BackButton" Classes="tool" Content="←" />
+        <Button x:Name="ForwardButton" Grid.Column="1" Classes="tool" Content="→" />
+        <Button x:Name="UpButton" Grid.Column="2" Classes="tool" Content="↑" />
+        <ComboBox x:Name="ScopePicker" Grid.Column="3" MinWidth="112" Margin="10,0,0,0" />
+        <TextBox x:Name="SearchBox" Grid.Column="4" Margin="6,0,0,0" />
+      </Grid>
+    </Border>
+    <Border Classes="footer" DockPanel.Dock="Bottom">
+      <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+        <Button x:Name="LocalButton" Classes="link" Content="Open from Local Computer" VerticalAlignment="Center" />
+        <CheckBox x:Name="ReadOnlyBox" Grid.Column="2" Content="Open Read-Only" Margin="0,0,14,0" VerticalAlignment="Center" />
+        <Button x:Name="CancelButton" Grid.Column="3" Classes="footer" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+        <Button x:Name="OpenButton" Grid.Column="4" Classes="footer accent" Content="Open" IsDefault="True" />
+      </Grid>
+    </Border>
+    <Grid ColumnDefinitions="180,*,260">
+      <Border x:Name="PlacesHost" Classes="nav" />
+
+      <Border Grid.Column="1" Classes="pane">
+        <DockPanel>
+          <Border Classes="crumb" DockPanel.Dock="Top">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True" />
+              <Button x:Name="StarButton" Grid.Column="1" Classes="tool">
+                <Path x:Name="StarIcon" Classes="star" Data="{StaticResource HdStarIcon}" />
+              </Button>
+            </Grid>
+          </Border>
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="24,*,56,52,58,84" Margin="10,6,10,4">
+            <TextBlock Grid.Column="1" Classes="column" Text="Title" />
+            <TextBlock Grid.Column="2" Classes="column" Text="Doc #" />
+            <TextBlock Grid.Column="3" Classes="column" Text="Version" />
+            <TextBlock Grid.Column="4" Classes="column" Text="Matter" />
+            <TextBlock Grid.Column="5" Classes="column" Text="Edited" />
+          </Grid>
+          <TextBlock x:Name="NoticeText" DockPanel.Dock="Bottom" Classes="muted" Margin="12,6" TextWrapping="Wrap" IsVisible="False" />
+          <ListBox x:Name="EntryList" Classes="rows">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="b:Entry">
+                <Grid ColumnDefinitions="24,*,56,52,58,84">
+                  <Path Classes="folder" Data="{StaticResource HdFolderIcon}" IsVisible="{Binding IsFolder}" VerticalAlignment="Top" Margin="0,2,0,0" HorizontalAlignment="Left" />
+                  <Path Classes="document" Data="{StaticResource HdDocumentIcon}" IsVisible="{Binding IsDocument}" VerticalAlignment="Top" Margin="2,1,0,0" HorizontalAlignment="Left" />
+                  <StackPanel Grid.Column="1" Margin="0,0,8,0">
+                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Holder}" IsVisible="{Binding HasHolder}" Classes="holder" Classes.mine="{Binding HeldByMe}" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="2" Text="{Binding DocNumber}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Version}" />
+                  <TextBlock Grid.Column="4" Text="{Binding MatterText}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="5" Text="{Binding Edited}" Classes="muted" TextTrimming="CharacterEllipsis" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+
+      <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="14,12" Spacing="8">
+          <Border Height="120" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource HdLineBrush}" Background="{DynamicResource HdReadOnlyBrush}" ClipToBounds="True">
+            <Panel>
+              <Image x:Name="Thumbnail" Stretch="Uniform" />
+              <TextBlock x:Name="ThumbnailNote" Classes="muted" Text="No preview yet" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" />
+            </Panel>
+          </Border>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock x:Name="DocTitle" Classes="title" TextWrapping="Wrap" />
+            <Button x:Name="DocStarButton" Grid.Column="1" Classes="tool" IsVisible="False" VerticalAlignment="Top">
+              <Path x:Name="DocStarIcon" Classes="star" Data="{StaticResource HdStarIcon}" />
+            </Button>
+          </Grid>
+          <TextBlock x:Name="DetailsNote" Classes="muted" TextWrapping="Wrap" Text="Choose a document to see its properties and versions." />
+          <ItemsControl x:Name="DetailRows">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="b:Detail">
+                <Grid ColumnDefinitions="82,*" Margin="0,1">
+                  <TextBlock Text="{Binding Label}" Classes="label" FontSize="12" />
+                  <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock x:Name="VersionsHeading" Text="Versions" Classes="label" Margin="0,6,0,0" IsVisible="False" />
+          <ListBox x:Name="VersionList" Classes="rows" MaxHeight="180" IsVisible="False" />
+          <TextBlock x:Name="VersionNote" Classes="muted" FontSize="11" TextWrapping="Wrap" IsVisible="False" Text="An older version opens read-only." />
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </DockPanel>
+</Window>

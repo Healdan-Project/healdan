@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Healdan.Helper.Windows.PropertiesWindow"
+        Title="Properties"
+        Width="440" Height="600" MinWidth="380" MinHeight="360"
+        CanMinimize="False" CanMaximize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- Properties (spec §5.5, §5.8): the same form as Save's right pane, for the open document. -->
+  <DockPanel>
+    <Border Classes="toolbar" DockPanel.Dock="Top" Padding="16,10">
+      <StackPanel Spacing="2">
+        <TextBlock x:Name="DocTitle" Classes="title" TextWrapping="Wrap" />
+        <TextBlock x:Name="Subtitle" Classes="muted" Text="Document Properties" />
+      </StackPanel>
+    </Border>
+    <Border Classes="footer" DockPanel.Dock="Bottom">
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <TextBlock x:Name="ProblemText" Classes="problem" VerticalAlignment="Center" Margin="0,0,10,0" IsVisible="False" />
+        <Button x:Name="CancelButton" Grid.Column="1" Classes="footer" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
+        <Button x:Name="SaveButton" Grid.Column="2" Classes="footer accent" Content="Save" IsDefault="True" />
+      </Grid>
+    </Border>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="16,12" Spacing="8">
+        <TextBlock x:Name="NoteText" Classes="muted" TextWrapping="Wrap" Text="Loading the properties…" />
+        <ContentControl x:Name="FormHost" />
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</Window>

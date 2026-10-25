@@ -22,6 +22,8 @@ public partial class SignInWindow : Window
         _prompt = prompt;
         Server.Text = prompt.Server;
         Server.IsReadOnly = prompt.ServerFixed;
+        if (prompt.ServerFixed)
+            Server.Classes.Add("readonly");
         SignInButton.Click += OnSignIn;
         CancelButton.Click += (_, _) => Close();
         Closed += (_, _) => _closed = true;

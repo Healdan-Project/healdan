@@ -4,6 +4,12 @@
              Name="Healdan Helper"
              RequestedThemeVariant="Default">
   <Application.Styles>
-    <FluentTheme />
+    <FluentTheme DensityStyle="Compact">
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Light" Accent="#FF3B5BDB" />
+        <ColorPaletteResources x:Key="Dark" Accent="#FF5C7CFA" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://HealdanHelper/Windows/HelperStyles.axaml" />
   </Application.Styles>
 </Application>
