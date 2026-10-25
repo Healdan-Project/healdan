@@ -65,7 +65,8 @@ Pushes to `master` that change only docs or `clients/` don't rebuild the image.
 1. **`changes`** runs `code-changed.sh`.
 2. **`Helper (ubuntu-24.04)`** and **`Helper (macos-15)`** run `dotnet test clients/helper/Healdan.Helper.sln`, with
    the .NET SDK that `clients/helper/global.json` pins.
-3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`.
+3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`,
+   which also builds the extension's `.oxt` and checks that its parts agree.
 4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
    nothing under `clients/` changed. A cancelled run fails it.
 

@@ -41,6 +41,7 @@ mvn -pl healdan-api test -Dtest=FolderResourceTest        # the API's tests, or 
 dotnet test clients/helper/Healdan.Helper.sln             # the desktop helper's tests (.NET 10 SDK; global.json pins it)
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain" # the real macOS keychain, by hand on a Mac
 python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice extension's tests (standard library only)
+clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.

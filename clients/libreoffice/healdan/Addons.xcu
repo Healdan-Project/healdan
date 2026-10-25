@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Healdan menu and toolbar (spec 6.2), in Writer, Calc and Impress. The menu is in the Start Center too, with Open
+  from Healdan only. Insert Doc ID is Writer's. A Context is matched as text against the window's module.
+-->
+<oor:component-data xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema"
+                    oor:name="Addons" oor:package="org.openoffice.Office">
+  <node oor:name="AddonUI">
+    <node oor:name="OfficeMenuBar">
+      <node oor:name="org.healdan.libreoffice.menu" oor:op="replace">
+        <prop oor:name="Title" oor:type="xs:string">
+          <value xml:lang="en-US">~Healdan</value>
+        </prop>
+        <prop oor:name="Context" oor:type="xs:string">
+          <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.frame.StartModule</value>
+        </prop>
+        <node oor:name="Submenu">
+          <node oor:name="m01" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>org.healdan.libreoffice:SaveToHealdan</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Save to Healdan…</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m02" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>org.healdan.libreoffice:OpenFromHealdan</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Open from Healdan…</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.frame.StartModule</value>
+            </prop>
+          </node>
+          <node oor:name="m03" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>private:separator</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m04" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>org.healdan.libreoffice:SaveAsNewVersion</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Save as New Version</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m05" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>org.healdan.libreoffice:SaveAsNewDocument</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Save as New Document…</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m06" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>org.healdan.libreoffice:Properties</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Properties…</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m07" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>private:separator</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
+          <node oor:name="m08" oor:op="replace">
+            <prop oor:name="URL" oor:type="xs:string">
+              <value>org.healdan.libreoffice:InsertDocId</value>
+            </prop>
+            <prop oor:name="Title" oor:type="xs:string">
+              <value xml:lang="en-US">Insert Doc ID</value>
+            </prop>
+            <prop oor:name="Target" oor:type="xs:string">
+              <value>_self</value>
+            </prop>
+            <prop oor:name="Context" oor:type="xs:string">
+              <value>com.sun.star.text.TextDocument</value>
+            </prop>
+          </node>
+        </node>
+      </node>
+    </node>
+    <node oor:name="OfficeToolBar">
+      <node oor:name="org.healdan.libreoffice.toolbar" oor:op="replace">
+        <node oor:name="t01" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>org.healdan.libreoffice:SaveToHealdan</value>
+          </prop>
+          <prop oor:name="Title" oor:type="xs:string">
+            <value xml:lang="en-US">Save to Healdan</value>
+          </prop>
+          <prop oor:name="Target" oor:type="xs:string">
+            <value>_self</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t02" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>org.healdan.libreoffice:OpenFromHealdan</value>
+          </prop>
+          <prop oor:name="Title" oor:type="xs:string">
+            <value xml:lang="en-US">Open from Healdan</value>
+          </prop>
+          <prop oor:name="Target" oor:type="xs:string">
+            <value>_self</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t03" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>org.healdan.libreoffice:SaveAsNewVersion</value>
+          </prop>
+          <prop oor:name="Title" oor:type="xs:string">
+            <value xml:lang="en-US">Save as New Version</value>
+          </prop>
+          <prop oor:name="Target" oor:type="xs:string">
+            <value>_self</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t04" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>org.healdan.libreoffice:SaveAsNewDocument</value>
+          </prop>
+          <prop oor:name="Title" oor:type="xs:string">
+            <value xml:lang="en-US">Save as New Document</value>
+          </prop>
+          <prop oor:name="Target" oor:type="xs:string">
+            <value>_self</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t05" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>org.healdan.libreoffice:Properties</value>
+          </prop>
+          <prop oor:name="Title" oor:type="xs:string">
+            <value xml:lang="en-US">Properties</value>
+          </prop>
+          <prop oor:name="Target" oor:type="xs:string">
+            <value>_self</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t06" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>org.healdan.libreoffice:InsertDocId</value>
+          </prop>
+          <prop oor:name="Title" oor:type="xs:string">
+            <value xml:lang="en-US">Insert Doc ID</value>
+          </prop>
+          <prop oor:name="Target" oor:type="xs:string">
+            <value>_self</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument</value>
+          </prop>
+        </node>
+      </node>
+    </node>
+  </node>
+</oor:component-data>

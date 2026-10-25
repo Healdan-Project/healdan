@@ -1,0 +1,1 @@
+Open from and save to Healdan in Writer, Calc and Impress, through Healdan Helper. The title bar shows each document's doc # and version, and Insert Doc ID adds a footer that keeps up with them.

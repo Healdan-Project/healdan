@@ -62,14 +62,16 @@ The desktop clients are under `clients/`, and build separately from Maven.
 - **The helper's core** is a .NET project in `clients/helper/Healdan.Helper.Core`, with its tests in
   `clients/helper/Healdan.Helper.Core.Tests`. You need the .NET 10 SDK; `clients/helper/global.json` pins the
   version, and `clients/helper/nuget.config` restores packages from nuget.org only.
-- **The LibreOffice extension's tests** are Python's `unittest`, in `clients/libreoffice/tests`. You need Python 3
-  and nothing else: the tests use the standard library only.
+- **The LibreOffice extension** is Python, in `clients/libreoffice`. Its tests are Python's `unittest`, in
+  `clients/libreoffice/tests`. You need Python 3 and nothing else: the tests use the standard library only.
+  `build.sh` packages the extension as `clients/libreoffice/healdan.oxt`, which the tests also build and check.
 
 ```bash
 dotnet test clients/helper/Healdan.Helper.sln                                  # the helper's tests
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain"  # the real macOS keychain, on a Mac
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=Stack"        # needs HEALDAN_STACK_URL
 python3 -m unittest discover -s clients/libreoffice/tests -v                   # the extension's tests
+clients/libreoffice/build.sh                                                   # the extension's healdan.oxt
 ```
 
 Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
