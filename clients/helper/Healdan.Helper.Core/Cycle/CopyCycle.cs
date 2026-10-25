@@ -275,6 +275,18 @@ public sealed class CopyCycle : IDisposable
         return record is null ? CopyState.Unknown(path) : StateOf(path, record, holdBy);
     }
 
+    /// <summary>
+    /// The copies the cycle is looking after, for the menu: open in the app, crashed, or with a close still going up.
+    /// A copy leaves the list once its window has closed and its check-in, release or refusal is done.
+    /// </summary>
+    public IReadOnlyList<CopyState> OpenCopies()
+    {
+        List<string> paths;
+        lock (_gate)
+            paths = [.. _sessions.Values.Select(s => s.Path)];
+        return [.. paths.Select(StateOf).Where(state => state.Known)];
+    }
+
     /// <summary>Retries every waiting save now, as once the user has signed in again.</summary>
     public void RetryNow()
     {
@@ -389,8 +401,9 @@ public sealed class CopyCycle : IDisposable
         {
             // Shutting down mid-download releases too, within a few seconds; if that doesn't get through, the
             // record the download left makes ResumeAsync release it.
-            if (checkedOut && !hadCopy)
-                await ReleaseQuietlyAsync(n, shuttingDown: e is OperationCanceledException && _stop.IsCancellationRequested);
+            var shuttingDown = e is OperationCanceledException && _stop.IsCancellationRequested;
+            if (checkedOut && !hadCopy && await ReleaseQuietlyAsync(n, shuttingDown) && shuttingDown)
+                DropRecordsWithoutFile(n); // released: nothing is left for ResumeAsync to do
             throw;
         }
 
@@ -513,19 +526,34 @@ public sealed class CopyCycle : IDisposable
             _app.Open(live.Path);
     }
 
-    /// <summary>Releases a check-out a failed open took. While shutting down it gets a few seconds of its own.</summary>
-    private async Task ReleaseQuietlyAsync(long n, bool shuttingDown)
+    /// <summary>
+    /// Releases a check-out the failed open took moments ago; true when it went through. While shutting down it gets a
+    /// few seconds of its own.
+    /// </summary>
+    private async Task<bool> ReleaseQuietlyAsync(long n, bool shuttingDown)
     {
         using var shutdown = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         try
         {
             await _api.ReleaseAsync(n, shuttingDown ? shutdown.Token : _stop.Token);
+            return true;
         }
         catch (Exception e) when (e is ApiException || IsTransient(e))
         {
             if (!shuttingDown)
                 Raise(ev => ev.Error($"#{n} is still checked out to you: releasing it failed."));
+            return false;
         }
+    }
+
+    /// <summary>Drops the document's records that have no file: nothing is in them to lose.</summary>
+    private void DropRecordsWithoutFile(long n)
+    {
+        foreach (var (path, record) in _store.All())
+            if (record.DocNumber == n && !File.Exists(path))
+                lock (_gate)
+                    if (Find(path) is null)
+                        _store.Delete(path);
     }
 
     /// <summary>Starts a session for a copy and watches it; an ended session at the same path is taken over.</summary>
@@ -699,7 +727,13 @@ public sealed class CopyCycle : IDisposable
         if (job.Uncertain)
         {
             // The answer doesn't say which bytes the server kept under that saveId: send these again, as a new save.
-            var moved = Update(s.Path, r => r with { Version = doc.Version, FileVersion = doc.FileVersion, PendingHash = null }) ?? record;
+            var moved = Update(s.Path, r => r with
+            {
+                DocumentName = doc.Name, // renamed meanwhile in the web page: the resend keeps the new name
+                Version = doc.Version,
+                FileVersion = doc.FileVersion,
+                PendingHash = null
+            }) ?? record;
             (job.Uncertain, job.SaveId, job.Resent) = (false, null, false);
             return await SaveAsync(s, job, moved, ct);
         }
@@ -775,8 +809,8 @@ public sealed class CopyCycle : IDisposable
         {
             case "held-elsewhere" or "not-held" or "checked-out" or "locked":
                 EndCheckout(s, heldHere: false);
-                if (job.CheckIn)
-                    Forget(s);
+                if (IsClosing(s))
+                    Forget(s); // its check-in, if one was waiting, was dropped with the check-out
                 return SaveOutcome.Done;
             case "version-moved":
                 var moved = ProblemOf(e)?.Document;
@@ -794,7 +828,9 @@ public sealed class CopyCycle : IDisposable
                 // Newer content was stored: the copy's changes don't go over it. A check-out still held here stays
                 // recorded, so closing the copy or Save as New Document releases it.
                 EndCheckout(s, heldHere);
-                if (job.CheckIn)
+                // The window may have closed while this save was going up; EndCheckout dropped its check-in, so the
+                // close is finished here: released if it's still this computer's, and the session let go either way.
+                if (IsClosing(s))
                 {
                     if (heldHere)
                         return await ReleaseAsync(s, new SaveJob { CheckIn = true }, ct);
@@ -810,6 +846,12 @@ public sealed class CopyCycle : IDisposable
         if (job.CheckIn)
             Forget(s);
         return SaveOutcome.Done;
+    }
+
+    private bool IsClosing(Session s)
+    {
+        lock (_gate)
+            return s.Closing;
     }
 
     /// <summary>
@@ -876,15 +918,26 @@ public sealed class CopyCycle : IDisposable
         });
     }
 
-    /// <summary>Releases the check-out: on closing with nothing new to send, or for Save as New Document's original.</summary>
+    /// <summary>
+    /// Releases the check-out: on closing with nothing new to send, for a copy whose changes can't go up, for a record
+    /// a stopped open left, or for Save as New Document's original. The record says what this computer held, which may
+    /// be long ago (a restart): the document is read first, and released only while its hold is still this
+    /// computer's. A plain release would free a check-out taken since, in the web page or on another computer, and
+    /// for an administrator, anyone's.
+    /// </summary>
     private async Task<SaveOutcome> ReleaseAsync(Session s, SaveJob job, CancellationToken ct)
     {
         var record = Record(s.Path);
+        var heldByOther = false;
         if (record is { CheckedOutHere: true })
         {
             try
             {
-                await _api.ReleaseAsync(s.DocNumber, ct);
+                var doc = await _api.DocumentAsync(s.DocNumber, ct);
+                if (HoldIsHere(doc.Hold))
+                    await _api.ReleaseAsync(s.DocNumber, ct);
+                else
+                    heldByOther = doc.Hold is not null;
             }
             catch (ApiException e) when (e.Status == 401)
             {
@@ -895,25 +948,37 @@ public sealed class CopyCycle : IDisposable
             {
                 return SaveOutcome.Retry;
             }
+            catch (ApiException e) when (e.Code is "held-elsewhere" or "not-held" or "checked-out" or "locked")
+            {
+                heldByOther = true; // taken in the moment between reading and releasing
+            }
+            catch (ApiException e) when (e.Code == "not-found")
+            {
+                // The document can't be read any more: there's nothing of this computer's to release.
+            }
             catch (ApiException e) when (!job.ReleaseOnly)
             {
-                if (e.Code is "held-elsewhere" or "not-held" or "checked-out" or "locked")
-                    EndCheckout(s, heldHere: false);
-                else
-                    Raise(ev => ev.Error($"Healdan refused to release {Title(record)}: {e.Detail}"));
+                Raise(ev => ev.Error($"Healdan refused to release {Title(record)}: {e.Detail}"));
                 Forget(s);
                 return SaveOutcome.Done;
             }
             catch (ApiException)
             {
-                // Save as New Document: the original's check-out had ended anyway; it keeps its last saved version.
+                // Save as New Document: the original keeps its last saved version whatever its check-out does.
             }
             Update(s.Path, r => r with { CheckedOutHere = false });
         }
+
         if (job.ReleaseOnly)
             _ = DeleteOnceAdoptedAsync(s, job.AfterAdoption ?? Task.CompletedTask);
+        else if (heldByOther && File.Exists(s.Path))
+        {
+            // The check-out ended here (spec §5.10): the copy is kept, and the app offers Save as New Document.
+            EndCheckout(s, heldHere: false);
+            Forget(s);
+        }
         else
-            Finish(s);
+            Finish(s); // a record with no file goes with it
         return SaveOutcome.Done;
     }
 

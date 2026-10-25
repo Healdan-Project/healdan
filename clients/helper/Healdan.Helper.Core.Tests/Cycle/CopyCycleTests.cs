@@ -87,6 +87,7 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Equal(FakeApi.Here("LibreOffice"), _server.Doc(5).Hold);
         Assert.Equal(1, _server.Count("POST /documents/5/checkout"));
         Assert.Equal(new CopyState(true, 5, "Lease agreement #5 v1.0", "#5 v1.0", false, path, null), cycle.StateOf(path));
+        Assert.Equal([cycle.StateOf(path)], cycle.OpenCopies());
         // The copy, its record and the app's lock file; no temporary file is left from the download.
         Assert.Equal(
             new[] { path, CopyPath(".Lease agreement #5 v1.0.docx.healdan.json"), FakeApp.LockPath(path) }.Order(),
@@ -507,6 +508,7 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Null(_server.Doc(6).Hold);
         Assert.Empty(Store.All());
         Assert.Empty(CopiesFolder());
+        Assert.Empty(cycle.OpenCopies());
     }
 
     [Fact]
@@ -809,13 +811,93 @@ public sealed class CopyCycleTests : IDisposable
 
         await Wait.Until(() => _server.Doc(5).Hold is null, "released on the way out");
         Assert.Empty(_app.Opened);
-        Assert.NotNull(Store.All().SingleOrDefault().Record); // what ResumeAsync releases if that hadn't got through
+        Assert.Empty(Store.All()); // released, so no record is left for ResumeAsync to release
 
-        // The record, and a temporary file a download left, are tidied at the next start.
+        // A temporary file a download left is tidied at the next start.
         File.WriteAllText(Path.Combine(Paths.Copies, ".healdan-0123456789abcdef0123456789abcdef.part"), "half");
         await Cycle().ResumeAsync();
         await Wait.Until(() => CopiesFolder().Length == 0, "nothing left in the folder");
         Assert.Null(_server.Doc(5).Hold);
+    }
+
+    [Theory]
+    [InlineData("someone else")]
+    [InlineData("the user, in the web page")]
+    public async Task ARecordOfAStoppedOpenNeverReleasesAnotherHold(string holder)
+    {
+        // An open stopped before its download was in place left its record, and the hold changed hands since.
+        var api = new HealdanApi(new Uri("https://healdan.test"), _server) { Token = "hd_test" };
+        var doc = await api.CheckOutAsync(5, "LibreOffice");
+        var (path, record, _) = Store.Create(doc, false, "LibreOffice");
+        Store.Save(record with { CheckedOutHere = true });
+        var hold = holder == "someone else" ? FakeApi.OtherPerson() : new FakeHold(FakeApi.MyId, FakeApi.MyName, null, null, null);
+        _server.Change(5, d => d.Hold = hold);
+
+        await Cycle().ResumeAsync();
+
+        await Wait.Until(() => Store.Find(path) is null, "the record dropped");
+        await Task.Delay(Quiet);
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Equal(hold, _server.Doc(5).Hold);
+        Assert.Empty(_events.Ended); // no copy, so nothing to keep or offer
+        Assert.Empty(CopiesFolder());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AWindowClosedWhileARefusedSaveWasGoingUp(bool stillHeldHere)
+    {
+        var (cycle, path) = await OpenAsync();
+        await Task.Delay(Fast.LockPoll * 4);
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        FakeApp.Close(path);
+        await Task.Delay(Fast.LockPoll * 6); // the close is noticed; its check-in waits behind A
+        if (stillHeldHere) // newer content was stored, with the check-out still this computer's: version-moved
+            _server.Change(5, d =>
+            {
+                d.Files["1.1"] = "newer"u8.ToArray();
+                d.Version = d.FileVersion = "1.1";
+            });
+        else // the web page released it: not-held
+            _server.Change(5, d => d.Hold = null);
+        _server.OpenSaves();
+
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+        if (stillHeldHere)
+            await Wait.Until(() => _server.Doc(5).Hold is null, "released, as the window has closed");
+        await Task.Delay(Quiet);
+        Assert.Equal(stillHeldHere ? 1 : 0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Single(_server.Saves);
+        Assert.Equal("A", File.ReadAllText(path)); // kept: its changes didn't go up
+
+        Assert.Empty(cycle.OpenCopies()); // the closed copy was let go, not left listed as still closing
+    }
+
+    [Fact]
+    public async Task RestartAfterALostAnswerAndARenameKeepsTheNewName()
+    {
+        var (first, path) = await OpenAsync(timings: Fast with { RetryDelays = [TimeSpan.FromMinutes(5)] });
+        _server.DropAnswers(1);
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.Saves.Count == 1, "A stored, its answer lost");
+        first.Dispose();
+        FakeApp.Write(path, "B"); // saved while the helper was down
+        _server.Change(5, d =>
+        {
+            d.Name = "Signed lease.docx"; // and renamed in the web page meanwhile
+            d.Version = "1.2";
+        });
+
+        await Cycle().ResumeAsync();
+
+        await Wait.Until(() => _server.Doc(5).Content == "B" && _events.LastTitle(path) is not null, "B stored and confirmed");
+        Assert.Equal(["stored 1.1", "repeat", "stored 1.3"], _server.Saves.Select(s => s.Outcome));
+        Assert.Equal("Signed lease.docx", _server.Saves[^1].Name);
+        Assert.Equal("Signed lease.docx", _server.Doc(5).Name);
+        Assert.Equal("Signed lease #5 v1.3", _events.LastTitle(path));
     }
 
     [Fact]
