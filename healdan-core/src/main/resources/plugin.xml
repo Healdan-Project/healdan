@@ -97,6 +97,11 @@
 		<parameter id="name" value="Feature_71" />
 	</extension>
 
+	<!-- Shows CE's Edit with Office toolbar button and right-click item, which Healdan relabels Open in App (M3 spec 8) -->
+	<extension plugin-id="logicaldoc-core" point-id="Feature" id="feature20">
+		<parameter id="name" value="Feature_20" />
+	</extension>
+
 	<!-- CE uses the first SystemInfo extension it finds, so no other plugin may declare one (HealdanSystemInfoTest checks) -->
 	<extension plugin-id="logicaldoc-core" point-id="SystemInfo" id="healdanSystemInfo">
 		<parameter id="class" value="com.logicaldoc.healdan.branding.HealdanSystemInfo" />

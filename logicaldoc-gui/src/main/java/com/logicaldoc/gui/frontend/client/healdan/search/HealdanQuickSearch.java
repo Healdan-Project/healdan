@@ -14,6 +14,7 @@ import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.frontend.client.document.DocumentsPanel;
 import com.logicaldoc.gui.frontend.client.document.grid.DocumentGridUtil;
 import com.logicaldoc.gui.frontend.client.document.grid.DocumentsListGrid;
+import com.logicaldoc.gui.frontend.client.healdan.HealdanDocumentOpener;
 import com.logicaldoc.gui.frontend.client.healdan.HealdanGuiConstants;
 import com.logicaldoc.gui.frontend.client.healdan.HealdanLabels;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUIDocNumberResult;
@@ -50,6 +51,7 @@ public final class HealdanQuickSearch {
 			observing = true;
 			Search.get().addObserver(new ClientColumnObserver());
 		}
+		HealdanDocumentOpener.register();
 		HealdanLabels.load(then);
 	}
 
