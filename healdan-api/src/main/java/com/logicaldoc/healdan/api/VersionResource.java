@@ -35,6 +35,7 @@ import com.logicaldoc.healdan.api.model.NewVersion;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.VersionView;
 import com.logicaldoc.healdan.security.AccessChecks;
+import com.logicaldoc.healdan.stamp.DocIdStamper;
 import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.healdan.token.HoldDevice;
 import com.logicaldoc.util.html.HTMLSanitizer;
@@ -151,7 +152,10 @@ public class VersionResource {
 	 * None of these leaves anything behind. A free document is then checked
 	 * out to the caller, checked in with the file, and with
 	 * {@code keepCheckedOut} checked out again, held on the caller's device;
-	 * the check-in on closing ends the device's hold. Once the save is
+	 * the check-in on closing ends the device's hold. A Word or LibreOffice
+	 * file that carries the {@code Healdan Doc ID} property is stamped, after
+	 * every check, with the doc # and the version it's stored as (M3 spec
+	 * section 9.7). Once the save is
 	 * stored, its {@code saveId} is kept, in the same write as the device. A
 	 * rule that refuses the check-in ({@code 409 refused}) leaves the
 	 * document as it was, but checked out to the caller: CE writes nothing
@@ -232,6 +236,12 @@ public class VersionResource {
 			if (!errors.isEmpty())
 				throw ApiProblem.validation(errors);
 
+			// The file carries the number it's stored as (M3 spec section 9.7), after every check
+			boolean major = VERSION.equals(request.kind());
+			String next = nextVersion(document, major);
+			String docId = next != null ? DocIdStamper.value(docNumber, next) : null;
+			boolean stamped = docId != null && DocIdStamper.stamp(upload.toPath(), Uploads.extension(name), docId);
+
 			// The checks above leave it free or checked out to the caller, held here if on any device
 			String app = devices.current(document).map(HoldDevice::getApp).orElse(null);
 			if (!ApiViews.checkedOutBy(document, user)) {
@@ -244,13 +254,15 @@ public class VersionResource {
 			checkin.setComment(comment);
 			String before = document.getVersion();
 			// Waits for CE's version record, so the timeline shows the save at once
-			DocumentManager.get()
-					.checkin(document.getId(), upload, name, VERSION.equals(request.kind()), null, checkin).get();
+			DocumentManager.get().checkin(document.getId(), upload, name, major, null, checkin).get();
 			confirmStored(document.getId(), docNumber, before, user);
 
 			if (Boolean.TRUE.equals(request.keepCheckedOut()))
 				checkOutAgain(document.getId(), session, docNumber);
 			Document saved = DocumentDAO.get().findById(document.getId());
+			// The web page can change the properties in the moment before the check-in, which moves version on
+			if (stamped && !docId.equals(DocIdStamper.value(docNumber, saved.getFileVersion())))
+				log.warn("Document #{} v{} was stamped {}", docNumber, saved.getFileVersion(), docId);
 			/*
 			 * The first save through the API records the device, and the check-in on closing ends its hold. The same
 			 * write keeps the save's id, now that the save is stored: under the document's lock, so a request
@@ -263,6 +275,24 @@ public class VersionResource {
 			return ApiViews.document(saved, user);
 		} finally {
 			FileUtils.deleteQuietly(upload);
+		}
+	}
+
+	/**
+	 * @return the version the save will store the file as, as CE's check-in
+	 *         counts it: from {@code version}, not {@code fileVersion} (spec
+	 *         section 6.6), a snapshot adding 1 to the minor number and a
+	 *         version taking the next major number with minor 0; null if
+	 *         CE's version can't be read, when the file isn't stamped
+	 */
+	static String nextVersion(Document document, boolean major) {
+		if (StringUtils.isEmpty(document.getVersion()))
+			return DocumentResource.firstVersion();
+		try {
+			return Version.calculateNewVersion(document.getVersion(), major);
+		} catch (RuntimeException e) {
+			log.warn("Cannot tell the next version of document {} from {}", document.getId(), document.getVersion());
+			return null;
 		}
 	}
 

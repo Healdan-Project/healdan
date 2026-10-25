@@ -341,6 +341,18 @@ paths:
           (`GET /v1/folders/{folderId}/form`) is ignored, so a client can send
           the whole form back.
 
+        Only once every check has passed is the doc # taken. A Word or
+        LibreOffice file (`.docx`, `.docm`, `.dotx`, `.dotm`, `.odt` or
+        `.ott`) that carries the document property `Healdan Doc ID` is then
+        stamped before it's stored: the property becomes the new doc # and
+        version 1.0 in the title's form (`#1234 v1.0`), and so does the
+        shown text of each field that displays it, so the stored file, its
+        preview and every download show the number. Nothing else in the file
+        changes. Any other file, and one the server can't read as such, is
+        stored as sent, byte for byte. A filing refused by a check takes no
+        number; one that fails while it's being stored leaves a gap in the
+        doc #s, as a deleted document does.
+
         `201` means the document is stored with its version 1.0 in its
         timeline. When the server stores the document but not that version,
         the answer is `500 server-error`, and its `detail` gives the new
@@ -575,6 +587,40 @@ paths:
                 contentMediaType: application/octet-stream
         default:
           $ref: '#/components/responses/Problem'
+  /v1/documents/{docNumber}/thumbnail:
+    get:
+      operationId: getDocumentThumbnail
+      summary: A document's thumbnail
+      description: |
+        A small image of the current file's first page, as a PNG. It's read
+        through the same checks as the content (`getDocumentContent`):
+        `403 forbidden` without the Download permission, and for a document
+        protected by a password. Viewing it isn't recorded as a download.
+
+        The server makes thumbnails in the background after each save, so a
+        document whose thumbnail hasn't been made yet, like one whose file
+        has none, is `404 not-found`: show a placeholder, and ask again
+        later.
+      tags: [Documents]
+      parameters:
+        - $ref: '#/components/parameters/DocNumber'
+      responses:
+        '200':
+          description: The thumbnail
+          headers:
+            Content-Length:
+              description: The image's size in bytes
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            image/png:
+              schema:
+                type: string
+                contentMediaType: image/png
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/documents/{docNumber}/checkout:
     post:
       operationId: checkOutDocument
@@ -701,6 +747,11 @@ paths:
         that writes the number into the file before it sends it, such as a
         doc ID footer, works it out from the `version` it last read, and
         reads the document again if anything may have changed it since.
+        The server stamps that number itself: a Word or LibreOffice file
+        that carries the `Healdan Doc ID` property is stored with it in the
+        property and in the shown text of the fields that display it, as for
+        `fileDocument`, once every check below has passed. Any other file is
+        stored as sent.
 
         A free
         document is checked out to the caller, saved and checked in again;
