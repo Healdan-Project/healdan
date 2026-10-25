@@ -16,8 +16,13 @@ Whichever proxy you use:
   see [The Sign-In Throttle Behind a Proxy](#the-sign-in-throttle-behind-a-proxy).
 - **WebSockets and large uploads.** The proxy must forward WebSockets (Healdan pushes live updates at
   `/wk-event`) and allow large uploads and long requests.
-- **Office add-ins need HTTPS.** Office loads an add-in's pages over HTTPS, and those pages can't call a plain HTTP
-  address. So an add-in that uses Healdan's [API](../../developer/api/) needs Healdan behind the proxy, with a
+- **The Healdan Helper needs HTTPS.** The helper that brings Healdan into LibreOffice refuses a server at a plain
+  `http://` address, apart from `localhost`, and checks the certificate as the Mac does. So it needs Healdan behind
+  the proxy, with a certificate the Macs trust. Give people the address in `LOGICALDOC_PUBLIC_URL` for both the web
+  page and the helper: the helper opens the web page's Open in App links only from the server it's signed in to. See
+  [Office Integration](../office-integration/).
+- **Office add-ins need HTTPS too.** Office loads an add-in's pages over HTTPS, and those pages can't call a plain
+  HTTP address. So an add-in that uses Healdan's [API](../../developer/api/) needs Healdan behind the proxy, with a
   certificate the computer running Office trusts.
 
 {{< tabs >}}

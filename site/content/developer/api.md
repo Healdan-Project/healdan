@@ -218,6 +218,8 @@ this, because the same person may have the document open on two computers.
   device hasn't sent is not in Healdan. The web page itself is never refused for a device.
 - **A check-out with no device** (from the web page, or from a token that signed in with none) works from any of
   your devices until a check-out or a save through the API records one.
+- **Filing with `checkOut: true`** holds the new document on the filing token's device, with no `app`, as
+  `POST /documents` takes none.
 - **A free document** is checked out for a save, saved and checked in again, so a client needn't check out
   first. A client that edits for a while checks out when it opens the file.
 
@@ -238,7 +240,17 @@ answer.
   server keeps the last one stored for each document: a save that repeats it is answered `201` with the document as
   it is now, and stores nothing. A `saveId` that isn't a UUID is `422 validation`.
 
-The checks run in a fixed order, which the docs page lists, and nothing is stored unless all pass.
+Nothing is stored unless every check passes. They run in this order, and the first that fails gives the answer
+(the docs page has the whole list):
+
+1. read access (`404`);
+2. a repeated `saveId`, answered `201` as above, whatever has happened to the document since;
+3. the Write permission (`403`);
+4. someone else's check-out or a lock (`409 checked-out` or `locked`), and your own on another device
+   (`409 held-elsewhere`);
+5. `ifHeld` (`409 not-held`), then `ifVersion` (`409 version-moved`);
+6. an immutable or archived document (`409 refused`);
+7. the name, the file and the comment (`413`, `422`).
 
 ## Doc IDs in Word and LibreOffice Files
 
@@ -296,6 +308,13 @@ development server, needs its origin in **API origins allowed (CORS)** in
 Office loads an add-in's pages over HTTPS, and a page loaded over HTTPS can't call an address that's plain HTTP.
 So an Office add-in needs Healdan behind a [reverse proxy](../../install/reverse-proxy/) that serves HTTPS, with a
 certificate the computer running Office trusts.
+
+## Healdan's Own Client
+
+The Healdan Helper, which brings Healdan into LibreOffice, is a client of this API, and uses most of what's above:
+device sign-ins, the windows' lists and searches, filing, device check-outs, and saves with `ifVersion`, `ifHeld`
+and `saveId`. It too refuses a plain `http://` server other than `localhost`. [Desktop Clients](../desktop-clients/)
+describes it, and its tests fail when it calls a route or reads a field the description file doesn't have.
 
 ## Trying It
 

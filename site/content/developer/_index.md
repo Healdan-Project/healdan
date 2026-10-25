@@ -16,4 +16,5 @@ How to build Healdan from source, how it extends LogicalDOC Community Edition, a
   {{< card link="upstream-syncs/" title="Upstream Syncs" icon="switch-horizontal" >}}
   {{< card link="writing-docs/" title="Writing Docs" icon="pencil" >}}
   {{< card link="api/" title="API" icon="code" >}}
+  {{< card link="desktop-clients/" title="Desktop Clients" icon="desktop-computer" >}}
 {{< /cards >}}

@@ -1,0 +1,95 @@
+---
+title: When Things Go Wrong
+weight: 6
+---
+
+<!-- The picture of the crash window is a render of the helper's real window, drawn offscreen with test data, not a
+screenshot. Replace it with a screenshot during the owner's acceptance (M3 plan, Task 21). -->
+
+The helper's first rule is that nothing you save is lost. When something goes wrong, it keeps your work on your Mac
+and tells you, through a notification or, when it needs an answer, a window of its own.
+
+## Healdan Can't Be Reached
+
+You're offline, or the server is down, when you save.
+
+- **Your save is safe.** LibreOffice saves to your Mac as usual, and the document stays checked out to you.
+- **The helper keeps trying.** A notice says "A save is waiting for Healdan", and the helper's menu shows how many
+  saves are waiting.
+- **When Healdan is back,** the helper sends them, in order, and says "Your saves have reached Healdan." The title
+  bar moves on.
+- **Restarting is safe.** If your Mac restarts first, the helper finds the waiting saves when it starts again and
+  sends them.
+
+Opening a document needs Healdan, so that has to wait.
+
+## The Helper Isn't Running
+
+You quit it, or haven't signed in since your Mac started.
+
+- **LibreOffice's Open and Save** show LibreOffice's own boxes, with a notice that the helper isn't running.
+- **A save on a Healdan document** is still kept on your Mac, and goes to Healdan once the helper is running again.
+
+Start **Healdan Helper** from your Applications folder.
+
+## LibreOffice or Your Mac Crashes
+
+The document stays checked out to you, and your local copy is kept as you last saved it. Within about ten seconds of
+LibreOffice going, or as soon as the helper starts after your Mac restarts, this window opens:
+
+![The crash window: Lease agreement #1234 v2.1 closed unexpectedly. It's still checked out to you, and your local copy is kept. With the Send and Check In and Reopen buttons](after-a-crash.png)
+
+- **Reopen** opens your kept copy, with what you last saved, and carries on as before.
+- **Send and Check In** sends what Healdan hasn't had yet, and checks the document in.
+- **Closing the window** decides nothing: the document stays in the helper's menu, marked "(closed unexpectedly)",
+  until you choose it, which reopens it.
+
+A read-only copy has nothing to lose: the window says so, and offers **Remove Copy**.
+
+## Your Check-Out Ended
+
+While you had the document open, its check-out ended:
+
+- it was checked in or unlocked in the web page, by you or an administrator;
+- you chose **Edit Here Instead** for it on another of your computers.
+
+Your next save, or closing the window, is then refused, so it can't land on a document that's moved on. A notice says
+"It can't be saved to Healdan any more. Your copy is kept: use Save as New Document to file your changes."
+
+- **While it's open:** choose **Healdan › Save as New Document…** to file your changes as a new document.
+- **If you've closed it:** open the document again from Healdan. The helper opens your kept copy instead of
+  downloading over it, and says the same. Then choose Save as New Document.
+
+## Someone Changed It in the Web Page
+
+Anyone who may edit a document can change its properties or rename it in the web page while you have it open. Your
+next save then starts from a version Healdan has moved past.
+
+- **If only the properties or the name changed,** the helper sends your save again on top of them, by itself.
+- **If someone stored newer content,** your save isn't sent over it. Your copy is kept, and you're told to use Save as
+  New Document.
+
+## Signed Out or Signed In Again
+
+When your sign-in stops working (you changed your password, or the helper wasn't used for a long time), the helper
+says "Sign in to Healdan again. Your saves wait on this computer until you do", and shows the Sign In window. The
+documents you have open stay checked out to this Mac.
+
+## A Link Didn't Open
+
+When Open in App doesn't open anything:
+
+- **Nothing at all happened:** the helper isn't installed, or your browser didn't hand the link over. See
+  [Installing the Healdan Helper](../installing-the-helper/).
+- **"That link is from …, but Healdan Helper is signed in to …":** open the web page at the address the helper is
+  signed in to. See [Opening Documents](../opening-documents/#from-the-web-page-open-in-app).
+- **"Sign in to Healdan Helper to open documents":** you're signed out. Choose **Sign In…** in the helper's menu,
+  then click Open in App again.
+- **One of the helper's windows is waiting for you,** such as Save to Healdan. The helper ignores links meanwhile,
+  and brings that window to the front: finish with it, then click Open in App again.
+- **"#1234 is still being checked in":** you closed it moments ago. Open it again once the check-in is done.
+
+## Asking for Help
+
+The helper's log is `~/Library/Logs/Healdan Helper/helper.log`, and the LibreOffice extension's is `extension.log`
+beside it. They hold no passwords and no document contents, so you can send them to your administrator.
