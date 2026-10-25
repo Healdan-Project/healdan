@@ -58,8 +58,12 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		for (Object value : row.values())
 			assertFalse(String.valueOf(value).contains(issued.token()));
 
-		Date created = (Date) row.get("LD_CREATION");
-		Date expires = (Date) row.get("HD_EXPIRES");
+		// Read the dates back through Hibernate, as the application does: the raw JDBC read above uses the JVM's
+		// zone, while Hibernate writes in hibernate.jdbc.time_zone (Europe/Rome in the tests), so two dates on
+		// either side of a DST change would differ by an hour
+		ApiToken stored = ApiTokenDAO.get().findById(issued.row().getId());
+		Date created = stored.getCreation();
+		Date expires = stored.getExpires();
 		assertEquals(365 * DAY, expires.getTime() - created.getTime(), 1000);
 	}
 
