@@ -15,9 +15,10 @@
 #
 # The steps: a self-contained, single-file .NET publish for osx-arm64 with no .pdb, since any file in Contents/MacOS
 # that isn't native code breaks the bundle's signature (the trial); the bundle, with healdan.oxt from
-# clients/libreoffice/build.sh in Contents/Resources; signing inside-out (each native library, the binary, then the
-# bundle) with the hardened runtime and a timestamp; codesign's strict check; notarising and stapling; the disk image,
-# with a link to Applications, signed (and notarised) too. Any failure stops it.
+# clients/libreoffice/build.sh and AppIcon.icns, which make-icon.swift draws from the docs site's favicon.svg, in
+# Contents/Resources; signing inside-out (each native library, the binary, then the bundle) with the hardened runtime
+# and a timestamp; codesign's strict check; notarising and stapling; the disk image, with a link to Applications,
+# signed (and notarised) too. Any failure stops it.
 set -euo pipefail
 
 say() { printf '%s\n' "$*"; }
@@ -29,7 +30,7 @@ version=$1
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]] || die "'$version' isn't a version like 1.2.3 or 1.2.3-rc1"
 numeric=${version%%-*} # what CFBundleShortVersionString and CFBundleVersion take
 [ "$(uname -s)" = Darwin ] || die "it builds only on macOS (codesign, hdiutil)"
-for tool in dotnet codesign hdiutil plutil ditto lipo python3; do
+for tool in dotnet codesign hdiutil plutil ditto lipo python3 swift iconutil; do
   command -v "$tool" >/dev/null || die "$tool isn't installed"
 done
 
@@ -108,7 +109,10 @@ sed -e "s/@VERSION@/$numeric/g" "$here/Info.plist.in" > "$app/Contents/Info.plis
 plutil -lint "$app/Contents/Info.plist" >/dev/null
 printf 'APPL????' > "$app/Contents/PkgInfo"
 sh "$repo/clients/libreoffice/build.sh" "$app/Contents/Resources/healdan.oxt"
-chmod 644 "$app/Contents/Info.plist" "$app/Contents/PkgInfo" "$app/Contents/Resources/healdan.oxt"
+swift "$here/make-icon.swift" "$repo/site/static/favicon.svg" "$work/AppIcon.iconset"
+iconutil --convert icns --output "$app/Contents/Resources/AppIcon.icns" "$work/AppIcon.iconset"
+chmod 644 "$app/Contents/Info.plist" "$app/Contents/PkgInfo" "$app/Contents/Resources/healdan.oxt" \
+  "$app/Contents/Resources/AppIcon.icns"
 xattr -cr "$app" 2>/dev/null || true # Finder info or a resource fork would make codesign refuse it
 
 # --- Signing, inside out --------------------------------------------------------------------------------------------
