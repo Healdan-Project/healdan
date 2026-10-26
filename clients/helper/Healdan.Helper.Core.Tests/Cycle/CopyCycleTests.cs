@@ -1021,14 +1021,20 @@ public sealed class CopyCycleTests : IDisposable
     {
         // The re-review's sequence: A goes up, Save as New Version queues a version job behind it, and the user saves
         // again before A finishes. B takes the queued job's place, and goes up as the version.
-        var (cycle, path) = await OpenAsync();
+        // The settle's clock is stopped while each write in place is made, so the emptied file never goes up instead.
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
         _server.HoldSaves();
+        clock.Pause();
         FakeApp.Write(path, "A");
+        clock.Resume();
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
         cycle.MarkNextVersion(path);
-        await Task.Delay(Fast.Settle * 3);
+        await Wait.Until(() => Queued(cycle, path, "A"), "A's bytes queued as the version");
+        clock.Pause();
         FakeApp.Write(path, "B");
-        await Task.Delay(Fast.Settle * 3);
+        clock.Resume();
+        await Wait.Until(() => Queued(cycle, path, "B"), "B in the version's place");
         Assert.Equal("version", Store.Find(path)!.Value.Item2.PendingKind); // what a restart would send B as
         _server.OpenSaves();
 
@@ -1061,13 +1067,19 @@ public sealed class CopyCycleTests : IDisposable
     public async Task SavedAfterARefusedSaveEndsOnTheSaveQueuedBehindIt()
     {
         // The re-review's case: A is refused for good while B waits behind it. The answer after save B is B's version.
-        var (cycle, path) = await OpenAsync();
+        // The settle's clock is stopped while each write in place is made, so the emptied file never goes up instead.
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
         _server.HoldSaves();
+        clock.Pause();
         FakeApp.Write(path, "A");
+        clock.Resume();
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        clock.Pause();
         FakeApp.Write(path, "B");
+        clock.Resume();
         var afterB = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
-        await Task.Delay(Fast.Settle * 3);
+        await Wait.Until(() => Queued(cycle, path, "B"), "B waiting behind A");
         _server.RefuseNextSave();
         _server.OpenSaves();
 
@@ -1079,7 +1091,9 @@ public sealed class CopyCycleTests : IDisposable
         // A refused save with nothing behind it answers at once: nothing more goes until the next save.
         _server.RefuseNextSave();
         var started = DateTime.UtcNow;
+        clock.Pause();
         FakeApp.Write(path, "C");
+        clock.Resume();
         var afterC = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
         Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5));
         Assert.Equal("Lease agreement #5 v1.1", afterC.Title);
@@ -1090,10 +1104,14 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task SavedAfterASaveThatBrokeAnswersAtOnce()
     {
-        var (cycle, path) = await OpenAsync();
+        // The settle's clock is stopped while A is written in place, so the emptied file isn't the save that breaks.
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
         _server.BreakNextSave();
         var started = DateTime.UtcNow;
+        clock.Pause();
         FakeApp.Write(path, "A");
+        clock.Resume();
 
         var state = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
 
@@ -1136,10 +1154,13 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task ARestartWhileAdoptingSendsNothingIfTheCopyIsWhatWasFiled()
     {
-        var first = Cycle();
+        // The settle's clock is stopped until the helper stops, so the copy is never taken as adopted before then.
+        var clock = new PausableClock();
+        var first = Cycle(Fast with { Clock = clock });
         var temp = Path.Combine(_root, "new.odt");
         File.WriteAllText(temp, "filed");
         var state = await first.AdoptNewAsync(temp, new NewDocument(9, "Letter.odt", new JsonObject(), false), null);
+        clock.Pause();
         FakeApp.Write(state.Path, "filed");
         File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
         first.Dispose(); // stopped before the adoption had settled, and before /v1/adopted
