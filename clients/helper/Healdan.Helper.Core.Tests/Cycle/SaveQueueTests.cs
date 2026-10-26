@@ -57,7 +57,7 @@ public sealed class SaveQueueTests : IDisposable
         return SaveOutcome.Done;
     }
 
-    private void Failed(Exception e)
+    private void Failed(SaveJob job, Exception e)
     {
         lock (_lock)
             _failures.Add(e);

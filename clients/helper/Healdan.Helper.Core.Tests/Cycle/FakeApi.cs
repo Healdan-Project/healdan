@@ -61,6 +61,8 @@ public sealed class FakeApi : HttpMessageHandler
     private TaskCompletionSource? _saveGate;
     private TaskCompletionSource? _downloadGate;
     private FakeHold? _cannedVersionMovedHold;
+    private bool _refuseNextSave;
+    private bool _breakNextSave;
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
 
@@ -151,6 +153,20 @@ public sealed class FakeApi : HttpMessageHandler
     {
         lock (_lock)
             _cannedVersionMovedHold = hold;
+    }
+
+    /// <summary>Refuses the next save for good, as a file too large does (<c>413</c>): nothing is stored.</summary>
+    public void RefuseNextSave()
+    {
+        lock (_lock)
+            _refuseNextSave = true;
+    }
+
+    /// <summary>The next save throws what no request should, so the cycle meets a failure it doesn't expect.</summary>
+    public void BreakNextSave()
+    {
+        lock (_lock)
+            _breakNextSave = true;
     }
 
     public IReadOnlyList<FakeSave> Saves
@@ -294,7 +310,18 @@ public sealed class FakeApi : HttpMessageHandler
         lock (_lock)
         {
             var doc = _docs[n];
-            if (_cannedVersionMovedHold is { } shown)
+            if (_breakNextSave)
+            {
+                _breakNextSave = false;
+                _saves.Add(new FakeSave(n, kind, keep, name, ifVersion, ifHeld, saveId, Encoding.UTF8.GetString(file), "broken"));
+                throw new InvalidOperationException("The save broke unexpectedly (fake).");
+            }
+            if (_refuseNextSave)
+            {
+                _refuseNextSave = false;
+                (answer, outcome) = (Problem(413, "too-large", "The file is too large."), "refused");
+            }
+            else if (_cannedVersionMovedHold is { } shown)
             {
                 _cannedVersionMovedHold = null;
                 var view = View(doc) with { Version = Next(doc.Version, "snapshot"), Hold = Hold(shown) };

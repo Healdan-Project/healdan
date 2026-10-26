@@ -77,17 +77,17 @@ internal sealed class SaveQueue : IDisposable
     private readonly Func<SaveJob, CancellationToken, Task<SaveOutcome>> _send;
     private readonly CycleTimings _timings;
     private readonly Action<bool> _waiting;
-    private readonly Action<Exception> _failed;
+    private readonly Action<SaveJob, Exception> _failed;
     private readonly CancellationTokenSource _stop = new();
     private SaveJob? _queued;
     private bool _looping;
     private TaskCompletionSource _wake = NewWake();
 
-    /// <param name="send">Sends a job once. It reports refusals itself; only a cancelled send should throw.</param>
+    /// <param name="send">Sends a job once. It reports refusals itself; anything else it throws goes to <paramref name="failed"/>.</param>
     /// <param name="waiting">Called with true when a job starts waiting for a retry, and false once it's done.</param>
-    /// <param name="failed">Told of a send that threw anyway; the job then counts as done, and the queue goes on.</param>
+    /// <param name="failed">Told of a send that threw, other than by being cancelled; the job then counts as done, and the queue goes on.</param>
     public SaveQueue(Func<SaveJob, CancellationToken, Task<SaveOutcome>> send, CycleTimings timings, Action<bool> waiting,
-        Action<Exception> failed)
+        Action<SaveJob, Exception> failed)
     {
         _send = send;
         _timings = timings;
@@ -204,7 +204,7 @@ internal sealed class SaveQueue : IDisposable
                     catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
                     {
                         // Never let one job stop the copy's saves: the copy keeps its changes, and the next save goes.
-                        _failed(e);
+                        _failed(job, e);
                         outcome = SaveOutcome.Done;
                     }
                     if (outcome == SaveOutcome.Done)

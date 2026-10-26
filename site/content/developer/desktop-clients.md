@@ -55,10 +55,13 @@ app.
   (`SaveQueue.Enqueue`), so the version the user asked for is still made, with the newer content.
 - **A new document's copy:** the extension's `/v1/adopted`, called right after `storeAsURL` while the window takes no
   input, makes the file as it is then the copy's starting point, so the next write is a save, however soon. Without
-  it (an older extension), the first write that settles is. The record keeps `adoptingSince` until then: at a restart
-  in between, a file written within 10 seconds of the filing is the starting point, and one written later is sent.
+  it (an older extension), the first write that settles is. Until then the record's confirmed hash is the filed
+  file's. A restart in between sends the copy unless it's those bytes. Nothing tells the adoption from a save made
+  while the helper was down, and the adoption differs from the filed file by the doc ID the extension sets first. So
+  a restart there sends an identical version, and never loses a save.
 - **Closing:** the extension's `/v1/closed`, or LibreOffice's lock file, `.~lock.<copy>#`, gone at two polls a second
   apart. Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
+  A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
 - **A crash:** while a copy is open, the helper checks every 5 seconds that `soffice` is running.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
@@ -84,7 +87,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 - **A copy with unconfirmed changes is never deleted** by the helper, and `CopyStore.Create` never deletes anything.
   Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
   under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
-  (`OpenKept`).
+  (`OpenKept`). The menu asks at each rebuild, so each copy is hashed again only once its size or time changes.
 
 ### The Helper's Files
 
@@ -126,6 +129,7 @@ server, a Save as New Version still to go, or a write that hasn't settled.
 
 - **Following a save:** the extension calls `/v1/saved` after each save, and sets the title and footer from the
   answer. A confirmation answers only once nothing newer is on its way, so the title never stops a version behind.
+  A save Healdan refuses for good, or one that fails, answers the same way.
   While the answer says `pending`, the extension asks again after 2, 5, 15, 30, then every 60 seconds, so the title
   moves on once Healdan is back, however long it was away.
 

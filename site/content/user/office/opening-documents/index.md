@@ -99,9 +99,11 @@ Open from Healdan window. It isn't checked out.
   presentations". Open it from the Open from Healdan window, or download it from the web page.
 - **Your Mac checks it.** The helper marks the copy as downloaded from the internet, so macOS checks it as it would
   any download.
-- **Never apps, installers or scripts.** A file that can run a program or change your Mac when opened, such as
-  `.app`, `.command`, `.pkg`, `.dmg`, `.sh` or `.mobileconfig`, isn't downloaded or opened: the helper says it never
-  opens that kind of file. If you need it, download it from the web page.
+- **Never the kinds on its list.** The helper keeps a list of the common kinds of file that can run a program or
+  change your Mac when opened, such as `.app`, `.command`, `.pkg`, `.dmg`, `.sh` or `.mobileconfig`. A file of one
+  of those kinds isn't downloaded or opened: the helper says it never opens that kind of file. If you need it,
+  download it from the web page. A kind that isn't on the list, such as a `.zsh` script, can still open, and then
+  your Mac's check is what protects you.
 
 ## What Can't Be Opened
 

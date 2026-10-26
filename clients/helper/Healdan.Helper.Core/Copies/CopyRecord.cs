@@ -24,10 +24,6 @@ namespace Healdan.Helper.Core.Copies;
 /// SHA-256 (hex) of the bytes <paramref name="LastSaveId"/> was sent with while its answer isn't known, else null. A
 /// retry repeats that saveId only with those same bytes.
 /// </param>
-/// <param name="AdoptingSince">
-/// For a new document's copy, when it was filed, until the app's first write (its adoption, spec §5.6) is taken as its
-/// starting point; null after that, and for every other copy. A restart in between needn't send the adoption as a save.
-/// </param>
 /// <param name="SentKind">
 /// The kind <paramref name="LastSaveId"/> was sent as, read only while <paramref name="PendingHash"/> is set: a retry
 /// repeats it as that kind, whatever newer save waits behind it. Null in a record from before it was kept.
@@ -45,5 +41,4 @@ public sealed record CopyRecord(
     string? LastSaveId,
     string FileName,
     string? PendingHash = null,
-    DateTimeOffset? AdoptingSince = null,
     string? SentKind = null);

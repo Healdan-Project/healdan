@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Healdan.Helper.Core.Cycle;
 
 namespace Healdan.Helper.Core.Copies;
 
@@ -12,6 +13,9 @@ public sealed class CopyStore(HelperPaths paths)
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
     private const UnixFileMode PrivateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
+
+    /// <summary>Each copy's hash as <see cref="HasUnconfirmedChanges"/> last read it, by file name, with the file's stamp then.</summary>
+    private readonly Dictionary<string, (FileStamp Stamp, string Hash)> _hashes = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Writes the record for a new copy and returns the path the copy will have; the content is the caller's to put there.
@@ -121,6 +125,8 @@ public sealed class CopyStore(HelperPaths paths)
             throw;
         }
         File.Delete(RecordPath(path));
+        lock (_hashes)
+            _hashes.Remove(System.IO.Path.GetFileName(path));
         return target;
     }
 
@@ -136,26 +142,44 @@ public sealed class CopyStore(HelperPaths paths)
         File.Delete(System.IO.Path.Combine(paths.Copies, CopyNames.LibreOfficeLockName(name)));
         foreach (var owner in CopyNames.WordOwnerNames(name))
             File.Delete(System.IO.Path.Combine(paths.Copies, owner));
+        lock (_hashes)
+            _hashes.Remove(name);
     }
 
-    /// <summary>True when the copy differs from what Healdan last confirmed. A copy with no confirmed content counts as changed.</summary>
-    public bool HasUnconfirmedChanges(string path)
+    /// <summary>
+    /// True when the copy differs from what Healdan last confirmed. A copy with no confirmed content counts as changed.
+    /// With <paramref name="cached"/>, a file whose size and time haven't changed since it was last read here isn't
+    /// read again, for a list asked for often, such as the menu's Not Yet in Healdan (re-review). A write that keeps
+    /// both goes unseen then, so a decision to delete a copy or download over it never uses it.
+    /// </summary>
+    public bool HasUnconfirmedChanges(string path, bool cached = false)
     {
         if (!File.Exists(path))
             return false;
         var record = Read(RecordPath(path));
         if (record?.ConfirmedHash is null)
             return true;
-        try
+        var name = System.IO.Path.GetFileName(path);
+        var stamp = FileStamp.Of(path); // before the read, so a change during it is read again next time
+        (FileStamp Stamp, string Hash) last;
+        bool known;
+        lock (_hashes)
+            known = _hashes.TryGetValue(name, out last) && cached && last.Stamp == stamp;
+        if (!known)
         {
-            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            var hash = Convert.ToHexString(SHA256.HashData(stream));
-            return !hash.Equals(record.ConfirmedHash, StringComparison.OrdinalIgnoreCase);
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                last = (stamp, Convert.ToHexString(SHA256.HashData(stream)));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return true; // unreadable: keep it
+            }
+            lock (_hashes)
+                _hashes[name] = last;
         }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            return true; // unreadable: keep it
-        }
+        return !last.Hash.Equals(record.ConfirmedHash, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>The folder holding every copy.</summary>
