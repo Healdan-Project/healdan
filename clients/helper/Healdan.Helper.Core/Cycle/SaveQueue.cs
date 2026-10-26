@@ -33,8 +33,8 @@ internal sealed class SaveJob
 
     public string? FallbackHash { get; init; }
 
-    /// <summary><c>snapshot</c> or <c>version</c>.</summary>
-    public string Kind { get; init; } = "snapshot";
+    /// <summary><c>snapshot</c> or <c>version</c>; a save that replaces a queued version takes its kind (<see cref="SaveQueue.Enqueue"/>).</summary>
+    public string Kind { get; set; } = "snapshot";
 
     /// <summary>The close's save: <c>keepCheckedOut: false</c>, or a release when nothing changed; then the copy goes.</summary>
     public bool CheckIn { get; init; }
@@ -70,17 +70,17 @@ internal sealed class SaveQueue : IDisposable
     private readonly Func<SaveJob, CancellationToken, Task<SaveOutcome>> _send;
     private readonly CycleTimings _timings;
     private readonly Action<bool> _waiting;
-    private readonly Action<Exception> _failed;
+    private readonly Action<SaveJob, Exception> _failed;
     private readonly CancellationTokenSource _stop = new();
     private SaveJob? _queued;
     private bool _looping;
     private TaskCompletionSource _wake = NewWake();
 
-    /// <param name="send">Sends a job once. It reports refusals itself; only a cancelled send should throw.</param>
+    /// <param name="send">Sends a job once. It reports refusals itself; anything else it throws goes to <paramref name="failed"/>.</param>
     /// <param name="waiting">Called with true when a job starts waiting for a retry, and false once it's done.</param>
-    /// <param name="failed">Told of a send that threw anyway; the job then counts as done, and the queue goes on.</param>
+    /// <param name="failed">Told of a send that threw, other than by being cancelled; the job then counts as done, and the queue goes on.</param>
     public SaveQueue(Func<SaveJob, CancellationToken, Task<SaveOutcome>> send, CycleTimings timings, Action<bool> waiting,
-        Action<Exception> failed)
+        Action<SaveJob, Exception> failed)
     {
         _send = send;
         _timings = timings;
@@ -88,13 +88,19 @@ internal sealed class SaveQueue : IDisposable
         _failed = failed;
     }
 
-    /// <summary>Queues the job behind the one running, replacing a queued one that hasn't started.</summary>
+    /// <summary>
+    /// Queues the job behind the one running, replacing a queued one that hasn't started. A save that replaces a queued
+    /// Save as New Version goes up as the version in its place, so the major version isn't lost (re-review). Decided
+    /// under the lock, so a version job that has just started isn't counted twice.
+    /// </summary>
     public void Enqueue(SaveJob job)
     {
         lock (_lock)
         {
             if (_stop.IsCancellationRequested)
                 return;
+            if (_queued?.Kind == "version")
+                job.Kind = "version";
             _queued = job;
             if (_looping)
                 return;
@@ -184,7 +190,7 @@ internal sealed class SaveQueue : IDisposable
                     catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
                     {
                         // Never let one job stop the copy's saves: the copy keeps its changes, and the next save goes.
-                        _failed(e);
+                        _failed(job, e);
                         outcome = SaveOutcome.Done;
                     }
                     if (outcome == SaveOutcome.Done)

@@ -24,13 +24,6 @@ public sealed class CopyCycle : IDisposable
     private const string Snapshot = "snapshot";
     private const string NewVersion = "version";
 
-    /// <summary>
-    /// The app writes a new document's copy within moments of its filing. A copy written later than this after it,
-    /// while the helper was stopped, may hold a save of the user's, so a restart sends it rather than taking it for
-    /// the adoption.
-    /// </summary>
-    private static readonly TimeSpan AdoptionWindow = TimeSpan.FromSeconds(10);
-
     private readonly HealdanApi _api;
     private readonly CopyStore _store;
     private readonly IOfficeApp _app;
@@ -46,6 +39,9 @@ public sealed class CopyCycle : IDisposable
 
     /// <summary>The documents being opened now: one open of a document at a time (a double-click sends two links).</summary>
     private readonly HashSet<long> _opening = [];
+
+    /// <summary>Each kept copy's hash as <see cref="KeptCopies"/> last read it, by file name, with the file's stamp then.</summary>
+    private Dictionary<string, (FileStamp Stamp, string Hash)> _keptHashes = new(StringComparer.Ordinal);
     private readonly SaveWatcher _saves;
     private readonly CloseWatcher _closes;
     private readonly CancellationTokenSource _stop = new();
@@ -79,12 +75,12 @@ public sealed class CopyCycle : IDisposable
     private sealed class Session
     {
         public Session(string path, long docNumber, bool readOnly, Func<Session, SaveJob, CancellationToken, Task<SaveOutcome>> send,
-            CycleTimings timings, Action<string, bool> waiting, Action<Exception> failed)
+            CycleTimings timings, Action<string, bool> waiting, Action<Session, SaveJob, Exception> failed)
         {
             Path = path;
             DocNumber = docNumber;
             ReadOnly = readOnly;
-            Queue = new SaveQueue((job, ct) => send(this, job, ct), timings, w => waiting(path, w), failed);
+            Queue = new SaveQueue((job, ct) => send(this, job, ct), timings, w => waiting(path, w), (job, e) => failed(this, job, e));
         }
 
         public string Path { get; }
@@ -108,8 +104,11 @@ public sealed class CopyCycle : IDisposable
         /// <summary>The hash of the newest content queued or sent, so the same bytes aren't queued twice.</summary>
         public string? LastHash { get; set; }
 
-        /// <summary>The newest save queued or sent is confirmed, and nothing has been queued since.</summary>
-        public bool Confirmed { get; set; }
+        /// <summary>
+        /// The newest save queued or sent has its outcome, confirmed or given up (refused for good, or failed), and
+        /// nothing has been queued since.
+        /// </summary>
+        public bool Answered { get; set; }
 
         /// <summary>The check-out ended here: nothing more is sent, and the copy is kept.</summary>
         public bool Ended { get; set; }
@@ -141,21 +140,24 @@ public sealed class CopyCycle : IDisposable
     /// Save to Healdan and Save as New Document (spec §5.5, §5.6): files <paramref name="tempPath"/> as a new document,
     /// checked out here, and returns the copy the app is to save the open document as. That first write is the copy's
     /// starting point, not a save: the extension says when it's done (<see cref="Adopted"/>), or else it's the first
-    /// write that settles. With <paramref name="replaces"/>, the original copy's check-out is released without
-    /// saving to it, and the original copy is deleted once the app has adopted the new file: its content went into the
-    /// new document. A failed filing throws, so the caller can fall back to the app's own save.
+    /// write that settles. Until then the filed bytes are what Healdan has confirmed, so a restart in between sends
+    /// the copy unless it's those bytes (re-review): nothing tells the adoption from a save made while the helper was
+    /// down, and the adoption differs from the filed file by the doc ID the extension stamps first, so it goes up as an
+    /// identical version rather than a save being lost. With <paramref name="replaces"/>, the original copy's check-out
+    /// is released without saving to it, and the original copy is deleted once the app has adopted the new file: its
+    /// content went into the new document. A failed filing throws, so the caller can fall back to the app's own save.
     /// </summary>
     public async Task<CopyState> AdoptNewAsync(string tempPath, NewDocument request, string? replaces)
     {
+        var filed = HashOf(tempPath);
         var doc = await _api.FileAsync(tempPath, request with { CheckOut = true }, _stop.Token);
         var (path, _, _) = _store.Create(doc, false, _app.Name);
         Update(path, r => r with
         {
             CheckedOutHere = true,
-            ConfirmedHash = null,
+            ConfirmedHash = filed,
             PendingKind = null,
-            PendingHash = null,
-            AdoptingSince = DateTimeOffset.UtcNow
+            PendingHash = null
         });
         var session = Begin(path, doc.DocNumber, false, null, adopting: true);
         if (replaces is not null && Name(replaces) != Name(path))
@@ -258,8 +260,6 @@ public sealed class CopyCycle : IDisposable
                     _store.Delete(path);
                 continue;
             }
-            if (record.AdoptingSince is { } since)
-                SettleAdoption(path, since); // changes only what HasUnconfirmedChanges reads
             var unconfirmed = _store.HasUnconfirmedChanges(path);
             if (_other is not null && record.App == _other.Name && record.ReadOnly)
             {
@@ -335,7 +335,7 @@ public sealed class CopyCycle : IDisposable
             if (adopted)
             {
                 s.Adopting = false;
-                Update(s.Path, r => r with { ConfirmedHash = hash, AdoptingSince = null });
+                Update(s.Path, r => r with { ConfirmedHash = hash });
             }
         }
         if (adopted)
@@ -352,15 +352,51 @@ public sealed class CopyCycle : IDisposable
     public IReadOnlyList<CopyState> KeptCopies()
     {
         var kept = new List<CopyState>();
+        var hashes = new Dictionary<string, (FileStamp Stamp, string Hash)>(StringComparer.Ordinal);
         foreach (var (path, record) in _store.All())
         {
             lock (_gate)
                 if (Find(path) is not null)
                     continue;
-            if (File.Exists(path) && _store.HasUnconfirmedChanges(path))
+            if (HasKeptChanges(path, record, hashes))
                 kept.Add(StateOf(path, record, null));
         }
+        lock (_gate)
+            _keptHashes = hashes;
         return kept;
+    }
+
+    /// <summary>
+    /// <see cref="CopyStore.HasUnconfirmedChanges"/> for <see cref="KeptCopies"/>, which the menu asks at each rebuild,
+    /// on the UI thread. A file is hashed again only once its size or time has changed since the last ask (re-review),
+    /// so the default app's copies, which stay until the next start, aren't read every time. Each hash read goes into
+    /// <paramref name="hashes"/>, for the next ask.
+    /// </summary>
+    private bool HasKeptChanges(string path, CopyRecord record, Dictionary<string, (FileStamp Stamp, string Hash)> hashes)
+    {
+        var stamp = FileStamp.Of(path); // before the read, so a change during it is read again next time
+        if (!stamp.Exists)
+            return false;
+        if (record.ConfirmedHash is null)
+            return true;
+        var name = Name(path);
+        (FileStamp Stamp, string Hash) last;
+        bool known;
+        lock (_gate)
+            known = _keptHashes.TryGetValue(name, out last) && last.Stamp == stamp;
+        if (!known)
+        {
+            try
+            {
+                last = (stamp, HashOf(path));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return true; // unreadable: kept, and read again next time
+            }
+        }
+        hashes[name] = last;
+        return !SameHash(last.Hash, record.ConfirmedHash);
     }
 
     /// <summary>
@@ -388,27 +424,6 @@ public sealed class CopyCycle : IDisposable
     /// </summary>
     public Task OpenLinkAsync(long docNumber, bool readOnly) =>
         ReportingAsync(docNumber, () => OpenCoreAsync(docNumber, readOnly, null, move: false, link: true));
-
-    /// <summary>
-    /// At start, a new document's copy whose adoption hadn't settled when the helper stopped. Written within
-    /// <see cref="AdoptionWindow"/> of its filing, the file is the app's adoption, its starting point, so it isn't sent
-    /// as an identical version. Written later, it may hold a save the user made while the helper was down, so it
-    /// stays unconfirmed and is sent (spec §2.4).
-    /// </summary>
-    private void SettleAdoption(string path, DateTimeOffset since)
-    {
-        string? start = null;
-        try
-        {
-            if (File.GetLastWriteTimeUtc(path) <= (since + AdoptionWindow).UtcDateTime)
-                start = HashOf(path);
-        }
-        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-        {
-            // Unreadable now: it counts as unconfirmed, and is kept and sent.
-        }
-        Update(path, r => r with { ConfirmedHash = start ?? r.ConfirmedHash, AdoptingSince = null });
-    }
 
     /// <summary>The copy's state for the channel, or an unknown one.</summary>
     public CopyState StateOf(string path) => StateOf(path, pending: null);
@@ -457,26 +472,26 @@ public sealed class CopyCycle : IDisposable
         return open.Count(s => HasUnsent(s, sendsCount: true));
     }
 
-    /// <summary>The copy's <see cref="CopyState.Pending"/>: a save confirmed counts as gone even while its job finishes.</summary>
+    /// <summary>The copy's <see cref="CopyState.Pending"/>: a save answered counts as gone even while its job finishes.</summary>
     private bool PendingOf(Session s) => HasUnsent(s, sendsCount: false);
 
     /// <summary>
     /// Whether the copy has changes on their way to Healdan (<see cref="Unsent"/>). With <paramref name="sendsCount"/>,
-    /// a job still running counts even once its save is confirmed, as a check-in's release can follow it, and Sign Out
-    /// mustn't revoke the token under it; without, a confirmed save counts as gone, so <c>/v1/saved</c> can answer the
-    /// moment Healdan has the content.
+    /// a job still running counts even once its save is answered, as a check-in's release can follow it, and Sign Out
+    /// mustn't revoke the token under it; without, an answered save counts as gone, so <c>/v1/saved</c> can answer the
+    /// moment Healdan has the content, or has refused it.
     /// </summary>
     private bool HasUnsent(Session s, bool sendsCount)
     {
         string? last;
-        bool version, confirmed;
+        bool version, answered;
         lock (_gate)
         {
             if (s.ReadOnly || s.Ended)
                 return false;
-            (last, version, confirmed) = (s.LastHash, s.NextKind is not null, s.Confirmed);
+            (last, version, answered) = (s.LastHash, s.NextKind is not null, s.Answered);
         }
-        if (version || s.Queue.Queued is not null || (!s.Queue.Idle && (sendsCount || !confirmed)))
+        if (version || s.Queue.Queued is not null || (!s.Queue.Idle && (sendsCount || !answered)))
             return true;
         if (s.Closing || Record(s.Path) is not { } record || !File.Exists(s.Path))
             return false;
@@ -887,7 +902,7 @@ public sealed class CopyCycle : IDisposable
                 // the first write to settle, its starting point, not a save (spec §5.6). Content that differs from it
                 // later is a save.
                 s.Adopting = false;
-                Update(s.Path, r => r with { ConfirmedHash = content.Hash, AdoptingSince = null });
+                Update(s.Path, r => r with { ConfirmedHash = content.Hash });
                 adopted = true;
             }
             else
@@ -916,19 +931,24 @@ public sealed class CopyCycle : IDisposable
             SettleWaiters(s);
     }
 
-    /// <summary>Queues a save; its kind is written to the record first, so a restart knows what was waiting.</summary>
+    /// <summary>
+    /// Queues a save and writes the kind it goes up as to the record, so a restart knows what was waiting. The queue
+    /// decides the kind (a queued Save as New Version's, if this replaces one), and the send's own record writes wait
+    /// for the gate, so the record is written before anything is sent.
+    /// </summary>
     private void Enqueue(Session s, SaveJob job)
     {
         lock (_gate)
         {
             s.LastHash = job.Hash;
-            s.Confirmed = false;
+            s.Answered = false;
+            s.Queue.Enqueue(job);
             if (job.Content is not null)
                 Update(s.Path, r => r with { PendingKind = job.Kind });
-            s.Queue.Enqueue(job);
         }
     }
 
+    /// <summary>Sends a job once. A failure it doesn't expect is thrown to the queue, which tells <see cref="SaveFailed"/>.</summary>
     private async Task<SaveOutcome> SendAsync(Session s, SaveJob job, CancellationToken ct)
     {
         try
@@ -951,12 +971,6 @@ public sealed class CopyCycle : IDisposable
         catch (Exception e) when (IsTransient(e))
         {
             return SaveOutcome.Retry;
-        }
-        catch (Exception e)
-        {
-            // Not expected; the copy and its record stay, and the next save tries again.
-            Raise(ev => ev.Error($"#{s.DocNumber} couldn't be saved to Healdan: {e.Message}"));
-            return SaveOutcome.Done;
         }
     }
 
@@ -1032,7 +1046,7 @@ public sealed class CopyCycle : IDisposable
             if (s.Adopting && job.Content is not null)
             {
                 s.Adopting = false;
-                Update(s.Path, r => r with { ConfirmedHash = job.Hash, AdoptingSince = null });
+                Update(s.Path, r => r with { ConfirmedHash = job.Hash });
                 s.Adopted.TrySetResult();
             }
         }
@@ -1061,7 +1075,7 @@ public sealed class CopyCycle : IDisposable
             });
             // The newest save: nothing queued behind it (a Save as New Version of the same bytes included).
             if (record is not null && SameHash(job.Hash, s.LastHash) && s.Queue.Queued is null)
-                s.Confirmed = true;
+                s.Answered = true;
             _signInAsked = false;
         }
         if (record is null)
@@ -1117,10 +1131,23 @@ public sealed class CopyCycle : IDisposable
         // Refused for good (403, 404, 413, 422, refused): nothing was stored, and the copy keeps the changes.
         Update(s.Path, r => r with { PendingHash = null });
         Raise(ev => ev.Error($"Healdan refused the save of {Title(record)}: {e.Detail}"));
-        CompleteWaiters(s, StateOf(s.Path, pending: false)); // nothing more goes until the next save
+        GaveUp(s, job);
         if (job.CheckIn)
             Forget(s);
         return SaveOutcome.Done;
+    }
+
+    /// <summary>
+    /// A save that won't go up, refused for good or failed: the copy keeps it, and nothing more goes until the next
+    /// save. <c>/v1/saved</c>'s waiters are answered unless something newer is still to go, such as a save queued
+    /// behind this one, whose confirmation answers them instead (re-review).
+    /// </summary>
+    private void GaveUp(Session s, SaveJob job)
+    {
+        lock (_gate)
+            if (SameHash(job.Hash, s.LastHash) && s.Queue.Queued is null)
+                s.Answered = true;
+        SettleWaiters(s);
     }
 
     private bool IsClosing(Session s)
@@ -1417,8 +1444,12 @@ public sealed class CopyCycle : IDisposable
         }
     }
 
-    private void SaveFailed(Exception e) =>
-        Raise(ev => ev.Error("The helper hit a problem sending a save; the copy keeps it: " + e.Message));
+    /// <summary>A send that threw what it doesn't expect: the copy and its record stay, and the next save tries again.</summary>
+    private void SaveFailed(Session s, SaveJob job, Exception e)
+    {
+        Raise(ev => ev.Error($"#{s.DocNumber} couldn't be saved to Healdan, and its copy keeps it: {e.Message}"));
+        GaveUp(s, job);
+    }
 
     /// <summary>
     /// Tells the app something. A handler that throws is reported through <see cref="ICycleEvents.Error"/> once, and

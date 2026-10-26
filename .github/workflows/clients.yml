@@ -4,7 +4,9 @@ name: Clients
 # Python tests on Ubuntu. A helper-v* tag, or a run by hand, also packages the macOS helper (spec §5.12).
 #
 # No paths filter: the Clients check should be required, so every pull request runs the workflow and the test jobs skip
-# themselves when code-changed.sh says nothing under clients/ changed. The Clients job, the check, then passes at once.
+# themselves when code-changed.sh says the clients didn't change: nothing under clients/, this workflow or the API
+# contract (healdan-api's openapi.yaml, which the helper's contract tests read). The Clients job, the check, then passes
+# at once.
 # Pull requests never package: that needs the signing secrets, and Clients doesn't wait for it.
 
 on:
@@ -85,8 +87,8 @@ jobs:
         run: python3 -m unittest discover -s clients/libreoffice/tests -v
 
   # The check to require in master's ruleset. It passes when the test jobs passed, or when they were skipped because
-  # nothing under clients/ changed. It runs even when the run is cancelled, and then fails, so a cancelled run can't
-  # count as a pass.
+  # the clients didn't change (nothing under clients/, this workflow or the API contract). It runs even when the run is
+  # cancelled, and then fails, so a cancelled run can't count as a pass.
   clients:
     name: Clients
     needs: [ changes, helper, extension ]

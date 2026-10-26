@@ -999,6 +999,27 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Fact]
+    public async Task AQueuedSaveAsNewVersionStaysAVersionWhenSavedOver()
+    {
+        // The re-review's sequence: A goes up, Save as New Version queues a version job behind it, and the user saves
+        // again before A finishes. B takes the queued job's place, and goes up as the version.
+        var (cycle, path) = await OpenAsync();
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        cycle.MarkNextVersion(path);
+        await Task.Delay(Fast.Settle * 3);
+        FakeApp.Write(path, "B");
+        await Task.Delay(Fast.Settle * 3);
+        Assert.Equal("version", Store.Find(path)!.Value.Item2.PendingKind); // what a restart would send B as
+        _server.OpenSaves();
+
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v2.0", "B as the new version");
+        await Task.Delay(Quiet);
+        Assert.Equal([("A", "snapshot"), ("B", "version")], _server.Saves.Select(s => (s.Content, s.Kind)));
+    }
+
+    [Fact]
     public async Task SavedDuringAnOutageSaysItsPendingThenMovesOn()
     {
         var (cycle, path) = await OpenAsync();
@@ -1016,6 +1037,56 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Equal("Lease agreement #5 v1.1", after.Title);
         Assert.False(after.Pending);
         Assert.False(cycle.StateOf(path).Pending);
+    }
+
+    [Fact]
+    public async Task SavedAfterARefusedSaveEndsOnTheSaveQueuedBehindIt()
+    {
+        // The re-review's case: A is refused for good while B waits behind it. The answer after save B is B's version.
+        var (cycle, path) = await OpenAsync();
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        FakeApp.Write(path, "B");
+        var afterB = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+        await Task.Delay(Fast.Settle * 3);
+        _server.RefuseNextSave();
+        _server.OpenSaves();
+
+        var state = await afterB;
+        Assert.Equal("Lease agreement #5 v1.1", state.Title);
+        Assert.False(state.Pending);
+        Assert.Equal(["refused", "stored 1.1"], _server.Saves.Select(s => s.Outcome));
+
+        // A refused save with nothing behind it answers at once: nothing more goes until the next save.
+        _server.RefuseNextSave();
+        var started = DateTime.UtcNow;
+        FakeApp.Write(path, "C");
+        var afterC = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5));
+        Assert.Equal("Lease agreement #5 v1.1", afterC.Title);
+        Assert.False(afterC.Pending);
+        Assert.True(Store.HasUnconfirmedChanges(path)); // the copy keeps C
+    }
+
+    [Fact]
+    public async Task SavedAfterASaveThatBrokeAnswersAtOnce()
+    {
+        var (cycle, path) = await OpenAsync();
+        _server.BreakNextSave();
+        var started = DateTime.UtcNow;
+        FakeApp.Write(path, "A");
+
+        var state = await cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10));
+
+        Assert.True(DateTime.UtcNow - started < TimeSpan.FromSeconds(5)); // not the whole wait
+        Assert.Equal("Lease agreement #5 v1.0", state.Title);
+        Assert.False(state.Pending);
+        Assert.Contains("#5 couldn't be saved to Healdan", Assert.Single(_events.Errors));
+        Assert.True(Store.HasUnconfirmedChanges(path)); // the copy keeps A, and the next save tries again
+
+        FakeApp.Write(path, "B");
+        await Wait.Until(() => _server.Doc(5).Content == "B" && !Store.HasUnconfirmedChanges(path), "the next save");
     }
 
     [Fact]
@@ -1045,13 +1116,13 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Fact]
-    public async Task ARestartWhileAdoptingDoesntSendTheAdoption()
+    public async Task ARestartWhileAdoptingSendsNothingIfTheCopyIsWhatWasFiled()
     {
         var first = Cycle();
         var temp = Path.Combine(_root, "new.odt");
         File.WriteAllText(temp, "filed");
         var state = await first.AdoptNewAsync(temp, new NewDocument(9, "Letter.odt", new JsonObject(), false), null);
-        FakeApp.Write(state.Path, "adopted by the app");
+        FakeApp.Write(state.Path, "filed");
         File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
         first.Dispose(); // stopped before the adoption had settled, and before /v1/adopted
         _app.Running = true;
@@ -1059,24 +1130,24 @@ public sealed class CopyCycleTests : IDisposable
         await Cycle().ResumeAsync();
         await Task.Delay(Fast.Settle * 4);
 
-        Assert.Empty(_server.Saves); // not sent as an identical version
+        Assert.Empty(_server.Saves); // Healdan has these bytes
         Assert.False(Store.HasUnconfirmedChanges(state.Path));
         FakeApp.Write(state.Path, "a real save");
         await Wait.Until(() => _server.Doc(100).Content == "a real save", "the next save");
     }
 
     [Fact]
-    public async Task ARestartWhileAdoptingStillSendsALaterSave()
+    public async Task ARestartWhileAdoptingSendsAnythingElse()
     {
-        // The helper stopped while adopting, and the user saved again a while later, while it was down: that save
-        // may be anything, so it goes up rather than being taken for the adoption.
+        // The re-review's case: the helper stopped while adopting, and the user saved moments later, while it was
+        // down. Nothing tells that save from the app's adoption, which the doc ID stamped before storeAsURL makes
+        // differ from the filed file, so it goes up: an identical version at worst, never a lost save.
         var first = Cycle();
         var temp = Path.Combine(_root, "new.odt");
         File.WriteAllText(temp, "filed");
         var state = await first.AdoptNewAsync(temp, new NewDocument(9, "Letter.odt", new JsonObject(), false), null);
         first.Dispose();
         FakeApp.Write(state.Path, "saved while the helper was down");
-        File.SetLastWriteTimeUtc(state.Path, DateTime.UtcNow + TimeSpan.FromMinutes(2));
         File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
         _app.Running = true;
 
@@ -1123,6 +1194,27 @@ public sealed class CopyCycleTests : IDisposable
         FakeApp.Close(path);
         await Wait.Until(() => !File.Exists(path), "checked in and deleted");
         Assert.Empty(cycle.KeptCopies());
+    }
+
+    [Fact]
+    public async Task KeptCopiesReadsACopyAgainOnlyOnceItChanges()
+    {
+        // The menu asks at each rebuild, on the UI thread: a copy nothing looks after, such as the default app's, is
+        // hashed once, not every time.
+        if (OperatingSystem.IsWindows())
+            return; // the unreadable file below is Unix's
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener);
+        await cycle.OpenAsync(7, false);
+        var path = Assert.Single(_opener.Opened);
+        Assert.Empty(cycle.KeptCopies());
+
+        File.SetUnixFileMode(path, UnixFileMode.None); // read again, it would count as changed: unreadable copies are kept
+        Assert.Empty(cycle.KeptCopies());
+
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        File.WriteAllText(path, "annotated");
+        Assert.Equal(path, Assert.Single(cycle.KeptCopies()).Path); // a change is still seen
     }
 
     [Fact]
