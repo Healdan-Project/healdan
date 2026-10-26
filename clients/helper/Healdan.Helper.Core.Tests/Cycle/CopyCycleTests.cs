@@ -217,7 +217,11 @@ public sealed class CopyCycleTests : IDisposable
         var clock = new PausableClock();
         var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
         _server.HoldSaves();
+        // A write in place empties the file first. The clock is stopped until A is in it, so the empty file can't
+        // settle and go up in A's place.
+        clock.Pause();
         FakeApp.Write(path, "A");
+        clock.Resume();
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
 
         // Each write waits until it's queued, so B settles alone and C replaces it, however slow the runner.
@@ -374,7 +378,8 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task AdoptIsNotASave()
     {
-        var cycle = Cycle();
+        var clock = new PausableClock();
+        var cycle = Cycle(Fast with { Clock = clock });
         var temp = Path.Combine(_root, "new.odt");
         File.WriteAllText(temp, "filed");
 
@@ -386,8 +391,11 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Contains("filed 100 checkOut=True", _server.Calls); // always checked out: it stays open
         Assert.NotNull(_server.Doc(100).Hold);
 
-        // The extension stores the open document under the copy's name: its starting point, not a save.
+        // The extension stores the open document under the copy's name: its starting point, not a save. The clock is
+        // stopped while it's written, so the emptied file can't settle first and be taken as the starting point.
+        clock.Pause();
         FakeApp.Write(state.Path, "adopted by the app");
+        clock.Resume();
         File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
         await Wait.Until(() => !Store.HasUnconfirmedChanges(state.Path), "the app's write taken as the starting point");
         await Task.Delay(Quiet);
