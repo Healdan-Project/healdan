@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text;
 
 namespace Healdan.Helper.Core.Cycle;
@@ -147,7 +146,8 @@ internal sealed class SaveWatcher : IDisposable
             lock (_lock)
                 seen = entry.Changes;
             var stamp = FileStamp.Of(entry.Path);
-            var since = Stopwatch.GetTimestamp();
+            var clock = _timings.Clock;
+            var since = clock.GetTimestamp();
             while (true)
             {
                 await Task.Delay(_timings.SizePoll, ct);
@@ -159,11 +159,11 @@ internal sealed class SaveWatcher : IDisposable
                     changes = entry.Changes;
                 if (now != stamp || changes != seen)
                 {
-                    (stamp, seen, since) = (now, changes, Stopwatch.GetTimestamp());
+                    (stamp, seen, since) = (now, changes, clock.GetTimestamp());
                     continue;
                 }
                 // A file that's gone is mid-way through a write-then-rename: wait for it to come back.
-                if (!now.Exists || Stopwatch.GetElapsedTime(since) < _timings.Settle)
+                if (!now.Exists || clock.GetElapsedTime(since) < _timings.Settle)
                     continue;
                 lock (_lock)
                 {

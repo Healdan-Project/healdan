@@ -196,6 +196,11 @@ through `channel.json`, and quits.
 
 - **The helper's core** has tests for each part, the cycle's failure cases included, against a fake server
   (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`).
+- **The cycle's tests wait for what they need,** not for a fixed time, so a slow runner can't change what they see.
+  `Wait.Until` polls for it (a confirmation, a save reaching `FakeApi`, or one queued, through the internal
+  `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`
+  in `CycleTimings.Clock`) between them. It stops it too while a write in place that must go up whole is made,
+  since the write empties the file first.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.
 - **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke

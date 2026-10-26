@@ -472,6 +472,18 @@ public sealed class CopyCycle : IDisposable
         return open.Count(s => HasUnsent(s, sendsCount: true));
     }
 
+    /// <summary>
+    /// The hash of the copy's save waiting for the one going up, or null. For the tests, which wait on it rather than
+    /// guess how long a settle takes.
+    /// </summary>
+    internal string? QueuedHash(string path)
+    {
+        Session? s;
+        lock (_gate)
+            s = Find(path);
+        return s?.Queue.Queued?.Hash;
+    }
+
     /// <summary>The copy's <see cref="CopyState.Pending"/>: a save answered counts as gone even while its job finishes.</summary>
     private bool PendingOf(Session s) => HasUnsent(s, sendsCount: false);
 

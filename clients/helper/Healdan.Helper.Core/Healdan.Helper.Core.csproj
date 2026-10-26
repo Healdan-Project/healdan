@@ -3,4 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>Healdan.Helper.Core</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- For the cycle's test-only seams: a copy's queued save, and a settle clock the tests can stop. -->
+    <InternalsVisibleTo Include="Healdan.Helper.Core.Tests" />
+  </ItemGroup>
 </Project>
