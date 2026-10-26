@@ -938,10 +938,10 @@ public sealed class CopyCycle : IDisposable
         {
             s.LastHash = job.Hash;
             s.Confirmed = false;
-            s.Queue.Enqueue(job);
-            // Still under the gate: the send writes its saveId and kind under it too, so its write comes after this one.
-            if (job.Content is not null)
-                Update(s.Path, r => r with { PendingKind = job.Kind });
+            // Written while the queue can't hand the job to the send yet, so the send's first read of the record comes
+            // after this write (Windows can refuse a read while the record file is being replaced). The write takes
+            // the gate, already held here, so it waits for nobody who holds the queue's lock.
+            s.Queue.Enqueue(job, job.Content is null ? null : j => Update(s.Path, r => r with { PendingKind = j.Kind }));
         }
     }
 
@@ -985,18 +985,28 @@ public sealed class CopyCycle : IDisposable
                 // A save went up before (and before a restart) whose answer never came: repeat its saveId, so the
                 // server doesn't store it twice nor refuse it as version-moved (Review Focus 1, 5).
                 job.SaveId = record.LastSaveId;
-                job.Uncertain = !SameHash(job.Hash, record.PendingHash);
+                // Repeated as the kind it went as. A version waiting behind a snapshot goes after it, even with the
+                // same bytes; a snapshot behind a version needs nothing more unless its bytes are newer.
+                job.RepeatKind = record.SentKind ?? job.Kind;
+                job.Uncertain = !SameHash(job.Hash, record.PendingHash) || (job.Kind == NewVersion && job.RepeatKind != NewVersion);
             }
             else
             {
                 job.SaveId = Guid.NewGuid().ToString();
-                // Written down before it's sent, so a retry after a crash repeats it.
-                record = Update(s.Path, r => r with { LastSaveId = job.SaveId, PendingHash = job.Hash, PendingKind = job.Kind }) ?? record;
+                // Written down before it's sent, so a retry after a crash repeats it. A save queued behind it keeps
+                // its kind as the newest still to go.
+                record = Update(s.Path, r => r with
+                {
+                    LastSaveId = job.SaveId,
+                    PendingHash = job.Hash,
+                    SentKind = job.Kind,
+                    PendingKind = s.Queue.Queued?.Kind ?? job.Kind
+                }) ?? record;
             }
             job.IfVersion = record.Version;
         }
 
-        var request = new SaveRequest(job.Kind, !job.CheckIn, record.DocumentName, job.IfVersion!, true, job.SaveId);
+        var request = new SaveRequest(job.RepeatKind ?? job.Kind, !job.CheckIn, record.DocumentName, job.IfVersion!, true, job.SaveId);
         DocumentView doc;
         try
         {
@@ -1009,7 +1019,8 @@ public sealed class CopyCycle : IDisposable
 
         if (job.Uncertain)
         {
-            // The answer doesn't say which bytes the server kept under that saveId: send these again, as a new save.
+            // The answer doesn't say which bytes the server kept under that saveId, or it went as a snapshot while this
+            // is a version: send these again, as a new save of this job's kind.
             var moved = Update(s.Path, r => r with
             {
                 DocumentName = doc.Name, // renamed meanwhile in the web page: the resend keeps the new name
@@ -1017,7 +1028,7 @@ public sealed class CopyCycle : IDisposable
                 FileVersion = doc.FileVersion,
                 PendingHash = null
             }) ?? record;
-            (job.Uncertain, job.SaveId, job.Resent) = (false, null, false);
+            (job.Uncertain, job.SaveId, job.Resent, job.RepeatKind) = (false, null, false, null);
             return await SaveAsync(s, job, moved, ct);
         }
 

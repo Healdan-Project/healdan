@@ -51,9 +51,15 @@ internal sealed class SaveJob
 
     /// <summary>
     /// The saveId was first sent, before a restart, with other bytes, so a <c>201</c> doesn't say which the server
-    /// kept: these bytes are then sent again under a new saveId.
+    /// kept, or as a snapshot while this job is a version: these bytes are then sent again under a new saveId.
     /// </summary>
     public bool Uncertain { get; set; }
+
+    /// <summary>
+    /// While the job repeats a saveId first sent before, the kind it was sent as (<see cref="Copies.CopyRecord.SentKind"/>),
+    /// which the repeat keeps; then null, and the job goes as its own <see cref="Kind"/>.
+    /// </summary>
+    public string? RepeatKind { get; set; }
 
     /// <summary>It was sent again once after <c>version-moved</c>; a second refusal ends the check-out here.</summary>
     public bool Resent { get; set; }
@@ -94,15 +100,21 @@ internal sealed class SaveQueue : IDisposable
     /// Version, this job takes its <see cref="SaveJob.Kind"/>: its content holds that save's too, and the user still
     /// asked for a version.
     /// </summary>
-    public void Enqueue(SaveJob job)
+    /// <param name="settled">
+    /// Told of the job once its kind is settled, before it can be sent, so what it writes down is there for the send;
+    /// told too once the queue has stopped, so a restart still knows what was waiting. It runs under the queue's lock,
+    /// so it mustn't wait for anything that holds the lock.
+    /// </param>
+    public void Enqueue(SaveJob job, Action<SaveJob>? settled = null)
     {
         lock (_lock)
         {
-            if (_stop.IsCancellationRequested)
-                return;
             // Decided under the lock, so the job replaced is one that won't start: one taken meanwhile is sent as it is.
             if (_queued is { Kind: "version" })
                 job.Kind = "version";
+            settled?.Invoke(job);
+            if (_stop.IsCancellationRequested)
+                return;
             _queued = job;
             if (_looping)
                 return;
