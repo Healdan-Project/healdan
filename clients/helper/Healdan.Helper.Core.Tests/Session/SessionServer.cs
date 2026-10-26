@@ -20,6 +20,9 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
     /// <summary>When set, sign-ins wait for it: received, but unanswered.</summary>
     public TaskCompletionSource? HoldSignIns { get; set; }
 
+    /// <summary>When set, Sign Out's revoke is answered with this status and no body, as a server error or a proxy would.</summary>
+    public HttpStatusCode? RevokeStatus { get; set; }
+
     public IReadOnlyList<string> Calls
     {
         get
@@ -56,7 +59,7 @@ public sealed class SessionServer(FakeApi documents) : DelegatingHandler(documen
                 return Json(HttpStatusCode.Created,
                     $$"""{"token":"{{IssuedToken}}","id":7,"name":"{{(string?)body["name"]}}","expiresAt":"2027-01-01T00:00:00Z","user":{{User}}}""");
             case ("DELETE", "/api/v1/auth/tokens/current"):
-                return new HttpResponseMessage(HttpStatusCode.NoContent);
+                return new HttpResponseMessage(RevokeStatus ?? HttpStatusCode.NoContent);
             case ("GET", "/api/v1/me"):
                 if (documents.Unauthorized || request.Headers.Authorization is null)
                     return Json(HttpStatusCode.Unauthorized,

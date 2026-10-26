@@ -27,6 +27,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>The Sign In window waits this long for the server, not the API client's ten minutes.</summary>
     private static readonly TimeSpan SignInTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>When saves can't go up during Sign Out, the check that Healdan answers at all waits this long.</summary>
+    private static readonly TimeSpan ReachTimeout = TimeSpan.FromSeconds(10);
+
     private readonly HelperPaths _paths;
     private readonly IKeychain _keychain;
     private readonly DeviceIdentity _device;
@@ -288,7 +291,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>
     /// Sign Out (spec §5.2): sends every unsent save first, settling ones and those going up included, then revokes the
     /// token and stops. Copies stay on this computer for the next sign-in. If saves are still unsent after a while, or
-    /// the token can't be revoked, the user is told and stays signed in; a Quit meanwhile keeps the sign-in too.
+    /// Healdan refuses the revoke, the user is told and stays signed in; a Quit meanwhile keeps the sign-in too. When
+    /// Healdan can't be reached at all, a server gone for good would keep the helper signed in to it for ever, so the
+    /// user is asked whether to forget the sign-in on this computer only.
     /// </summary>
     public async Task SignOutAsync()
     {
@@ -306,28 +311,55 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             }
             try
             {
-                await new SignIn(api, _keychain, _device).SignOutAsync(() => FlushAsync(cycle));
-            }
-            catch (OperationCanceledException) when (Disposed)
-            {
-                _log.Info("Quit during Sign Out: the sign-in is kept, and the next start sends what's unsent");
-                return;
-            }
-            catch (Exception e) when (e is InvalidOperationException or ApiException or HttpRequestException or TaskCanceledException or IOException)
-            {
-                _log.Warn("Sign Out didn't finish: " + e.Message);
-                _notifier.Notify(Helper, e is InvalidOperationException
-                    ? e.Message
-                    : "Healdan Helper couldn't sign out, as Healdan can't be reached. You're still signed in.");
-                return;
+                var signIn = new SignIn(api, _keychain, _device);
+                bool reached;
+                var unsent = 0;
+                try
+                {
+                    await signIn.SignOutAsync(() => FlushAsync(cycle));
+                    reached = true;
+                }
+                catch (OperationCanceledException) when (Disposed)
+                {
+                    _log.Info("Quit during Sign Out: the sign-in is kept, and the next start sends what's unsent");
+                    return;
+                }
+                catch (UnsentSavesException e)
+                {
+                    if (await ReachableAsync(api))
+                    {
+                        _log.Warn("Sign Out didn't finish: " + e.Message);
+                        _notifier.Notify(Helper, e.Message);
+                        return;
+                    }
+                    (reached, unsent) = (false, e.Count);
+                }
+                catch (Exception e) when (Unreachable(e))
+                {
+                    _log.Warn($"Sign Out couldn't revoke the token: Healdan can't be reached ({e.GetType().Name}: {e.Message})");
+                    reached = false;
+                }
+                catch (Exception e) when (e is InvalidOperationException or ApiException)
+                {
+                    _log.Warn("Sign Out didn't finish: " + e.Message);
+                    _notifier.Notify(Helper, e is ApiException a
+                        ? $"Healdan Helper couldn't sign out, as Healdan answered {a.Status}. You're still signed in."
+                        : e.Message);
+                    return;
+                }
+                if (!reached)
+                {
+                    await SignOutHereAsync(signIn, api, unsent);
+                    return;
+                }
+                _log.Info("Signed out");
+                Stop(SignInToOpen);
             }
             finally
             {
                 lock (_gate)
                     _signingOut = false;
             }
-            _log.Info("Signed out");
-            Stop(SignInToOpen);
         }
         finally
         {
@@ -744,9 +776,79 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         if (Disposed)
             throw new OperationCanceledException("Quitting during Sign Out."); // a disposed cycle has nothing open, not nothing unsent
         if (left > 0)
-            throw new InvalidOperationException(left == 1
-                ? "A save is still waiting to go to Healdan, so you're still signed in. Sign out once it has gone."
-                : $"{left} saves are still waiting to go to Healdan, so you're still signed in. Sign out once they have gone.");
+            throw new UnsentSavesException(left);
+    }
+
+    /// <summary>
+    /// Sign Out couldn't reach Healdan (spec §5.2): asks whether to forget the sign-in on this computer only, and does
+    /// so on a yes. Unsent saves stay with their copies, for the next sign-in to this server. A Quit meanwhile, or a
+    /// keychain that refuses, keeps the sign-in.
+    /// </summary>
+    private async Task SignOutHereAsync(SignIn signIn, HealdanApi api, int unsent)
+    {
+        var server = LinkName(api);
+        _log.Info($"Asking whether to sign out on this computer only, as {server} can't be reached ({unsent} save(s) unsent)");
+        bool here;
+        try
+        {
+            here = await _windows.SignOutHereAsync(server, unsent);
+        }
+        catch (Exception e)
+        {
+            _log.Error("The Sign Out on This Computer Only window failed", e);
+            here = false;
+        }
+        if (!here || Disposed)
+        {
+            _log.Info("Stayed signed in to " + server);
+            return;
+        }
+        try
+        {
+            signIn.ForgetHere();
+        }
+        catch (InvalidOperationException e)
+        {
+            _log.Warn("The keychain couldn't forget the sign-in: " + e.Message);
+            _notifier.Notify(Helper, e.Message);
+            return;
+        }
+        _log.Info($"Signed out on this computer only: {server} still accepts the token until it expires");
+        Stop(SignInToOpen);
+    }
+
+    /// <summary>Whether Healdan answers at all, asked when saves couldn't go up during Sign Out.</summary>
+    private static async Task<bool> ReachableAsync(HealdanApi api)
+    {
+        using var timeout = new CancellationTokenSource(ReachTimeout);
+        try
+        {
+            await api.ServerAsync(timeout.Token);
+            return true;
+        }
+        catch (Exception e) when (Unreachable(e))
+        {
+            return false;
+        }
+        catch (Exception e) when (e is ApiException or JsonException)
+        {
+            return true; // something answered
+        }
+    }
+
+    /// <summary>
+    /// No answer from Healdan: no connection, no answer in time, or a proxy whose server has gone (502, 503, 504). A
+    /// refusal Healdan sends itself is an answer.
+    /// </summary>
+    private static bool Unreachable(Exception e) =>
+        e is HttpRequestException or OperationCanceledException or IOException || e is ApiException { Status: 502 or 503 or 504 };
+
+    /// <summary>Sign Out's flush ended with saves still to go up.</summary>
+    private sealed class UnsentSavesException(int count) : InvalidOperationException(count == 1
+        ? "A save is still waiting to go to Healdan, so you're still signed in. Sign out once it has gone."
+        : $"{count} saves are still waiting to go to Healdan, so you're still signed in. Sign out once they have gone.")
+    {
+        public int Count { get; } = count;
     }
 
     // --- What the cycle tells the user -----------------------------------------------------------------------------

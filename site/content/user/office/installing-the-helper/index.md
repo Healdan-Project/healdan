@@ -125,6 +125,9 @@ Click Healdan's icon in the menu bar.
 ![The Healdan Helper Settings window: the server https://healdan.example, read-only; Documents, Spreadsheets and Presentations each opening in LibreOffice; Start at Sign-In on; and the LibreOffice extension's version](settings.png)
 
 - **Server:** the server the helper is signed in to. To use another, sign out, then sign in with its address.
+  Before you do, close your documents, and check the menu shows no saves waiting and nothing Not Yet in Healdan.
+  Local copies left from the old server carry on against the new one, where the same doc # can be a different
+  document.
 - **Open Each Kind of File In:** documents, spreadsheets and presentations open in LibreOffice. Other files, such as
   PDFs, open read-only in your Mac's usual app for them.
 - **Start at Sign-In:** after your first sign-in, the helper starts whenever you sign in to your Mac. To stop it,
@@ -136,10 +139,23 @@ Click Healdan's icon in the menu bar.
 Choose **Sign Out** in the helper's menu.
 
 - **Your saves go first.** The helper sends anything still waiting, and waits up to half a minute for it. If
-  Healdan can't take it by then, you stay signed in, and a notice says so.
+  Healdan can't take it by then, you stay signed in, and a notice says so. If Healdan doesn't answer at all, see
+  [If Healdan Can't Be Reached](#if-healdan-cant-be-reached).
 - **Signing out ends this Mac's sign-in** on the server too, and removes it from the keychain.
 - **While you're signed out,** LibreOffice's Open and Save show LibreOffice's own boxes, with a notice that the
   helper isn't running.
+
+### If Healdan Can't Be Reached
+
+When the helper gets no answer from the server, it can't end the sign-in there, so it asks whether to sign out on
+this Mac only. That's for a server that's gone for good, or one you're moving away from.
+
+- **Stay Signed In** keeps everything as it was. Choose it if you're only offline, and sign out once Healdan is
+  back.
+- **Sign Out on This Computer** removes the sign-in from your Mac's keychain and stops the helper, as Sign Out does.
+  The server still counts this Mac as signed in until the sign-in expires or you change your password.
+- **Saves that never reached Healdan** stay on your Mac, in the helper's `Copies` folder, and the window says how
+  many there are. The helper sends them the next time you sign in to the same server.
 
 ## Removing the Helper
 

@@ -205,7 +205,7 @@ The name "Healdan Helper" is a call; the owner may rename it.
 - **The device id** is a random id the helper makes once per computer and user, and keeps beside its settings. It isn't a secret. Signing in again, after a `401`, a password change or Sign Out, sends the same id, so the documents this computer holds stay its own (call).
 - **The token lives in the system keychain:** the macOS Keychain through Security.framework, and the Secret Service (GNOME Keyring) on Ubuntu. Never in a file. On macOS the signed helper reads it back with no prompt at every start, including after a rebuild signed with the same Developer ID (the trial).
 - A `401` at any time means the token has expired or been revoked; the helper asks for the password again and keeps any saves waiting meanwhile.
-- Sign Out revokes the token (`DELETE /auth/tokens/current`), after the helper has sent any waiting saves or the user has chosen to leave them as local copies. (changed in the build: Sign Out asks nothing. It tries every unsent save at once, waits up to 30 seconds for them, and keeps the sign-in, with a notice, if any is still unsent; quitting meanwhile keeps it too. After Sign Out the channel stops, so the extension falls back to LibreOffice's own commands, §6.2.)
+- Sign Out revokes the token (`DELETE /auth/tokens/current`), after the helper has sent any waiting saves or the user has chosen to leave them as local copies. (changed in the build: Sign Out asks nothing. It tries every unsent save at once, waits up to 30 seconds for them, and keeps the sign-in, with a notice, if any is still unsent; quitting meanwhile keeps it too. After Sign Out the channel stops, so the extension falls back to LibreOffice's own commands, §6.2. Changed after the build: a revoke gets 30 seconds. When Healdan can't be reached at all (no connection, no answer in time, or a proxy's 502, 503 or 504; after unsent saves, a 10-second `GET /server` decides), Sign Out on This Computer Only? (§5.8) asks whether to forget the sign-in here and leave the token on the server until it expires, so a server that's gone for good doesn't keep the helper signed in to it for ever. Unsent saves stay with their copies, for the next sign-in to that server.)
 - M4 replaces the password with the identity provider's pop-up, ending in the same device token (M2 §5.6).
 
 ### 5.3 Links from the web page
@@ -327,6 +327,8 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 **Checked out on another computer** (mockup reviewed, §5.10).
 
 **After a crash** (the trial's window): "<title> closed unexpectedly. It's still checked out to you, and your local copy is kept." with Reopen and Send and Check In.
+
+**Sign Out on This Computer Only?** (added after the build, §5.2): "Healdan at <server> can't be reached", what forgetting the sign-in here leaves on the server, and how many saves never reached Healdan. Sign Out on This Computer, and Stay Signed In, the default.
 
 **Sign In** and **Settings** (the server's address, which app opens each kind of file, §5.11) (call). (changed in the build: the server's address is read-only in Settings, which says to sign out and in again to change it, as there's one server per helper. Settings also says whether the helper starts at sign-in, and which version of the LibreOffice extension is installed and how.)
 

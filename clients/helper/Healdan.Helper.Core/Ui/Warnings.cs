@@ -2,7 +2,7 @@ using Healdan.Helper.Core.Browse;
 
 namespace Healdan.Helper.Core.Ui;
 
-/// <summary>What the two warning windows say (spec §5.8, §5.10), in the owner's words.</summary>
+/// <summary>What the warning windows say (spec §5.2, §5.8, §5.10), the first two in the owner's words.</summary>
 public static class Warnings
 {
     /// <param name="deviceName">The device's name as the hold has it, such as <c>Healdan Helper on MacBook</c>.</param>
@@ -22,4 +22,19 @@ public static class Warnings
     public static string Crashed(string title, bool readOnly) => readOnly
         ? $"{title} closed unexpectedly. It was read-only, so nothing is lost."
         : $"{title} closed unexpectedly. It's still checked out to you, and your local copy is kept.";
+
+    /// <summary>Sign Out couldn't reach Healdan to revoke the token (spec §5.2).</summary>
+    /// <param name="server">The server's host, and its port when it isn't the usual one.</param>
+    /// <param name="unsent">How many copies have a save that never reached Healdan.</param>
+    public static SignOutHereWarning SignOutHere(string server, int unsent) => new(
+        $"Healdan at {server} can't be reached",
+        "Healdan Helper can't end this computer's sign-in there. If the server has gone for good, or you're moving to "
+        + "another one, it can forget the sign-in on this computer instead. Healdan still counts this computer as signed "
+        + "in until the sign-in expires or you change your password.",
+        unsent switch
+        {
+            0 => null,
+            1 => "1 save hasn't reached Healdan. Its copy stays on this computer, in Healdan Helper's Copies folder.",
+            _ => $"{unsent} saves haven't reached Healdan. Their copies stay on this computer, in Healdan Helper's Copies folder."
+        });
 }

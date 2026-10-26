@@ -407,6 +407,115 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task SignOutOffersToForgetTheSignInHereWhenHealdanCantBeReached()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+        _windows.OnSignOutHere = (_, _) => Task.FromResult(true);
+
+        await session.SignOutAsync();
+
+        Assert.Equal([("healdan.test", 0)], _windows.SignOutHeres);
+        Assert.Empty(_keychain.Items);
+        Assert.False(session.SignedIn);
+        Assert.False(session.Started);
+        Assert.False(File.Exists(Paths.Channel));
+        Assert.Equal(Account, HelperSettings.Load(Paths).Server); // the Sign In window offers it, and takes another
+        LogIndex("Signed out on this computer only");
+    }
+
+    [Fact]
+    public async Task StayingSignedInWhenHealdanCantBeReachedKeepsTheSignIn()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+
+        await session.SignOutAsync(); // the user chooses Stay Signed In
+
+        Assert.Single(_windows.SignOutHeres);
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.True(session.SignedIn);
+        Assert.True(session.Started);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadGateway)]
+    [InlineData(HttpStatusCode.ServiceUnavailable)]
+    [InlineData(HttpStatusCode.GatewayTimeout)]
+    public async Task AProxyWhoseServerHasGoneCountsAsHealdanUnreachable(HttpStatusCode status)
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _http.RevokeStatus = status;
+        _windows.OnSignOutHere = (_, _) => Task.FromResult(true);
+
+        await session.SignOutAsync();
+
+        Assert.Single(_windows.SignOutHeres);
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public async Task ARefusalHealdanAnswersKeepsTheSignInWithoutOfferingToForgetIt()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _http.RevokeStatus = HttpStatusCode.InternalServerError;
+
+        await session.SignOutAsync();
+
+        Assert.Empty(_windows.SignOutHeres);
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.True(session.SignedIn);
+        Assert.Contains("You're still signed in", _notifier.All);
+        Assert.DoesNotContain("can't be reached", _notifier.All);
+    }
+
+    [Fact]
+    public async Task SignOutWithASaveThatCantReachHealdanSaysItsCopyStays()
+    {
+        SignedInBefore();
+        var session = Make(signOutFlush: TimeSpan.FromMilliseconds(300));
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        _server.Down = true;
+        FakeApp.Write(path, "an edit that can't go up");
+        await Wait.Until(() => _notifier.All.Contains("A save is waiting for Healdan"), "the save waiting");
+        _windows.OnSignOutHere = (_, _) => Task.FromResult(true);
+
+        await session.SignOutAsync();
+
+        Assert.Equal([("healdan.test", 1)], _windows.SignOutHeres);
+        Assert.Empty(_keychain.Items);
+        Assert.False(session.Started);
+        Assert.Equal("an edit that can't go up", File.ReadAllText(path)); // the next sign-in to this server sends it
+    }
+
+    [Fact]
+    public async Task QuittingWhileSignOutAsksKeepsTheSignIn()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+        _windows.OnSignOutHere = (_, _) =>
+        {
+            session.Dispose(); // Quit while the window is up
+            return Task.FromResult(true);
+        };
+
+        await session.SignOutAsync();
+
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+    }
+
+    [Fact]
     public async Task ASignInThatFinishesAfterItsWindowClosedStillStarts()
     {
         _http.HoldSignIns = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
