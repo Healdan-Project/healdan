@@ -1,4 +1,5 @@
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -10,6 +11,12 @@ public final class ConfigPlan {
     public static final String HOME = "/opt/logicaldoc";
 
     private static final String REPO = HOME + "/repository";
+
+    /**
+     * Describe the image rather than the install, so every boot takes them from the image's defaults: an upgrade
+     * would otherwise keep reporting the release the conf file was first written by.
+     */
+    public static final List<String> IMAGE_KEYS = List.of("product.release", "product.year");
 
     private ConfigPlan() {
     }

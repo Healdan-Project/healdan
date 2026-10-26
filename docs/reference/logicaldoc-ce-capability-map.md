@@ -1,8 +1,9 @@
-# LogicalDOC CE 9.3.1: capability map for Healdan
+# LogicalDOC CE 9.3.2: capability map for Healdan
 
 - **Date:** 2026-10-16
 - **Method.** Three read-only code surveys of this repository, run during the roadmap session (see [`docs/ROADMAP.md`](../ROADMAP.md)). Nothing was run against a live server. Claims marked **✔ checked** were re-read in the source by hand. Treat everything else as a well-sourced lead and confirm it before relying on it.
 - **Upstream merges.** This reflects the code at merge `1c2389e3d` (upstream `3085e45c3`). Line numbers will drift.
+- **9.3.2.** Rechecked on 2026-10-26 against the 9.3.2 sync ([#80](https://github.com/Healdan-Project/healdan/pull/80), upstream `cfebaee9d`), which changed nothing this map records: the release number, Java 25 source, two stream leaks closed in `MailUtil` and `EMailSender`, a copiable anonymous URL and wider password fields.
 - **M3.** Updated on 2026-10-25, when M3's first phase was built: §2.3 adds Healdan's Comments property and how it's searched, §2.6 the API's favourites, and §5.1 Open in App and the Healdan Helper. The [M3 plan](../superpowers/plans/2026-10-24-m3-office-integration.md) has the rulings and follow-ups.
 - **M2.** Updated on 2026-10-24, when M2 was built: the sign-in throttle is **Fixed** (§5.4, §6), §4.1 points to Healdan's own API, and §6 adds what the build found.
 - **M1.** Updated on 2026-10-21, when M1 was built (`4d1b2ca2d`). The CE gaps M1 fixed are marked **Fixed in M1**, and §6 adds the CE defects M1 fixed or found. The [M1 plan](../superpowers/plans/2026-10-17-m1-move-in.md) has the details: its rulings (R1–R131), decision log (D1–D8) and follow-ups.

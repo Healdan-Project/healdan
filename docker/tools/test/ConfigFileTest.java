@@ -49,10 +49,13 @@ public class ConfigFileTest {
         Check.eq("x", probe.getString("probe"), "getString decodes _b64_");
 
         // A later boot applies env keys only: a seed-once key the admin changed must survive. A key the conf
-        // file lacks (as after an upstream sync adds one to the defaults) is filled in from the defaults.
+        // file lacks (as after an upstream sync adds one to the defaults) is filled in from the defaults, and the
+        // image-owned keys an older image wrote are replaced by this image's.
         reread.setProperty("conf.importdir", "/srv/custom-in/");
         reread.setProperty("webservice.enabled", "false");
         reread.remove("cookies.samesite");
+        reread.setProperty("product.release", "9.0.0");
+        reread.setProperty("product.year", "2006-2020");
         reread.write();
         boolean seededAgain = DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
         ContextProperties later = new ContextProperties(conf);
@@ -61,6 +64,14 @@ public class ConfigFileTest {
         Check.eq("false", later.getProperty("webservice.enabled"), "admin-changed default key preserved");
         Check.eq("lax", later.getProperty("cookies.samesite"), "key missing from conf restored from the defaults");
         Check.eq("rotated", later.getProperty("jdbc.password"), "env key re-applied");
+        Properties shipped = new Properties();
+        try (FileInputStream in = new FileInputStream(defaults)) {
+            shipped.load(in);
+        }
+        for (String key : ConfigPlan.IMAGE_KEYS) {
+            Check.isTrue(shipped.getProperty(key) != null, key + " is in the shipped defaults");
+            Check.eq(shipped.getProperty(key), later.getProperty(key), key + " taken from the image");
+        }
 
         // context.properties is written byte-per-char (Latin-1): anything it cannot hold must be refused, not
         // silently corrupted into a value that only fails later when Tomcat logs in.

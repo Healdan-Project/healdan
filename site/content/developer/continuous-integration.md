@@ -128,7 +128,7 @@ docs are skipped), but publishes it to `ghcr.io/healdan-project/healdan` only wh
 2. After the first publish, open the package (the Healdan-Project organisation → Packages → `healdan`). If it's
    private, make it public under Package settings → Change visibility, so pulls work without `docker login`.
 
-To publish a release, push a tag such as `v9.3.1-1`.
+To publish a release, push a tag such as `v9.3.2-1`.
 
 ### Once Images Are Published
 

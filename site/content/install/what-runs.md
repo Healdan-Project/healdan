@@ -18,7 +18,9 @@ weight: 2
 - **On every later start** it re-applies only the settings that come from `.env` (see
   [Configuration](../configuration/)).
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your
-  `context.properties`, such as one a new release introduces, is added. A value you already have is never changed.
+  `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
+  except the release number and copyright years (`product.release` and `product.year`), which always come from the
+  image.
 - **The setup wizard is switched off.** `/setup` answers with HTTP 403, because `.env` configures the database.
 
 ## External Programs

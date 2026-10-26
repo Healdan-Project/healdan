@@ -3,8 +3,9 @@ title: How Healdan Extends LogicalDOC
 weight: 5
 ---
 
-Healdan is a fork of [LogicalDOC Community Edition](https://github.com/logicaldoc/community) 9.3.1. It goes its own
-way, but still merges upstream's fixes, so its own work stays out of upstream's files wherever it can.
+Healdan is a fork of [LogicalDOC Community Edition](https://github.com/logicaldoc/community). It started from 9.3.1
+and follows upstream's releases: the root `pom.xml`'s version is the one it's on. It goes its own way, but still
+merges upstream's fixes, so its own work stays out of upstream's files wherever it can.
 
 ## LogicalDOC's Modules
 
