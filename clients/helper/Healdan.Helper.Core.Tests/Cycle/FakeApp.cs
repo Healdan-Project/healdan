@@ -80,8 +80,8 @@ public sealed class FakeApp : IOfficeApp
         File.Move(temp, path, overwrite: true);
     }
 
-    /// <summary>A save written in pieces: one piece every <paramref name="every"/>.</summary>
-    public static async Task GrowAsync(string path, int pieces, TimeSpan every)
+    /// <summary>A save written in pieces: one piece every <paramref name="every"/>, calling <paramref name="between"/> after each but the last.</summary>
+    public static async Task GrowAsync(string path, int pieces, TimeSpan every, Action? between = null)
     {
         await using var file = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
         for (var i = 0; i < pieces; i++)
@@ -89,7 +89,10 @@ public sealed class FakeApp : IOfficeApp
             await file.WriteAsync(Encoding.UTF8.GetBytes($"piece {i};"));
             await file.FlushAsync();
             if (i < pieces - 1)
+            {
+                between?.Invoke();
                 await Task.Delay(every);
+            }
         }
     }
 
