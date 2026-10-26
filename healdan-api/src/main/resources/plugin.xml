@@ -89,7 +89,7 @@
 ]>
 
 <!-- Healdan's JSON API at /api (ApiServlet registers itself with @WebServlet) -->
-<plugin id="healdan-api" version="9.3.1" class="com.logicaldoc.healdan.api.HealdanApiPlugin">
+<plugin id="healdan-api" version="9.3.2" class="com.logicaldoc.healdan.api.HealdanApiPlugin">
 	<requires>
 		<import plugin-id="logicaldoc-core" />
 		<import plugin-id="healdan-core" />
