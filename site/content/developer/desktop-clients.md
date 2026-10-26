@@ -60,6 +60,7 @@ app.
   a restart there sends an identical version, and never loses a save.
 - **Closing:** the extension's `/v1/closed`, or LibreOffice's lock file, `.~lock.<copy>#`, gone at two polls a second
   apart. Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
+  A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
 - **A crash:** while a copy is open, the helper checks every 5 seconds that `soffice` is running.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link.

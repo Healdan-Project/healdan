@@ -1104,7 +1104,7 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task SavedAfterASaveThatBrokeAnswersAtOnce()
     {
-        // The settle's clock is stopped while A is written in place, so the emptied file isn't the save that breaks.
+        // The settle's clock is stopped while each write in place is made, so the emptied file never goes up instead.
         var clock = new PausableClock();
         var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
         _server.BreakNextSave();
@@ -1121,8 +1121,37 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Contains("#5 couldn't be saved to Healdan", Assert.Single(_events.Errors));
         Assert.True(Store.HasUnconfirmedChanges(path)); // the copy keeps A, and the next save tries again
 
+        clock.Pause();
         FakeApp.Write(path, "B");
+        clock.Resume();
         await Wait.Until(() => _server.Doc(5).Content == "B" && !Store.HasUnconfirmedChanges(path), "the next save");
+        // Nothing says whether A was stored, so B goes under A's saveId, then again as a save of its own: an identical
+        // version, as after a restart mid-send, rather than a check-out ended by a version-moved if A had been.
+        Assert.Equal([("A", "broken"), ("B", "stored 1.1"), ("B", "stored 1.2")],
+            _server.Saves.Select(s => (s.Content, s.Outcome)));
+    }
+
+    [Fact]
+    public async Task ACheckInThatBrokeEndsTheCloseAndKeepsTheCopy()
+    {
+        // The check-in is a close's last job, so nothing else would finish the close: the copy leaves the open copies
+        // with its changes, is listed under Not Yet in Healdan, and the next start checks it in.
+        var (cycle, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromSeconds(30) });
+        FakeApp.Write(path, "the last save"); // never settles: the check-in carries it
+        _server.BreakNextSave();
+        FakeApp.Close(path);
+        await cycle.ClosedAsync(path);
+
+        await Wait.Until(() => cycle.OpenCopies().Count == 0, "the close let go");
+        Assert.Contains("#5 couldn't be saved to Healdan", Assert.Single(_events.Errors));
+        Assert.Equal(path, Assert.Single(cycle.KeptCopies()).Path);
+        Assert.Equal(FakeApi.Here(), _server.Doc(5).Hold); // still checked out here
+
+        cycle.Dispose();
+        await Cycle().ResumeAsync();
+        await Wait.Until(() => !File.Exists(path), "checked in at the next start");
+        Assert.Equal("the last save", _server.Doc(5).Content);
+        Assert.Null(_server.Doc(5).Hold);
     }
 
     [Fact]

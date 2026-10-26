@@ -63,11 +63,12 @@ by the words in it.
   to whatever app the Mac has for it.
 - **Other files** open only from the helper's Open from Healdan window, where the person chose them, read-only in the
   Mac's default app. Each copy is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
-  it as it does a browser's downloads. The helper never downloads or opens these kinds of file, which run a program
-  or change the Mac when opened: apps, installers and disk images, common scripts, Automator and Shortcuts files,
-  internet location files, kernel extensions and configuration profiles. People download those from the web page.
-  It goes by a fixed list of 24 extensions, so a kind it doesn't list, such as `.zsh`, `.pyc` or `.jnlp`, still
-  opens, and the quarantine is then the check.
+  it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 24
+  extensions, which run a program or change the Mac when opened: apps, `.pkg` and `.mpkg` installers, `.dmg` disk
+  images, common scripts, Automator and Shortcuts files, internet location files, kernel extensions and
+  configuration profiles. People download those from the web page. A kind it doesn't list still opens, and the
+  quarantine is then the check: disk images other than `.dmg`, such as `.iso` or `.sparseimage`, and kinds such as
+  `.zsh`, `.pyc` or `.jnlp`.
 - **The risk that's left.** Opening a document someone can edit checks it out to them, with no extra question.
   Browsers ask before a site hands a link to an app, and remember the answer per site. So a page the person has
   allowed could open, and check out, documents they can edit, though it can't change them. Their next close checks

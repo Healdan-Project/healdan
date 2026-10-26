@@ -39,9 +39,6 @@ public sealed class CopyCycle : IDisposable
 
     /// <summary>The documents being opened now: one open of a document at a time (a double-click sends two links).</summary>
     private readonly HashSet<long> _opening = [];
-
-    /// <summary>Each kept copy's hash as <see cref="KeptCopies"/> last read it, by file name, with the file's stamp then.</summary>
-    private Dictionary<string, (FileStamp Stamp, string Hash)> _keptHashes = new(StringComparer.Ordinal);
     private readonly SaveWatcher _saves;
     private readonly CloseWatcher _closes;
     private readonly CancellationTokenSource _stop = new();
@@ -149,13 +146,13 @@ public sealed class CopyCycle : IDisposable
     /// </summary>
     public async Task<CopyState> AdoptNewAsync(string tempPath, NewDocument request, string? replaces)
     {
-        var filed = HashOf(tempPath);
-        var doc = await _api.FileAsync(tempPath, request with { CheckOut = true }, _stop.Token);
+        var filed = await File.ReadAllBytesAsync(tempPath, _stop.Token); // read once: hashed here and sent as it is
+        var doc = await _api.FileAsync(filed, Path.GetFileName(tempPath), request with { CheckOut = true }, _stop.Token);
         var (path, _, _) = _store.Create(doc, false, _app.Name);
         Update(path, r => r with
         {
             CheckedOutHere = true,
-            ConfirmedHash = filed,
+            ConfirmedHash = Convert.ToHexString(SHA256.HashData(filed)),
             PendingKind = null,
             PendingHash = null
         });
@@ -352,51 +349,17 @@ public sealed class CopyCycle : IDisposable
     public IReadOnlyList<CopyState> KeptCopies()
     {
         var kept = new List<CopyState>();
-        var hashes = new Dictionary<string, (FileStamp Stamp, string Hash)>(StringComparer.Ordinal);
         foreach (var (path, record) in _store.All())
         {
             lock (_gate)
                 if (Find(path) is not null)
                     continue;
-            if (HasKeptChanges(path, record, hashes))
+            // The menu asks at each rebuild, on the UI thread: a copy is read again only once its size or time has
+            // changed (re-review), so the default app's copies, which stay until the next start, aren't read every time.
+            if (File.Exists(path) && _store.HasUnconfirmedChanges(path, cached: true))
                 kept.Add(StateOf(path, record, null));
         }
-        lock (_gate)
-            _keptHashes = hashes;
         return kept;
-    }
-
-    /// <summary>
-    /// <see cref="CopyStore.HasUnconfirmedChanges"/> for <see cref="KeptCopies"/>, which the menu asks at each rebuild,
-    /// on the UI thread. A file is hashed again only once its size or time has changed since the last ask (re-review),
-    /// so the default app's copies, which stay until the next start, aren't read every time. Each hash read goes into
-    /// <paramref name="hashes"/>, for the next ask.
-    /// </summary>
-    private bool HasKeptChanges(string path, CopyRecord record, Dictionary<string, (FileStamp Stamp, string Hash)> hashes)
-    {
-        var stamp = FileStamp.Of(path); // before the read, so a change during it is read again next time
-        if (!stamp.Exists)
-            return false;
-        if (record.ConfirmedHash is null)
-            return true;
-        var name = Name(path);
-        (FileStamp Stamp, string Hash) last;
-        bool known;
-        lock (_gate)
-            known = _keptHashes.TryGetValue(name, out last) && last.Stamp == stamp;
-        if (!known)
-        {
-            try
-            {
-                last = (stamp, HashOf(path));
-            }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
-            {
-                return true; // unreadable: kept, and read again next time
-            }
-        }
-        hashes[name] = last;
-        return !SameHash(last.Hash, record.ConfirmedHash);
     }
 
     /// <summary>
@@ -1000,8 +963,14 @@ public sealed class CopyCycle : IDisposable
             else
             {
                 job.SaveId = Guid.NewGuid().ToString();
-                // Written down before it's sent, so a retry after a crash repeats it.
-                record = Update(s.Path, r => r with { LastSaveId = job.SaveId, PendingHash = job.Hash, PendingKind = job.Kind }) ?? record;
+                // Written down before it's sent, so a retry after a crash repeats it. A save queued behind this one
+                // keeps its own kind in the record, as it holds the newer content a restart sends.
+                record = Update(s.Path, r => r with
+                {
+                    LastSaveId = job.SaveId,
+                    PendingHash = job.Hash,
+                    PendingKind = s.Queue.Queued?.Kind ?? job.Kind
+                }) ?? record;
             }
             job.IfVersion = record.Version;
         }
@@ -1085,16 +1054,13 @@ public sealed class CopyCycle : IDisposable
                 // A repeated save's answer shows the hold as it is now, which may be another computer's.
                 CheckedOutHere = !job.CheckIn || HoldIsHere(doc.Hold)
             });
-            // The newest save: nothing queued behind it (a Save as New Version of the same bytes included).
-            if (record is not null && SameHash(job.Hash, s.LastHash) && s.Queue.Queued is null)
-                s.Answered = true;
             _signInAsked = false;
         }
         if (record is null)
             return false;
+        Answer(s, job);
         var state = StateOf(s.Path, record, s.HoldBy);
         Raise(ev => ev.Confirmed(s.Path, state));
-        SettleWaiters(s);
         return true;
     }
 
@@ -1143,18 +1109,19 @@ public sealed class CopyCycle : IDisposable
         // Refused for good (403, 404, 413, 422, refused): nothing was stored, and the copy keeps the changes.
         Update(s.Path, r => r with { PendingHash = null });
         Raise(ev => ev.Error($"Healdan refused the save of {Title(record)}: {e.Detail}"));
-        GaveUp(s, job);
+        Answer(s, job); // nothing more goes until the next save
         if (job.CheckIn)
             Forget(s);
         return SaveOutcome.Done;
     }
 
     /// <summary>
-    /// A save that won't go up, refused for good or failed: the copy keeps it, and nothing more goes until the next
-    /// save. <c>/v1/saved</c>'s waiters are answered unless something newer is still to go, such as a save queued
-    /// behind this one, whose confirmation answers them instead (re-review).
+    /// The job has its outcome: confirmed, or given up (refused for good, or failed), when the copy keeps it.
+    /// <c>/v1/saved</c>'s waiters are answered unless something newer is still to go, such as a save queued behind
+    /// this one (a Save as New Version of the same bytes included), whose outcome answers them instead (final review
+    /// I1, re-review).
     /// </summary>
-    private void GaveUp(Session s, SaveJob job)
+    private void Answer(Session s, SaveJob job)
     {
         lock (_gate)
             if (SameHash(job.Hash, s.LastHash) && s.Queue.Queued is null)
@@ -1456,11 +1423,21 @@ public sealed class CopyCycle : IDisposable
         }
     }
 
-    /// <summary>A send that threw what it doesn't expect: the copy and its record stay, and the next save tries again.</summary>
+    /// <summary>
+    /// A send that threw what it doesn't expect: the copy and its record stay, and the next save tries again. The
+    /// record keeps the saveId it was sent with, as nothing says whether Healdan stored it, so the next save resolves
+    /// that as a restart does: an identical version at worst, never a save lost or a check-out ended by its own save.
+    /// A close's check-in or release has nothing after it to finish the session, so it's let go, as a refused one is;
+    /// the copy is kept, and the next start closes it again.
+    /// </summary>
     private void SaveFailed(Session s, SaveJob job, Exception e)
     {
-        Raise(ev => ev.Error($"#{s.DocNumber} couldn't be saved to Healdan, and its copy keeps it: {e.Message}"));
-        GaveUp(s, job);
+        Raise(ev => ev.Error(job.ReleaseOnly || (job.CheckIn && job.Content is null)
+            ? $"#{s.DocNumber}'s check-out couldn't be released: {e.Message}"
+            : $"#{s.DocNumber} couldn't be saved to Healdan, and its copy keeps it: {e.Message}"));
+        Answer(s, job);
+        if (job.CheckIn || job.ReleaseOnly)
+            Forget(s);
     }
 
     /// <summary>

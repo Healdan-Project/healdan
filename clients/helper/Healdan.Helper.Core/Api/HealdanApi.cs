@@ -103,10 +103,13 @@ public sealed class HealdanApi
     }
 
     /// <summary>Files the file at <paramref name="path"/> as a new document.</summary>
-    public async Task<DocumentView> FileAsync(string path, NewDocument request, CancellationToken ct = default)
+    public async Task<DocumentView> FileAsync(string path, NewDocument request, CancellationToken ct = default) =>
+        await FileAsync(await File.ReadAllBytesAsync(path, ct), Path.GetFileName(path), request, ct);
+
+    /// <summary>Files <paramref name="content"/> as a new document, so the caller knows exactly which bytes it sent.</summary>
+    public async Task<DocumentView> FileAsync(byte[] content, string fileName, NewDocument request, CancellationToken ct = default)
     {
-        var bytes = await File.ReadAllBytesAsync(path, ct);
-        using var form = Multipart("document", request, bytes, Path.GetFileName(path));
+        using var form = Multipart("document", request, content, fileName);
         return await SendJsonAsync<DocumentView>(HttpMethod.Post, "v1/documents", form, ct);
     }
 
