@@ -23,6 +23,12 @@ public sealed record CycleTimings(
         TimeSpan.FromSeconds(1),
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60)]);
 
+    /// <summary>
+    /// The clock a <see cref="Settle"/> is timed on. Tests pass one they can stop, so whether two writes are one save
+    /// never depends on how quickly the runner gets from one to the other.
+    /// </summary>
+    internal TimeProvider Clock { get; init; } = TimeProvider.System;
+
     /// <summary>The wait before retry number <paramref name="attempt"/> (from 0).</summary>
     public TimeSpan RetryDelay(int attempt) =>
         RetryDelays.Count == 0 ? TimeSpan.FromSeconds(1) : RetryDelays[Math.Min(attempt, RetryDelays.Count - 1)];

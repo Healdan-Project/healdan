@@ -64,6 +64,10 @@ public sealed class CopyCycleTests : IDisposable
 
     private static string Hash(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
+    /// <summary>Whether the copy's save waiting for the one going up holds <paramref name="content"/>.</summary>
+    private static bool Queued(CopyCycle cycle, string path, string content) =>
+        string.Equals(cycle.QueuedHash(path), Hash(content), StringComparison.OrdinalIgnoreCase);
+
     private static void AssertReadOnlyFile(string path)
     {
         if (!OperatingSystem.IsWindows())
@@ -190,17 +194,19 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task PartialWriteNotSent()
     {
-        // The file grows every 50 ms for 2 s. The settle time is 30 times the gap, so a slow runner that stalls the
-        // writer for over a second still doesn't let the file look finished; and the growth outlasts the settle, so a
-        // cycle that sent after one settle from the first change would still fail.
+        // The settle's clock is stopped while the file grows, and moves on half a settle between pieces: the file
+        // never looks finished however long the runner stalls the writer, and the growth lasts 20 settles, so a
+        // cycle that sent one settle after the first change would still fail.
         const int pieces = 40;
-        var timings = Fast with { Settle = TimeSpan.FromMilliseconds(1500), SizePoll = TimeSpan.FromMilliseconds(100) };
-        var (_, path) = await OpenAsync(timings: timings);
+        var clock = new PausableClock();
+        var (_, path) = await OpenAsync(timings: Fast with { Clock = clock });
 
-        await FakeApp.GrowAsync(path, pieces: pieces, every: TimeSpan.FromMilliseconds(50));
+        clock.Pause();
+        await FakeApp.GrowAsync(path, pieces: pieces, every: TimeSpan.FromMilliseconds(50), between: () => clock.Advance(Fast.Settle / 2));
+        clock.Resume();
 
         await Wait.Until(() => _server.Saves.Count == 1, "the save");
-        await Task.Delay(Quiet * 2);
+        await Task.Delay(Quiet);
         var save = Assert.Single(_server.Saves);
         Assert.Equal(string.Concat(Enumerable.Range(0, pieces).Select(i => $"piece {i};")), save.Content);
     }
@@ -208,29 +214,33 @@ public sealed class CopyCycleTests : IDisposable
     [Fact]
     public async Task TwoSavesInOrder()
     {
-        // A settle far longer than the gap between D and E below, so a stalled runner can't split them
-        var (_, path) = await OpenAsync(timings: Fast with { Settle = TimeSpan.FromMilliseconds(500) });
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
         _server.HoldSaves();
         FakeApp.Write(path, "A");
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
 
-        FakeApp.Write(path, "B"); // waits behind A
-        await Task.Delay(Fast.Settle * 3);
-        FakeApp.Write(path, "C"); // replaces B, which hasn't started
-        await Task.Delay(Fast.Settle * 3);
-        Assert.Equal(1, _server.SavesReceived); // nothing overtakes A, and A isn't cancelled
+        // Each write waits until it's queued, so B settles alone and C replaces it, however slow the runner.
+        FakeApp.Write(path, "B");
+        await Wait.Until(() => Queued(cycle, path, "B"), "B waiting behind A");
+        FakeApp.Write(path, "C");
+        await Wait.Until(() => Queued(cycle, path, "C"), "C in place of B, which hasn't started");
+        Assert.Equal(1, _server.SavesReceived); // nothing overtakes A
         _server.OpenSaves();
 
         await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v1.2", "the title on the last save");
         await Task.Delay(Quiet);
+        Assert.Equal(2, _server.SavesReceived); // A wasn't cancelled and sent again
         Assert.Equal(["A", "C"], _server.Saves.Select(s => s.Content));
         Assert.Equal(["stored 1.1", "stored 1.2"], _server.Saves.Select(s => s.Outcome));
         Assert.Equal("C", _server.Doc(5).Content);
 
-        // Cmd+S twice within the settle time is one save, of the last.
+        // Cmd+S twice within the settle time is one save, of the last. The settle's clock is stopped between the
+        // two, so a stalled runner can't split them.
+        clock.Pause();
         FakeApp.Write(path, "D");
-        await Task.Delay(TimeSpan.FromMilliseconds(20));
         FakeApp.Write(path, "E");
+        clock.Resume();
         await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v1.3", "the title after a double save");
         await Task.Delay(Quiet);
         Assert.Equal(["A", "C", "E"], _server.Saves.Select(s => s.Content));
@@ -379,9 +389,9 @@ public sealed class CopyCycleTests : IDisposable
         // The extension stores the open document under the copy's name: its starting point, not a save.
         FakeApp.Write(state.Path, "adopted by the app");
         File.WriteAllText(FakeApp.LockPath(state.Path), "lock");
-        await Task.Delay(Fast.Settle * 4);
+        await Wait.Until(() => !Store.HasUnconfirmedChanges(state.Path), "the app's write taken as the starting point");
+        await Task.Delay(Quiet);
         Assert.Empty(_server.Saves);
-        Assert.False(Store.HasUnconfirmedChanges(state.Path));
 
         FakeApp.Write(state.Path, "a real save");
         await Wait.Until(() => _server.Saves.Count == 1, "the first real save");
