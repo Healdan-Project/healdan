@@ -4,7 +4,8 @@
   Healdan Helper.app's Info.plist (spec §5.12). package.sh replaces @VERSION@ with the numeric part of the version it
   builds (1.2.3 from helper-v1.2.3-rc1). LSUIElement keeps the helper out of the Dock and Cmd+Tab; CFBundleURLTypes
   makes it the healdan: links' app; the bundle identifier is what notifications, the keychain's access rules and
-  the login item know the helper by, so it never changes.
+  the login item know the helper by, so it never changes. CFBundleIconFile is the AppIcon.icns package.sh draws with
+  make-icon.swift.
 -->
 <plist version="1.0">
 <dict>
@@ -14,6 +15,8 @@
   <string>Healdan Helper</string>
   <key>CFBundleExecutable</key>
   <string>HealdanHelper</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleIdentifier</key>
   <string>com.healdan.helper</string>
   <key>CFBundleInfoDictionaryVersion</key>

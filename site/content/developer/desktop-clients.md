@@ -212,6 +212,9 @@ the steps and the secrets.
 
 - **The bundle** is `com.healdan.helper`: one self-contained file for Apple silicon, with `healdan.oxt` in
   `Contents/Resources`. It registers `healdan:` and stays out of the Dock.
+- **The icon,** `AppIcon.icns`, is Healdan's mark from the docs site's `site/static/favicon.svg` on macOS's rounded
+  square. `clients/helper/packaging/mac/make-icon.swift` draws it each time `package.sh` runs, so changing the
+  favicon changes the helper's icon too.
 - **The version** is the helper's own, from its tag. The helper checks `GET /server`'s `apiVersion`, and refuses a
   server whose API it doesn't speak.
 - **The login item:** after its first sign-in, the installed helper registers itself to start at sign-in, with

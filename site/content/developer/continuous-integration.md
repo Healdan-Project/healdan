@@ -145,7 +145,7 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
 
 1. **`Package (macos-15)`** runs `clients/helper/packaging/mac/package.sh 1.2.3`, which publishes the helper as a
    single self-contained file for Apple silicon, builds `Healdan Helper.app` with the LibreOffice extension's
-   `healdan.oxt` inside, signs it with the Developer ID, has Apple notarise it, and wraps it in
+   `healdan.oxt` and the app's icon inside, signs it with the Developer ID, has Apple notarise it, and wraps it in
    `Healdan-Helper-1.2.3.dmg`, signed and notarised too. It uploads the disk image as the run's artifact.
 2. **`Release (macOS)`** attaches the disk image to the tag's GitHub release, and makes the release first if
    there isn't one (a pre-release for a version like `1.2.3-rc1`). It runs only for a pushed tag, and only once
