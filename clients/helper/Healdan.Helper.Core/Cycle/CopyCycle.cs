@@ -292,7 +292,7 @@ public sealed class CopyCycle : IDisposable
             var s = Begin(path, record.DocNumber, false, null, appSeenRunning: running, watchClose: !locked || running);
             if (!locked)
             {
-                Close(path); // its window closed while the helper wasn't running
+                Close(path, record.PendingKind); // its window closed while the helper wasn't running
                 continue;
             }
             if (!running)
@@ -1006,7 +1006,9 @@ public sealed class CopyCycle : IDisposable
             job.IfVersion = record.Version;
         }
 
-        var request = new SaveRequest(job.RepeatKind ?? job.Kind, !job.CheckIn, record.DocumentName, job.IfVersion!, true, job.SaveId);
+        // A repeat with a new save to follow keeps the check-out, whatever this job is: the new save checks it in.
+        var request = new SaveRequest(job.RepeatKind ?? job.Kind, !job.CheckIn || job.Uncertain, record.DocumentName,
+            job.IfVersion!, true, job.SaveId);
         DocumentView doc;
         try
         {
@@ -1175,7 +1177,12 @@ public sealed class CopyCycle : IDisposable
 
     // --- Closing -------------------------------------------------------------------------------------------------
 
-    private void Close(string path)
+    /// <summary>The copy's window has closed: its check-in goes, carrying the newest content, or its check-out is released.</summary>
+    /// <param name="recorded">
+    /// At a restart, the kind the record says is still to go (its <see cref="CopyRecord.PendingKind"/>), as nothing is
+    /// queued yet to say it: a Save as New Version waiting when the helper stopped is checked in as the version.
+    /// </param>
+    private void Close(string path, string? recorded = null)
     {
         Session? s;
         SaveJob? waiting;
@@ -1188,7 +1195,7 @@ public sealed class CopyCycle : IDisposable
             s.Closing = true;
             waiting = s.Queue.Queued;
             s.Queue.DropQueued(); // the check-in carries the newest content
-            kind = s.NextKind ?? waiting?.Kind ?? Snapshot;
+            kind = s.NextKind ?? waiting?.Kind ?? recorded ?? Snapshot;
         }
         _saves.Unwatch(s.Path);
         _closes.Unwatch(s.Path);

@@ -63,7 +63,8 @@ app.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
   `saveId` and the kind it went up as (the record's `sentKind`), and then, when newer content or a version was
-  still to go (`pendingKind`), that goes up as a new save.
+  still to go (`pendingKind`), that goes up as a new save; the repeat keeps the check-out for it. A window that
+  closed meanwhile is checked in as `pendingKind`, so a Save as New Version that was waiting is still made.
 - **Refusals:** `409 held-elsewhere` or `not-held` ends the copy's check-out: it's kept, never deleted, and the user
   is told to use Save as New Document. `409 version-moved` is resent once with the new `ifVersion` and the current
   name, but only while the document is still checked out here and its `fileVersion` hasn't moved.
