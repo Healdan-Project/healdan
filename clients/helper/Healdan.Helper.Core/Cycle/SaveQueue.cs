@@ -33,8 +33,8 @@ internal sealed class SaveJob
 
     public string? FallbackHash { get; init; }
 
-    /// <summary><c>snapshot</c> or <c>version</c>.</summary>
-    public string Kind { get; init; } = "snapshot";
+    /// <summary><c>snapshot</c> or <c>version</c>; a save that replaces a waiting version becomes one (<see cref="SaveQueue.Enqueue"/>).</summary>
+    public string Kind { get; set; } = "snapshot";
 
     /// <summary>The close's save: <c>keepCheckedOut: false</c>, or a release when nothing changed; then the copy goes.</summary>
     public bool CheckIn { get; init; }
@@ -51,9 +51,15 @@ internal sealed class SaveJob
 
     /// <summary>
     /// The saveId was first sent, before a restart, with other bytes, so a <c>201</c> doesn't say which the server
-    /// kept: these bytes are then sent again under a new saveId.
+    /// kept, or as a snapshot while this job is a version: these bytes are then sent again under a new saveId.
     /// </summary>
     public bool Uncertain { get; set; }
+
+    /// <summary>
+    /// While the job repeats a saveId first sent before, the kind it was sent as (<see cref="Copies.CopyRecord.SentKind"/>),
+    /// which the repeat keeps; then null, and the job goes as its own <see cref="Kind"/>.
+    /// </summary>
+    public string? RepeatKind { get; set; }
 
     /// <summary>It was sent again once after <c>version-moved</c>; a second refusal ends the check-out here.</summary>
     public bool Resent { get; set; }
@@ -61,8 +67,9 @@ internal sealed class SaveJob
 
 /// <summary>
 /// The saves of one copy, sent one at a time and in order (Review Focus 2). A job that hasn't started is replaced by a
-/// newer one, which holds newer content. A job that has started is never cancelled or overtaken by a newer one: it's
-/// retried, with the same saveId and bytes, until its outcome is known, and only then does the next one go.
+/// newer one, which holds newer content, and which goes up as a version if the one it replaced was to. A job that has
+/// started is never cancelled or overtaken by a newer one: it's retried, with the same saveId and bytes, until its
+/// outcome is known, and only then does the next one go.
 /// </summary>
 internal sealed class SaveQueue : IDisposable
 {
@@ -88,11 +95,24 @@ internal sealed class SaveQueue : IDisposable
         _failed = failed;
     }
 
-    /// <summary>Queues the job behind the one running, replacing a queued one that hasn't started.</summary>
-    public void Enqueue(SaveJob job)
+    /// <summary>
+    /// Queues the job behind the one running, replacing a queued one that hasn't started. If that one was a Save as New
+    /// Version, this job takes its <see cref="SaveJob.Kind"/>: its content holds that save's too, and the user still
+    /// asked for a version.
+    /// </summary>
+    /// <param name="settled">
+    /// Told of the job once its kind is settled, before it can be sent, so what it writes down is there for the send;
+    /// told too once the queue has stopped, so a restart still knows what was waiting. It runs under the queue's lock,
+    /// so it mustn't wait for anything that holds the lock.
+    /// </param>
+    public void Enqueue(SaveJob job, Action<SaveJob>? settled = null)
     {
         lock (_lock)
         {
+            // Decided under the lock, so the job replaced is one that won't start: one taken meanwhile is sent as it is.
+            if (_queued is { Kind: "version" })
+                job.Kind = "version";
+            settled?.Invoke(job);
             if (_stop.IsCancellationRequested)
                 return;
             _queued = job;
