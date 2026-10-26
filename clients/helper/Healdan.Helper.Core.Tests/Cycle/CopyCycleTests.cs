@@ -1009,6 +1009,35 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Fact]
+    public async Task ASaveReplacingAWaitingVersionMakesTheVersion()
+    {
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+
+        // Save as New Version saves B while A goes up, as one settle, and the user saves C before A is done.
+        clock.Pause();
+        cycle.MarkNextVersion(path);
+        FakeApp.Write(path, "B");
+        clock.Resume();
+        await Wait.Until(() => Queued(cycle, path, "B"), "B waiting behind A");
+        FakeApp.Write(path, "C");
+        await Wait.Until(() => Queued(cycle, path, "C"), "C in place of B, which hasn't started");
+        Assert.Equal("version", Store.Find(path)!.Value.Item2.PendingKind); // what a restart would send C as
+        var answer = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10)); // the extension's /v1/saved after C
+        _server.OpenSaves();
+
+        // C holds B's changes too, so it goes up as the version the user asked for.
+        Assert.Equal("Lease agreement #5 v2.0", (await answer).Title);
+        await Task.Delay(Quiet);
+        Assert.Equal(["A", "C"], _server.Saves.Select(s => s.Content));
+        Assert.Equal(["snapshot", "version"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 1.1", "stored 2.0"], _server.Saves.Select(s => s.Outcome));
+    }
+
+    [Fact]
     public async Task SavedDuringAnOutageSaysItsPendingThenMovesOn()
     {
         var (cycle, path) = await OpenAsync();

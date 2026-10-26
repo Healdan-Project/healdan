@@ -33,8 +33,8 @@ internal sealed class SaveJob
 
     public string? FallbackHash { get; init; }
 
-    /// <summary><c>snapshot</c> or <c>version</c>.</summary>
-    public string Kind { get; init; } = "snapshot";
+    /// <summary><c>snapshot</c> or <c>version</c>; a save that replaces a waiting version becomes one (<see cref="SaveQueue.Enqueue"/>).</summary>
+    public string Kind { get; set; } = "snapshot";
 
     /// <summary>The close's save: <c>keepCheckedOut: false</c>, or a release when nothing changed; then the copy goes.</summary>
     public bool CheckIn { get; init; }
@@ -61,8 +61,9 @@ internal sealed class SaveJob
 
 /// <summary>
 /// The saves of one copy, sent one at a time and in order (Review Focus 2). A job that hasn't started is replaced by a
-/// newer one, which holds newer content. A job that has started is never cancelled or overtaken by a newer one: it's
-/// retried, with the same saveId and bytes, until its outcome is known, and only then does the next one go.
+/// newer one, which holds newer content, and which goes up as a version if the one it replaced was to. A job that has
+/// started is never cancelled or overtaken by a newer one: it's retried, with the same saveId and bytes, until its
+/// outcome is known, and only then does the next one go.
 /// </summary>
 internal sealed class SaveQueue : IDisposable
 {
@@ -88,13 +89,20 @@ internal sealed class SaveQueue : IDisposable
         _failed = failed;
     }
 
-    /// <summary>Queues the job behind the one running, replacing a queued one that hasn't started.</summary>
+    /// <summary>
+    /// Queues the job behind the one running, replacing a queued one that hasn't started. If that one was a Save as New
+    /// Version, this job takes its <see cref="SaveJob.Kind"/>: its content holds that save's too, and the user still
+    /// asked for a version.
+    /// </summary>
     public void Enqueue(SaveJob job)
     {
         lock (_lock)
         {
             if (_stop.IsCancellationRequested)
                 return;
+            // Decided under the lock, so the job replaced is one that won't start: one taken meanwhile is sent as it is.
+            if (_queued is { Kind: "version" })
+                job.Kind = "version";
             _queued = job;
             if (_looping)
                 return;

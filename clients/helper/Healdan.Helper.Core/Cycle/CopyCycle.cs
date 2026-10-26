@@ -928,16 +928,20 @@ public sealed class CopyCycle : IDisposable
             SettleWaiters(s);
     }
 
-    /// <summary>Queues a save; its kind is written to the record first, so a restart knows what was waiting.</summary>
+    /// <summary>
+    /// Queues a save; its kind is written to the record before it can be sent, so a restart knows what was waiting. The
+    /// kind is the one the queue settles on, as a save replacing a waiting version becomes one.
+    /// </summary>
     private void Enqueue(Session s, SaveJob job)
     {
         lock (_gate)
         {
             s.LastHash = job.Hash;
             s.Confirmed = false;
+            s.Queue.Enqueue(job);
+            // Still under the gate: the send writes its saveId and kind under it too, so its write comes after this one.
             if (job.Content is not null)
                 Update(s.Path, r => r with { PendingKind = job.Kind });
-            s.Queue.Enqueue(job);
         }
     }
 

@@ -51,7 +51,8 @@ app.
   counts once the file's size has stopped changing for 1.2 seconds, checked every 300 ms, and its content differs
   from the last sent. It goes up as a snapshot with `keepCheckedOut: true`, the document's own `name`, `ifVersion`,
   `ifHeld: true` and a fresh `saveId`, which a retry repeats. Saves queue in order, and a newer one replaces a queued
-  older one.
+  older one. If that one was a Save as New Version, the newer one goes up as `kind: version` in its place
+  (`SaveQueue.Enqueue`), so the version the user asked for is still made, with the newer content.
 - **A new document's copy:** the extension's `/v1/adopted`, called right after `storeAsURL` while the window takes no
   input, makes the file as it is then the copy's starting point, so the next write is a save, however soon. Without
   it (an older extension), the first write that settles is. The record keeps `adoptingSince` until then: at a restart
