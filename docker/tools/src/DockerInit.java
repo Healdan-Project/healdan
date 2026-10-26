@@ -85,15 +85,19 @@ public final class DockerInit {
 
     /**
      * Adds keys the file lacks from the image defaults (upstream adds settings over time, and LogicalDOC fails to
-     * start on an unresolvable one), seeds the container's paths and DB settings the first time (recognised by a
-     * missing LDOCHOME, which the shipped defaults lack), then applies the env-owned keys. Returns true when this
-     * call seeded the file.
+     * start on an unresolvable one) and takes the image-owned keys from them, seeds the container's paths and DB
+     * settings the first time (recognised by a missing LDOCHOME, which the shipped defaults lack), then applies the
+     * env-owned keys. Returns true when this call seeded the file.
      */
     static boolean applyConfig(File file, File defaults, Map<String, String> envKeys) throws IOException {
         ContextProperties config = new ContextProperties(file);
-        TreeSet<String> added = addMissingDefaults(config, defaults);
+        Properties pristine = readDefaults(defaults);
+        TreeSet<String> added = addMissingDefaults(config, pristine);
         if (!added.isEmpty())
             log("added settings missing from " + file + ": " + String.join(", ", added));
+        TreeSet<String> updated = applyImageKeys(config, pristine);
+        if (!updated.isEmpty())
+            log("updated from the image: " + String.join(", ", updated));
         String home = config.getProperty("LDOCHOME");
         boolean seed = home == null || home.isBlank();
         if (seed) {
@@ -106,21 +110,38 @@ public final class DockerInit {
         return seed;
     }
 
-    /** Copies into config every key of the defaults file that config lacks; existing values are kept. */
-    private static TreeSet<String> addMissingDefaults(ContextProperties config, File defaults) throws IOException {
-        TreeSet<String> added = new TreeSet<>();
-        if (!defaults.isFile())
-            return added;
+    /** The image's defaults, or none when the file is absent. */
+    private static Properties readDefaults(File defaults) throws IOException {
         Properties pristine = new Properties();
-        try (FileInputStream in = new FileInputStream(defaults)) {
-            pristine.load(in);
-        }
+        if (defaults.isFile())
+            try (FileInputStream in = new FileInputStream(defaults)) {
+                pristine.load(in);
+            }
+        return pristine;
+    }
+
+    /** Copies into config every key of the defaults that config lacks; existing values are kept. */
+    private static TreeSet<String> addMissingDefaults(ContextProperties config, Properties pristine) {
+        TreeSet<String> added = new TreeSet<>();
         for (String key : pristine.stringPropertyNames())
             if (!config.containsKey(key)) {
                 config.setProperty(key, pristine.getProperty(key));
                 added.add(key);
             }
         return added;
+    }
+
+    /** Overwrites each image-owned key whose value differs from the defaults'; returns them as key=value. */
+    private static TreeSet<String> applyImageKeys(ContextProperties config, Properties pristine) {
+        TreeSet<String> updated = new TreeSet<>();
+        for (String key : ConfigPlan.IMAGE_KEYS) {
+            String value = pristine.getProperty(key);
+            if (value != null && !value.equals(config.getProperty(key))) {
+                config.setProperty(key, value);
+                updated.add(key + "=" + value);
+            }
+        }
+        return updated;
     }
 
     /**

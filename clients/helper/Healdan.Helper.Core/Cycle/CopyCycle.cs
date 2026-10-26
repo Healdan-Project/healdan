@@ -289,7 +289,7 @@ public sealed class CopyCycle : IDisposable
             var s = Begin(path, record.DocNumber, false, null, appSeenRunning: running, watchClose: !locked || running);
             if (!locked)
             {
-                Close(path); // its window closed while the helper wasn't running
+                Close(path, record.PendingKind); // its window closed while the helper wasn't running
                 continue;
             }
             if (!running)
@@ -907,9 +907,8 @@ public sealed class CopyCycle : IDisposable
     }
 
     /// <summary>
-    /// Queues a save and writes the kind it goes up as to the record, so a restart knows what was waiting. The queue
-    /// decides the kind (a queued Save as New Version's, if this replaces one), and the send's own record writes wait
-    /// for the gate, so the record is written before anything is sent.
+    /// Queues a save; its kind is written to the record before it can be sent, so a restart knows what was waiting. The
+    /// kind is the one the queue settles on, as a save replacing a waiting version becomes one.
     /// </summary>
     private void Enqueue(Session s, SaveJob job)
     {
@@ -917,9 +916,10 @@ public sealed class CopyCycle : IDisposable
         {
             s.LastHash = job.Hash;
             s.Answered = false;
-            s.Queue.Enqueue(job);
-            if (job.Content is not null)
-                Update(s.Path, r => r with { PendingKind = job.Kind });
+            // Written while the queue can't hand the job to the send yet, so the send's first read of the record comes
+            // after this write (Windows can refuse a read while the record file is being replaced). The write takes
+            // the gate, already held here, so it waits for nobody who holds the queue's lock.
+            s.Queue.Enqueue(job, job.Content is null ? null : j => Update(s.Path, r => r with { PendingKind = j.Kind }));
         }
     }
 
@@ -958,24 +958,30 @@ public sealed class CopyCycle : IDisposable
                 // A save went up before (and before a restart) whose answer never came: repeat its saveId, so the
                 // server doesn't store it twice nor refuse it as version-moved (Review Focus 1, 5).
                 job.SaveId = record.LastSaveId;
-                job.Uncertain = !SameHash(job.Hash, record.PendingHash);
+                // Repeated as the kind it went as. A version waiting behind a snapshot goes after it, even with the
+                // same bytes; a snapshot behind a version needs nothing more unless its bytes are newer.
+                job.RepeatKind = record.SentKind ?? job.Kind;
+                job.Uncertain = !SameHash(job.Hash, record.PendingHash) || (job.Kind == NewVersion && job.RepeatKind != NewVersion);
             }
             else
             {
                 job.SaveId = Guid.NewGuid().ToString();
-                // Written down before it's sent, so a retry after a crash repeats it. A save queued behind this one
-                // keeps its own kind in the record, as it holds the newer content a restart sends.
+                // Written down before it's sent, so a retry after a crash repeats it. A save queued behind it keeps
+                // its kind as the newest still to go.
                 record = Update(s.Path, r => r with
                 {
                     LastSaveId = job.SaveId,
                     PendingHash = job.Hash,
+                    SentKind = job.Kind,
                     PendingKind = s.Queue.Queued?.Kind ?? job.Kind
                 }) ?? record;
             }
             job.IfVersion = record.Version;
         }
 
-        var request = new SaveRequest(job.Kind, !job.CheckIn, record.DocumentName, job.IfVersion!, true, job.SaveId);
+        // A repeat with a new save to follow keeps the check-out, whatever this job is: the new save checks it in.
+        var request = new SaveRequest(job.RepeatKind ?? job.Kind, !job.CheckIn || job.Uncertain, record.DocumentName,
+            job.IfVersion!, true, job.SaveId);
         DocumentView doc;
         try
         {
@@ -988,7 +994,8 @@ public sealed class CopyCycle : IDisposable
 
         if (job.Uncertain)
         {
-            // The answer doesn't say which bytes the server kept under that saveId: send these again, as a new save.
+            // The answer doesn't say which bytes the server kept under that saveId, or it went as a snapshot while this
+            // is a version: send these again, as a new save of this job's kind.
             var moved = Update(s.Path, r => r with
             {
                 DocumentName = doc.Name, // renamed meanwhile in the web page: the resend keeps the new name
@@ -996,7 +1003,7 @@ public sealed class CopyCycle : IDisposable
                 FileVersion = doc.FileVersion,
                 PendingHash = null
             }) ?? record;
-            (job.Uncertain, job.SaveId, job.Resent) = (false, null, false);
+            (job.Uncertain, job.SaveId, job.Resent, job.RepeatKind) = (false, null, false, null);
             return await SaveAsync(s, job, moved, ct);
         }
 
@@ -1154,7 +1161,12 @@ public sealed class CopyCycle : IDisposable
 
     // --- Closing -------------------------------------------------------------------------------------------------
 
-    private void Close(string path)
+    /// <summary>The copy's window has closed: its check-in goes, carrying the newest content, or its check-out is released.</summary>
+    /// <param name="recorded">
+    /// At a restart, the kind the record says is still to go (its <see cref="CopyRecord.PendingKind"/>), as nothing is
+    /// queued yet to say it: a Save as New Version waiting when the helper stopped is checked in as the version.
+    /// </param>
+    private void Close(string path, string? recorded = null)
     {
         Session? s;
         SaveJob? waiting;
@@ -1167,7 +1179,7 @@ public sealed class CopyCycle : IDisposable
             s.Closing = true;
             waiting = s.Queue.Queued;
             s.Queue.DropQueued(); // the check-in carries the newest content
-            kind = s.NextKind ?? waiting?.Kind ?? Snapshot;
+            kind = s.NextKind ?? waiting?.Kind ?? recorded ?? Snapshot;
         }
         _saves.Unwatch(s.Path);
         _closes.Unwatch(s.Path);

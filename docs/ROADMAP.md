@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-16
 - **Status:** direction agreed with the owner in an interview session. M1 is done: the owner accepted it on 2026-10-22 ([spec](superpowers/specs/2026-10-17-m1-move-in-design.md), [plan](superpowers/plans/2026-10-17-m1-move-in.md)). M1.5 is done: the owner accepted it on 2026-10-23 ([spec](superpowers/specs/2026-10-22-m1-5-office-previews-design.md), [plan](superpowers/plans/2026-10-22-m1-5-office-previews.md)). M2 is done: the owner accepted it on 2026-10-24 ([spec](superpowers/specs/2026-10-23-m2-api-foundation-design.md), [plan](superpowers/plans/2026-10-23-m2-api-foundation.md)). M3's design and plan were approved on 2026-10-24, after a trial build, and its first phase, LibreOffice on macOS, was built on 2026-10-24 and 2026-10-25; the owner's acceptance is next ([spec](superpowers/specs/2026-10-24-m3-office-integration-design.md), [plan](superpowers/plans/2026-10-24-m3-office-integration.md)).
-- **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE 9.3.1 already has, what's hidden, half built or missing, with file paths.
+- **Companion:** [`docs/reference/logicaldoc-ce-capability-map.md`](reference/logicaldoc-ce-capability-map.md) records what LogicalDOC CE already has, what's hidden, half built or missing, with file paths.
 
 This is a living document. It sets the direction and the order of work. It is not a build plan.
 

@@ -10,7 +10,10 @@ namespace Healdan.Helper.Core.Copies;
 /// <param name="ReadOnly">The copy was opened without a check-out.</param>
 /// <param name="CheckedOutHere">The document is checked out to this computer for this copy.</param>
 /// <param name="ConfirmedHash">SHA-256 (hex) of the content Healdan last confirmed; null until the first download finishes.</param>
-/// <param name="PendingKind">The kind of save waiting to go up, or null.</param>
+/// <param name="PendingKind">
+/// The kind of the newest save still to go up, or null: the one waiting, or else the one being sent. The one being sent
+/// keeps its own kind in <paramref name="SentKind"/>.
+/// </param>
 /// <param name="App">The app the copy was opened in.</param>
 /// <param name="LastSaveId">The id of the last save sent, so a retry after a lost answer isn't stored twice.</param>
 /// <param name="FileName">
@@ -20,6 +23,10 @@ namespace Healdan.Helper.Core.Copies;
 /// <param name="PendingHash">
 /// SHA-256 (hex) of the bytes <paramref name="LastSaveId"/> was sent with while its answer isn't known, else null. A
 /// retry repeats that saveId only with those same bytes.
+/// </param>
+/// <param name="SentKind">
+/// The kind <paramref name="LastSaveId"/> was sent as, read only while <paramref name="PendingHash"/> is set: a retry
+/// repeats it as that kind, whatever newer save waits behind it. Null in a record from before it was kept.
 /// </param>
 public sealed record CopyRecord(
     long DocNumber,
@@ -33,4 +40,5 @@ public sealed record CopyRecord(
     string App,
     string? LastSaveId,
     string FileName,
-    string? PendingHash = null);
+    string? PendingHash = null,
+    string? SentKind = null);

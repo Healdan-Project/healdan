@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of LogicalDOC Community Edition (version 9.3.1, LGPLv3), a Java document management system. It's detached from GitHub's fork network. The plan is to take it in its own direction (a new UI, bespoke features, replacements for features LogicalDOC sells as paid extras) while still merging upstream core and security fixes.
+This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of LogicalDOC Community Edition (LGPLv3), a Java document management system. It started from 9.3.1 and follows upstream's releases; the root POM's version is the one it's on. It's detached from GitHub's fork network. The plan is to take it in its own direction (a new UI, bespoke features, replacements for features LogicalDOC sells as paid extras) while still merging upstream core and security fixes.
 
 - Upstream is `https://github.com/logicaldoc/community.git`. A fresh clone needs `git remote add upstream <that url>`.
 - Sync upstream by merging `upstream/master` into a dedicated branch and opening a PR to `master`. Merge, never squash or rebase, so the shared history stays intact. Keep sync PRs free of feature work.
@@ -70,7 +70,7 @@ HEALDAN_HELPER_DEV_ROOT=/tmp/hh dotnet run --project clients/helper/Healdan.Help
 
 - `Dockerfile` (stages `build` → `tools` → `runtime`) and `compose.yaml` are this fork's own. The docs site's Install manual (`site/content/install/`) is the user guide, and its Developer Guide covers the dev overlay, tests and CI; the design is `docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md`.
 - The container never runs the setup wizard. `docker/tools/src/DockerInit.java` seeds `context.properties` and, on a fresh database, creates the schema by running the `DbInit` scripts from every `plugin.xml`, so a plugin's `DbInit` extension is picked up for new installs. Existing databases are never migrated, apart from Healdan's own `hd_` tables, which Flyway upgrades on every start (see "Healdan's code"). A plugin or upstream change that adds SQL to CE's tables needs it applied by hand there.
-- On every start, keys in the image's default `context.properties` that the conf volume lacks are added (values are never overwritten).
+- On every start, keys in the image's default `context.properties` that the conf volume lacks are added. Values are never overwritten, except `product.release` and `product.year` (`ConfigPlan.IMAGE_KEYS`): they describe the image, so they're always taken from it.
 - `docker/server.xml`'s `RemoteIpValve` believes `X-Forwarded-For` and `-Proto` only from `LOGICALDOC_TRUSTED_PROXIES`, or, when it's unset, the Docker networks the container is on. `DockerInit` (`TrustedProxies`) works the list out and checks it on every start, and `setenv.sh` passes it to Tomcat as `healdan.trustedProxies`.
 - LogicalDOC only runs external programs listed in a classpath `allowed-commands.txt`. The lines in `docker/allowed-commands.txt` are re-added to the conf volume's copy on every start; a new external tool needs a line there.
 - Tests (the Developer Guide's Tests page describes each):

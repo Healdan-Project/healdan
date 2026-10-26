@@ -1044,6 +1044,183 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Fact]
+    public async Task ASaveReplacingAWaitingVersionMakesTheVersion()
+    {
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+
+        // Save as New Version saves B while A goes up, as one settle, and the user saves C before A is done.
+        clock.Pause();
+        cycle.MarkNextVersion(path);
+        FakeApp.Write(path, "B");
+        clock.Resume();
+        await Wait.Until(() => Queued(cycle, path, "B"), "B waiting behind A");
+        FakeApp.Write(path, "C");
+        await Wait.Until(() => Queued(cycle, path, "C"), "C in place of B, which hasn't started");
+        Assert.Equal("version", Store.Find(path)!.Value.Item2.PendingKind); // what a restart would send C as
+        var answer = cycle.WaitForConfirmationAsync(path, TimeSpan.FromSeconds(10)); // the extension's /v1/saved after C
+        _server.OpenSaves();
+
+        // C holds B's changes too, so it goes up as the version the user asked for.
+        Assert.Equal("Lease agreement #5 v2.0", (await answer).Title);
+        await Task.Delay(Quiet);
+        Assert.Equal(["A", "C"], _server.Saves.Select(s => s.Content));
+        Assert.Equal(["snapshot", "version"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 1.1", "stored 2.0"], _server.Saves.Select(s => s.Outcome));
+    }
+
+    [Fact]
+    public async Task ARestartRepeatsAVersionAsTheVersionWithASnapshotBehindIt()
+    {
+        // Save as New Version's B is going up when the helper stops, with the user's C waiting behind it, and Healdan
+        // never got B. C's snapshot mustn't turn B's repeat into one: the version the user asked for is still made.
+        var clock = new PausableClock();
+        var (first, path) = await OpenAsync(timings: Fast with { Clock = clock });
+        _server.HoldSaves();
+        clock.Pause();
+        first.MarkNextVersion(path);
+        FakeApp.Write(path, "B");
+        clock.Resume();
+        await Wait.Until(() => _server.SavesReceived == 1, "B on its way up");
+        FakeApp.Write(path, "C");
+        await Wait.Until(() => Queued(first, path, "C"), "C waiting behind B");
+        first.Dispose(); // B's send is cancelled before Healdan stores it
+        var record = Store.Find(path)!.Value.Item2;
+        Assert.Equal(("version", "snapshot"), (record.SentKind, record.PendingKind));
+        _server.OpenSaves();
+
+        var second = Cycle();
+        await second.ResumeAsync();
+
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v2.1", "C confirmed");
+        await Task.Delay(Quiet);
+        Assert.Equal(record.LastSaveId, _server.Saves[0].SaveId);
+        Assert.Equal(["C", "C"], _server.Saves.Select(s => s.Content));
+        Assert.Equal(["version", "snapshot"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 2.0", "stored 2.1"], _server.Saves.Select(s => s.Outcome));
+    }
+
+    [Fact]
+    public async Task ARestartRepeatsASnapshotAsOneWithAVersionBehindIt()
+    {
+        // A is going up when the helper stops, with Save as New Version's B waiting behind it, and Healdan never got
+        // A. A's repeat stays a snapshot, and B's version follows it, made once.
+        var clock = new PausableClock();
+        var (first, path) = await OpenAsync(timings: Fast with { Clock = clock });
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        clock.Pause();
+        first.MarkNextVersion(path);
+        FakeApp.Write(path, "B");
+        clock.Resume();
+        await Wait.Until(() => Queued(first, path, "B"), "B waiting behind A");
+        first.Dispose(); // A's send is cancelled before Healdan stores it
+        var record = Store.Find(path)!.Value.Item2;
+        Assert.Equal(("snapshot", "version"), (record.SentKind, record.PendingKind));
+        _server.OpenSaves();
+
+        var second = Cycle();
+        await second.ResumeAsync();
+
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v2.0", "B confirmed");
+        await Task.Delay(Quiet);
+        Assert.Equal(record.LastSaveId, _server.Saves[0].SaveId);
+        Assert.Equal(["B", "B"], _server.Saves.Select(s => s.Content));
+        Assert.Equal(["snapshot", "version"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 1.1", "stored 2.0"], _server.Saves.Select(s => s.Outcome));
+    }
+
+    [Fact]
+    public async Task ARestartAfterALostAnswerStillMakesTheVersionWaitingBehindIt()
+    {
+        // A is stored but its answer lost, and Save as New Version, with nothing new to save, queues the same bytes as
+        // a version behind A's retry; then the helper stops. The repeat of A's saveId only answers A: the version goes
+        // after it.
+        var (first, path) = await OpenAsync(timings: Fast with { RetryDelays = [TimeSpan.FromMinutes(5)] });
+        _server.DropAnswers(1);
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.Saves.Count == 1, "A stored, its answer lost");
+        first.MarkNextVersion(path);
+        await Wait.Until(() => Queued(first, path, "A"), "the version waiting behind A's retry");
+        first.Dispose();
+        var record = Store.Find(path)!.Value.Item2;
+        Assert.Equal(("snapshot", "version"), (record.SentKind, record.PendingKind));
+
+        var second = Cycle();
+        await second.ResumeAsync();
+
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v2.0", "the version confirmed");
+        await Task.Delay(Quiet);
+        Assert.Equal(["A", "A", "A"], _server.Saves.Select(s => s.Content));
+        Assert.Equal(["snapshot", "snapshot", "version"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 1.1", "repeat", "stored 2.0"], _server.Saves.Select(s => s.Outcome));
+        Assert.False(Store.HasUnconfirmedChanges(path));
+    }
+
+    [Fact]
+    public async Task ARestartAfterTheWindowClosedChecksInTheVersionThatWasWaiting()
+    {
+        // As above, but the window closes while the helper is stopped: nothing is queued at the restart, so the
+        // check-in takes the version from the record, and goes after the repeat of A's saveId.
+        var (first, path) = await OpenAsync(timings: Fast with { RetryDelays = [TimeSpan.FromMinutes(5)] });
+        _server.DropAnswers(1);
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.Saves.Count == 1, "A stored, its answer lost");
+        first.MarkNextVersion(path);
+        await Wait.Until(() => Queued(first, path, "A"), "the version waiting behind A's retry");
+        first.Dispose();
+        FakeApp.Close(path);
+
+        await Cycle().ResumeAsync();
+
+        await Wait.Until(() => !File.Exists(path), "the check-in done");
+        await Task.Delay(Quiet);
+        Assert.Equal(["snapshot", "snapshot", "version"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 1.1", "repeat", "stored 2.0"], _server.Saves.Select(s => s.Outcome));
+        Assert.Equal([true, true, false], _server.Saves.Select(s => s.KeepCheckedOut));
+        Assert.Null(_server.Doc(5).Hold);
+        Assert.Empty(_events.Ended);
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
+    public async Task ARestartAfterTheWindowClosedKeepsTheCheckOutForTheSaveAfterARepeat()
+    {
+        // A is going up when the helper stops, with Save as New Version's B waiting, Healdan never got A, and the
+        // window closes meanwhile. The check-in repeats A's saveId first, which stores B: that repeat keeps the
+        // check-out, so the version after it can still go, and check it in.
+        var clock = new PausableClock();
+        var (first, path) = await OpenAsync(timings: Fast with { Clock = clock });
+        _server.HoldSaves();
+        FakeApp.Write(path, "A");
+        await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
+        clock.Pause();
+        first.MarkNextVersion(path);
+        FakeApp.Write(path, "B");
+        clock.Resume();
+        await Wait.Until(() => Queued(first, path, "B"), "B waiting behind A");
+        first.Dispose(); // A's send is cancelled before Healdan stores it
+        FakeApp.Close(path);
+        _server.OpenSaves();
+
+        await Cycle().ResumeAsync();
+
+        await Wait.Until(() => !File.Exists(path), "the check-in done");
+        await Task.Delay(Quiet);
+        Assert.Equal(["B", "B"], _server.Saves.Select(s => s.Content));
+        Assert.Equal(["snapshot", "version"], _server.Saves.Select(s => s.Kind));
+        Assert.Equal(["stored 1.1", "stored 2.0"], _server.Saves.Select(s => s.Outcome));
+        Assert.Equal([true, false], _server.Saves.Select(s => s.KeepCheckedOut));
+        Assert.Null(_server.Doc(5).Hold);
+        Assert.Empty(_events.Ended);
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
     public async Task SavedDuringAnOutageSaysItsPendingThenMovesOn()
     {
         var (cycle, path) = await OpenAsync();

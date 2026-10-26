@@ -1382,7 +1382,7 @@ components:
         version:
           type: string
           description: The server's release
-          examples: [9.3.1]
+          examples: [9.3.2]
         apiVersion:
           type: string
           const: v1

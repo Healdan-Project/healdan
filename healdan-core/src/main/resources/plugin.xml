@@ -88,7 +88,7 @@
 <!ELEMENT value (#PCDATA)>
 ]>
 
-<plugin id="healdan-core" version="9.3.1" class="com.logicaldoc.healdan.HealdanPlugin">
+<plugin id="healdan-core" version="9.3.2" class="com.logicaldoc.healdan.HealdanPlugin">
 	<requires>
 		<import plugin-id="logicaldoc-core" />
 	</requires>

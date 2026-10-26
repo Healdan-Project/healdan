@@ -83,7 +83,7 @@ docker/
   restart.sh                       target of Admin → Restart
   setenv.sh                        Tomcat JVM options
   tools/src/DbInitPlan.java        pure: which DbInit scripts to run (plugin.xml → ordered resources, created tables)
-  tools/src/ConfigPlan.java        pure: seed-once and env-owned keys, env validation
+  tools/src/ConfigPlan.java        pure: seed-once, env-owned and image-owned keys, env validation
   tools/src/DockerInit.java        main: apply config via ContextProperties, wait for DB, create + verify schema
   tools/test/*.java                unit and round-trip tests (no JUnit), run by tools/build.sh
   tools/build.sh                   compile, test and package the tool in the image's `tools` stage
@@ -166,6 +166,7 @@ Compose-only variables:
 ### Who owns which keys
 
 - **Env-owned keys** are re-applied on **every** boot, so `.env` is the source of truth for them: `jdbc.url`, `jdbc.username`, `jdbc.password`, and `server.url` when `LOGICALDOC_PUBLIC_URL` is set.
+- **Image-owned keys** are taken from `defaults/context.properties` on **every** boot, because they describe the image rather than the install: `product.release` and `product.year` (`ConfigPlan.IMAGE_KEYS`). Before this rule, an upgraded install kept reporting the release its conf file was first written by; the 9.3.2 sync found it.
 - **Seed-once keys** are written only while `LDOCHOME` is absent from `conf/context.properties`. The shipped defaults lack it and the seed adds it. So a first boot that crashes before seeding still gets seeded on the next boot. After that the keys belong to the app and its Settings UI:
 
   | Key | Value |
@@ -202,7 +203,7 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 4. **Run `DockerInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-init.jar' DockerInit`, in the background (see **Stopping during init** below). It reads everything from the environment and behaves as follows:
    - **Validate** the env vars (§5). Errors exit 1 with `[docker-init] ERROR: …`.
    - **Apply config.**
-     - It adds every key of `defaults/context.properties` that the conf file lacks, so settings upstream adds over time reach existing installs. It never overwrites a value.
+     - It adds every key of `defaults/context.properties` that the conf file lacks, so settings upstream adds over time reach existing installs. It never overwrites a value, except an image-owned key whose value differs from the defaults'.
      - It applies the seed-once keys if `LDOCHOME` is absent, then the env-owned keys, and writes once.
      - It then re-reads the file. LogicalDOC writes it one byte per character, so an env-owned value outside Latin-1, or one containing a line break, comes back changed. That exits 1, naming the variable.
    - **Wait for the DB.** It retries a connection with `select 1` every 2 s, for up to `DB_WAIT_SECONDS` (default 60). If the DB is still unreachable, it exits 1 ("not reachable"). An authentication error (SQLSTATE class 28) exits 1 at once ("database authentication failed").
