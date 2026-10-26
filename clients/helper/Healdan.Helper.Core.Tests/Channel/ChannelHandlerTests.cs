@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
@@ -22,6 +24,7 @@ public sealed class ChannelHandlerTests : IDisposable
         RetryDelays: [TimeSpan.FromMilliseconds(50)]);
 
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-handler-").FullName;
+    private readonly PausableClock _clock = new();
     private readonly List<string> _outside = [];
     private readonly FakeApi _server = new();
     private readonly FakeApp _app = new();
@@ -37,7 +40,7 @@ public sealed class ChannelHandlerTests : IDisposable
         var paths = HelperPaths.For(_root);
         var log = new HelperLog(paths.Log);
         var api = new HealdanApi(Server, _server) { Token = "hd_test" };
-        _cycle = new CopyCycle(api, new CopyStore(paths), _app, FakeApi.HereDevice, _events, Fast);
+        _cycle = new CopyCycle(api, new CopyStore(paths), _app, FakeApi.HereDevice, _events, Fast with { Clock = _clock });
         var links = new LinkHandler(_windows, _notifier, log);
         links.Ready(Server, _cycle).Wait();
         _handler = new ChannelHandler(_cycle, links, _windows, _notifier, log, paths, savedWait: TimeSpan.FromSeconds(10));
@@ -62,6 +65,21 @@ public sealed class ChannelHandlerTests : IDisposable
         (await _handler.HandleAsync(route, body))?.AsObject() ?? new JsonObject();
 
     private static JsonObject PathBody(string path) => new() { ["path"] = path };
+
+    /// <summary>
+    /// The app saves the copy in place. That empties the file first, so the settle's clock is stopped until the content
+    /// is in it: the empty file can't settle and go up in its place, however slow the runner.
+    /// </summary>
+    private void Save(string path, string content)
+    {
+        _clock.Pause();
+        FakeApp.Write(path, content);
+        _clock.Resume();
+    }
+
+    private bool Queued(string path, string content) =>
+        string.Equals(_cycle.QueuedHash(path), Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content))),
+            StringComparison.OrdinalIgnoreCase);
 
     private async Task<string> OpenAsync()
     {
@@ -126,7 +144,7 @@ public sealed class ChannelHandlerTests : IDisposable
     {
         var path = await OpenAsync();
 
-        FakeApp.Write(path, "edited");
+        Save(path, "edited");
         var state = await Call("saved", PathBody(path));
 
         Assert.Equal("Lease agreement #5 v1.1", (string?)state["title"]);
@@ -139,12 +157,12 @@ public sealed class ChannelHandlerTests : IDisposable
     {
         var path = await OpenAsync();
         _server.HoldSaves();
-        FakeApp.Write(path, "A");
+        Save(path, "A");
         var afterA = Call("saved", PathBody(path));
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
-        FakeApp.Write(path, "B");
+        Save(path, "B");
         var afterB = Call("saved", PathBody(path));
-        await Task.Delay(Fast.Settle * 3);
+        await Wait.Until(() => Queued(path, "B"), "B waiting behind A"); // not a fixed time: a slow settle can't miss it
         _server.OpenSaves();
 
         foreach (var answer in new[] { await afterA, await afterB })
@@ -161,7 +179,7 @@ public sealed class ChannelHandlerTests : IDisposable
     {
         var path = await OpenAsync();
         _server.HoldSaves();
-        FakeApp.Write(path, "A");
+        Save(path, "A");
         var afterSave = Call("saved", PathBody(path));
         await Wait.Until(() => _server.SavesReceived == 1, "A on its way up");
         await Call("new-version", PathBody(path)); // with no unsaved changes: the file as it is goes as a version
@@ -181,7 +199,7 @@ public sealed class ChannelHandlerTests : IDisposable
             new HelperLog(paths.Log), paths, savedWait: TimeSpan.FromMilliseconds(400)); // 120 s in the helper
         var path = await OpenAsync();
         _server.Down = true;
-        FakeApp.Write(path, "written while Healdan is down");
+        Save(path, "written while Healdan is down");
 
         var during = (await handler.HandleAsync("saved", PathBody(path)))!.AsObject();
         Assert.Equal("#5 v1.0", (string?)during["docRef"]);
@@ -200,11 +218,11 @@ public sealed class ChannelHandlerTests : IDisposable
         var filed = await Call("file", FileBody(TempFile("the window's content")));
         var path = (string)filed["path"]!;
 
-        FakeApp.Write(path, "the window, as LibreOffice stored it"); // storeAsURL
+        Save(path, "the window, as LibreOffice stored it"); // storeAsURL
         var adopted = await Call("adopted", PathBody(path));
         Assert.True((bool?)adopted["known"]);
         Assert.Equal("Memo #100 v1.0", (string?)adopted["title"]);
-        FakeApp.Write(path, "typed straight after, and saved"); // within the settle of the adoption
+        Save(path, "typed straight after, and saved"); // within the settle of the adoption
         var saved = await Call("saved", PathBody(path));
 
         Assert.Equal("Memo #100 v1.1", (string?)saved["title"]);
@@ -226,7 +244,7 @@ public sealed class ChannelHandlerTests : IDisposable
         var path = await OpenAsync();
 
         Assert.Equal("{}", (await Call("new-version", PathBody(path))).ToJsonString());
-        FakeApp.Write(path, "the next save");
+        Save(path, "the next save");
 
         await Wait.Until(() => _server.Saves.Any(s => s.Outcome.StartsWith("stored")), "the save");
         Assert.Equal("version", _server.Saves.Single().Kind);
