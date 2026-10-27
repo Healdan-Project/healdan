@@ -59,7 +59,7 @@ internal sealed class PropertiesForm
         var label = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Avalonia.Thickness(0, 0, 0, 2) };
         label.Children.Add(new TextBlock { Text = "Client / Matter", Classes = { "label" } });
         label.Children.Add(new Border { Classes = { "chip" }, Child = new TextBlock { Text = "from the matter" } });
-        var value = new SelectableTextBlock { Text = matter, Classes = { "value" } };
+        var value = new SelectableTextBlock { Text = matter, Classes = { "value" }, IsTabStop = false };
         return new StackPanel { Children = { label, value } };
     }
 
@@ -88,10 +88,15 @@ internal sealed class PropertiesForm
         : field.Source == "inherited" && field.InheritedFrom is { } folder ? $"from {folder}"
         : null;
 
+    /// <summary>
+    /// Not a Tab stop, as the Mac's selectable labels aren't (a focused one would also draw Fluent's black rectangle). It stays
+    /// focusable, so a click still selects it and Ctrl+C copies the selection; <c>Focusable = false</c> would lose Ctrl+C.
+    /// </summary>
     private static Control ReadOnly(FormField field) => new SelectableTextBlock
     {
         Text = field.Options is null ? field.Text : field.LabelOf(field.Text),
-        Classes = { "value" }
+        Classes = { "value" },
+        IsTabStop = false
     };
 
     private Control Editor(FormField field)
