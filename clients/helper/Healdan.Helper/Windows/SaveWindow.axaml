@@ -11,7 +11,7 @@
        contents in the middle, the new document's properties and its format on the right. -->
   <DockPanel>
     <Border x:Name="Toolbar" Classes="toolbar" DockPanel.Dock="Top">
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" VerticalAlignment="Center">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,*" VerticalAlignment="Center">
         <TextBlock x:Name="WindowTitle" Classes="heading" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="False" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
           <Button x:Name="BackButton" Classes="tool" AutomationProperties.Name="Back">
@@ -24,8 +24,8 @@
             <local:IconView Data="{StaticResource Icon.chevron-up}" />
           </Button>
         </StackPanel>
-        <ComboBox x:Name="ScopePicker" Grid.Column="3" MinWidth="112" Margin="10,0,6,0" VerticalAlignment="Center" />
-        <TextBox x:Name="SearchBox" Grid.Column="4" Width="320" VerticalAlignment="Center">
+        <ComboBox x:Name="ScopePicker" Grid.Column="2" MinWidth="112" Margin="10,0,6,0" VerticalAlignment="Center" />
+        <TextBox x:Name="SearchBox" Grid.Column="3" MinWidth="200" VerticalAlignment="Center">
           <TextBox.InnerLeftContent>
             <local:IconView Data="{StaticResource Icon.search}" Width="13" Height="13" Margin="6,0,0,0"
                             Foreground="{DynamicResource HdSecondaryBrush}" />

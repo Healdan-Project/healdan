@@ -493,6 +493,14 @@
   <Style Selector="Button.tool:disabled local|IconView">
     <Setter Property="Foreground" Value="{DynamicResource HdMutedBrush}" />
   </Style>
+  <!-- A star in a tool button keeps its own colours: Avalonia has no specificity, so these come after the two rules above. -->
+  <Style Selector="Button.tool local|IconView.star">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+  </Style>
+  <Style Selector="Button.tool local|IconView.star.on">
+    <Setter Property="Foreground" Value="{DynamicResource HdStarBrush}" />
+    <Setter Property="Fill" Value="{DynamicResource HdStarBrush}" />
+  </Style>
   <Style Selector="Button.tool:disabled /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
   </Style>
