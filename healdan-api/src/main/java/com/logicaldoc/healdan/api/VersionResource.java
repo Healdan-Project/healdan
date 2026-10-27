@@ -131,8 +131,11 @@ public class VersionResource {
 	 * JSON expected, or a missing {@code file} part;</li>
 	 * <li>{@code 404} for a document the caller can't read;</li>
 	 * <li>a {@code saveId} that's the last one stored for the document is a
-	 * save sent again after its answer was lost: {@code 201} with the
-	 * document as it is, storing nothing, whatever happened to it since;</li>
+	 * save sent again after its answer was lost, which stores nothing:
+	 * {@code 201} with the document as it is while its file is still the one
+	 * that save stored, whatever else happened to it since; {@code 409
+	 * version-moved}, with the document, once newer content was stored, by
+	 * any route, or when the save was kept before its file version was;</li>
 	 * <li>{@code 403} without the Write permission, or for a document
 	 * protected by a password, which the API never opens;</li>
 	 * <li>{@code 409 checked-out} for someone else's check-out, administrators
@@ -202,9 +205,16 @@ public class VersionResource {
 		// Read again: another request may have changed it while this one waited
 		Document document = DocumentResource.readable(docNumber, user);
 		DeviceHolds devices = DeviceHolds.get();
-		// Sent again after its answer was lost (Review Focus 1): it's stored, whatever happened to the document since
-		if (request.saveId() != null && request.saveId().equals(devices.lastSaveId(document)))
+		// Sent again after its answer was lost (Review Focus 1): told it's stored while its file is the document's
+		if (request.saveId() != null && request.saveId().equals(devices.lastSaveId(document))) {
+			String stored = devices.lastSaveFileVersion(document);
+			if (stored == null || !stored.equals(document.getFileVersion()))
+				throw ApiProblem.conflict(VERSION_MOVED,
+						"Document #%d changed after this save was stored: its file is at version %s now."
+								.formatted(docNumber, document.getFileVersion()))
+						.with("document", ApiViews.document(document, user));
 			return ApiViews.document(document, user);
+		}
 		if (!AccessChecks.allowed(user, Permission.WRITE, document))
 			throw ApiProblem.forbidden("You may not save to document #%d.".formatted(docNumber));
 		DocumentResource.refuseProtected(document, session, docNumber);

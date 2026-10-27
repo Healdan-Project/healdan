@@ -508,7 +508,7 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
 
 - **`ifVersion`:** when the document's `version` isn't that value, the save is `409 version-moved`, and nothing is stored.
 - **`ifHeld: true`:** when the document isn't checked out to the caller (on this device, if the hold has one), the save is `409 not-held`, and nothing is stored. Without it, M2's behaviour stays: a free document is checked out and saved. (changed in the build: the caller's hold on another device is `409 held-elsewhere` with or without `ifHeld`, §9.4, and someone else's is `409 checked-out`, so `not-held` means the document is free: released, or checked in from the web page. R2.)
-- (changed in the build) **`saveId`,** a UUID the client makes for each save and sends again unchanged with a retry. The server keeps the last `saveId` stored for each document, and a save repeating it is answered `201` with the document as it stands, storing nothing. The repeat is checked first, after read access, so a retry is recognised whatever has happened to the document since, its own check-in included; the preconditions alone would refuse it as `version-moved`. A `saveId` that isn't a UUID is `422`. Plan correction 1.
+- (changed in the build) **`saveId`,** a UUID the client makes for each save and sends again unchanged with a retry. The server keeps the last `saveId` stored for each document, and a save repeating it is answered `201` with the document as it stands, storing nothing. The repeat is checked first, after read access, so a retry is recognised whatever has happened to the document since, its own check-in included; the preconditions alone would refuse it as `version-moved`. A `saveId` that isn't a UUID is `422`. Plan correction 1. (changed after the build: the server keeps the `fileVersion` the save stored beside its `saveId` (V5), and answers a repeat `201` only while that's still the document's file. Once newer content has been stored, by any route, the repeat is `409 version-moved` with the document, so a late retry is never answered with someone else's content. A property change alone still gets `201`. The plan's follow-up from final review M5.)
 
 ### 9.6 The title's `#` form
 
@@ -725,7 +725,7 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
 - the preconditions:
   - `version-moved` for a stale `ifVersion`;
   - `not-held` for `ifHeld` on a released document, one checked in from the web page, and one someone else holds (changed in the build: someone else's hold is `409 checked-out`, which comes first, §9.5);
-  - a repeated `saveId` answered `201`, storing nothing (changed in the build);
+  - a repeated `saveId` answered `201`, storing nothing (changed in the build), and `409 version-moved` once newer content was stored over it (changed after the build);
 - stamping:
   - a `.docx` and an `.odt` with the property, filed and saved, carry their own number and version in the property and in the field's shown text;
   - a Save as New Document's file carries the new number;

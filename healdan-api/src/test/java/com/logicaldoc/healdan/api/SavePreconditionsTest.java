@@ -238,6 +238,65 @@ public class SavePreconditionsTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testSaveIdRepeatedAfterWebPageSave() throws Exception {
+		// The helper's save is stored, but its answer is lost, and the retry waits
+		String request = version("1.0", true, true, SAVE_X);
+		ApiResponse saved = save(request);
+		assertEquals(saved.toString(), 201, saved.status());
+		assertEquals("1.1", saved.json().path("fileVersion").textValue());
+		// Meanwhile clerk checks other content in from the web page, which sends no saveId, and checks it out again
+		DocumentManager.get()
+				.checkin(d.getId(), new ByteArrayInputStream(bytes("from the web page")), d.getFileName(), false,
+						null, history(clerk, DocumentEvent.CHECKEDIN))
+				.get();
+		DocumentManager.get().checkout(d.getId(), history(clerk, DocumentEvent.CHECKEDOUT));
+		awaitAsyncWork();
+		DbSnapshot before = fx.snapshot();
+
+		// Answered 201, the helper would take the web page's content for its own, and its next save would go over it
+		ApiResponse again = save(request);
+
+		assertEquals(again.toString(), 409, again.status());
+		assertEquals("version-moved", again.code());
+		assertEquals("1.2", again.json().path("document").path("fileVersion").textValue());
+		before.assertUnchanged();
+		assertEquals(List.of("1.2", "1.1", "1.0"), versions());
+	}
+
+	@Test
+	public void testSaveIdRepeatedAfterPropertyChange() throws Exception {
+		String request = version("1.0", true, true, SAVE_X);
+		assertEquals(201, save(request).status());
+		// Only a property changes: version moves on, but the document's file is still the one the save stored
+		ApiResponse patched = patch(document() + "/properties").token(token)
+				.json(Map.of("values", Map.of("legacydocnum", "OLD-1"))).send();
+		assertEquals(patched.toString(), 200, patched.status());
+		DbSnapshot before = fx.snapshot();
+
+		ApiResponse again = save(request);
+
+		assertEquals(again.toString(), 201, again.status());
+		assertEquals("1.2", again.json().path("version").textValue());
+		assertEquals("1.1", again.json().path("fileVersion").textValue());
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testSaveIdRepeatedFromBeforeUpgrade() throws Exception {
+		String request = version("1.0", true, true, SAVE_X);
+		assertEquals(201, save(request).status());
+		// Kept before the server recorded the file a save stored, so nothing says the file is still that one
+		jdbc().update("update hd_hold_device set hd_lastsavefileversion = null where hd_docid = ?", d.getId());
+		DbSnapshot before = fx.snapshot();
+
+		ApiResponse again = save(request);
+
+		assertEquals(again.toString(), 409, again.status());
+		assertEquals("version-moved", again.code());
+		before.assertUnchanged();
+	}
+
+	@Test
 	public void testSaveIdRepeatedAtOnce() throws Exception {
 		// The retry can reach the server while the first request is still being stored
 		String request = version("1.0", true, true, SAVE_X);

@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -174,6 +176,32 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 		assertEquals("save-3", holds().lastSaveId(reload()));
 		assertEquals(1, (int) jdbc().queryForObject("select count(*) from hd_hold_device where hd_docid = ?",
 				Integer.class, doc.getId()));
+	}
+
+	@Test
+	public void testLastSaveFileVersion() throws Exception {
+		ApiToken mac = token("mac-1");
+		assertNull(holds().lastSaveFileVersion(reload()));
+
+		// A save on closing: the file it stored is the document's as it is then
+		holds().clear(reload(), "save-1");
+		assertEquals("1.0", holds().lastSaveFileVersion(reload()));
+
+		// Content checked in another way, as from the web page, doesn't move it
+		checkout(clerk);
+		DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream("two".getBytes(StandardCharsets.UTF_8)),
+				"a.docx", false, null, history(clerk, DocumentEvent.CHECKEDIN)).get();
+		awaitVersionSaves();
+		assertEquals("1.1", reload().getFileVersion());
+		assertEquals("1.0", holds().lastSaveFileVersion(reload()));
+
+		// The next save with an id records its own file, and writes without one keep it
+		checkout(clerk);
+		holds().record(reload(), mac, "LibreOffice", "save-2");
+		assertEquals("1.1", holds().lastSaveFileVersion(reload()));
+		holds().record(reload(), mac, "Writer");
+		holds().clear(reload());
+		assertEquals("1.1", holds().lastSaveFileVersion(reload()));
 	}
 
 	@Test

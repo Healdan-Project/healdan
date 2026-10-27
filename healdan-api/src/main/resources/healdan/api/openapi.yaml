@@ -770,11 +770,16 @@ paths:
            a missing `file` part.
         2. `404 not-found` for a document the caller can't read.
         3. A `saveId` that is the last one stored for the document is the
-           same save sent again after its answer was lost: the answer is
-           `201` with the document as it is now, and nothing is stored. That
-           holds whatever happened to the document since, a check-in by the
-           save itself included, so a client that didn't hear back sends
-           the save again unchanged.
+           same save sent again after its answer was lost, and nothing is
+           stored. While the document's file is still the one that save
+           stored (its `fileVersion`), the answer is `201` with the document
+           as it is now. That holds whatever else happened to the document
+           since, a check-in by the save itself and changes to its
+           properties included, so a client that didn't hear back sends the
+           save again unchanged. Once newer content has been stored, by any
+           route, the answer is `409 version-moved` with the `document` as
+           it is now: the save went in, but the client's copy is no longer
+           the document's content.
         4. `403 forbidden` without the Write permission, and for a document
            protected by a password, which is always refused through the API:
            open it in Healdan's web page.
@@ -2187,6 +2192,8 @@ components:
           description: |
             A UUID the client makes for this save, and sends again unchanged
             when it sends the save again. The server keeps the last one
-            stored for each document, and a save repeating it is answered
-            `201` with the document as it is, storing nothing.
+            stored for each document, with the file version it stored. A
+            save repeating it stores nothing, and is answered `201` with the
+            document as it is while the document's file is still that one,
+            or `409 version-moved` once newer content has been stored.
           examples: ['0b0c5f8e-3f4c-4d39-9a52-0d1e2f3a4b5c']
