@@ -159,6 +159,25 @@ public class BrowserTests
     }
 
     [Fact]
+    public void TheDocumentsScopeSaysADocNumberJumps()
+    {
+        var open = Make(BrowseMode.Open);
+        Assert.Equal("Search documents, or type #1234", open.SearchPlaceholder);
+        open.Scope = SearchScope.Matters;
+        Assert.Equal("Search matters", open.SearchPlaceholder); // the other scopes stay short (call 2)
+        Assert.Equal("Search folders", Make(BrowseMode.Save).SearchPlaceholder);
+    }
+
+    [Fact]
+    public async Task EntriesCarryTheirIcons()
+    {
+        var browser = Make(BrowseMode.Save);
+        await browser.OpenFolderAsync(11);
+
+        Assert.Equal(["folder", "file-text"], browser.Entries.Select(e => e.Icon));
+    }
+
+    [Fact]
     public async Task SearchesWithinTheMatterShown()
     {
         var browser = Make(BrowseMode.Save);
@@ -172,7 +191,7 @@ public class BrowserTests
         // Searching again refines within the same matter.
         _api.Answer("GET /v1/search?scope=documents&q=lease&within=10&limit=50", Page());
         browser.Scope = SearchScope.Documents;
-        Assert.Equal("Search documents within 998.1 – Healdan Demo", browser.SearchPlaceholder);
+        Assert.Equal("Search documents within 998.1 – Healdan Demo, or type #1234", browser.SearchPlaceholder);
         await browser.SearchAsync("lease");
         Assert.Equal("GET /v1/search?scope=documents&q=lease&within=10&limit=50", _api.Calls.Last());
 

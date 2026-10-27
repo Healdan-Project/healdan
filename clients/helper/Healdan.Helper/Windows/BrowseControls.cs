@@ -1,5 +1,4 @@
 using Avalonia.Controls;
-using Path = Avalonia.Controls.Shapes.Path;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Healdan.Helper.Core.Browse;
@@ -29,7 +28,7 @@ internal sealed class BrowseControls
         TextBox Search,
         StackPanel Crumbs,
         Button Star,
-        Path StarIcon,
+        IconView StarIcon,
         ListBox List,
         TextBlock Notice,
         Button? NewFolder = null,
@@ -221,7 +220,11 @@ internal sealed class BrowseControls
         var button = new Button { Content = crumb.Text, Classes = { "link" } };
         button.Click += (_, _) => _ = _browser.OpenFolderAsync(crumb.FolderId);
         step.Children.Add(button);
-        step.Children.Add(new TextBlock { Text = "  ›  ", Classes = { "muted" }, VerticalAlignment = VerticalAlignment.Center });
+        step.Children.Add(new IconView
+        {
+            Data = Icons.Get("chevron-right"), Width = 12, Height = 12, Margin = new Avalonia.Thickness(4, 0),
+            Classes = { "row-icon" }, VerticalAlignment = VerticalAlignment.Center
+        });
         return step;
     }
 }

@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:b="using:Healdan.Helper.Core.Browse"
+        xmlns:local="using:Healdan.Helper.Windows"
         x:Class="Healdan.Helper.Windows.OpenWindow"
         Title="Open from Healdan"
         Width="1000" Height="600" MinWidth="820" MinHeight="440"
@@ -9,18 +10,32 @@
   <!-- Open from Healdan (spec §5.8; mockup open-from-healdan.html): the same three panes as Save, defaulting to the
        Documents scope, with a document's thumbnail, properties and versions on the right. -->
   <DockPanel>
-    <Border Classes="toolbar" DockPanel.Dock="Top">
-      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*">
-        <Button x:Name="BackButton" Classes="tool" Content="←" />
-        <Button x:Name="ForwardButton" Grid.Column="1" Classes="tool" Content="→" />
-        <Button x:Name="UpButton" Grid.Column="2" Classes="tool" Content="↑" />
-        <ComboBox x:Name="ScopePicker" Grid.Column="3" MinWidth="112" Margin="10,0,0,0" />
-        <TextBox x:Name="SearchBox" Grid.Column="4" Margin="6,0,0,0" />
+    <Border x:Name="Toolbar" Classes="toolbar" DockPanel.Dock="Top">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" VerticalAlignment="Center">
+        <TextBlock x:Name="WindowTitle" Classes="heading" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="False" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+          <Button x:Name="BackButton" Classes="tool" AutomationProperties.Name="Back">
+            <local:IconView Data="{StaticResource Icon.chevron-left}" />
+          </Button>
+          <Button x:Name="ForwardButton" Classes="tool" AutomationProperties.Name="Forward">
+            <local:IconView Data="{StaticResource Icon.chevron-right}" />
+          </Button>
+          <Button x:Name="UpButton" Classes="tool" AutomationProperties.Name="Up">
+            <local:IconView Data="{StaticResource Icon.chevron-up}" />
+          </Button>
+        </StackPanel>
+        <ComboBox x:Name="ScopePicker" Grid.Column="3" MinWidth="112" Margin="10,0,6,0" VerticalAlignment="Center" />
+        <TextBox x:Name="SearchBox" Grid.Column="4" Width="320" VerticalAlignment="Center">
+          <TextBox.InnerLeftContent>
+            <local:IconView Data="{StaticResource Icon.search}" Width="13" Height="13" Margin="6,0,0,0"
+                            Foreground="{DynamicResource HdSecondaryBrush}" />
+          </TextBox.InnerLeftContent>
+        </TextBox>
       </Grid>
     </Border>
-    <Border Classes="footer" DockPanel.Dock="Bottom">
+    <Border Classes="footer line" DockPanel.Dock="Bottom">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
-        <Button x:Name="LocalButton" Classes="link" Content="Open from Local Computer" VerticalAlignment="Center" />
+        <Button x:Name="LocalButton" Classes="link" Content="Open from Local Computer…" VerticalAlignment="Center" />
         <CheckBox x:Name="ReadOnlyBox" Grid.Column="2" Content="Open Read-Only" Margin="0,0,14,0" VerticalAlignment="Center" />
         <Button x:Name="CancelButton" Grid.Column="3" Classes="footer" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
         <Button x:Name="OpenButton" Grid.Column="4" Classes="footer accent" Content="Open" IsDefault="True" />
@@ -34,12 +49,12 @@
           <Border Classes="crumb" DockPanel.Dock="Top">
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True" />
-              <Button x:Name="StarButton" Grid.Column="1" Classes="tool">
-                <Path x:Name="StarIcon" Classes="star" Data="{StaticResource HdStarIcon}" />
+              <Button x:Name="StarButton" Grid.Column="1" Classes="tool" AutomationProperties.Name="Favourite">
+                <local:IconView x:Name="StarIcon" Classes="star" Data="{StaticResource Icon.star}" />
               </Button>
             </Grid>
           </Border>
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="24,*,56,52,58,84" Margin="10,6,10,4">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="24,*,56,52,58,84" Margin="10,6,10,3">
             <TextBlock Grid.Column="1" Classes="column" Text="Title" />
             <TextBlock Grid.Column="2" Classes="column" Text="Doc #" />
             <TextBlock Grid.Column="3" Classes="column" Text="Version" />
@@ -51,11 +66,14 @@
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="b:Entry">
                 <Grid ColumnDefinitions="24,*,56,52,58,84">
-                  <Path Classes="folder" Data="{StaticResource HdFolderIcon}" IsVisible="{Binding IsFolder}" VerticalAlignment="Top" Margin="0,2,0,0" HorizontalAlignment="Left" />
-                  <Path Classes="document" Data="{StaticResource HdDocumentIcon}" IsVisible="{Binding IsDocument}" VerticalAlignment="Top" Margin="2,1,0,0" HorizontalAlignment="Left" />
+                  <local:IconView Data="{Binding Icon, Converter={x:Static local:Icons.ByName}}" Classes="row-icon" Classes.folder="{Binding IsFolder}"
+                                  VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,1,0,0" />
                   <StackPanel Grid.Column="1" Margin="0,0,8,0">
                     <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Text="{Binding Holder}" IsVisible="{Binding HasHolder}" Classes="holder" Classes.mine="{Binding HeldByMe}" />
+                    <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding HasHolder}" Classes="holder" Classes.mine="{Binding HeldByMe}">
+                      <local:IconView Data="{StaticResource Icon.lock}" Width="11" Height="11" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Holder}" />
+                    </StackPanel>
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding DocNumber}" />
                   <TextBlock Grid.Column="3" Text="{Binding Version}" />

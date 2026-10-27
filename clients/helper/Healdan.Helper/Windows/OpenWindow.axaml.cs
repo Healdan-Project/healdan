@@ -33,6 +33,7 @@ public partial class OpenWindow : Window
     internal OpenWindow(HealdanApi api, bool fromApp) : this()
     {
         _api = api;
+        BrowserChrome.Apply(this, Toolbar, WindowTitle, [BackButton, ForwardButton, UpButton, ScopePicker, SearchBox]);
         _browser = new Browser(api, BrowseMode.Open);
         var places = new PlacesPane(BrowseMode.Open);
         PlacesHost.Child = places.View;

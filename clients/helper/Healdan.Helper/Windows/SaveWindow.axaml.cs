@@ -36,6 +36,7 @@ public partial class SaveWindow : Window
         (_request, _api, _paths) = (request, api, paths);
         if (request.DocNumber is not null)
             Title = "Save as New Document";
+        BrowserChrome.Apply(this, Toolbar, WindowTitle, [BackButton, ForwardButton, UpButton, ScopePicker, SearchBox]);
         _browser = new Browser(api, BrowseMode.Save);
         var places = new PlacesPane(BrowseMode.Save);
         PlacesHost.Child = places.View;
