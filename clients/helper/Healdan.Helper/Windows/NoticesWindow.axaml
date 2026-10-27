@@ -1,0 +1,17 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Healdan.Helper.Windows.NoticesWindow"
+        Title="Open-Source Notices"
+        Width="680" Height="560" MinWidth="420" MinHeight="300"
+        CanMinimize="False" CanMaximize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- Open-Source Notices (#89), from About: THIRD-PARTY-NOTICES.txt as the app carries it, read-only. -->
+  <DockPanel>
+    <Border Classes="footer" DockPanel.Dock="Bottom">
+      <Button x:Name="DoneButton" Classes="footer accent" Content="Done" IsDefault="True" IsCancel="True" HorizontalAlignment="Right" />
+    </Border>
+    <TextBox x:Name="NoticesText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+             FontFamily="Menlo, DejaVu Sans Mono, Consolas" FontSize="12" BorderThickness="0" Padding="16,12"
+             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+  </DockPanel>
+</Window>

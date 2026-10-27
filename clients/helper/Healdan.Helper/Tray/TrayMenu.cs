@@ -14,9 +14,9 @@ namespace Healdan.Helper.Tray;
 /// The menu-bar icon and its menu (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
 /// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), Open from Healdan (once the helper
 /// has started), Open Healdan in Browser (once there's a server, signed in or not: #87), Install the LibreOffice
-/// Extension while it isn't installed (spec §5.12, R22), Settings, Sign In or Sign Out, and Quit. When native
-/// notifications can't be shown, the last notice is the menu's status line. The menu is rebuilt when it opens and
-/// whenever the session changes.
+/// Extension while it isn't installed (spec §5.12, R22), Settings, Sign In or Sign Out, About (#89) and Quit. When
+/// native notifications can't be shown, the last notice is the menu's status line. The menu is rebuilt when it opens
+/// and whenever the session changes.
 /// </summary>
 internal sealed class TrayMenu : IDisposable
 {
@@ -94,7 +94,11 @@ internal sealed class TrayMenu : IDisposable
         var open = Item("Open from Healdan…", _windows.OpenFromMenu);
         open.IsEnabled = _session.Started && _session.SignedIn;
         items.Add(open);
-        var browse = Item("Open Healdan in Browser", OpenInBrowser);
+        var browse = Item("Open Healdan in Browser", () =>
+        {
+            if (_session.WebPage is { } page)
+                _windows.OpenWebPage(page);
+        });
         browse.IsEnabled = _session.WebPage is not null;
         items.Add(browse);
         if (_extension.Refresh()) // reads LibreOffice's registry, so the item goes once the user has accepted it
@@ -104,25 +108,8 @@ internal sealed class TrayMenu : IDisposable
             ? Item("Sign Out", () => Run(_session.SignOutAsync))
             : Item("Sign In…", () => Run(_session.SignInAgainAsync)));
         items.Add(new NativeMenuItemSeparator());
+        items.Add(Item("About Healdan Helper", _windows.ShowAbout));
         items.Add(Item("Quit Healdan Helper", _quit));
-    }
-
-    private void OpenInBrowser()
-    {
-        if (_session.WebPage is not { } page)
-            return;
-        _ = Task.Run(() =>
-        {
-            try
-            {
-                SystemOpener.OpenWebPage(page);
-            }
-            catch (Exception e)
-            {
-                Program.Log.Error("Open Healdan in Browser failed", e);
-                _notifier.Notify("Healdan Helper", "Healdan Helper couldn't open your browser.");
-            }
-        });
     }
 
     private void InstallExtension() => _ = Task.Run(() =>

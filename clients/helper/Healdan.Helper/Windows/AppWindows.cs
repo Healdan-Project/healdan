@@ -21,7 +21,7 @@ namespace Healdan.Helper.Windows;
 /// <para>A window that asks what the user started (Sign In, Sign Out on This Computer Only?, Save, Open, Properties,
 /// Checked Out on Another Computer) waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link
 /// brings it to the front. One the user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links
-/// back (<see cref="OpenWindows"/>).</para>
+/// back, and nor do About and its Open-Source Notices (<see cref="OpenWindows"/>).</para>
 /// <para>One of each window at a time: a second request for one that's open brings it to the front and is answered
 /// Cancel. The windows read Healdan through the session's API client, whose refused token asks for the sign-in again,
 /// and open documents through its cycle once they've closed, so the app never waits on a window for a download.
@@ -200,6 +200,51 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");
     });
+
+    // --- About -----------------------------------------------------------------------------------------------------
+
+    /// <summary>About Healdan Helper (#89), which asks nothing, like Settings.</summary>
+    public void ShowAbout() => Dispatcher.UIThread.Post(() => ShowOnly("about", () => new AboutWindow(Session, this)));
+
+    /// <summary>About's Open-Source Notices (#89).</summary>
+    public void ShowNotices() => Dispatcher.UIThread.Post(() => ShowOnly("notices", () => new NoticesWindow()));
+
+    /// <summary>
+    /// Opens a web page in the usual browser, off the UI thread, for the menu's Open Healdan in Browser (#87) and
+    /// About's links (#89). When no browser can be started, the user is told.
+    /// </summary>
+    public void OpenWebPage(Uri page) => _ = Task.Run(() =>
+    {
+        try
+        {
+            SystemOpener.OpenWebPage(page);
+        }
+        catch (Exception e)
+        {
+            log.Error($"{page} couldn't be opened in the browser", e);
+            notifier.Notify("Healdan Helper", "Healdan Helper couldn't open your browser.");
+        }
+    });
+
+    /// <summary>UI thread: shows a window that asks nothing, or brings the one of that kind up if it's open.</summary>
+    private void ShowOnly(string key, Func<Window> make)
+    {
+        if (Bring(key))
+            return;
+        Window window;
+        try
+        {
+            window = make();
+        }
+        catch (Exception e)
+        {
+            log.Error($"The {key} window couldn't be made", e);
+            return;
+        }
+        _single[key] = window;
+        if (!Show(window, waits: false, () => _single.Remove(key)))
+            _single.Remove(key);
+    }
 
     // --- Showing windows -------------------------------------------------------------------------------------------
 

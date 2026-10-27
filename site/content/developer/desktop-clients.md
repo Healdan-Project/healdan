@@ -216,6 +216,14 @@ through `channel.json`, and quits.
 - **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke
   test's step 5d runs them in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
+- **`NoticesTests`** fail when the packages `Healdan.Helper/THIRD-PARTY-NOTICES.txt` names differ from those the app
+  restores (its `obj/project.assets.json`), ids and versions both. The file is About's Open-Source Notices, built
+  into the app. A package added or moved needs its notice: its copyright and licence text, from the package or its
+  repository at that version, in a section whose `Packages:` line names it. The .NET section holds the runtime
+  pack's own `LICENSE.TXT` and `THIRD-PARTY-NOTICES.TXT`, and names the pack it took them from; refresh it when the
+  helper moves to a new .NET release.
+- **`MarkTests`** fail when About's mark, `Windows/HealdanMark.axaml`, and the docs site's `site/static/favicon.svg`
+  draw different shapes.
 - **The extension's tests** cover `healdan_logic.py` with fakes for LibreOffice, and build the `.oxt` and check that
   its files agree. A real LibreOffice isn't part of them.
 
@@ -232,7 +240,8 @@ the steps and the secrets.
   `Contents/Resources`. It registers `healdan:` and stays out of the Dock.
 - **The icon,** `AppIcon.icns`, is Healdan's mark from the docs site's `site/static/favicon.svg` on macOS's rounded
   square. `clients/helper/packaging/mac/make-icon.swift` draws it each time `package.sh` runs, so changing the
-  favicon changes the helper's icon too.
+  favicon changes the helper's icon too. About's mark is the same shapes in XAML, as Avalonia doesn't read SVG, and
+  `MarkTests` fails until it's redrawn.
 - **The version** is the helper's own, from its tag. The helper checks `GET /server`'s `apiVersion`, and refuses a
   server whose API it doesn't speak.
 - **The login item:** after its first sign-in, the installed helper registers itself to start at sign-in, with

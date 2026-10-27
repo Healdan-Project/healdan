@@ -1,0 +1,32 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Healdan.Helper.Windows"
+        x:Class="Healdan.Helper.Windows.AboutWindow"
+        Title="About Healdan Helper"
+        Width="400" SizeToContent="Height"
+        CanResize="False" CanMinimize="False" CanMaximize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- About Healdan Helper (#89): the mark, the version, the copyright, the server and its version, and the links. -->
+  <DockPanel>
+    <Border Classes="footer" DockPanel.Dock="Bottom">
+      <DockPanel>
+        <Button x:Name="DoneButton" Classes="footer accent" Content="Done" IsDefault="True" IsCancel="True" DockPanel.Dock="Right" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="NoticesButton" Classes="footer" Content="Open-Source Notices…" />
+          <Button x:Name="CopyButton" Classes="footer" Content="Copy for Support" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+    <StackPanel Margin="20,20,20,16" Spacing="4" HorizontalAlignment="Center">
+      <local:HealdanMark Width="72" Height="72" Margin="0,0,0,8" HorizontalAlignment="Center" />
+      <TextBlock Text="Healdan Helper" Classes="title" HorizontalAlignment="Center" />
+      <SelectableTextBlock x:Name="VersionText" HorizontalAlignment="Center" />
+      <TextBlock x:Name="CopyrightText" Classes="muted" HorizontalAlignment="Center" />
+      <SelectableTextBlock x:Name="ServerText" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,10,0,0" />
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12" Margin="0,8,0,0">
+        <HyperlinkButton x:Name="DocsLink" Content="Healdan Docs" />
+        <HyperlinkButton x:Name="LicenceLink" Content="Licence: GNU LGPL v3" />
+      </StackPanel>
+    </StackPanel>
+  </DockPanel>
+</Window>

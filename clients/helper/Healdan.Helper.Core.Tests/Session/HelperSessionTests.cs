@@ -316,6 +316,43 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task AboutReadsTheServersVersionSignedInOrOut()
+    {
+        SignedInBefore();
+        var session = Make();
+        Assert.Null(await session.AboutServerAsync()); // no server yet
+
+        await session.StartAsync();
+        Assert.Equal(new AboutServer("healdan.test", SignedIn: true, Version: "9.3.1"), await session.AboutServerAsync());
+
+        await session.SignOutAsync();
+        Assert.Equal(new AboutServer("healdan.test", SignedIn: false, Version: "9.3.1"), await session.AboutServerAsync());
+    }
+
+    [Fact]
+    public async Task AboutSaysWhenTheServerCantBeReached()
+    {
+        SignedInBefore();
+        _server.Down = true;
+        var session = Make();
+        await session.StartAsync();
+
+        Assert.Equal(new AboutServer("healdan.test", SignedIn: true, Version: null), await session.AboutServerAsync());
+    }
+
+    [Fact]
+    public async Task AboutStopsAskingWhenItsWindowGivesUp()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+
+        var about = await session.AboutServerAsync(new CancellationToken(canceled: true));
+
+        Assert.Equal(new AboutServer("healdan.test", SignedIn: true, Version: null), about);
+    }
+
+    [Fact]
     public async Task QuittingRemovesTheChannelFileAndKeepsTheCopies()
     {
         SignedInBefore();
