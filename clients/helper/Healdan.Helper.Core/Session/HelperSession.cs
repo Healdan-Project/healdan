@@ -30,6 +30,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>When saves can't go up during Sign Out, the check that Healdan answers at all waits this long.</summary>
     private static readonly TimeSpan ReachTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>About waits this long for the server's version.</summary>
+    private static readonly TimeSpan AboutTimeout = TimeSpan.FromSeconds(10);
+
     /// <summary>Once the user chooses Sign Out on This Computer, the revoke is tried once more for this long, in case Healdan is back.</summary>
     private static readonly TimeSpan RetryRevokeTimeout = TimeSpan.FromSeconds(5);
 
@@ -119,6 +122,34 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// Sign Out, as the browser has its own sign-in. A server under a path keeps it.
     /// </summary>
     public Uri? WebPage => Server is { } server ? new Uri(Address(server) + "/") : null;
+
+    /// <summary>
+    /// About's server line (#89): the server's host and port, whether the helper is signed in, and the Healdan version
+    /// its <c>GET /server</c> reports, which needs no sign-in. The version is null when Healdan couldn't be reached within
+    /// <see cref="AboutTimeout"/>, or the caller gave up first. Null before there's a server.
+    /// </summary>
+    public async Task<AboutServer?> AboutServerAsync(CancellationToken ct = default)
+    {
+        HealdanApi? api;
+        bool signedIn;
+        lock (_gate)
+            (api, signedIn) = (_api, _signedIn);
+        if (api is null)
+            return null;
+        string? version = null;
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(AboutTimeout);
+            version = (await api.ServerAsync(timeout.Token)).Version;
+        }
+        catch (Exception e) when (e is ApiException or HttpRequestException or OperationCanceledException or IOException or JsonException)
+        {
+            _log.Info($"About couldn't read {LinkName(api)}'s version ({e.GetType().Name})");
+        }
+        return new AboutServer(LinkName(api), signedIn, version);
+    }
+
 
     /// <summary>
     /// The API client once the helper has started, for the windows (Task 17's Open and Save). A <c>401</c> it meets

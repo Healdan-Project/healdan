@@ -13,6 +13,8 @@
   </PropertyGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets/**" />
+    <!-- About's Open-Source Notices (#89); NoticesTests checks it names every package restored. -->
+    <AvaloniaResource Include="THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" />

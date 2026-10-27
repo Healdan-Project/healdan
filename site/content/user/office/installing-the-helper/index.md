@@ -119,6 +119,7 @@ Click Healdan's icon in the menu bar.
 | Install the LibreOffice Extension… | Only while the extension isn't installed |
 | Settings… | See [Settings](#settings) |
 | Sign Out, or Sign In… | See [Signing Out](#signing-out) |
+| About Healdan Helper | The helper's version, and the server's: see [About Healdan Helper](#about-healdan-helper) |
 | Quit Healdan Helper | Stops the helper. The documents you have open stay checked out to you, and what you save meanwhile waits on your Mac until it starts again |
 
 ## Settings
@@ -135,6 +136,17 @@ Click Healdan's icon in the menu bar.
 - **Start at Sign-In:** after your first sign-in, the helper starts whenever you sign in to your Mac. To stop it,
   turn it off in **System Settings › General › Login Items & Extensions**.
 - **LibreOffice Extension:** the version installed, or what to do to install it.
+
+## About Healdan Helper
+
+Choose **About Healdan Helper** in the helper's menu.
+
+- **The helper's version,** and the server it signs in to with the version of Healdan it runs. It says "Not signed
+  in to …" when you're signed out, and "… couldn't be reached" when Healdan doesn't answer.
+- **Copy for Support** copies the helper's version, your Mac's, and the server with its version, as one line to
+  paste into an email or an issue.
+- **Healdan Docs** opens these pages, and **Licence: GNU LGPL v3** the licence the helper is free software under.
+- **Open-Source Notices…** lists the open-source software the helper is built with, and each one's licence.
 
 ## Signing Out
 
