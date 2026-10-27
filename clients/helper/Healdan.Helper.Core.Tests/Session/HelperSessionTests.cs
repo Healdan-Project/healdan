@@ -288,6 +288,34 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task TheWebPageIsTheServersFromTheStartAndStaysAfterSignOut()
+    {
+        SignedInBefore();
+        var session = Make();
+        Assert.Null(session.WebPage); // nothing for the menu to open yet
+
+        await session.StartAsync();
+        Assert.Equal("https://healdan.test/", session.WebPage?.AbsoluteUri);
+
+        await session.SignOutAsync();
+        Assert.Equal("https://healdan.test/", session.WebPage?.AbsoluteUri); // the browser has its own sign-in
+    }
+
+    [Fact]
+    public async Task TheWebPageKeepsTheServersPath()
+    {
+        new HelperSettings { Server = Account + "/healdan" }.Save(Paths);
+        _keychain.Items[Account] = "hd_kept_token"; // the keychain keeps one sign-in per scheme and host
+        _server.Down = true; // the fake answers only at the root, so the helper starts offline
+        var session = Make();
+
+        await session.StartAsync();
+
+        Assert.True(session.Started);
+        Assert.Equal("https://healdan.test/healdan/", session.WebPage?.AbsoluteUri);
+    }
+
+    [Fact]
     public async Task QuittingRemovesTheChannelFileAndKeepsTheCopies()
     {
         SignedInBefore();

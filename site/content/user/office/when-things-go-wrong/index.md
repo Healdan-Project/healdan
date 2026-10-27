@@ -85,7 +85,8 @@ When Open in App doesn't open anything:
 - **Nothing at all happened:** the helper isn't installed, or your browser didn't hand the link over. See
   [Installing the Healdan Helper](../installing-the-helper/).
 - **"That link is from …, but Healdan Helper is signed in to …":** open the web page at the address the helper is
-  signed in to. See [Opening Documents](../opening-documents/#from-the-web-page-open-in-app).
+  signed in to: **Open Healdan in Browser** in the helper's menu opens it. See
+  [Opening Documents](../opening-documents/#from-the-web-page-open-in-app).
 - **"Sign in to Healdan Helper to open documents":** you're signed out. Choose **Sign In…** in the helper's menu,
   then click Open in App again.
 - **One of the helper's windows is waiting for you,** such as Save to Healdan. The helper ignores links meanwhile,
