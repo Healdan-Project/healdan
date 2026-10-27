@@ -32,6 +32,7 @@
           <SolidColorBrush x:Key="HdYoursBrush" Color="#1E7B34" />
           <SolidColorBrush x:Key="HdTheirsBrush" Color="#B3261E" />
           <SolidColorBrush x:Key="HdCautionBrush" Color="#C77700" />
+          <SolidColorBrush x:Key="HdCautionTextBrush" Color="#9A5B00" />
           <SolidColorBrush x:Key="HdWarnBrush" Color="#FFF6E5" />
           <SolidColorBrush x:Key="HdWarnLineBrush" Color="#F2C26B" />
           <SolidColorBrush x:Key="HdWarnTextBrush" Color="#6B3D00" />
@@ -115,6 +116,7 @@
           <SolidColorBrush x:Key="HdYoursBrush" Color="#69DB7C" />
           <SolidColorBrush x:Key="HdTheirsBrush" Color="#FF8A80" />
           <SolidColorBrush x:Key="HdCautionBrush" Color="#F5A623" />
+          <SolidColorBrush x:Key="HdCautionTextBrush" Color="#F5A623" />
           <SolidColorBrush x:Key="HdWarnBrush" Color="#3B2A14" />
           <SolidColorBrush x:Key="HdWarnLineBrush" Color="#A0611B" />
           <SolidColorBrush x:Key="HdWarnTextBrush" Color="#FFD8A8" />

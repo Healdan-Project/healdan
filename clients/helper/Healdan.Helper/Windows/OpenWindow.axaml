@@ -97,10 +97,10 @@
               <TextBlock x:Name="DocSubtitle" Classes="muted" FontSize="11" />
               <StackPanel x:Name="OlderLine" Orientation="Horizontal" Spacing="3" IsVisible="False">
                 <local:IconView Data="{StaticResource Icon.eye}" Width="12" Height="12" Foreground="{DynamicResource HdCautionBrush}" />
-                <TextBlock Text="Older version: opens read-only" FontSize="11" Foreground="{DynamicResource HdCautionBrush}" />
+                <TextBlock Text="Older version: opens read-only" FontSize="11" Foreground="{DynamicResource HdCautionTextBrush}" />
               </StackPanel>
             </StackPanel>
-            <Button x:Name="DocStarButton" Grid.Column="2" Classes="tool" VerticalAlignment="Top" AutomationProperties.Name="Favourite">
+            <Button x:Name="DocStarButton" Grid.Column="2" Classes="tool" VerticalAlignment="Top" IsVisible="False" AutomationProperties.Name="Favourite">
               <local:IconView x:Name="DocStarIcon" Classes="star" Data="{StaticResource Icon.star}" />
             </Button>
           </Grid>

@@ -53,6 +53,7 @@ public partial class OpenWindow : Window
         });
         VersionList.SelectionChanged += (_, _) => VersionChanged();
         DetailTabs.SelectionChanged += (_, _) => ShowTab();
+        DetailTabs.KeyDown += TabKeyDown;
         ReadOnlyBox.IsCheckedChanged += (_, _) =>
         {
             if (!_quiet)
@@ -100,6 +101,7 @@ public partial class OpenWindow : Window
         _details = null;
         OpenButton.IsEnabled = true;
         ShowHeader(doc);
+        DocStarButton.IsVisible = false; // ShowStar shows it once the details are here and the star can act on them
         (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = ("Loading…", true, new Avalonia.Thickness(0, 12, 0, 0));
         PropertiesTab.IsVisible = VersionList.IsVisible = false;
         try
@@ -118,6 +120,7 @@ public partial class OpenWindow : Window
             if (load != _detailLoad)
                 return;
             _loadingFor = null;
+            DocStarButton.IsVisible = false;
             (DetailsNote.Text, DetailsNote.IsVisible) = (e is ApiException { Detail.Length: > 0 } api ? api.Detail : "Its details couldn't be read.", true);
         }
     }
@@ -148,6 +151,21 @@ public partial class OpenWindow : Window
         var shown = _details is not null;
         PropertiesTab.IsVisible = shown && DetailTabs.SelectedIndex == 0;
         VersionList.IsVisible = shown && DetailTabs.SelectedIndex == 1;
+    }
+
+    /// <summary>
+    /// Left and Right switch the tabs. Avalonia's list moves its selection on the arrow keys only when its panel is
+    /// navigable, and the grid that gives the segments their equal widths isn't, so the Versions tab would be out of
+    /// reach of the keyboard without this.
+    /// </summary>
+    private void TabKeyDown(object? sender, Avalonia.Input.KeyEventArgs e)
+    {
+        if (e.Handled || e.KeyModifiers != Avalonia.Input.KeyModifiers.None || e.Key is not (Avalonia.Input.Key.Left or Avalonia.Input.Key.Right))
+            return;
+        var next = Math.Clamp(DetailTabs.SelectedIndex + (e.Key == Avalonia.Input.Key.Right ? 1 : -1), 0, DetailTabs.ItemCount - 1);
+        DetailTabs.SelectedIndex = next;
+        (DetailTabs.ContainerFromIndex(next) as Control)?.Focus();
+        e.Handled = true;
     }
 
     private void ShowHeader(DocumentView doc, string? version = null)
