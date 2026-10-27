@@ -4,6 +4,9 @@
   <Styles.Resources>
     <!-- The colours, from the mockups, with a dark set for a dark menu bar and windows; and the rows' icons. -->
     <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://HealdanHelper/Windows/HelperIcons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
           <SolidColorBrush x:Key="HdWindowBrush" Color="#FFFFFF" />
