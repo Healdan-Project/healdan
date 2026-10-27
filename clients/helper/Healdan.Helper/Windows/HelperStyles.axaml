@@ -294,6 +294,16 @@
     <Setter Property="ClipToBounds" Value="True" />
   </Style>
 
+  <!-- Text keeps all its ink (polish spec §4.2). HarfBuzz lays San Francisco out from the font file's default instance
+       (optical size 28, Display) but Skia draws it at Text size (17), whose glyphs are wider. A … shows it most: at 13 pt
+       it ends 1.7 pt past the box it was measured into. Avalonia clips every text block and templated control to its
+       bounds, which cut the last dot off every "Install…" and "Loading…". Neither clips, so the ink stays
+       whole and no layout changes. :is() covers AccessText (a button's content) and SelectableTextBlock too; Button.link
+       has no padding, so its button must not clip either. -->
+  <Style Selector=":is(TextBlock), Button">
+    <Setter Property="ClipToBounds" Value="False" />
+  </Style>
+
   <!-- Text (polish spec §4.2). "muted" is Secondary, as the windows use it for text people read (call 8). -->
   <Style Selector="TextBlock.muted">
     <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
