@@ -59,7 +59,7 @@ internal sealed class PropertiesForm
         var label = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Avalonia.Thickness(0, 0, 0, 2) };
         label.Children.Add(new TextBlock { Text = "Client / Matter", Classes = { "label" } });
         label.Children.Add(new Border { Classes = { "chip" }, Child = new TextBlock { Text = "from the matter" } });
-        var value = new TextBox { Text = matter, IsReadOnly = true, Focusable = false, Classes = { "readonly" }, TextWrapping = TextWrapping.Wrap };
+        var value = new SelectableTextBlock { Text = matter, Classes = { "value" } };
         return new StackPanel { Children = { label, value } };
     }
 
@@ -88,13 +88,10 @@ internal sealed class PropertiesForm
         : field.Source == "inherited" && field.InheritedFrom is { } folder ? $"from {folder}"
         : null;
 
-    private static Control ReadOnly(FormField field) => new TextBox
+    private static Control ReadOnly(FormField field) => new SelectableTextBlock
     {
         Text = field.Options is null ? field.Text : field.LabelOf(field.Text),
-        IsReadOnly = true,
-        Focusable = false,
-        Classes = { "readonly" },
-        TextWrapping = TextWrapping.Wrap
+        Classes = { "value" }
     };
 
     private Control Editor(FormField field)
@@ -121,6 +118,8 @@ internal sealed class PropertiesForm
             AcceptsReturn = lines,
             TextWrapping = lines ? TextWrapping.Wrap : TextWrapping.NoWrap,
             Height = lines ? 64 : double.NaN,
+            // Comments' text starts at the top: the text-field style centres a single line, which would float it in the middle.
+            VerticalContentAlignment = lines ? VerticalAlignment.Top : VerticalAlignment.Center,
             PlaceholderText = field.Type switch { "integer" => "A whole number", "decimal" => "A number", _ => null }
         };
         box.TextChanged += (_, _) => Quietly(() => _model.SetText(field.Name, box.Text));

@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Healdan.Helper.Windows"
         x:Class="Healdan.Helper.Windows.PropertiesWindow"
         Title="Properties"
         Width="440" Height="600" MinWidth="380" MinHeight="360"
@@ -7,12 +8,14 @@
         WindowStartupLocation="CenterScreen">
   <!-- Properties (spec §5.5, §5.8): the same form as Save's right pane, for the open document. -->
   <DockPanel>
-    <Border Classes="toolbar" DockPanel.Dock="Top" Padding="16,10">
-      <StackPanel Spacing="2">
-        <TextBlock x:Name="DocTitle" Classes="title" TextWrapping="Wrap" />
-        <TextBlock x:Name="Subtitle" Classes="muted" Text="Document Properties" />
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="Auto,*" Margin="20,16,20,4">
+      <local:IconView x:Name="DocIcon" Width="32" Height="32" Foreground="{DynamicResource HdAccentTextBrush}"
+                      Data="{StaticResource Icon.file-text}" VerticalAlignment="Top" Margin="0,0,9,0" />
+      <StackPanel Grid.Column="1" Spacing="1">
+        <TextBlock x:Name="DocTitle" Classes="heading" TextWrapping="Wrap" />
+        <TextBlock x:Name="Subtitle" Classes="muted" FontSize="11" Text="Document Properties" />
       </StackPanel>
-    </Border>
+    </Grid>
     <Border Classes="footer" DockPanel.Dock="Bottom">
       <Grid ColumnDefinitions="*,Auto,Auto">
         <TextBlock x:Name="ProblemText" Classes="problem" VerticalAlignment="Center" Margin="0,0,10,0" IsVisible="False" />
@@ -21,9 +24,10 @@
       </Grid>
     </Border>
     <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-      <StackPanel Margin="16,12" Spacing="8">
+      <StackPanel Margin="20,8,20,12" Spacing="8">
         <TextBlock x:Name="NoteText" Classes="muted" TextWrapping="Wrap" Text="Loading the properties…" />
-        <ContentControl x:Name="FormHost" />
+        <!-- A ContentControl clips to its bounds, which would cut a focused field's ring at the form's edges. -->
+        <ContentControl x:Name="FormHost" ClipToBounds="False" />
       </StackPanel>
     </ScrollViewer>
   </DockPanel>

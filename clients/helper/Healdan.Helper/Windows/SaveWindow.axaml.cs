@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using Avalonia.Controls;
+using Avalonia.Controls.Templates;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Browse;
@@ -98,27 +99,26 @@ public partial class SaveWindow : Window
         await _browser!.StartAsync(Place.RecentFolders, folderId);
     }
 
+    /// <summary>The formats LibreOffice can save in, as a File Format pop-up (polish spec §6.3): the same choices, order and default.</summary>
     private void AddFormats(SaveNewRequest request)
     {
         _format = request.DefaultFormat();
         if (request.Formats.Count == 0)
         {
-            FormatPanel.Children.Add(new TextBlock { Text = "LibreOffice didn't say which formats it can save in.", Classes = { "problem" } });
+            (FormatPicker.IsVisible, FormatProblem.IsVisible) = (false, true);
             return;
         }
-        foreach (var format in request.Formats)
+        FormatPicker.ItemTemplate = new FuncDataTemplate<string>((format, _) => new TextBlock { Text = format is null ? "" : FileFormats.Label(format) });
+        FormatPicker.ItemsSource = request.Formats;
+        FormatPicker.SelectedItem = _format;
+        FormatPicker.SelectionChanged += (_, _) =>
         {
-            var radio = new RadioButton { Content = FileFormats.Label(format), GroupName = "format", IsChecked = format == _format };
-            radio.IsCheckedChanged += (_, _) =>
+            if (FormatPicker.SelectedItem is string format)
             {
-                if (radio.IsChecked == true)
-                {
-                    _format = format;
-                    UpdateSave();
-                }
-            };
-            FormatPanel.Children.Add(radio);
-        }
+                _format = format;
+                UpdateSave();
+            }
+        };
     }
 
     /// <summary>

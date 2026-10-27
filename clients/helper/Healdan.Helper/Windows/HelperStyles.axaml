@@ -178,10 +178,6 @@
       <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
       <Thickness x:Key="TextControlBorderThemeThickness">1</Thickness>
       <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
-      <!-- Until Task 6: the old icons, while windows still use them. -->
-      <StreamGeometry x:Key="HdFolderIcon">M0,2 C0,0.9 0.9,0 2,0 L6,0 L8,2 L14,2 C15.1,2 16,2.9 16,4 L16,11 C16,12.1 15.1,13 14,13 L2,13 C0.9,13 0,12.1 0,11 Z</StreamGeometry>
-      <StreamGeometry x:Key="HdDocumentIcon">M1,1 L8,1 L11,4 L11,14 L1,14 Z M8,1 L8,4 L11,4</StreamGeometry>
-      <StreamGeometry x:Key="HdStarIcon">M10,1 L12.6,7 L19,7.4 L14.1,11.5 L15.6,18 L10,14.5 L4.4,18 L5.9,11.5 L1,7.4 L7.4,7 Z</StreamGeometry>
     </ResourceDictionary>
   </Styles.Resources>
 
@@ -223,6 +219,30 @@
     <Setter Property="Data" Value="{StaticResource Icon.selector}" />
     <Setter Property="Width" Value="9" />
     <Setter Property="Height" Value="12" />
+  </Style>
+  <!-- The date picker's field at a text field's size (polish spec §4.3). Fluent gives it MinHeight 32 and Padding 4, which its
+       inner text box takes (and the text box's own MinHeight 22 plus its 1 pt margin would make 24); the calendar glyph's Grid
+       is Height 24 in the template, so it is set with the pseudo-class pair (a plain style loses to the template). -->
+  <Style Selector="CalendarDatePicker">
+    <Setter Property="MinHeight" Value="22" />
+    <Setter Property="Padding" Value="6,2,0,2" />
+  </Style>
+  <Style Selector="CalendarDatePicker /template/ TextBox#PART_TextBox">
+    <Setter Property="MinHeight" Value="20" />
+  </Style>
+  <Style Selector="CalendarDatePicker:not(:disabled) /template/ Button#PART_Button > Grid, CalendarDatePicker:disabled /template/ Button#PART_Button > Grid">
+    <Setter Property="Height" Value="18" />
+  </Style>
+  <!-- Its focus ring goes round the whole field, as a text box's, and not round the text box inside it (whose ring would show
+       as patches within the border). Like a text box's, the picker and its DataValidationErrors must not clip, or the ring is cut. -->
+  <Style Selector="CalendarDatePicker /template/ TextBox#PART_TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BoxShadow" Value="none" />
+  </Style>
+  <Style Selector="CalendarDatePicker:focus-within /template/ Panel#LayoutRoot > Border#Background">
+    <Setter Property="BoxShadow" Value="{DynamicResource HdFocusRing}" />
+  </Style>
+  <Style Selector="CalendarDatePicker, CalendarDatePicker /template/ DataValidationErrors">
+    <Setter Property="ClipToBounds" Value="False" />
   </Style>
   <Style Selector="CheckBox">
     <Setter Property="MinHeight" Value="22" />
@@ -519,31 +539,5 @@
   <Style Selector="Button.footer">
     <Setter Property="MinWidth" Value="80" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
-  </Style>
-
-  <!-- Until Task 6: the old icons, while windows still use them. -->
-  <Style Selector="Path.folder">
-    <Setter Property="Fill" Value="{DynamicResource HdAccentTextBrush}" />
-    <Setter Property="Width" Value="16" />
-    <Setter Property="Height" Value="13" />
-    <Setter Property="Stretch" Value="Uniform" />
-  </Style>
-  <Style Selector="Path.document">
-    <Setter Property="Stroke" Value="{DynamicResource HdSecondaryBrush}" />
-    <Setter Property="StrokeThickness" Value="1.2" />
-    <Setter Property="Width" Value="12" />
-    <Setter Property="Height" Value="15" />
-    <Setter Property="Stretch" Value="Uniform" />
-  </Style>
-  <Style Selector="Path.star">
-    <Setter Property="Stroke" Value="{DynamicResource HdSecondaryBrush}" />
-    <Setter Property="StrokeThickness" Value="1.2" />
-    <Setter Property="Width" Value="15" />
-    <Setter Property="Height" Value="15" />
-    <Setter Property="Stretch" Value="Uniform" />
-  </Style>
-  <Style Selector="Path.star.on">
-    <Setter Property="Fill" Value="{DynamicResource HdStarBrush}" />
-    <Setter Property="Stroke" Value="{DynamicResource HdStarBrush}" />
   </Style>
 </Styles>
