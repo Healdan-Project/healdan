@@ -74,6 +74,23 @@
           <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#6E6E73" />
           <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#0C69C0" />
           <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeChecked" Color="#0C69C0" />
+          <!-- The date picker's field, as a text box's; its glyph Secondary. TextForeground is the "Choose a date" text. -->
+          <SolidColorBrush x:Key="CalendarDatePickerBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPressed" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundFocused" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrush" Color="#C7C7CC" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPointerOver" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPressed" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="CalendarDatePickerForeground" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForeground" Color="#8E8E93" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForegroundSelected" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="CalendarDatePickerCalendarGlyphForeground" Color="#6E6E73" />
+          <!-- Links are Accent text, not the accent (polish spec §4.1); a disabled one is Muted. -->
+          <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundDisabled" Color="#8E8E93" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
           <SolidColorBrush x:Key="HdWindowBrush" Color="#1E1E1E" />
@@ -139,6 +156,21 @@
           <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#AEAEB2" />
           <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#1A74C4" />
           <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeChecked" Color="#1A74C4" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackground" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPointerOver" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPressed" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundFocused" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrush" Color="#48484A" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPointerOver" Color="#5A5A5E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPressed" Color="#5A5A5E" />
+          <SolidColorBrush x:Key="CalendarDatePickerForeground" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForeground" Color="#8E8E93" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForegroundSelected" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="CalendarDatePickerCalendarGlyphForeground" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundDisabled" Color="#8E8E93" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
       <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
@@ -433,6 +465,13 @@
     <Setter Property="Background" Value="{DynamicResource HdSegmentBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
     <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <!-- Text on a grey selection is the Text colour, whatever class it has: Secondary, and Yours green, fall below AA on the
+       pill and on the inactive selection. Icons keep their own colours. A focused list's accent selection is not here:
+       its white text rule above stays. These come after the class rules, so they win over them. -->
+  <Style Selector="ListBox.places ListBoxItem:selected TextBlock, ListBox.versions ListBoxItem:selected TextBlock, ListBox.rows:not(:focus-within) ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
   </Style>
 
   <!-- Buttons: icon-only tools, links, footers. -->
