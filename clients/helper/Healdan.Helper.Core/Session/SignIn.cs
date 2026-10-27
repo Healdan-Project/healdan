@@ -81,11 +81,12 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
 
     /// <summary>
     /// Forgets the token on this computer without asking the server, which goes on accepting it until it expires: for
-    /// a server Sign Out can't reach, once the user has said so.
+    /// a server Sign Out can't reach, once the user has said so. The keychain goes first, so a keychain that refuses
+    /// leaves the client its token, and the sign-in carries on as it was.
     /// </summary>
     public void ForgetHere()
     {
-        api.Token = null;
         keychain.Delete(Account);
+        api.Token = null;
     }
 }

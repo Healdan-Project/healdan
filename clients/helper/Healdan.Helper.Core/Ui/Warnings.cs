@@ -34,7 +34,7 @@ public static class Warnings
         unsent switch
         {
             0 => null,
-            1 => "1 save hasn't reached Healdan. Its copy stays on this computer, in Healdan Helper's Copies folder.",
-            _ => $"{unsent} saves haven't reached Healdan. Their copies stay on this computer, in Healdan Helper's Copies folder."
+            1 => $"1 save hasn't reached Healdan. Its copy stays on this computer, and goes up the next time you sign in to {server}.",
+            _ => $"{unsent} saves haven't reached Healdan. Their copies stay on this computer, and go up the next time you sign in to {server}."
         });
 }

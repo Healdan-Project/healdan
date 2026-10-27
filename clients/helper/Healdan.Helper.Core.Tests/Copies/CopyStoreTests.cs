@@ -324,6 +324,29 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void SetAsideMovesEveryCopyToAFolderNamedForItsServer()
+    {
+        var store = Store();
+        Assert.Null(store.SetAside("healdan.example")); // nothing to move
+        var (path, _, _) = store.Create(Doc(1234), false, "LibreOffice");
+        File.WriteAllText(path, "x");
+
+        var aside = store.SetAside("localhost:8080")!;
+
+        Assert.Equal(Path.Combine(_root, "Copies from localhost-8080"), aside);
+        Assert.True(File.Exists(Path.Combine(aside, Path.GetFileName(path))));
+        Assert.True(File.Exists(Path.Combine(aside, "." + Path.GetFileName(path) + ".healdan.json")));
+        if (!OperatingSystem.IsWindows())
+            Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(aside));
+        Assert.True(Directory.Exists(Paths.Copies)); // the folder itself stays
+        Assert.Empty(Directory.GetFileSystemEntries(Paths.Copies));
+        Assert.Empty(store.All());
+
+        store.Create(Doc(1234), false, "LibreOffice");
+        Assert.Equal(Path.Combine(_root, "Copies from localhost-8080 2"), store.SetAside("localhost:8080"));
+    }
+
+    [Fact]
     public void LongNamesGetRecordsThatFit()
     {
         var (path, _, _) = Store().Create(Doc(7, new string('x', 400) + ".docx"), false, "LibreOffice");

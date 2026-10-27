@@ -88,6 +88,10 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
   under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
   (`OpenKept`). The menu asks at each rebuild, so each copy is hashed again only once its size or time changes.
+- **The copies belong to the server in `settings.json`.** A sign-in to another server first moves everything in
+  `Copies/` into `Copies from <host[-port]>/` beside it (`CopyStore.SetAside`), numbered when that's taken, so no copy
+  is resumed against a server where its doc # is another document. `Copies/` itself stays, with any app's access to
+  it. A move that fails refuses the sign-in.
 
 ### The Helper's Files
 
@@ -95,6 +99,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 |---|---|---|
 | Support folder | `~/Library/Application Support/Healdan Helper/` | `$XDG_DATA_HOME/healdan-helper/`, or `~/.local/share/healdan-helper/` |
 | Local copies | `<support>/Copies/` | the same |
+| Copies from another server | `<support>/Copies from <host[-port]>/` | the same |
 | Files for filing | `<support>/Temp/`: the helper deletes each file once it's filed | the same |
 | Settings | `<support>/settings.json` | the same |
 | Device id | `<support>/device.json`: a random UUID made once, not a secret | the same |

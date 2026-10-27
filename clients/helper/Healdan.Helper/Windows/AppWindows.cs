@@ -58,7 +58,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         return _signIn = done.Task;
     });
 
-    /// <summary>Sign Out holds the session's lifecycle while it asks, so there's only ever one of these.</summary>
+    /// <summary>The session runs one Sign Out at a time, its window included, so there's only ever one of these.</summary>
     public Task<bool> SignOutHereAsync(string server, int unsent) => OnUi(() =>
     {
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

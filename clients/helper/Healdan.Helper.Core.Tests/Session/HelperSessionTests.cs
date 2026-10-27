@@ -516,6 +516,146 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task QuittingWhileSignOutRevokesAsksNothingAndKeepsTheSignIn()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _http.RevokeStatus = HttpStatusCode.ServiceUnavailable;
+        _http.OnRevoke = session.Dispose; // Quit while the revoke waits for its answer
+
+        await session.SignOutAsync();
+
+        Assert.Empty(_windows.SignOutHeres);
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+    }
+
+    [Fact]
+    public async Task SigningOutHereTriesTheRevokeOnceMoreInCaseHealdanIsBack()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+        _windows.OnSignOutHere = (_, _) =>
+        {
+            _server.Down = false; // back while the window was up
+            return Task.FromResult(true);
+        };
+
+        await session.SignOutAsync();
+
+        Assert.Equal(2, _http.Calls.Count(c => c == "DELETE healdan.test/api/v1/auth/tokens/current"));
+        Assert.Empty(_keychain.Items);
+        Assert.False(session.Started);
+        LogIndex("Signed out: healdan.test answered after all");
+    }
+
+    [Fact]
+    public async Task AKeychainThatRefusesKeepsTheSignInHere()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+        _keychain.RefuseDelete = true;
+        _windows.OnSignOutHere = (_, _) => Task.FromResult(true);
+
+        await session.SignOutAsync();
+
+        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.True(session.SignedIn);
+        Assert.True(session.Started);
+        Assert.NotNull(session.Api?.Token); // the client keeps its token, so Sign Out can ask again
+        Assert.Contains("refused to delete", _notifier.All);
+
+        await session.SignOutAsync();
+
+        Assert.Equal(2, _windows.SignOutHeres.Count);
+    }
+
+    [Fact]
+    public async Task ASecondSignOutWhileTheWindowIsUpDoesNothing()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+        Task? second = null;
+        _windows.OnSignOutHere = (_, _) =>
+        {
+            second = session.SignOutAsync();
+            return Task.FromResult(false);
+        };
+
+        await session.SignOutAsync();
+
+        Assert.True(second!.IsCompletedSuccessfully);
+        Assert.Single(_windows.SignOutHeres);
+        Assert.Single(_http.Calls, c => c == "DELETE healdan.test/api/v1/auth/tokens/current");
+    }
+
+    [Fact]
+    public async Task ARefusedTokenWhileSignOutAsksIsToldAsUsual()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        _server.Down = true;
+        _windows.OnSignOutHere = async (_, _) =>
+        {
+            (_server.Down, _server.Unauthorized) = (false, true); // Healdan is back, and refuses the token
+            await session.Links.Handle("healdan://open/5?server=healdan.test");
+            await Wait.Until(() => _notifier.All.Contains("Sign in to Healdan again"), "the refused token told");
+            return false;
+        };
+
+        await session.SignOutAsync();
+
+        Assert.True(session.Started);
+    }
+
+    [Fact]
+    public async Task SigningInToAnotherServerSetsTheOldServersCopiesAside()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        await session.SignOutAsync();
+        Assert.True(File.Exists(path)); // still checked out on healdan.test, so its copy stays
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync("https://second.test", "robert", Password) is null;
+
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.Equal("https://second.test", HelperSettings.Load(Paths).Server);
+        Assert.False(File.Exists(path));
+        var aside = Path.Combine(_root, "Copies from healdan.test");
+        Assert.True(File.Exists(Path.Combine(aside, Path.GetFileName(path))));
+        Assert.True(File.Exists(Path.Combine(aside, "." + Path.GetFileName(path) + ".healdan.json")));
+        Assert.DoesNotContain(_http.Calls, c => c.Contains("second.test/api/v1/documents/5", StringComparison.Ordinal)); // not resumed there
+        Assert.Contains("Copies from healdan.test", _notifier.All);
+    }
+
+    [Fact]
+    public async Task SigningInAgainToTheSameServerKeepsItsCopies()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        await session.SignOutAsync();
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(prompt.Server!, "robert", Password) is null;
+
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.True(File.Exists(path));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.test")));
+    }
+
+    [Fact]
     public async Task ASignInThatFinishesAfterItsWindowClosedStillStarts()
     {
         _http.HoldSignIns = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

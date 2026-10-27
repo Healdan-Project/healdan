@@ -182,6 +182,39 @@ public sealed class CopyStore(HelperPaths paths)
         return !last.Hash.Equals(record.ConfirmedHash, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Moves everything in the folder, every copy with its record and lock files, into a folder of its own beside it,
+    /// <c>Copies from &lt;server&gt;</c> (numbered when that's taken), and returns that folder's path; null when there's
+    /// nothing to move. For a sign-in to another server (spec §5.4): the copies belong to the server they came from,
+    /// where the same doc # can be another document, so none of them may go to the new one. The folder itself stays,
+    /// so an app's access to it does too. A move that fails part way leaves the rest where they were, and throws.
+    /// </summary>
+    /// <param name="server">The server the copies came from, as the user knows it, such as <c>healdan.example</c>.</param>
+    public string? SetAside(string server)
+    {
+        if (!Directory.Exists(paths.Copies) || !Directory.EnumerateFileSystemEntries(paths.Copies).Any())
+            return null;
+        var name = "Copies from " + string.Concat(server.Select(c => c is '/' or ':' or '\\' || char.IsControl(c) ? '-' : c));
+        var aside = System.IO.Path.Combine(paths.Support, name);
+        for (var n = 2; Directory.Exists(aside) || File.Exists(aside); n++)
+            aside = System.IO.Path.Combine(paths.Support, $"{name} {n}");
+        if (OperatingSystem.IsWindows())
+            Directory.CreateDirectory(aside);
+        else
+            Directory.CreateDirectory(aside, PrivateMode);
+        foreach (var entry in Directory.EnumerateFileSystemEntries(paths.Copies).ToList())
+        {
+            var target = System.IO.Path.Combine(aside, System.IO.Path.GetFileName(entry));
+            if (Directory.Exists(entry))
+                Directory.Move(entry, target);
+            else
+                File.Move(entry, target);
+        }
+        lock (_hashes)
+            _hashes.Clear();
+        return aside;
+    }
+
     /// <summary>The folder holding every copy.</summary>
     internal string Folder => paths.Copies;
 

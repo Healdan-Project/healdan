@@ -9,6 +9,9 @@ public sealed class MemoryKeychain : IKeychain
 
     public List<string> Log { get; } = [];
 
+    /// <summary>When set, Delete refuses, as a locked keychain would.</summary>
+    public bool RefuseDelete { get; set; }
+
     public string? Load(string account) => Items.GetValueOrDefault(account);
 
     public void Save(string account, string secret)
@@ -19,6 +22,8 @@ public sealed class MemoryKeychain : IKeychain
 
     public void Delete(string account)
     {
+        if (RefuseDelete)
+            throw new InvalidOperationException("The keychain refused to delete the sign-in (fake).");
         Items.Remove(account);
         Log.Add("delete");
     }

@@ -126,8 +126,9 @@ Click Healdan's icon in the menu bar.
 
 - **Server:** the server the helper is signed in to. To use another, sign out, then sign in with its address.
   Before you do, close your documents, and check the menu shows no saves waiting and nothing Not Yet in Healdan.
-  Local copies left from the old server carry on against the new one, where the same doc # can be a different
-  document.
+  Any local copies left from the old server are moved to a folder of their own beside `Copies`, such as
+  `Copies from healdan.example`, and a notice says so. The helper never sends them to the new server, where the
+  same doc # can be a different document.
 - **Open Each Kind of File In:** documents, spreadsheets and presentations open in LibreOffice. Other files, such as
   PDFs, open read-only in your Mac's usual app for them.
 - **Start at Sign-In:** after your first sign-in, the helper starts whenever you sign in to your Mac. To stop it,
@@ -154,8 +155,11 @@ this Mac only. That's for a server that's gone for good, or one you're moving aw
   back.
 - **Sign Out on This Computer** removes the sign-in from your Mac's keychain and stops the helper, as Sign Out does.
   The server still counts this Mac as signed in until the sign-in expires or you change your password.
+- **Healdan answers after all?** If the server is back by the time you choose, the helper ends the sign-in there
+  too.
 - **Saves that never reached Healdan** stay on your Mac, in the helper's `Copies` folder, and the window says how
-  many there are. The helper sends them the next time you sign in to the same server.
+  many there are. The helper sends them the next time you sign in to the same server. If you sign in to another
+  server instead, they're moved to a folder of their own, as for the [Server](#settings) setting, and never sent.
 
 ## Removing the Helper
 
@@ -164,4 +168,5 @@ this Mac only. That's for a server that's gone for good, or one you're moving aw
 3. Choose **Sign Out**, then **Quit Healdan Helper**, and drag **Healdan Helper** from Applications to the Bin.
 
 The helper's files are in `~/Library/Application Support/Healdan Helper/`. Its `Copies` folder holds the local copies
-of the documents you had open, including any changes that never reached Healdan: look there before deleting it.
+of the documents you had open, including any changes that never reached Healdan, and any `Copies from` folders hold
+those left from other servers: look there before deleting it.
