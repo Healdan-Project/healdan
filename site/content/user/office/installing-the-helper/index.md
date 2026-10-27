@@ -115,6 +115,7 @@ Click Healdan's icon in the menu bar.
 | "1 save waiting to be sent" | Saves Healdan couldn't take yet. The helper keeps trying |
 | Not Yet in Healdan | Copies with changes Healdan can't take, such as after your check-out ended, kept once their window closed. Choose one to open it as it is, then use Save as New Document: see [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended) |
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
+| Open Healdan in Browser | Healdan's web page, on the helper's server, in your usual browser. It works when the helper is signed out too: the web page has its own sign-in |
 | Install the LibreOffice Extension… | Only while the extension isn't installed |
 | Settings… | See [Settings](#settings) |
 | Sign Out, or Sign In… | See [Signing Out](#signing-out) |

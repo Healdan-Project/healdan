@@ -105,6 +105,12 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     /// <summary>
+    /// The server's web page, for the menu's Open Healdan in Browser: there once <see cref="Server"/> is, and kept after
+    /// Sign Out, as the browser has its own sign-in. A server under a path keeps it.
+    /// </summary>
+    public Uri? WebPage => Server is { } server ? new Uri(Address(server) + "/") : null;
+
+    /// <summary>
     /// The API client once the helper has started, for the windows (Task 17's Open and Save). A <c>401</c> it meets
     /// asks for the password again, as the cycle's do.
     /// </summary>
