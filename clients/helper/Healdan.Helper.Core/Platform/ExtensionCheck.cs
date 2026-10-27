@@ -1,3 +1,4 @@
+using System.Globalization;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Ui;
@@ -108,6 +109,22 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
         return Refresh()
             ? $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {MenuItem} in the Healdan Helper menu."
             : Record().Describe();
+    }
+
+    /// <summary>Settings' row (polish spec §6.5); <see cref="Describe"/> is its tooltip.</summary>
+    public ExtensionSummary Summary()
+    {
+        if (bundledOxt is null || !File.Exists(bundledOxt))
+            return ExtensionSummary.NotInThisBuild;
+        var missing = Refresh(); // reads the registry first, which may record what the user accepted
+        var record = Record();
+        if (missing)
+            return new("Not Installed", record.OpenedFor is { } waiting
+                ? $"Waiting for you to accept version {waiting} in LibreOffice."
+                : "Adds Healdan's menu and toolbar to LibreOffice.", true);
+        return record.Version is { } version
+            ? new(version, record.At is { } at ? "Installed on " + at.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture) : "Installed", false)
+            : new("Not Installed", null, false);
     }
 
     /// <summary>macOS (R22): the registry, and the <c>.oxt</c> opened in LibreOffice once per helper version.</summary>

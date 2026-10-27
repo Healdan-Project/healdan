@@ -194,8 +194,15 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var extension = Extension?.Describe() ?? "Not in this build: the installed app installs it.";
-        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Describe(), extension);
+        var check = Extension;
+        var summary = check?.Summary() ?? ExtensionSummary.NotInThisBuild;
+        var tip = check?.Describe() ?? "Not in this build: the installed app installs it.";
+        Func<Task<ExtensionSummary>>? install = check is null ? null : () => Task.Run(() =>
+        {
+            check.InstallFromMenu();
+            return check.Summary(); // what it says now, such as "Waiting for you to accept …" (call 4)
+        });
+        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Summary(), summary, tip, install);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

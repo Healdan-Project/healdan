@@ -30,6 +30,9 @@
           <SolidColorBrush x:Key="HdFieldLineBrush" Color="#C7C7CC" />
           <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#F5F5F7" />
           <SolidColorBrush x:Key="HdYoursBrush" Color="#1E7B34" />
+          <!-- Settings' status dot: on, and off (detail the spec's §4.1 table leaves to the builder). -->
+          <SolidColorBrush x:Key="HdOnBrush" Color="#28A745" />
+          <SolidColorBrush x:Key="HdOffBrush" Color="#8E8E93" />
           <SolidColorBrush x:Key="HdTheirsBrush" Color="#B3261E" />
           <SolidColorBrush x:Key="HdCautionBrush" Color="#C77700" />
           <SolidColorBrush x:Key="HdCautionTextBrush" Color="#9A5B00" />
@@ -114,6 +117,8 @@
           <SolidColorBrush x:Key="HdFieldLineBrush" Color="#48484A" />
           <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#2A2A2C" />
           <SolidColorBrush x:Key="HdYoursBrush" Color="#69DB7C" />
+          <SolidColorBrush x:Key="HdOnBrush" Color="#30D158" />
+          <SolidColorBrush x:Key="HdOffBrush" Color="#8E8E93" />
           <SolidColorBrush x:Key="HdTheirsBrush" Color="#FF8A80" />
           <SolidColorBrush x:Key="HdCautionBrush" Color="#F5A623" />
           <SolidColorBrush x:Key="HdCautionTextBrush" Color="#F5A623" />

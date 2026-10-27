@@ -1,27 +1,56 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Healdan.Helper.Windows"
         x:Class="Healdan.Helper.Windows.SettingsWindow"
         Title="Healdan Helper Settings"
         Width="460" SizeToContent="Height"
         CanResize="False" CanMinimize="False" CanMaximize="False"
+        Background="{DynamicResource HdGroupedBrush}"
         WindowStartupLocation="CenterScreen">
-  <!-- Settings (spec §5.8, §5.11, §5.12): the server's address, which app opens each kind of file, start at sign-in and the extension. -->
-  <DockPanel>
-    <Border Classes="footer" DockPanel.Dock="Bottom">
-      <Button x:Name="DoneButton" Classes="footer accent" Content="Done" IsDefault="True" IsCancel="True" HorizontalAlignment="Right" />
+  <!-- Settings (spec §5.8, §5.11, §5.12; polish spec §6.5): the server's address, which app opens each kind of file, start at
+       sign-in and the extension, as grouped rows, as the Mac's System Settings. -->
+  <StackPanel Margin="20,6,20,16">
+    <TextBlock Text="Server" Classes="group-header" />
+    <Border Classes="group">
+      <Grid Classes="row" ColumnDefinitions="Auto,*,Auto">
+        <local:IconView Data="{StaticResource Icon.server}" Classes="folder" Margin="0,0,8,0" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Text="Address" VerticalAlignment="Center" />
+        <SelectableTextBlock x:Name="ServerValue" Grid.Column="2" IsTabStop="False" Foreground="{DynamicResource HdSecondaryBrush}" VerticalAlignment="Center" />
+      </Grid>
     </Border>
-    <StackPanel Margin="20,16" Spacing="6">
-      <TextBlock Text="Server" Classes="heading" />
-      <TextBox x:Name="ServerBox" IsReadOnly="True" Classes="readonly" />
-      <TextBlock x:Name="ServerNote" Classes="muted" TextWrapping="Wrap" FontSize="12" />
-      <TextBlock Text="Open Each Kind of File In" Classes="heading" Margin="0,12,0,0" />
-      <Grid x:Name="KindsGrid" ColumnDefinitions="*,170" RowDefinitions="Auto,Auto,Auto" />
-      <TextBlock Classes="muted" TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0"
-                 Text="Other files open read-only in the computer's default app." />
-      <TextBlock Text="Start at Sign-In" Classes="heading" Margin="0,12,0,0" />
-      <TextBlock x:Name="LoginItemLine" TextWrapping="Wrap" />
-      <TextBlock Text="LibreOffice Extension" Classes="heading" Margin="0,12,0,0" />
-      <TextBlock x:Name="ExtensionLine" TextWrapping="Wrap" />
-    </StackPanel>
-  </DockPanel>
+    <TextBlock x:Name="ServerNote" Classes="footnote" />
+    <TextBlock Text="Open Each Kind of File In" Classes="group-header" />
+    <Border Classes="group">
+      <StackPanel x:Name="KindsGroup" />
+    </Border>
+    <TextBlock Classes="footnote" Text="Other files open read-only in the computer's default app." />
+    <TextBlock Text="This Computer" Classes="group-header" />
+    <Border Classes="group">
+      <StackPanel>
+        <Grid x:Name="LoginRow" Classes="row" ColumnDefinitions="Auto,*,Auto">
+          <local:IconView Data="{StaticResource Icon.power}" Classes="folder" Margin="0,0,8,0" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="Start at Sign-In" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+            <Ellipse x:Name="LoginDot" Width="7" Height="7" />
+            <TextBlock x:Name="LoginValue" Foreground="{DynamicResource HdSecondaryBrush}" />
+          </StackPanel>
+        </Grid>
+        <Border Classes="divided">
+          <Grid x:Name="ExtensionRow" Classes="row" ColumnDefinitions="Auto,*,Auto">
+            <local:IconView Data="{StaticResource Icon.puzzle}" Classes="folder" Margin="0,0,8,0" VerticalAlignment="Center" />
+            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+              <TextBlock Text="LibreOffice Extension" />
+              <TextBlock x:Name="ExtensionNote" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock x:Name="ExtensionValue" Foreground="{DynamicResource HdSecondaryBrush}" VerticalAlignment="Center" />
+              <Button x:Name="InstallButton" Content="Install…" IsVisible="False" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </StackPanel>
+    </Border>
+    <Button x:Name="DoneButton" Classes="footer accent" Content="Done" IsDefault="True" IsCancel="True"
+            HorizontalAlignment="Right" Margin="0,16,0,0" />
+  </StackPanel>
 </Window>

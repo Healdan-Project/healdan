@@ -345,6 +345,35 @@ public sealed class ExtensionCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task MacSettingsRowOffersInstallWhileItIsntInstalled()
+    {
+        Save(new ExtensionRecord { OpenedFor = "0.2.0", OpenedBy = Helper });
+        var check = Mac(Oxt("0.2.0"));
+        await check.RunAsync();
+
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+
+        _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
+        var installed = check.Summary();
+        Assert.Equal("0.2.0", installed.Value);
+        Assert.StartsWith("Installed on ", installed.Note);
+        Assert.False(installed.CanInstall);
+    }
+
+    [Fact]
+    public async Task MacSettingsRowBeforeLibreOfficeWasAsked()
+    {
+        var check = Mac(Oxt("0.2.0"));
+        Assert.Equal(new ExtensionSummary("Not Installed", null, false), check.Summary()); // before the start's check: nothing to offer yet
+
+        await check.RunAsync(); // opens it in LibreOffice once
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+    }
+
+    [Fact]
+    public void SettingsRowWithoutTheOxt() => Assert.Equal(ExtensionSummary.NotInThisBuild, Mac(null).Summary());
+
+    [Fact]
     public void SettingsSayWhichWayWorked()
     {
         var at = new DateTimeOffset(new DateTime(2026, 10, 25, 12, 0, 0, DateTimeKind.Local)); // shown in local time

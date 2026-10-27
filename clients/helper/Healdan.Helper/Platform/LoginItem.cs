@@ -103,6 +103,29 @@ internal static unsafe class LoginItem
         }
     }
 
+    /// <summary>Settings' row (polish spec §6.5): a short value, whether it's on, and <see cref="Describe"/> as its tooltip.</summary>
+    public static LoginItemSummary Summary()
+    {
+        var tip = Describe();
+        if (!Available)
+            return new("Not in This Build", false, tip);
+        if (Passing() is not null)
+            return new("Off", false, tip);
+        try
+        {
+            return Status() switch
+            {
+                Enabled => new("On", true, tip),
+                RequiresApproval => new("Waiting for Approval", false, tip),
+                _ => new("Off", false, tip)
+            };
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return new("Unknown", false, tip);
+        }
+    }
+
     /// <summary>
     /// Where the app runs from, when it's a place that goes away: the mounted disk image, or the read-only copy macOS
     /// runs a quarantined app from until it's moved (App Translocation). Null from anywhere else, such as Applications.
@@ -154,3 +177,6 @@ internal static unsafe class LoginItem
         return service != IntPtr.Zero ? service : throw new EntryPointNotFoundException("SMAppService has no main app service.");
     }
 }
+
+/// <summary>Start at Sign-In's row in Settings.</summary>
+internal sealed record LoginItemSummary(string Value, bool On, string Tip);
