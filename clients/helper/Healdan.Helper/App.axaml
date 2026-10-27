@@ -6,8 +6,8 @@
   <Application.Styles>
     <FluentTheme DensityStyle="Compact">
       <FluentTheme.Palettes>
-        <ColorPaletteResources x:Key="Light" Accent="#FF3B5BDB" />
-        <ColorPaletteResources x:Key="Dark" Accent="#FF5C7CFA" />
+        <ColorPaletteResources x:Key="Light" Accent="#FF0C69C0" />
+        <ColorPaletteResources x:Key="Dark" Accent="#FF1A74C4" />
       </FluentTheme.Palettes>
     </FluentTheme>
     <StyleInclude Source="avares://HealdanHelper/Windows/HelperStyles.axaml" />
