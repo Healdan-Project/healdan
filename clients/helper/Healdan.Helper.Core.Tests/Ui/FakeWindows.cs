@@ -17,6 +17,11 @@ public sealed class FakeWindows : IWindows
 
     public ConcurrentQueue<SignInPrompt> SignIns { get; } = new();
 
+    /// <summary>What Sign Out on This Computer Only? answers: by default the user chooses Stay Signed In.</summary>
+    public Func<string, int, Task<bool>> OnSignOutHere { get; set; } = (_, _) => Task.FromResult(false);
+
+    public ConcurrentQueue<(string Server, int Unsent)> SignOutHeres { get; } = new();
+
     public ConcurrentQueue<(string Route, JsonObject Request)> Asked { get; } = new();
 
     public ConcurrentQueue<long> HeldElsewheres { get; } = new();
@@ -29,6 +34,12 @@ public sealed class FakeWindows : IWindows
     {
         SignIns.Enqueue(prompt);
         return OnSignIn(prompt);
+    }
+
+    public Task<bool> SignOutHereAsync(string server, int unsent)
+    {
+        SignOutHeres.Enqueue((server, unsent));
+        return OnSignOutHere(server, unsent);
     }
 
     public Task<JsonObject> OpenDialogAsync(JsonObject request) => Ask("open-dialog", request);

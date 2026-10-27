@@ -168,6 +168,43 @@ public sealed class SignInTests : IDisposable
     }
 
     [Fact]
+    public async Task SignOutGivesUpOnAServerThatDoesntAnswer()
+    {
+        _keychain.Items[Account] = Token;
+        var api = new HealdanApi(new Uri(Account), new SilentHandler());
+        api.Token = Token;
+        var signIn = new SignIn(api, _keychain, Device(), revokeTimeout: TimeSpan.FromMilliseconds(200));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => signIn.SignOutAsync(() => Task.CompletedTask));
+
+        Assert.Equal(Token, _keychain.Items[Account]);
+    }
+
+    [Fact]
+    public void ForgetHereClearsTheTokenWithoutAskingTheServer()
+    {
+        _keychain.Items[Account] = Token;
+        var api = Api();
+        api.Token = Token;
+
+        Make(api).ForgetHere();
+
+        Assert.Empty(_keychain.Items);
+        Assert.Null(api.Token);
+        Assert.Empty(_handler.Requests);
+    }
+
+    /// <summary>A server that takes the request and never answers.</summary>
+    private sealed class SilentHandler : HttpMessageHandler
+    {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            throw new InvalidOperationException("Never reached.");
+        }
+    }
+
+    [Fact]
     public void SettingsKeepOnlyTheServerAndChooseLibreOffice()
     {
         var paths = HelperPaths.For(_dir);

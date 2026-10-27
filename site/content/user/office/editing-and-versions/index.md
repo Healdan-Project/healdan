@@ -92,3 +92,6 @@ on. Leave the folder to the helper: opening, moving or renaming a copy yourself 
 A copy with changes Healdan hasn't confirmed is never deleted, even after a crash or a refused save. Once its window
 has closed, the helper's menu lists it under **Not Yet in Healdan** until you file it. See
 [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended).
+
+When you sign in to another server, the copies left from the old one move to a folder of their own beside `Copies`,
+such as `Copies from healdan.example`, and the helper never sends them to the new server.

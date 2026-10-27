@@ -18,6 +18,13 @@ public interface IWindows
     /// <summary>The Sign In window. True once the user has signed in; false when they closed it.</summary>
     Task<bool> SignInAsync(SignInPrompt prompt);
 
+    /// <summary>
+    /// Sign Out on This Computer Only? (spec §5.2): Sign Out couldn't reach <paramref name="server"/> to revoke the
+    /// token. True when the user chose to forget the sign-in here; false for Stay Signed In, the default, or a close.
+    /// <paramref name="unsent"/> copies have a save that never reached Healdan, and stay on this computer either way.
+    /// </summary>
+    Task<bool> SignOutHereAsync(string server, int unsent);
+
     /// <summary><c>/v1/open-dialog</c>: Open from Healdan. Answers <c>{"action": "opened" | "local" | "cancel"}</c>.</summary>
     Task<JsonObject> OpenDialogAsync(JsonObject request);
 

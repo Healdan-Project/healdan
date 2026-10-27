@@ -27,6 +27,12 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>The Sign In window waits this long for the server, not the API client's ten minutes.</summary>
     private static readonly TimeSpan SignInTimeout = TimeSpan.FromSeconds(30);
 
+    /// <summary>When saves can't go up during Sign Out, the check that Healdan answers at all waits this long.</summary>
+    private static readonly TimeSpan ReachTimeout = TimeSpan.FromSeconds(10);
+
+    /// <summary>Once the user chooses Sign Out on This Computer, the revoke is tried once more for this long, in case Healdan is back.</summary>
+    private static readonly TimeSpan RetryRevokeTimeout = TimeSpan.FromSeconds(5);
+
     private readonly HelperPaths _paths;
     private readonly IKeychain _keychain;
     private readonly DeviceIdentity _device;
@@ -64,6 +70,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private string? _userName;
     private int _waiting;
     private int _asking;
+
+    /// <summary>1 while a Sign Out runs, its Sign Out on This Computer Only? window included.</summary>
+    private int _signOut;
+
     private bool _disposed;
 
     /// <param name="http">The HTTP handler under every API client; the system's by default (tests pass a fake server).</param>
@@ -288,9 +298,31 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>
     /// Sign Out (spec §5.2): sends every unsent save first, settling ones and those going up included, then revokes the
     /// token and stops. Copies stay on this computer for the next sign-in. If saves are still unsent after a while, or
-    /// the token can't be revoked, the user is told and stays signed in; a Quit meanwhile keeps the sign-in too.
+    /// Healdan refuses the revoke, the user is told and stays signed in; a Quit meanwhile keeps the sign-in too. When
+    /// Healdan can't be reached at all, a server gone for good would keep the helper signed in to it for ever, so the
+    /// user is asked whether to forget the sign-in on this computer only. A second Sign Out meanwhile, while that
+    /// window is up included, does nothing.
     /// </summary>
     public async Task SignOutAsync()
+    {
+        if (Interlocked.Exchange(ref _signOut, 1) == 1)
+            return; // one is under way already
+        try
+        {
+            if (await RevokeAsync() is { } unreached)
+                await SignOutHereAsync(unreached.Api, unreached.Unsent);
+        }
+        finally
+        {
+            Volatile.Write(ref _signOut, 0);
+        }
+    }
+
+    /// <summary>
+    /// Under <see cref="_lifecycle"/>: Sign Out's flush and revoke, and the stop once they've worked. Returns the client
+    /// and the saves left unsent when Healdan couldn't be reached at all, else null.
+    /// </summary>
+    private async Task<(HealdanApi Api, int Unsent)?> RevokeAsync()
     {
         await _lifecycle.WaitAsync();
         try
@@ -301,33 +333,53 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             {
                 (api, cycle) = (_api, _cycle);
                 if (api?.Token is null || _disposed)
-                    return;
+                    return null;
                 _signingOut = true; // its own 401s (a token already refused) are expected
             }
             try
             {
-                await new SignIn(api, _keychain, _device).SignOutAsync(() => FlushAsync(cycle));
-            }
-            catch (OperationCanceledException) when (Disposed)
-            {
-                _log.Info("Quit during Sign Out: the sign-in is kept, and the next start sends what's unsent");
-                return;
-            }
-            catch (Exception e) when (e is InvalidOperationException or ApiException or HttpRequestException or TaskCanceledException or IOException)
-            {
-                _log.Warn("Sign Out didn't finish: " + e.Message);
-                _notifier.Notify(Helper, e is InvalidOperationException
-                    ? e.Message
-                    : "Healdan Helper couldn't sign out, as Healdan can't be reached. You're still signed in.");
-                return;
+                try
+                {
+                    await new SignIn(api, _keychain, _device).SignOutAsync(() => FlushAsync(cycle));
+                }
+                catch (OperationCanceledException) when (Disposed)
+                {
+                    _log.Info("Quit during Sign Out: the sign-in is kept, and the next start sends what's unsent");
+                    return null;
+                }
+                catch (UnsentSavesException e)
+                {
+                    if (await ReachableAsync(api))
+                    {
+                        _log.Warn("Sign Out didn't finish: " + e.Message);
+                        _notifier.Notify(Helper, e.Message);
+                        return null;
+                    }
+                    _log.Warn($"Sign Out couldn't send {e.Count} save(s): Healdan can't be reached");
+                    return (api, e.Count);
+                }
+                catch (Exception e) when (Unreachable(e))
+                {
+                    _log.Warn($"Sign Out couldn't revoke the token: Healdan can't be reached ({e.GetType().Name}: {e.Message})");
+                    return (api, 0);
+                }
+                catch (Exception e) when (e is InvalidOperationException or ApiException)
+                {
+                    _log.Warn("Sign Out didn't finish: " + e.Message);
+                    _notifier.Notify(Helper, e is ApiException a
+                        ? $"Healdan Helper couldn't sign out, as Healdan answered {a.Status}. You're still signed in."
+                        : e.Message);
+                    return null;
+                }
+                _log.Info("Signed out");
+                Stop(SignInToOpen);
+                return null;
             }
             finally
             {
                 lock (_gate)
                     _signingOut = false;
             }
-            _log.Info("Signed out");
-            Stop(SignInToOpen);
         }
         finally
         {
@@ -513,6 +565,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return $"{server.Authority} couldn't be reached: {e.Message}";
         }
 
+        if (SetCopiesAside(server) is { } refusal)
+            return refusal;
         HelperSettings.Update(_paths, s => s.Server = Address(server));
         SetSignedIn(api, await UserNameAsync(api));
         _log.Info($"Signed in to {LinkName(api)} as {user.Trim()}");
@@ -522,6 +576,46 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             _ = Task.Run(EnsureStartedAsync); // a no-op when the window's caller starts the helper itself
         RaiseChanged();
         return null;
+    }
+
+    /// <summary>
+    /// A sign-in to another server than the settings name (spec §5.4): the copies are all from that one, so they're set
+    /// aside first (<see cref="CopyStore.SetAside"/>), and none goes to the new server, where the same doc # can be
+    /// another document. The user is told where they are. Returns why the sign-in can't go on, or null.
+    /// </summary>
+    private string? SetCopiesAside(Uri server)
+    {
+        if (HelperSettings.Load(_paths).Server is not { } previous)
+            return null;
+        string from;
+        try
+        {
+            var old = ParseAddress(previous);
+            if (SameServer(old, server))
+                return null;
+            from = HealdanLink.HostAndPort(old);
+        }
+        catch (UriFormatException)
+        {
+            from = "an earlier server"; // the copies came from somewhere, but not from this one
+        }
+        var to = HealdanLink.HostAndPort(server);
+        try
+        {
+            if (new CopyStore(_paths).SetAside(from) is { } aside)
+            {
+                var folder = Path.GetFileName(aside);
+                _log.Info($"Signing in to {to}: the copies from {from} are set aside in {folder}");
+                _notifier.Notify(Helper, $"The copies from {from} are now in the {folder} folder, beside Healdan Helper's Copies "
+                    + $"folder. Healdan Helper won't send them to {to}.");
+            }
+            return null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn($"The copies from {from} couldn't be set aside: {e.Message}");
+            return $"Healdan Helper couldn't move the copies from {from} out of the way, so it hasn't signed in to {to}: {e.Message}";
+        }
     }
 
     /// <summary>Starts the helper once signed in, unless it has started, its start failed, or it's quitting.</summary>
@@ -744,9 +838,120 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         if (Disposed)
             throw new OperationCanceledException("Quitting during Sign Out."); // a disposed cycle has nothing open, not nothing unsent
         if (left > 0)
-            throw new InvalidOperationException(left == 1
-                ? "A save is still waiting to go to Healdan, so you're still signed in. Sign out once it has gone."
-                : $"{left} saves are still waiting to go to Healdan, so you're still signed in. Sign out once they have gone.");
+            throw new UnsentSavesException(left);
+    }
+
+    /// <summary>
+    /// Sign Out couldn't reach Healdan (spec §5.2): asks whether to forget the sign-in on this computer only. The
+    /// window waits outside <see cref="_lifecycle"/>, as the user may take their time, and the cycle runs on meanwhile.
+    /// On a yes the revoke is tried once more, briefly, in case Healdan is back; failing that, the token is forgotten
+    /// here. Either way the helper stops. Unsent saves stay with their copies, for the next sign-in to this server. A
+    /// Quit before or meanwhile, a sign-out some other way meanwhile, or a keychain that refuses keeps the sign-in.
+    /// </summary>
+    private async Task SignOutHereAsync(HealdanApi api, int unsent)
+    {
+        var server = LinkName(api);
+        if (Disposed)
+        {
+            _log.Info("Quit during Sign Out: the sign-in is kept, and the next start sends what's unsent");
+            return;
+        }
+        _log.Info($"Asking whether to sign out on this computer only, as {server} can't be reached ({unsent} save(s) unsent)");
+        bool here;
+        try
+        {
+            here = await _windows.SignOutHereAsync(server, unsent);
+        }
+        catch (Exception e)
+        {
+            _log.Error("The Sign Out on This Computer Only window failed", e);
+            here = false;
+        }
+        if (!here)
+        {
+            _log.Info("Stayed signed in to " + server);
+            return;
+        }
+
+        await _lifecycle.WaitAsync();
+        try
+        {
+            bool still;
+            lock (_gate)
+            {
+                still = !_disposed && _api == api && api.Token is not null;
+                if (still)
+                    _signingOut = true;
+            }
+            if (!still)
+            {
+                _log.Info($"The sign-in to {server} is kept: the helper quit, or signed out, while the window was up");
+                return;
+            }
+            try
+            {
+                var signIn = new SignIn(api, _keychain, _device, RetryRevokeTimeout);
+                try
+                {
+                    try
+                    {
+                        await signIn.SignOutAsync(() => Task.CompletedTask);
+                        _log.Info($"Signed out: {server} answered after all");
+                    }
+                    catch (Exception e) when (Unreachable(e) || e is ApiException)
+                    {
+                        signIn.ForgetHere();
+                        _log.Info($"Signed out on this computer only: {server} still accepts the token until it expires");
+                    }
+                }
+                catch (InvalidOperationException e)
+                {
+                    _log.Warn("The keychain couldn't forget the sign-in: " + e.Message);
+                    _notifier.Notify(Helper, e.Message);
+                    return;
+                }
+                Stop(SignInToOpen);
+            }
+            finally
+            {
+                lock (_gate)
+                    _signingOut = false;
+            }
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    /// <summary>Whether Healdan answers at all, asked when saves couldn't go up during Sign Out.</summary>
+    private static async Task<bool> ReachableAsync(HealdanApi api)
+    {
+        using var timeout = new CancellationTokenSource(ReachTimeout);
+        try
+        {
+            await api.ServerAsync(timeout.Token);
+            return true;
+        }
+        catch (Exception e)
+        {
+            return !Unreachable(e); // a refusal, or an answer that isn't Healdan's, is still an answer
+        }
+    }
+
+    /// <summary>
+    /// No answer from Healdan: no connection, no answer in time, or a proxy whose server has gone (502, 503, 504). A
+    /// refusal Healdan sends itself is an answer.
+    /// </summary>
+    private static bool Unreachable(Exception e) =>
+        e is HttpRequestException or OperationCanceledException or IOException || e is ApiException { Status: 502 or 503 or 504 };
+
+    /// <summary>Sign Out's flush ended with saves still to go up.</summary>
+    private sealed class UnsentSavesException(int count) : InvalidOperationException(count == 1
+        ? "A save is still waiting to go to Healdan, so you're still signed in. Sign out once it has gone."
+        : $"{count} saves are still waiting to go to Healdan, so you're still signed in. Sign out once they have gone.")
+    {
+        public int Count { get; } = count;
     }
 
     // --- What the cycle tells the user -----------------------------------------------------------------------------

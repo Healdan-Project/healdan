@@ -18,10 +18,10 @@ namespace Healdan.Helper.Windows;
 /// <summary>
 /// The helper's windows (spec §5.8). Each comes to the front over the app (<see cref="MacPlatform.Activate"/>), and
 /// once the last one closes the focus goes back to the app (<see cref="MacPlatform.GiveBackFocus"/>).
-/// <para>A window that asks what the user started (Sign In, Save, Open, Properties, Checked Out on Another Computer)
-/// waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link brings it to the front. One the
-/// user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links back
-/// (<see cref="OpenWindows"/>).</para>
+/// <para>A window that asks what the user started (Sign In, Sign Out on This Computer Only?, Save, Open, Properties,
+/// Checked Out on Another Computer) waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link
+/// brings it to the front. One the user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links
+/// back (<see cref="OpenWindows"/>).</para>
 /// <para>One of each window at a time: a second request for one that's open brings it to the front and is answered
 /// Cancel. The windows read Healdan through the session's API client, whose refused token asks for the sign-in again,
 /// and open documents through its cycle once they've closed, so the app never waits on a window for a download.
@@ -56,6 +56,14 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             return Task.FromResult(false);
         log.Info("Sign In window shown");
         return _signIn = done.Task;
+    });
+
+    /// <summary>The session runs one Sign Out at a time, its window included, so there's only ever one of these.</summary>
+    public Task<bool> SignOutHereAsync(string server, int unsent) => OnUi(() =>
+    {
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var window = new SignOutHereWindow(Warnings.SignOutHere(server, unsent));
+        return Show(window, waits: true, () => done.TrySetResult(window.SignOutHere)) ? done.Task : Task.FromResult(false);
     });
 
     // --- The channel's window routes -------------------------------------------------------------------------------
