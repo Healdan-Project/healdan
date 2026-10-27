@@ -99,6 +99,27 @@ public sealed class HelperSessionTests : IDisposable
         return i;
     }
 
+    /// <summary>Whether the log has <paramref name="text"/> yet, read while the helper may still be writing to it.</summary>
+    private bool Logged(string text)
+    {
+        try
+        {
+            using var log = new StreamReader(new FileStream(Paths.Log, FileMode.Open, FileAccess.Read, FileShare.ReadWrite));
+            return log.ReadToEnd().Contains(text, StringComparison.Ordinal);
+        }
+        catch (FileNotFoundException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// A Sign In window that stays up to the end of the test. A refused open tells the session twice, from the call and
+    /// from the cycle, and the second asks for the sign-in again if the first window has closed by then: a log line,
+    /// or a whole sign-in, after the test has deleted its folder.
+    /// </summary>
+    private static Task<bool> StaysUp() => new TaskCompletionSource<bool>().Task;
+
     [Fact]
     public async Task StartsInOrderAndOnlyThenOpensLinks()
     {
@@ -251,11 +272,14 @@ public sealed class HelperSessionTests : IDisposable
         var session = Make();
         await session.StartAsync();
         var asked = new TaskCompletionSource<SignInPrompt>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var signedIn = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _windows.OnSignIn = async prompt =>
         {
             asked.TrySetResult(prompt);
             _server.Unauthorized = false;
-            return await prompt.SignInAsync(prompt.Server!, "robert", Password) is null;
+            // Set once the whole sign-in has run, its settings and log included, which go on after the token is kept.
+            signedIn.TrySetResult(await prompt.SignInAsync(prompt.Server!, "robert", Password));
+            return await StaysUp();
         };
 
         _server.Unauthorized = true;
@@ -264,7 +288,8 @@ public sealed class HelperSessionTests : IDisposable
         var again = await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Assert.True(again.ServerFixed); // one server per helper while it runs
         Assert.Equal(Account, again.Server);
-        await Wait.Until(() => _keychain.Items.GetValueOrDefault(Account) == SessionServer.IssuedToken, "the new token kept");
+        Assert.Null(await signedIn.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.Equal(SessionServer.IssuedToken, _keychain.Items[Account]);
         Assert.Contains("Sign in", _notifier.All);
     }
 
@@ -667,6 +692,12 @@ public sealed class HelperSessionTests : IDisposable
         var session = Make();
         await session.StartAsync();
         _server.Down = true;
+        var asked = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _windows.OnSignIn = _ =>
+        {
+            asked.TrySetResult();
+            return StaysUp();
+        };
         _windows.OnSignOutHere = async (_, _) =>
         {
             (_server.Down, _server.Unauthorized) = (false, true); // Healdan is back, and refuses the token
@@ -678,6 +709,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.SignOutAsync();
 
         Assert.True(session.Started);
+        await asked.Task.WaitAsync(TimeSpan.FromSeconds(10)); // the Sign In window too, which comes after the notice
     }
 
     [Fact]
@@ -737,7 +769,9 @@ public sealed class HelperSessionTests : IDisposable
         _http.HoldSignIns.SetResult();
 
         Assert.Null(await late!.WaitAsync(TimeSpan.FromSeconds(10)));
-        await Wait.Until(() => session.Started, "the start after the late sign-in", TimeSpan.FromSeconds(5));
+        // The start's last write, which comes after Started is set.
+        await Wait.Until(() => Logged("Accepting links"), "the start after the late sign-in", TimeSpan.FromSeconds(5));
+        Assert.True(session.Started);
         Assert.True(session.SignedIn);
         Assert.True(File.Exists(Paths.Channel));
     }
