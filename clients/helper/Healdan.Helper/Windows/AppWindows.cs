@@ -182,7 +182,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (!shown)
         {
             _crashShown.Remove(copy.Path);
-            notifier.Notify(copy.Title, Warnings.Crashed(copy.Title, copy.ReadOnly) + " Choose it in the Healdan Helper menu to reopen it.");
+            notifier.Notify(copy.Title, Warnings.Crashed(copy.Title, copy.ReadOnly).ToString() + " Choose it in the Healdan Helper menu to reopen it.");
         }
     });
 

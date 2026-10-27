@@ -200,6 +200,12 @@
     <Setter Property="Padding" Value="6,2" />
     <Setter Property="CornerRadius" Value="5" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
+    <!-- The text box and its template's DataValidationErrors both clip to their bounds by default, which cuts the focus
+         ring down to the triangles at the corners. -->
+    <Setter Property="ClipToBounds" Value="False" />
+  </Style>
+  <Style Selector="TextBox /template/ DataValidationErrors">
+    <Setter Property="ClipToBounds" Value="False" />
   </Style>
   <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
     <Setter Property="BoxShadow" Value="{DynamicResource HdFocusRing}" />

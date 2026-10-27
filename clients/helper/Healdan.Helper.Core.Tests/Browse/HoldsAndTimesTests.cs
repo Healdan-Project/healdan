@@ -103,10 +103,15 @@ public class HoldsAndTimesTests
     [Fact]
     public void AfterACrash()
     {
+        var crashed = Warnings.Crashed("Lease agreement #1234 v2.1", readOnly: false);
+        Assert.Equal("Lease agreement #1234 v2.1 closed unexpectedly.", crashed.Headline);
+        Assert.Equal("It's still checked out to you, and your local copy is kept.", crashed.Body);
         Assert.Equal("Lease agreement #1234 v2.1 closed unexpectedly. It's still checked out to you, and your local copy is kept.",
-            Warnings.Crashed("Lease agreement #1234 v2.1", readOnly: false));
-        Assert.Equal("Lease agreement #1234 v2.1 (read-only) closed unexpectedly. It was read-only, so nothing is lost.",
-            Warnings.Crashed("Lease agreement #1234 v2.1 (read-only)", readOnly: true));
+            crashed.ToString()); // the notification's sentence, as before
+
+        var readOnly = Warnings.Crashed("Lease agreement #1234 v2.1 (read-only)", readOnly: true);
+        Assert.Equal("Lease agreement #1234 v2.1 (read-only) closed unexpectedly.", readOnly.Headline);
+        Assert.Equal("It was read-only, so nothing is lost.", readOnly.Body);
     }
 
     [Fact]
