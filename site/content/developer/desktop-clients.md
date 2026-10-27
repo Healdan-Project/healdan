@@ -70,7 +70,8 @@ app.
   closed meanwhile is checked in as `pendingKind`, so a Save as New Version that was waiting is still made.
 - **Refusals:** `409 held-elsewhere` or `not-held` ends the copy's check-out: it's kept, never deleted, and the user
   is told to use Save as New Document. `409 version-moved` is resent once with the new `ifVersion` and the current
-  name, but only while the document is still checked out here and its `fileVersion` hasn't moved.
+  name, but only while the document is still checked out here and its `fileVersion` hasn't moved. A repeated
+  `saveId` gets `version-moved` too once newer content has been stored over the save, so it's never resent.
 - **This computer's hold** is one whose `hold.device.id` is this computer's device id. Device names aren't compared,
   as two computers can share one.
 
