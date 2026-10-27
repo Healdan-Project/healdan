@@ -12,10 +12,13 @@
   <StackPanel Margin="20,6,20,16">
     <TextBlock Text="Server" Classes="group-header" />
     <Border Classes="group">
-      <Grid Classes="row" ColumnDefinitions="Auto,*,Auto">
+      <!-- The address is the user's to type: its column takes what the label leaves and trims, where an Auto column would take all
+           it asks for and leave the label none. -->
+      <Grid Classes="row" ColumnDefinitions="Auto,Auto,*">
         <local:IconView Data="{StaticResource Icon.server}" Classes="folder" Margin="0,0,8,0" VerticalAlignment="Center" />
-        <TextBlock Grid.Column="1" Text="Address" VerticalAlignment="Center" />
-        <SelectableTextBlock x:Name="ServerValue" Grid.Column="2" IsTabStop="False" Foreground="{DynamicResource HdSecondaryBrush}" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Text="Address" VerticalAlignment="Center" Margin="0,0,12,0" />
+        <SelectableTextBlock x:Name="ServerValue" Grid.Column="2" IsTabStop="False" Foreground="{DynamicResource HdSecondaryBrush}"
+                             HorizontalAlignment="Right" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
       </Grid>
     </Border>
     <TextBlock x:Name="ServerNote" Classes="footnote" />

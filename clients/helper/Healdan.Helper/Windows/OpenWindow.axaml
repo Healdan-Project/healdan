@@ -75,9 +75,9 @@
                       <TextBlock Text="{Binding Holder}" />
                     </StackPanel>
                   </StackPanel>
-                  <TextBlock Grid.Column="2" Text="{Binding DocNumber}" />
-                  <TextBlock Grid.Column="3" Text="{Binding Version}" />
-                  <TextBlock Grid.Column="4" Text="{Binding MatterText}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="2" Text="{Binding DocNumber}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
+                  <TextBlock Grid.Column="3" Text="{Binding Version}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
+                  <TextBlock Grid.Column="4" Text="{Binding MatterText}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
                   <TextBlock Grid.Column="5" Text="{Binding Edited}" Classes="muted" TextTrimming="CharacterEllipsis" />
                 </Grid>
               </DataTemplate>
@@ -128,7 +128,8 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="b:Detail">
                     <Grid ColumnDefinitions="84,*" Margin="0,2">
-                      <TextBlock Text="{Binding Label}" Classes="label" />
+                      <!-- An administrator can name a property anything; the 4 pt keeps a trimmed … (it overhangs its box) off the value. -->
+                      <TextBlock Text="{Binding Label}" Classes="label" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
                       <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
                     </Grid>
                   </DataTemplate>
