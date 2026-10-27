@@ -52,6 +52,7 @@ public partial class OpenWindow : Window
             }
         });
         VersionList.SelectionChanged += (_, _) => VersionChanged();
+        DetailTabs.SelectionChanged += (_, _) => ShowTab();
         ReadOnlyBox.IsCheckedChanged += (_, _) =>
         {
             if (!_quiet)
@@ -98,9 +99,9 @@ public partial class OpenWindow : Window
         var load = ++_detailLoad;
         _details = null;
         OpenButton.IsEnabled = true;
-        DocTitle.Text = doc.Name;
-        (DetailsNote.Text, DetailsNote.IsVisible) = ("Loading…", true);
-        DetailRows.ItemsSource = null;
+        ShowHeader(doc);
+        (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = ("Loading…", true, new Avalonia.Thickness(0, 12, 0, 0));
+        PropertiesTab.IsVisible = VersionList.IsVisible = false;
         try
         {
             var details = await DocumentDetails.LoadAsync(_api!, doc.DocNumber, _browser!.Me, DateTimeOffset.Now);
@@ -125,9 +126,8 @@ public partial class OpenWindow : Window
     {
         _details = details;
         var doc = details.Document;
-        DocTitle.Text = doc.Name;
-        DetailsNote.IsVisible = FileKinds.Of(doc.Name) is null;
-        DetailsNote.Text = "Only office documents can be edited from here: this one opens read-only.";
+        DetailsNote.IsVisible = false;
+        KindNote.IsVisible = FileKinds.Of(doc.Name) is null;
         DetailRows.ItemsSource = details.Rows;
         ShowThumbnail(details.Thumbnail);
         ShowStar();
@@ -136,9 +136,27 @@ public partial class OpenWindow : Window
         var rows = details.Saves.Select(s => new VersionRow(s, $"v{s.Version}" + (s.Version == doc.FileVersion ? " (current)" : ""),
             string.Join(" · ", new[] { s.Date is { } d ? When.InSentence(d, now) : null, s.By?.Name, s.Comment }.Where(t => !string.IsNullOrWhiteSpace(t))))).ToList();
         VersionList.ItemsSource = rows;
-        VersionList.IsVisible = VersionsHeading.IsVisible = rows.Count > 0;
+        VersionsTab.Content = $"Versions ({rows.Count})";
         VersionList.SelectedItem = rows.FirstOrDefault(r => r.Save.Version == (version ?? doc.FileVersion)) ?? rows.FirstOrDefault();
+        ShowTab();
         VersionChanged();
+    }
+
+    /// <summary>The tab chosen stays as the user left it while they choose other documents (polish spec §6.2).</summary>
+    private void ShowTab()
+    {
+        var shown = _details is not null;
+        PropertiesTab.IsVisible = shown && DetailTabs.SelectedIndex == 0;
+        VersionList.IsVisible = shown && DetailTabs.SelectedIndex == 1;
+    }
+
+    private void ShowHeader(DocumentView doc, string? version = null)
+    {
+        DetailsHeader.IsVisible = true;
+        DocIcon.Data = Icons.Get(FileIcons.For(doc.Name));
+        DocTitle.Text = doc.Name;
+        DocSubtitle.Text = $"#{doc.DocNumber} · v{version ?? doc.FileVersion}";
+        OlderLine.IsVisible = version is not null && version != doc.FileVersion;
     }
 
     private void ClearDetails(string note)
@@ -146,13 +164,12 @@ public partial class OpenWindow : Window
         ++_detailLoad;
         _loadingFor = null;
         _details = null;
-        DocTitle.Text = "";
-        (DetailsNote.Text, DetailsNote.IsVisible) = (note, true);
+        DetailsHeader.IsVisible = false;
+        (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = (note, true, new Avalonia.Thickness(0, 40, 0, 0));
         DetailRows.ItemsSource = null;
         VersionList.ItemsSource = null;
-        VersionList.IsVisible = VersionsHeading.IsVisible = VersionNote.IsVisible = false;
+        ShowTab();
         ShowThumbnail(null);
-        DocStarButton.IsVisible = false;
         OpenButton.IsEnabled = false;
         SetReadOnly(forced: false);
     }
@@ -173,7 +190,7 @@ public partial class OpenWindow : Window
         }
         (Thumbnail.Source as IDisposable)?.Dispose();
         Thumbnail.Source = image;
-        ThumbnailNote.IsVisible = image is null;
+        ThumbnailFrame.IsVisible = image is not null;
     }
 
     private void ShowStar()
@@ -186,12 +203,13 @@ public partial class OpenWindow : Window
         ToolTip.SetTip(DocStarButton, favorite ? "Remove from Favorites" : "Add to Favorites");
     }
 
-    /// <summary>An older version opens read-only, as does a file no office app edits.</summary>
+    /// <summary>An older version opens read-only, as does a file no office app edits; the header says which version (polish spec §6.2).</summary>
     private void VersionChanged()
     {
-        var older = SelectedVersion() is not null;
-        VersionNote.IsVisible = older;
-        SetReadOnly(forced: older || (_details is { } d && FileKinds.Of(d.Document.Name) is null));
+        var older = SelectedVersion();
+        if (_details is { } d)
+            ShowHeader(d.Document, older);
+        SetReadOnly(forced: older is not null || (_details is { } e && FileKinds.Of(e.Document.Name) is null));
     }
 
     private void SetReadOnly(bool forced)

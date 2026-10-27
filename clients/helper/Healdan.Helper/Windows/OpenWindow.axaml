@@ -86,36 +86,59 @@
         </DockPanel>
       </Border>
 
-      <ScrollViewer Grid.Column="2" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="14,12" Spacing="8">
-          <Border Height="120" CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource HdLineBrush}" Background="{DynamicResource HdReadOnlyBrush}" ClipToBounds="True">
-            <Panel>
-              <Image x:Name="Thumbnail" Stretch="Uniform" />
-              <TextBlock x:Name="ThumbnailNote" Classes="muted" Text="No preview yet" HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="11" />
-            </Panel>
-          </Border>
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock x:Name="DocTitle" Classes="title" TextWrapping="Wrap" />
-            <Button x:Name="DocStarButton" Grid.Column="1" Classes="tool" IsVisible="False" VerticalAlignment="Top">
-              <Path x:Name="DocStarIcon" Classes="star" Data="{StaticResource HdStarIcon}" />
+      <DockPanel Grid.Column="2" Margin="14,12,14,10">
+        <!-- The details pane (polish spec §6.2): a fixed header, then Properties and Versions. -->
+        <StackPanel x:Name="DetailsHeader" DockPanel.Dock="Top" Spacing="10" IsVisible="False">
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <local:IconView x:Name="DocIcon" Width="32" Height="32" Foreground="{DynamicResource HdAccentTextBrush}"
+                            VerticalAlignment="Top" Margin="0,0,9,0" />
+            <StackPanel Grid.Column="1" Spacing="1">
+              <TextBlock x:Name="DocTitle" Classes="heading" TextWrapping="Wrap" />
+              <TextBlock x:Name="DocSubtitle" Classes="muted" FontSize="11" />
+              <StackPanel x:Name="OlderLine" Orientation="Horizontal" Spacing="3" IsVisible="False">
+                <local:IconView Data="{StaticResource Icon.eye}" Width="12" Height="12" Foreground="{DynamicResource HdCautionBrush}" />
+                <TextBlock Text="Older version: opens read-only" FontSize="11" Foreground="{DynamicResource HdCautionBrush}" />
+              </StackPanel>
+            </StackPanel>
+            <Button x:Name="DocStarButton" Grid.Column="2" Classes="tool" VerticalAlignment="Top" AutomationProperties.Name="Favourite">
+              <local:IconView x:Name="DocStarIcon" Classes="star" Data="{StaticResource Icon.star}" />
             </Button>
           </Grid>
-          <TextBlock x:Name="DetailsNote" Classes="muted" TextWrapping="Wrap" Text="Choose a document to see its properties and versions." />
-          <ItemsControl x:Name="DetailRows">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="b:Detail">
-                <Grid ColumnDefinitions="82,*" Margin="0,1">
-                  <TextBlock Text="{Binding Label}" Classes="label" FontSize="12" />
-                  <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <TextBlock x:Name="VersionsHeading" Text="Versions" Classes="label" Margin="0,6,0,0" IsVisible="False" />
-          <ListBox x:Name="VersionList" Classes="rows" MaxHeight="180" IsVisible="False" />
-          <TextBlock x:Name="VersionNote" Classes="muted" FontSize="11" TextWrapping="Wrap" IsVisible="False" Text="An older version opens read-only." />
+          <ListBox x:Name="DetailTabs" Classes="segmented" SelectedIndex="0">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <UniformGrid Rows="1" />
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBoxItem Content="Properties" />
+            <ListBoxItem x:Name="VersionsTab" Content="Versions" />
+          </ListBox>
         </StackPanel>
-      </ScrollViewer>
+        <TextBlock x:Name="DetailsNote" DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" TextAlignment="Center"
+                   Margin="0,40,0,0" Text="Choose a document to see its properties and versions." />
+        <Panel Margin="0,10,0,0">
+          <ScrollViewer x:Name="PropertiesTab" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
+            <StackPanel Spacing="10">
+              <Border x:Name="ThumbnailFrame" Classes="thumbnail" MaxHeight="140" HorizontalAlignment="Center" IsVisible="False">
+                <Image x:Name="Thumbnail" Stretch="Uniform" />
+              </Border>
+              <TextBlock x:Name="KindNote" Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="False"
+                         Text="Only office documents can be edited from here: this one opens read-only." />
+              <ItemsControl x:Name="DetailRows">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="b:Detail">
+                    <Grid ColumnDefinitions="84,*" Margin="0,2">
+                      <TextBlock Text="{Binding Label}" Classes="label" />
+                      <TextBlock Grid.Column="1" Text="{Binding Value}" FontSize="12" TextWrapping="Wrap" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
+          <ListBox x:Name="VersionList" Classes="versions" IsVisible="False" />
+        </Panel>
+      </DockPanel>
     </Grid>
   </DockPanel>
 </Window>
