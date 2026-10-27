@@ -237,11 +237,11 @@ answer.
   `409 not-held`, because its check-out was released or checked in from the web page. Without it, a free document
   is checked out for the save. Another device's check-out is `409 held-elsewhere` either way.
 - **`saveId`**, a UUID the client makes for a save and sends again, unchanged, if it didn't hear the answer. The
-  server keeps the last one stored for each document, with the `fileVersion` it stored. A save that repeats it
-  stores nothing. It's answered `201` with the document as it is now while the document's file is still that
-  version, even if its properties have changed. Once newer content has been stored, from the web page say, it's
-  `409 version-moved`, so a late retry is never answered with someone else's content. A `saveId` that isn't a UUID
-  is `422 validation`.
+  server keeps the last one stored for each document, with the version it stored. A save that repeats it stores
+  nothing. It's answered `201` with the document as it is now while the document's file is still that version's,
+  even if its properties have changed. Once newer content has been stored, from the web page say, or that version
+  has been deleted, it's `409 version-moved`, so a late retry is never answered with someone else's content. A
+  `saveId` that isn't a UUID is `422 validation`.
 
 Nothing is stored unless every check passes. They run in this order, and the first that fails gives the answer
 (the docs page has the whole list):

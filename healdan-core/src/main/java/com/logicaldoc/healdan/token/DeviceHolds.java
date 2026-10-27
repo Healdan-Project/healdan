@@ -15,6 +15,8 @@ import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
 import com.logicaldoc.core.document.DocumentStatus;
+import com.logicaldoc.core.document.Version;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -32,8 +34,8 @@ import com.logicaldoc.util.spring.Context;
  * web page does without recording a device. A check-out with no record works
  * from any of the holder's devices, as in M2. Records are never deleted: the
  * next check-out through the API writes over a stale one, and the end of a
- * check-out through the API empties it but keeps its last save's id and the
- * file version that save stored.
+ * check-out through the API empties it but keeps its last save: its id and
+ * the version it stored.
  * <p>
  * Only the API asks; the old web page acts for the person on any computer.
  */
@@ -44,6 +46,34 @@ public class DeviceHolds {
 	static final String MOVED = "Moved to another device";
 
 	private final HoldDeviceDAO dao;
+
+	/**
+	 * A save stored through the API
+	 *
+	 * @param id the id the client made for it
+	 * @param versionId the id of the version record its check-in made, which
+	 *        names the file it stored; null if CE didn't write one
+	 */
+	public record Save(String id, Long versionId) {
+	}
+
+	/**
+	 * What a save sent again with its id is told (M3 spec section 9.5)
+	 */
+	public enum Repeat {
+		/** Not a repeat: it has no id, or not the last save's */
+		NO,
+		/** The last save, and the document's file is still the one it stored */
+		STORED,
+		/** The last save, but newer content has been stored since, by any route, or its version deleted */
+		SUPERSEDED,
+		/**
+		 * The last save, but its record doesn't name the version it stored,
+		 * as one kept before schema version 5, so nothing says the file is
+		 * still that one
+		 */
+		UNKNOWN
+	}
 
 	/**
 	 * A token as a record names it, revoked or not
@@ -84,20 +114,18 @@ public class DeviceHolds {
 	 * As {@link #record(Document, ApiToken, String)}, after a save through
 	 * the API, in the same write.
 	 *
-	 * @param doc the document, as it is now: checked out to the token's user,
-	 *        and after a save, with the file it stored
+	 * @param doc the document, as it is now: checked out to the token's user
 	 * @param token the token of the device that holds it
 	 * @param app the app the document is open in, or null
-	 * @param saveId the id of the save just stored, which
-	 *        {@link #lastSaveId(Document)} answers from now on, and the
-	 *        document's file version {@link #lastSaveFileVersion(Document)};
-	 *        null to keep the last ones
+	 * @param save the save just stored, which {@link #lastSaveId(Document)}
+	 *        and {@link #repeat(Document, String)} answer from now on; null to
+	 *        keep the last one
 	 */
-	public void record(Document doc, ApiToken token, String app, String saveId) {
+	public void record(Document doc, ApiToken token, String app, Save save) {
 		HoldDevice row = find(doc);
 		if (row != null && upToDate(doc, row) && Objects.equals(row.getDevice(), token.getDevice())
 				&& Objects.equals(row.getTokenId(), token.getId()) && Objects.equals(row.getApp(), app)
-				&& (saveId == null || isLastSave(row, doc, saveId)))
+				&& (save == null || isLastSave(row, save)))
 			return;
 
 		if (row == null)
@@ -105,7 +133,7 @@ public class DeviceHolds {
 		row.setDevice(token.getDevice());
 		row.setTokenId(token.getId());
 		row.setApp(app);
-		setLastSave(row, doc, saveId);
+		setLastSave(row, save);
 		store(row);
 	}
 
@@ -169,7 +197,7 @@ public class DeviceHolds {
 
 	/**
 	 * Records that no device holds the document's check-out any more, when it
-	 * ends through the API. The record's last save id and file version stay.
+	 * ends through the API. The record's last save stays.
 	 *
 	 * @param doc the document
 	 */
@@ -182,16 +210,15 @@ public class DeviceHolds {
 	 * the check-out, in the same write. A document with no record gets one
 	 * that names no device, for the save's id.
 	 *
-	 * @param doc the document, after a save with the file it stored
-	 * @param saveId the id of the save just stored, which
-	 *        {@link #lastSaveId(Document)} answers from now on, and the
-	 *        document's file version {@link #lastSaveFileVersion(Document)};
-	 *        null to keep the last ones
+	 * @param doc the document
+	 * @param save the save just stored, which {@link #lastSaveId(Document)}
+	 *        and {@link #repeat(Document, String)} answer from now on; null to
+	 *        keep the last one
 	 */
-	public void clear(Document doc, String saveId) {
+	public void clear(Document doc, Save save) {
 		HoldDevice row = find(doc);
 		boolean empty = row == null || row.getDevice() == null && row.getTokenId() == null && row.getApp() == null;
-		if (empty && (saveId == null || row != null && isLastSave(row, doc, saveId)))
+		if (empty && (save == null || row != null && isLastSave(row, save)))
 			return;
 
 		if (row == null)
@@ -199,7 +226,7 @@ public class DeviceHolds {
 		row.setDevice(null);
 		row.setTokenId(null);
 		row.setApp(null);
-		setLastSave(row, doc, saveId);
+		setLastSave(row, save);
 		store(row);
 	}
 
@@ -217,18 +244,24 @@ public class DeviceHolds {
 	}
 
 	/**
-	 * A save sent again is told it's stored only while this is still the
-	 * document's {@code fileVersion}. Once newer content is stored, by any
-	 * route, telling it so would pass that content off as the save's.
+	 * A save sent again is told it's stored only while the document's file is
+	 * still the one it stored. Once newer content is stored, by any route,
+	 * telling it so would pass that content off as the save's.
 	 *
-	 * @param doc a document
-	 * @return the file version the last save with an id stored, or null if
-	 *         none was stored, or it was stored before this was kept (schema
-	 *         version 5), when nothing says the file is still that one
+	 * @param doc a document, as it is now
+	 * @param saveId the id a save came with, or null
+	 * @return whether it's the document's last save, and if so whether its
+	 *         file is still the document's
 	 */
-	public String lastSaveFileVersion(Document doc) {
+	public Repeat repeat(Document doc, String saveId) {
+		if (saveId == null)
+			return Repeat.NO;
 		HoldDevice row = find(doc);
-		return row != null ? row.getLastSaveFileVersion() : null;
+		if (row == null || !saveId.equals(row.getLastSaveId()))
+			return Repeat.NO;
+		if (row.getLastSaveVersionId() == null)
+			return Repeat.UNKNOWN;
+		return isFileOf(doc, row.getLastSaveVersionId()) ? Repeat.STORED : Repeat.SUPERSEDED;
 	}
 
 	/**
@@ -286,22 +319,41 @@ public class DeviceHolds {
 	}
 
 	/**
-	 * @return true if the record already names the save, and the file it
-	 *         stored as the document's now
+	 * Compares the version record, not the {@code fileVersion} alone: once its
+	 * version is deleted, CE numbers the next check-in as it was numbered, so
+	 * another file can carry the same {@code fileVersion}. A record, once
+	 * deleted, never comes back, and while it stands, the document's version
+	 * can't drop below it to number another file the same.
+	 *
+	 * @return true if the version record is still in the document's timeline,
+	 *         and the file it names is the document's
 	 */
-	private static boolean isLastSave(HoldDevice row, Document doc, String saveId) {
-		return saveId.equals(row.getLastSaveId()) && Objects.equals(doc.getFileVersion(), row.getLastSaveFileVersion());
+	private static boolean isFileOf(Document doc, long versionId) {
+		try {
+			Version version = VersionDAO.get().findById(versionId);
+			return version != null && version.getDocId() == doc.getId()
+					&& Objects.equals(version.getFileVersion(), doc.getFileVersion());
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read the versions of document " + doc.getId(), e);
+		}
 	}
 
 	/**
-	 * Keeps the save's id with the file it stored, the document's now; a null
-	 * id keeps the last ones
+	 * @return true if the record already names the save
 	 */
-	private static void setLastSave(HoldDevice row, Document doc, String saveId) {
-		if (saveId == null)
+	private static boolean isLastSave(HoldDevice row, Save save) {
+		return save.id().equals(row.getLastSaveId()) && Objects.equals(save.versionId(), row.getLastSaveVersionId());
+	}
+
+	/**
+	 * Keeps the save's id with the version it stored; a null save keeps the
+	 * last one
+	 */
+	private static void setLastSave(HoldDevice row, Save save) {
+		if (save == null)
 			return;
-		row.setLastSaveId(saveId);
-		row.setLastSaveFileVersion(doc.getFileVersion());
+		row.setLastSaveId(save.id());
+		row.setLastSaveVersionId(save.versionId());
 	}
 
 	private static HoldDevice newRow(Document doc) {

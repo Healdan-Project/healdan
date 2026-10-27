@@ -22,6 +22,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentFuture;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.Version;
@@ -135,7 +136,8 @@ public class VersionResource {
 	 * {@code 201} with the document as it is while its file is still the one
 	 * that save stored, whatever else happened to it since; {@code 409
 	 * version-moved}, with the document, once newer content was stored, by
-	 * any route, or when the save was kept before its file version was;</li>
+	 * any route, the save's version was deleted, or the save was kept before
+	 * its version was;</li>
 	 * <li>{@code 403} without the Write permission, or for a document
 	 * protected by a password, which the API never opens;</li>
 	 * <li>{@code 409 checked-out} for someone else's check-out, administrators
@@ -159,7 +161,8 @@ public class VersionResource {
 	 * file that carries the {@code Healdan Doc ID} property is stamped, after
 	 * every check, with the doc # and the version it's stored as (M3 spec
 	 * section 9.7). Once the save is
-	 * stored, its {@code saveId} is kept, in the same write as the device. A
+	 * stored, its {@code saveId} is kept with the version its check-in made,
+	 * in the same write as the device. A
 	 * rule that refuses the check-in ({@code 409 refused}) leaves the
 	 * document as it was, but checked out to the caller: CE writes nothing
 	 * when a rule refuses it. A
@@ -206,15 +209,16 @@ public class VersionResource {
 		Document document = DocumentResource.readable(docNumber, user);
 		DeviceHolds devices = DeviceHolds.get();
 		// Sent again after its answer was lost (Review Focus 1): told it's stored while its file is the document's
-		if (request.saveId() != null && request.saveId().equals(devices.lastSaveId(document))) {
-			String stored = devices.lastSaveFileVersion(document);
-			if (stored == null || !stored.equals(document.getFileVersion()))
-				throw ApiProblem.conflict(VERSION_MOVED,
-						"Document #%d changed after this save was stored: its file is at version %s now."
-								.formatted(docNumber, document.getFileVersion()))
-						.with("document", ApiViews.document(document, user));
+		DeviceHolds.Repeat repeat = devices.repeat(document, request.saveId());
+		if (repeat == DeviceHolds.Repeat.STORED)
 			return ApiViews.document(document, user);
-		}
+		if (repeat != DeviceHolds.Repeat.NO)
+			throw ApiProblem.conflict(VERSION_MOVED, repeat == DeviceHolds.Repeat.SUPERSEDED
+					? "Document #%d changed after this save was stored: its file is at version %s now."
+							.formatted(docNumber, document.getFileVersion())
+					: ("This save was stored, but Healdan can't tell whether document #%d's file, at version %s, is "
+							+ "still the one it stored.").formatted(docNumber, document.getFileVersion()))
+					.with("document", ApiViews.document(document, user));
 		if (!AccessChecks.allowed(user, Permission.WRITE, document))
 			throw ApiProblem.forbidden("You may not save to document #%d.".formatted(docNumber));
 		DocumentResource.refuseProtected(document, session, docNumber);
@@ -264,8 +268,12 @@ public class VersionResource {
 			checkin.setComment(comment);
 			String before = document.getVersion();
 			// Waits for CE's version record, so the timeline shows the save at once
-			DocumentManager.get().checkin(document.getId(), upload, name, major, null, checkin).get();
+			DocumentFuture checkedIn = DocumentManager.get().checkin(document.getId(), upload, name, major, null,
+					checkin);
+			checkedIn.get();
 			confirmStored(document.getId(), docNumber, before, user);
+			// The check-in's own version, as the web page can store newer content before the document is read again
+			Version stored = VersionDAO.get().findByVersion(document.getId(), checkedIn.getObject().getVersion());
 
 			if (Boolean.TRUE.equals(request.keepCheckedOut()))
 				checkOutAgain(document.getId(), session, docNumber);
@@ -275,13 +283,16 @@ public class VersionResource {
 				log.warn("Document #{} v{} was stamped {}", docNumber, saved.getFileVersion(), docId);
 			/*
 			 * The first save through the API records the device, and the check-in on closing ends its hold. The same
-			 * write keeps the save's id, now that the save is stored: under the document's lock, so a request
-			 * repeating it that waited for the lock finds it.
+			 * write keeps the save's id and version, now that the save is stored: under the document's lock, so a
+			 * request repeating it that waited for the lock finds it.
 			 */
+			DeviceHolds.Save save = request.saveId() != null
+					? new DeviceHolds.Save(request.saveId(), stored != null ? stored.getId() : null)
+					: null;
 			if (ApiViews.checkedOutBy(saved, user))
-				devices.record(saved, caller.token(), app, request.saveId());
+				devices.record(saved, caller.token(), app, save);
 			else
-				devices.clear(saved, request.saveId());
+				devices.clear(saved, save);
 			return ApiViews.document(saved, user);
 		} finally {
 			FileUtils.deleteQuietly(upload);

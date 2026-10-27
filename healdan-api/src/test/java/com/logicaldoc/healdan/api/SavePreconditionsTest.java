@@ -29,6 +29,7 @@ import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.DocumentStatus;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
@@ -264,6 +265,55 @@ public class SavePreconditionsTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testSaveIdRepeatedAfterCheckInAndWebPageSave() throws Exception {
+		// The save on closing is stored, but its answer is lost
+		String request = version("1.0", true, false, SAVE_X);
+		assertEquals(201, save(request).status());
+		// Meanwhile clerk checks the document out in the web page and checks other content in
+		DocumentManager.get().checkout(d.getId(), history(clerk, DocumentEvent.CHECKEDOUT));
+		DocumentManager.get()
+				.checkin(d.getId(), new ByteArrayInputStream(bytes("from the web page")), d.getFileName(), false,
+						null, history(clerk, DocumentEvent.CHECKEDIN))
+				.get();
+		awaitAsyncWork();
+		DbSnapshot before = fx.snapshot();
+
+		ApiResponse again = save(request);
+
+		assertEquals(again.toString(), 409, again.status());
+		assertEquals("version-moved", again.code());
+		assertEquals("1.2", again.json().path("document").path("fileVersion").textValue());
+		before.assertUnchanged();
+		assertEquals(List.of("1.2", "1.1", "1.0"), versions());
+	}
+
+	@Test
+	public void testSaveIdRepeatedAfterVersionDeleted() throws Exception {
+		String request = version("1.0", true, true, SAVE_X);
+		assertEquals(201, save(request).status());
+		// The save's version is deleted in the web page, and other content checked in: CE numbers it 1.1 again
+		DocumentManager.get().deleteVersion(VersionDAO.get().findByVersion(d.getId(), "1.1").getId(),
+				history(clerk, DocumentEvent.VERSION_DELETED));
+		DocumentManager.get()
+				.checkin(d.getId(), new ByteArrayInputStream(bytes("from the web page")), d.getFileName(), false,
+						null, history(clerk, DocumentEvent.CHECKEDIN))
+				.get();
+		DocumentManager.get().checkout(d.getId(), history(clerk, DocumentEvent.CHECKEDOUT));
+		awaitAsyncWork();
+		assertEquals("1.1", DocumentDAO.get().findById(d.getId()).getFileVersion());
+		DbSnapshot before = fx.snapshot();
+
+		// The same fileVersion, but not the save's file
+		ApiResponse again = save(request);
+
+		assertEquals(again.toString(), 409, again.status());
+		assertEquals("version-moved", again.code());
+		assertEquals("1.1", again.json().path("document").path("fileVersion").textValue());
+		before.assertUnchanged();
+		assertEquals(List.of("1.1", "1.0"), versions());
+	}
+
+	@Test
 	public void testSaveIdRepeatedAfterPropertyChange() throws Exception {
 		String request = version("1.0", true, true, SAVE_X);
 		assertEquals(201, save(request).status());
@@ -285,14 +335,16 @@ public class SavePreconditionsTest extends ApiTestCase {
 	public void testSaveIdRepeatedFromBeforeUpgrade() throws Exception {
 		String request = version("1.0", true, true, SAVE_X);
 		assertEquals(201, save(request).status());
-		// Kept before the server recorded the file a save stored, so nothing says the file is still that one
-		jdbc().update("update hd_hold_device set hd_lastsavefileversion = null where hd_docid = ?", d.getId());
+		// Kept before the server recorded the version a save stored, so nothing says the file is still that one
+		jdbc().update("update hd_hold_device set hd_lastsaveversionid = null where hd_docid = ?", d.getId());
 		DbSnapshot before = fx.snapshot();
 
 		ApiResponse again = save(request);
 
 		assertEquals(again.toString(), 409, again.status());
 		assertEquals("version-moved", again.code());
+		// Nothing changed, so the answer doesn't say it did
+		assertTrue(again.toString(), again.json().path("detail").textValue().contains("can't tell"));
 		before.assertUnchanged();
 	}
 

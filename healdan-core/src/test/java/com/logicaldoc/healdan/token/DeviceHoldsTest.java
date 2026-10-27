@@ -23,6 +23,7 @@ import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Tenant;
@@ -32,6 +33,8 @@ import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.token.DeviceHolds.Repeat;
+import com.logicaldoc.healdan.token.DeviceHolds.Save;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -155,14 +158,14 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 		assertNull(holds().lastSaveId(reload()));
 
 		// A save on closing of a check-out with no record: a row for the id alone, which holds nothing
-		holds().clear(reload(), "save-1");
+		holds().clear(reload(), save("save-1"));
 		assertEquals("save-1", holds().lastSaveId(reload()));
 		checkout(clerk);
 		assertTrue(holds().current(reload()).isEmpty());
 		assertTrue(holds().heldHere(reload(), mac));
 
 		// Saved while editing: the device and the id in one write
-		holds().record(reload(), mac, "LibreOffice", "save-2");
+		holds().record(reload(), mac, "LibreOffice", save("save-2"));
 		assertEquals("save-2", holds().lastSaveId(reload()));
 		assertEquals("mac-1", holds().current(reload()).orElseThrow().getDevice());
 
@@ -172,36 +175,49 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 		DocumentManager.get().unlock(doc.getId(), history(clerk, DocumentEvent.UNLOCKED));
 		holds().clear(reload());
 		assertEquals("save-2", holds().lastSaveId(reload()));
-		holds().clear(reload(), "save-3");
+		holds().clear(reload(), save("save-3"));
 		assertEquals("save-3", holds().lastSaveId(reload()));
 		assertEquals(1, (int) jdbc().queryForObject("select count(*) from hd_hold_device where hd_docid = ?",
 				Integer.class, doc.getId()));
 	}
 
 	@Test
-	public void testLastSaveFileVersion() throws Exception {
+	public void testRepeat() throws Exception {
 		ApiToken mac = token("mac-1");
-		assertNull(holds().lastSaveFileVersion(reload()));
+		assertEquals(Repeat.NO, holds().repeat(reload(), "save-1"));
 
-		// A save on closing: the file it stored is the document's as it is then
-		holds().clear(reload(), "save-1");
-		assertEquals("1.0", holds().lastSaveFileVersion(reload()));
+		// A save on closing: told it's stored while the document's file is the one it stored
+		holds().clear(reload(), save("save-1"));
+		assertEquals(Repeat.STORED, holds().repeat(reload(), "save-1"));
+		assertEquals(Repeat.NO, holds().repeat(reload(), "save-2"));
+		assertEquals(Repeat.NO, holds().repeat(reload(), null));
 
-		// Content checked in another way, as from the web page, doesn't move it
+		// Content checked in another way, as from the web page: the file isn't the save's any more
 		checkout(clerk);
-		DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream("two".getBytes(StandardCharsets.UTF_8)),
-				"a.docx", false, null, history(clerk, DocumentEvent.CHECKEDIN)).get();
-		awaitVersionSaves();
+		checkin("two");
 		assertEquals("1.1", reload().getFileVersion());
-		assertEquals("1.0", holds().lastSaveFileVersion(reload()));
+		assertEquals(Repeat.SUPERSEDED, holds().repeat(reload(), "save-1"));
 
-		// The next save with an id records its own file, and writes without one keep it
+		// The next save with an id names its own version, and writes without one keep it
 		checkout(clerk);
-		holds().record(reload(), mac, "LibreOffice", "save-2");
-		assertEquals("1.1", holds().lastSaveFileVersion(reload()));
+		holds().record(reload(), mac, "LibreOffice", save("save-2"));
+		assertEquals(Repeat.STORED, holds().repeat(reload(), "save-2"));
+		assertEquals(Repeat.NO, holds().repeat(reload(), "save-1"));
 		holds().record(reload(), mac, "Writer");
 		holds().clear(reload());
-		assertEquals("1.1", holds().lastSaveFileVersion(reload()));
+		assertEquals(Repeat.STORED, holds().repeat(reload(), "save-2"));
+
+		// Its version deleted, CE numbers the next file as it was numbered: the same fileVersion, but not its file
+		DocumentManager.get().deleteVersion(VersionDAO.get().findByVersion(doc.getId(), "1.1").getId(),
+				history(clerk, DocumentEvent.VERSION_DELETED));
+		assertEquals("1.0", reload().getFileVersion());
+		checkin("three");
+		assertEquals("1.1", reload().getFileVersion());
+		assertEquals(Repeat.SUPERSEDED, holds().repeat(reload(), "save-2"));
+
+		// A record that doesn't name the version, as one kept before schema version 5
+		holds().clear(reload(), new Save("save-3", null));
+		assertEquals(Repeat.UNKNOWN, holds().repeat(reload(), "save-3"));
 	}
 
 	@Test
@@ -251,6 +267,23 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 	/** As the old web page checks a document out */
 	private void checkout(User as) throws Exception {
 		DocumentManager.get().checkout(doc.getId(), history(as, DocumentEvent.CHECKEDOUT));
+	}
+
+	/** As the old web page checks content in, for clerk, who has it checked out */
+	private void checkin(String content) throws Exception {
+		DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8)),
+				"a.docx", false, null, history(clerk, DocumentEvent.CHECKEDIN)).get();
+		awaitVersionSaves();
+	}
+
+	/**
+	 * @return a save with the id, as the API keeps it after storing the
+	 *         document's file as it is now: with the version record of that
+	 *         file
+	 */
+	private Save save(String id) throws Exception {
+		Document now = reload();
+		return new Save(id, VersionDAO.get().findByVersion(now.getId(), now.getFileVersion()).getId());
 	}
 
 	private DocumentHistory history(User as, DocumentEvent event) {
