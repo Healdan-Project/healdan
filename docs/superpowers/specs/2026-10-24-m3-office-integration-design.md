@@ -333,6 +333,8 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 
 **Sign In** and **Settings** (the server's address, which app opens each kind of file, §5.11) (call). (changed in the build: the server's address is read-only in Settings, which says to sign out and in again to change it, as there's one server per helper. Settings also says whether the helper starts at sign-in, and which version of the LibreOffice extension is installed and how.)
 
+The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polish-design.md).
+
 ### 5.9 The doc ID footer
 
 - **Insert Doc ID** (Writer, and Word in M3.5) does two things (owner; call on the property's name):
@@ -419,6 +421,8 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 - (changed in the build) **When the helper can't be reached** (it isn't running, or is signed out), Open, Save and Save As fall back to LibreOffice's own, with one notice until the helper answers again. A copy's save is still stored, and the helper sends it once it's back. An unexpected error in a Healdan command before any of the helper's windows was shown also falls back to LibreOffice's own command, and says so.
 - **Sets the title bar** and refreshes the footer when the helper confirms a save (§5.7, §5.9). It learns about the confirmation by waiting on the helper's channel after each save, in the background. (changed in the build, final review I1: while the answer says `pending`, it asks again after 2, 5, 15, 30, then every 60 seconds, so an outage longer than the helper's 120-second wait still moves the title on once Healdan is back.)
 - **Tells the helper when a document closes** (its close event), and the helper also watches the lock file (§5.5).
+
+The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polish-design.md).
 
 ## 7. The Office add-in (M3.5)
 

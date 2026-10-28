@@ -17,7 +17,7 @@
 
 **Spec:** [`docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`](../specs/2026-10-27-helper-ui-polish-design.md), approved by the owner on 2026-10-27, with its mockups in [`2026-10-27-helper-polish-mockups/`](../specs/2026-10-27-helper-polish-mockups/). Every § below points into it. Where the two disagree, the spec wins, except for "Spec corrections and calls this plan makes".
 
-**Status:** Tasks 1–9 built on 2026-10-27; PR 1 not yet opened.
+**Status:** Tasks 1–13 built on 2026-10-27, in PR 1 ([Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93)) and PR 2; Task 14, the owner's checks on a Mac, is next.
 
 ## Global Constraints
 
@@ -2800,7 +2800,7 @@ Run by the owner with the packaged helper (`clients/helper/packaging/mac/package
 - [ ] **Step 9: Sign In's keychain line:** check it breaks as "…in the keychain," and "never your password.", with no word alone on a line, in light and dark.
 - [ ] **Step 10: Every trailing "…"** (the ellipsis fix): Settings' **Install…**, **Open from Local Computer…** and **Save to Local Computer…** each show three whole dots.
 - [ ] **Step 11: The File Format drop-down** in Save: open its list in light and dark, and check the choices are legible and the chosen one is marked.
-- [ ] **Step 12: The menu bar dot's size** (Task 8): macOS shows the icon at about 17 pt, not the 22 pt it's drawn for, so check the dot is still plain on light and dark menu bars.
+- [ ] **Step 12: The menu bar dot's size** (Task 8): the icon is drawn for 22 pt, and macOS may show it smaller (a figure to check on the Mac is about 17 pt), so check the dot is still plain on light and dark menu bars.
   - If it's too small, raise `DotRadius` and `RingRadius` together in `Tray/TrayIcons.cs`, keeping the ring clear of the back page.
   - Record the result in the decision log either way.
 - [ ] **Step 13: Letter spacing** (note only): look at San Francisco's spacing in the windows. The owner has made it a separate follow-up (see Follow-ups), so record what you see here and fix nothing.
@@ -2842,6 +2842,10 @@ Every call made while building, in order. "Where" is the task or review that rai
 | 2026-10-27 | Owner's review | The scope pop-up stays beside the chevrons, as built | the owner accepted the hint's visibility over the mockup's spacing | a spacer and a `MaxWidth` |
 | 2026-10-27 | Owner's review | The letter spacing left by the optical-size mismatch above is a follow-up, not part of PR 1 | the owner's call at the review. It's in Follow-ups | nothing now |
 | 2026-10-27 | Task 9 | The docs' seven pictures are the light renders halved to the site's 1× size (420 to 1000 px wide), not the renderer's 2× files | the site's pictures were halved in M3 (its log, 2026-10-25), so each window shows at its real size in the page | 2× copies if the owner wants sharper pictures; no file name changes |
+| 2026-10-27 | Task 10 | `IconRender` draws the 42 px full-colour mark by walking `HealdanMark`'s shapes with their fills (`DrawShapes`), not by rendering the control | `RenderTargetBitmap.Render` draws a control with no visual root blank, and a `Window`'s captured frame has no alpha, so it can't make a transparent PNG. The walk is pixel-identical to the window capture flattened on white. The white high-contrast mark uses `HealdanMark.Silhouette()` | a new kind of shape in `HealdanMark` needs a case in `DrawShapes`, which would otherwise leave it out of the 42 px mark |
+| 2026-10-27 | Task 12 | The extension's `description.xml` version goes from 0.1.0 to 0.2.0, in its own commit (96b20094a) | its images, toolbar and notices change in PR 2, and the helper installs a bundled extension only when it's newer than the one installed, so without a new version existing installs, and the owner's Task 14 checks, would keep the old toolbar | a renumber if the owner prefers another version |
+| 2026-10-27 | Task 13 | The spec's fold records what the build changed beyond calls 1–4: `HdCautionTextBrush`, `HdOnBrush` and `HdOffBrush` in §4.1's table; text in a grey selection taking the Text colour (§4.3); read-only values skipping Tab (§9); Open's arrow keys switching tabs, and the toolbar's layout (§5.3, §6.2); San Francisco's optical size and what it led to (§4.2); and the corrections to §6.6 (the credit line, and "and credit lines") and to §6.8 and §10.1 (the test's name) | they're builder detail the spec should record, each marked "(changed in the build)" | nothing |
+| 2026-10-27 | Task 13 | The records link PR 1 ([Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93)) and write PR 2 as "PR 2", with no number. A one-line commit adds its link once it opens | PR 2's number doesn't exist until it opens | one tiny commit |
 
 ## Follow-ups
 

@@ -2,7 +2,7 @@
 
 - **Follows:** M3 in [`docs/ROADMAP.md`](../../ROADMAP.md), whose [spec](2026-10-24-m3-office-integration-design.md) §5.8 set the windows' layout and §6.2 the extension's menu and toolbar. This spec changes how they look, not what they do.
 - **Date:** 2026-10-27
-- **Status:** design approved by the owner on 2026-10-27, section by section, against the mockups in [`2026-10-27-helper-polish-mockups/`](2026-10-27-helper-polish-mockups/). Not built yet.
+- **Status:** design approved by the owner on 2026-10-27, section by section, against the mockups in [`2026-10-27-helper-polish-mockups/`](2026-10-27-helper-polish-mockups/). Built on 2026-10-27, the helper in [Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93) (PR 1) and the extension in PR 2. Where the build changed the design, the section says so, marked "(changed in the build)", and the [plan](../plans/2026-10-27-helper-ui-polish.md)'s decision log has the reasons.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-27, in which Claude worked as the designer;
   - offscreen renders of all ten helper windows in light and dark, from a scratch renderer like M3's (its plan's decision R23), and the docs site's pictures of them;
@@ -73,7 +73,10 @@ All colours are tokens in `clients/helper/Healdan.Helper/Windows/HelperStyles.ax
 | Secondary button | `#FFFFFF` with Field line | `#4A4A4D` | |
 | Yours | `#1E7B34` | `#69DB7C` | "checked out to you" |
 | Someone else's | `#B3261E` | `#FF8A80` | "checked out to …" |
-| Caution | `#C77700` | `#F5A623` | alert badges, "Older version" |
+| Caution | `#C77700` | `#F5A623` | alert badges and other icons (`HdCautionBrush`). (changed in the build) Not text: see Caution text |
+| Caution text | `#9A5B00` | `#F5A623` | caution text, such as "Older version: opens read-only" (`HdCautionTextBrush`). (changed in the build) Caution's light value is 3.5:1 on the window, enough for an icon but not for text; this one is 5.4:1 |
+| On | `#28A745` | `#30D158` | Settings' status dot when it's on (`HdOnBrush`). (changed in the build) |
+| Off | `#8E8E93` | `#8E8E93` | Settings' status dot when it's off (`HdOffBrush`). (changed in the build) |
 | Warning box | `#FFF6E5`, line `#F2C26B`, text `#6B3D00` | `#3B2A14`, line `#A0611B`, text `#FFD8A8` | Checked Out on Another Computer, Sign Out Here |
 
 Required (`#D70015` / `#FF6961`), the star (`#F59F00` / `#FCC419`) and the chips keep today's values.
@@ -87,6 +90,10 @@ Required (`#D70015` / `#FF6961`), the star (`#F59F00` / `#FCC419`) and the chips
 - **macOS: San Francisco,** asked for as `.AppleSystemUIFont`. A scratch render confirmed Skia finds it. It also fixes most of the text sitting 2–3 pt high in fields. (call)
 - **Linux: the desktop's default font,** as today.
 - **Sizes:** body 13; secondary and labels 11; group headers 11 semibold; the details pane's and alerts' headlines 13 semibold; window headings (Sign In, About) 15 semibold.
+- **(changed in the build) San Francisco's optical size.** Avalonia lays the font out with HarfBuzz at its default Display optical size (28), but Skia draws it through CoreText at Text size. The glyphs are drawn wider than the room measured for them, so the ink of a text block's last character ran about 1.7 pt past its box, and the letter spacing doesn't match the glyphs.
+  - **`TextBlock` and `Button` don't clip.** Avalonia 12 clips each to its bounds, which cut the last dot of "…" in Install… and in Open from Local Computer…. One style in `HelperStyles.axaml` turns `ClipToBounds` off for text blocks (`AccessText` and `SelectableTextBlock` included) and buttons.
+  - **Long labels and cells trim.** With no clipping, text that overflowed a fixed cell ran into its neighbour, so those cells trim with "…" and keep 4 pt clear of the next: Open's detail labels and its Doc #, Version and Matter cells, Save's Version and Doc # cells, and Settings' Address value.
+  - **The spacing fix is a follow-up** (the plan's Follow-ups), not part of this design.
 
 ### 4.3 Controls
 
@@ -99,6 +106,7 @@ Set through Fluent's resources where it has them, and through styles in `HelperS
 - **A segmented control** (§6.2) is a styled `TabControl` strip: a Pill-coloured track and a raised white segment. Tab and the arrow keys reach it.
 - **List rows** are 24 pt, or 34 pt with a badge line, and alternate rows take the Alternate row colour. The selected row is the accent fill with white text, or Inactive selection when the list isn't focused, as on the Mac.
 - **The sidebar's selection** is a Pill-coloured rounded row with the accent icon, inset 6 pt from each side.
+- **(changed in the build) Text inside a grey selection takes the Text colour:** the sidebar's and the versions' Pill, and a list's Inactive selection. Icons there keep their colours, since 3:1 suffices for an icon. This keeps §4.1's promise that every text colour passes AA without changing its tokens.
 - **Icon-only buttons** have a tooltip and an accessible name: back, forward, up, the stars, New Folder's icon and the toolbar's.
 
 ### 4.4 Icons
@@ -148,10 +156,11 @@ The window titles stay, for the window list and screen readers.
   - the system's buttons;
   - the window's name in 13 pt semibold;
   - back, forward and up as chevron buttons;
-  - a flexible space;
   - the scope pop-up;
   - the search field, at least 200 pt wide, with a magnifier.
-  
+
+  (changed in the build, at the owner's review) There's no flexible space: the scope pop-up sits beside the chevrons, and the search field takes the rest of the bar's width, so that the placeholder's doc # hint (§6.2) shows whole beside its field. The owner kept this over the mockup's pop-up at the far right.
+
   The bar's empty space drags the window, and double-clicking it zooms, as a title bar does.
 - **Linux:** the system's title bar, with the same toolbar row under it, without the name.
 - **The footer** has a hairline above it, not a band: the local-computer link on the left and the controls on the right.
@@ -173,11 +182,11 @@ The mockups are `open-window.html` and `open-details-tabs.html`.
 - **The details pane** is 260 pt wide, with a fixed header and two tabs (owner):
   - **Header:** the file-kind icon at 32 pt, the name in 13 pt semibold, `#1234 · v2.1` in Secondary, and the favourite star.
   - **When an older version is chosen,** the header shows its number, and a Caution line with `eye` reads **Older version: opens read-only**. It replaces today's "An older version opens read-only." under the versions. Choosing another document goes back to its current version.
-  - **A segmented control:** **Properties** and **Versions (n)**. Each new Open window starts on Properties. The tab then stays as the user left it while they choose other documents.
+  - **A segmented control:** **Properties** and **Versions (n)**. Each new Open window starts on Properties. The tab then stays as the user left it while they choose other documents. (changed in the build) The Left and Right arrow keys switch between them, through a `KeyDown` handler on the control: its equal-width `UniformGrid` strip isn't a navigable container, so the arrow keys never reached Versions without one.
   - **Properties:** the thumbnail, when the server has one, at its own aspect ratio up to 140 pt tall, with 6 pt corners and a hairline. Then today's label and value rows, with labels in Secondary 11 pt and an 84 pt label column. With no thumbnail there's nothing in its place: the header's icon stands for the file, and the "No preview yet" box goes.
   - **Versions:** today's list, with the Pill selection, filling the pane's height.
   - **Before a document is chosen,** the pane shows only today's "Choose a document to see its properties and versions.", centred and muted, with no header or tabs.
-- **Search's placeholder** adds **", or type #1234"** in the scopes where a typed doc # jumps to the document (`Browser.SearchAsync`). It comes from `Browser.SearchPlaceholder`, so a test pins it.
+- **Search's placeholder** adds **", or type #1234"** in the scopes where a typed doc # jumps to the document (`Browser.SearchAsync`). It comes from `Browser.SearchPlaceholder`, so a test pins it. (changed in the build) Only the Documents scope's placeholder says it. A typed doc # jumps from any scope, but Folders, Matters and Clients keep their placeholders, so those stay short. The search field takes the toolbar's spare width, with the scope pop-up beside the chevrons (§5.3), so the hint shows whole.
 - **Footer:** **Open from Local Computer…**, now with an ellipsis because it opens another window, then Open Read-Only, Cancel and Open.
 
 ### 6.3 Save to Healdan
@@ -201,15 +210,15 @@ The mockup is `settings-and-about.html`. Grouped rows, as in the Mac's System Se
 - **Server:** Address, with the host on the right. Today's note goes under the group.
 - **Open Each Kind of File In:** a row for each kind, with its icon, its name, and its extensions under the name. The app's name is plain text on the right: no disabled pop-up. When a later milestone makes the choice real, the value becomes a pop-up in the same row. Today's note about other files goes under the group.
 - **This Computer:**
-  - **Start at Sign-In,** with an On or Off status dot.
+  - **Start at Sign-In,** with an On or Off status dot (changed in the build: `HdOnBrush` and `HdOffBrush`, §4.1).
   - **LibreOffice Extension,** with the version on the right and "Installed on …" under the name.
   - **Where the rows' data comes from.** They take the login item's state and the extension's record as data, not by parsing today's sentences. `LoginItem.Describe()` and `ExtensionCheck.Describe()` stay, as the rows' tooltips.
-  - **While the extension isn't installed (owner),** the row reads **Not Installed** with an **Install…** button. The button runs what the menu's Install item runs (`ExtensionCheck.InstallFromMenu`), and the row then shows that outcome's text.
+  - **While the extension isn't installed (owner),** the row reads **Not Installed** with an **Install…** button. The button runs what the menu's Install item runs (`ExtensionCheck.InstallFromMenu`), and the row then shows that outcome's text. (changed in the build) The row shows `ExtensionCheck.Summary()` again after the install, not a text mapped from the install's outcome: the summary already says "Waiting for you to accept version … in LibreOffice".
 - **Done** stays at the bottom right.
 
 ### 6.6 About
 
-- **The mark** at 64 pt, then "Healdan Helper", the version, and the copyright and credit lines exactly as `About` has them today, LogicalDOC's credit included. Then the server line.
+- **The mark** at 64 pt, then "Healdan Helper", the version, and the copyright line exactly as `About` has it today (`About.Copyright`). Then the server line. (changed in the build) The helper's About has no LogicalDOC credit line: that credit is the web GUI's (`HealdanCredits.java`), and the helper is Healdan's own .NET code. About keeps `About.Copyright` as it is.
 - **The links** sit in one row: Healdan Docs, the licence, and **Open-Source Notices** (a button today).
 - **Copy for Support** sits at the bottom left, and Done at the bottom right.
 
@@ -221,7 +230,7 @@ The text sits on the window's colours in both themes (no near-black panel) and d
 
 - **Checked Out on Another Computer:** the alert shell. The headline, line and warning box keep their M3 wording.
 - **Sign Out on This Computer Only?:** the alert shell; the wording is unchanged.
-- **After a Crash:** the alert shell. `Warnings.Crashed` returns a headline and a body: the headline is its first sentence (for example **Lease agreement #1234 v2.1 closed unexpectedly.**), and the body the rest. The hint stays below them in Secondary, and the buttons are unchanged. `WarningsTests` pins the split.
+- **After a Crash:** the alert shell. `Warnings.Crashed` returns a headline and a body: the headline is its first sentence (for example **Lease agreement #1234 v2.1 closed unexpectedly.**), and the body the rest. The hint stays below them in Secondary, and the buttons are unchanged. `HoldsAndTimesTests.AfterACrash` pins the split. (changed in the build: not `WarningsTests`, which holds Sign Out Here's tests)
 
 ## 7. The menu bar
 
@@ -267,6 +276,7 @@ The mockups are `menubar-and-libreoffice.html` and `libreoffice-open-save-icons.
 ### 8.3 Infobars
 
 - **A headline and a detail.** Each notice in `healdan_logic.py` becomes a headline and a detail, split at its first sentence, and the wording doesn't change. `tell` passes them as the infobar's primary message (bold) and secondary message (regular).
+  - (changed in the build) **The split is made at display time.** The notices stay single strings, so the flows and their tests don't change. A new pure function, `notice_parts(text)`, splits one at the end of its first sentence, and `tell` calls it. A full stop inside brackets, as in an error's own words, or inside a number such as a version, doesn't end the sentence.
 - **The message box fallback** in the Start Center shows the headline, a blank line, and the detail.
 - **A one-sentence notice** (such as `STORE_FAILED`) has a headline and no detail.
 - `test_logic.py` pins the split.
@@ -286,6 +296,7 @@ The mockups are `menubar-and-libreoffice.html` and `libreoffice-open-save-icons.
 
 - **Contrast:** text meets AA (§4.1), and icons and focus rings meet 3:1 against their backgrounds.
 - **Keyboard:** every control a mouse reaches can be reached with Tab. The segmented control also takes the arrow keys. Escape and Return keep today's meanings.
+  - (changed in the build) **Read-only values skip Tab.** A detail's value and About's version and server lines are `SelectableTextBlock`s with `IsTabStop = false`, as the Mac's selectable labels aren't in the key-view loop. They stay selectable with the mouse and copyable (Cmd+C, or the context menu's Copy). `Focusable = false` would have lost the keyboard copy.
 - **Names:** icon-only buttons have accessible names and tooltips (§4.3). The attention dot's reason is in the tray's tooltip (§7.2).
 - **High contrast:** LibreOffice gets HC images (§8.2), and the shield marks Healdan's two commands by shape, not colour.
 
@@ -296,7 +307,7 @@ The mockups are `menubar-and-libreoffice.html` and `libreoffice-open-save-icons.
 - **`Healdan.Helper.Core.Tests`:**
   - `IconsTests`: each icon geometry matches its Tabler source;
   - `AttentionTests`: the dot's rule and its tooltip reason;
-  - `WarningsTests`: After a Crash's headline and body;
+  - `HoldsAndTimesTests.AfterACrash`: After a Crash's headline and body (changed in the build: not `WarningsTests`);
   - `BrowserTests`: the search placeholder's doc # hint;
   - `MarkTests` unchanged; `NoticesTests` unchanged.
 - **The extension's tests:**
@@ -340,10 +351,12 @@ Docs change in the same PRs as the code (CLAUDE.md).
 
 Two pull requests, each touching only `clients/`, the docs and these records. CI's Java and Docker builds skip them, and its `Clients` job runs. (call)
 
-1. **The helper.** The tokens, controls, icons and sources, the window shells and windows, the menu bar icon and dot, the render tool, the tests and notices, and the helper's docs.
-2. **The extension.** The rendered images and their sources, `Addons.xcu`, `description.xml`, the infobar split, the tests and notice, and the extension's docs.
+1. **The helper.** The tokens, controls, icons and sources, the window shells and windows, the menu bar icon and dot, the tests and notices, and the helper's docs.
+2. **The extension.** The render tool, the rendered images and their sources, `Addons.xcu`, `description.xml`, the infobar split, the tests and notice, and the extension's docs.
 
-The roadmap's M3 row notes the polish when the second PR merges.
+(changed in the build) The render tool ships with the extension, in the second pull request, not the helper's: its only output is the extension's images, which the first pull request's reviewer couldn't judge (§8.5). The second also numbers the extension 0.2.0, since the helper installs a bundled extension only when it's newer than the installed one, and this one has new images, a new toolbar and new notices.
+
+The roadmap's M3 row notes the polish when the second PR merges. (changed in the build) It notes it in the second pull request itself, linking both.
 
 ## 13. Risks
 
