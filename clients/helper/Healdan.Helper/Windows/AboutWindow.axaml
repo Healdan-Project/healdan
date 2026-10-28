@@ -20,10 +20,11 @@
       <SelectableTextBlock x:Name="VersionText" IsTabStop="False" HorizontalAlignment="Center" />
       <TextBlock x:Name="CopyrightText" Classes="muted" HorizontalAlignment="Center" />
       <SelectableTextBlock x:Name="ServerText" IsTabStop="False" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="0,10,0,0" />
+      <!-- Secondary size, as the mockup has them: at 13 pt the three need 421 pt of the 400 there is. -->
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="12" Margin="0,8,0,0">
-        <HyperlinkButton x:Name="DocsLink" Content="Healdan Docs" />
-        <HyperlinkButton x:Name="LicenceLink" Content="Licence: GNU LGPL v3" />
-        <HyperlinkButton x:Name="NoticesLink" Content="Open-Source Notices" />
+        <HyperlinkButton x:Name="DocsLink" Content="Healdan Docs" FontSize="11" />
+        <HyperlinkButton x:Name="LicenceLink" Content="Licence: GNU LGPL v3" FontSize="11" />
+        <HyperlinkButton x:Name="NoticesLink" Content="Open-Source Notices" FontSize="11" />
       </StackPanel>
     </StackPanel>
   </DockPanel>
