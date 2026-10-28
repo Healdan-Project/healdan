@@ -2,8 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using Healdan.Helper.Core.Browse;
-using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Platform;
@@ -20,17 +20,17 @@ namespace Healdan.Helper.Windows;
 /// </summary>
 public partial class SettingsWindow : Window
 {
+    private const string Https = "https://";
+
     /// <summary>For the XAML loader; the helper always opens it with the settings.</summary>
     public SettingsWindow() => InitializeComponent();
 
-    /// <param name="install">What Install… (or Update…) runs; the row then shows the summary it returns. Null when the build has no extension.</param>
-    internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, LoginItemSummary login, ExtensionSummary extension,
-        string extensionTip, Func<Task<ExtensionSummary>>? install) : this()
+    /// <param name="extension">The extension's check, which Install… (or Update…) runs; null when the build has none.</param>
+    internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, LoginItemSummary login, ExtensionCheck? extension) : this()
     {
-        // A hand-edited Server setting may not be an address at all: shown as it is, rather than ending the helper.
+        // As Sign In takes it: https:// left out, as Sign In adds it, and http:// or a path kept.
         ServerValue.Text = server is null ? "Not Set Yet"
-            : Uri.TryCreate(server, UriKind.Absolute, out var uri) && uri.Authority.Length > 0 ? HealdanLink.HostAndPort(uri)
-            : server;
+            : server.StartsWith(Https, StringComparison.OrdinalIgnoreCase) ? server[Https.Length..] : server;
         ServerNote.Text = signedIn
             ? "To use another server, sign out from the Healdan Helper menu, then sign in with its address."
             : "Sign in from the Healdan Helper menu to choose the server.";
@@ -39,40 +39,50 @@ public partial class SettingsWindow : Window
 
         LoginValue.Text = login.Value;
         LoginDot.Bind(Shape.FillProperty, LoginDot.GetResourceObservable(login.On ? "HdOnBrush" : "HdOffBrush"));
-        ToolTip.SetTip(LoginRow, login.Tip);
+        (LoginNote.Text, LoginNote.IsVisible) = (login.Note, login.Note is not null);
         ShowExtension(extension);
-        ToolTip.SetTip(ExtensionRow, extensionTip);
+        if (extension is not null)
+        {
+            // The menu bar icon reads LibreOffice's registry again while the extension is missing, so the row follows
+            // an install the user accepts there.
+            Action changed = () => Dispatcher.UIThread.Post(() => ShowExtension(extension));
+            extension.Changed += changed;
+            Closed += (_, _) => extension.Changed -= changed;
+        }
         InstallButton.Click += async (_, _) =>
         {
-            if (install is null)
+            if (extension is null)
                 return;
             InstallButton.IsEnabled = false;
             try
             {
-                ShowExtension(await install());
+                await Task.Run(extension.InstallFromMenu);
             }
             catch (Exception e)
             {
                 Program.Log.Error("Settings' Install… failed", e);
             }
+            ShowExtension(extension); // what it says now, such as "Waiting for you to accept …" (call 4)
             InstallButton.IsEnabled = true;
         };
         DoneButton.Click += (_, _) => Close();
     }
 
-    private void ShowExtension(ExtensionSummary extension)
+    private void ShowExtension(ExtensionCheck? check)
     {
+        var extension = check?.Summary() ?? ExtensionSummary.NotInThisBuild;
         ExtensionValue.Text = extension.Value;
         (ExtensionNote.Text, ExtensionNote.IsVisible) = (extension.Note, extension.Note is not null);
         InstallButton.IsVisible = extension.CanInstall;
         InstallButton.Content = extension.Button; // Install…, or Update… while an older version is installed
+        ToolTip.SetTip(ExtensionRow, extension.Tip);
     }
 
     /// <summary>A kind of file, its extensions under it, and the app that opens it as plain text: no disabled pop-up.</summary>
     private static Control KindRow(FileKind kind, string app, bool divided)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Classes = { "row" } };
-        var icon = Icons.View(FileIcons.For("x" + kind.Extensions[0]));
+        var icon = Icons.View(FileIcons.For(kind));
         icon.Classes.Add("folder");
         icon.Margin = new Thickness(0, 0, 8, 0);
         icon.VerticalAlignment = VerticalAlignment.Center;

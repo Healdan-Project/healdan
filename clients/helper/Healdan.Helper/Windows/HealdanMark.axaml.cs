@@ -1,4 +1,3 @@
-using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Media;
@@ -12,9 +11,6 @@ namespace Healdan.Helper.Windows;
 /// </summary>
 public partial class HealdanMark : UserControl
 {
-    /// <summary>Where the shapes sit in the mark's 260-point square.</summary>
-    private static readonly Vector Offset = new(22, 5);
-
     public HealdanMark() => InitializeComponent();
 
     /// <summary>
@@ -48,5 +44,7 @@ public partial class HealdanMark : UserControl
 
     private static Geometry Union(Geometry? a, Geometry b) => a is null ? b : new CombinedGeometry(GeometryCombineMode.Union, a, b);
 
-    private static Geometry Placed(Geometry shape) => new GeometryGroup { Children = { shape }, Transform = new TranslateTransform(Offset.X, Offset.Y) };
+    /// <summary>The shapes moved to where the XAML sets them in the mark's 260-point square.</summary>
+    private Geometry Placed(Geometry shape) =>
+        new GeometryGroup { Children = { shape }, Transform = new TranslateTransform(Canvas.GetLeft(Shapes), Canvas.GetTop(Shapes)) };
 }

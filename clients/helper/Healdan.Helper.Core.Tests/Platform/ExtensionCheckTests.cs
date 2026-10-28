@@ -3,6 +3,7 @@ using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Tests.Ui;
+using Healdan.Helper.Core.Ui;
 
 namespace Healdan.Helper.Core.Tests.Platform;
 
@@ -17,6 +18,14 @@ namespace Healdan.Helper.Core.Tests.Platform;
 public sealed class ExtensionCheckTests : IDisposable
 {
     private const string Helper = "0.2.0";
+
+    /// <summary>Settings' tooltip while the extension isn't installed.</summary>
+    private const string NotInstalledTip =
+        $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {ExtensionCheck.MenuItem} in the Healdan Helper menu.";
+
+    /// <summary>Settings' tooltip while 0.1.0 is installed and the helper carries 0.2.0.</summary>
+    private const string OlderTip =
+        $"Version 0.1.0 is installed. To update it to 0.2.0, choose {ExtensionCheck.MenuItem} in the Healdan Helper menu.";
 
     private readonly string _dir = Directory.CreateTempSubdirectory("healdan-check-").FullName;
     private readonly FakeTools _tools = new();
@@ -351,23 +360,25 @@ public sealed class ExtensionCheckTests : IDisposable
         var check = Mac(Oxt("0.2.0"));
         await check.RunAsync();
 
-        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true, NotInstalledTip), check.Summary());
 
         _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
         var installed = check.Summary();
         Assert.Equal("0.2.0", installed.Value);
         Assert.StartsWith("Installed on ", installed.Note);
         Assert.False(installed.CanInstall);
+        Assert.Equal(check.Describe(), installed.Tip);
+        Assert.StartsWith("Version 0.2.0, installed in LibreOffice on ", installed.Tip);
     }
 
     [Fact]
     public async Task MacSettingsRowBeforeLibreOfficeWasAsked()
     {
         var check = Mac(Oxt("0.2.0"));
-        Assert.Equal(new ExtensionSummary("Not Installed", null, false), check.Summary()); // before the start's check: nothing to offer yet
+        Assert.Equal(new ExtensionSummary("Not Installed", null, false, "Not installed yet."), check.Summary()); // before the start's check: nothing to offer yet
 
         await check.RunAsync(); // opens it in LibreOffice once
-        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true, NotInstalledTip), check.Summary());
     }
 
     [Fact]
@@ -380,13 +391,14 @@ public sealed class ExtensionCheckTests : IDisposable
 
         Assert.True(check.Missing);
         Assert.Equal("0.1.0", check.Older);
-        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is ready to add to LibreOffice.", true, ExtensionSummary.Update), check.Summary());
+        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is ready to add to LibreOffice.", true, OlderTip, ExtensionSummary.Update),
+            check.Summary());
 
         Volatile.Write(ref waiting, false);
         Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await run);
-        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is waiting for you to accept it in LibreOffice.", true, ExtensionSummary.Update),
-            check.Summary());
-        Assert.Equal($"Version 0.1.0 is installed. To update it to 0.2.0, choose {ExtensionCheck.MenuItem} in the Healdan Helper menu.", check.Describe());
+        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is waiting for you to accept it in LibreOffice.", true, OlderTip,
+            ExtensionSummary.Update), check.Summary());
+        Assert.Equal(OlderTip, check.Describe());
 
         _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
         var updated = check.Summary();
@@ -402,8 +414,58 @@ public sealed class ExtensionCheckTests : IDisposable
         await check.RunAsync();
 
         Assert.Null(check.Older);
-        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true, NotInstalledTip),
+            check.Summary());
         Assert.Equal(ExtensionSummary.Install, check.Summary().Button);
+    }
+
+    [Fact]
+    public async Task MacOlderVersionsRowSurvivesThePoll()
+    {
+        _tools.Registry = new InstalledExtension("0.1.0", true);
+        var check = Mac(Oxt("0.2.0"));
+        await check.RunAsync(); // opens 0.2.0 in LibreOffice
+        var changes = 0;
+        check.Changed += () => changes++;
+
+        // The menu bar icon reads the registry every 5 s while the extension is missing; nothing changed, so nothing's raised.
+        Assert.True(check.Refresh());
+        Assert.True(check.Refresh());
+        Assert.Equal(0, changes);
+        Assert.Equal("0.1.0", check.Older);
+        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is waiting for you to accept it in LibreOffice.", true, OlderTip,
+            ExtensionSummary.Update), check.Summary());
+        Assert.Equal("LibreOffice Extension Needs Updating", Reason(check));
+    }
+
+    [Fact]
+    public async Task MacPollFollowsAnOlderVersionComingAndGoing()
+    {
+        _tools.Registry = new InstalledExtension("0.1.0", true);
+        var check = Mac(Oxt("0.2.0"));
+        await check.RunAsync();
+        var changes = 0;
+        check.Changed += () => changes++;
+
+        _tools.Registry = new InstalledExtension("0.1.0", false); // turned off in LibreOffice: still missing, but not older
+        Assert.True(check.Refresh());
+        Assert.Equal(1, changes); // Settings' row and the menu follow
+        var off = check.Summary();
+        Assert.Equal(("Not Installed", ExtensionSummary.Install, NotInstalledTip), (off.Value, off.Button, off.Tip));
+        Assert.Equal("LibreOffice Extension Not Installed", Reason(check));
+
+        _tools.Registry = new InstalledExtension("0.1.0", true); // turned on again
+        Assert.True(check.Refresh());
+        Assert.Equal(2, changes);
+        var on = check.Summary();
+        Assert.Equal(("0.1.0", ExtensionSummary.Update, OlderTip), (on.Value, on.Button, on.Tip));
+        Assert.Equal("LibreOffice Extension Needs Updating", Reason(check));
+
+        _tools.Registry = new InstalledExtension("0.2.0", true); // the user accepted 0.2.0
+        Assert.False(check.Refresh());
+        Assert.Equal(3, changes);
+        Assert.False(check.Summary().CanInstall);
+        Assert.Null(Reason(check)); // the dot goes by itself
     }
 
     [Fact]
@@ -446,6 +508,10 @@ public sealed class ExtensionCheckTests : IDisposable
         Assert.Equal("Waiting for you to accept version 0.3.0 in LibreOffice.", new ExtensionRecord { OpenedFor = "0.3.0" }.Describe());
         Assert.Equal("Not installed yet.", new ExtensionRecord().Describe());
     }
+
+    /// <summary>The dot's reason as the menu bar icon gives it on each rebuild, with all else well.</summary>
+    private static string? Reason(ExtensionCheck check) =>
+        Attention.Reason(signedIn: true, startFailed: false, crashed: false, kept: 0, check.Missing, check.Older is not null);
 
     private ExtensionCheck Linux(string? oxt, Func<bool>? waiting = null) =>
         new(_tools, _paths, _notifier, _log, Helper, ExtensionRoute.Unopkg, oxt, waiting ?? (() => false), poll: TimeSpan.FromMilliseconds(10));

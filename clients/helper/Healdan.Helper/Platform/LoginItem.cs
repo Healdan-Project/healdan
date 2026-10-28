@@ -80,49 +80,29 @@ internal static unsafe class LoginItem
         }
     }
 
-    /// <summary>Settings' read-only line.</summary>
-    public static string Describe()
-    {
-        if (!Available)
-            return "Not in this build: the installed app starts when you sign in to this computer.";
-        if (Passing() is { } where)
-            return $"Off while Healdan Helper runs from {where}. Drag it to Applications, then open it from there.";
-        try
-        {
-            return Status() switch
-            {
-                Enabled => "On: Healdan Helper starts when you sign in to this computer.",
-                RequiresApproval => $"Waiting for your approval in {Where}.",
-                NotFound => "Off: macOS can't find the app. Move it to Applications and open it again.",
-                _ => $"Off. To turn it on, add Healdan Helper in {Where}."
-            };
-        }
-        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
-        {
-            return "Unknown: macOS didn't say.";
-        }
-    }
-
-    /// <summary>Settings' row (polish spec §6.5): a short value, whether it's on, and <see cref="Describe"/> as its tooltip.</summary>
+    /// <summary>
+    /// Settings' row (polish spec §6.5), from one look at the login item: a short value, whether it's on, and, unless it
+    /// is, the line under the row's name saying why or how to turn it on.
+    /// </summary>
     public static LoginItemSummary Summary()
     {
-        var tip = Describe();
         if (!Available)
-            return new("Not in This Build", false, tip);
-        if (Passing() is not null)
-            return new("Off", false, tip);
+            return new("Not in This Build", false, "The installed app starts when you sign in to this computer.");
+        if (Passing() is { } where)
+            return new("Off", false, $"Not while Healdan Helper runs from {where}. Drag it to Applications, then open it from there.");
         try
         {
             return Status() switch
             {
-                Enabled => new("On", true, tip),
-                RequiresApproval => new("Waiting for Approval", false, tip),
-                _ => new("Off", false, tip)
+                Enabled => new("On", true, null),
+                RequiresApproval => new("Waiting for Approval", false, $"Approve it in {Where}."),
+                NotFound => new("Off", false, "macOS can't find the app. Move it to Applications and open it again."),
+                _ => new("Off", false, $"To turn it on, add Healdan Helper in {Where}.")
             };
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
-            return new("Unknown", false, tip);
+            return new("Unknown", false, "macOS didn't say.");
         }
     }
 
@@ -178,5 +158,5 @@ internal static unsafe class LoginItem
     }
 }
 
-/// <summary>Start at Sign-In's row in Settings.</summary>
-internal sealed record LoginItemSummary(string Value, bool On, string Tip);
+/// <summary>Start at Sign-In's row in Settings: <paramref name="Note"/> is null while it's on.</summary>
+internal sealed record LoginItemSummary(string Value, bool On, string? Note);

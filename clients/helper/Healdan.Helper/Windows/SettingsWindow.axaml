@@ -32,7 +32,10 @@
       <StackPanel>
         <Grid x:Name="LoginRow" Classes="row" ColumnDefinitions="Auto,*,Auto">
           <local:IconView Data="{StaticResource Icon.power}" Classes="folder" Margin="0,0,8,0" VerticalAlignment="Center" />
-          <TextBlock Grid.Column="1" Text="Start at Sign-In" VerticalAlignment="Center" />
+          <StackPanel Grid.Column="1" VerticalAlignment="Center">
+            <TextBlock Text="Start at Sign-In" />
+            <TextBlock x:Name="LoginNote" Classes="muted" FontSize="11" TextWrapping="Wrap" />
+          </StackPanel>
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
             <Ellipse x:Name="LoginDot" Width="7" Height="7" />
             <TextBlock x:Name="LoginValue" Foreground="{DynamicResource HdSecondaryBrush}" />

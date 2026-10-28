@@ -34,6 +34,11 @@ internal sealed class TrayMenu : IDisposable
     private readonly TrayIcon _icon;
     private readonly WindowIcon _plain;
     private readonly WindowIcon _attention;
+    /// <summary>
+    /// macOS: LibreOffice's registry read again while the extension is missing, so the dot and the menu item go once the
+    /// user has accepted it there, without waiting for the menu to open.
+    /// </summary>
+    private readonly DispatcherTimer _registry = new() { Interval = TimeSpan.FromSeconds(5) };
     private bool? _dotShown;
 
     public TrayMenu(Application app, HelperSession session, Notifier notifier, AppWindows windows, ExtensionCheck extension, Action quit)
@@ -55,6 +60,7 @@ internal sealed class TrayMenu : IDisposable
         session.Changed += Refresh;
         notifier.StatusChanged += Refresh;
         extension.Changed += Refresh;
+        _registry.Tick += (_, _) => _extension.Refresh(); // a change raises Changed, which rebuilds the menu
         Build();
     }
 
@@ -63,6 +69,7 @@ internal sealed class TrayMenu : IDisposable
         _session.Changed -= Refresh;
         _notifier.StatusChanged -= Refresh;
         _extension.Changed -= Refresh;
+        _registry.Stop();
         _icon.IsVisible = false;
         _icon.Dispose();
     }
@@ -76,6 +83,7 @@ internal sealed class TrayMenu : IDisposable
         var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, copies.Any(_session.HasCrashed), _session.KeptCopies().Count, missing,
             _extension.Older is not null);
         ShowDot(reason);
+        _registry.IsEnabled = missing && OperatingSystem.IsMacOS();
 
         var items = _menu.Items;
         items.Clear();

@@ -1,4 +1,5 @@
 using Healdan.Helper.Core.Browse;
+using Healdan.Helper.Core.Settings;
 
 namespace Healdan.Helper.Core.Tests.Browse;
 
@@ -18,4 +19,8 @@ public sealed class FileIconsTests
     [InlineData("archive.zip", "file")]
     [InlineData("docx", "file")]
     public void EachFileGetsItsKindsIcon(string name, string icon) => Assert.Equal(icon, FileIcons.For(name));
+
+    [Fact]
+    public void SettingsRowsGetTheirKindsIcon() =>
+        Assert.Equal(["file-text", "file-spreadsheet", "presentation"], FileKinds.All.Select(FileIcons.For));
 }
