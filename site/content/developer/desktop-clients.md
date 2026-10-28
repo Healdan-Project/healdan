@@ -183,7 +183,9 @@ Don't use `unopkg` on macOS. With LibreOffice 26.8 on macOS 27 it fails to reach
 (`NoConnectException`), even with LibreOffice closed and `TMPDIR=/tmp`, and `unopkg list` hangs beside a running
 LibreOffice. So the packaged helper never runs it on macOS: it opens its own `.oxt` in LibreOffice, once for each
 helper version that brings a newer extension, and reads LibreOffice's registry under
-`~/Library/Application Support/LibreOffice/4/user/` to see what's installed. On Ubuntu, `unopkg` works.
+`~/Library/Application Support/LibreOffice/4/user/` to see what's installed: at each start, as the menu opens, and
+every 5 seconds while the extension is missing or older, so the menu, the menu bar icon's dot and Settings follow
+what the user accepts. On Ubuntu, `unopkg` works.
 
 ## Running the Helper from Source
 
