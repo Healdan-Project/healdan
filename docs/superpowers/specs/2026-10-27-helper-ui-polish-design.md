@@ -103,7 +103,7 @@ Set through Fluent's resources where it has them, and through styles in `HelperS
 - **Pop-up buttons** (`ComboBox`) look like a secondary button with Tabler's `selector` chevrons in place of Fluent's arrow.
 - **Text fields** are 22 pt tall with 5 pt corners. Focus is a 1 pt accent border and a 3 pt Focus ring.
 - **Checkboxes and radio buttons** are 14 pt, with an accent fill when on.
-- **A segmented control** (§6.2) is a styled `TabControl` strip: a Pill-coloured track and a raised white segment. Tab and the arrow keys reach it.
+- **A segmented control** (§6.2) is a Pill-coloured track and a raised white segment. (changed in the build) It's a styled `ListBox` whose items panel is a one-row `UniformGrid`, which keeps the segments equal, not a `TabControl`. Tab reaches it, and the arrow keys switch segments through a key handler (§6.2), since a `UniformGrid` isn't keyboard-navigable on its own.
 - **List rows** are 24 pt, or 34 pt with a badge line, and alternate rows take the Alternate row colour. The selected row is the accent fill with white text, or Inactive selection when the list isn't focused, as on the Mac.
 - **The sidebar's selection** is a Pill-coloured rounded row with the accent icon, inset 6 pt from each side.
 - **(changed in the build) Text inside a grey selection takes the Text colour:** the sidebar's and the versions' Pill, and a list's Inactive selection. Icons there keep their colours, since 3:1 suffices for an icon. This keeps §4.1's promise that every text colour passes AA without changing its tokens.
