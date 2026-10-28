@@ -77,6 +77,7 @@ public class BrowserTests
         var matter = Assert.Single(browser.Entries);
         Assert.Equal(EntryKind.Matter, matter.Kind);
         Assert.Equal("998.1 – Healdan Demo", matter.Title);
+        Assert.Equal("(Northwind Properties)", matter.ClientText);
 
         // Another place goes back to the window's own scope.
         await browser.ShowAsync(Place.RecentFolders);
@@ -104,13 +105,49 @@ public class BrowserTests
 
         await browser.OpenFolderAsync(11);
 
-        Assert.Equal(["998.1 – Healdan Demo (Healdan)", "Documents"], browser.Crumbs.Select(c => c.Text));
+        Assert.Equal(["998.1 – Healdan Demo", "Documents"], browser.Crumbs.Select(c => c.Text));
+        Assert.Equal(["(Northwind Properties · Healdan)", ""], browser.Crumbs.Select(c => c.Note)); // the client, then the Store
         Assert.Equal([10L, 11L], browser.Crumbs.Select(c => c.FolderId));
         Assert.Equal(["Drafts", "Engagement letter.docx"], browser.Entries.Select(e => e.Title));
         var doc = browser.Entries[1];
         Assert.Equal(("1.0", "1229"), (doc.Version, doc.DocNumber));
         Assert.Equal("Wednesday", doc.Edited); // from its versions
         Assert.Equal("Search folders within 998.1 – Healdan Demo", browser.SearchPlaceholder);
+    }
+
+    [Fact]
+    public async Task AMatterIsNamedWithItsClient()
+    {
+        _api.Answer("GET /v1/me/favorites", Page(Favorite(7, Folder(10)), Favorite(8, Doc(1229, "Engagement letter.docx"))));
+        var browser = Make(BrowseMode.Open);
+
+        await browser.ShowAsync(Place.Favorites);
+
+        var (matter, doc) = (browser.Entries[0], browser.Entries[1]);
+        Assert.Equal(("998.1 – Healdan Demo", "(Northwind Properties)"), (matter.Title, matter.ClientText));
+        Assert.Equal("", doc.ClientText); // a document's title is its own
+        Assert.Equal(("998.1", "998.1 – Healdan Demo (Northwind Properties)"), (doc.MatterText, doc.MatterTip));
+    }
+
+    [Fact]
+    public async Task AnOlderServersMatterReadsAsBefore()
+    {
+        var folder = Folder(11);
+        folder["matter"] = MatterRef(client: false);
+        _api.Answer("GET /v1/folders/11", folder);
+        var workspace = Folder(10);
+        workspace["matter"] = MatterRef(client: false);
+        var doc = Doc(1229, "Engagement letter.docx");
+        doc["matter"] = MatterRef(client: false);
+        _api.Answer("GET /v1/folders/11/children?limit=200", Page(workspace, doc));
+        var browser = Make(BrowseMode.Open);
+
+        await browser.OpenFolderAsync(11);
+
+        Assert.Equal(["998.1 – Healdan Demo", "Documents"], browser.Crumbs.Select(c => c.Text));
+        Assert.Equal(["(Healdan)", ""], browser.Crumbs.Select(c => c.Note)); // the Store alone, as before
+        Assert.Equal(("998.1 – Healdan Demo", ""), (browser.Entries[0].Title, browser.Entries[0].ClientText));
+        Assert.Equal("998.1 – Healdan Demo", browser.Entries[1].MatterTip);
     }
 
     [Fact]

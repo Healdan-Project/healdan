@@ -39,9 +39,12 @@ in the Start Center, and **Healdan › Open from Healdan…**. So does **Open fr
 - **On the left:** Recent Documents (where it starts), Checked Out to Me and Favorites, then Recent Matters, My
   Matters and Recent Folders to browse.
 - **In the middle:** each document's title, doc #, version, matter, and when it was last saved. Under the title,
-  who has it checked out: "checked out to you on MacBook", or "checked out to Jane Smith".
+  who has it checked out: "checked out to you on MacBook", or "checked out to Jane Smith". The Matter column shows
+  the matter's number: point at it to see the matter's name and its client.
+- **Matters** are listed with their client's name after them, in smaller type: `998.1 – Healdan Demo (Healdan)`.
 - **On the right:** a small preview of the first page ("No preview yet" until Healdan has made one), the main
-  properties, and the versions. The star adds the document to your Favorites, or takes it off.
+  properties, with the matter's client under the matter, and the versions. The star adds the document to your
+  Favorites, or takes it off.
 - **To find a document,** type in the search box: it searches documents, unless you choose another scope beside it.
   `#1234` and Enter shows document 1234, and `#1234 v2.1` selects that version.
 - **To open it,** double-click it, or select it and choose **Open**.

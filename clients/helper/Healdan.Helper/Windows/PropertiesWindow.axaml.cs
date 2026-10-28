@@ -40,7 +40,7 @@ public partial class PropertiesWindow : Window
         {
             var doc = _api!.DocumentAsync(_docNumber);
             var form = new FormModel(await _api.PropertiesAsync(_docNumber));
-            var matter = (await doc).Matter?.Display;
+            var matter = (await doc).Matter;
             var editable = form.Fields.Any(f => f.Editable);
             NoteText.IsVisible = !editable;
             NoteText.Text = "These properties can't be changed now: you may not edit this document, or it's checked out to someone else.";

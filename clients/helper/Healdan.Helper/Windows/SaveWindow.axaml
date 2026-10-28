@@ -60,7 +60,8 @@
                   <Path Classes="folder" Data="{StaticResource HdFolderIcon}" IsVisible="{Binding IsFolder}" VerticalAlignment="Top" Margin="0,2,0,0" HorizontalAlignment="Left" />
                   <Path Classes="document" Data="{StaticResource HdDocumentIcon}" IsVisible="{Binding IsDocument}" VerticalAlignment="Top" Margin="2,1,0,0" HorizontalAlignment="Left" />
                   <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <!-- A matter's client after it, smaller; cut off first when the row is too long. -->
+                    <TextBlock TextTrimming="CharacterEllipsis"><Run Text="{Binding Title}" /><Run Text=" " /><Run Classes="label" Text="{Binding ClientText}" /></TextBlock>
                     <TextBlock Text="{Binding Holder}" IsVisible="{Binding HasHolder}" Classes="holder" Classes.mine="{Binding HeldByMe}" />
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding Version}" />

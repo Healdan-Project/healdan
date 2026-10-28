@@ -22,6 +22,7 @@ public sealed class Entry : INotifyPropertyChanged
             Version = doc.FileVersion;
             DocNumber = doc.DocNumber.ToString(System.Globalization.CultureInfo.InvariantCulture);
             MatterText = MatterNumber(doc.Matter?.Display);
+            MatterTip = doc.Matter is { } m ? Matters.Line(m) : null;
             Holder = Holds.Text(doc.Hold, me);
             HeldByMe = Holds.ByMe(doc.Hold, me);
         }
@@ -29,11 +30,13 @@ public sealed class Entry : INotifyPropertyChanged
         {
             Kind = EntryKind.Matter;
             Title = matter.Display;
+            ClientText = Matters.ClientNote(matter.Client);
         }
         else
         {
             Kind = EntryKind.Folder;
             Title = item.Folder!.Kind == "matter" && item.Folder.Matter is { } m ? m.Display : item.Folder.Name;
+            ClientText = item.Folder.Kind == "matter" ? Matters.ClientNote(item.Folder.Matter?.Client) : "";
         }
     }
 
@@ -59,6 +62,12 @@ public sealed class Entry : INotifyPropertyChanged
 
     /// <summary>The matter's number, such as <c>998.1</c>.</summary>
     public string MatterText { get; } = "";
+
+    /// <summary>A matter's client after its title, <c>(Northwind Properties)</c>; empty for a folder or document.</summary>
+    public string ClientText { get; } = "";
+
+    /// <summary>A document's matter in full, for the Matter column's tooltip; null when it has none.</summary>
+    public string? MatterTip { get; }
 
     /// <summary>"checked out to you on MacBook", "checked out to Jane Smith", or empty.</summary>
     public string Holder { get; } = "";

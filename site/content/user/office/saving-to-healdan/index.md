@@ -31,8 +31,10 @@ The window starts on **Recent Folders**. Choose where the document goes from the
 | Clients | nothing by itself: it sets the search to Clients, so you can type a client's number or name |
 | Favorites | your favourite folders: see [Favourites](#favourites) |
 
+- **Matters** are listed with their client's name after them, in smaller type: `998.1 – Healdan Demo (Healdan)`.
 - **Double-click a matter or a folder** to go into it. The bar above the list shows where you are, from the matter
-  down: click any part of it to go back there. The arrows at the top go back, forward and up.
+  down, with the matter's client and Store after it: `998.1 – Healdan Demo (Healdan · Client Work) › Documents`.
+  Click any part of it to go back there. The arrows at the top go back, forward and up.
 - **Click a folder in the list** to file into it, or leave nothing selected to file into the folder shown.
 - **Save turns on** once you've chosen a folder that can hold documents, inside a matter, and every required
   property has a value. A Store, a matter's top folder and a search folder can't hold documents, as in the web page.
@@ -67,7 +69,8 @@ ones are marked with a red star.
 
 - **Name:** the document's name. It starts from the name LibreOffice gave it, or the file's name if it was saved on
   your Mac before. Healdan adds the extension.
-- **Client / Matter,** marked "from the matter", can't be changed.
+- **Client / Matter,** marked "from the matter", shows the matter, with its client's name under it. It can't be
+  changed.
 - **Author** and **Typist** are you, unless you change them. Type part of a name to find someone else.
 - **Class** and **Subclass** follow the folder. A chip such as "from Drafts" says where the value comes from.
   Choosing another Class narrows the Subclass list to its own.

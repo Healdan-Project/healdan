@@ -119,7 +119,7 @@ public class HoldsAndTimesTests
         var rows = DocumentDetails.RowsFor(doc, properties, DateTimeOffset.Parse("2026-10-25T10:42:00Z"), me: 1, Now, TimeZoneInfo.Utc);
 
         Assert.Equal(
-            ["Doc # = 1234 v2.1", "Matter = 998.1 – Healdan Demo", "Folder = Documents", "Author = Robert Example", "Class = Docs",
+            ["Doc # = 1234 v2.1", "Matter = 998.1 – Healdan Demo", "Client = Northwind Properties", "Folder = Documents", "Author = Robert Example", "Class = Docs",
              "Subclass = Draft", "Last Saved = today at 10:42", "Checked Out = to you on MacBook"],
             rows.Select(r => $"{r.Label} = {r.Value}"));
     }

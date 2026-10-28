@@ -31,10 +31,11 @@ internal sealed class PropertiesForm
     private string? _classShown;
 
     /// <param name="matter">
-    /// The matter as people read it (<c>998.1 – Healdan Demo (Healdan)</c>). When given, Client and Matter, whose values
-    /// are only numbers, are shown as this one line, "Client / Matter", as the mockup has them.
+    /// The document's or folder's matter. When given, Client and Matter, whose values are only numbers, are shown as one
+    /// line, "Client / Matter", as the mockup has them: the matter as people read it (<c>998.1 – Healdan Demo</c>), and
+    /// its client's name under it, smaller (owner, 2026-10-28).
     /// </param>
-    public PropertiesForm(FormModel model, HealdanApi api, bool readOnly = false, string? matter = null)
+    public PropertiesForm(FormModel model, HealdanApi api, bool readOnly = false, MatterRef? matter = null)
     {
         _model = model;
         _api = api;
@@ -54,13 +55,17 @@ internal sealed class PropertiesForm
         model.Changed += Refresh;
     }
 
-    private static StackPanel MatterRow(string matter)
+    private static StackPanel MatterRow(MatterRef matter)
     {
         var label = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Avalonia.Thickness(0, 0, 0, 2) };
         label.Children.Add(new TextBlock { Text = "Client / Matter", Classes = { "label" } });
         label.Children.Add(new Border { Classes = { "chip" }, Child = new TextBlock { Text = "from the matter" } });
-        var value = new TextBox { Text = matter, IsReadOnly = true, Focusable = false, Classes = { "readonly" }, TextWrapping = TextWrapping.Wrap };
-        return new StackPanel { Children = { label, value } };
+        var value = new TextBox { Text = matter.Display, IsReadOnly = true, Focusable = false, Classes = { "readonly" }, TextWrapping = TextWrapping.Wrap };
+        var row = new StackPanel { Children = { label, value } };
+        // A server older than the client in a matter's reference sends none.
+        if (matter.Client is { } client)
+            row.Children.Add(new TextBlock { Text = client.Name, Classes = { "label" }, TextWrapping = TextWrapping.Wrap, Margin = new Avalonia.Thickness(0, 2, 0, 0) });
+        return row;
     }
 
     /// <summary>The form's controls, top to bottom.</summary>

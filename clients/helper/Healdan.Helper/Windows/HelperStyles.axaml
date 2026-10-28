@@ -98,9 +98,10 @@
   <Style Selector="TextBlock.muted">
     <Setter Property="Foreground" Value="{DynamicResource HdMutedBrush}" />
   </Style>
-  <Style Selector="TextBlock.label">
-    <Setter Property="Foreground" Value="{DynamicResource HdLabelBrush}" />
-    <Setter Property="FontSize" Value="11" />
+  <!-- A Run too: a matter's client after it in a list row. -->
+  <Style Selector="TextBlock.label, Run.label">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource HdLabelBrush}" />
+    <Setter Property="TextElement.FontSize" Value="11" />
   </Style>
   <Style Selector="TextBlock.heading">
     <Setter Property="FontSize" Value="13" />

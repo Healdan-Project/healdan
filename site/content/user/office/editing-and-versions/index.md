@@ -69,6 +69,8 @@ properties without leaving LibreOffice. They're the properties of the Ext. Prope
 
 ![The Properties window for #1234: Client / Matter 998.1 – Healdan Demo from the matter, Author and Typist, Class and Subclass from Drafts, Comments, and two more properties, with Cancel and Save](properties.png)
 
+- **Client / Matter,** marked "from the matter", shows the matter, with its client's name under it. It can't be
+  changed here.
 - **Save** stores your changes in Healdan straight away. It's on once something has changed.
 - **If you may not edit the document,** the properties are shown read-only.
 - **On a document that isn't in Healdan yet,** Properties opens Save to Healdan instead.

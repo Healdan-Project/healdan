@@ -303,9 +303,9 @@ public sealed class Browser : IDisposable
         var f = await folder;
         var page = await children;
         (Place, Folder, Heading) = (null, f, f.Name);
-        // From the matter down; the matter reads as people know it, with its Store.
+        // From the matter down; the matter reads as people know it, with its client and Store.
         Crumbs = [.. f.Path.Where(p => p.Kind != "store")
-            .Select(p => new Crumb(p.Id, p.Kind == "matter" && f.Matter is { } m ? $"{m.Display} ({f.Store.Name})" : p.Name))];
+            .Select(p => p.Kind == "matter" && f.Matter is { } m ? new Crumb(p.Id, m.Display, Matters.CrumbNote(m, f.Store)) : new Crumb(p.Id, p.Name))];
         if (f.Path.FirstOrDefault(p => p.Kind == "matter") is { } workspace)
             (_withinId, _withinName) = (workspace.Id, f.Matter?.Display ?? workspace.Name);
         else
