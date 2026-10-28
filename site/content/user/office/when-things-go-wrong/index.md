@@ -29,6 +29,9 @@ You quit it, or haven't signed in since your Mac started.
 
 - **LibreOffice's Open and Save** show LibreOffice's own boxes, with a notice that the helper isn't running.
 - **A save on a Healdan document** is still kept on your Mac, and goes to Healdan once the helper is running again.
+  The title bar then moves on to your last save, however long the helper was away.
+- **The notice goes by itself** once LibreOffice hears from the helper again, such as when your kept save reaches
+  Healdan, or when you next use a Healdan command.
 
 Start **Healdan Helper** from your Applications folder.
 

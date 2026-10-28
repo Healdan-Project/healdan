@@ -71,7 +71,8 @@ SAVED_TIMEOUT = 135.0
 QUICK_TIMEOUT = 10.0
 
 # Seconds between /v1/saved calls while the helper says a save is still on its way ("pending", as while Healdan can't
-# be reached), the last repeating: each call itself waits up to 120 s for Healdan.
+# be reached), or while the helper itself can't be reached, the last repeating: each call itself waits up to 120 s for
+# Healdan.
 FOLLOW_BACKOFF = (2.0, 5.0, 15.0, 30.0, 60.0)
 
 # What the user is told (British English).
@@ -394,7 +395,9 @@ class Flows:
       wait(fn)               runs fn away from LibreOffice's thread, LibreOffice going on meanwhile, and answers its
                              result (or raises its exception); for the window routes and the steps of a filing
       later(fn)              runs fn in the background; if it answers a callable, that runs on LibreOffice's thread
-      tell(doc, text, warning=True)   a short notice in the document's window (doc None: the Start Center)
+      tell(doc, text, warning=True)   a short notice in the document's window (doc None: the Start Center), in place
+                             of the one it shows
+      withdraw(doc)          takes the extension's notice out of the document's window, if it shows one
 
     doc (None for the Start Center):
       model                       the document, compared with == (UNO's own for LibreOffice's)
@@ -417,6 +420,7 @@ class Flows:
         self.log = log or _LOG
         self._sleep = sleep or time.sleep  # in the background, between /v1/saved calls
         self._told_down = False
+        self._down_shown = []  # the docs whose window shows a notice that the helper isn't running
         self._states = {}  # the latest state the helper gave for each copy, by its path
         self._following = {}  # the newest save followed for each copy, by its path: an older follow stops
         self._windows_asked = 0  # window routes asked for, so a surprise knows whether the user saw one
@@ -468,9 +472,9 @@ class Flows:
                 raise
             self.log.exception("A Healdan command failed")
             if fall_back and self._windows_asked == asked:
-                self.ui.tell(doc, FAILED_BEFORE.format(error=said(e)))
+                self.tell(doc, FAILED_BEFORE.format(error=said(e)))
                 return own()
-            self.ui.tell(doc, FAILED_AFTER.format(error=said(e)))
+            self.tell(doc, FAILED_AFTER.format(error=said(e)))
             return False
 
     def _command(self, command, doc, original):
@@ -513,17 +517,18 @@ class Flows:
         if copy is None:
             return self._save_new(doc, save_as_box, None)
         if doc.read_only:
-            self.ui.tell(doc, READ_ONLY_VERSION)
+            self.tell(doc, READ_ONLY_VERSION)
             return False
         try:
             self.ui.wait(lambda: self.channel.call("new-version", {"path": copy}, QUICK_TIMEOUT))
         except ChannelUnreachable:
             self._down(doc, HELPER_DOWN_SAVE)
-            if doc.modified:
-                self._store(doc)  # kept on this computer; the helper sends it once it's back
+            if doc.modified and self._store(doc):
+                self._follow(doc, copy)  # kept on this computer; the helper sends it once it's back
             return False
         except ChannelError as e:
             self.log.warning("Save as New Version: %s", e)
+            self._up()
             return False
         self._up()
         if doc.modified and not self._store(doc):
@@ -549,7 +554,7 @@ class Flows:
         ref = self._doc_ref(doc)
         doc.insert_doc_id(ref)
         if ref is None:
-            self.ui.tell(doc, NOT_FILED_DOC_ID, warning=False)
+            self.tell(doc, NOT_FILED_DOC_ID, warning=False)
         return True
 
     # -- LibreOffice's events
@@ -578,7 +583,8 @@ class Flows:
                 self.channel.call("closed", {"path": path}, QUICK_TIMEOUT)
             except (ChannelUnreachable, ChannelError) as e:
                 self.log.info("Couldn't tell Healdan Helper a copy closed (%s); it watches the lock file too", e)
-            return None
+                return self._up if isinstance(e, ChannelError) else None
+            return self._up
 
         self.ui.later(work)
 
@@ -597,7 +603,7 @@ class Flows:
             return True
         except Exception as e:
             self.log.warning("Storing a copy failed: %s", e)
-            self.ui.tell(doc, STORE_FAILED.format(error=said(e)))
+            self.tell(doc, STORE_FAILED.format(error=said(e)))
             return False
 
     def _save_new(self, doc, save_as_box, original):
@@ -610,7 +616,7 @@ class Flows:
             return save_as_box()
         filed = self._filed_as(doc)
         if filed is not None:
-            self.ui.tell(doc, ALREADY_FILED.format(as_ref=" as " + filed if filed else "", it=filed or "it"))
+            self.tell(doc, ALREADY_FILED.format(as_ref=" as " + filed if filed else "", it=filed or "it"))
             return save_as_box()
         body = {"app": APP, "name": document_name(doc.title, doc.url), "formats": kinds, "path": original}
         answer = self._window("save-new", body, doc, HELPER_DOWN_BOX)
@@ -633,7 +639,7 @@ class Flows:
         except Exception as e:
             self.log.warning("Writing the temporary file failed: %s", e)
             _remove(temp)  # the helper deletes it only after /v1/file
-            self.ui.tell(doc, WRITE_FAILED.format(error=said(e)))
+            self.tell(doc, WRITE_FAILED.format(error=said(e)))
             return save_as_box()
 
         filing = {"tempPath": temp, "folderId": answer.get("folderId"), "name": answer.get("name"), "format": fmt,
@@ -649,6 +655,7 @@ class Flows:
                 failed = "unreachable"
             except ChannelError as e:
                 self.log.warning("Filing failed: %s", e)  # the helper told the user and deleted the file
+                self._up()
                 failed = "refused"
             if failed is None:
                 self._up()
@@ -674,7 +681,7 @@ class Flows:
         if failed is not None:
             # Filed and checked out in Healdan, but this window isn't its copy.
             self._filed.append((doc.model, ref))
-            self.ui.tell(doc, failed)
+            self.tell(doc, failed)
             return False
         self._remember(path, state)
         try:
@@ -707,6 +714,7 @@ class Flows:
             return None
         except ChannelError as e:
             self.log.warning("/v1/%s: %s", route, e)
+            self._up()
             return None
         self._up()
         return answer
@@ -715,8 +723,9 @@ class Flows:
         """
         After a save: the helper's answer once Healdan has it, waited for in the background, moves the title and footer
         on (final review I1). While the helper says a save is still on its way (pending, as while Healdan can't be
-        reached), it's asked again after a pause that grows to a minute, so the title moves on once Healdan has the
-        save, however long that takes. A newer save of the copy takes the following over, and closing it ends it.
+        reached), or while the helper itself can't be reached, which keeps the save on this computer until it's back,
+        it's asked again after a pause that grows to a minute, so the title moves on once Healdan has the save, however
+        long that takes. A newer save of the copy takes the following over, and closing it ends it.
         """
         key = _norm(path)
         generation = self._following.get(key, 0) + 1
@@ -727,24 +736,34 @@ class Flows:
         def work():
             if round_:
                 self._sleep(FOLLOW_BACKOFF[min(round_, len(FOLLOW_BACKOFF)) - 1])
+                if self._following.get(key) != generation:
+                    return None  # closed, or a newer save took over, during the pause
             try:
                 state = self.channel.call("saved", {"path": path}, SAVED_TIMEOUT)
             except ChannelUnreachable:
-                return lambda: self._down(doc, HELPER_DOWN_SAVE)
+                def away():
+                    self._down(doc, HELPER_DOWN_SAVE)
+                    self._again(doc, path, key, generation, round_)
+
+                return away
             except ChannelError as e:
                 self.log.warning("/v1/saved: %s", e)
-                return None
+                return self._up
 
             def then():
                 # Each answer's version is what Healdan has, pending or not: the title and footer show it.
                 self._apply(doc, path, state, confirmed=True)
-                if state.get("pending") is True and self._following.get(key) == generation and doc.alive \
-                        and same_file(self._copy_path(doc), path):
-                    self._poll(doc, path, key, generation, round_ + 1)
+                if state.get("pending") is True:
+                    self._again(doc, path, key, generation, round_)
 
             return then
 
         self.ui.later(work)
+
+    def _again(self, doc, path, key, generation, round_):
+        """The save's next round, unless its window closed, a newer save took over, or it was saved elsewhere since."""
+        if self._following.get(key) == generation and doc.alive and same_file(self._copy_path(doc), path):
+            self._poll(doc, path, key, generation, round_ + 1)
 
     def _refresh(self, doc, path):
         """The copy's state as the helper has it, for its title, in the background."""
@@ -754,7 +773,7 @@ class Flows:
                 state = self.channel.call("state", {"path": path}, QUICK_TIMEOUT)
             except (ChannelUnreachable, ChannelError) as e:
                 self.log.info("/v1/state: %s", e)
-                return None
+                return self._up if isinstance(e, ChannelError) else None
             return lambda: self._apply(doc, path, state, confirmed=False)
 
         self.ui.later(work)
@@ -801,24 +820,46 @@ class Flows:
 
     def window_closed(self, model):
         """A document's window closed: nothing more to remember about it."""
-        kept = []
-        for known, ref in self._filed:
-            try:
-                if known == model:
-                    continue
-            except Exception:
-                continue
-            kept.append((known, ref))
-        self._filed = kept
+        self._filed = _others(self._filed, model, lambda filed: filed[0])
+        self._down_shown = _others(self._down_shown, model, lambda doc: doc.model)
+
+    def tell(self, doc, text, warning=True):
+        """A notice in the document's window (ui.tell). It takes the place of a notice that the helper isn't running."""
+        if doc is not None:
+            self._down_shown = _others(self._down_shown, doc.model, lambda shown: shown.model)
+        self.ui.tell(doc, text, warning)
 
     def _down(self, doc, text):
         """Tells the user once that the helper isn't running, until it has answered again."""
         if not self._told_down:
             self._told_down = True
-            self.ui.tell(doc, text)
+            self.tell(doc, text)
+            if doc is not None:
+                self._down_shown.append(doc)
 
     def _up(self):
+        """
+        The helper answered, on LibreOffice's thread: the next time it can't be reached is told again, and the notices
+        that it isn't running go from every window still showing one. A notice that has taken one's place stays.
+        """
         self._told_down = False
+        shown, self._down_shown = self._down_shown, []
+        for doc in shown:
+            if doc.alive:
+                self.ui.withdraw(doc)
+
+
+def _others(items, model, model_of):
+    """The items that aren't the model's, compared with UNO's ==; one that can't be compared goes too."""
+    kept = []
+    for item in items:
+        try:
+            if model_of(item) == model:
+                continue
+        except Exception:
+            continue
+        kept.append(item)
+    return kept
 
 
 def said(e):
