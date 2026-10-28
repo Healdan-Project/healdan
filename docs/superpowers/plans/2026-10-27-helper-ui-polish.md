@@ -2776,36 +2776,39 @@ Expected: all pass.
 
 Run by the owner with the packaged helper (`clients/helper/packaging/mac/package.sh`), which carries the extension. The results go in the decision log.
 
-- [ ] **Step 1: The title bar** (Review Focus 3): dragging, double-click to zoom, the system buttons, full screen, and every toolbar control clickable, in Open and Save.
+- [x] **Step 1: The title bar** (Review Focus 3): dragging, double-click to zoom, the system buttons, full screen, and every toolbar control clickable, in Open and Save.
 - [ ] **Step 2: The menu bar icon** (Review Focus 4):
   - light and dark menu bars;
   - highlighted while the menu is open;
   - the dot while signed out, and while the extension isn't installed;
   - the tooltip's reason, and **LibreOffice Extension Needs Updating** while an older extension is installed (the packaged helper's 0.2.0 over 0.1.0);
   - the dot going by itself a few seconds after you accept the extension in LibreOffice, without opening the menu.
+  - Run on 2026-10-28, all but **LibreOffice Extension Needs Updating**, which needs 0.1.0 installed (see the decision log).
 - [ ] **Step 3: Settings' Install…** with the extension removed (Task 7, Step 11), and **Update…** with an older one installed: the row shows the older version, its line says 0.2.0 is ready to add or waiting for you to accept it, and, with Settings left open, the row shows 0.2.0 a few seconds after you accept it in LibreOffice.
-- [ ] **Step 4: LibreOffice on Retina** (Review Focus 5): the toolbar and the Healdan menu, in light and dark, and with **Tools › Options › Accessibility** high contrast on.
+  - Install… was run on 2026-10-28; Update… needs 0.1.0 installed, and wasn't (see the decision log).
+- [x] **Step 4: LibreOffice on Retina** (Review Focus 5): the toolbar and the Healdan menu, in light and dark, and with **Tools › Options › Accessibility** high contrast on.
   - If the 16 px images are soft, try an SVG:
     - have `IconRender` also write `<command>.svg`: the Tabler SVG's paths, stroked `#7C7C80` at 1.5, with the shield as a path, translated and scaled as in `Icon()`;
     - point one command's `ImageSmallURL` and `ImageBigURL` at it in an installed copy;
     - restart LibreOffice.
   - If LibreOffice draws the SVG sharply, ship SVGs for all six, update `test_package.py`'s `IMAGES` and `test_every_command_has_its_images` to expect `.svg`, and commit "Ship the toolbar images as SVG for Retina screens" on PR 2's branch.
   - Record the result in the decision log either way.
-- [ ] **Step 5: The Extension Manager** shows the mark beside Healdan.
-- [ ] **Step 6: The infobars:** quit the helper, save in Writer, and check that the infobar's first sentence is bold and the rest regular.
-- [ ] **Step 7: Keyboard reach** (Review Focus 1; Task 5, Step 4): in the packaged helper:
+- [x] **Step 5: The Extension Manager** shows the mark beside Healdan.
+- [x] **Step 6: The infobars:** quit the helper, save in Writer, and check that the infobar's first sentence is bold and the rest regular.
+- [x] **Step 7: Keyboard reach** (Review Focus 1; Task 5, Step 4): in the packaged helper:
   - Tab through Open, Save, Properties, Settings and each alert, and check every control takes focus in turn;
   - in Open's details, the Left and Right arrow keys switch Properties and Versions;
   - read-only values skip Tab, and can still be selected with the mouse and copied with Cmd+C: Save's and Properties' read-only values and their Client / Matter, Settings' Address, and About's version and server lines. (Open's detail values are plain text, not selectable, so they don't take part.)
   - with VoiceOver on (Cmd+F5), each of these is read by its name: the places in Open and Save (such as "Recent Documents", not "StackPanel"), Save's **New Folder**, the **File Format** pop-up and its choices (such as "OpenDocument Text (.odt)", not "odt"), the favourite stars ("Add to Favorites" or "Remove from Favorites", as their tooltips say), and Open's **Properties** and **Versions** tabs.
-- [ ] **Step 8: Banding while a list scrolls** (Task 2): in Open and Save, with a list long enough to scroll, check each alternating band stays with its row as the rows move.
-- [ ] **Step 9: Sign In's keychain line:** check it breaks as "…in the keychain," and "never your password.", with no word alone on a line, in light and dark.
-- [ ] **Step 10: Every trailing "…"** (the ellipsis fix): Settings' **Install…**, **Open from Local Computer…** and **Save to Local Computer…** each show three whole dots.
-- [ ] **Step 11: The File Format drop-down** in Save: open its list in light and dark, and check the choices are legible and the chosen one is marked.
-- [ ] **Step 12: The menu bar dot's size** (Task 8): the icon is drawn for 22 pt, and macOS may show it smaller (a figure to check on the Mac is about 17 pt), so check the dot is still plain on light and dark menu bars.
+- [x] **Step 8: Banding while a list scrolls** (Task 2): in Open and Save, with a list long enough to scroll, check each alternating band stays with its row as the rows move.
+- [x] **Step 9: Sign In's keychain line:** check it breaks as "…in the keychain," and "never your password.", with no word alone on a line, in light and dark.
+- [x] **Step 10: Every trailing "…"** (the ellipsis fix): Settings' **Install…**, **Open from Local Computer…** and **Save to Local Computer…** each show three whole dots.
+- [x] **Step 11: The File Format drop-down** in Save: open its list in light and dark, and check the choices are legible and the chosen one is marked.
+- [x] **Step 12: The menu bar dot's size** (Task 8): the icon is drawn for 22 pt, and macOS may show it smaller (a figure to check on the Mac is about 17 pt), so check the dot is still plain on light and dark menu bars.
   - If it's too small, raise `DotRadius` and `RingRadius` together in `Tray/TrayIcons.cs`, keeping the ring clear of the back page.
   - Record the result in the decision log either way.
 - [ ] **Step 13: Letter spacing** (note only): look at San Francisco's spacing in the windows. The owner has made it a separate follow-up (see Follow-ups), so record what you see here and fix nothing.
+  - Not looked at on its own: the follow-up is [Healdan-Project/healdan#94](https://github.com/Healdan-Project/healdan/pull/94), which checks it.
 
 ---
 
@@ -2860,10 +2863,16 @@ Every call made while building, in order. "Where" is the task or review that rai
 | 2026-10-28 | Integration | `ExtensionCheck.Refresh()` also raises `Changed` when it finds an older version gone or come while the extension is still missing (56323f3af) | the review's poll raised `Changed` only when Missing changed, so turning an older version off or on in LibreOffice left the dot's reason (Needs Updating or Not Installed) and Settings' row and button on the old state until the menu opened | a revert, leaving those to the next menu opening |
 | 2026-10-28 | Integration | "No versions to show." is hidden while another document loads, and after its load fails (3a015ab1f) | the review's note stayed under "Loading…" and under the error, as the final review's Minor 6 found for the tab's count | nothing |
 | 2026-10-28 | Integration | The User Guide says the extension's dot goes by itself, and Settings' row follows, a few seconds after the user accepts the extension, and that Start at Sign-In's line shows whenever it isn't on; the Developer Guide says when the registry is read. Task 14's Steps 2 and 3, and spec §10.3, check the dot, Needs Updating and Update… by hand | neither guide described the review's poll, and the poll and Update… meet a real registry only on the Mac | nothing |
+| 2026-10-28 | Task 14 | The owner's checks pass on the Mac with the packaged helper (0.2.0-rc1, then rc2 for the dot): the title bar, banding, the three "…", the File Format list, keyboard reach and VoiceOver's names, Sign In's keychain line, the infobar's bold headline, the Extension Manager's mark, and the toolbar and menu in light, dark and high contrast. The menu bar icon passes in light and dark and highlighted, with the dot while signed out and while the extension isn't installed, its tooltip, and the dot going by itself after Install… | run one at a time with the owner | nothing |
+| 2026-10-28 | Task 14 | The toolbar and menu images stay 16 and 26 px PNGs, with no SVG | the owner found them sharp on the Retina screen (Step 4) | nothing |
+| 2026-10-28 | Task 14 | **LibreOffice Extension Needs Updating** and Settings' **Update…** weren't checked by hand | the packaged helper opened 0.2.0 in LibreOffice at its first start, and the owner accepted it before the check, so no older extension was installed. `AttentionTests` and `ExtensionSummary`'s tests cover the rule and the row | a fix if Update… misbehaves with a real older install; it's in Follow-ups |
+| 2026-10-28 | Task 14 | The menu bar dot moves to (216, 44), with a radius of 44 and a ring of 57 (9e2d9f699), over the shield's shoulder as a badge is, and no longer clear of the back page | macOS draws the icon at about 17 pt, where Task 8's dot was about 4 pt across and too small to notice. The owner chose this size, about 6 pt there, from five renders at 17 and 22 pt; the back page's corner it covers is too thin to show at that size | a retune of the three numbers |
+| 2026-10-28 | Task 14 | Four problems found on the way go to their own pull requests, as none comes from the polish: a helper resuming with a token another helper on the Mac signed in for, which made every close of an unchanged copy read the check-out as another device's and keep it, and a second copy of the helper started by a link quitting without passing the link on ([Healdan-Project/healdan#96](https://github.com/Healdan-Project/healdan/pull/96)); the extension's "Healdan Helper isn't running." infobar and the copy's title staying as they were once the helper is back ([Healdan-Project/healdan#97](https://github.com/Healdan-Project/healdan/pull/97)); and the client's name missing beside a matter (its own session, in design) | the cycle, sign-in, links, the extension's save handling and the API are unchanged by PR 1 and PR 2, and `master` behaves the same | nothing |
 
 ## Follow-ups
 
-- **Letter spacing in the helper's San Francisco type** (owner, at Task 9's review). HarfBuzz lays the font out at its default Display optical size (28) while Skia draws it at Text size, so the spacing doesn't match the glyphs drawn. The ellipsis fix (26e7a7232) stops the overhang clipping but leaves the spacing as it is. Look for a way to make layout and drawing agree (the font's optical-size axis, or another text-measuring path), and check the packaged app on the Mac in Task 14, since the renders and the app share Skia and the font.
+- **Update… and Needs Updating with a real older extension** (Task 14). Install 0.1.0 (the extension on `master` before PR 2), start the packaged helper, and check Settings' row and button, the line under it, the menu bar's reason, and the row and dot following once 0.2.0 is accepted.
+- **Letter spacing in the helper's San Francisco type** (owner, at Task 9's review; now [Healdan-Project/healdan#94](https://github.com/Healdan-Project/healdan/pull/94)). HarfBuzz lays the font out at its default Display optical size (28) while Skia draws it at Text size, so the spacing doesn't match the glyphs drawn. The ellipsis fix (26e7a7232) stops the overhang clipping but leaves the spacing as it is. Look for a way to make layout and drawing agree (the font's optical-size axis, or another text-measuring path), and check the packaged app on the Mac in Task 14, since the renders and the app share Skia and the font.
 - **Fluent's part names fail silently on an Avalonia upgrade.** Styles in `HelperStyles.axaml` reach into Fluent's templates by part name: the pop-up button's `DropDownGlyph`, the checkbox's `NormalRectangle`, the date picker's `PART_TextBox`, `PART_Button` and `LayoutRoot`, and the text box's `PART_BorderElement` and `PART_Placeholder`. A renamed part drops its style without an error, so check them in the renders whenever the Avalonia pins in `Directory.Packages.props` move, or add a comment beside the pins saying so.
 - **`default` cases for the mark's shapes.** `HealdanMark.Silhouette()` and `IconRender`'s `DrawShapes` walk the mark's shapes by kind. A new kind of shape would be left out of the menu bar icon and the extension's 42 px mark without a word, so each could throw on a kind it doesn't know.
 - **Tabler's version in three places.** `clients/icons/README.md` and both `THIRD-PARTY-NOTICES.txt` files (the helper's and the extension's) name the Tabler release. Moving to a new release changes all three, and nothing checks that they agree.

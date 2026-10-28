@@ -2,7 +2,7 @@
 
 - **Follows:** M3 in [`docs/ROADMAP.md`](../../ROADMAP.md), whose [spec](2026-10-24-m3-office-integration-design.md) §5.8 set the windows' layout and §6.2 the extension's menu and toolbar. This spec changes how they look, not what they do.
 - **Date:** 2026-10-27
-- **Status:** design approved by the owner on 2026-10-27, section by section, against the mockups in [`2026-10-27-helper-polish-mockups/`](2026-10-27-helper-polish-mockups/). Built on 2026-10-27, the helper in [Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93) (PR 1) and the extension in [Healdan-Project/healdan#95](https://github.com/Healdan-Project/healdan/pull/95) (PR 2). Where the build changed the design, the section says so, marked "(changed in the build)", and the [plan](../plans/2026-10-27-helper-ui-polish.md)'s decision log has the reasons.
+- **Status:** design approved by the owner on 2026-10-27, section by section, against the mockups in [`2026-10-27-helper-polish-mockups/`](2026-10-27-helper-polish-mockups/). Built on 2026-10-27, the helper in [Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93) (PR 1) and the extension in [Healdan-Project/healdan#95](https://github.com/Healdan-Project/healdan/pull/95) (PR 2). Where the build changed the design, the section says so, marked "(changed in the build)", and the [plan](../plans/2026-10-27-helper-ui-polish.md)'s decision log has the reasons. The owner's checks on the Mac (§10.3, the plan's Task 14) passed on 2026-10-28, except Update… and Needs Updating with an older extension, which weren't run.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-27, in which Claude worked as the designer;
   - offscreen renders of all ten helper windows in light and dark, from a scratch renderer like M3's (its plan's decision R23), and the docs site's pictures of them;
@@ -244,7 +244,7 @@ The text sits on the window's colours in both themes (no near-black panel) and d
 
 ### 7.2 The attention dot (owner)
 
-- **The dot.** A second version of the icon has a dot at its top right, in the same single colour, with a cut-out ring around it.
+- **The dot.** A second version of the icon has a dot at its top right, in the same single colour, with a cut-out ring around it. (changed in the build) It sits over the shield's shoulder as a badge does, about 6 pt across where macOS draws the icon at about 17 pt: the first size, about 4 pt there, was too small to notice in the owner's check.
 - **When it shows:** while any of these is true:
   - the helper isn't signed in;
   - the start failed;
