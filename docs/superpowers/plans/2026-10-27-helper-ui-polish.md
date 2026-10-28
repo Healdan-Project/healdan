@@ -58,7 +58,7 @@ These are the risks to a person using the helper that the unit tests don't reach
 
 ## Spec corrections and calls this plan makes
 
-The owner hears about these when the plan is handed over. Task 13 folds 1–4 into the spec.
+The owner hears about these when the plan is handed over. Task 13 folds 1–4 into the spec, and the changes the build made (its Step 4).
 
 1. **Infobars split at display time.** The notices in `healdan_logic.py` stay single strings, so the flows and their tests don't change. A new pure function, `notice_parts(text)`, splits one into headline and detail, and `tell` uses it (§8.3).
 2. **The search hint is in the Documents scope only.** A typed doc # jumps from any scope, but only the Documents scope's placeholder says so. Folders, Matters and Clients keep theirs, so they stay short (§6.2).
@@ -2752,7 +2752,11 @@ dotnet run --project clients/helper/tools/IconRender      # the extension's tool
   - **The M3 spec,** §5.8 and §6.2: add a line to each: "The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polish-design.md)."
   - **The polish spec:**
     - its **Status** becomes "built on <date>, in PR 1 and PR 2" (linked);
-    - fold this plan's calls 1–4 into §8.3, §6.2, §12 and §6.5, each marked "(changed in the build)".
+    - fold this plan's calls 1–4 into §8.3, §6.2, §12 and §6.5, each marked "(changed in the build)";
+    - fold what Tasks 1–9 changed, each marked "(changed in the build)":
+      - §4.1's table gains `HdCautionTextBrush` (`#9A5B00` light, `#F5A623` dark; Caution text, with `HdCautionBrush` kept for icons), `HdOnBrush` (`#28A745` light, `#30D158` dark) and `HdOffBrush` (`#8E8E93`), which Settings' status dot uses;
+      - §6.6 loses "LogicalDOC's credit included": the helper's About has no LogicalDOC credit line (the credit is the web GUI's), and keeps `About.Copyright` as it is;
+      - §6.8 and §10.1 name `HoldsAndTimesTests.AfterACrash`, not `WarningsTests`, as the test that pins After a Crash's headline and body.
   - **This plan:** set **Status**, and fill in the decision log.
 
 - [ ] **Step 5: Check**
@@ -2788,6 +2792,18 @@ Run by the owner with the packaged helper (`clients/helper/packaging/mac/package
   - Record the result in the decision log either way.
 - [ ] **Step 5: The Extension Manager** shows the mark beside Healdan.
 - [ ] **Step 6: The infobars:** quit the helper, save in Writer, and check that the infobar's first sentence is bold and the rest regular.
+- [ ] **Step 7: Keyboard reach** (Review Focus 1; Task 5, Step 4): in the packaged helper:
+  - Tab through Open, Save, Properties, Settings and each alert, and check every control takes focus in turn;
+  - in Open's details, the Left and Right arrow keys switch Properties and Versions;
+  - read-only values (a detail's value, About's version and server lines) skip Tab, and can still be selected with the mouse and copied with Cmd+C.
+- [ ] **Step 8: Banding while a list scrolls** (Task 2): in Open and Save, with a list long enough to scroll, check each alternating band stays with its row as the rows move.
+- [ ] **Step 9: Sign In's keychain line:** check it breaks as "…in the keychain," and "never your password.", with no word alone on a line, in light and dark.
+- [ ] **Step 10: Every trailing "…"** (the ellipsis fix): Settings' **Install…**, **Open from Local Computer…** and **Save to Local Computer…** each show three whole dots.
+- [ ] **Step 11: The File Format drop-down** in Save: open its list in light and dark, and check the choices are legible and the chosen one is marked.
+- [ ] **Step 12: The menu bar dot's size** (Task 8): macOS shows the icon at about 17 pt, not the 22 pt it's drawn for, so check the dot is still plain on light and dark menu bars.
+  - If it's too small, raise `DotRadius` and `RingRadius` together in `Tray/TrayIcons.cs`, keeping the ring clear of the back page.
+  - Record the result in the decision log either way.
+- [ ] **Step 13: Letter spacing** (note only): look at San Francisco's spacing in the windows. The owner has made it a separate follow-up (see Follow-ups), so record what you see here and fix nothing.
 
 ---
 
@@ -2814,7 +2830,7 @@ Every call made while building, in order. "Where" is the task or review that rai
 | 2026-10-27 | Task 7 | About's `VersionText` and `ServerText` also take `IsTabStop=false` | the same Tab-stop issue Task 6 fixed, and Task 7 owns About | nothing |
 | 2026-10-27 | Task 7 | Step 11 (Install… by hand) moves to Task 14 | subagents can't see the screen | a later fix if the wiring fails in the packaged app |
 | 2026-10-27 | Task 7 | About widens from 400 to 440 pt | its three links (Healdan Docs, the licence and Open-Source Notices) don't fit in a row at 400, and the spec gives no width | nothing |
-| 2026-10-27 | Task 7 | Settings' status dot gets two tokens, `HdOnBrush` (`#28A745` light, `#30D158` dark) and `HdOffBrush` (`#8E8E93` in both) | spec §4.1's table leaves the dot's colours to the builder, so they're listed here and not there | a colour tweak |
+| 2026-10-27 | Task 7 | Settings' status dot gets two tokens, `HdOnBrush` (`#28A745` light, `#30D158` dark) and `HdOffBrush` (`#8E8E93` in both) | spec §4.1's table leaves the dot's colours to the builder; Task 13 adds them to the table | a colour tweak |
 | 2026-10-27 | Task 7 | Spec §6.6's "LogicalDOC's credit included" is an error: About keeps its copyright line unchanged | the helper's `About.Copyright` never had a LogicalDOC credit. It's the web GUI's (`HealdanCredits.java`), and the helper is Healdan's own .NET code. Task 13 corrects §6.6 | a credit line if the owner wants one |
 | 2026-10-27 | Task 8 | The by-hand menu bar check (Step 9) moves to Task 14, and the implementer renders the four icons headless instead | subagents can't see the screen | a later tweak of the dot's geometry |
 | 2026-10-27 | Task 8 | The attention dot sits at (226, 34) in the mark's 260-unit square, with a radius of 30 and a ring of 44, where the plan had (214, 46), 38 and 56 | the plan's ring cut the shield's shoulder and opened the back page in the renders; this one cuts the shoulder only. The plan allowed tuning | a retune after the owner's menu bar check in Task 14 |
