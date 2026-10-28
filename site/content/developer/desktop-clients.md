@@ -38,8 +38,8 @@ app.
   - **The look** (polish spec, `docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`): the tokens and
     control styles are in `Windows/HelperStyles.axaml`, over Fluent. The icons are Tabler's, in
     `Windows/HelperIcons.axaml`, which `python3 clients/icons/write-helper-icons.py` writes from
-    `clients/icons/tabler/` (`IconsTests` fails until it's run). The menu bar icon is drawn at run time from
-    `HealdanMark`'s shapes (`Tray/TrayIcons.cs`).
+    `clients/icons/tabler/` (`IconsTests` fails until it's run, and until a new icon is in its `SpecNames`). The menu
+    bar icon is drawn at run time from `HealdanMark`'s shapes (`Tray/TrayIcons.cs`).
 - **`Healdan.Helper.Core.Tests`** is xUnit.
 
 ### The Cycle
@@ -230,7 +230,8 @@ through `channel.json`, and quits.
 - **`MarkTests`** fail when About's mark, `Windows/HealdanMark.axaml`, and the docs site's `site/static/favicon.svg`
   draw different shapes.
 - **`IconsTests`** fail when `Windows/HelperIcons.axaml` and the SVGs in `clients/icons/tabler/` draw different
-  shapes. After adding or changing an icon, run `python3 clients/icons/write-helper-icons.py`.
+  shapes, or when the SVGs aren't the spec's list, `SpecNames`. After adding or changing an icon, run
+  `python3 clients/icons/write-helper-icons.py`, and add a new one to `SpecNames`.
 - **`AttentionTests`** pin when the menu bar icon shows its dot, and the reason its tooltip gives.
 - **The extension's tests** cover `healdan_logic.py` with fakes for LibreOffice, and build the `.oxt` and check that
   its files agree. A real LibreOffice isn't part of them.

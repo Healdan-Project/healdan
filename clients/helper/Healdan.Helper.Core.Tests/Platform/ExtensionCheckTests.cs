@@ -18,6 +18,10 @@ public sealed class ExtensionCheckTests : IDisposable
 {
     private const string Helper = "0.2.0";
 
+    /// <summary>Settings' tooltip while the extension isn't installed.</summary>
+    private const string NotInstalledTip =
+        $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {ExtensionCheck.MenuItem} in the Healdan Helper menu.";
+
     private readonly string _dir = Directory.CreateTempSubdirectory("healdan-check-").FullName;
     private readonly FakeTools _tools = new();
     private readonly FakeNotifier _notifier = new();
@@ -351,23 +355,25 @@ public sealed class ExtensionCheckTests : IDisposable
         var check = Mac(Oxt("0.2.0"));
         await check.RunAsync();
 
-        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true, NotInstalledTip), check.Summary());
 
         _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
         var installed = check.Summary();
         Assert.Equal("0.2.0", installed.Value);
         Assert.StartsWith("Installed on ", installed.Note);
         Assert.False(installed.CanInstall);
+        Assert.Equal(check.Describe(), installed.Tip);
+        Assert.StartsWith("Version 0.2.0, installed in LibreOffice on ", installed.Tip);
     }
 
     [Fact]
     public async Task MacSettingsRowBeforeLibreOfficeWasAsked()
     {
         var check = Mac(Oxt("0.2.0"));
-        Assert.Equal(new ExtensionSummary("Not Installed", null, false), check.Summary()); // before the start's check: nothing to offer yet
+        Assert.Equal(new ExtensionSummary("Not Installed", null, false, "Not installed yet."), check.Summary()); // before the start's check: nothing to offer yet
 
         await check.RunAsync(); // opens it in LibreOffice once
-        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true, NotInstalledTip), check.Summary());
     }
 
     [Fact]

@@ -149,8 +149,10 @@ public partial class OpenWindow : Window
     private void ShowTab()
     {
         var shown = _details is not null;
+        var versions = shown && DetailTabs.SelectedIndex == 1;
         PropertiesTab.IsVisible = shown && DetailTabs.SelectedIndex == 0;
-        VersionList.IsVisible = shown && DetailTabs.SelectedIndex == 1;
+        VersionList.IsVisible = versions && _details!.Saves.Count > 0;
+        NoVersionsNote.IsVisible = versions && _details!.Saves.Count == 0;
     }
 
     /// <summary>

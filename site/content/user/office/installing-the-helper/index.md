@@ -131,16 +131,17 @@ Click Healdan's icon in the menu bar.
 
 Settings has three groups:
 
-- **Server:** the server the helper is signed in to, as its name, such as `healdan.example`. To use another, sign
-  out, then sign in with its address. Before you do, close your documents, and check the menu shows no saves waiting
-  and nothing Not Yet in Healdan. Any local copies left from the old server are moved to a folder of their own
-  beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them to the
-  new server, where the same doc # can be a different document.
+- **Server:** the server the helper is signed in to, as you'd type it to sign in, such as `healdan.example`. To use
+  another, sign out, then sign in with its address. Before you do, close your documents, and check the menu shows no
+  saves waiting and nothing Not Yet in Healdan. Any local copies left from the old server are moved to a folder of
+  their own beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them
+  to the new server, where the same doc # can be a different document.
 - **Open Each Kind of File In:** a row each for documents, spreadsheets and presentations, with the file extensions
   it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app for them.
 - **This Computer:**
   - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
-    To stop it, turn it off in **System Settings › General › Login Items & Extensions**.
+    To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it's off, a line
+    under it says why, or how to turn it on.
   - **LibreOffice Extension:** the version installed, and when it was installed, or **Not Installed**. While the
     extension isn't installed, **Install…** asks LibreOffice to add it, as the menu's **Install the LibreOffice
     Extension…** does.

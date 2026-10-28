@@ -11,8 +11,12 @@ public static class FileIcons
     public static string For(string name)
     {
         if (FileKinds.OfFile(name) is { } kind)
-            return kind == FileKinds.Spreadsheets ? "file-spreadsheet" : kind == FileKinds.Presentations ? "presentation" : "file-text";
+            return For(kind);
         var ext = Path.GetExtension(name);
         return ext.Equals(".pdf", StringComparison.OrdinalIgnoreCase) ? "file-type-pdf" : Images.Contains(ext) ? "photo" : "file";
     }
+
+    /// <summary>An office kind's icon, as Settings' rows show it.</summary>
+    public static string For(FileKind kind) =>
+        kind == FileKinds.Spreadsheets ? "file-spreadsheet" : kind == FileKinds.Presentations ? "presentation" : "file-text";
 }

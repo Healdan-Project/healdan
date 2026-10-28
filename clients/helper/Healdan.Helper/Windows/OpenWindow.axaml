@@ -138,6 +138,8 @@
             </StackPanel>
           </ScrollViewer>
           <ListBox x:Name="VersionList" Classes="versions" IsVisible="False" />
+          <TextBlock x:Name="NoVersionsNote" Classes="muted" TextWrapping="Wrap" TextAlignment="Center" Margin="0,30,0,0"
+                     VerticalAlignment="Top" Text="No versions to show." IsVisible="False" />
         </Panel>
       </DockPanel>
     </Grid>

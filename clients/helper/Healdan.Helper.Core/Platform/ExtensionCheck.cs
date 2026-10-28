@@ -79,7 +79,8 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     }
 
     /// <summary>
-    /// macOS: reads the registry again, as the menu opens, so its item goes once the user has accepted the extension.
+    /// macOS: reads the registry again, as the menu opens and every few seconds while it's missing, so the menu's item and
+    /// the dot go once the user has accepted the extension.
     /// Elsewhere, what the last check found.
     /// </summary>
     public bool Refresh()
@@ -101,17 +102,10 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
         return Open(Record(), bundled, bundledOxt, "chosen from the menu");
     }
 
-    /// <summary>Settings' line.</summary>
-    public string Describe()
-    {
-        if (bundledOxt is null || !File.Exists(bundledOxt))
-            return "Not in this build: the installed app installs it.";
-        return Refresh()
-            ? $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {MenuItem} in the Healdan Helper menu."
-            : Record().Describe();
-    }
+    /// <summary>Settings' tooltip for the extension's row.</summary>
+    public string Describe() => Summary().Tip;
 
-    /// <summary>Settings' row (polish spec §6.5); <see cref="Describe"/> is its tooltip.</summary>
+    /// <summary>Settings' row (polish spec §6.5), from one read of the registry.</summary>
     public ExtensionSummary Summary()
     {
         if (bundledOxt is null || !File.Exists(bundledOxt))
@@ -121,10 +115,12 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
         if (missing)
             return new("Not Installed", record.OpenedFor is { } waiting
                 ? $"Waiting for you to accept version {waiting} in LibreOffice."
-                : "Adds Healdan's menu and toolbar to LibreOffice.", true);
+                : "Adds Healdan's menu and toolbar to LibreOffice.", true,
+                $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {MenuItem} in the Healdan Helper menu.");
         return record.Version is { } version
-            ? new(version, record.At is { } at ? "Installed on " + at.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture) : "Installed", false)
-            : new("Not Installed", null, false);
+            ? new(version, record.At is { } at ? "Installed on " + at.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture) : "Installed",
+                false, record.Describe())
+            : new("Not Installed", null, false, record.Describe());
     }
 
     /// <summary>macOS (R22): the registry, and the <c>.oxt</c> opened in LibreOffice once per helper version.</summary>
