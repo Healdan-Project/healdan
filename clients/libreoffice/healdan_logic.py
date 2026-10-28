@@ -113,7 +113,7 @@ def notice_parts(text):
     return text, ""
 
 
-_LOG =logging.getLogger("healdan")
+_LOG = logging.getLogger("healdan")
 
 _SECRET = re.compile(r"[0-9a-fA-F]{48}")
 
