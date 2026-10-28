@@ -213,6 +213,11 @@
   <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
     <Setter Property="BoxShadow" Value="{DynamicResource HdFocusRing}" />
   </Style>
+  <!-- Placeholders in Muted at full strength (polish spec §4.1). Fluent's template draws them at Opacity 0.5, which would
+       halve Muted's contrast to about 1.7:1 on white; a plain style loses to the template, so it's the pseudo-class pair. -->
+  <Style Selector="TextBox:not(:disabled) /template/ TextBlock#PART_Placeholder, TextBox:disabled /template/ TextBlock#PART_Placeholder">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
   <Style Selector="ComboBox">
     <Setter Property="MinHeight" Value="22" />
     <Setter Property="Padding" Value="10,2,8,2" />
