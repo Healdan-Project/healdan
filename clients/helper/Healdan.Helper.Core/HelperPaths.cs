@@ -3,10 +3,13 @@ namespace Healdan.Helper.Core;
 /// <summary>Where the helper keeps its files (plan: "The helper's files"). Tests pass a <c>root</c> so they never touch the real folders.</summary>
 public sealed class HelperPaths
 {
-    private HelperPaths(string support, string log)
+    private const string Name = "Healdan Helper";
+
+    private HelperPaths(string support, string log, string keychainService)
     {
         Support = support;
         Log = log;
+        KeychainService = keychainService;
     }
 
     /// <summary>The helper's own folder, which only the user can read.</summary>
@@ -29,22 +32,29 @@ public sealed class HelperPaths
 
     public string Log { get; }
 
+    /// <summary>
+    /// The keychain's service for the device token: the helper's name, or, for folders under a <c>root</c>, one of
+    /// their own. A helper with its own <c>device.json</c> then never resumes with another's token, which the server
+    /// would take as another device's.
+    /// </summary>
+    public string KeychainService { get; }
+
     /// <summary>The usual folders for this user, or everything under <paramref name="root"/> when it is given.</summary>
     public static HelperPaths For(string? root = null)
     {
         if (root is not null)
-            return new HelperPaths(root, Path.Combine(root, "helper.log"));
+            return new HelperPaths(root, Path.Combine(root, "helper.log"), $"{Name} ({Path.GetFullPath(root)})");
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (OperatingSystem.IsMacOS())
             return new HelperPaths(
-                Path.Combine(home, "Library", "Application Support", "Healdan Helper"),
-                Path.Combine(home, "Library", "Logs", "Healdan Helper", "helper.log"));
+                Path.Combine(home, "Library", "Application Support", Name),
+                Path.Combine(home, "Library", "Logs", Name, "helper.log"), Name);
 
         var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
         if (string.IsNullOrEmpty(data))
             data = Path.Combine(home, ".local", "share");
         var support = Path.Combine(data, "healdan-helper");
-        return new HelperPaths(support, Path.Combine(support, "helper.log"));
+        return new HelperPaths(support, Path.Combine(support, "helper.log"), Name);
     }
 }
