@@ -105,7 +105,7 @@ public partial class OpenWindow : Window
         VersionsTab.Content = "Versions"; // not the last document's count, while this one's load, or if it fails
         DocStarButton.IsVisible = false; // ShowStar shows it once the details are here and the star can act on them
         (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = ("Loading…", true, new Avalonia.Thickness(0, 12, 0, 0));
-        PropertiesTab.IsVisible = VersionList.IsVisible = false;
+        PropertiesTab.IsVisible = VersionList.IsVisible = NoVersionsNote.IsVisible = false;
         try
         {
             var details = await DocumentDetails.LoadAsync(_api!, doc.DocNumber, _browser!.Me, DateTimeOffset.Now);
