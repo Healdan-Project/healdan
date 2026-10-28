@@ -371,6 +371,65 @@ public sealed class ExtensionCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task MacSettingsRowOffersUpdateWhileAnOlderVersionIsInstalled()
+    {
+        _tools.Registry = new InstalledExtension("0.1.0", true); // LibreOffice shows 0.1.0's toolbar
+        var waiting = true;
+        var check = Mac(Oxt("0.2.0"), () => Volatile.Read(ref waiting));
+        var run = check.RunAsync(); // waits for the window before opening anything
+
+        Assert.True(check.Missing);
+        Assert.Equal("0.1.0", check.Older);
+        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is ready to add to LibreOffice.", true, ExtensionSummary.Update), check.Summary());
+
+        Volatile.Write(ref waiting, false);
+        Assert.Equal(ExtensionOutcome.OpenedInLibreOffice, await run);
+        Assert.Equal(new ExtensionSummary("0.1.0", "Version 0.2.0 is waiting for you to accept it in LibreOffice.", true, ExtensionSummary.Update),
+            check.Summary());
+        Assert.Equal($"Version 0.1.0 is installed. To update it to 0.2.0, choose {ExtensionCheck.MenuItem} in the Healdan Helper menu.", check.Describe());
+
+        _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
+        var updated = check.Summary();
+        Assert.Equal(("0.2.0", false), (updated.Value, updated.CanInstall));
+        Assert.Null(check.Older);
+    }
+
+    [Fact]
+    public async Task MacSettingsRowCallsATurnedOffExtensionNotInstalled()
+    {
+        _tools.Registry = new InstalledExtension("0.1.0", false); // turned off in LibreOffice, so no toolbar shows
+        var check = Mac(Oxt("0.2.0"));
+        await check.RunAsync();
+
+        Assert.Null(check.Older);
+        Assert.Equal(new ExtensionSummary("Not Installed", "Waiting for you to accept version 0.2.0 in LibreOffice.", true), check.Summary());
+        Assert.Equal(ExtensionSummary.Install, check.Summary().Button);
+    }
+
+    [Fact]
+    public async Task NothingIsOlderWhileNothingIsInstalled()
+    {
+        var check = Mac(Oxt("0.2.0"));
+        Assert.Null(check.Older); // before the start's check
+        await check.RunAsync();
+        Assert.True(check.Missing);
+        Assert.Null(check.Older);
+    }
+
+    [Fact]
+    public async Task LinuxKnowsAnOlderVersionUnopkgCouldntReplace()
+    {
+        _tools.Lists.Enqueue(Listing("0.1.0", true));
+        _tools.Lists.Enqueue(Listing("0.1.0", true)); // the add failed, and 0.1.0 is still in use
+        _tools.AddFailure = "couldn't connect to pipe";
+        var check = Linux(Oxt("0.2.0"));
+        await check.RunAsync();
+
+        Assert.True(check.Missing);
+        Assert.Equal("0.1.0", check.Older);
+    }
+
+    [Fact]
     public void SettingsRowWithoutTheOxt() => Assert.Equal(ExtensionSummary.NotInThisBuild, Mac(null).Summary());
 
     [Fact]

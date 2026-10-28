@@ -33,6 +33,7 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
 
     private readonly TimeSpan _poll = poll ?? TimeSpan.FromSeconds(2);
     private string? _bundled;
+    private InstalledExtension? _installed;
     private int _missing;
 
     /// <summary>
@@ -40,6 +41,13 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     /// <see cref="MenuItem"/>. False until the start's check has run.
     /// </summary>
     public bool Missing => Volatile.Read(ref _missing) == 1;
+
+    /// <summary>
+    /// While <see cref="Missing"/>, the older version LibreOffice is using, as the last check or <see cref="Refresh"/>
+    /// read it; null when none is installed, or only a turned-off one. Settings then offers Update…, and the menu bar
+    /// icon's dot says the extension needs updating (polish spec §6.5, §7.2; changed in the build).
+    /// </summary>
+    public string? Older => Missing ? Volatile.Read(ref _installed)?.UsableVersion : null;
 
     /// <summary>Raised on any thread when <see cref="Missing"/> changes.</summary>
     public event Action? Changed;
@@ -88,7 +96,7 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
             return Missing;
         if (!tools.LibreOfficeInstalled)
             SetMissing(false); // nothing to install into
-        else if (!RecordIfCurrent(tools.ReadInstalled(), bundled, Record()))
+        else if (!RecordIfCurrent(ReadInstalled(), bundled, Record()))
             SetMissing(true);
         return Missing;
     }
@@ -106,18 +114,27 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     {
         if (bundledOxt is null || !File.Exists(bundledOxt))
             return "Not in this build: the installed app installs it.";
-        return Refresh()
-            ? $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {MenuItem} in the Healdan Helper menu."
-            : Record().Describe();
+        if (!Refresh())
+            return Record().Describe();
+        return Older is { } older && Volatile.Read(ref _bundled) is { } bundled
+            ? $"Version {older} is installed. To update it to {bundled}, choose {MenuItem} in the Healdan Helper menu."
+            : $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {MenuItem} in the Healdan Helper menu.";
     }
 
-    /// <summary>Settings' row (polish spec §6.5); <see cref="Describe"/> is its tooltip.</summary>
+    /// <summary>
+    /// Settings' row (polish spec §6.5); <see cref="Describe"/> is its tooltip. While an older version is installed,
+    /// the row shows it, with Update… (changed in the build): LibreOffice is showing that version's toolbar.
+    /// </summary>
     public ExtensionSummary Summary()
     {
         if (bundledOxt is null || !File.Exists(bundledOxt))
             return ExtensionSummary.NotInThisBuild;
         var missing = Refresh(); // reads the registry first, which may record what the user accepted
         var record = Record();
+        if (missing && Older is { } older && Volatile.Read(ref _bundled) is { } bundled)
+            return new(older, record.OpenedFor == bundled
+                ? $"Version {bundled} is waiting for you to accept it in LibreOffice."
+                : $"Version {bundled} is ready to add to LibreOffice.", true, ExtensionSummary.Update);
         if (missing)
             return new("Not Installed", record.OpenedFor is { } waiting
                 ? $"Waiting for you to accept version {waiting} in LibreOffice."
@@ -130,7 +147,7 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     /// <summary>macOS (R22): the registry, and the <c>.oxt</c> opened in LibreOffice once per helper version.</summary>
     private async Task<ExtensionOutcome> OneClickAsync(ExtensionRecord record, string bundled, string oxt, CancellationToken cancel)
     {
-        var installed = tools.ReadInstalled();
+        var installed = ReadInstalled();
         if (RecordIfCurrent(installed, bundled, record))
             return ExtensionOutcome.Current;
         SetMissing(true);
@@ -242,12 +259,23 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
         return ExtensionOutcome.OpenedInLibreOffice;
     }
 
+    /// <summary>LibreOffice's registry (macOS), kept so <see cref="Older"/> can tell an older extension from none.</summary>
+    private InstalledExtension? ReadInstalled()
+    {
+        var installed = tools.ReadInstalled();
+        Volatile.Write(ref _installed, installed);
+        return installed;
+    }
+
+    /// <summary><c>unopkg list</c> (Linux), kept as <see cref="ReadInstalled"/> keeps the registry.</summary>
     private async Task<InstalledExtension?> ListAsync(CancellationToken cancel)
     {
         var output = await tools.ListAsync(cancel);
         if (output is null)
             log.Warn("unopkg list didn't answer, so the installed extension's version isn't known");
-        return output is null ? null : ExtensionVersion.FromUnopkgList(output);
+        var installed = output is null ? null : ExtensionVersion.FromUnopkgList(output);
+        Volatile.Write(ref _installed, installed);
+        return installed;
     }
 
     /// <summary>Nothing of this check comes up over a window the user is answering.</summary>
