@@ -102,6 +102,7 @@ public partial class OpenWindow : Window
         _details = null;
         OpenButton.IsEnabled = true;
         ShowHeader(doc);
+        VersionsTab.Content = "Versions"; // not the last document's count, while this one's load, or if it fails
         DocStarButton.IsVisible = false; // ShowStar shows it once the details are here and the star can act on them
         (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = ("Loading…", true, new Avalonia.Thickness(0, 12, 0, 0));
         PropertiesTab.IsVisible = VersionList.IsVisible = false;

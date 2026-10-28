@@ -104,7 +104,8 @@
               <local:IconView x:Name="DocStarIcon" Classes="star" Data="{StaticResource Icon.star}" />
             </Button>
           </Grid>
-          <ListBox x:Name="DetailTabs" Classes="segmented" SelectedIndex="0">
+          <!-- AlwaysSelected: a Cmd or Ctrl-click on the chosen segment would otherwise leave neither chosen, and the pane blank. -->
+          <ListBox x:Name="DetailTabs" Classes="segmented" SelectedIndex="0" SelectionMode="AlwaysSelected">
             <ListBox.ItemsPanel>
               <ItemsPanelTemplate>
                 <UniformGrid Rows="1" />

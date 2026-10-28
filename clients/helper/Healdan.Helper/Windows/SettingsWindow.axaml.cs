@@ -27,7 +27,10 @@ public partial class SettingsWindow : Window
     internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, LoginItemSummary login, ExtensionSummary extension,
         string extensionTip, Func<Task<ExtensionSummary>>? install) : this()
     {
-        ServerValue.Text = server is null ? "Not Set Yet" : HealdanLink.HostAndPort(new Uri(server));
+        // A hand-edited Server setting may not be an address at all: shown as it is, rather than ending the helper.
+        ServerValue.Text = server is null ? "Not Set Yet"
+            : Uri.TryCreate(server, UriKind.Absolute, out var uri) && uri.Authority.Length > 0 ? HealdanLink.HostAndPort(uri)
+            : server;
         ServerNote.Text = signedIn
             ? "To use another server, sign out from the Healdan Helper menu, then sign in with its address."
             : "Sign in from the Healdan Helper menu to choose the server.";
