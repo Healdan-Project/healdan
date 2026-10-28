@@ -15,11 +15,43 @@ ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
 PW='sm0ke,p=a\ss $x #1 é:! '
 
+# The stack logs in UTC, as do the FAIL lines (docker/tests/lib.sh), even when the shell sets another zone.
+export TZ=UTC
+
 # docker/tests/compose.smoke.yaml makes Healdan seed a Store, template, client and matter to upload into.
 compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml "$@"; }
+# The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
+# but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
+show_server_log() {
+  local cid dir=$WORK/logs f
+  cid=$(compose ps -aq app 2>/dev/null | head -1)
+  if [ -z "$cid" ] || ! docker cp "$cid:/opt/logicaldoc/repository/logs/." "$dir" >/dev/null 2>&1 \
+    || [ ! -f "$dir/dms.log" ]; then
+    echo "== no dms.log to show"
+    return 0
+  fi
+  # It rolls over at 5 MB into dms.log.1, .2, …, the higher the newer.
+  for f in "$dir"/dms.log.[0-9] "$dir/dms.log"; do [ -f "$f" ] && cat "$f"; done > "$dir/run.log"
+  # An entry starts "dd.MM.yyyy HH:mm:ss,SSS LEVEL". A warning or error keeps its exception's messages and "Caused
+  # by" lines, without the stack frames.
+  awk '/^[0-9][0-9]\.[0-9][0-9]\.[0-9][0-9][0-9][0-9] / { keep = $3 ~ /^(WARN|ERROR|FATAL)$/ }
+       keep && !/^[[:space:]]+(at |\.\.\. [0-9]+ more)/' "$dir/run.log" > "$dir/problems.log"
+  echo "== dms.log: the last 200 lines of the run's $(grep -cE '^[0-9.]{10} [0-9:,]{12} (WARN|ERROR|FATAL)' \
+    "$dir/run.log") warnings and errors (times in UTC)"
+  tail -n 200 "$dir/problems.log" | cut -c 1-400
+  echo "== dms.log: its last 40 lines"
+  tail -n 40 "$dir/run.log" | cut -c 1-400
+}
 cleanup() {
-  [ "$FAILED" = 0 ] || compose logs --tail 150 app || true
-  compose down -v --remove-orphans >/dev/null 2>&1 || true
+  local status=$?
+  # Nothing here may stop the stack's removal.
+  set +e
+  if [ "$status" != 0 ]; then
+    echo "== the app container's last 150 lines of output"
+    compose logs --no-log-prefix --tail 150 app
+    show_server_log
+  fi
+  compose down -v --remove-orphans >/dev/null 2>&1
   rm -rf "$WORK"
 }
 trap cleanup EXIT

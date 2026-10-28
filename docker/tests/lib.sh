@@ -3,7 +3,8 @@
 FAILED=0
 
 pass() { echo "PASS  $*"; }
-fail() { echo "FAIL  $*"; FAILED=1; }
+# The time, in UTC, finds the server's log lines from around a failure.
+fail() { echo "FAIL  $* ($(date -u +%H:%M:%S) UTC)"; FAILED=1; }
 
 # check <description> <command...>: runs the command and records PASS or FAIL.
 check() {
