@@ -2781,8 +2781,9 @@ Run by the owner with the packaged helper (`clients/helper/packaging/mac/package
   - light and dark menu bars;
   - highlighted while the menu is open;
   - the dot while signed out, and while the extension isn't installed;
-  - the tooltip's reason.
-- [ ] **Step 3: Settings' Install…** with the extension removed (Task 7, Step 11).
+  - the tooltip's reason, and **LibreOffice Extension Needs Updating** while an older extension is installed (the packaged helper's 0.2.0 over 0.1.0);
+  - the dot going by itself a few seconds after you accept the extension in LibreOffice, without opening the menu.
+- [ ] **Step 3: Settings' Install…** with the extension removed (Task 7, Step 11), and **Update…** with an older one installed: the row shows the older version, its line says 0.2.0 is ready to add or waiting for you to accept it, and, with Settings left open, the row shows 0.2.0 a few seconds after you accept it in LibreOffice.
 - [ ] **Step 4: LibreOffice on Retina** (Review Focus 5): the toolbar and the Healdan menu, in light and dark, and with **Tools › Options › Accessibility** high contrast on.
   - If the 16 px images are soft, try an SVG:
     - have `IconRender` also write `<command>.svg`: the Tabler SVG's paths, stroked `#7C7C80` at 1.5, with the shield as a path, translated and scaled as in `Icon()`;
@@ -2849,5 +2850,4 @@ Every call made while building, in order. "Where" is the task or review that rai
 - **Letter spacing in the helper's San Francisco type** (owner, at Task 9's review). HarfBuzz lays the font out at its default Display optical size (28) while Skia draws it at Text size, so the spacing doesn't match the glyphs drawn. The ellipsis fix (26e7a7232) stops the overhang clipping but leaves the spacing as it is. Look for a way to make layout and drawing agree (the font's optical-size axis, or another text-measuring path), and check the packaged app on the Mac in Task 14, since the renders and the app share Skia and the font.
 - **Fluent's part names fail silently on an Avalonia upgrade.** Styles in `HelperStyles.axaml` reach into Fluent's templates by part name: the pop-up button's `DropDownGlyph`, the checkbox's `NormalRectangle`, the date picker's `PART_TextBox`, `PART_Button` and `LayoutRoot`, and the text box's `PART_BorderElement` and `PART_Placeholder`. A renamed part drops its style without an error, so check them in the renders whenever the Avalonia pins in `Directory.Packages.props` move, or add a comment beside the pins saying so.
 - **`default` cases for the mark's shapes.** `HealdanMark.Silhouette()` and `IconRender`'s `DrawShapes` walk the mark's shapes by kind. A new kind of shape would be left out of the menu bar icon and the extension's 42 px mark without a word, so each could throw on a kind it doesn't know.
-- **Settings reads LibreOffice's registry twice** as it opens: `ExtensionCheck.Summary()` for the row and `ExtensionCheck.Describe()` for its tooltip each call `Refresh()`. One read, shared by both, would do.
 - **Tabler's version in three places.** `clients/icons/README.md` and both `THIRD-PARTY-NOTICES.txt` files (the helper's and the extension's) name the Tabler release. Moving to a new release changes all three, and nothing checks that they agree.
