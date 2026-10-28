@@ -17,7 +17,7 @@
 
 **Spec:** [`docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`](../specs/2026-10-27-helper-ui-polish-design.md), approved by the owner on 2026-10-27, with its mockups in [`2026-10-27-helper-polish-mockups/`](../specs/2026-10-27-helper-polish-mockups/). Every § below points into it. Where the two disagree, the spec wins, except for "Spec corrections and calls this plan makes".
 
-**Status:** Tasks 1–13 built on 2026-10-27, in PR 1 ([Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93)) and PR 2; Task 14, the owner's checks on a Mac, is next.
+**Status:** Tasks 1–13 built on 2026-10-27, in PR 1 ([Healdan-Project/healdan#93](https://github.com/Healdan-Project/healdan/pull/93)) and PR 2 ([Healdan-Project/healdan#95](https://github.com/Healdan-Project/healdan/pull/95)); Task 14, the owner's checks on a Mac, is next.
 
 ## Global Constraints
 
