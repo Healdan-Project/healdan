@@ -60,6 +60,7 @@ All colours are tokens in `clients/helper/Healdan.Helper/Windows/HelperStyles.ax
 | Line | `#E5E5EA` | `#38383A` | hairlines |
 | Alternate row | `#F4F5F5` | `#232325` | every other list row |
 | Pill | `#E1E1E6` | `#3A3A3C` | the sidebar's and the versions' selection |
+| Segment | `#FFFFFF` | `#636366` | a segmented control's chosen segment (`HdSegmentBrush`), on a Pill track. (changed in the build) |
 | Inactive selection | `#DCDCDC` | `#464646` | a list's selected row when the list isn't focused |
 | Text | `#1D1D1F` | `#F2F2F7` | body |
 | Secondary | `#6E6E73` | `#AEAEB2` | labels, columns, group headers, details' labels |
@@ -100,10 +101,10 @@ Required (`#D70015` / `#FF6961`), the star (`#F59F00` / `#FCC419`) and the chips
 Set through Fluent's resources where it has them, and through styles in `HelperStyles.axaml` where it doesn't. (call)
 
 - **Push buttons** are 22 pt tall with 6 pt corners. A plain `Button` is the secondary style, and `Button.accent` is the accent fill. Each window has one accent button, its default.
-- **Pop-up buttons** (`ComboBox`) look like a secondary button with Tabler's `selector` chevrons in place of Fluent's arrow.
+- **Pop-up buttons** (`ComboBox`) look like a secondary button with Tabler's `selector` chevrons in place of Fluent's arrow. (changed in the build) Fluent's glyph fills its path, so the chevrons draw filled, as two small triangles, like the Mac's own pop-up buttons, not as Tabler's outline.
 - **Text fields** are 22 pt tall with 5 pt corners. Focus is a 1 pt accent border and a 3 pt Focus ring.
 - **Checkboxes and radio buttons** are 14 pt, with an accent fill when on.
-- **A segmented control** (§6.2) is a Pill-coloured track and a raised white segment. (changed in the build) It's a styled `ListBox` whose items panel is a one-row `UniformGrid`, which keeps the segments equal, not a `TabControl`. Tab reaches it, and the arrow keys switch segments through a key handler (§6.2), since a `UniformGrid` isn't keyboard-navigable on its own.
+- **A segmented control** (§6.2) is a Pill-coloured track and a raised white segment. (changed in the build) The segment is the Segment colour (§4.1): white in light, and grey `#636366` in dark. It's a styled `ListBox` whose items panel is a one-row `UniformGrid`, which keeps the segments equal, not a `TabControl`. Tab reaches it, and the arrow keys switch segments through a key handler (§6.2), since a `UniformGrid` isn't keyboard-navigable on its own.
 - **List rows** are 24 pt, or 34 pt with a badge line, and alternate rows take the Alternate row colour. The selected row is the accent fill with white text, or Inactive selection when the list isn't focused, as on the Mac.
 - **The sidebar's selection** is a Pill-coloured rounded row with the accent icon, inset 6 pt from each side.
 - **(changed in the build) Text inside a grey selection takes the Text colour:** the sidebar's and the versions' Pill, and a list's Inactive selection. Icons there keep their colours, since 3:1 suffices for an icon. This keeps §4.1's promise that every text colour passes AA without changing its tokens.
@@ -214,6 +215,7 @@ The mockup is `settings-and-about.html`. Grouped rows, as in the Mac's System Se
   - **LibreOffice Extension,** with the version on the right and "Installed on …" under the name.
   - **Where the rows' data comes from.** They take the login item's state and the extension's record as data, not by parsing today's sentences. `LoginItem.Describe()` and `ExtensionCheck.Describe()` stay, as the rows' tooltips.
   - **While the extension isn't installed (owner),** the row reads **Not Installed** with an **Install…** button. The button runs what the menu's Install item runs (`ExtensionCheck.InstallFromMenu`), and the row then shows that outcome's text. (changed in the build) The row shows `ExtensionCheck.Summary()` again after the install, not a text mapped from the install's outcome: the summary already says "Waiting for you to accept version … in LibreOffice".
+  - (changed in the build) **While an older version is installed,** the row shows that version, such as `0.1.0`, with an **Update…** button that runs the same install. The line under the name reads "Version 0.2.0 is waiting for you to accept it in LibreOffice." once the helper has opened it there, or "Version 0.2.0 is ready to add to LibreOffice." before, and the tooltip says which version is installed and how to update it. The helper counts an older extension as missing, so as to offer the new one, and the row used to read Not Installed while the older version's toolbar was plainly in LibreOffice; the extension's 0.2.0 makes that every existing install's path. `ExtensionCheck` keeps what it last read of the installed extension, and `ExtensionCheck.Older` names the older version. Only a usable one counts: with nothing installed, or a turned-off copy, the row reads Not Installed as before.
 - **Done** stays at the bottom right.
 
 ### 6.6 About
@@ -247,10 +249,10 @@ The text sits on the window's colours in both themes (no near-black panel) and d
   - the start failed;
   - a copy closed unexpectedly;
   - a copy is Not Yet in Healdan;
-  - the extension isn't installed.
+  - the extension isn't installed, or an older version is (changed in the build: see below).
   
   Saves waiting to be sent don't count, since they clear by themselves.
-- **The tooltip** names the first reason, for example **Healdan Helper: Not Signed In**.
+- **The tooltip** names the first reason, for example **Healdan Helper: Not Signed In**. (changed in the build) An older extension's reason is **LibreOffice Extension Needs Updating**, not **LibreOffice Extension Not Installed**, which stays for an extension that isn't there at all (§6.5).
 - **The rule** is a pure function in `Healdan.Helper.Core` (`Ui/Attention.cs`), with tests. `TrayMenu` swaps the icon whenever it rebuilds.
 
 ## 8. The LibreOffice extension
@@ -296,7 +298,7 @@ The mockups are `menubar-and-libreoffice.html` and `libreoffice-open-save-icons.
 
 - **Contrast:** text meets AA (§4.1), and icons and focus rings meet 3:1 against their backgrounds.
 - **Keyboard:** every control a mouse reaches can be reached with Tab. The segmented control also takes the arrow keys. Escape and Return keep today's meanings.
-  - (changed in the build) **Read-only values skip Tab.** A detail's value and About's version and server lines are `SelectableTextBlock`s with `IsTabStop = false`, as the Mac's selectable labels aren't in the key-view loop. They stay selectable with the mouse and copyable (Cmd+C, or the context menu's Copy). `Focusable = false` would have lost the keyboard copy.
+  - (changed in the build) **Read-only values skip Tab.** Save's and Properties' read-only values and their Client / Matter, Settings' Address, and About's version and server lines are `SelectableTextBlock`s with `IsTabStop = false`, as the Mac's selectable labels aren't in the key-view loop. They stay selectable with the mouse and copyable (Cmd+C, or the context menu's Copy). `Focusable = false` would have lost the keyboard copy. Open's detail values are plain text, which Tab doesn't reach and which can't be selected.
 - **Names:** icon-only buttons have accessible names and tooltips (§4.3). The attention dot's reason is in the tray's tooltip (§7.2).
 - **High contrast:** LibreOffice gets HC images (§8.2), and the shield marks Healdan's two commands by shape, not colour.
 
