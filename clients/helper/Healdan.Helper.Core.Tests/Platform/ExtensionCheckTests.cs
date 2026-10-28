@@ -439,6 +439,36 @@ public sealed class ExtensionCheckTests : IDisposable
     }
 
     [Fact]
+    public async Task MacPollFollowsAnOlderVersionComingAndGoing()
+    {
+        _tools.Registry = new InstalledExtension("0.1.0", true);
+        var check = Mac(Oxt("0.2.0"));
+        await check.RunAsync();
+        var changes = 0;
+        check.Changed += () => changes++;
+
+        _tools.Registry = new InstalledExtension("0.1.0", false); // turned off in LibreOffice: still missing, but not older
+        Assert.True(check.Refresh());
+        Assert.Equal(1, changes); // Settings' row and the menu follow
+        var off = check.Summary();
+        Assert.Equal(("Not Installed", ExtensionSummary.Install, NotInstalledTip), (off.Value, off.Button, off.Tip));
+        Assert.Equal("LibreOffice Extension Not Installed", Reason(check));
+
+        _tools.Registry = new InstalledExtension("0.1.0", true); // turned on again
+        Assert.True(check.Refresh());
+        Assert.Equal(2, changes);
+        var on = check.Summary();
+        Assert.Equal(("0.1.0", ExtensionSummary.Update, OlderTip), (on.Value, on.Button, on.Tip));
+        Assert.Equal("LibreOffice Extension Needs Updating", Reason(check));
+
+        _tools.Registry = new InstalledExtension("0.2.0", true); // the user accepted 0.2.0
+        Assert.False(check.Refresh());
+        Assert.Equal(3, changes);
+        Assert.False(check.Summary().CanInstall);
+        Assert.Null(Reason(check)); // the dot goes by itself
+    }
+
+    [Fact]
     public async Task NothingIsOlderWhileNothingIsInstalled()
     {
         var check = Mac(Oxt("0.2.0"));

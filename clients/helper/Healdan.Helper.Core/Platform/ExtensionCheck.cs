@@ -49,7 +49,10 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     /// </summary>
     public string? Older => Missing ? Volatile.Read(ref _installed)?.UsableVersion : null;
 
-    /// <summary>Raised on any thread when <see cref="Missing"/> changes.</summary>
+    /// <summary>
+    /// Raised on any thread when <see cref="Missing"/> changes, or when <see cref="Refresh"/> finds <see cref="Older"/>
+    /// has, so the dot's reason and Settings' row follow the registry too.
+    /// </summary>
     public event Action? Changed;
 
     /// <summary>The start's check, once signed in.</summary>
@@ -95,10 +98,13 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
     {
         if (route != ExtensionRoute.OpenInLibreOffice || Volatile.Read(ref _bundled) is not { } bundled)
             return Missing;
+        var (wasMissing, wasOlder) = (Missing, Older);
         if (!tools.LibreOfficeInstalled)
             SetMissing(false); // nothing to install into
         else if (!RecordIfCurrent(ReadInstalled(), bundled, Record()))
             SetMissing(true);
+        if (Missing == wasMissing && Older != wasOlder)
+            RaiseChanged(); // still missing, but an older version went in or out: Update… or Install…, and the dot's reason
         return Missing;
     }
 
@@ -283,8 +289,12 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
 
     private void SetMissing(bool missing)
     {
-        if (Interlocked.Exchange(ref _missing, missing ? 1 : 0) == (missing ? 1 : 0))
-            return;
+        if (Interlocked.Exchange(ref _missing, missing ? 1 : 0) != (missing ? 1 : 0))
+            RaiseChanged();
+    }
+
+    private void RaiseChanged()
+    {
         try
         {
             Changed?.Invoke();
