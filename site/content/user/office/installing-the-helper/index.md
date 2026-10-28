@@ -42,6 +42,9 @@ checked by Apple, so macOS doesn't warn about it otherwise.
 
 Healdan's icon appears in the menu bar. The helper has no Dock icon, and shows a window only when it needs you.
 
+A dot on the icon means the helper needs you: you're signed out, it couldn't start, a document closed unexpectedly, a
+copy is Not Yet in Healdan, or LibreOffice's extension isn't installed. Point at the icon to see which.
+
 ### Sign In
 
 The Sign In to Healdan window opens: see [The Sign In Window](#the-sign-in-window). Once you're signed in,
@@ -55,7 +58,7 @@ The helper for Ubuntu isn't ready yet. Until it is, Healdan works in LibreOffice
 
 ## The Sign In Window
 
-![The Sign In to Healdan window: Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
+![The Sign In to Healdan window: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
 
 Type the server's address, your username and your password, and choose **Sign In**.
 
@@ -124,18 +127,23 @@ Click Healdan's icon in the menu bar.
 
 ## Settings
 
-![The Healdan Helper Settings window: the server https://healdan.example, read-only; Documents, Spreadsheets and Presentations each opening in LibreOffice; Start at Sign-In on; and the LibreOffice extension's version](settings.png)
+![The Healdan Helper Settings window in three groups: Server, with the address healdan.example; Open Each Kind of File In, with Documents, Spreadsheets and Presentations, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version and when it was installed](settings.png)
 
-- **Server:** the server the helper is signed in to. To use another, sign out, then sign in with its address.
-  Before you do, close your documents, and check the menu shows no saves waiting and nothing Not Yet in Healdan.
-  Any local copies left from the old server are moved to a folder of their own beside `Copies`, such as
-  `Copies from healdan.example`, and a notice says so. The helper never sends them to the new server, where the
-  same doc # can be a different document.
-- **Open Each Kind of File In:** documents, spreadsheets and presentations open in LibreOffice. Other files, such as
-  PDFs, open read-only in your Mac's usual app for them.
-- **Start at Sign-In:** after your first sign-in, the helper starts whenever you sign in to your Mac. To stop it,
-  turn it off in **System Settings › General › Login Items & Extensions**.
-- **LibreOffice Extension:** the version installed, or what to do to install it.
+Settings has three groups:
+
+- **Server:** the server the helper is signed in to, as its name, such as `healdan.example`. To use another, sign
+  out, then sign in with its address. Before you do, close your documents, and check the menu shows no saves waiting
+  and nothing Not Yet in Healdan. Any local copies left from the old server are moved to a folder of their own
+  beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them to the
+  new server, where the same doc # can be a different document.
+- **Open Each Kind of File In:** a row each for documents, spreadsheets and presentations, with the file extensions
+  it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app for them.
+- **This Computer:**
+  - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
+    To stop it, turn it off in **System Settings › General › Login Items & Extensions**.
+  - **LibreOffice Extension:** the version installed, and when it was installed, or **Not Installed**. While the
+    extension isn't installed, **Install…** asks LibreOffice to add it, as the menu's **Install the LibreOffice
+    Extension…** does.
 
 ## About Healdan Helper
 
@@ -146,7 +154,7 @@ Choose **About Healdan Helper** in the helper's menu.
 - **Copy for Support** copies the helper's version, your Mac's, and the server with its version, as one line to
   paste into an email or an issue.
 - **Healdan Docs** opens these pages, and **Licence: GNU LGPL v3** the licence the helper is free software under.
-- **Open-Source Notices…** lists the open-source software the helper is built with, and each one's licence.
+- **Open-Source Notices** lists the open-source software the helper is built with, and each one's licence.
 
 ## Signing Out
 

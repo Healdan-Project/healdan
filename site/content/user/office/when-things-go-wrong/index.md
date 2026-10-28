@@ -37,12 +37,13 @@ Start **Healdan Helper** from your Applications folder.
 The document stays checked out to you, and your local copy is kept as you last saved it. Within about ten seconds of
 LibreOffice going, or as soon as the helper starts after your Mac restarts, this window opens:
 
-![The crash window: Lease agreement #1234 v2.1 closed unexpectedly. It's still checked out to you, and your local copy is kept. With the Send and Check In and Reopen buttons](after-a-crash.png)
+![The crash window: Healdan's mark with a warning triangle, and the headline Lease agreement #1234 v2.1 closed unexpectedly. It's still checked out to you, and your local copy is kept. With the Send and Check In and Reopen buttons](after-a-crash.png)
 
 - **Reopen** opens your kept copy, with what you last saved, and carries on as before.
 - **Send and Check In** sends what Healdan hasn't had yet, and checks the document in.
 - **Closing the window** decides nothing: the document stays in the helper's menu, marked "(closed unexpectedly)",
-  until you choose it, which reopens it.
+  until you choose it, which reopens it. The helper's icon in the menu bar shows a dot until you choose the
+  document.
 
 A read-only copy has nothing to lose: the window says so, and offers **Remove Copy**.
 
