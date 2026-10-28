@@ -1566,9 +1566,9 @@ components:
           description: '`matter` is a matter''s own top folder.'
     MatterRef:
       type: object
-      description: A matter named in another object
+      description: A matter named in another object, with its client
       additionalProperties: false
-      required: [id, display]
+      required: [id, display, client]
       properties:
         id:
           type: integer
@@ -1576,6 +1576,8 @@ components:
         display:
           type: string
           description: The matter as people read it, such as `998.1 - Healdan Demo`, with an en dash
+        client:
+          $ref: '#/components/schemas/ClientRef'
     HoldView:
       type: object
       description: Who has a document checked out or locked

@@ -151,6 +151,9 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
   `fileVersion` isn't its `version` is one of those changes, not a save.
 - **Every document, folder and matter carries `type`:** `document`, `folder` or `matter`. Folder listings and
   search results mix them, so switch on it.
+- **A document's or folder's `matter` names its client,** as `{ "id", "display", "client": { "id", "number",
+  "name" } }`, so a list can show the client beside the matter without asking for each one. An older server sends
+  only `id` and `display`, so a client that may meet one reads `client` as optional.
 - **Field names are camelCase.** A field with no value is `null`, never left out. Timestamps are ISO 8601 in UTC,
   such as `2026-10-23T14:05:00Z`.
 - **A doc ID is `#<doc #> v<version>`,** the form of the title bar and the filed files: `#1234 v2.1`.

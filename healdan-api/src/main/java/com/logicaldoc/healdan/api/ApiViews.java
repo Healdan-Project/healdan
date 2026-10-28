@@ -229,7 +229,8 @@ public final class ApiViews {
 		if (matter == null)
 			return null;
 		Client client = ClientDAO.get().findById(matter.getClientId());
-		return new MatterRef(matter.getId(), MatterDisplay.format(client.getNumber(), matter.getNumber(), matter.getName()));
+		return new MatterRef(matter.getId(), MatterDisplay.format(client.getNumber(), matter.getNumber(), matter.getName()),
+				new ClientRef(client.getId(), client.getNumber(), client.getName()));
 	}
 
 	/**
