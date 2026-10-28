@@ -15,6 +15,7 @@ person's computer, and **Healdan's LibreOffice extension**. They build apart fro
 |---|---|---|
 | The web page's Open in App | The helper | A `healdan://open/<doc #>?server=<host>` link, which macOS hands the app bundle as an Apple event, started or not |
 | The LibreOffice extension | The helper | The channel: HTTP on `127.0.0.1`, with a secret (below) |
+| A second helper | The running helper | The channel's `/v1/link`, for a link macOS gave another copy of the app (below) |
 | The helper | Healdan | The [API](../api/) under `/api/v1`, with a device token |
 
 The extension holds no token and calls no server. The helper does the work, and draws every window, once for every
@@ -73,7 +74,8 @@ app.
   name, but only while the document is still checked out here and its `fileVersion` hasn't moved. A repeated
   `saveId` gets `version-moved` too once newer content has been stored over the save, so it's never resent.
 - **This computer's hold** is one whose `hold.device.id` is this computer's device id. Device names aren't compared,
-  as two computers can share one.
+  as two computers can share one. The server records a hold under the device id of the token that made it, which is
+  why the helper never uses a token issued to another device id (below).
 
 ### Local Copies
 
@@ -110,15 +112,24 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 The token is in the keychain, never in a file: service `Healdan Helper`, account the server's base URL
 (`https://host[:port]`). Nothing logs a token, a password, the channel's secret or a file's contents.
 
+- **The item holds `{"device", "token"}`** (`KeptToken`): the token and the device id it was issued for, as the API
+  doesn't say which device a token is. At start, `SignIn.TryResumeAsync` uses the token only when `device` is this
+  computer's id in `device.json`. Otherwise it revokes the token (`DELETE /auth/tokens/current`, which may fail when
+  Healdan can't be reached), removes it, and the helper asks for the sign-in. That covers a bare token kept by a helper
+  before this check, so everyone signs in once after the update, and a `device.json` that was lost or remade.
+- **A helper with its files elsewhere** (`HEALDAN_HELPER_DEV_ROOT`) uses the service `Healdan Helper (<root>)`
+  (`HelperPaths.KeychainService`), so it never takes the installed helper's token, nor the installed helper its.
+
 ## The Channel
 
-The extension calls the helper over HTTP on `127.0.0.1`, at the port in `channel.json`. Every request but
+The extension, and a second helper handing over a link, call the helper over HTTP on `127.0.0.1`, at the port in
+`channel.json`. Every request but
 `GET /v1/ping` sends the secret as `X-Healdan-Secret`; a missing or wrong one is `403`. Bodies are JSON.
 
 | Route | Body | Answer |
 |---|---|---|
 | `GET /v1/ping` | none | `{"ok": true}` |
-| `POST /v1/link` | `{"url"}` | `{}` at once; the open runs in the background |
+| `POST /v1/link` | `{"url"}` | `{}` at once; the open runs in the background, as for an Apple event's link |
 | `POST /v1/open-dialog` | `{"app"}` | `{"action": "opened" \| "local" \| "cancel"}`, once the window closes |
 | `POST /v1/save-new` | `{"app", "name", "formats", "path"}` | `{"action": "save" \| "local" \| "cancel", "folderId", "name", "format", "properties", "tempPath"}`; `path` is the copy for Save as New Document |
 | `POST /v1/file` | `{"tempPath", "folderId", "name", "format", "properties", "app", "replaces"}` | the new copy's state |
@@ -138,6 +149,13 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   A save Healdan refuses for good, or one that fails, answers the same way.
   While the answer says `pending`, the extension asks again after 2, 5, 15, 30, then every 60 seconds, so the title
   moves on once Healdan is back, however long it was away.
+
+- **A second helper's link:** only one helper runs for each user. macOS starts another copy of the app when the copy
+  it hands `healdan:` links to isn't the one running, such as an old one in `/Applications` beside a newer one, and
+  sends the link as an Apple event once the app runs, not in its arguments. So a start that finds a helper answering
+  its channel runs `HandOverApp` instead of the helper: Avalonia with no window or icon, which takes each link's event
+  and posts it to `/v1/link` (`LinkHandOver`), then quits a second after the last, or after 5 seconds when none came.
+  A link it can't hand over is logged as dropped, with why. An old copy can't do any of this, so its links are lost.
 
 - **The window routes** answer when the user closes the window, which can take minutes, so their callers mustn't time
   out. A second request while one of a window is open is answered `cancel`, and brings the open one up.
@@ -192,8 +210,10 @@ HEALDAN_HELPER_DEV_ROOT=$PWD/scratch/helper dotnet run --project clients/helper/
 Sign in with the stack's address, such as `http://localhost:8080`: the helper allows plain HTTP for `localhost`
 only. A Debug build run this way:
 
-- keeps its files under `HEALDAN_HELPER_DEV_ROOT` when it's set, away from an installed helper's;
-- takes its token from `HEALDAN_HELPER_DEV_TOKEN` instead of the keychain, when that's set;
+- keeps its files under `HEALDAN_HELPER_DEV_ROOT` when it's set, away from an installed helper's, and its sign-in
+  under a keychain service of its own;
+- takes its token from `HEALDAN_HELPER_DEV_TOKEN` instead of the keychain, when that's set, as one issued to its own
+  device id: check-outs read as this computer's only when the token was;
 - answers the windows from the JSON file `HEALDAN_HELPER_DEV_ANSWERS` names, for a check with nobody at the screen;
 - isn't an app bundle, so macOS doesn't hand it links, it posts no notifications (its notices become the menu's
   status line), it doesn't start at sign-in, and it carries no `.oxt`.
@@ -201,7 +221,7 @@ only. A Debug build run this way:
 Release builds have none of the variables. For links, notifications and the extension's install, build the app with
 `clients/helper/packaging/mac/package.sh` (unsigned, without `SIGN_IDENTITY`, it runs on your own Mac) and open
 `clients/helper/packaging/mac/out/Healdan Helper.app`. Only one helper runs per user: a second start finds the first
-through `channel.json`, and quits.
+through `channel.json`, hands it any link it was started for, and quits (see [The Channel](#the-channel)).
 
 ## Tests
 

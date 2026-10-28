@@ -78,12 +78,20 @@ When your sign-in stops working (you changed your password, or the helper wasn't
 says "Sign in to Healdan again. Your saves wait on this computer until you do", and shows the Sign In window. The
 documents you have open stay checked out to this Mac.
 
+The helper also shows the Sign In window, once, when the sign-in in your keychain wasn't made for it: the first time
+an updated helper starts, if the sign-in is from a version that didn't record which copy of the helper it belongs to,
+or after the helper's files were deleted from your Mac. It never uses such a sign-in, as Healdan would then take this
+Mac's check-outs for another computer's, and it signs it out.
+
 ## A Link Didn't Open
 
 When Open in App doesn't open anything:
 
 - **Nothing at all happened:** the helper isn't installed, or your browser didn't hand the link over. See
   [Installing the Healdan Helper](../installing-the-helper/).
+- **Nothing happened, and there's more than one copy of Healdan Helper on your Mac,** such as an old one left in
+  Downloads: macOS may hand the link to a copy that isn't the one running. A current copy passes the link on to the
+  running helper, but an old one can't. Keep only the copy in Applications.
 - **"That link is from …, but Healdan Helper is signed in to …":** open the web page at the address the helper is
   signed in to: **Open Healdan in Browser** in the helper's menu opens it. See
   [Opening Documents](../opening-documents/#from-the-web-page-open-in-app).
