@@ -47,6 +47,7 @@ internal static class Program
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<App>()
             .UsePlatformDetect()
+            .UseSystemFontShaper()
             .With(new MacOSPlatformOptions { ShowInDock = false })
             .LogToTrace();
 

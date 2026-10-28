@@ -36,11 +36,11 @@ public partial class App : Application
     {
         AvaloniaXamlLoader.Load(this);
         // San Francisco on macOS (polish spec §4.2): Skia's default there is Helvetica. Every top level, so pop-ups and
-        // tooltips too; elsewhere the desktop's own font.
+        // tooltips too; elsewhere the desktop's own font. SystemFont's shaper lays it out as Skia draws it.
         if (OperatingSystem.IsMacOS())
         {
             var font = new Style(x => x.Is<TopLevel>());
-            font.Setters.Add(new Setter(TemplatedControl.FontFamilyProperty, new FontFamily(".AppleSystemUIFont")));
+            font.Setters.Add(new Setter(TemplatedControl.FontFamilyProperty, new FontFamily(SystemFont.Family)));
             Styles.Add(font);
         }
     }

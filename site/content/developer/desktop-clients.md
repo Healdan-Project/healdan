@@ -22,7 +22,7 @@ app.
 
 ## The Helper
 
-`clients/helper/Healdan.Helper.sln` is .NET 10 (`global.json` pins the SDK), with three projects:
+`clients/helper/Healdan.Helper.sln` is .NET 10 (`global.json` pins the SDK), with four projects:
 
 - **`Healdan.Helper.Core`** has no windows and no Avalonia, so the tests drive all of it:
   - `Api/`: the API client, written by hand against `openapi.yaml`;
@@ -33,14 +33,36 @@ app.
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
-  notifications, login item and extension install (`Platform/`). It stays out of the Dock (`LSUIElement`) and hands
-  the focus back after each window.
+  notifications, login item, extension install and text layout (`Platform/`). It stays out of the Dock
+  (`LSUIElement`) and hands the focus back after each window.
   - **The look** (polish spec, `docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`): the tokens and
     control styles are in `Windows/HelperStyles.axaml`, over Fluent. The icons are Tabler's, in
     `Windows/HelperIcons.axaml`, which `python3 clients/icons/write-helper-icons.py` writes from
     `clients/icons/tabler/` (`IconsTests` fails until it's run, and until a new icon is in its `SpecNames`). The menu
     bar icon is drawn at run time from `HealdanMark`'s shapes (`Tray/TrayIcons.cs`).
 - **`Healdan.Helper.Core.Tests`** is xUnit.
+- **`Healdan.Helper.Tests`** is xUnit too, for the app's own code that needs Avalonia to test. It runs Avalonia
+  headless, with Skia's real drawing.
+
+### San Francisco's Layout
+
+On macOS the windows' text is San Francisco, asked for as `.AppleSystemUIFont`. Avalonia 12 shapes text with
+HarfBuzz at the font file's default instance, which for San Francisco is its Display optical size, while Skia draws
+the face CoreText matched at its Text optical size. Left alone, the text is measured about 15% narrower than it's drawn,
+and SemiBold about 25%.
+
+`Platform/SystemFont.cs` closes the gap. `Program` adds its shaper with `UseSystemFontShaper()`, on macOS only. The
+shaper hands each call on to Avalonia's HarfBuzz shaper. For each San Francisco typeface, it first sets HarfBuzz's font
+to the instance Skia draws: the named instance with the face's PostScript name, at optical size 17. Before each run, it
+sets the point size, from which HarfBuzz applies the font's tracking as CoreText does. Up to 17 pt, which covers every
+size the helper uses, the widths then match CoreText's.
+
+- Avalonia marks `ITextShaperImpl` as not for apps to implement, so the shaper is a `DispatchProxy`, made at run time.
+  It goes in as an `AppBuilder` option, since the service locator isn't in Avalonia's reference assemblies.
+- It reaches two public properties of internal Avalonia classes, `HarfBuzzTypeface.HBFont` and
+  `SkiaTypeface.SKTypeface`, and calls HarfBuzz's C API in HarfBuzzSharp's native library. `SystemFontTests` fails
+  when an Avalonia upgrade moves either property, since the widths go back to the narrow ones.
+- Other fonts, and every font off macOS, go to HarfBuzz unchanged.
 
 ### The Cycle
 
@@ -235,6 +257,8 @@ through `channel.json`, and quits.
   shapes, or when the SVGs aren't the spec's list, `SpecNames`. After adding or changing an icon, run
   `python3 clients/icons/write-helper-icons.py`, and add a new one to `SpecNames`.
 - **`AttentionTests`** pin when the menu bar icon shows its dot, and the reason its tooltip gives.
+- **`SystemFontTests`** lay San Francisco out at each size the helper uses, Regular and SemiBold, and fail when a
+  width is more than 0.2% from CoreText's own layout of the same text. They run on macOS and skip elsewhere.
 - **The extension's tests** cover `healdan_logic.py` with fakes for LibreOffice, and build the `.oxt` and check that
   its files agree. A real LibreOffice isn't part of them.
 

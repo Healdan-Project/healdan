@@ -10,6 +10,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Test-only packages. -->
+    <PackageVersion Include="Avalonia.Headless" Version="12.1.4" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="YamlDotNet" Version="16.3.0" />
