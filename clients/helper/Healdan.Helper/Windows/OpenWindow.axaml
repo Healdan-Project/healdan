@@ -49,7 +49,7 @@
           <Border Classes="crumb" DockPanel.Dock="Top">
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True" />
-              <Button x:Name="StarButton" Grid.Column="1" Classes="tool" AutomationProperties.Name="Favourite">
+              <Button x:Name="StarButton" Grid.Column="1" Classes="tool" AutomationProperties.Name="Add to Favorites">
                 <local:IconView x:Name="StarIcon" Classes="star" Data="{StaticResource Icon.star}" />
               </Button>
             </Grid>
@@ -100,7 +100,7 @@
                 <TextBlock Text="Older version: opens read-only" FontSize="11" Foreground="{DynamicResource HdCautionTextBrush}" />
               </StackPanel>
             </StackPanel>
-            <Button x:Name="DocStarButton" Grid.Column="2" Classes="tool" VerticalAlignment="Top" IsVisible="False" AutomationProperties.Name="Favourite">
+            <Button x:Name="DocStarButton" Grid.Column="2" Classes="tool" VerticalAlignment="Top" IsVisible="False" AutomationProperties.Name="Add to Favorites">
               <local:IconView x:Name="DocStarIcon" Classes="star" Data="{StaticResource Icon.star}" />
             </Button>
           </Grid>
