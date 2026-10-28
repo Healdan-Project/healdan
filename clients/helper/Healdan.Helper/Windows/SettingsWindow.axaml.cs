@@ -15,7 +15,8 @@ namespace Healdan.Helper.Windows;
 /// kind of file, as grouped rows. One server per helper (spec §5.1), so the address changes only by signing out and in
 /// again. In M3 every kind opens in LibreOffice, so the choice is shown, as plain text, but fixed. Below them: whether
 /// the helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
-/// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does.
+/// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does, and while
+/// an older version is, Update…, which does the same (changed in the build).
 /// </summary>
 public partial class SettingsWindow : Window
 {
@@ -24,7 +25,7 @@ public partial class SettingsWindow : Window
     /// <summary>For the XAML loader; the helper always opens it with the settings.</summary>
     public SettingsWindow() => InitializeComponent();
 
-    /// <param name="extension">The extension's check, which Install… runs; null when the build has none.</param>
+    /// <param name="extension">The extension's check, which Install… (or Update…) runs; null when the build has none.</param>
     internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, LoginItemSummary login, ExtensionCheck? extension) : this()
     {
         // As Sign In takes it: https:// left out, as Sign In adds it, and http:// or a path kept.
@@ -73,6 +74,7 @@ public partial class SettingsWindow : Window
         ExtensionValue.Text = extension.Value;
         (ExtensionNote.Text, ExtensionNote.IsVisible) = (extension.Note, extension.Note is not null);
         InstallButton.IsVisible = extension.CanInstall;
+        InstallButton.Content = extension.Button; // Install…, or Update… while an older version is installed
         ToolTip.SetTip(ExtensionRow, extension.Tip);
     }
 

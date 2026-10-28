@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -181,7 +182,9 @@ internal sealed class BrowseControls
             p.Star.IsVisible = _browser.Folder is not null;
             var favorite = _browser.Folder is { } folder && _browser.IsFavorite(folder);
             p.StarIcon.Classes.Set("on", favorite);
-            ToolTip.SetTip(p.Star, favorite ? "Remove from Favorites" : "Add to Favorites");
+            var star = favorite ? "Remove from Favorites" : "Add to Favorites";
+            ToolTip.SetTip(p.Star, star);
+            AutomationProperties.SetName(p.Star, star); // a screen reader hears what the star would do, as the tooltip says (polish spec §9)
             if (p.NewFolder is { } newFolder)
             {
                 newFolder.IsEnabled = _browser.Folder is { Kind: not "searchFolder" };

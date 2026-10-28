@@ -6,11 +6,17 @@ namespace Healdan.Helper.Core.Ui;
 /// </summary>
 public static class Attention
 {
-    public static string? Reason(bool signedIn, bool startFailed, bool crashed, int kept, bool extensionMissing) =>
+    /// <param name="extensionMissing">The bundled LibreOffice extension isn't installed (<c>ExtensionCheck.Missing</c>).</param>
+    /// <param name="extensionOutdated">
+    /// An older version of it is (<c>ExtensionCheck.Older</c>), so its reason is that it needs updating, not that it
+    /// isn't installed (changed in the build).
+    /// </param>
+    public static string? Reason(bool signedIn, bool startFailed, bool crashed, int kept, bool extensionMissing, bool extensionOutdated) =>
         !signedIn ? "Not Signed In"
         : startFailed ? "Couldn't Start"
         : crashed ? "A Document Closed Unexpectedly"
         : kept > 0 ? "Not Yet in Healdan"
+        : extensionOutdated ? "LibreOffice Extension Needs Updating"
         : extensionMissing ? "LibreOffice Extension Not Installed"
         : null;
 

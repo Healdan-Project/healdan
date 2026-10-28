@@ -80,7 +80,8 @@ internal sealed class TrayMenu : IDisposable
     {
         var missing = _extension.Refresh(); // reads LibreOffice's registry, so the item goes once the user has accepted it
         var copies = _session.OpenCopies();
-        var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, copies.Any(_session.HasCrashed), _session.KeptCopies().Count, missing);
+        var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, copies.Any(_session.HasCrashed), _session.KeptCopies().Count, missing,
+            _extension.Older is not null);
         ShowDot(reason);
         _registry.IsEnabled = missing && OperatingSystem.IsMacOS();
 

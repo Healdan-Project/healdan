@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
 using Avalonia.Media.Imaging;
@@ -101,6 +102,7 @@ public partial class OpenWindow : Window
         _details = null;
         OpenButton.IsEnabled = true;
         ShowHeader(doc);
+        VersionsTab.Content = "Versions"; // not the last document's count, while this one's load, or if it fails
         DocStarButton.IsVisible = false; // ShowStar shows it once the details are here and the star can act on them
         (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = ("Loading…", true, new Avalonia.Thickness(0, 12, 0, 0));
         PropertiesTab.IsVisible = VersionList.IsVisible = false;
@@ -220,7 +222,9 @@ public partial class OpenWindow : Window
         DocStarButton.IsVisible = true;
         var favorite = _browser.IsFavorite(doc);
         DocStarIcon.Classes.Set("on", favorite);
-        ToolTip.SetTip(DocStarButton, favorite ? "Remove from Favorites" : "Add to Favorites");
+        var star = favorite ? "Remove from Favorites" : "Add to Favorites";
+        ToolTip.SetTip(DocStarButton, star);
+        AutomationProperties.SetName(DocStarButton, star); // as the crumb row's star (polish spec §9)
     }
 
     /// <summary>An older version opens read-only, as does a file no office app edits; the header says which version (polish spec §6.2).</summary>
