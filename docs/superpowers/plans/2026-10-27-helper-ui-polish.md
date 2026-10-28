@@ -78,7 +78,7 @@ The owner hears about these when the plan is handed over. Task 13 folds 1–4 in
 - **The renderer** is a scratch tool from the design session, outside the repo. It draws all ten windows, light and dark, into PNGs:
 
   ```bash
-  R=/private/tmp/claude-501/-Users-robert-Projects-healdan--claude-worktrees-healdan-helper-ui-polish-085f29/2af7a6b3-6aa7-45ff-833d-c73640dc756d/scratchpad/render
+  R=<the renderer's folder>    # the design session's scratch renderer, outside the repo
   $R/render.sh                 # every window, light and dark, into $R/out/<window>-<light|dark>.png
   $R/render.sh open dark       # one window and theme
   $R/compare.sh                # changed pixels against $R/baseline/, with diffs in $R/diff/
@@ -86,7 +86,7 @@ The owner hears about these when the plan is handed over. Task 13 folds 1–4 in
 
   - `baseline/` holds the before images. Don't rebase it until Task 9.
   - Its `RenderApp.axaml` copies `App.axaml`'s styles, and it warns when they drift. Task 2 brings it in step, and later tasks keep it so.
-  - If the scratchpad has gone, rebuild the renderer before Task 2:
+  - If the renderer has gone, rebuild it before Task 2:
     - a console project referencing `Healdan.Helper.csproj` by path, with `Avalonia.Headless` and `Avalonia.Skia` 12.1.4;
     - Skia drawing, not the headless stub;
     - an `Application` with `App.axaml`'s styles;
@@ -2795,7 +2795,8 @@ Run by the owner with the packaged helper (`clients/helper/packaging/mac/package
 - [ ] **Step 7: Keyboard reach** (Review Focus 1; Task 5, Step 4): in the packaged helper:
   - Tab through Open, Save, Properties, Settings and each alert, and check every control takes focus in turn;
   - in Open's details, the Left and Right arrow keys switch Properties and Versions;
-  - read-only values (a detail's value, About's version and server lines) skip Tab, and can still be selected with the mouse and copied with Cmd+C.
+  - read-only values skip Tab, and can still be selected with the mouse and copied with Cmd+C: Save's and Properties' read-only values and their Client / Matter, Settings' Address, and About's version and server lines. (Open's detail values are plain text, not selectable, so they don't take part.)
+  - with VoiceOver on (Cmd+F5), each of these is read by its name: the places in Open and Save (such as "Recent Documents", not "StackPanel"), Save's **New Folder**, the **File Format** pop-up and its choices (such as "OpenDocument Text (.odt)", not "odt"), the favourite stars ("Add to Favorites" or "Remove from Favorites", as their tooltips say), and Open's **Properties** and **Versions** tabs.
 - [ ] **Step 8: Banding while a list scrolls** (Task 2): in Open and Save, with a list long enough to scroll, check each alternating band stays with its row as the rows move.
 - [ ] **Step 9: Sign In's keychain line:** check it breaks as "…in the keychain," and "never your password.", with no word alone on a line, in light and dark.
 - [ ] **Step 10: Every trailing "…"** (the ellipsis fix): Settings' **Install…**, **Open from Local Computer…** and **Save to Local Computer…** each show three whole dots.
@@ -2850,3 +2851,7 @@ Every call made while building, in order. "Where" is the task or review that rai
 ## Follow-ups
 
 - **Letter spacing in the helper's San Francisco type** (owner, at Task 9's review). HarfBuzz lays the font out at its default Display optical size (28) while Skia draws it at Text size, so the spacing doesn't match the glyphs drawn. The ellipsis fix (26e7a7232) stops the overhang clipping but leaves the spacing as it is. Look for a way to make layout and drawing agree (the font's optical-size axis, or another text-measuring path), and check the packaged app on the Mac in Task 14, since the renders and the app share Skia and the font.
+- **Fluent's part names fail silently on an Avalonia upgrade.** Styles in `HelperStyles.axaml` reach into Fluent's templates by part name: the pop-up button's `DropDownGlyph`, the checkbox's `NormalRectangle`, the date picker's `PART_TextBox`, `PART_Button` and `LayoutRoot`, and the text box's `PART_BorderElement` and `PART_Placeholder`. A renamed part drops its style without an error, so check them in the renders whenever the Avalonia pins in `Directory.Packages.props` move, or add a comment beside the pins saying so.
+- **`default` cases for the mark's shapes.** `HealdanMark.Silhouette()` and `IconRender`'s `DrawShapes` walk the mark's shapes by kind. A new kind of shape would be left out of the menu bar icon and the extension's 42 px mark without a word, so each could throw on a kind it doesn't know.
+- **Settings reads LibreOffice's registry twice** as it opens: `ExtensionCheck.Summary()` for the row and `ExtensionCheck.Describe()` for its tooltip each call `Refresh()`. One read, shared by both, would do.
+- **Tabler's version in three places.** `clients/icons/README.md` and both `THIRD-PARTY-NOTICES.txt` files (the helper's and the extension's) name the Tabler release. Moving to a new release changes all three, and nothing checks that they agree.

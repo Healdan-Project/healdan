@@ -48,10 +48,10 @@
           <Border Classes="crumb" DockPanel.Dock="Top">
             <Grid ColumnDefinitions="*,Auto,Auto">
               <StackPanel x:Name="CrumbPanel" Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True" />
-              <Button x:Name="StarButton" Grid.Column="1" Classes="tool" AutomationProperties.Name="Favourite">
+              <Button x:Name="StarButton" Grid.Column="1" Classes="tool" AutomationProperties.Name="Add to Favorites">
                 <local:IconView x:Name="StarIcon" Classes="star" Data="{StaticResource Icon.star}" />
               </Button>
-              <Button x:Name="NewFolderButton" Grid.Column="2" Margin="6,0,0,0">
+              <Button x:Name="NewFolderButton" Grid.Column="2" Margin="6,0,0,0" AutomationProperties.Name="New Folder">
                 <StackPanel Orientation="Horizontal" Spacing="5">
                   <local:IconView Data="{StaticResource Icon.folder-plus}" Width="14" Height="14" />
                   <TextBlock Text="New Folder" />
@@ -113,7 +113,7 @@
             <TextBlock x:Name="FormNotice" Classes="muted" TextWrapping="Wrap" IsVisible="False" />
             <StackPanel Spacing="2" Margin="0,4,0,0">
               <TextBlock Text="File Format" Classes="label" Margin="0,0,0,3" />
-              <ComboBox x:Name="FormatPicker" HorizontalAlignment="Stretch" />
+              <ComboBox x:Name="FormatPicker" HorizontalAlignment="Stretch" AutomationProperties.Name="File Format" />
               <TextBlock x:Name="FormatProblem" Classes="problem" IsVisible="False" Text="LibreOffice didn't say which formats it can save in." />
             </StackPanel>
           </StackPanel>

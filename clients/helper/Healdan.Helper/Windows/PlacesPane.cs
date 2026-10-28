@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Healdan.Helper.Core.Browse;
@@ -26,7 +27,7 @@ internal sealed class PlacesPane
                     Focusable = false,
                     Classes = { "group" }
                 });
-            _list.Items.Add(new ListBoxItem
+            var item = new ListBoxItem
             {
                 Content = new StackPanel
                 {
@@ -35,7 +36,10 @@ internal sealed class PlacesPane
                     Children = { Icons.View(Icon(places[i].Kind), 15), new TextBlock { Text = places[i].Label, VerticalAlignment = VerticalAlignment.Center } }
                 },
                 Tag = places[i]
-            });
+            };
+            // Screen readers name an item from its content, which is now an icon and a label: they'd say "StackPanel" (polish spec §9).
+            AutomationProperties.SetName(item, places[i].Label);
+            _list.Items.Add(item);
         }
         _list.SelectionChanged += (_, _) =>
         {

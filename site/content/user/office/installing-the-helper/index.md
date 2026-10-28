@@ -43,7 +43,8 @@ checked by Apple, so macOS doesn't warn about it otherwise.
 Healdan's icon appears in the menu bar. The helper has no Dock icon, and shows a window only when it needs you.
 
 A dot on the icon means the helper needs you: you're signed out, it couldn't start, a document closed unexpectedly, a
-copy is Not Yet in Healdan, or LibreOffice's extension isn't installed. Point at the icon to see which.
+copy is Not Yet in Healdan, or LibreOffice's extension isn't installed or needs updating. Point at the icon to see
+which, such as "LibreOffice Extension Needs Updating".
 
 ### Sign In
 
@@ -133,7 +134,7 @@ Click Healdan's icon in the menu bar.
 | Not Yet in Healdan | Copies with changes Healdan can't take, such as after your check-out ended, kept once their window closed. Choose one to open it as it is, then use Save as New Document: see [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended) |
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
 | Open Healdan in Browser | Healdan's web page, on the helper's server, in your usual browser. It works when the helper is signed out too: the web page has its own sign-in |
-| Install the LibreOffice Extension… | Only while the extension isn't installed |
+| Install the LibreOffice Extension… | Only while the extension isn't installed, or an older version is |
 | Settings… | See [Settings](#settings) |
 | Sign Out, or Sign In… | See [Signing Out](#signing-out) |
 | About Healdan Helper | The helper's version, and the server's: see [About Healdan Helper](#about-healdan-helper) |
@@ -157,7 +158,8 @@ Settings has three groups:
     To stop it, turn it off in **System Settings › General › Login Items & Extensions**.
   - **LibreOffice Extension:** the version installed, and when it was installed, or **Not Installed**. While the
     extension isn't installed, **Install…** asks LibreOffice to add it, as the menu's **Install the LibreOffice
-    Extension…** does.
+    Extension…** does. While an older version is installed, the row shows that version, with **Update…**, which asks
+    LibreOffice to add the helper's newer one in the same way.
 
 ## About Healdan Helper
 

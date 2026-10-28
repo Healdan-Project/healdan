@@ -15,18 +15,22 @@ namespace Healdan.Helper.Windows;
 /// kind of file, as grouped rows. One server per helper (spec §5.1), so the address changes only by signing out and in
 /// again. In M3 every kind opens in LibreOffice, so the choice is shown, as plain text, but fixed. Below them: whether
 /// the helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
-/// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does.
+/// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does, and while
+/// an older version is, Update…, which does the same (changed in the build).
 /// </summary>
 public partial class SettingsWindow : Window
 {
     /// <summary>For the XAML loader; the helper always opens it with the settings.</summary>
     public SettingsWindow() => InitializeComponent();
 
-    /// <param name="install">What Install… runs; the row then shows the summary it returns. Null when the build has no extension.</param>
+    /// <param name="install">What Install… (or Update…) runs; the row then shows the summary it returns. Null when the build has no extension.</param>
     internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, LoginItemSummary login, ExtensionSummary extension,
         string extensionTip, Func<Task<ExtensionSummary>>? install) : this()
     {
-        ServerValue.Text = server is null ? "Not Set Yet" : HealdanLink.HostAndPort(new Uri(server));
+        // A hand-edited Server setting may not be an address at all: shown as it is, rather than ending the helper.
+        ServerValue.Text = server is null ? "Not Set Yet"
+            : Uri.TryCreate(server, UriKind.Absolute, out var uri) && uri.Authority.Length > 0 ? HealdanLink.HostAndPort(uri)
+            : server;
         ServerNote.Text = signedIn
             ? "To use another server, sign out from the Healdan Helper menu, then sign in with its address."
             : "Sign in from the Healdan Helper menu to choose the server.";
@@ -61,6 +65,7 @@ public partial class SettingsWindow : Window
         ExtensionValue.Text = extension.Value;
         (ExtensionNote.Text, ExtensionNote.IsVisible) = (extension.Note, extension.Note is not null);
         InstallButton.IsVisible = extension.CanInstall;
+        InstallButton.Content = extension.Button; // Install…, or Update… while an older version is installed
     }
 
     /// <summary>A kind of file, its extensions under it, and the app that opens it as plain text: no disabled pop-up.</summary>

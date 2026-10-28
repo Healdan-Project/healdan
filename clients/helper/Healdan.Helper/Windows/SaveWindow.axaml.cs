@@ -1,6 +1,5 @@
 using System.Text.Json.Nodes;
 using Avalonia.Controls;
-using Avalonia.Controls.Templates;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Browse;
@@ -99,6 +98,16 @@ public partial class SaveWindow : Window
         await _browser!.StartAsync(Place.RecentFolders, folderId);
     }
 
+    /// <summary>
+    /// One of the File Format pop-up's choices: the format LibreOffice saves in, and its label. Screen readers read the
+    /// pop-up's value and items from <see cref="ToString"/>, so it's the label, "OpenDocument Text (.odt)", not "odt"
+    /// (polish spec §9).
+    /// </summary>
+    private sealed record FormatChoice(string Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
     /// <summary>The formats LibreOffice can save in, as a File Format pop-up (polish spec §6.3): the same choices, order and default.</summary>
     private void AddFormats(SaveNewRequest request)
     {
@@ -108,14 +117,14 @@ public partial class SaveWindow : Window
             (FormatPicker.IsVisible, FormatProblem.IsVisible) = (false, true);
             return;
         }
-        FormatPicker.ItemTemplate = new FuncDataTemplate<string>((format, _) => new TextBlock { Text = format is null ? "" : FileFormats.Label(format) });
-        FormatPicker.ItemsSource = request.Formats;
-        FormatPicker.SelectedItem = _format;
+        var choices = request.Formats.Select(f => new FormatChoice(f, FileFormats.Label(f))).ToList();
+        FormatPicker.ItemsSource = choices;
+        FormatPicker.SelectedItem = choices.FirstOrDefault(c => c.Id == _format);
         FormatPicker.SelectionChanged += (_, _) =>
         {
-            if (FormatPicker.SelectedItem is string format)
+            if (FormatPicker.SelectedItem is FormatChoice choice)
             {
-                _format = format;
+                _format = choice.Id;
                 UpdateSave();
             }
         };
