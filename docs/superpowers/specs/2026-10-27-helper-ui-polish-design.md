@@ -185,7 +185,7 @@ The mockups are `open-window.html` and `open-details-tabs.html`.
   - **When an older version is chosen,** the header shows its number, and a Caution line with `eye` reads **Older version: opens read-only**. It replaces today's "An older version opens read-only." under the versions. Choosing another document goes back to its current version.
   - **A segmented control:** **Properties** and **Versions (n)**. Each new Open window starts on Properties. The tab then stays as the user left it while they choose other documents. (changed in the build) The Left and Right arrow keys switch between them, through a `KeyDown` handler on the control: its equal-width `UniformGrid` strip isn't a navigable container, so the arrow keys never reached Versions without one.
   - **Properties:** the thumbnail, when the server has one, at its own aspect ratio up to 140 pt tall, with 6 pt corners and a hairline. Then today's label and value rows, with labels in Secondary 11 pt and an 84 pt label column. With no thumbnail there's nothing in its place: the header's icon stands for the file, and the "No preview yet" box goes.
-  - **Versions:** today's list, with the Pill selection, filling the pane's height.
+  - **Versions:** today's list, with the Pill selection, filling the pane's height. (changed in the build) A document with no versions says "No versions to show." there, centred and muted, rather than showing an empty list.
   - **Before a document is chosen,** the pane shows only today's "Choose a document to see its properties and versions.", centred and muted, with no header or tabs.
 - **Search's placeholder** adds **", or type #1234"** in the scopes where a typed doc # jumps to the document (`Browser.SearchAsync`). It comes from `Browser.SearchPlaceholder`, so a test pins it. (changed in the build) Only the Documents scope's placeholder says it. A typed doc # jumps from any scope, but Folders, Matters and Clients keep their placeholders, so those stay short. The search field takes the toolbar's spare width, with the scope pop-up beside the chevrons (§5.3), so the hint shows whole.
 - **Footer:** **Open from Local Computer…**, now with an ellipsis because it opens another window, then Open Read-Only, Cancel and Open.
@@ -208,14 +208,15 @@ The form shell, with the same header as Open's details pane (the file-kind icon,
 
 The mockup is `settings-and-about.html`. Grouped rows, as in the Mac's System Settings, on the Grouped colour:
 
-- **Server:** Address, with the host on the right. Today's note goes under the group.
+- **Server:** Address, with the host on the right. Today's note goes under the group. (changed in the build) The value is the address as Sign In takes it, with only `https://` left out, since Sign In adds it back: a server on `http://` or under a path keeps them, where the host and port alone read as an address Sign In wouldn't reach. It isn't parsed as a `Uri`, so a hand-edited Server setting that isn't an address shows as it is, rather than stopping Settings opening.
 - **Open Each Kind of File In:** a row for each kind, with its icon, its name, and its extensions under the name. The app's name is plain text on the right: no disabled pop-up. When a later milestone makes the choice real, the value becomes a pop-up in the same row. Today's note about other files goes under the group.
 - **This Computer:**
-  - **Start at Sign-In,** with an On or Off status dot (changed in the build: `HdOnBrush` and `HdOffBrush`, §4.1).
+  - **Start at Sign-In,** with an On or Off status dot (changed in the build: `HdOnBrush` and `HdOffBrush`, §4.1). (changed in the build) Whenever it isn't on, a line under the row's name says why, or how to turn it on, such as "To turn it on, add Healdan Helper in System Settings › General › Login Items & Extensions.", where it was only in a tooltip. One look at the login item gives the value, the dot and the line.
   - **LibreOffice Extension,** with the version on the right and "Installed on …" under the name.
-  - **Where the rows' data comes from.** They take the login item's state and the extension's record as data, not by parsing today's sentences. `LoginItem.Describe()` and `ExtensionCheck.Describe()` stay, as the rows' tooltips.
+  - **Where the rows' data comes from.** They take the login item's state and the extension's record as data, not by parsing today's sentences. `LoginItem.Describe()` and `ExtensionCheck.Describe()` stay, as the rows' tooltips. (changed in the build) `LoginItem.Describe()` went, since Start at Sign-In's line is its summary's note. The extension's summary carries its tooltip (`ExtensionSummary.Tip`), which `ExtensionCheck.Describe()` returns, so Settings reads LibreOffice's registry once for the row and its tooltip.
   - **While the extension isn't installed (owner),** the row reads **Not Installed** with an **Install…** button. The button runs what the menu's Install item runs (`ExtensionCheck.InstallFromMenu`), and the row then shows that outcome's text. (changed in the build) The row shows `ExtensionCheck.Summary()` again after the install, not a text mapped from the install's outcome: the summary already says "Waiting for you to accept version … in LibreOffice".
   - (changed in the build) **While an older version is installed,** the row shows that version, such as `0.1.0`, with an **Update…** button that runs the same install. The line under the name reads "Version 0.2.0 is waiting for you to accept it in LibreOffice." once the helper has opened it there, or "Version 0.2.0 is ready to add to LibreOffice." before, and the tooltip says which version is installed and how to update it. The helper counts an older extension as missing, so as to offer the new one, and the row used to read Not Installed while the older version's toolbar was plainly in LibreOffice; the extension's 0.2.0 makes that every existing install's path. `ExtensionCheck` keeps what it last read of the installed extension, and `ExtensionCheck.Older` names the older version. Only a usable one counts: with nothing installed, or a turned-off copy, the row reads Not Installed as before.
+  - (changed in the build) **The row follows the registry.** While the extension is missing or older, the menu bar icon reads LibreOffice's registry every 5 seconds (§7.2). A change raises `ExtensionCheck.Changed`, as does an older version going in or out while the extension is still missing, and Settings, while it's open, shows the summary again. So the row, its button (Install… or Update…) and its tooltip follow an install the user accepts in LibreOffice, without reopening Settings.
 - **Done** stays at the bottom right.
 
 ### 6.6 About
@@ -254,6 +255,7 @@ The text sits on the window's colours in both themes (no near-black panel) and d
   Saves waiting to be sent don't count, since they clear by themselves.
 - **The tooltip** names the first reason, for example **Healdan Helper: Not Signed In**. (changed in the build) An older extension's reason is **LibreOffice Extension Needs Updating**, not **LibreOffice Extension Not Installed**, which stays for an extension that isn't there at all (§6.5).
 - **The rule** is a pure function in `Healdan.Helper.Core` (`Ui/Attention.cs`), with tests. `TrayMenu` swaps the icon whenever it rebuilds.
+- (changed in the build) **The extension's dot clears by itself.** LibreOffice's registry was read again only as the menu opened, so after the user accepted the extension the dot stayed until they opened the menu. On macOS, while the extension is missing or older, `TrayMenu` reads the registry every 5 seconds, and rebuilds on `ExtensionCheck.Changed`, so the dot goes, or its reason changes, a few seconds after the user acts in LibreOffice.
 
 ## 8. The LibreOffice extension
 
@@ -326,7 +328,7 @@ The scratch renderer from this design session draws all ten windows in light and
 - the menu bar icon and its dot, on light and dark menu bars and when highlighted;
 - the LibreOffice toolbar and menu on a Retina screen, in light and dark, and in high contrast (§8.2);
 - the Extension Manager's icon;
-- Settings' Install… while the extension isn't installed.
+- Settings' Install… while the extension isn't installed. (changed in the build) Also Update… while an older one is, and the tooltip's Needs Updating; and, after the user accepts the extension in LibreOffice, the dot going by itself and Settings' row following while it stays open.
 
 GNOME's checks go with M3's phase 2, which hasn't started.
 
