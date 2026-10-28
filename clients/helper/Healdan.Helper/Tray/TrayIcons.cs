@@ -17,13 +17,14 @@ internal static class TrayIcons
     private const double Square = 260;
 
     /// <summary>
-    /// The dot's centre and radii in the mark's square: at the shield's top right corner, about 5 points across with a ring
-    /// about 1.2 points wide. The ring stops short of the back page's corner, so it cuts the shield's shoulder but doesn't
-    /// open a page into it (checked by rendering at 44 pixels and enlarged, as a 22-point icon).
+    /// The dot's centre and radii in the mark's square: at the shield's top right corner, about 7 points across with a ring
+    /// about 1.1 points wide, over the shield's shoulder as a badge is. macOS draws the icon at about 17 points, where the
+    /// first dot, about 5 points across and clear of the back page, was too small to notice (Task 14); this one covers the
+    /// back page's corner, too thin to show at that size (checked by rendering at 34 and 44 pixels and enlarged).
     /// </summary>
-    private static readonly Point Dot = new(226, 34);
-    private const double DotRadius = 30;
-    private const double RingRadius = 44;
+    private static readonly Point Dot = new(216, 44);
+    private const double DotRadius = 44;
+    private const double RingRadius = 57;
 
     /// <param name="color">Black on macOS, which tints it as a template image; white on Linux, for GNOME's dark top bar.</param>
     public static WindowIcon Draw(bool dot, Color color)
