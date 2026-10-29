@@ -1,7 +1,20 @@
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
           xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 https://maven.apache.org/xsd/settings-1.0.0.xsd">
-  <!-- Same repositories as .github/workflows/build-logicaldoc.yml; some dependencies are not on Maven Central. -->
+  <!-- CI, the Docker build and local builds copy this file to ~/.m2/settings.xml. Some dependencies aren't on Maven
+       Central: Healdan hosts the ones only LogicalDOC's repository has, and Terracotta's repository has the rest.
+       The design is docs/superpowers/specs/2026-10-29-healdan-maven-repository-design.md. -->
+  <mirrors>
+    <!-- Upstream's POMs declare LogicalDOC's repository (id logicaldoc, on logicaldoc.sourceforge.net). A mirror
+         matches by id, so every request for it, whatever URL a POM gives, goes to Healdan's copies instead.
+         .github/scripts/check-maven-repositories.py fails the build without this mirror. -->
+    <mirror>
+      <id>healdan</id>
+      <name>Healdan's copies of artifacts only LogicalDOC's repository has</name>
+      <mirrorOf>logicaldoc</mirrorOf>
+      <url>https://maven.healdan.com/</url>
+    </mirror>
+  </mirrors>
   <profiles>
     <profile>
       <id>with-extra-repos</id>
@@ -9,11 +22,6 @@
         <repository>
           <id>central</id>
           <url>https://repo1.maven.org/maven2</url>
-        </repository>
-        <!-- LogicalDOC repository (hosts the *-jakarta Jackrabbit artifacts, etc.) -->
-        <repository>
-          <id>logicaldoc</id>
-          <url>https://logicaldoc.sourceforge.net/maven/</url>
         </repository>
         <!-- Terracotta repository (org.terracotta.internal:statistics, etc.) -->
         <repository>
