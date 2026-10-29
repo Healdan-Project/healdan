@@ -12,6 +12,10 @@
   <display-name>
     <name lang="en">Healdan</name>
   </display-name>
+  <icon>
+    <default xlink:href="icons/healdan-42.png"/>
+    <high-contrast xlink:href="icons/healdan-42-hc.png"/>
+  </icon>
   <publisher>
     <name xlink:href="https://docs.healdan.com" lang="en">Healdan Project</name>
   </publisher>

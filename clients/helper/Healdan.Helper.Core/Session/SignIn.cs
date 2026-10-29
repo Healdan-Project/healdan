@@ -1,14 +1,18 @@
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
 
 namespace Healdan.Helper.Core.Session;
 
 /// <summary>
-/// Signing in once, and keeping only the device token, in the keychain (spec §5.2). The password is in memory for the
-/// one call; no file, log or exception message holds it or the token.
+/// Signing in once, and keeping only the device token, in the keychain (spec §5.2), with the device id it was issued
+/// for (<see cref="KeptToken"/>). The password is in memory for the one call; no file, log or exception message holds
+/// it or the token.
 /// </summary>
-/// <param name="revokeTimeout">How long Sign Out waits for the server to revoke the token; 30 s by default.</param>
-public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity device, TimeSpan? revokeTimeout = null)
+/// <param name="revokeTimeout">How long Sign Out, or the revoke of a kept token that isn't this computer's, waits for the server; 30 s by default.</param>
+/// <param name="log">Where the revoke of a kept token that isn't this computer's is noted.</param>
+public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity device, TimeSpan? revokeTimeout = null,
+    HelperLog? log = null)
 {
     /// <summary>The API version this helper speaks.</summary>
     public const string SupportedApiVersion = "v1";
@@ -22,13 +26,22 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
     /// <summary>
     /// Takes the token from the keychain and checks it with <c>/me</c>. A <c>401</c> means it expired or was revoked:
     /// it is removed and the answer is false, so the caller asks for the password. Other failures (no network)
-    /// propagate and keep the token.
+    /// propagate and keep the token. A token issued to another device id, or kept without one by an older helper, is
+    /// never used: the server would record this computer's check-outs under that device, and this computer would then
+    /// read them as another's. It's revoked and removed, and the answer is false.
     /// </summary>
     public async Task<bool> TryResumeAsync(CancellationToken ct = default)
     {
-        var token = keychain.Load(Account);
-        if (token is null) return false;
-        api.Token = token;
+        var secret = keychain.Load(Account);
+        if (secret is null) return false;
+        var kept = KeptToken.Read(secret);
+        if (kept?.Device != device.Id)
+        {
+            await DiscardAsync(kept?.Token ?? secret,
+                kept is null ? "was kept without its device id" : $"was issued to device {kept.Device}, not this computer's {device.Id}", ct);
+            return false;
+        }
+        api.Token = kept.Token;
         try
         {
             await api.GetJsonAsync("v1/me", ct);
@@ -40,6 +53,36 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
             keychain.Delete(Account);
             return false;
         }
+    }
+
+    /// <summary>
+    /// Revokes a kept token that isn't this computer's, then removes it. It's removed whether or not Healdan answers:
+    /// one it couldn't revoke is still accepted there until it expires, but nothing here uses it again.
+    /// </summary>
+    private async Task DiscardAsync(string token, string why, CancellationToken ct)
+    {
+        log?.Warn($"The sign-in kept for {Account} {why}, so it's revoked and a new one is asked for");
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(_revokeTimeout);
+        api.Token = token;
+        try
+        {
+            await api.SignOutAsync(timeout.Token);
+        }
+        catch (ApiException e) when (e.Status == 401)
+        {
+            // already expired or revoked
+        }
+        catch (Exception e) when (e is ApiException or HttpRequestException or IOException
+                                      || (e is OperationCanceledException && !ct.IsCancellationRequested))
+        {
+            log?.Warn($"Healdan couldn't revoke that sign-in ({e.GetType().Name}); it's forgotten here all the same");
+        }
+        finally
+        {
+            api.Token = null;
+        }
+        keychain.Delete(Account);
     }
 
     /// <summary>
@@ -55,7 +98,7 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
             throw new InvalidOperationException(
                 $"This server speaks API {server.ApiVersion}, which this version of Healdan Helper doesn't. Update the helper.");
         var token = await api.SignInAsync(user, password, device.Name, device.Id, ct);
-        keychain.Save(Account, token);
+        keychain.Save(Account, new KeptToken(device.Id, token).ToSecret());
     }
 
     /// <summary>

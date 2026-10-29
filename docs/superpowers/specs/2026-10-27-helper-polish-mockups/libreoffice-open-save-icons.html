@@ -1,0 +1,34 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Helper polish: LibreOffice Open and Save icons</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>:root{--text-primary:#1d1d1f;--text-secondary:#6e6e73;--surface-1:#f3f3f2;--border:rgba(0,0,0,.12)}body{margin:24px auto;max-width:680px;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<style>
+.c{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:0.5rem 0}
+.card{background:var(--surface-1);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.h{font-size:13px;font-weight:500;color:var(--text-primary)}
+.d{font-size:12px;color:var(--text-secondary);line-height:1.5}
+.tbx{display:inline-flex;align-items:center;gap:2px;background:#F0F0F0;border:0.5px solid #D6D6D6;border-radius:6px;padding:3px 6px}
+.ico{position:relative;display:inline-flex;padding:3px 5px}
+.ico i{color:#3A3A3C}
+.sep{width:0.5px;height:18px;background:#C7C7CC;margin:0 5px}
+.bdg{position:absolute;color:#0C69C0}
+.zoom{display:flex;gap:18px;align-items:center;background:#F0F0F0;border-radius:8px;padding:10px 14px;width:max-content}
+.cap{font-size:11px;color:#6E6E73;text-align:center;margin-top:2px}
+</style>
+<h2 class="sr-only">Two options for Healdan's Open and Save toolbar icons as a folder and a floppy disk beside LibreOffice's own grey Open and Save: option A coloured in Healdan blue, option B grey with a small Healdan shield badge.</h2>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="sh" viewBox="0 0 260 260"><g transform="translate(22,5)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 C166,232 216,200 216,140 L216,30 Z" fill="#F0F0F0"/><path d="M108,14 L14,40 L14,140 C14,190 56,218 108,235 C160,218 202,190 202,140 L202,40 Z" fill="currentColor"/></g></symbol></defs></svg>
+<div class="c">
+<div class="card">
+<div class="h">A. Healdan blue</div>
+<div class="tbx"><span class="ico"><i class="ti ti-folder-open" style="font-size:17px" aria-label="LibreOffice Open"></i></span><span class="ico"><i class="ti ti-device-floppy" style="font-size:17px" aria-label="LibreOffice Save"></i></span><span class="sep"></span><span class="ico"><i class="ti ti-device-floppy" style="font-size:17px;color:#0C69C0" aria-label="Save to Healdan"></i></span><span class="ico"><i class="ti ti-folder-open" style="font-size:17px;color:#0C69C0" aria-label="Open from Healdan"></i></span><span class="sep"></span><span class="ico"><i class="ti ti-versions" style="font-size:17px" aria-hidden="true"></i></span><span class="ico"><i class="ti ti-file-plus" style="font-size:17px" aria-hidden="true"></i></span></div>
+<div class="zoom"><div><i class="ti ti-device-floppy" style="font-size:36px;color:#3A3A3C" aria-hidden="true"></i><div class="cap">LO Save</div></div><div><i class="ti ti-device-floppy" style="font-size:36px;color:#0C69C0" aria-hidden="true"></i><div class="cap">Healdan</div></div></div>
+<div class="d">Cleanest at 16 px. Colour alone tells them apart, so it's weaker for colour-blind users and in LibreOffice's high-contrast mode.</div>
+</div>
+<div class="card">
+<div class="h">B. Grey, with the shield</div>
+<div class="tbx"><span class="ico"><i class="ti ti-folder-open" style="font-size:17px" aria-label="LibreOffice Open"></i></span><span class="ico"><i class="ti ti-device-floppy" style="font-size:17px" aria-label="LibreOffice Save"></i></span><span class="sep"></span><span class="ico"><i class="ti ti-device-floppy" style="font-size:17px" aria-label="Save to Healdan"></i><svg class="bdg" width="10" height="10" style="right:1px;bottom:1px" aria-hidden="true"><use href="#sh"/></svg></span><span class="ico"><i class="ti ti-folder-open" style="font-size:17px" aria-label="Open from Healdan"></i><svg class="bdg" width="10" height="10" style="right:1px;bottom:1px" aria-hidden="true"><use href="#sh"/></svg></span><span class="sep"></span><span class="ico"><i class="ti ti-versions" style="font-size:17px" aria-hidden="true"></i></span><span class="ico"><i class="ti ti-file-plus" style="font-size:17px" aria-hidden="true"></i></span></div>
+<div class="zoom"><div><i class="ti ti-device-floppy" style="font-size:36px;color:#3A3A3C" aria-hidden="true"></i><div class="cap">LO Save</div></div><div style="position:relative"><i class="ti ti-device-floppy" style="font-size:36px;color:#3A3A3C" aria-hidden="true"></i><svg class="bdg" width="20" height="20" style="right:-3px;top:22px" aria-hidden="true"><use href="#sh"/></svg><div class="cap">Healdan</div></div></div>
+<div class="d">The blue shield badge marks every Healdan command the same way, and it still works in high contrast. It's a little busier at 16 px.</div>
+</div>
+</div>

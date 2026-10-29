@@ -259,8 +259,7 @@ public class VersionResource {
 			// The checks above leave it free or checked out to the caller, held here if on any device
 			String app = devices.current(document).map(HoldDevice::getApp).orElse(null);
 			if (!ApiViews.checkedOutBy(document, user)) {
-				DocumentManager.get().checkout(document.getId(),
-						CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
+				CheckoutResource.checkOut(document.getId(), session);
 				// So that if the check-in is refused, the check-out it leaves is this device's
 				devices.record(DocumentDAO.get().findById(document.getId()), caller.token(), app);
 			}
@@ -385,13 +384,15 @@ public class VersionResource {
 
 	/**
 	 * CE's check-in always releases the check-out, so a save while editing
-	 * checks the document out again. The old web page can take it in the
-	 * moment between (spec section 6.6): the save stands, and the answer's
+	 * checks the document out again, past the Office preview saving the
+	 * document as its conversion of the file ends ({@link
+	 * CheckoutResource#checkOut}). The old web page can take it in the moment
+	 * between (spec section 6.6): the save stands, and the answer's
 	 * {@code hold} shows who has the document.
 	 */
 	private static void checkOutAgain(long docId, Session session, long docNumber) {
 		try {
-			DocumentManager.get().checkout(docId, CheckoutResource.history(session, DocumentEvent.CHECKEDOUT));
+			CheckoutResource.checkOut(docId, session);
 		} catch (PersistenceException e) {
 			log.warn("Saved document #{} but couldn't check it out again: {}", docNumber, e.getMessage());
 		}

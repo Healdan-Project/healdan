@@ -1,0 +1,15 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="using:Healdan.Helper.Windows"
+             x:Class="Healdan.Helper.Windows.AlertMark"
+             Width="52" Height="52">
+  <!-- The alerts' icon (polish spec §5.2): the mark, with a caution badge on a window-coloured disc. -->
+  <Panel>
+    <local:HealdanMark Width="48" Height="48" HorizontalAlignment="Left" VerticalAlignment="Top" />
+    <Border Width="22" Height="22" CornerRadius="11" Background="{DynamicResource HdWindowBrush}"
+            HorizontalAlignment="Right" VerticalAlignment="Bottom">
+      <local:IconView Data="{StaticResource Icon.alert-triangle}" Width="17" Height="17"
+                      Foreground="{DynamicResource HdCautionBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+    </Border>
+  </Panel>
+</UserControl>

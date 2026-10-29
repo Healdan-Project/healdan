@@ -217,10 +217,8 @@ public class DocumentResource {
 			VersionResource.confirmStored(id, Long.parseLong(created.getCustomId()), null, user);
 
 			if (Boolean.TRUE.equals(request.checkOut())) {
-				DocumentHistory checkout = new DocumentHistory();
-				checkout.setSession(caller.session());
-				checkout.setEvent(DocumentEvent.CHECKEDOUT);
-				DocumentManager.get().checkout(id, checkout);
+				// Past the Office preview saving the document as its conversion of the new file ends
+				CheckoutResource.checkOut(id, caller.session());
 				// Held on the device that filed it, as by any check-out through the API; filing names no app
 				DeviceHolds.get().record(DocumentDAO.get().findById(id), caller.token(), null);
 			}

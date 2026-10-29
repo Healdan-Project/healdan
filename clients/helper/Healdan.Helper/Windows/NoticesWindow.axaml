@@ -7,11 +7,11 @@
         WindowStartupLocation="CenterScreen">
   <!-- Open-Source Notices (#89), from About: THIRD-PARTY-NOTICES.txt as the app carries it, read-only. -->
   <DockPanel>
-    <Border Classes="footer" DockPanel.Dock="Bottom">
+    <Border Classes="footer line" DockPanel.Dock="Bottom">
       <Button x:Name="DoneButton" Classes="footer accent" Content="Done" IsDefault="True" IsCancel="True" HorizontalAlignment="Right" />
     </Border>
-    <TextBox x:Name="NoticesText" IsReadOnly="True" TextWrapping="Wrap" AcceptsReturn="True"
+    <TextBox x:Name="NoticesText" Classes="notices" IsReadOnly="True" TextWrapping="NoWrap" AcceptsReturn="True"
              FontFamily="Menlo, DejaVu Sans Mono, Consolas" FontSize="12" BorderThickness="0" Padding="16,12"
-             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+             ScrollViewer.VerticalScrollBarVisibility="Auto" ScrollViewer.HorizontalScrollBarVisibility="Auto" />
   </DockPanel>
 </Window>

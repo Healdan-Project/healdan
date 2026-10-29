@@ -163,6 +163,55 @@ public class SaveTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testKeptCheckedOutPastABackgroundWrite() throws Exception {
+		// The Office preview saves the document when its conversion ends, which fell between CE's read and write of
+		// the check-out that keeps it held (CI, 2026-10-28)
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals("1.1", response.json().path("fileVersion").textValue());
+		assertEquals(clerk.getId(), response.json().path("hold").path("by").path("id").asLong());
+		Document saved = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.CHECKEDOUT, saved.getStatus());
+		assertEquals(Long.valueOf(clerk.getId()), saved.getLockUserId());
+		assertEquals(List.of("event.checkedout", "event.checkedin", "event.checkedout"), holdEvents(d));
+	}
+
+	@Test
+	public void testTakenInTheMomentBetween() throws Exception {
+		// The old web page can check it out between the check-in and the check-out that keeps it (spec section 6.6)
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, document -> {
+			document.setStatus(DocumentStatus.CHECKEDOUT);
+			document.setLockUserId(boss.getId());
+			document.setLockUser(boss.getFullName());
+		}).start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			webPage.assertWritten();
+		}
+
+		// The save stands, and the answer shows who has the document
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals("1.1", response.json().path("fileVersion").textValue());
+		assertEquals(boss.getId(), response.json().path("hold").path("by").path("id").asLong());
+		Document saved = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.CHECKEDOUT, saved.getStatus());
+		assertEquals(Long.valueOf(boss.getId()), saved.getLockUserId());
+	}
+
+	@Test
 	public void testComment() throws Exception {
 		Document d = file("a.docx");
 		String token = signIn(clerk);

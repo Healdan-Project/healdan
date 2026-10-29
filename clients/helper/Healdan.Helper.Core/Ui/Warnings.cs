@@ -18,10 +18,10 @@ public static class Warnings
             + $"{device} keeps its copy, and you can file it later as a new document.");
     }
 
-    /// <summary>After a Crash: "<c>title</c> closed unexpectedly. It's still checked out to you, and your local copy is kept."</summary>
-    public static string Crashed(string title, bool readOnly) => readOnly
-        ? $"{title} closed unexpectedly. It was read-only, so nothing is lost."
-        : $"{title} closed unexpectedly. It's still checked out to you, and your local copy is kept.";
+    /// <summary>After a Crash: "<c>title</c> closed unexpectedly." then what became of it (polish spec §6.8).</summary>
+    public static CrashedWarning Crashed(string title, bool readOnly) => new(
+        $"{title} closed unexpectedly.",
+        readOnly ? "It was read-only, so nothing is lost." : "It's still checked out to you, and your local copy is kept.");
 
     /// <summary>Sign Out couldn't reach Healdan to revoke the token (spec §5.2).</summary>
     /// <param name="server">The server's host, and its port when it isn't the usual one.</param>

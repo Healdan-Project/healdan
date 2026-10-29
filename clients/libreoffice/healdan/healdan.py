@@ -199,7 +199,11 @@ class Ui:
         self._async.addCallback(_Callback(fn, self.ext.log), None)
 
     def tell(self, doc, text, warning=True):
-        """An infobar in the document's window, or a message box where there's none (the Start Center)."""
+        """
+        An infobar in the document's window, the first sentence bold and the rest regular (polish spec 8.3), or a
+        message box where there's none (the Start Center).
+        """
+        headline, detail = logic.notice_parts(text)
         frame = None
         try:
             frame = doc.frame if doc is not None else self.ext.desktop().getCurrentFrame()
@@ -210,7 +214,8 @@ class Ui:
             if controller is not None and hasattr(controller, "appendInfobar"):
                 if controller.hasInfobar(INFOBAR):
                     controller.removeInfobar(INFOBAR)
-                controller.appendInfobar(INFOBAR, text, "", INFOBAR_WARNING if warning else INFOBAR_INFO, (), True)
+                controller.appendInfobar(INFOBAR, headline, detail, INFOBAR_WARNING if warning else INFOBAR_INFO,
+                                         (), True)
                 return
         except Exception:
             self.ext.log.exception("The infobar couldn't be shown")
@@ -218,7 +223,8 @@ class Ui:
             toolkit = self.ext.create("com.sun.star.awt.Toolkit")
             kind = uno.Enum("com.sun.star.awt.MessageBoxType", "WARNINGBOX" if warning else "INFOBOX")
             parent = frame.getContainerWindow() if frame is not None else None
-            toolkit.createMessageBox(parent, kind, 1, "Healdan", text).execute()  # 1: MessageBoxButtons.BUTTONS_OK
+            toolkit.createMessageBox(parent, kind, 1, "Healdan",
+                                     headline + ("\n\n" + detail if detail else "")).execute()  # 1: BUTTONS_OK
         except Exception:
             self.ext.log.exception("The notice couldn't be shown: %s", text)
 

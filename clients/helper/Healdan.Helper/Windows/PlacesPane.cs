@@ -1,4 +1,6 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Healdan.Helper.Core.Browse;
 
 namespace Healdan.Helper.Windows;
@@ -20,12 +22,24 @@ internal sealed class PlacesPane
             if (mode == BrowseMode.Open && i == Place.OpenBrowseFrom)
                 _list.Items.Add(new ListBoxItem
                 {
-                    Content = new TextBlock { Text = "BROWSE", LetterSpacing = 0.6 },
+                    Content = new TextBlock { Text = "Browse" },
                     IsEnabled = false,
                     Focusable = false,
-                    Classes = { "sep" }
+                    Classes = { "group" }
                 });
-            _list.Items.Add(new ListBoxItem { Content = places[i].Label, Tag = places[i] });
+            var item = new ListBoxItem
+            {
+                Content = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    Spacing = 7,
+                    Children = { Icons.View(Icon(places[i].Kind), 15), new TextBlock { Text = places[i].Label, VerticalAlignment = VerticalAlignment.Center } }
+                },
+                Tag = places[i]
+            };
+            // Screen readers name an item from its content, which is now an icon and a label: they'd say "StackPanel" (polish spec §9).
+            AutomationProperties.SetName(item, places[i].Label);
+            _list.Items.Add(item);
         }
         _list.SelectionChanged += (_, _) =>
         {
@@ -52,4 +66,16 @@ internal sealed class PlacesPane
             _quiet = false;
         }
     }
+
+    /// <summary>Each place's icon (polish spec §4.4).</summary>
+    private static string Icon(PlaceKind kind) => kind switch
+    {
+        PlaceKind.RecentDocuments => "clock",
+        PlaceKind.CheckedOutToMe => "lock",
+        PlaceKind.Favorites => "star",
+        PlaceKind.RecentMatters => "history",
+        PlaceKind.MyMatters => "briefcase",
+        PlaceKind.Clients => "building",
+        _ => "folder"
+    };
 }

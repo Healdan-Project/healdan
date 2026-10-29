@@ -3,6 +3,9 @@ package com.logicaldoc.healdan.api;
 import java.util.List;
 
 import org.apache.commons.lang.StringUtils;
+import org.hibernate.StaleStateException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -29,6 +32,7 @@ import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.healdan.token.HoldDevice;
 import com.logicaldoc.healdan.util.BasicPlane;
 
+import jakarta.persistence.OptimisticLockException;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -48,6 +52,11 @@ import jakarta.ws.rs.core.MediaType;
 @Path("/v1/documents/{docNumber: [0-9]+}/checkout")
 @Produces(MediaType.APPLICATION_JSON)
 public class CheckoutResource {
+
+	private static final Logger log = LoggerFactory.getLogger(CheckoutResource.class);
+
+	/** How many times CE is asked to check a document out while other writes keep overtaking it */
+	private static final int CHECKOUT_TRIES = 3;
 
 	/** The code of a refusal by the document's state, or by one of Healdan's rules */
 	static final String REFUSED = "refused";
@@ -117,7 +126,7 @@ public class CheckoutResource {
 				refuseImmutable(document, user, false, docNumber);
 				refuseArchived(document, docNumber);
 
-				DocumentManager.get().checkout(document.getId(), history(caller.session(), DocumentEvent.CHECKEDOUT));
+				checkOut(document.getId(), caller.session());
 				Document checkedOut = DocumentDAO.get().findById(document.getId());
 				devices.record(checkedOut, token, app);
 				return ApiViews.document(checkedOut, user);
@@ -291,6 +300,43 @@ public class CheckoutResource {
 				? "Document #%d is locked by you. Release it first.".formatted(docNumber)
 				: "Document #%d is locked by %s.".formatted(docNumber, holder);
 		return ApiProblem.conflict("locked", detail).with("hold", hold);
+	}
+
+	/**
+	 * Checks the document out to the session's user through CE's
+	 * {@code DocumentManager}, which reads the document and then writes it. A
+	 * write by another thread in that moment, such as the Office preview
+	 * saving the document when a conversion ends, leaves CE's copy a record
+	 * version behind, and CE's write fails; so CE is asked again, and reads
+	 * the document as it is then. Any other refusal, such as a check-out
+	 * someone else took meanwhile, stands.
+	 *
+	 * @param docId the document's id
+	 * @param session the caller's session
+	 * @throws PersistenceException CE's refusal, or its last failure
+	 */
+	static void checkOut(long docId, Session session) throws PersistenceException {
+		for (int tries = 1;; tries++) {
+			try {
+				DocumentManager.get().checkout(docId, history(session, DocumentEvent.CHECKEDOUT));
+				return;
+			} catch (PersistenceException | RuntimeException e) {
+				if (tries >= CHECKOUT_TRIES || !overtaken(e))
+					throw e;
+				log.info("Checking out document {} again, as another write came first: {}", docId, e.getMessage());
+			}
+		}
+	}
+
+	/**
+	 * @return true if the failure is a write over a newer version of the
+	 *         record, which Hibernate refuses
+	 */
+	private static boolean overtaken(Throwable failure) {
+		for (Throwable t = failure; t != null; t = t.getCause())
+			if (t instanceof OptimisticLockException || t instanceof StaleStateException)
+				return true;
+		return false;
 	}
 
 	/**

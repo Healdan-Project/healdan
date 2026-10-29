@@ -96,6 +96,24 @@ ALREADY_FILED = ("This window's document is already filed in Healdan{as_ref}, bu
 FAILED_BEFORE = "The Healdan extension hit a problem ({error}), so LibreOffice's own command runs instead."
 FAILED_AFTER = "The Healdan extension hit a problem ({error}). Its log has the details."
 
+
+def notice_parts(text):
+    """
+    A notice as an infobar shows it (polish spec 8.3): its first sentence as the bold headline, the rest as the regular
+    detail, which may be empty. A full stop inside brackets, as in an error's own words, or inside a number such as a
+    version, doesn't end the sentence.
+    """
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch == "." and depth == 0 and text[i + 1:i + 2] == " ":
+            return text[:i + 1], text[i + 2:]
+    return text, ""
+
+
 _LOG = logging.getLogger("healdan")
 
 _SECRET = re.compile(r"[0-9a-fA-F]{48}")

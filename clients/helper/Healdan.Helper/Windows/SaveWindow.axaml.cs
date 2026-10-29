@@ -36,6 +36,7 @@ public partial class SaveWindow : Window
         (_request, _api, _paths) = (request, api, paths);
         if (request.DocNumber is not null)
             Title = "Save as New Document";
+        BrowserChrome.Apply(this, Toolbar, WindowTitle, [BackButton, ForwardButton, UpButton, ScopePicker, SearchBox]);
         _browser = new Browser(api, BrowseMode.Save);
         var places = new PlacesPane(BrowseMode.Save);
         PlacesHost.Child = places.View;
@@ -97,27 +98,36 @@ public partial class SaveWindow : Window
         await _browser!.StartAsync(Place.RecentFolders, folderId);
     }
 
+    /// <summary>
+    /// One of the File Format pop-up's choices: the format LibreOffice saves in, and its label. Screen readers read the
+    /// pop-up's value and items from <see cref="ToString"/>, so it's the label, "OpenDocument Text (.odt)", not "odt"
+    /// (polish spec §9).
+    /// </summary>
+    private sealed record FormatChoice(string Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    /// <summary>The formats LibreOffice can save in, as a File Format pop-up (polish spec §6.3): the same choices, order and default.</summary>
     private void AddFormats(SaveNewRequest request)
     {
         _format = request.DefaultFormat();
         if (request.Formats.Count == 0)
         {
-            FormatPanel.Children.Add(new TextBlock { Text = "LibreOffice didn't say which formats it can save in.", Classes = { "problem" } });
+            (FormatPicker.IsVisible, FormatProblem.IsVisible) = (false, true);
             return;
         }
-        foreach (var format in request.Formats)
+        var choices = request.Formats.Select(f => new FormatChoice(f, FileFormats.Label(f))).ToList();
+        FormatPicker.ItemsSource = choices;
+        FormatPicker.SelectedItem = choices.FirstOrDefault(c => c.Id == _format);
+        FormatPicker.SelectionChanged += (_, _) =>
         {
-            var radio = new RadioButton { Content = FileFormats.Label(format), GroupName = "format", IsChecked = format == _format };
-            radio.IsCheckedChanged += (_, _) =>
+            if (FormatPicker.SelectedItem is FormatChoice choice)
             {
-                if (radio.IsChecked == true)
-                {
-                    _format = format;
-                    UpdateSave();
-                }
-            };
-            FormatPanel.Children.Add(radio);
-        }
+                _format = choice.Id;
+                UpdateSave();
+            }
+        };
     }
 
     /// <summary>

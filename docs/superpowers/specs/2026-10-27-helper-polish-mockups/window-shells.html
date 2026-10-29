@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Helper polish: window shells</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>:root{--text-primary:#1d1d1f;--text-secondary:#6e6e73;--surface-1:#f3f3f2;--border:rgba(0,0,0,.12)}body{margin:24px auto;max-width:680px;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<style>
+.w{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;background:#FFFFFF;color:#1D1D1F;border:0.5px solid #C7C7CC;border-radius:10px;overflow:hidden}
+.tb{height:28px;display:flex;align-items:center;gap:7px;padding:0 10px;background:#F6F6F6;border-bottom:0.5px solid #E5E5EA;font-size:13px;font-weight:600;color:#1D1D1F}
+.tl{width:11px;height:11px;border-radius:50%;display:inline-block}
+.b{font-size:13px;height:22px;padding:0 14px;border-radius:6px;display:inline-flex;align-items:center}
+.sec{background:#FFFFFF;border:0.5px solid #C7C7CC;color:#1D1D1F}.pri{background:#0C69C0;color:#FFFFFF}
+.f{height:22px;border-radius:5px;border:0.5px solid #C7C7CC;display:flex;align-items:center;padding:0 7px;font-size:13px}
+.l{font-size:11px;color:#6E6E73;margin:0 0 3px}
+.lbl{font-size:11px;color:#6E6E73;margin-top:6px}
+</style>
+<h2 class="sr-only">Proposed window shells for Healdan Helper: Sign In with the Healdan mark, an alert with icon and right-aligned buttons, and a unified title bar and toolbar for the Open and Save windows.</h2>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mk" viewBox="0 0 260 260"><g transform="translate(22,5)"><clipPath id="ca"><polygon points="34,59.65 135,93.69 135,210.35 34,172.31"/></clipPath><clipPath id="cb"><polygon points="58,43.65 159,77.69 159,194.35 58,156.31"/></clipPath><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff"/><g clip-path="url(#cb)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/></g><polygon points="64,52 153,82 153,186 64,152" fill="#fff"/><g clip-path="url(#ca)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/></g><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/></g></symbol></defs></svg>
+<div style="display:grid;grid-template-columns:minmax(0,280px) minmax(0,1fr);gap:14px;padding:0.5rem 0;align-items:start">
+<div class="w">
+<div class="tb"><span class="tl" style="background:#FF5F57"></span><span class="tl" style="background:#FEBC2E"></span><span class="tl" style="background:#D9D9D9"></span></div>
+<div style="padding:18px 20px 16px;display:flex;flex-direction:column;align-items:center;gap:3px">
+<svg width="46" height="46" aria-hidden="true"><use href="#mk"/></svg>
+<div style="font-size:15px;font-weight:600;margin-top:6px">Sign In to Healdan</div>
+<div style="font-size:11px;color:#6E6E73;text-align:center;line-height:1.4">Healdan Helper keeps a sign-in for this computer in the keychain, never your password.</div>
+</div>
+<div style="padding:0 20px;display:flex;flex-direction:column;gap:2px">
+<div class="l">Server Address</div><div class="f" style="background:#F5F5F7;color:#6E6E73">https://dms.smithpartners.example</div>
+<div class="lbl">Username</div><div class="f">sarah.collins</div>
+<div class="lbl">Password</div><div class="f" style="border:1px solid #0C69C0;box-shadow:0 0 0 3px rgba(34,162,224,.35)"></div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding:18px 20px 16px"><span class="b sec">Cancel</span><span class="b pri">Sign In</span></div>
+</div>
+<div class="w">
+<div class="tb"><span class="tl" style="background:#FF5F57"></span><span class="tl" style="background:#FEBC2E"></span><span class="tl" style="background:#D9D9D9"></span></div>
+<div style="padding:18px 20px 16px;display:grid;grid-template-columns:52px minmax(0,1fr);gap:14px">
+<div style="position:relative;width:48px;height:48px"><svg width="48" height="48" aria-hidden="true"><use href="#mk"/></svg><span style="position:absolute;right:-4px;bottom:-3px;width:22px;height:22px;border-radius:50%;background:#FFFFFF;display:flex;align-items:center;justify-content:center"><i class="ti ti-alert-triangle" style="font-size:17px;color:#C77700" aria-hidden="true"></i></span></div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div style="font-size:13px;font-weight:600;line-height:1.35">#1234 is checked out to you on Office iMac (LibreOffice)</div>
+<div style="font-size:12px;color:#3A3A3C">It was last saved to Healdan yesterday at 17:48.</div>
+<div style="background:#FFF6E5;border:0.5px solid #F2C26B;border-radius:7px;padding:8px 10px;font-size:12px;line-height:1.4;color:#6B3D00"><div style="font-weight:600">Edits on Office iMac that haven't reached Healdan won't be in this copy.</div>If Office iMac was offline or still has unsaved changes, editing here means working without them.</div>
+</div>
+</div>
+<div style="display:flex;justify-content:flex-end;gap:8px;padding:2px 20px 16px"><span class="b sec">Open Read-Only</span><span class="b sec">Edit Here Instead</span><span class="b pri">Cancel</span></div>
+</div>
+</div>
+<div class="w" style="margin:4px 0 0.5rem">
+<div style="height:46px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#F6F6F6;border-bottom:0.5px solid #E5E5EA">
+<span class="tl" style="background:#FF5F57"></span><span class="tl" style="background:#FEBC2E"></span><span class="tl" style="background:#28C840"></span>
+<span style="font-size:13px;font-weight:600;margin-left:8px;white-space:nowrap">Open from Healdan</span>
+<span style="display:inline-flex;margin-left:6px;color:#3A3A3C;font-size:16px;gap:2px"><i class="ti ti-chevron-left" style="padding:3px 5px" aria-hidden="true"></i><i class="ti ti-chevron-right" style="padding:3px 5px;color:#C7C7CC" aria-hidden="true"></i><i class="ti ti-chevron-up" style="padding:3px 5px" aria-hidden="true"></i></span>
+<span style="flex:1"></span>
+<span class="b sec" style="gap:14px">Documents <i class="ti ti-selector" style="font-size:12px;color:#6E6E73" aria-hidden="true"></i></span>
+<span class="f" style="width:220px;gap:5px;color:#8E8E93;background:#FFFFFF"><i class="ti ti-search" style="font-size:13px" aria-hidden="true"></i>Search documents or #1234</span>
+</div>
+<div style="display:grid;grid-template-columns:150px minmax(0,1fr);height:44px">
+<div style="background:#F5F5F7;border-right:0.5px solid #E5E5EA"></div><div></div>
+</div>
+</div>

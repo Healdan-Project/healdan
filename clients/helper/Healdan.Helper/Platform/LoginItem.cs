@@ -80,26 +80,29 @@ internal static unsafe class LoginItem
         }
     }
 
-    /// <summary>Settings' read-only line.</summary>
-    public static string Describe()
+    /// <summary>
+    /// Settings' row (polish spec §6.5), from one look at the login item: a short value, whether it's on, and, unless it
+    /// is, the line under the row's name saying why or how to turn it on.
+    /// </summary>
+    public static LoginItemSummary Summary()
     {
         if (!Available)
-            return "Not in this build: the installed app starts when you sign in to this computer.";
+            return new("Not in This Build", false, "The installed app starts when you sign in to this computer.");
         if (Passing() is { } where)
-            return $"Off while Healdan Helper runs from {where}. Drag it to Applications, then open it from there.";
+            return new("Off", false, $"Not while Healdan Helper runs from {where}. Drag it to Applications, then open it from there.");
         try
         {
             return Status() switch
             {
-                Enabled => "On: Healdan Helper starts when you sign in to this computer.",
-                RequiresApproval => $"Waiting for your approval in {Where}.",
-                NotFound => "Off: macOS can't find the app. Move it to Applications and open it again.",
-                _ => $"Off. To turn it on, add Healdan Helper in {Where}."
+                Enabled => new("On", true, null),
+                RequiresApproval => new("Waiting for Approval", false, $"Approve it in {Where}."),
+                NotFound => new("Off", false, "macOS can't find the app. Move it to Applications and open it again."),
+                _ => new("Off", false, $"To turn it on, add Healdan Helper in {Where}.")
             };
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
         {
-            return "Unknown: macOS didn't say.";
+            return new("Unknown", false, "macOS didn't say.");
         }
     }
 
@@ -154,3 +157,6 @@ internal static unsafe class LoginItem
         return service != IntPtr.Zero ? service : throw new EntryPointNotFoundException("SMAppService has no main app service.");
     }
 }
+
+/// <summary>Start at Sign-In's row in Settings: <paramref name="Note"/> is null while it's on.</summary>
+internal sealed record LoginItemSummary(string Value, bool On, string? Note);

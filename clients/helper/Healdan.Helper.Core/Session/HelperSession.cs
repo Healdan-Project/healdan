@@ -504,7 +504,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         try
         {
-            if (!await new SignIn(api, _keychain, _device).TryResumeAsync())
+            if (!await new SignIn(api, _keychain, _device, log: _log).TryResumeAsync())
             {
                 _log.Info($"No usable sign-in for {LinkName(api)} is kept: asking for one");
                 return false;
