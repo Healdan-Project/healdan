@@ -54,6 +54,7 @@ public class SaveNewTests
         Assert.Equal("Excel Workbook (.xlsx)", FileFormats.Label("xlsx"));
         Assert.Equal("OpenDocument Presentation (.odp)", FileFormats.Label("odp"));
         Assert.Equal("PowerPoint Presentation (.pptx)", FileFormats.Label("pptx"));
+        Assert.Equal("OpenDocument Drawing (.odg)", FileFormats.Label("odg"));
         Assert.Equal(".rtf", FileFormats.Label("rtf"));
     }
 

@@ -86,7 +86,7 @@ and a notice from the helper says the same.
 1. Choose **OK**.
 2. Restart LibreOffice when it asks: quit it (**⌘Q**) and open it again.
 
-The **Healdan** menu is now in Writer, Calc and Impress, with Save to Healdan, Open from Healdan, Save as New
+The **Healdan** menu is now in Writer, Calc, Impress and Draw, with Save to Healdan, Open from Healdan, Save as New
 Version, Save as New Document, Properties and, in Writer, Insert Doc ID. The same commands are on the Healdan
 toolbar: **View › Toolbars › Healdan** shows or hides it. The Start Center's Healdan menu has Open from Healdan.
 
@@ -144,7 +144,7 @@ Click Healdan's icon in the menu bar.
 
 ## Settings
 
-![The Healdan Helper Settings window in three groups: Server, with the address healdan.example; Open Each Kind of File In, with Documents, Spreadsheets and Presentations, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version and when it was installed](settings.png)
+![The Healdan Helper Settings window in three groups: Server, with the address healdan.example; Open Each Kind of File In, with Documents, Spreadsheets, Presentations and Drawings, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version and when it was installed](settings.png)
 
 Settings has three groups:
 
@@ -154,8 +154,9 @@ Settings has three groups:
   their own beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them
   to the new server, where the same doc # can be a different document. They come back, with any saves still to send,
   when you sign in to the old server again. Meanwhile the menu shows how many are waiting.
-- **Open Each Kind of File In:** a row each for documents, spreadsheets and presentations, with the file extensions
-  it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app for them.
+- **Open Each Kind of File In:** a row each for documents, spreadsheets, presentations and drawings, with the file
+  extensions it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app
+  for them.
 - **This Computer:**
   - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
     To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it isn't on, a line
