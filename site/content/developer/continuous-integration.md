@@ -38,6 +38,22 @@ the newest successful run, the pull request's own or else `master`'s, or 3 secon
 one. The log of `checks`' plan step lists each shard's classes with their times. A failing shard doesn't stop the
 others, so one run shows every failing test.
 
+### The Maven Repository Cache
+
+Each shard restores a copy of Maven's local repository before it builds: the copy for the POMs as they are, or else
+the newest copy `master` saved. Only `master`'s runs save one, from a single shard, so a pull request that edits a
+POM downloads only what its edit adds. That matters because some dependencies come only from
+`logicaldoc.sourceforge.net`, which sometimes refuses requests.
+
+Maven notes where each file came from in a `_remote.repositories` file beside it, and uses a cached file only when
+that note names one of the build's repositories. Maven 3.9 notes the repository's id, and Maven 3.10 its id and a
+hash of its URL. 3.10 accepts 3.9's notes, but 3.9 rejects 3.10's, and `ubuntu-latest`'s images ship both. So each
+shard deletes those files after restoring the copy, and Maven then takes every cached file as installed locally and
+downloads only what's missing. Before that step, on 29 October 2026, shards on Maven 3.9 restored a copy Maven 3.10
+had saved, downloaded every file again, and failed on SourceForge's 403.
+
+The Docker build keeps its own copy, which the `maven:3.9` image both writes and reads, so it doesn't need the step.
+
 ## What a Pull Request Runs
 
 `.github/scripts/code-changed.sh` lists the files a pull request changes and writes two answers. `code` is false

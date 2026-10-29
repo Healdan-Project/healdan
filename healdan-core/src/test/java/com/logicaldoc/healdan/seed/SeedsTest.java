@@ -436,6 +436,44 @@ public class SeedsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testQueueDrawingPreviewsIsABeanAndDoneAfterStartup() {
+		assertTrue(Context.get().getBeansOfType(SeedStep.class).stream()
+				.anyMatch(step -> step instanceof QueueDrawingPreviewsSeed));
+		assertEquals("done", Context.get(HealdanSettings.class).get("seed.queue-drawing-previews"));
+	}
+
+	@Test
+	public void testQueueDrawingPreviewsQueuesCurrentDrawingsOnly() throws Exception {
+		HealdanFixtures fx = new HealdanFixtures();
+		Matter matter = fx.matter(fx.client(997, "Healdan"), 1, "Previews", fx.store("Main"), "Documents");
+		Folder folder = FolderDAO.get()
+				.findByName(FolderDAO.get().findById(matter.getFolderId()), "Documents", Tenant.DEFAULT_ID, true).get(0);
+
+		Document a = fx.upload(folder, "a.odg", "a", fx.admin());
+		DocumentManager.get().checkout(a.getId(), fx.documentHistory(fx.admin()));
+		DocumentManager.get().checkin(a.getId(), new ByteArrayInputStream("v2".getBytes(StandardCharsets.UTF_8)),
+				"a.odg", false, null, fx.documentHistory(fx.admin()));
+		String current = DocumentDAO.get().findById(a.getId()).getFileVersion();
+		assertEquals("1.1", current);
+		for (String name : List.of("b.ODG", "c.docx", "d.otg", "e.vsdx"))
+			fx.upload(folder, name, "x", fx.admin());
+		Document f = fx.upload(folder, "f.odg", "f", fx.admin());
+		jdbc().update("update ld_document set ld_deleted = 1 where ld_id = ?", f.getId());
+		fx.legacyShortcut(DocumentDAO.get().findById(a.getId()), folder);
+
+		// As on a stack upgraded from before drawings previewed: none is queued
+		jdbc().update("delete from hd_preview_job");
+		new QueueDrawingPreviewsSeed(Context.get(DataSource.class)).run();
+		// A second run adds nothing
+		new QueueDrawingPreviewsSeed(Context.get(DataSource.class)).run();
+
+		List<String> queued = jdbc().queryForList(
+				"select d.ld_filename || ' ' || j.hd_fileversion from hd_preview_job j join ld_document d on d.ld_id = j.hd_docid order by 1",
+				String.class);
+		assertEquals(List.of("a.odg " + current, "b.ODG 1.0"), queued);
+	}
+
+	@Test
 	public void testCountOfficePagesIsABeanAndDoneAfterStartup() {
 		assertTrue(Context.get().getBeansOfType(SeedStep.class).stream()
 				.anyMatch(step -> step instanceof CountOfficePagesSeed));

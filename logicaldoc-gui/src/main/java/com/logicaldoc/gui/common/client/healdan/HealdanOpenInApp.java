@@ -17,7 +17,7 @@ public final class HealdanOpenInApp {
 
 	/** The kinds of file the helper opens (spec 5.11), in lower case */
 	private static final Set<String> EXTENSIONS = new HashSet<>(Arrays.asList("doc", "docx", "docm", "dotx", "dotm",
-			"rtf", "odt", "ott", "xls", "xlsx", "xlsm", "ods", "ppt", "pptx", "pptm", "odp"));
+			"rtf", "odt", "ott", "xls", "xlsx", "xlsm", "ods", "ppt", "pptx", "pptm", "odp", "odg"));
 
 	private static LongConsumer opener = null;
 
@@ -29,8 +29,8 @@ public final class HealdanOpenInApp {
 	 *
 	 * @param fileName the document's file name; may be null
 	 *
-	 * @return true for a Writer, Calc or Impress kind of file, whatever the case
-	 *         of its extension
+	 * @return true for a Writer, Calc, Impress or Draw kind of file, whatever
+	 *         the case of its extension
 	 */
 	public static boolean handles(String fileName) {
 		if (fileName == null)

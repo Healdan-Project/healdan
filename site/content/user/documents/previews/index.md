@@ -4,7 +4,8 @@ weight: 2
 ---
 
 A preview is a quick check that a document is the one you expect, before you open, print or email it. Word, Excel,
-PowerPoint and OpenDocument files preview in the browser and get thumbnails, as PDFs and images do.
+PowerPoint and OpenDocument files, LibreOffice Draw's drawings among them, preview in the browser and get
+thumbnails, as PDFs and images do.
 
 ## Which Files Preview
 
@@ -14,6 +15,7 @@ PowerPoint and OpenDocument files preview in the browser and get thumbnails, as 
 | Excel | `xls`, `xlsx`, `xlsm`, `xlt`, `xltx`, `xltm`, `csv` | every visible sheet, using its print settings. A wide sheet without them is split across pages |
 | PowerPoint | `ppt`, `pptx`, `pptm`, `pps`, `ppsx`, `pot`, `potx` | one slide per page, without speaker notes |
 | OpenDocument | `odt`, `ott`, `ods`, `ots`, `odp`, `otp` | as their Word, Excel or PowerPoint kind |
+| Drawing | `odg` | one page of the drawing per page |
 
 The layout is recognisably the document, but not always identical to Office's.
 

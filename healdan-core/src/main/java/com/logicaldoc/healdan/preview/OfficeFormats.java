@@ -13,11 +13,12 @@ import java.util.stream.Collectors;
  */
 public final class OfficeFormats {
 
-	/** The three families LibreOffice opens with different applications. */
+	/** The four families LibreOffice opens with different applications. */
 	public enum Kind {
 		TEXT("writer_pdf_Export", "doc", "docx", "docm", "dot", "dotx", "dotm", "rtf", "odt", "ott"),
 		SPREADSHEET("calc_pdf_Export", "xls", "xlsx", "xlsm", "xlt", "xltx", "xltm", "csv", "ods", "ots"),
-		PRESENTATION("impress_pdf_Export", "ppt", "pptx", "pptm", "pps", "ppsx", "pot", "potx", "odp", "otp");
+		PRESENTATION("impress_pdf_Export", "ppt", "pptx", "pptm", "pps", "ppsx", "pot", "potx", "odp", "otp"),
+		DRAWING("draw_pdf_Export", "odg");
 
 		private final String pdfFilter;
 
@@ -31,6 +32,11 @@ public final class OfficeFormats {
 		/** @return the name of LibreOffice's PDF export filter for this family */
 		public String pdfFilter() {
 			return pdfFilter;
+		}
+
+		/** @return the family's extensions, in lower case */
+		public Set<String> extensions() {
+			return extensions;
 		}
 	}
 

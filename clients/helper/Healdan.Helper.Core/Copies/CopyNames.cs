@@ -51,6 +51,14 @@ public static class CopyNames
             yield return "~$" + string.Concat(elements.Skip(drop));
     }
 
+    /// <summary>
+    /// Whether a file in the folder is an app's own: LibreOffice's lock file or Word's owner file. The app deletes it by
+    /// the path it opened, so a copy set aside leaves it where it is (spec §5.4).
+    /// </summary>
+    internal static bool IsAppFile(string fileName) =>
+        (fileName.StartsWith(".~lock.", StringComparison.Ordinal) && fileName.EndsWith('#'))
+        || fileName.StartsWith("~$", StringComparison.Ordinal);
+
     private static string Clean(string s)
     {
         var sb = new StringBuilder(s.Length);

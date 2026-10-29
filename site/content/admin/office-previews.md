@@ -3,16 +3,17 @@ title: Office Previews
 weight: 8
 ---
 
-Healdan converts Word, Excel, PowerPoint and OpenDocument files to PDF with LibreOffice, which is in the Docker image,
-for their previews and thumbnails. There's nothing to switch on. [Previews](../../user/documents/previews/) in the
-User Guide covers what people see.
+Healdan converts Word, Excel, PowerPoint and OpenDocument files, LibreOffice Draw's `.odg` drawings among them, to
+PDF with LibreOffice, which is in the Docker image, for their previews and thumbnails. There's nothing to switch on.
+[Previews](../../user/documents/previews/) in the User Guide covers what people see.
 
 ## How It Works
 
 - **In the background.** Each new file or file version is queued when it's filed, and converted one at a time.
   Previews are usually ready within a minute.
-- **Files already in Healdan,** from before previews were added, are converted in the background after the upgrade,
-  newest first, alongside new uploads.
+- **Files already in Healdan,** from before their previews were added, are converted in the background after the
+  upgrade, newest first, alongside new uploads. Drawings got previews after other Office files, so an upgrade to
+  the release that adds them converts the drawings already in Healdan the same way.
 - **On the spot.** If someone opens a preview before its turn, it's converted then.
 - **Safely.** Conversion never runs a document's macros and never fetches anything over the network.
 - **Permissions** are those of PDF previews: Read and Download.
