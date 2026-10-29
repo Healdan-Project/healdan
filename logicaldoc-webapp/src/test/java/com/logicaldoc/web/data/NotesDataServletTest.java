@@ -28,7 +28,8 @@ public class NotesDataServletTest extends AbstractDataServletTestCase {
 		assertTrue(FileUtil.readFile(responseFile).contains("<![CDATA[message for note 1]]>"));
 		
 		response.clear();
-		mockRequest.setParameter("page", "1");
+		response = new MockServletResponse(responseFile);
+		mockRequest.setParameter("page", "0");
 		testSubject.service(mockRequest, response);
 		response.flushBuffer();
 		assertTrue(FileUtil.readFile(responseFile).contains("<![CDATA[message for note 1]]>"));
