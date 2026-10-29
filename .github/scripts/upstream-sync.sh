@@ -64,7 +64,8 @@ print(version)
 # Healdan's modules name the root POM as their <parent>. If that version falls
 # behind the root's, Maven looks for the stock LogicalDOC release of the old
 # version instead of this repo's build. The build no longer fetches LogicalDOC's
-# jars, so it fails with "Could not find artifact com.logicaldoc:... in healdan".
+# jars, so it fails with "Non-resolvable parent POM ... Could not find artifact
+# com.logicaldoc:logicaldoc:pom:<old version>".
 # Sets the parent version of each healdan-*/pom.xml whose parent is the root,
 # and the version of each healdan-* plugin.xml, to $1 in the working tree.
 # Prints each file it changed.

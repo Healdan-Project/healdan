@@ -24,7 +24,8 @@ git remote add upstream https://github.com/logicaldoc/community.git
 
 Healdan's own modules (`healdan-*`) follow upstream's version: their POM parent and `plugin.xml` version match the
 root POM's. A module left behind makes Maven look for stock LogicalDOC jars, which the build no longer fetches: it
-fails with `Could not find artifact com.logicaldoc:… in healdan`. Bump the module instead.
+fails with `Non-resolvable parent POM … Could not find artifact com.logicaldoc:logicaldoc:pom:<old version>`. Bump
+the module instead.
 
 - After a clean merge that brings a LogicalDOC release, the sync script adds a "Follow upstream to &lt;version&gt;"
   commit.
