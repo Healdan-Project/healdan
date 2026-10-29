@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The draft lease for 1002.1 (Brightwell Bakeries Ltd, Unit 4, Weir Lane Trading Estate), as the firm's
+  reviewers left it: tracked changes by Priya Nair (client's points) and Helen Ashcombe (partner), and two
+  comments. HTML can't express either, which is why this is flat ODF.
+
+  Changes and comments are dated 15-17 September 2026, before the document is filed (day -41).
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.text">
+
+  <office:meta>
+    <meta:initial-creator>Chris Doyle</meta:initial-creator>
+    <dc:creator>Chris Doyle</dc:creator>
+    <dc:title>Lease – Unit 4, Weir Lane Trading Estate (draft)</dc:title>
+    <dc:subject>Brightwell Bakeries Ltd – Commercial Lease</dc:subject>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-14T15:00:00</meta:creation-date>
+    <dc:date>2026-09-17T11:30:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Arial" svg:font-family="Arial" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="paragraph">
+      <style:paragraph-properties fo:orphans="2" fo:widows="2"/>
+      <style:text-properties style:font-name="Arial" fo:font-size="10pt" fo:language="en" fo:country="GB"/>
+    </style:default-style>
+
+    <style:style style:name="Standard" style:family="paragraph" style:class="text">
+      <style:paragraph-properties fo:margin-top="0cm" fo:margin-bottom="0.2cm" fo:line-height="120%"/>
+    </style:style>
+    <style:style style:name="Title" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Standard">
+      <style:paragraph-properties fo:margin-top="0.6cm" fo:margin-bottom="0.15cm" fo:text-align="center"/>
+      <style:text-properties fo:font-size="20pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="Subtitle" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-bottom="0.15cm" fo:text-align="center"/>
+      <style:text-properties fo:font-size="11pt"/>
+    </style:style>
+    <style:style style:name="Centred" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Party" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-left="1cm" fo:text-indent="-1cm">
+        <style:tab-stops><style:tab-stop style:position="0cm"/><style:tab-stop style:position="1cm"/></style:tab-stops>
+      </style:paragraph-properties>
+    </style:style>
+    <style:style style:name="Heading" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Clause">
+      <style:paragraph-properties fo:margin-top="0.45cm" fo:margin-bottom="0.2cm" fo:keep-with-next="always" fo:margin-left="1.1cm" fo:text-indent="-1.1cm">
+        <style:tab-stops><style:tab-stop style:position="1.1cm"/></style:tab-stops>
+      </style:paragraph-properties>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="Clause" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-left="1.1cm" fo:text-indent="-1.1cm" fo:text-align="justify">
+        <style:tab-stops><style:tab-stop style:position="1.1cm"/></style:tab-stops>
+      </style:paragraph-properties>
+    </style:style>
+    <style:style style:name="Definition" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-left="1.1cm" fo:text-align="justify"/>
+    </style:style>
+    <style:style style:name="TableText" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-bottom="0cm" fo:line-height="115%"/>
+      <style:text-properties fo:font-size="9.5pt"/>
+    </style:style>
+    <style:style style:name="Header" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-bottom="0cm" fo:text-align="end"/>
+      <style:text-properties fo:font-size="8pt" fo:color="#555555"/>
+    </style:style>
+    <style:style style:name="Footer" style:family="paragraph" style:parent-style-name="Standard">
+      <style:paragraph-properties fo:margin-bottom="0cm">
+        <style:tab-stops><style:tab-stop style:position="16.6cm" style:type="right"/></style:tab-stops>
+      </style:paragraph-properties>
+      <style:text-properties fo:font-size="8pt" fo:color="#555555"/>
+    </style:style>
+    <style:style style:name="Strong" style:family="text">
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:print-orientation="portrait"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="2.2cm" fo:margin-right="2.2cm"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0.5cm" fo:margin-bottom="0.4cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0.5cm" fo:margin-top="0.4cm"/></style:footer-style>
+    </style:page-layout>
+    <style:style style:name="Tbl" style:family="table">
+      <style:table-properties style:width="16.6cm" table:align="margins" fo:margin-top="0.2cm" fo:margin-bottom="0.3cm"/>
+    </style:style>
+    <style:style style:name="TblA" style:family="table-column"><style:table-column-properties style:column-width="4cm"/></style:style>
+    <style:style style:name="TblB" style:family="table-column"><style:table-column-properties style:column-width="12.6cm"/></style:style>
+    <style:style style:name="TblC" style:family="table-column"><style:table-column-properties style:column-width="8.3cm"/></style:style>
+    <style:style style:name="Cell" style:family="table-cell">
+      <style:table-cell-properties fo:padding="0.12cm" fo:border="0.5pt solid #999999"/>
+    </style:style>
+    <style:style style:name="CellHead" style:family="table-cell">
+      <style:table-cell-properties fo:padding="0.12cm" fo:border="0.5pt solid #999999" fo:background-color="#e8e8e8"/>
+    </style:style>
+    <style:style style:name="Plain" style:family="table-cell">
+      <style:table-cell-properties fo:padding="0.1cm" fo:border="none"/>
+    </style:style>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Standard" style:page-layout-name="pm1">
+      <style:header><text:p text:style-name="Header">Draft for client – subject to contract</text:p></style:header>
+      <style:footer><text:p text:style-name="Footer">Ashcombe Reeve LLP – HA/1002.1<text:tab/>Page <text:page-number text:select-page="current">1</text:page-number> of <text:page-count>3</text:page-count></text:p></style:footer>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:text>
+
+      <text:tracked-changes text:track-changes="false">
+        <!-- Priya Nair, 15 September 2026: the client's points -->
+        <text:changed-region xml:id="ct1" text:id="ct1"><text:deletion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T16:20:00</dc:date></office:change-info><text:p text:style-name="Standard">£48,000</text:p></text:deletion></text:changed-region>
+        <text:changed-region xml:id="ct2" text:id="ct2"><text:insertion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T16:20:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <text:changed-region xml:id="ct4" text:id="ct4"><text:deletion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T16:41:00</dc:date></office:change-info><text:p text:style-name="Standard">the Rent increased by the percentage rise in the consumer prices index over the previous five years</text:p></text:deletion></text:changed-region>
+        <text:changed-region xml:id="ct5" text:id="ct5"><text:insertion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T16:41:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <text:changed-region xml:id="ct6" text:id="ct6"><text:deletion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T16:52:00</dc:date></office:change-info><text:p text:style-name="Standard">seven</text:p></text:deletion></text:changed-region>
+        <text:changed-region xml:id="ct7" text:id="ct7"><text:insertion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T16:52:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <text:changed-region xml:id="ct10" text:id="ct10"><text:insertion><office:change-info><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-15T17:08:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <!-- Helen Ashcombe, 16 and 17 September 2026: the partner's review -->
+        <text:changed-region xml:id="ct3" text:id="ct3"><text:insertion><office:change-info><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-16T10:12:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <text:changed-region xml:id="ct8" text:id="ct8"><text:deletion><office:change-info><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-16T10:30:00</dc:date></office:change-info><text:p text:style-name="Standard"> and substantial</text:p></text:deletion></text:changed-region>
+        <text:changed-region xml:id="ct9" text:id="ct9"><text:insertion><office:change-info><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-16T10:30:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <text:changed-region xml:id="ct11" text:id="ct11"><text:deletion><office:change-info><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-16T10:47:00</dc:date></office:change-info><text:p text:style-name="Standard">The Tenant shall pay all of the Landlord’s costs, including legal costs and surveyors’ fees, of every application the Tenant makes under this lease, whether or not the application is granted or is withdrawn.</text:p></text:deletion></text:changed-region>
+        <text:changed-region xml:id="ct12" text:id="ct12"><text:insertion><office:change-info><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-16T10:47:00</dc:date></office:change-info></text:insertion></text:changed-region>
+        <text:changed-region xml:id="ct13" text:id="ct13"><text:insertion><office:change-info><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-17T09:40:00</dc:date></office:change-info></text:insertion></text:changed-region>
+      </text:tracked-changes>
+
+      <text:p text:style-name="Title">LEASE</text:p>
+      <text:p text:style-name="Subtitle">Unit 4, Weir Lane Trading Estate, Marlbridge WX2 6DN</text:p>
+      <text:p text:style-name="Subtitle">Dated ____________________ 2026</text:p>
+
+      <text:p text:style-name="Standard"/>
+      <text:p text:style-name="Party"><text:span text:style-name="Strong">(1)</text:span><text:tab/><text:span text:style-name="Strong">PENWICK PROPERTY LIMITED</text:span>, a company incorporated in England and Wales (company number to be inserted) whose registered office is at 3 Millrace Court, Marlbridge WX1 2JT (the <text:span text:style-name="Strong">Landlord</text:span>); and</text:p>
+      <text:p text:style-name="Party"><text:span text:style-name="Strong">(2)</text:span><text:tab/><text:span text:style-name="Strong">BRIGHTWELL BAKERIES LIMITED</text:span>, a company incorporated in England and Wales (company number to be inserted) whose registered office is at The Old Bakehouse, Church Lane, Marlbridge WX3 5PA (the <text:span text:style-name="Strong">Tenant</text:span>).</text:p>
+
+      <text:p text:style-name="Standard"/>
+      <table:table table:name="Particulars" table:style-name="Tbl">
+        <table:table-column table:style-name="TblA"/>
+        <table:table-column table:style-name="TblB"/>
+        <table:table-row>
+          <table:table-cell table:style-name="CellHead" table:number-columns-spanned="2" office:value-type="string"><text:p text:style-name="TableText"><text:span text:style-name="Strong">Particulars</text:span></text:p></table:table-cell>
+          <table:covered-table-cell/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText"><text:span text:style-name="Strong">Premises</text:span></text:p></table:table-cell>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText">Unit 4, Weir Lane Trading Estate, Marlbridge WX2 6DN, with its yard and the loading bay in front of it.</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText"><text:span text:style-name="Strong">Term</text:span></text:p></table:table-cell>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText">Ten years beginning on 1 November 2026.</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText"><text:span text:style-name="Strong">Permitted use</text:span></text:p></table:table-cell>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText">Baking, and the retail sale of bread and confectionery (see clause 4.2).</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText"><text:span text:style-name="Strong">Rent</text:span></text:p></table:table-cell>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText">See clause 3, payable quarterly in advance.</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText"><text:span text:style-name="Strong">Landlord’s agent</text:span></text:p></table:table-cell>
+          <table:table-cell table:style-name="Cell" office:value-type="string"><text:p text:style-name="TableText">Harrow &amp; Lund, Commercial Agents, 01632 960340.</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+
+      <text:p text:style-name="Heading">1.<text:tab/>Definitions and interpretation</text:p>
+      <text:p text:style-name="Clause">1.1<text:tab/>In this lease these words have the meanings given to them here.</text:p>
+      <text:p text:style-name="Definition"><text:span text:style-name="Strong">Premises</text:span> means the property described in the Particulars, including any part of it.</text:p>
+      <text:p text:style-name="Definition"><text:span text:style-name="Strong">Rent</text:span> means the yearly rent reserved by clause 3, as reviewed under clause 3.3.</text:p>
+      <text:p text:style-name="Definition"><text:span text:style-name="Strong">Term</text:span> means the period of ten years beginning on the Term Start Date.</text:p>
+      <text:p text:style-name="Definition"><text:span text:style-name="Strong">Term Start Date</text:span> means 1 November 2026.</text:p>
+      <text:p text:style-name="Definition"><text:span text:style-name="Strong">VAT</text:span> means value added tax, and any tax that replaces it.</text:p>
+      <text:p text:style-name="Clause">1.2<text:tab/>A reference to a clause is to a clause of this lease. Headings are for convenience and do not affect what the lease means. Where the Tenant is more than one person, its obligations are joint and several.</text:p>
+
+      <text:p text:style-name="Heading">2.<text:tab/>Grant</text:p>
+      <text:p text:style-name="Clause">2.1<text:tab/>The Landlord lets the Premises to the Tenant for the Term, with the rights in clause 2.2 and subject to the rights in clause 2.3, the Tenant paying the Rent and performing its obligations in this lease.</text:p>
+      <text:p text:style-name="Clause">2.2<text:tab/>The Tenant may, in common with the Landlord and others, use the estate road to reach the Premises, and may display a sign for its business at the entrance to the estate.</text:p>
+      <text:p text:style-name="Clause">2.3<text:tab/>The Landlord may, on reasonable notice except in an emergency, enter the Premises to inspect them, to repair neighbouring property, and to run services through them, causing as little disturbance as it can.</text:p>
+
+      <text:p text:style-name="Heading">3.<text:tab/>Rent</text:p>
+      <text:p text:style-name="Clause">3.1<text:tab/>The Tenant shall pay the Landlord <office:annotation office:name="c1"><dc:creator>Helen Ashcombe</dc:creator><dc:date>2026-09-16T10:05:00</dc:date><meta:creator-initials>HA</meta:creator-initials><text:p text:style-name="Standard">Brightwell’s budget is £45,000 a year. The landlord’s agent has hinted at £47,000, so I would only hold at £45,000 if the rent-free period in 3.2 goes in.</text:p></office:annotation>a yearly rent of<office:annotation-end office:name="c1"/> <text:change text:change-id="ct1"/><text:change-start text:change-id="ct2"/>£45,000<text:change-end text:change-id="ct2"/> plus VAT, in equal quarterly instalments in advance on 1 January, 1 April, 1 July and 1 October. The first instalment is due on the Term Start Date, for the period up to the next quarter day.</text:p>
+      <text:p text:style-name="Clause"><text:change-start text:change-id="ct3"/>3.2<text:tab/>No Rent is payable for the first three months of the Term.<text:change-end text:change-id="ct3"/></text:p>
+      <text:p text:style-name="Clause">3.3<text:tab/>The Rent shall be reviewed on the fifth anniversary of the Term Start Date. From that date the Rent shall be <text:change text:change-id="ct4"/><text:change-start text:change-id="ct5"/>the open market rent of the Premises at that date, but no more than ten per cent above the Rent then payable<text:change-end text:change-id="ct5"/>. If the parties have not agreed the new Rent within three months, either of them may ask an independent surveyor, agreed between them, to decide it.</text:p>
+      <text:p text:style-name="Clause">3.4<text:tab/>If any Rent is unpaid <text:change text:change-id="ct6"/><text:change-start text:change-id="ct7"/>fourteen<text:change-end text:change-id="ct7"/> days after it falls due, the Tenant shall pay interest on it from the due date until payment, at three per cent a year above the base rate of the Landlord’s bank.</text:p>
+
+      <text:p text:style-name="Heading">4.<text:tab/>The Tenant’s obligations</text:p>
+      <text:p text:style-name="Clause">4.1<text:tab/>The Tenant shall keep the Premises in good<text:change text:change-id="ct8"/> repair<text:change-start text:change-id="ct9"/> and condition, except for fair wear and tear and damage by an insured risk<text:change-end text:change-id="ct9"/>, and shall not let them fall into disrepair.</text:p>
+      <text:p text:style-name="Clause">4.2<text:tab/>The Tenant shall use the Premises only for baking, and for the retail sale of bread and confectionery<text:change-start text:change-id="ct10"/>, and for serving food and drink to customers for consumption on the Premises<text:change-end text:change-id="ct10"/>.</text:p>
+      <text:p text:style-name="Clause">4.3<text:tab/>The Tenant shall not make structural alterations to the Premises. It may make other alterations with the Landlord’s written consent, which the Landlord shall not unreasonably withhold or delay.</text:p>
+      <text:p text:style-name="Clause">4.4<text:tab/>The Tenant shall pay the Landlord a fair share of the premium for insuring the Premises, within 14 days of being asked, and shall give the Landlord a copy of the insurance schedule if it asks for one.</text:p>
+      <text:p text:style-name="Clause">4.5<text:tab/><text:change text:change-id="ct11"/><text:change-start text:change-id="ct12"/>The Tenant shall pay the Landlord’s reasonable and proper costs of an application for consent under this lease that the Landlord grants.<text:change-end text:change-id="ct12"/></text:p>
+
+      <text:p text:style-name="Heading">5.<text:tab/>The Landlord’s obligations</text:p>
+      <text:p text:style-name="Clause">5.1<text:tab/>The Landlord shall allow the Tenant to enjoy the Premises during the Term without interruption by the Landlord or anyone claiming through it.</text:p>
+      <text:p text:style-name="Clause">5.2<text:tab/>The Landlord shall keep the Premises insured against fire, flood and the other usual risks for their full rebuilding cost, and shall keep the estate road in reasonable repair.</text:p>
+
+      <text:p text:style-name="Heading">6.<text:tab/>Ending the lease</text:p>
+      <text:p text:style-name="Clause">6.1<text:tab/>The Landlord may end this lease by re-entering the Premises if any Rent is unpaid 21 days after it falls due, or if the Tenant breaks any other obligation and does not put it right within a reasonable time after the Landlord has given notice.</text:p>
+      <text:p text:style-name="Clause"><office:annotation office:name="c2"><dc:creator>Priya Nair</dc:creator><dc:date>2026-09-17T11:30:00</dc:date><meta:creator-initials>PN</meta:creator-initials><text:p text:style-name="Standard">Helen, the heads of terms said nothing about a break. Should we ask for one at year five, or keep it to trade against the rent review?</text:p></office:annotation>6.2<office:annotation-end office:name="c2"/><text:change-start text:change-id="ct13"/><text:tab/>The Tenant may end this lease on the fifth anniversary of the Term Start Date by giving the Landlord at least six months’ written notice, if it has paid the Rent and has carried out its obligations in this lease up to that date.<text:change-end text:change-id="ct13"/></text:p>
+
+      <text:p text:style-name="Heading">7.<text:tab/>Notices</text:p>
+      <text:p text:style-name="Clause">7.1<text:tab/>A notice under this lease must be in writing, and delivered by hand or sent by pre-paid first-class post to the other party at its address at the head of this lease, or at any other address in England or Wales that it has told the other party about.</text:p>
+
+      <text:p text:style-name="Heading">8.<text:tab/>Governing law</text:p>
+      <text:p text:style-name="Clause">8.1<text:tab/>This lease, and any dispute arising from it, is governed by the law of England and Wales, and the courts of England and Wales have exclusive jurisdiction.</text:p>
+
+      <text:p text:style-name="Standard"/>
+      <text:p text:style-name="Standard">This lease has been signed as a deed, and is delivered on the date written at the start of it.</text:p>
+      <table:table table:name="Signatures" table:style-name="Tbl">
+        <table:table-column table:style-name="TblC"/>
+        <table:table-column table:style-name="TblC"/>
+        <table:table-row>
+          <table:table-cell table:style-name="Plain" office:value-type="string">
+            <text:p text:style-name="TableText"><text:span text:style-name="Strong">Signed as a deed by PENWICK PROPERTY LIMITED</text:span>, acting by a director in the presence of a witness:</text:p>
+            <text:p text:style-name="TableText"/>
+            <text:p text:style-name="TableText">Director ______________________________</text:p>
+            <text:p text:style-name="TableText"/>
+            <text:p text:style-name="TableText">Witness ______________________________</text:p>
+          </table:table-cell>
+          <table:table-cell table:style-name="Plain" office:value-type="string">
+            <text:p text:style-name="TableText"><text:span text:style-name="Strong">Signed as a deed by BRIGHTWELL BAKERIES LIMITED</text:span>, acting by a director in the presence of a witness:</text:p>
+            <text:p text:style-name="TableText"/>
+            <text:p text:style-name="TableText">Director ______________________________</text:p>
+            <text:p text:style-name="TableText"/>
+            <text:p text:style-name="TableText">Witness ______________________________</text:p>
+          </table:table-cell>
+        </table:table-row>
+      </table:table>
+
+    </office:text>
+  </office:body>
+</office:document>

@@ -1,0 +1,82 @@
+{
+  "groups": [
+    {"name": "Partners", "description": "The firm's partners"},
+    {"name": "Fee Earners", "description": "Solicitors and paralegals who work on matters"},
+    {"name": "Support Staff", "description": "Legal assistants and office staff"}
+  ],
+  "users": [
+    {"username": "hashcombe", "firstName": "Helen", "name": "Ashcombe", "email": "helen.ashcombe@ashcombe-reeve.example", "groups": ["Partners", "Fee Earners", "author"]},
+    {"username": "treeve", "firstName": "Tom", "name": "Reeve", "email": "tom.reeve@ashcombe-reeve.example", "groups": ["Partners", "Fee Earners", "author"]},
+    {"username": "pnair", "firstName": "Priya", "name": "Nair", "email": "priya.nair@ashcombe-reeve.example", "groups": ["Fee Earners", "author"]},
+    {"username": "jclarke", "firstName": "Jamie", "name": "Clarke", "email": "jamie.clarke@ashcombe-reeve.example", "groups": ["Fee Earners", "author"]},
+    {"username": "cdoyle", "firstName": "Chris", "name": "Doyle", "email": "chris.doyle@ashcombe-reeve.example", "groups": ["Support Staff", "author"]},
+    {"username": "sokafor", "firstName": "Sam", "name": "Okafor", "email": "sam.okafor@ashcombe-reeve.example", "groups": ["admin"]}
+  ],
+  "classes": [
+    {"name": "Docs"},
+    {"name": "Correspondence", "subclasses": ["Letter", "Email", "Attendance Note"]},
+    {"name": "Agreements", "subclasses": ["Draft", "Executed"]},
+    {"name": "Court Documents", "subclasses": ["Pleading", "Evidence", "Order"]},
+    {"name": "Finance", "subclasses": ["Costs", "Calculation", "Statement"]},
+    {"name": "Firm", "subclasses": ["Policy", "HR", "IT"]}
+  ],
+  "stores": [
+    {"name": "Client Work", "acl": {"Everyone": ["READ"], "Partners": ["READ"]}},
+    {"name": "Firm", "acl": {"Everyone": ["READ"], "Partners": ["READ"]}}
+  ],
+  "templates": [
+    {"name": "Litigation",
+     "acl": {"Everyone": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"],
+             "Partners": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]},
+     "folders": [
+       {"name": "Correspondence"}, {"name": "Pleadings"}, {"name": "Evidence"}, {"name": "Drafts"}, {"name": "Emails"},
+       {"name": "Privileged", "acl": {"Partners": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]}}
+     ],
+     "searchFolders": [
+       {"name": "My Recent Docs Here", "days": 14, "onlyMine": true, "kind": "ALL"},
+       {"name": "Emails in This Matter", "days": 90, "onlyMine": false, "kind": "EMAILS"}
+     ]},
+    {"name": "Transactional",
+     "acl": {"Everyone": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]},
+     "folders": [
+       {"name": "Correspondence"}, {"name": "Drafts"}, {"name": "Due Diligence"}, {"name": "Executed"}, {"name": "Emails"}
+     ],
+     "searchFolders": [
+       {"name": "My Recent Docs Here", "days": 14, "onlyMine": true, "kind": "ALL"},
+       {"name": "Emails in This Matter", "days": 90, "onlyMine": false, "kind": "EMAILS"}
+     ]},
+    {"name": "Firm",
+     "acl": {"Everyone": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]},
+     "folders": [{"name": "Documents"}, {"name": "Policies"}],
+     "searchFolders": [{"name": "My Recent Docs Here", "days": 14, "onlyMine": true, "kind": "ALL"}]}
+  ],
+  "clients": [
+    {"number": 998, "name": "Ashcombe Reeve LLP"},
+    {"number": 1001, "name": "Saltmarsh Shipping Ltd"},
+    {"number": 1002, "name": "Brightwell Bakeries Ltd"},
+    {"number": 1003, "name": "Kestrel Software Ltd"},
+    {"number": 1004, "name": "Marsh Lane Community Trust"},
+    {"number": 1005, "name": "Dr Ada Fenwick"},
+    {"number": 1006, "name": "Oliver and Grace Pemberton"}
+  ],
+  "matters": [
+    {"ref": "998.1", "name": "Firm Policies", "description": "The firm's own policies and procedures, from complaints handling to how long files are kept.", "store": "Firm", "owner": "hashcombe", "template": "Firm"},
+    {"ref": "998.2", "name": "IT and Systems", "description": "Records of the firm's computer systems, its suppliers and the support it relies on.", "store": "Firm", "owner": "sokafor", "template": "Firm"},
+    {"ref": "998.3", "name": "HR", "description": "Staff contracts, appraisals and other personnel records, open to the partners only.", "store": "Firm", "owner": "hashcombe", "template": "Firm",
+     "acl": {"Partners": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]}},
+    {"ref": "1001.1", "name": "Charter Dispute – MV Northern Star", "description": "Saltmarsh Shipping Ltd, as charterer, disputes the shipowner's claim for demurrage on the MV Northern Star.", "store": "Client Work", "owner": "treeve", "template": "Litigation"},
+    {"ref": "1001.2", "name": "Vessel Sale", "description": "Saltmarsh Shipping Ltd sells its coaster, the MV Curlew Bay, to a Dutch buyer.", "store": "Client Work", "owner": "treeve", "template": "Transactional"},
+    {"ref": "1002.1", "name": "Commercial Lease", "description": "Brightwell Bakeries Ltd takes a ten-year lease of a bakery unit on the Weir Lane trading estate.", "store": "Client Work", "owner": "hashcombe", "template": "Transactional"},
+    {"ref": "1002.2", "name": "Employment Tribunal", "description": "Brightwell Bakeries Ltd defends a former delivery driver's claim for unfair dismissal.", "store": "Client Work", "owner": "treeve", "template": "Litigation"},
+    {"ref": "1003.1", "name": "Series A Investment", "description": "Kestrel Software Ltd raises its first outside investment from two venture investors.", "store": "Client Work", "owner": "hashcombe", "template": "Transactional"},
+    {"ref": "1003.2", "name": "Licence Review", "description": "A review of the software licences Kestrel Software Ltd offers its customers, ahead of the investment.", "store": "Client Work", "owner": "hashcombe", "template": "Transactional"},
+    {"ref": "1004.1", "name": "Grant Agreement", "description": "Marsh Lane Community Trust agrees the terms of a three-year grant for its youth centre.", "store": "Client Work", "owner": "hashcombe", "template": "Transactional"},
+    {"ref": "1005.1", "name": "Will and Lasting Power of Attorney", "description": "Dr Ada Fenwick makes a new will and appoints attorneys under two lasting powers of attorney.", "store": "Client Work", "owner": "treeve", "template": "Transactional"},
+    {"ref": "1006.1", "name": "House Purchase", "description": "Oliver and Grace Pemberton buy a three-bedroom house in Marlbridge.", "store": "Client Work", "owner": "hashcombe", "template": "Transactional"}
+  ],
+  "timeline": [
+    {"day": -41, "time": "14:10", "as": "cdoyle", "do": "file", "key": "lease-draft", "matter": "1002.1", "folder": "Drafts", "file": "brightwell-lease-draft.docx", "name": "Lease – Draft for Client.docx", "author": "hashcombe", "typist": "cdoyle", "class": "Agreements", "subclass": "Draft"},
+    {"day": -36, "time": "11:25", "as": "pnair", "do": "file", "key": "owners-letter", "matter": "1001.1", "folder": "Correspondence", "file": "saltmarsh-letter-to-owners.docx", "name": "Letter to Dunmere Pryce – Laytime and Demurrage.docx", "author": "treeve", "typist": "pnair", "class": "Correspondence", "subclass": "Letter"},
+    {"day": -31, "time": "16:40", "as": "jclarke", "do": "file", "key": "costs-schedule", "matter": "1001.1", "folder": "Drafts", "file": "northern-star-costs-schedule.ods", "name": "Costs Schedule to Date.ods", "author": "treeve", "typist": "jclarke", "class": "Finance", "subclass": "Costs"}
+  ]
+}

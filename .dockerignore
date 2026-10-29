@@ -20,3 +20,5 @@ site
 .env
 .env.*
 compose*.yaml
+# The demo stack's sources and files: the overlay mounts them, and the image doesn't need them
+docker/demo
