@@ -6,7 +6,9 @@
     {"username": "hashcombe", "firstName": "Helen", "name": "Ashcombe",
      "email": "helen.ashcombe@ashcombe-reeve.example", "groups": ["Partners", "author"]},
     {"username": "pnair", "firstName": "Priya", "name": "Nair",
-     "email": "priya.nair@ashcombe-reeve.example", "groups": ["author"]}
+     "email": "priya.nair@ashcombe-reeve.example", "groups": ["author"]},
+    {"username": "mvance", "firstName": "Mira", "name": "Vance",
+     "email": "mira.vance@ashcombe-reeve.example", "groups": ["admin"]}
   ],
   "classes": [
     {"name": "Correspondence", "subclasses": ["Letter", "Email"]}
@@ -54,6 +56,8 @@
     {"day": -5, "time": "09:30", "as": "pnair", "do": "deleteFolder", "matter": "1001.1",
      "folder": "Correspondence/Superseded"},
     {"day": -4, "as": "pnair", "do": "checkout", "doc": "memo"},
+    {"day": -3, "time": "11:00", "as": "pnair", "do": "note", "doc": "memo",
+     "text": "The club will send its laytime figures on Monday."},
     {"day": -4, "time": "12:00", "as": "hashcombe", "do": "file", "key": "terms", "matter": "1001.2",
      "folder": "Correspondence", "file": "letter.txt", "name": "Heads of Terms.txt"},
     {"day": -3, "as": "hashcombe", "do": "lock", "doc": "terms"},

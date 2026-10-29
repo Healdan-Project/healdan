@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.logicaldoc.core.HealdanTreeChecks;
 import com.logicaldoc.core.communication.Message;
 import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.communication.SystemMessage;
@@ -42,6 +43,7 @@ import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.ticket.Ticket;
@@ -139,9 +141,9 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * </tr>
  * <tr>
  * <td>{@code folder}</td>
- * <td>{@code matter}, {@code folder}, {@code name}</td>
- * <td></td>
- * <td>ADD on the parent</td>
+ * <td>{@code matter}, {@code name}</td>
+ * <td>{@code folder} (the parent; none: the workspace itself)</td>
+ * <td>ADD on the parent; for the workspace itself, being an administrator</td>
  * <td>{@code FolderDAO.create(parent, …, true, …)}</td>
  * </tr>
  * <tr>
@@ -155,7 +157,9 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * <td>{@code deleteFolder}</td>
  * <td>{@code matter}, {@code folder}</td>
  * <td></td>
- * <td>DELETE on the folder</td>
+ * <td>DELETE on the folder, then on every folder and document in its tree
+ * ({@code HealdanTreeChecks.deletedTrees}, as the web page's RPC checks); for
+ * a top-level folder or the workspace, being an administrator</td>
  * <td>{@code FolderDAO.deleteTree}</td>
  * </tr>
  * <tr>
@@ -198,6 +202,13 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * </tr>
  * </table>
  * <p>
+ * Inside a seed Healdan treats every actor as an admin, so the positions only
+ * admins may use (a matter's top level, workspaces, Stores, the Templates
+ * Store) aren't checked beyond the refusals above, and a manifest must not use
+ * them for a user who isn't an admin. Filing or moving a document to a
+ * matter's top level is refused for everyone, as Healdan's filing rule
+ * stands in a seed too.
+ * <p>
  * Run it outside any Hibernate session or transaction: {@link Backdater} writes
  * dates with JDBC and clears only the second-level cache, so a session that
  * had loaded the rows would write them back.
@@ -214,6 +225,10 @@ public final class DemoTimeline {
 	private static final int MESSAGE_DAYS = 60;
 
 	private static final Duration TICKET_LIFE = Duration.ofDays(30);
+
+	private static final String TOP_LEVEL_ADMINS = "only administrators add or delete a matter's top-level folders";
+
+	private static final String WORKSPACE_ADMINS = "only administrators delete a matter's workspace";
 
 	private final DemoFirm firm;
 
@@ -305,27 +320,14 @@ public final class DemoTimeline {
 		case "tag" -> tag(step, actor, when);
 		case "link" -> link(step, actor);
 		case "move" -> move(step, actor, when);
-		case "folder" -> {
-			Folder parent = firm.folder(step.matter(), step.folder());
-			need(actor, Permission.ADD, parent, step.matter() + "/" + step.folder());
-			FolderDAO.get().create(parent, new Folder(step.name()), true, folderHistory(actor, when));
-		}
+		case "folder" -> folder(step, actor, when);
 		case "delete" -> {
 			Document doc = need(actor, Permission.DELETE, step.doc());
 			DocumentDAO.get().delete(doc.getId(), history(actor, when));
 			// The Recycle Bin lists a deleted document by its last change
 			backdater.touch(doc.getId(), when, false);
 		}
-		case "deleteFolder" -> {
-			Folder folder = firm.folder(step.matter(), step.folder());
-			need(actor, Permission.DELETE, folder, step.matter() + "/" + step.folder());
-			List<Folder> left = FolderDAO.get().deleteTree(folder.getId(), folderHistory(actor, when));
-			if (!left.isEmpty())
-				throw new IllegalStateException(
-						"%d folders under %s weren't deleted".formatted(left.size(), step.folder()));
-			// As a deleted document's: the Recycle Bin lists the folder by its last change
-			backdater.touchFolder(folder.getId(), when);
-		}
+		case "deleteFolder" -> deleteFolder(step, actor, when);
 		case "bookmark" -> bookmark(step, actor);
 		case "myMatter" -> MyMatters.get().add(actor.getId(), firm.workspace(step.matter()).getId());
 		case "message" -> message(step, actor, when);
@@ -335,10 +337,72 @@ public final class DemoTimeline {
 		}
 	}
 
+	/**
+	 * As the web page's folder dialog: ADD on the parent. A matter's top
+	 * level is for administrators only, which Healdan's rules skip inside a
+	 * seed.
+	 */
+	private void folder(Step step, User actor, Date when) throws Exception {
+		Folder parent = folderAt(step.matter(), step.folder());
+		if (isWorkspace(step.folder()) && !actor.isAdmin())
+			throw adminsOnly(actor, TOP_LEVEL_ADMINS);
+		need(actor, Permission.ADD, parent, where(step));
+		FolderDAO.get().create(parent, new Folder(step.name()), true, folderHistory(actor, when));
+	}
+
+	/**
+	 * As the web page's delete: DELETE on the folder, then on every folder and
+	 * document in its tree ({@code HealdanTreeChecks.deletedTrees}, which the
+	 * web page's RPC calls and Healdan's rules skip inside a seed). A matter's
+	 * workspace and top-level folders are for administrators only.
+	 */
+	private void deleteFolder(Step step, User actor, Date when) throws Exception {
+		Folder folder = folderAt(step.matter(), step.folder());
+		if (isWorkspace(step.folder()) && !actor.isAdmin())
+			throw adminsOnly(actor, WORKSPACE_ADMINS);
+		if (isTopLevel(step.folder()) && !actor.isAdmin())
+			throw adminsOnly(actor, TOP_LEVEL_ADMINS);
+		need(actor, Permission.DELETE, folder, where(step));
+		try {
+			HealdanTreeChecks.deletedTrees(actor, List.of(folder.getId()));
+		} catch (PermissionException e) {
+			throw new IllegalStateException("%s lacks DELETE on everything in %s, so couldn't do this in the web page: %s"
+					.formatted(actor.getUsername(), where(step), e.getMessage()), e);
+		}
+		List<Folder> left = FolderDAO.get().deleteTree(folder.getId(), folderHistory(actor, when));
+		if (!left.isEmpty())
+			throw new IllegalStateException(
+					"%d folders under %s weren't deleted".formatted(left.size(), step.folder()));
+		// As a deleted document's: the Recycle Bin lists the folder by its last change
+		backdater.touchFolder(folder.getId(), when);
+	}
+
+	/** @param path a folder in the matter's workspace; null or blank for the workspace itself */
+	private Folder folderAt(String matter, String path) throws Exception {
+		return isWorkspace(path) ? firm.workspace(matter) : firm.folder(matter, path);
+	}
+
+	private static boolean isWorkspace(String path) {
+		return path == null || path.isBlank();
+	}
+
+	/** @return true for a folder directly in the workspace, which Healdan calls the matter's top level */
+	private static boolean isTopLevel(String path) {
+		return !isWorkspace(path) && !path.contains("/");
+	}
+
+	private static String where(Step step) {
+		return step.matter() + "/" + (step.folder() == null ? "" : step.folder());
+	}
+
+	private static IllegalStateException adminsOnly(User actor, String rule) {
+		return new IllegalStateException("%s isn't an administrator, and %s, so couldn't do this in the web page"
+				.formatted(actor.getUsername(), rule));
+	}
+
 	private void file(Step step, User actor, Date when) throws Exception {
-		String path = step.folder() == null ? "" : step.folder();
-		Folder folder = step.folder() == null ? firm.workspace(step.matter()) : firm.folder(step.matter(), path);
-		need(actor, Permission.WRITE, folder, step.matter() + "/" + path);
+		Folder folder = folderAt(step.matter(), step.folder());
+		need(actor, Permission.WRITE, folder, where(step));
 
 		Document vo = new Document();
 		vo.setFolder(folder);
@@ -399,6 +463,9 @@ public final class DemoTimeline {
 		note.setMessage(step.text());
 		note.setDate(when);
 		DocumentNoteDAO.get().store(note, history(actor, when));
+		// CE saves the document for a whole-document note: with the real time, and marked to index again
+		reindexIfNeeded(doc.getId(), actor, when);
+		backdater.touch(doc.getId(), when, false);
 	}
 
 	private void tag(Step step, User actor, Date when) throws Exception {
@@ -426,8 +493,8 @@ public final class DemoTimeline {
 	private void move(Step step, User actor, Date when) throws Exception {
 		DocumentDAO dao = DocumentDAO.get();
 		Document doc = need(actor, Permission.MOVE, step.doc());
-		Folder target = firm.folder(step.matter(), step.folder());
-		need(actor, Permission.WRITE, target, step.matter() + "/" + step.folder());
+		Folder target = folderAt(step.matter(), step.folder());
+		need(actor, Permission.WRITE, target, where(step));
 		doc = dao.initialize(doc);
 		DocumentManager.get().moveToFolder(doc, target, history(actor, when)).getDocument();
 		reindexIfNeeded(doc.getId(), actor, when);

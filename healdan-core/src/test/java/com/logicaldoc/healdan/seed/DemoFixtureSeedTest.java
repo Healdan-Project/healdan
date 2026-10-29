@@ -234,7 +234,9 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 		Document memo = byName("Attendance Note.txt");
 		assertEquals(DocumentStatus.CHECKEDOUT, memo.getStatus());
 		assertEquals(Long.valueOf(pnair.getId()), memo.getLockUserId());
-		assertEquals(clock.at(-4, null).getTime(), documentDate("ld_lastmodified", memo).getTime());
+		// A note is the memo's last action: CE saves the document for it, with the real time, and marks it to index
+		assertEquals(clock.at(-3, "11:00").getTime(), documentDate("ld_lastmodified", memo).getTime());
+		assertEquals(1, count("select count(*) from ld_note where ld_docid = ?", memo.getId()));
 
 		Document terms = byName("Heads of Terms.txt");
 		assertEquals(DocumentStatus.LOCKED, terms.getStatus());
