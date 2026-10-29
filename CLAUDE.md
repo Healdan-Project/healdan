@@ -16,7 +16,9 @@ This repo, Healdan (`Healdan-Project/healdan` on GitHub), is a hard fork of Logi
   - `.github/scripts/check-fontawesome-icons.py` catches them. It runs first in `build-logicaldoc.yml`, and `build` must pass before a PR can merge. Run it locally with `python3 .github/scripts/check-fontawesome-icons.py`.
   - When it flags lines an upstream sync brought in, swap them for Free icons in the sync PR itself. That's a merge fix, not feature work.
 - Outside the docs site's interim pages, nothing links to LogicalDOC's docs (docs, wiki, help or forums.logicaldoc.com). `.github/scripts/check-logicaldoc-doc-links.py` runs next to the icon check and fails `build` on one, naming the file and line. When a sync brings one in, point it at docs.healdan.com in the sync PR, a merge fix like the icons. Its `ALLOWED` list holds the few exact lines Healdan leaves alone, each with its reason (the `SystemInfo` defaults `HealdanSystemInfo` replaces).
-- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for, then points to the docs site. It's Healdan's own now: when a sync brings an edit to upstream's README, keep Healdan's. `Build_this_Sources.md` and `docker/README.md` are short pointers to the site.
+- `README.md` opens with Healdan's notice that it's a modified version of LogicalDOC CE, which the LGPL asks for, then its Status section (experimental, no warranty, use at your own risk), then points to the docs site. It's Healdan's own now: when a sync brings an edit to upstream's README, keep Healdan's. `Build_this_Sources.md` and `docker/README.md` are short pointers to the site.
+  - The docs site's home page and the Install manual's first page carry the same status notice. Change all three together.
+  - `GPL-3.0.txt` is the GPLv3, which the LGPL in `LICENSE` incorporates. It isn't named `COPYING`, because GitHub would then stop detecting the repository's licence as LGPL-3.0.
 
 ## Roadmap
 
