@@ -48,6 +48,22 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: an Office add-in's flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
 | `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the API's add-in flow (`test-api.sh`, step 5c), the helper's open-save-close cycle (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), and data surviving a restart. With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
 
+### When a Smoke Check Fails
+
+The server's warnings go to its own log, `repository/logs/dms.log` in the repository volume, not to the container's
+output. So when a check fails, or the script stops early, `docker/smoke-test.sh` prints the server's log before it
+removes the stack. It's at the end of the script's output, after `SOME CHECKS FAILED` when a check failed, and in CI
+at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
+
+- **The app container's last 150 lines of output:** the entrypoint, the init tool and Tomcat's start.
+- **The run's warnings and errors from `dms.log`,** the last 200 lines of them. Each keeps its exception's message
+  and `Caused by` lines, without the stack frames.
+- **`dms.log`'s last 40 lines.**
+
+`dms.log` covers the whole run. Step 8 replaces the container but keeps the volume, so its restart doesn't lose the
+earlier steps' lines. Every `FAIL` line ends with its time in UTC, and the smoke stack logs in UTC, so the log's
+lines from around a failure are easy to find.
+
 ## Desktop Client Tests
 
 The helper's and the LibreOffice extension's tests run with `dotnet test` and Python's `unittest`, apart from
