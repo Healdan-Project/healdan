@@ -1,7 +1,8 @@
 # Healdan's Maven repository: design
 
+- **Tracking issue:** [Healdan-Project/healdan#107](https://github.com/Healdan-Project/healdan/issues/107)
 - **Date:** 2026-10-29
-- **Status:** designed with the owner on 2026-10-29; waiting for the owner's review of this document.
+- **Status:** approved by the owner on 2026-10-29.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
   - the failed `master` runs of `build-logicaldoc.yml` that day (40877494760, 40891327931, 40894089832), and the
