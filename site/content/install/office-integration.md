@@ -58,9 +58,9 @@ by the words in it.
   id or password, unlike LogicalDOC's "Edit with Office" links. The helper uses its own sign-in.
 - **A link can only open a document,** and only from the helper's own server. It never saves, files, releases or
   checks in anything, and it's ignored while one of the helper's windows is waiting for an answer.
-- **Links open only what LibreOffice edits:** documents, spreadsheets and presentations. A link to any other kind of
-  file is refused with a notice, before anything is downloaded, so a page can't hand a file someone put in a matter
-  to whatever app the Mac has for it.
+- **Links open only what LibreOffice edits:** documents, spreadsheets, presentations and drawings. A link to any other
+  kind of file is refused with a notice, before anything is downloaded, so a page can't hand a file someone put in a
+  matter to whatever app the Mac has for it.
 - **Other files** open only from the helper's Open from Healdan window, where the person chose them, read-only in the
   Mac's default app. Each copy is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
   it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 24

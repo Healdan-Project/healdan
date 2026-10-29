@@ -20,8 +20,8 @@ weight: 10
 - **The extension is installed by a click.** On macOS, LibreOffice's command-line installer can't install Healdan's
   extension, so the helper opens it in LibreOffice for the person to accept: the first time, and whenever a new
   version of the helper brings a newer extension.
-- **The doc ID footer is Writer's only.** Calc and Impress show the doc # and version in the title bar, but have no
-  footer field.
+- **The doc ID footer is Writer's only.** Calc, Impress and Draw show the doc # and version in the title bar, but have
+  no footer field.
 - **Stamping removes a signature.** A Word or LibreOffice file with a digital signature that carries
   `Healdan Doc ID` loses its signature when a save through the helper or the API stamps it, as the stamp changes
   the signed content. The parts Healdan rewrites can also change form, such as the order of attributes, though not

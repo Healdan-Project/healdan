@@ -124,11 +124,11 @@ Set through Fluent's resources where it has them, and through styles in `HelperS
 | Toolbar | `chevron-left`, `chevron-right`, `chevron-up`, `search`, `selector` |
 | Open's places | `clock` Recent Documents, `lock` Checked Out to Me, `star` Favorites, `history` Recent Matters, `briefcase` My Matters, `folder` Recent Folders |
 | Save's places | `folder` Recent Folders, `history` Recent Matters, `briefcase` My Matters, `building` Clients, `star` Favorites |
-| Rows and the details pane | `folder` (accent), `file-text` (documents), `file-spreadsheet`, `presentation`, `file-type-pdf`, `photo` (images), `file` (anything else), `lock` (the holder badge), `star` |
+| Rows and the details pane | `folder` (accent), `file-text` (documents), `file-spreadsheet`, `presentation`, `triangle-square-circle` (drawings, added 2026-10-29), `file-type-pdf`, `photo` (images), `file` (anything else), `lock` (the holder badge), `star` |
 | Save | `folder-plus` (New Folder) |
 | Open's details | `eye` (older version) |
 | Alerts | `alert-triangle` (the badge) |
-| Settings | `server`, `file-text`, `file-spreadsheet`, `presentation`, `power`, `puzzle` |
+| Settings | `server`, `file-text`, `file-spreadsheet`, `presentation`, `triangle-square-circle`, `power`, `puzzle` |
 | LibreOffice | `device-floppy`, `folder-open`, `versions`, `file-plus`, `list-details`, `hash` |
 
 ## 5. Window shells

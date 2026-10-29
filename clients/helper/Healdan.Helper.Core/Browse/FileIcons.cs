@@ -18,5 +18,8 @@ public static class FileIcons
 
     /// <summary>An office kind's icon, as Settings' rows show it.</summary>
     public static string For(FileKind kind) =>
-        kind == FileKinds.Spreadsheets ? "file-spreadsheet" : kind == FileKinds.Presentations ? "presentation" : "file-text";
+        kind == FileKinds.Spreadsheets ? "file-spreadsheet"
+        : kind == FileKinds.Presentations ? "presentation"
+        : kind == FileKinds.Drawings ? "triangle-square-circle"
+        : "file-text";
 }

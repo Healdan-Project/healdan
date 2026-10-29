@@ -3,8 +3,8 @@ title: Working in LibreOffice
 weight: 5
 ---
 
-With the Healdan Helper on your Mac, you save to and open from Healdan inside LibreOffice Writer, Calc and Impress,
-without going through the web page. The title bar always shows the document's doc # and version:
+With the Healdan Helper on your Mac, you save to and open from Healdan inside LibreOffice Writer, Calc, Impress and
+Draw, without going through the web page. The title bar always shows the document's doc # and version:
 `Lease agreement #1234 v2.1`.
 
 ## How It Fits Together

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The Healdan menu and toolbar (spec 6.2), in Writer, Calc and Impress. The menu is in the Start Center too, with Open
-  from Healdan only. Insert Doc ID is Writer's. A Context is matched as text against the window's module. The toolbar's
-  buttons come in three groups, and the Images node gives each command its icon, in two sizes and a high-contrast pair.
+  The Healdan menu and toolbar (spec 6.2), in Writer, Calc, Impress and Draw. The menu is in the Start Center too,
+  with Open from Healdan only. Insert Doc ID is Writer's. A Context is matched as text against the window's module.
+  The toolbar's buttons come in three groups, and the Images node gives each command its icon, in two sizes and a
+  high-contrast pair.
 -->
 <oor:component-data xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema"
                     oor:name="Addons" oor:package="org.openoffice.Office">
@@ -13,7 +14,7 @@
           <value xml:lang="en-US">~Healdan</value>
         </prop>
         <prop oor:name="Context" oor:type="xs:string">
-          <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.frame.StartModule</value>
+          <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument,com.sun.star.frame.StartModule</value>
         </prop>
         <node oor:name="Submenu">
           <node oor:name="m01" oor:op="replace">
@@ -27,7 +28,7 @@
               <value>_self</value>
             </prop>
             <prop oor:name="Context" oor:type="xs:string">
-              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
             </prop>
           </node>
           <node oor:name="m02" oor:op="replace">
@@ -41,7 +42,7 @@
               <value>_self</value>
             </prop>
             <prop oor:name="Context" oor:type="xs:string">
-              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.frame.StartModule</value>
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument,com.sun.star.frame.StartModule</value>
             </prop>
           </node>
           <node oor:name="m03" oor:op="replace">
@@ -49,7 +50,7 @@
               <value>private:separator</value>
             </prop>
             <prop oor:name="Context" oor:type="xs:string">
-              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
             </prop>
           </node>
           <node oor:name="m04" oor:op="replace">
@@ -63,7 +64,7 @@
               <value>_self</value>
             </prop>
             <prop oor:name="Context" oor:type="xs:string">
-              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
             </prop>
           </node>
           <node oor:name="m05" oor:op="replace">
@@ -77,7 +78,7 @@
               <value>_self</value>
             </prop>
             <prop oor:name="Context" oor:type="xs:string">
-              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
             </prop>
           </node>
           <node oor:name="m06" oor:op="replace">
@@ -91,7 +92,7 @@
               <value>_self</value>
             </prop>
             <prop oor:name="Context" oor:type="xs:string">
-              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+              <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
             </prop>
           </node>
           <node oor:name="m07" oor:op="replace">
@@ -132,7 +133,7 @@
             <value>_self</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t02" oor:op="replace">
@@ -146,7 +147,7 @@
             <value>_self</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t03" oor:op="replace">
@@ -154,7 +155,7 @@
             <value>private:separator</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t04" oor:op="replace">
@@ -168,7 +169,7 @@
             <value>_self</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t05" oor:op="replace">
@@ -182,7 +183,7 @@
             <value>_self</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t06" oor:op="replace">
@@ -190,7 +191,7 @@
             <value>private:separator</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t07" oor:op="replace">
@@ -204,7 +205,7 @@
             <value>_self</value>
           </prop>
           <prop oor:name="Context" oor:type="xs:string">
-            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument,com.sun.star.drawing.DrawingDocument</value>
           </prop>
         </node>
         <node oor:name="t08" oor:op="replace">
