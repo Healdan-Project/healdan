@@ -1,5 +1,6 @@
 package com.logicaldoc.web.data;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -27,21 +28,29 @@ public class AclDataServletTest extends AbstractDataServletTestCase {
 		assertTrue(FileUtil.readFile(responseFile).contains("<entityId>2</entityId>"));
 
 		response.clear();
+		response = new MockServletResponse(responseFile);
 		mockRequest.setParameter("id", "5");
 		mockRequest.setParameter("type", "folder");
 		testSubject.service(mockRequest, response);
+		response.flushBuffer();
 		assertTrue(FileUtil.readFile(responseFile).contains("<entityId>2</entityId>"));
 
 		response.clear();
+		response = new MockServletResponse(responseFile);
 		mockRequest.setParameter("id", "-1");
 		mockRequest.setParameter("type", "template");
 		testSubject.service(mockRequest, response);
-		assertTrue(FileUtil.readFile(responseFile).contains("<entityId>2</entityId>"));
+		response.flushBuffer();
+		// Only group 3 is in template -1's ACL
+		assertTrue(FileUtil.readFile(responseFile).contains("<entityId>3</entityId>"));
 
 		response.clear();
+		response = new MockServletResponse(responseFile);
 		mockRequest.setParameter("id", "1");
 		mockRequest.setParameter("type", "document");
 		testSubject.service(mockRequest, response);
-		assertTrue(FileUtil.readFile(responseFile).contains("<entityId>2</entityId>"));
+		response.flushBuffer();
+		// The fixture gives document 1 no ACL entries
+		assertEquals("<list></list>", FileUtil.readFile(responseFile));
 	}
 }
