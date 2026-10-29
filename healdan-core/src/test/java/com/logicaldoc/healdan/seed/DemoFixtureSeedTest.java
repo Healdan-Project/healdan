@@ -11,7 +11,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,7 +25,11 @@ import javax.sql.DataSource;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
+import com.logicaldoc.core.document.IndexingStatus;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.metadata.AttributeOption;
@@ -40,6 +47,8 @@ import com.logicaldoc.healdan.HealdanOperation.Kind;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
+import com.logicaldoc.healdan.navigation.MyMatters;
+import com.logicaldoc.healdan.seed.demo.DemoClock;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.util.spring.Context;
 
@@ -169,5 +178,156 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 				""");
 		Exception e = assertThrows(Exception.class, () -> run(seed(dir.toString())));
 		assertTrue(e.getMessage(), e.getMessage().contains("Nobody"));
+	}
+
+	@Test
+	public void testPlaysTheTimeline() throws Exception {
+		run(seed(TEST_DIR));
+		DemoClock clock = new DemoClock(TODAY, ZoneId.systemDefault());
+		DocumentDAO docs = DocumentDAO.get();
+		User pnair = UserDAO.get().findByUsername("pnair");
+		User hashcombe = UserDAO.get().findByUsername("hashcombe");
+
+		Document letter = byName("Letter to Owners.txt");
+		// CE records a move as a subversion: 1.0 filed, 2.0 checked in, 2.1 moved. The tests' context.properties
+		// keeps a document's newest two versions (document.maxversions=2), where the image keeps them all
+		assertEquals("2.1", letter.getVersion());
+		assertEquals(List.of("2.0", "2.1"), jdbc().queryForList(
+				"select ld_version from ld_version where ld_documentid = ? and ld_deleted = 0 order by ld_versiondate",
+				String.class, letter.getId()));
+		assertEquals(List.of(clock.at(-8, null).getTime(), clock.at(-2, null).getTime()), jdbc()
+				.queryForList("select ld_versiondate from ld_version where ld_documentid = ? and ld_deleted = 0 "
+						+ "order by ld_versiondate", Timestamp.class, letter.getId())
+				.stream().map(Timestamp::getTime).toList());
+		// CE keeps a user property's id in intValue and its username in stringValue (Attribute.setValue)
+		assertEquals(Long.valueOf(hashcombe.getId()),
+				letter.getAttribute(HealdanConstants.ATTR_AUTHOR).getIntValue());
+		assertEquals(Long.valueOf(pnair.getId()), letter.getAttribute(HealdanConstants.ATTR_TYPIST).getIntValue());
+		assertEquals("Correspondence", letter.getValue(HealdanConstants.ATTR_DOCCLASS));
+		assertEquals("Letter", letter.getValue(HealdanConstants.ATTR_DOCSUBCLASS));
+		assertEquals(Set.of("charter", "urgent"), new HashSet<>(docs.findTags(letter.getId())));
+		assertEquals(correspondenceOf(matter(1001, 2)), letter.getFolder().getId());
+		assertEquals(1, count("select count(*) from ld_note where ld_docid = ?", letter.getId()));
+
+		// Dates are read through JDBC: in the tests Hibernate reads them in another zone than JDBC writes them
+		// Filed on day -10 at 09:30, though CE's create stamped it with now
+		assertEquals(clock.at(-10, "09:30").getTime(), documentDate("ld_creation", letter).getTime());
+		// Its last change was the move, on day -2 at 09:00
+		assertEquals(clock.at(-2, null).getTime(), documentDate("ld_lastmodified", letter).getTime());
+		// The check-in on day -8 gave the file its date
+		assertEquals(clock.at(-8, null).getTime(), documentDate("ld_date", letter).getTime());
+		// Each action is in the history as its user, at its time
+		assertEquals(clock.at(-8, null).getTime(),
+				eventDate(letter, "event.checkedin", hashcombe).getTime());
+		assertEquals(clock.at(-10, "09:30").getTime(), eventDate(letter, "event.stored", pnair).getTime());
+		assertEquals(clock.at(-8, "10:00").getTime(), jdbc().queryForObject(
+				"select ld_date from ld_note where ld_docid = ?", Timestamp.class, letter.getId()).getTime());
+
+		// Healdan names an email after its subject, with the colon replaced (M1 spec section 6)
+		Document reply = byName("Re_ MV Northern Star - laytime.eml");
+		assertEquals("Re: MV Northern Star - laytime", reply.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
+		// Healdan's listener wrote this date and Hibernate reads it back as it was written
+		assertEquals(clock.at(-9, "11:00").getTime() - 25 * 60_000L,
+				((Date) reply.getValue(HealdanConstants.ATTR_EMAILSENT)).getTime());
+		assertTrue(reply.getPassword() != null && !reply.getPassword().isEmpty());
+
+		Document memo = byName("Attendance Note.txt");
+		assertEquals(DocumentStatus.CHECKEDOUT, memo.getStatus());
+		assertEquals(Long.valueOf(pnair.getId()), memo.getLockUserId());
+		assertEquals(clock.at(-4, null).getTime(), documentDate("ld_lastmodified", memo).getTime());
+
+		Document terms = byName("Heads of Terms.txt");
+		assertEquals(DocumentStatus.LOCKED, terms.getStatus());
+		assertTrue(docs.isReadAllowed(terms.getId(), pnair.getId()));
+		assertFalse(FolderDAO.get().isReadAllowed(terms.getFolder().getId(), pnair.getId()));
+		// Enough to work with the document, not only to know of it (demo spec section 4.4)
+		assertTrue(docs.isPermissionAllowed(Permission.PREVIEW, terms.getId(), pnair.getId()));
+		assertTrue(docs.isPermissionAllowed(Permission.DOWNLOAD, terms.getId(), pnair.getId()));
+		assertFalse(docs.isPermissionAllowed(Permission.WRITE, terms.getId(), pnair.getId()));
+
+		// Indexed inside their actions, so the background indexer has nothing left to do and re-date them
+		assertEquals(0, count("select count(*) from ld_document where ld_deleted = 0 and ld_indexed <> ?",
+				IndexingStatus.INDEXED.ordinal()));
+
+		// The Recycle Bin lists a deleted document by the day it was deleted
+		List<Timestamp> deleted = jdbc().queryForList("select ld_lastmodified from ld_document where ld_deleted <> 0",
+				Timestamp.class);
+		assertEquals(1, deleted.size());
+		assertEquals(clock.at(-5, null).getTime(), deleted.get(0).getTime());
+		assertEquals(1, count("select count(*) from ld_folder where ld_deleted <> 0 and ld_name = 'Superseded'"));
+		assertEquals(1, count("select count(*) from ld_link"));
+		assertEquals(1, count("select count(*) from ld_ticket"));
+		// The link is live: it expires about 30 days after the real today, not after the timeline's day
+		long expires = jdbc().queryForObject("select ld_expired from ld_ticket", Timestamp.class).getTime();
+		long day = 24 * 3_600_000L;
+		assertTrue(Long.toString(expires), Math.abs(expires - (System.currentTimeMillis() + 30 * day)) < 2 * day);
+		assertEquals(1, count("select count(*) from ld_bookmark where ld_userid = ? and ld_docid = ?",
+				pnair.getId(), memo.getId()));
+		assertEquals(1, count("select count(*) from ld_systemmessage"));
+		assertEquals(clock.at(-1, null).getTime(),
+				jdbc().queryForObject("select ld_sentdate from ld_systemmessage", Timestamp.class).getTime());
+		assertEquals(1, MyMatters.get().list(pnair.getId()).size());
+
+		// Doc #s follow the order of filing
+		List<Long> numbers = jdbc().queryForList("select ld_customid from ld_document order by ld_creation, ld_id",
+				String.class).stream().map(Long::valueOf).toList();
+		assertEquals(numbers.stream().sorted().toList(), numbers);
+
+		// Nothing is dated today
+		Timestamp latest = jdbc().queryForObject("select max(ld_date) from ld_history", Timestamp.class);
+		assertTrue(latest.toString(), latest.toLocalDateTime().toLocalDate().isBefore(TODAY));
+		// Rows a deletion hides aren't looked at: CE re-saves a deleted document's notes and links as it deletes
+		// them. A deleted document is looked at above
+		for (String table : List.of("ld_document", "ld_note", "ld_link", "ld_ticket", "ld_bookmark",
+				"ld_systemmessage")) {
+			Timestamp changed = jdbc().queryForObject(
+					"select max(ld_lastmodified) from " + table + " where ld_deleted = 0", Timestamp.class);
+			assertTrue(table + " " + changed, changed.toLocalDateTime().toLocalDate().isBefore(TODAY));
+		}
+		// A version is listed by its own date. Its last-modified date isn't shown anywhere, and a later action
+		// on its document re-saves some (the reply's, here), so it isn't looked at
+		Timestamp versioned = jdbc().queryForObject("select max(ld_versiondate) from ld_version", Timestamp.class);
+		assertTrue(versioned.toString(), versioned.toLocalDateTime().toLocalDate().isBefore(TODAY));
+		// The folders the stack made before the demo, such as the Templates Store, are dated today, so look at
+		// the ones the demo made: none was saved today, the deleted one included
+		assertEquals(0, count("select count(*) from ld_folder where ld_creation < ? and ld_lastmodified >= ?",
+				Timestamp.valueOf(TODAY.atStartOfDay()), Timestamp.valueOf(TODAY.atStartOfDay())));
+		assertEquals(clock.at(-5, "09:30").getTime(), jdbc().queryForObject(
+				"select ld_lastmodified from ld_folder where ld_name = 'Superseded'", Timestamp.class).getTime());
+	}
+
+	@Test
+	public void testRefusesASecondRun() throws Exception {
+		run(seed(TEST_DIR));
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> run(seed(TEST_DIR)));
+		assertTrue(e.getMessage(), e.getMessage().contains("down -v"));
+	}
+
+	private static Document byName(String name) throws Exception {
+		List<Long> ids = jdbc().queryForList("select ld_id from ld_document where ld_filename = ? and ld_deleted = 0",
+				Long.class, name);
+		assertEquals(name, 1, ids.size());
+		// Initialized, because the DAO's initialize returns a loaded copy and leaves its argument lazy
+		return DocumentDAO.get().findById(ids.get(0), true);
+	}
+
+	private static Timestamp documentDate(String column, Document doc) {
+		return jdbc().queryForObject("select %s from ld_document where ld_id = ?".formatted(column), Timestamp.class,
+				doc.getId());
+	}
+
+	private static Timestamp eventDate(Document doc, String event, User user) {
+		return jdbc().queryForObject("select ld_date from ld_history where ld_docid = ? and ld_event = ? and ld_userid = ?",
+				Timestamp.class, doc.getId(), event, user.getId());
+	}
+
+	private static long correspondenceOf(Matter matter) throws Exception {
+		FolderDAO dao = FolderDAO.get();
+		return dao.findByName(dao.findById(matter.getFolderId()), "Correspondence", Tenant.DEFAULT_ID, true).get(0)
+				.getId();
+	}
+
+	private static int count(String sql, Object... args) {
+		return jdbc().queryForObject(sql, Integer.class, args);
 	}
 }

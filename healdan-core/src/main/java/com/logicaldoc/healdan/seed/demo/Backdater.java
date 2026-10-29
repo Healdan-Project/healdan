@@ -99,6 +99,16 @@ public final class Backdater {
 	}
 
 	/**
+	 * Dates a folder an action changed, whose save set its last-modified date
+	 * to now. The Recycle Bin lists a deleted folder by that date.
+	 */
+	public void touchFolder(long folderId, Date when) {
+		jdbc.update("update ld_folder set ld_lastmodified = ? where ld_id = ?", new Timestamp(when.getTime()),
+				folderId);
+		evictCache();
+	}
+
+	/**
 	 * Clears every region of the second-level cache (entities, collections and
 	 * queries), since the writes above can touch any of the tables
 	 */

@@ -90,7 +90,7 @@ public record DemoManifest(List<GroupSpec> groups, List<UserSpec> users, List<Cl
 	}
 
 	/**
-	 * One action on the timeline (Task 4 of the plan lists what each needs).
+	 * One action on the timeline. {@link DemoTimeline} lists what each needs.
 	 *
 	 * @param day days before the stack's first start, so -1 is the day
 	 *        before

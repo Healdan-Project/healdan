@@ -18,12 +18,14 @@ import com.logicaldoc.healdan.seed.demo.DemoClock;
 import com.logicaldoc.healdan.seed.demo.DemoFirm;
 import com.logicaldoc.healdan.seed.demo.DemoManifest;
 import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
+import com.logicaldoc.healdan.seed.demo.DemoTimeline;
 import com.logicaldoc.util.spring.Context;
 
 /**
  * For screenshots only: when {@code HEALDAN_DEMO_FIXTURE} is {@code true},
  * fills a fresh stack with the demo firm that the manifest in
- * {@code HEALDAN_DEMO_DIR} describes, its users signing in with
+ * {@code HEALDAN_DEMO_DIR} describes, then plays its timeline with the files
+ * in that folder's {@code files}. Its users sign in with
  * {@code HEALDAN_DEMO_PASSWORD} (demo spec §5). {@code docker/demo}'s
  * overlay sets all three.
  * <p>
@@ -84,10 +86,11 @@ public class DemoFixtureSeed implements SeedStep {
 		DemoClock clock = new DemoClock(today.get(), ZoneId.systemDefault());
 
 		Backdater backdater = new Backdater(jdbc);
-		new DemoFirm(manifest, password).build();
+		DemoFirm firm = new DemoFirm(manifest, password).build();
 		// The firm is set up the day before its first action
 		int firstDay = manifest.timeline().stream().mapToInt(Step::day).min().orElse(-1);
 		backdater.stamp(clock.at(firstDay - 1, "08:30"));
+		new DemoTimeline(firm, dir.resolve("files"), clock, backdater, DemoTimeline::index).run(manifest.timeline());
 	}
 
 	private String required(String name) {

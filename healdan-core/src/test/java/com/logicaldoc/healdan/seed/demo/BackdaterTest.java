@@ -93,6 +93,23 @@ public class BackdaterTest extends AbstractHealdanTestCase {
 		assertEquals(FolderDAO.get().findById(folder.getId()).getCreation().getTime(), cached.getTime());
 	}
 
+	@Test
+	public void testTouchDatesAFolderTheActionSaved() throws Exception {
+		Backdater backdater = new Backdater(jdbc());
+		Folder folder = createFolder("touched");
+		// The read loads the folder into the second-level cache with its real last-modified date
+		Date real = FolderDAO.get().findById(folder.getId()).getLastModified();
+
+		backdater.touchFolder(folder.getId(), LONG_AGO);
+
+		Timestamp modified = jdbc().queryForObject("select ld_lastmodified from ld_folder where ld_id = ?",
+				Timestamp.class, folder.getId());
+		assertEquals(LONG_AGO.getTime(), modified.getTime());
+		// A save from the cache's copy would write the real date back over it
+		Date cached = FolderDAO.get().findById(folder.getId()).getLastModified();
+		assertNotEquals("The cache still holds the real date", real.getTime(), cached.getTime());
+	}
+
 	private Folder createFolder(String name) throws Exception {
 		Folder workspace = FolderDAO.get().findFolder(Folder.DEFAULTWORKSPACEID);
 		Folder vo = new Folder(name);
