@@ -96,4 +96,5 @@ has closed, the helper's menu lists it under **Not Yet in Healdan** until you fi
 [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended).
 
 When you sign in to another server, the copies left from the old one move to a folder of their own beside `Copies`,
-such as `Copies from healdan.example`, and the helper never sends them to the new server.
+such as `Copies from healdan.example`, and the helper never sends them to the new server. They come back when you sign
+in to the old server again.

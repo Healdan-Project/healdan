@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
+using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
@@ -89,6 +91,10 @@ public sealed class HelperSessionTests : IDisposable
         await Wait.Until(() => _app.LockSeen(path), "the close watcher sees the lock file");
         return path;
     }
+
+    private static DocumentView View(long number, string name = "Lease agreement.docx") =>
+        new("document", number, name, 10, "2.1", "2.1", $"{number}.2.1",
+            new FolderRef(5, "Documents", "folder"), null, DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, null, true);
 
     private bool Revoked() => _http.Calls.Contains("DELETE healdan.test/api/v1/auth/tokens/current");
 
@@ -753,6 +759,7 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(File.Exists(Path.Combine(aside, "." + Path.GetFileName(path) + ".healdan.json")));
         Assert.DoesNotContain(_http.Calls, c => c.Contains("second.test/api/v1/documents/5", StringComparison.Ordinal)); // not resumed there
         Assert.Contains("Copies from healdan.test", _notifier.All);
+        Assert.Contains("brings them back when you sign in to healdan.test again", _notifier.All);
     }
 
     [Fact]
@@ -770,6 +777,191 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(session.Started);
         Assert.True(File.Exists(path));
         Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.test")));
+    }
+
+    [Fact]
+    public async Task ACopyRecordsTheServerItCameFrom()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+
+        var path = await OpenAsync(session);
+
+        Assert.Equal(Account, new CopyStore(Paths).Find(path)!.Value.Item2.Server);
+    }
+
+    [Fact]
+    public async Task CopiesSetAsideComeBackWhenTheirServerSignsInAgain()
+    {
+        SignedInBefore();
+        var session = Make(signOutFlush: TimeSpan.FromMilliseconds(300));
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        _server.Down = true;
+        FakeApp.Write(path, "an edit that can't go up");
+        await Wait.Until(() => _notifier.All.Contains("A save is waiting for Healdan"), "the save waiting");
+        FakeApp.Close(path); // its window closes with the save still waiting
+        _windows.OnSignOutHere = (_, _) => Task.FromResult(true);
+        await session.SignOutAsync();
+        _server.Down = false;
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync("https://second.test", "robert", Password) is null;
+        await session.SignInAgainAsync();
+        Assert.True(session.Started);
+        Assert.Equal(new AsideCopies("healdan.test", Path.Combine(_root, "Copies from healdan.test"), 1),
+            Assert.Single(session.CopiesAside()));
+        await session.SignOutAsync();
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(Account, "robert", Password) is null;
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.Empty(session.CopiesAside());
+        Assert.Contains("The copy set aside from healdan.test is back", _notifier.All);
+        await Wait.Until(() => _server.Saves.Any(s => s.DocNumber == 5 && s.Content == "an edit that can't go up"),
+            "the kept save sent to its own server");
+        Assert.DoesNotContain(_http.Calls, c => c.Contains("second.test/api/v1/documents/5", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ACopyNamingAnotherServerIsSetAsideAtTheStartWhenTheSettingsAreLost()
+    {
+        SignedInBefore();
+        var first = Make();
+        await first.StartAsync();
+        var path = await OpenAsync(first);
+        first.Dispose(); // Quit: the copy stays, checked out on healdan.test
+        File.Delete(Paths.Settings);
+        _keychain.Items.Clear();
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync("https://second.test", "robert", Password) is null;
+
+        var second = Make();
+        await second.StartAsync();
+        await Wait.Until(() => second.Started, "started on second.test");
+
+        Assert.True(File.Exists(Path.Combine(_root, "Copies from healdan.test", Path.GetFileName(path))));
+        Assert.Contains("won't send them to second.test", _notifier.All);
+        Assert.DoesNotContain(_http.Calls, c => c.Contains("second.test/api/v1/documents/5", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AStartThatCantSetAsideAnotherServersCopyDoesntStart()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        SignedInBefore();
+        var (path, _, _) = new CopyStore(Paths, "https://second.test").Create(View(5), false, "LibreOffice");
+        File.WriteAllText(path, "second.test's document 5");
+        File.SetUnixFileMode(Paths.Copies, UnixFileMode.UserRead | UnixFileMode.UserExecute); // nothing can leave it
+        try
+        {
+            var session = Make();
+            await session.StartAsync();
+            await Wait.Until(() => session.StartFailed, "the start refused");
+
+            Assert.False(session.Started);
+            Assert.Contains("hasn't started", _notifier.All);
+            Assert.True(File.Exists(path));
+            Assert.DoesNotContain(_http.Calls, c => c.Contains("healdan.test/api/v1/documents/5", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.SetUnixFileMode(Paths.Copies, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public async Task ASignInToAnotherServerRefusedForAMoveThatFailedChangesNothing()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        SignedInBefore();
+        _keychain.Items.Clear(); // no kept token, so the start asks for a sign-in, and the user types another server
+        var (path, _, _) = new CopyStore(Paths, Account).Create(View(5), false, "LibreOffice");
+        File.WriteAllText(path, "healdan.test's document 5");
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInAsync("https://second.test", "robert", Password);
+            return false;
+        };
+        File.SetUnixFileMode(Paths.Copies, UnixFileMode.UserRead | UnixFileMode.UserExecute); // nothing can leave it
+        try
+        {
+            var session = Make();
+            await session.StartAsync();
+
+            Assert.Contains("couldn't move the copies from healdan.test out of the way", refusal);
+            Assert.Equal(Account, HelperSettings.Load(Paths).Server);
+            Assert.False(session.Started);
+            Assert.False(session.SignedIn);
+            Assert.True(File.Exists(path));
+            Assert.Empty(session.CopiesAside());
+        }
+        finally
+        {
+            File.SetUnixFileMode(Paths.Copies, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public async Task ACopyOpenInAnAppWhenAnotherServerSignsInIsLookedAfterAsOpenWhenItsServerReturns()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        var lockFile = FakeApp.LockPath(path);
+        await session.SignOutAsync();
+        Assert.True(File.Exists(path)); // still checked out on healdan.test, so its copy stays
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync("https://second.test", "robert", Password) is null;
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.False(File.Exists(path));
+        Assert.True(File.Exists(Path.Combine(_root, "Copies from healdan.test", Path.GetFileName(path))));
+        Assert.True(File.Exists(lockFile)); // the app deletes its lock file by the path it opened, so it stays
+        await session.SignOutAsync();
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(Account, "robert", Password) is null;
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.True(File.Exists(path));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.test")));
+        Assert.True(File.Exists(lockFile));
+        Assert.Equal(path, Assert.Single(session.OpenCopies()).Path); // the cycle looks after it as open
+    }
+
+    [Fact]
+    public async Task ASetAsideCopyOpenInAnAppComesBackOnceClosed()
+    {
+        var (path, _, _) = new CopyStore(Paths, Account).Create(View(5), false, "LibreOffice");
+        File.WriteAllText(path, "edited while away");
+        new CopyStore(Paths, "https://second.test").SetAside("https://second.test", Account);
+        var aside = Path.Combine(_root, "Copies from healdan.test");
+        var lockFile = Path.Combine(aside, $".~lock.{Path.GetFileName(path)}#");
+        File.WriteAllText(lockFile, "opened from that folder");
+        SignedInBefore();
+
+        var first = Make();
+        await first.StartAsync();
+        await Wait.Until(() => first.Started, "started");
+        Assert.Contains("open in an app", _notifier.All);
+        Assert.Equal(new AsideCopies("healdan.test", aside, 1), Assert.Single(first.CopiesAside()));
+        Assert.False(File.Exists(path));
+        first.Dispose();
+
+        File.Delete(lockFile);
+        var second = Make();
+        await second.StartAsync();
+        await Wait.Until(() => second.Started, "started again");
+
+        Assert.True(File.Exists(path)); // its check-out had ended, so it's kept for Not Yet in Healdan
+        Assert.False(Directory.Exists(aside));
+        Assert.Contains("is back", _notifier.All);
     }
 
     [Fact]
