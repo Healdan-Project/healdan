@@ -60,10 +60,13 @@ public sealed class HelperSessionTests : IDisposable
         return session;
     }
 
+    /// <summary>A token as the keychain keeps it for this computer: with the device id it was issued for.</summary>
+    private static string KeptHere(string token) => new KeptToken(FakeApi.HereDevice, token).ToSecret();
+
     private void SignedInBefore()
     {
         new HelperSettings { Server = Account }.Save(Paths);
-        _keychain.Items[Account] = "hd_kept_token";
+        _keychain.Items[Account] = KeptHere("hd_kept_token");
     }
 
     /// <summary>A request to the running helper's channel, as the extension sends it.</summary>
@@ -167,6 +170,23 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task RevokesATokenKeptForAnotherDeviceAndAsksForTheSignIn()
+    {
+        new HelperSettings { Server = Account }.Save(Paths);
+        _keychain.Items[Account] = new KeptToken("00d0aa76-dev-helper", "hd_kept_token").ToSecret();
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(Account, "robert", Password) is null;
+        var session = Make();
+
+        await session.StartAsync();
+
+        Assert.Equal("DELETE healdan.test/api/v1/auth/tokens/current", _http.Calls[0]); // never used, only revoked
+        Assert.Equal(Account,Assert.Single(_windows.SignIns).Server);
+        Assert.True(session.Started);
+        Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]);
+        LogIndex("issued to device 00d0aa76-dev-helper");
+    }
+
+    [Fact]
     public async Task SignsInFromTheWindowThenStarts()
     {
         var refusals = new List<string?>();
@@ -181,7 +201,7 @@ public sealed class HelperSessionTests : IDisposable
 
         Assert.Equal([null], refusals);
         Assert.True(session.Started);
-        Assert.Equal(SessionServer.IssuedToken, _keychain.Items[Account]); // an address without a scheme is https
+        Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]); // an address without a scheme is https
         Assert.Equal(Account, HelperSettings.Load(Paths).Server);
         Assert.True(File.Exists(Paths.Channel));
         foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
@@ -289,7 +309,7 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(again.ServerFixed); // one server per helper while it runs
         Assert.Equal(Account, again.Server);
         Assert.Null(await signedIn.Task.WaitAsync(TimeSpan.FromSeconds(10)));
-        Assert.Equal(SessionServer.IssuedToken, _keychain.Items[Account]);
+        Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]);
         Assert.Contains("Sign in", _notifier.All);
     }
 
@@ -330,7 +350,7 @@ public sealed class HelperSessionTests : IDisposable
     public async Task TheWebPageKeepsTheServersPath()
     {
         new HelperSettings { Server = Account + "/healdan" }.Save(Paths);
-        _keychain.Items[Account] = "hd_kept_token"; // the keychain keeps one sign-in per scheme and host
+        _keychain.Items[Account] = KeptHere("hd_kept_token"); // the keychain keeps one sign-in per scheme and host
         _server.Down = true; // the fake answers only at the root, so the helper starts offline
         var session = Make();
 
@@ -404,7 +424,7 @@ public sealed class HelperSessionTests : IDisposable
 
         Assert.True(session.Started);
         Assert.True(File.Exists(Paths.Channel));
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
         Assert.Empty(_windows.SignIns);
     }
 
@@ -469,7 +489,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.SignOutAsync();
 
         Assert.False(Revoked());
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
         Assert.True(session.SignedIn);
         Assert.True(session.Started);
         Assert.Contains("still waiting to go to Healdan", _notifier.All);
@@ -493,7 +513,7 @@ public sealed class HelperSessionTests : IDisposable
         await signOut.WaitAsync(TimeSpan.FromSeconds(10));
 
         Assert.False(Revoked());
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]); // the next start carries on, and sends the save
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]); // the next start carries on, and sends the save
     }
 
     [Fact]
@@ -527,7 +547,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.SignOutAsync(); // the user chooses Stay Signed In
 
         Assert.Single(_windows.SignOutHeres);
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
         Assert.True(session.SignedIn);
         Assert.True(session.Started);
     }
@@ -561,7 +581,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.SignOutAsync();
 
         Assert.Empty(_windows.SignOutHeres);
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
         Assert.True(session.SignedIn);
         Assert.Contains("You're still signed in", _notifier.All);
         Assert.DoesNotContain("can't be reached", _notifier.All);
@@ -602,7 +622,7 @@ public sealed class HelperSessionTests : IDisposable
 
         await session.SignOutAsync();
 
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
     }
 
     [Fact]
@@ -617,7 +637,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.SignOutAsync();
 
         Assert.Empty(_windows.SignOutHeres);
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
     }
 
     [Fact]
@@ -653,7 +673,7 @@ public sealed class HelperSessionTests : IDisposable
 
         await session.SignOutAsync();
 
-        Assert.Equal("hd_kept_token", _keychain.Items[Account]);
+        Assert.Equal(KeptHere("hd_kept_token"), _keychain.Items[Account]);
         Assert.True(session.SignedIn);
         Assert.True(session.Started);
         Assert.NotNull(session.Api?.Token); // the client keeps its token, so Sign Out can ask again

@@ -44,7 +44,7 @@ python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice e
 clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt (reproducible)
 dotnet run --project clients/helper/tools/IconRender      # the extension's toolbar images and icon, from the helper's icons (by hand, on a Mac)
 clients/helper/packaging/mac/package.sh 1.2.3             # Healdan Helper.app and its .dmg, on a Mac; signed only with SIGN_IDENTITY set
-HEALDAN_HELPER_DEV_ROOT=/tmp/hh dotnet run --project clients/helper/Healdan.Helper # a Debug helper with its files apart; no links, notifications or .oxt
+HEALDAN_HELPER_DEV_ROOT=/tmp/hh dotnet run --project clients/helper/Healdan.Helper # a Debug helper with its files and keychain entry apart; no links, notifications or .oxt
 ```
 
 - `logicaldoc-parent` is a reactor module, and the root POM inherits from it, so dependency and plugin versions live there.

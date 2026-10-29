@@ -1,5 +1,6 @@
 using System.Net;
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Core.Settings;
@@ -32,6 +33,9 @@ public sealed class SignInTests : IDisposable
 
     private SignIn Make(HealdanApi api) => new(api, _keychain, Device());
 
+    /// <summary>The token as the keychain keeps it for this computer: with the device id it was issued for.</summary>
+    private string KeptHere(string token) => new KeptToken(Device().Id, token).ToSecret();
+
     [Fact]
     public async Task SignInSendsDeviceAndStoresOnlyToken()
     {
@@ -46,7 +50,7 @@ public sealed class SignInTests : IDisposable
         Assert.EndsWith("/api/v1/auth/tokens", request.Uri.AbsolutePath);
         Assert.Contains($"\"id\":\"{device.Id}\"", request.BodyText);
         Assert.Contains("\"name\":\"Healdan Helper on Mac\"", request.BodyText);
-        Assert.Equal(Token, _keychain.Items[Account]);
+        Assert.Equal(new KeptToken(device.Id, Token), KeptToken.Read(_keychain.Items[Account]));
         Assert.Equal(Token, api.Token);
         foreach (var file in Directory.EnumerateFiles(_dir, "*", SearchOption.AllDirectories))
         {
@@ -88,7 +92,7 @@ public sealed class SignInTests : IDisposable
     [Fact]
     public async Task ResumeWithAValidTokenSucceeds()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         _handler.Enqueue(HttpStatusCode.OK, """{"id":1,"username":"ann","name":"Ann","admin":false}""");
         var api = Api();
         Assert.True(await Make(api).TryResumeAsync());
@@ -106,7 +110,7 @@ public sealed class SignInTests : IDisposable
     [Fact]
     public async Task ResumeWith401ClearsToken()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthorized","detail":"Sign in again."}""");
         var api = Api();
         Assert.False(await Make(api).TryResumeAsync());
@@ -117,16 +121,88 @@ public sealed class SignInTests : IDisposable
     [Fact]
     public async Task ResumeKeepsTheTokenWhenTheServerCannotBeReached()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         _handler.EnqueueResponse(() => throw new HttpRequestException("offline"));
         await Assert.ThrowsAsync<HttpRequestException>(() => Make(Api()).TryResumeAsync());
-        Assert.Equal(Token, _keychain.Items[Account]);
+        Assert.Equal(KeptHere(Token), _keychain.Items[Account]);
+    }
+
+    [Fact]
+    public async Task ResumeRevokesATokenIssuedToAnotherDevice()
+    {
+        _keychain.Items[Account] = new KeptToken("00d0aa76-other-device", Token).ToSecret();
+        _handler.Enqueue(HttpStatusCode.NoContent, "");
+        var api = Api();
+
+        Assert.False(await Make(api).TryResumeAsync());
+
+        var revoke = Assert.Single(_handler.Requests);
+        Assert.Equal(HttpMethod.Delete, revoke.Method);
+        Assert.EndsWith("/api/v1/auth/tokens/current", revoke.Uri.AbsolutePath);
+        Assert.Equal($"Bearer {Token}", revoke.Authorization);
+        Assert.Empty(_keychain.Items);
+        Assert.Null(api.Token);
+    }
+
+    [Fact]
+    public async Task ResumeRevokesATokenKeptWithoutItsDevice()
+    {
+        _keychain.Items[Account] = Token; // as helpers before the device was kept with it did
+        _handler.Enqueue(HttpStatusCode.NoContent, "");
+        var api = Api();
+
+        Assert.False(await Make(api).TryResumeAsync());
+
+        var revoke = Assert.Single(_handler.Requests);
+        Assert.Equal(HttpMethod.Delete, revoke.Method);
+        Assert.Equal($"Bearer {Token}", revoke.Authorization);
+        Assert.Empty(_keychain.Items);
+        Assert.Null(api.Token);
+    }
+
+    [Fact]
+    public async Task ResumeForgetsAnotherDevicesTokenWhenHealdanCannotRevokeIt()
+    {
+        _keychain.Items[Account] = new KeptToken("00d0aa76-other-device", Token).ToSecret();
+        _handler.EnqueueResponse(() => throw new HttpRequestException("offline"));
+        var log = new HelperLog(Path.Combine(_dir, "helper.log"));
+        var api = Api();
+
+        Assert.False(await new SignIn(api, _keychain, Device(), log: log).TryResumeAsync());
+
+        Assert.Empty(_keychain.Items);
+        Assert.Null(api.Token);
+        var text = File.ReadAllText(log.Path);
+        Assert.Contains("00d0aa76-other-device", text);
+        Assert.DoesNotContain(Token, text);
+    }
+
+    [Fact]
+    public async Task ResumeForgetsAnotherDevicesTokenHealdanAlreadyRefuses()
+    {
+        _keychain.Items[Account] = new KeptToken("00d0aa76-other-device", Token).ToSecret();
+        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthorized","detail":"Sign in again."}""");
+
+        Assert.False(await Make(Api()).TryResumeAsync());
+
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public void AKeptTokenReadsBackAsItWasWritten()
+    {
+        var kept = new KeptToken("265fc672-device", Token);
+        Assert.Equal(kept, KeptToken.Read(kept.ToSecret()));
+        Assert.Null(KeptToken.Read(Token));
+        Assert.Null(KeptToken.Read("{}"));
+        Assert.Null(KeptToken.Read("""{"device":"265fc672-device"}"""));
+        Assert.Null(KeptToken.Read("{not json"));
     }
 
     [Fact]
     public async Task SignOutFlushesThenRevokes()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         var api = Api();
         api.Token = Token;
         _handler.Enqueue(HttpStatusCode.NoContent, "");
@@ -148,7 +224,7 @@ public sealed class SignInTests : IDisposable
     [Fact]
     public async Task SignOutWithAnAlreadyRevokedTokenStillClears()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         var api = Api();
         api.Token = Token;
         _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthorized","detail":"x"}""");
@@ -159,31 +235,31 @@ public sealed class SignInTests : IDisposable
     [Fact]
     public async Task SignOutKeepsTheTokenWhenFlushFails()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         var api = Api();
         api.Token = Token;
         await Assert.ThrowsAsync<IOException>(() => Make(api).SignOutAsync(() => throw new IOException("busy")));
-        Assert.Equal(Token, _keychain.Items[Account]);
+        Assert.Equal(KeptHere(Token), _keychain.Items[Account]);
         Assert.Empty(_handler.Requests);
     }
 
     [Fact]
     public async Task SignOutGivesUpOnAServerThatDoesntAnswer()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         var api = new HealdanApi(new Uri(Account), new SilentHandler());
         api.Token = Token;
         var signIn = new SignIn(api, _keychain, Device(), revokeTimeout: TimeSpan.FromMilliseconds(200));
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => signIn.SignOutAsync(() => Task.CompletedTask));
 
-        Assert.Equal(Token, _keychain.Items[Account]);
+        Assert.Equal(KeptHere(Token), _keychain.Items[Account]);
     }
 
     [Fact]
     public void ForgetHereClearsTheTokenWithoutAskingTheServer()
     {
-        _keychain.Items[Account] = Token;
+        _keychain.Items[Account] = KeptHere(Token);
         var api = Api();
         api.Token = Token;
 
