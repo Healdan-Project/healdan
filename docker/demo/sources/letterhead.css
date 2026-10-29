@@ -17,9 +17,11 @@
    - Float, position, letter-spacing and text-transform do nothing. font-variant:
      small-caps works.
    - <meta name="author|created|changedby|changed|keywords|description"> in the <head>
-     sets the file's own properties, and lang="en-GB" on <body> sets its language. LibreOffice
-     stamps "now" over any it isn't given, so set them: the person who typed the file, and
-     the day it was filed.
+     sets the file's own properties, and lang="en-GB" on <html> and <body> sets its
+     language. Set them: the person who typed the file, and the day it was filed.
+     Any other <meta>, including http-equiv, becomes a Word comment in the built file
+     (build.py refuses a file that has one).
+   - Copy the head, footer and letterhead block from saltmarsh-letter-to-owners.html.
 
    One accent colour, #1d4e5f. Everything else is black or grey. */
 

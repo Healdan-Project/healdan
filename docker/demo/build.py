@@ -30,6 +30,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
+import zipfile
 from collections import defaultdict
 from email.message import EmailMessage
 from pathlib import Path
@@ -80,6 +82,31 @@ def convert(image, sources, target, infilter, out):
         args.append(f"--infilter={infilter}")
     args += ["--convert-to", target, "--outdir", "/out"] + [f"/in/{s.name}" for s in sources]
     docker(image, [(SOURCES, "/in:ro"), (out, "/out")], "soffice", args)
+
+
+def comments_in(path):
+    """The text of each comment in a built .docx or .odt"""
+    with zipfile.ZipFile(path) as z:
+        if path.suffix == ".docx":
+            if "word/comments.xml" not in z.namelist():
+                return []
+            root = ET.fromstring(z.read("word/comments.xml"))
+            return [" ".join("".join(c.itertext()).split())
+                    for c in root.iter("{http://schemas.openxmlformats.org/wordprocessingml/2006/main}comment")]
+        root = ET.fromstring(z.read("content.xml"))
+    # An ODF annotation also holds its author and date, so read only its paragraphs
+    para = "{urn:oasis:names:tc:opendocument:xmlns:text:1.0}p"
+    return [" ".join(" ".join("".join(p.itertext()) for p in a.iter(para)).split())
+            for a in root.iter("{urn:oasis:names:tc:opendocument:xmlns:office:1.0}annotation")]
+
+
+def refuse_stray_comments(source, built):
+    """LibreOffice's HTML import turns a <meta> it doesn't read, such as http-equiv, into a Word comment,
+    which a headless PDF or PNG doesn't show. Only a .fodt source is meant to carry comments."""
+    for text in comments_in(built):
+        sys.exit(f"{built.name}: LibreOffice made a comment from something in {source.name}: {text!r}. "
+                 "Remove the <meta> tag it came from (only author, created, changedby, changed, keywords and "
+                 "description are read), and build again.")
 
 
 def build_email(source, output):
@@ -137,6 +164,10 @@ def main():
         for output in jpgs:
             stem = Path(output).stem
             docker(options.image, [(out, "/out")], "convert", [f"/out/{stem}.png", "-quality", "85", f"/out/{output}"])
+        for output in outputs:
+            source = source_for(output)
+            if source.suffix == ".html" and Path(output).suffix.lower() in (".docx", ".odt") and (out / output).exists():
+                refuse_stray_comments(source, out / output)
         for output in outputs:
             if (out / output).exists():
                 shutil.copyfile(out / output, FILES / output)
