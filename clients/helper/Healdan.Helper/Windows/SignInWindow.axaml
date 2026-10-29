@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Healdan.Helper.Windows"
         x:Class="Healdan.Helper.Windows.SignInWindow"
         Title="Sign In to Healdan"
         Width="420"
@@ -9,34 +10,30 @@
         CanMaximize="False"
         WindowStartupLocation="CenterScreen">
   <!-- Sign In (spec §5.2), in the look of the helper's other windows (spec §5.8). -->
-  <DockPanel>
-    <Border Classes="toolbar" DockPanel.Dock="Top" Padding="20,14">
-      <StackPanel Spacing="2">
-        <TextBlock Text="Sign In to Healdan" Classes="title" />
-        <TextBlock Classes="muted" TextWrapping="Wrap" FontSize="12"
-                   Text="Healdan Helper keeps a sign-in for this computer in the keychain, never your password." />
-      </StackPanel>
-    </Border>
-    <Border Classes="footer" DockPanel.Dock="Bottom">
-      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-        <Button x:Name="CancelButton" Classes="footer" Content="Cancel" IsCancel="True" />
-        <Button x:Name="SignInButton" Classes="footer accent" Content="Sign In" IsDefault="True" />
-      </StackPanel>
-    </Border>
-    <StackPanel Margin="20,14,20,16" Spacing="9">
+  <StackPanel Margin="24,20,24,16">
+    <local:HealdanMark Width="48" Height="48" HorizontalAlignment="Center" />
+    <TextBlock Text="Sign In to Healdan" Classes="title" HorizontalAlignment="Center" Margin="0,10,0,2" />
+    <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"
+               MaxWidth="300" HorizontalAlignment="Center"
+               Text="Healdan Helper keeps a sign-in for this computer in the keychain, never your password." />
+    <StackPanel Margin="0,16,0,0" Spacing="9">
       <StackPanel>
-        <TextBlock Text="Server Address" Classes="label" Margin="0,0,0,2" />
+        <TextBlock Text="Server Address" Classes="label" Margin="0,0,0,3" />
         <TextBox x:Name="Server" PlaceholderText="https://healdan.example" />
       </StackPanel>
       <StackPanel>
-        <TextBlock Text="Username" Classes="label" Margin="0,0,0,2" />
+        <TextBlock Text="Username" Classes="label" Margin="0,0,0,3" />
         <TextBox x:Name="User" />
       </StackPanel>
       <StackPanel>
-        <TextBlock Text="Password" Classes="label" Margin="0,0,0,2" />
+        <TextBlock Text="Password" Classes="label" Margin="0,0,0,3" />
         <TextBox x:Name="Password" PasswordChar="&#x2022;" />
       </StackPanel>
       <TextBlock x:Name="Problem" Classes="problem" FontSize="12" IsVisible="False" />
     </StackPanel>
-  </DockPanel>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,0">
+      <Button x:Name="CancelButton" Classes="footer" Content="Cancel" IsCancel="True" />
+      <Button x:Name="SignInButton" Classes="footer accent" Content="Sign In" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
 </Window>

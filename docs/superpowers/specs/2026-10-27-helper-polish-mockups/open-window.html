@@ -1,0 +1,64 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Helper polish: Open from Healdan</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>:root{--text-primary:#1d1d1f;--text-secondary:#6e6e73;--surface-1:#f3f3f2;--border:rgba(0,0,0,.12)}body{margin:24px auto;max-width:680px;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<style>
+.w{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;background:#FFFFFF;color:#1D1D1F;border:0.5px solid #C7C7CC;border-radius:10px;overflow:hidden;font-size:12px}
+.tl{width:11px;height:11px;border-radius:50%;display:inline-block}
+.b{font-size:12px;height:21px;padding:0 12px;border-radius:6px;display:inline-flex;align-items:center;white-space:nowrap}
+.sec{background:#FFFFFF;border:0.5px solid #C7C7CC}.pri{background:#0C69C0;color:#FFFFFF}
+.si{display:flex;align-items:center;gap:7px;padding:4px 8px;margin:0 6px;border-radius:6px}
+.si i{font-size:15px;color:#0C69C0}
+.gh{font-size:10.5px;font-weight:600;color:#8E8E93;padding:10px 14px 3px}
+.row{display:grid;grid-template-columns:20px minmax(0,1fr) 34px 26px 36px;align-items:center;gap:4px;padding:4px 10px;min-height:22px}
+.row i{font-size:15px;color:#8E8E93}
+.hold{font-size:10.5px;display:flex;align-items:center;gap:3px}
+.dl{display:grid;grid-template-columns:62px minmax(0,1fr);gap:3px 8px;font-size:11px}
+.dl span:nth-child(odd){color:#6E6E73}
+</style>
+<h2 class="sr-only">Proposed Open from Healdan window: sidebar with icons, a list with alternating rows and lock badges for checked-out documents, and a details pane led by the title, properties and versions.</h2>
+<div class="w" style="margin:0.5rem 0">
+<div style="height:42px;display:flex;align-items:center;gap:9px;padding:0 12px;background:#F6F6F6;border-bottom:0.5px solid #E5E5EA">
+<span class="tl" style="background:#FF5F57"></span><span class="tl" style="background:#FEBC2E"></span><span class="tl" style="background:#28C840"></span>
+<span style="font-size:13px;font-weight:600;margin-left:6px">Open from Healdan</span>
+<span style="display:inline-flex;color:#3A3A3C;font-size:15px;gap:4px;margin-left:4px"><i class="ti ti-chevron-left" aria-hidden="true"></i><i class="ti ti-chevron-right" style="color:#C7C7CC" aria-hidden="true"></i><i class="ti ti-chevron-up" aria-hidden="true"></i></span>
+<span style="flex:1"></span>
+<span class="b sec" style="gap:10px">Documents <i class="ti ti-selector" style="font-size:11px;color:#6E6E73" aria-hidden="true"></i></span>
+<span style="height:21px;width:150px;border:0.5px solid #C7C7CC;border-radius:5px;display:flex;align-items:center;gap:4px;padding:0 6px;color:#8E8E93;background:#fff"><i class="ti ti-search" style="font-size:12px" aria-hidden="true"></i>Search documents</span>
+</div>
+<div style="display:grid;grid-template-columns:138px minmax(0,1fr) 196px;min-height:300px">
+<div style="background:#F5F5F7;border-right:0.5px solid #E5E5EA;padding:8px 0">
+<div class="si" style="background:#E1E1E6;font-weight:500"><i class="ti ti-clock" aria-hidden="true"></i>Recent Documents</div>
+<div class="si"><i class="ti ti-lock" aria-hidden="true"></i>Checked Out to Me</div>
+<div class="si"><i class="ti ti-star" aria-hidden="true"></i>Favorites</div>
+<div class="gh">Browse</div>
+<div class="si"><i class="ti ti-history" aria-hidden="true"></i>Recent Matters</div>
+<div class="si"><i class="ti ti-briefcase" aria-hidden="true"></i>My Matters</div>
+<div class="si"><i class="ti ti-folder" aria-hidden="true"></i>Recent Folders</div>
+</div>
+<div style="border-right:0.5px solid #E5E5EA;display:flex;flex-direction:column">
+<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-bottom:0.5px solid #E5E5EA"><span style="font-size:13px;font-weight:600">Recent Documents</span><i class="ti ti-star" style="font-size:15px;color:#8E8E93" aria-hidden="true"></i></div>
+<div class="row" style="font-size:10.5px;color:#6E6E73;min-height:16px;border-bottom:0.5px solid #E5E5EA"><span></span><span>Title</span><span>Doc #</span><span>Ver.</span><span>Edited</span></div>
+<div class="row" style="background:#0C69C0;color:#FFFFFF;margin:2px 4px;border-radius:5px;padding:4px 6px"><i class="ti ti-file-text" style="color:#FFFFFF" aria-hidden="true"></i><div><div>Lease agreement.docx</div><div class="hold" style="color:#DCEBFA"><i class="ti ti-lock" style="font-size:11px;color:#DCEBFA" aria-hidden="true"></i>You, on this Mac</div></div><span>1234</span><span>2.1</span><span>09:42</span></div>
+<div class="row" style="background:#F4F5F5"><i class="ti ti-file-text" aria-hidden="true"></i><span>Heads of terms.docx</span><span>1231</span><span>3.2</span><span style="color:#6E6E73">Mon</span></div>
+<div class="row"><i class="ti ti-file-text" aria-hidden="true"></i><div><div>Board minutes.docx</div><div class="hold" style="color:#B3261E"><i class="ti ti-lock" style="font-size:11px;color:#B3261E" aria-hidden="true"></i>Jane Smith</div></div><span>1207</span><span>1.4</span><span style="color:#6E6E73">Mon</span></div>
+<div class="row" style="background:#F4F5F5"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i><span>Schedule of dilapidations.xlsx</span><span>1189</span><span>1.2</span><span style="color:#6E6E73">Wed</span></div>
+<div class="row"><i class="ti ti-file-text" aria-hidden="true"></i><span>Engagement letter.docx</span><span>1229</span><span>1.0</span><span style="color:#6E6E73">Wed</span></div>
+</div>
+<div style="padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;gap:8px;align-items:flex-start"><i class="ti ti-file-text" style="font-size:30px;color:#0C69C0" aria-hidden="true"></i><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">Lease agreement.docx</div><div style="font-size:11px;color:#6E6E73">#1234 · v2.1</div></div><i class="ti ti-star" style="font-size:15px;color:#F59F00" aria-hidden="true"></i></div>
+<div class="dl"><span>Matter</span><span>1.1 Acme v Beta</span><span>Folder</span><span>Drafts</span><span>Author</span><span>Sarah Collins</span><span>Class</span><span>Correspondence</span><span>Last Saved</span><span>Today at 09:42</span><span>Checked Out</span><span>You, on this Mac</span></div>
+<div style="font-size:10.5px;font-weight:600;color:#8E8E93;margin-top:4px">Versions</div>
+<div style="font-size:11px;display:flex;flex-direction:column;gap:4px">
+<div style="background:#E1E1E6;border-radius:5px;padding:3px 6px"><b style="font-weight:500">v2.1</b> current<div style="color:#6E6E73;font-size:10.5px">Today 09:42 · Sarah Collins</div></div>
+<div style="padding:0 6px">v2.0<div style="color:#6E6E73;font-size:10.5px">23 Oct · Sarah Collins</div></div>
+</div>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-top:0.5px solid #E5E5EA">
+<span style="color:#0C69C0">Open from Local Computer…</span><span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:5px"><span style="width:13px;height:13px;border:0.5px solid #AEAEB2;border-radius:3px;background:#fff;display:inline-block"></span>Open Read-Only</span>
+<span class="b sec">Cancel</span><span class="b pri">Open</span>
+</div>
+</div>

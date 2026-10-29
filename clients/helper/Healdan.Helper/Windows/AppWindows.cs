@@ -182,7 +182,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (!shown)
         {
             _crashShown.Remove(copy.Path);
-            notifier.Notify(copy.Title, Warnings.Crashed(copy.Title, copy.ReadOnly) + " Choose it in the Healdan Helper menu to reopen it.");
+            notifier.Notify(copy.Title, Warnings.Crashed(copy.Title, copy.ReadOnly).ToString() + " Choose it in the Healdan Helper menu to reopen it.");
         }
     });
 
@@ -194,8 +194,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var extension = Extension?.Describe() ?? "Not in this build: the installed app installs it.";
-        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Describe(), extension);
+        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Summary(), Extension);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

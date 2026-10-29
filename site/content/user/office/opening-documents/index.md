@@ -34,24 +34,32 @@ Double-clicking a document in the web page still shows its preview.
 Any of LibreOffice's ways of opening shows the **Open from Healdan** window: **⌘O**, **File › Open**, **Open File**
 in the Start Center, and **Healdan › Open from Healdan…**. So does **Open from Healdan…** in the helper's menu.
 
-![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details, properties and versions on the right](open-from-healdan.png)
+![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details on the right, under a header with its name, #1234 and v2.1, and Properties and Versions tabs, with Properties showing](open-from-healdan.png)
 
 - **On the left:** Recent Documents (where it starts), Checked Out to Me and Favorites, then Recent Matters, My
   Matters and Recent Folders to browse.
 - **In the middle:** each document's title, doc #, version, matter, and when it was last saved. Under the title,
   who has it checked out: "checked out to you on MacBook", or "checked out to Jane Smith".
-- **On the right:** a small preview of the first page ("No preview yet" until Healdan has made one), the main
-  properties, and the versions. The star adds the document to your Favorites, or takes it off.
+- **On the right:** the selected document's details. A header names it, with its doc # and version, as in
+  `#1234 · v2.1`. Its star adds the document to your Favorites, or takes it off. Two tabs sit under the header:
+  - **Properties,** where each Open window starts, shows a small preview of the first page, when Healdan has made
+    one, and the document's main properties.
+  - **Versions** lists the document's versions, the number of them in brackets.
+
+  The tab stays as you left it while you choose other documents. Before you choose a document, the pane asks you to.
 - **To find a document,** type in the search box: it searches documents, unless you choose another scope beside it.
-  `#1234` and Enter shows document 1234, and `#1234 v2.1` selects that version.
+  `#1234` and Enter shows document 1234, and `#1234 v2.1` selects that version. That's what the box's hint, ", or
+  type #1234", means. It shows while you search documents, but a typed doc # works from any scope.
 - **To open it,** double-click it, or select it and choose **Open**.
 
 At the bottom:
 
 - **Open Read-Only:** tick it, then choose **Open**, for a copy you can read but not save to Healdan, even if you
   could edit it.
-- **An older version** always opens read-only: choose it in the versions list.
-- **Open from Local Computer** shows LibreOffice's own Open box, for a file on your Mac.
+- **An older version** always opens read-only: choose **Versions** above the details, then the version in the list.
+  The header then shows that version, with the warning **Older version: opens read-only**, and Open Read-Only is
+  ticked for you. Choosing another document goes back to its current version.
+- **Open from Local Computer…** shows LibreOffice's own Open box, for a file on your Mac.
 
 ## What Happens When It Opens
 
@@ -79,7 +87,7 @@ instead, which files your changes as a new document (see
 
 If you have the document checked out on another of your computers, the helper asks first:
 
-![The Checked Out on Another Computer window: #1234 is checked out to you on MacBook (LibreOffice), when it was last saved to Healdan, a warning that edits on MacBook that haven't reached Healdan won't be in this copy, and the Open Read-Only, Edit Here Instead and Cancel buttons](checked-out-on-another-computer.png)
+![The Checked Out on Another Computer window: Healdan's mark with a warning triangle, then #1234 is checked out to you on MacBook (LibreOffice), when it was last saved to Healdan, a warning that edits on MacBook that haven't reached Healdan won't be in this copy, and the Open Read-Only, Edit Here Instead and Cancel buttons](checked-out-on-another-computer.png)
 
 - **Open Read-Only** opens a read-only copy here, and leaves the check-out where it is.
 - **Edit Here Instead** moves the check-out to this computer and opens the document for editing. What you saved on

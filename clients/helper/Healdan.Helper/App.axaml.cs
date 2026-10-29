@@ -3,7 +3,10 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
@@ -29,7 +32,18 @@ public partial class App : Application
     private bool _stopped;
     private int _afterStart;
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        // San Francisco on macOS (polish spec §4.2): Skia's default there is Helvetica. Every top level, so pop-ups and
+        // tooltips too; elsewhere the desktop's own font.
+        if (OperatingSystem.IsMacOS())
+        {
+            var font = new Style(x => x.Is<TopLevel>());
+            font.Setters.Add(new Setter(TemplatedControl.FontFamilyProperty, new FontFamily(".AppleSystemUIFont")));
+            Styles.Add(font);
+        }
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {

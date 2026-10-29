@@ -1,18 +1,24 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Healdan.Helper.Windows"
         x:Class="Healdan.Helper.Windows.SignOutHereWindow"
         Title="Sign Out on This Computer Only?"
         Width="520" SizeToContent="Height"
         CanResize="False" CanMinimize="False" CanMaximize="False"
         WindowStartupLocation="CenterScreen">
   <!-- Sign Out on This Computer Only? (spec §5.2): Sign Out couldn't reach Healdan to revoke the token. -->
-  <StackPanel Margin="20,18" Spacing="8">
-    <TextBlock x:Name="TitleText" Classes="title" TextWrapping="Wrap" />
-    <TextBlock x:Name="DetailText" TextWrapping="Wrap" />
-    <Border x:Name="UnsentBox" Classes="warn" Margin="0,2,0,0">
-      <TextBlock x:Name="UnsentText" TextWrapping="Wrap" />
-    </Border>
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,10,0,0">
+  <StackPanel Margin="20,20,20,16">
+    <Grid ColumnDefinitions="Auto,*">
+      <local:AlertMark VerticalAlignment="Top" Margin="0,0,14,0" />
+      <StackPanel Grid.Column="1" Spacing="6">
+        <TextBlock x:Name="TitleText" Classes="headline" TextWrapping="Wrap" />
+        <TextBlock x:Name="DetailText" TextWrapping="Wrap" />
+        <Border x:Name="UnsentBox" Classes="warn" Margin="0,2,0,0">
+          <TextBlock x:Name="UnsentText" TextWrapping="Wrap" />
+        </Border>
+      </StackPanel>
+    </Grid>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
       <Button x:Name="SignOutHereButton" Classes="footer" Content="Sign Out on This Computer" />
       <Button x:Name="StayButton" Classes="footer accent" Content="Stay Signed In" IsCancel="True" IsDefault="True" />
     </StackPanel>

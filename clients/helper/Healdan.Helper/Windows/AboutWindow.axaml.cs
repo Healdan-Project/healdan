@@ -31,7 +31,7 @@ public partial class AboutWindow : Window
 
         DocsLink.Click += (_, _) => windows.OpenWebPage(About.Docs);
         LicenceLink.Click += (_, _) => windows.OpenWebPage(About.Licence);
-        NoticesButton.Click += (_, _) => windows.ShowNotices();
+        NoticesLink.Click += (_, _) => windows.ShowNotices();
         CopyButton.Click += async (_, _) => await CopyAsync(version, server);
         DoneButton.Click += (_, _) => Close();
         Opened += (_, _) => DoneButton.Focus();

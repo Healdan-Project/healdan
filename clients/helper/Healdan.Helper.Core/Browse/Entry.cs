@@ -71,6 +71,9 @@ public sealed class Entry : INotifyPropertyChanged
 
     public bool IsFolder => Kind != EntryKind.Document;
 
+    /// <summary>The row's icon (polish spec §4.4): a folder for folders and matters, else the file's kind.</summary>
+    public string Icon => Kind == EntryKind.Document ? FileIcons.For(Title) : "folder";
+
     public string Edited
     {
         get => _edited;

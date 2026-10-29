@@ -16,7 +16,9 @@ public partial class CrashWindow : Window
 
     internal CrashWindow(CopyState copy) : this()
     {
-        MessageText.Text = Warnings.Crashed(copy.Title, copy.ReadOnly);
+        var crashed = Warnings.Crashed(copy.Title, copy.ReadOnly);
+        TitleText.Text = crashed.Headline;
+        MessageText.Text = crashed.Body;
         HintText.Text = "If you close this, the document stays in the Healdan Helper menu until you choose it.";
         if (copy.ReadOnly)
             CheckInButton.Content = "Remove Copy";

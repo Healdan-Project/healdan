@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Browse;
 using Healdan.Helper.Core.Forms;
 using Healdan.Helper.Core.Ui;
 
@@ -40,7 +41,11 @@ public partial class PropertiesWindow : Window
         {
             var doc = _api!.DocumentAsync(_docNumber);
             var form = new FormModel(await _api.PropertiesAsync(_docNumber));
-            var matter = (await doc).Matter?.Display;
+            var d = await doc;
+            var matter = d.Matter?.Display;
+            DocTitle.Text = d.Name;
+            Subtitle.Text = $"#{d.DocNumber} · v{d.FileVersion}";
+            DocIcon.Data = Icons.Get(FileIcons.For(d.Name));
             var editable = form.Fields.Any(f => f.Editable);
             NoteText.IsVisible = !editable;
             NoteText.Text = "These properties can't be changed now: you may not edit this document, or it's checked out to someone else.";
