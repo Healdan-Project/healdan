@@ -294,7 +294,9 @@ Each drops something whose licence doesn't allow hosting it (§3.1):
 - **`logicaldoc-webapp/pom.xml`:** drop the `betelio:betelio` and `com.oracle.jdbc:ojdbc8` dependencies.
 - **`logicaldoc-webapp/.../web/data/NotesDataServlet.java`:** drop the branch that unwraps an `oracle.sql.TIMESTAMP`,
   which only an Oracle database returns, and which can't compile without Oracle's driver. Every other database
-  already takes the `getTimestamp` path. `NotesDataServletTest` joins CI's `UPSTREAM_TESTS`.
+  already takes the `getTimestamp` path. No upstream test joins CI for it: no test database runs the removed branch,
+  and `NotesDataServletTest` already fails before this change (it reads a `target/response.xml` the servlet never
+  writes).
 - **`pom.xml`** (the root POM, which already lists Healdan's modules): drop
   `<module>logicaldoc-webserviceclient</module>`, ksoap2's only user. No module depends on it.
 
