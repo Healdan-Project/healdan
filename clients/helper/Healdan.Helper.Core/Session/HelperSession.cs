@@ -578,6 +578,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return e is ArgumentException { ParamName: { } name } ? e.Message.Replace($" (Parameter '{name}')", "") : e.Message;
         }
 
+        // Before the sign-in, so no token is made for a server the helper then doesn't sign in to.
+        if (OpenToSetAside(server) is { } open)
+            return open;
+
         using var timeout = new CancellationTokenSource(SignInTimeout);
         try
         {
@@ -626,24 +630,15 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// A sign-in to another server than the settings name (spec §5.4): every copy that doesn't name the new server is
     /// set aside first (<see cref="CopyStore.SetAside"/>), and a record without a server, from before records named one,
     /// counts as the old server's. None goes to the new server, where the same doc # can be another document. The user
-    /// is told where they are. Returns why the sign-in can't go on, or null.
+    /// is told where they are. Returns why the sign-in can't go on, or null: a move that failed, or a copy opened in the
+    /// app while the server answered (<see cref="OpenToSetAside(Uri)"/>).
     /// </summary>
     private string? SetCopiesAside(Uri server)
     {
-        if (HelperSettings.Load(_paths).Server is not { } previous)
+        if (Leaving(server) is not { } old)
             return null;
-        string old;
-        try
-        {
-            var parsed = ParseAddress(previous);
-            if (SameServer(parsed, server))
-                return null;
-            old = Address(parsed);
-        }
-        catch (UriFormatException)
-        {
-            old = previous; // the copies came from somewhere, but not from this one
-        }
+        if (OpenToSetAside(server) is { } open)
+            return open;
         var to = HealdanLink.HostAndPort(server);
         try
         {
@@ -655,6 +650,67 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             var from = ServerAddress.Name(old);
             _log.Warn($"The copies from {from} couldn't be set aside: {e.Message}");
             return $"Healdan Helper couldn't move the copies from {from} out of the way, so it hasn't signed in to {to}: {e.Message}";
+        }
+    }
+
+    /// <summary>
+    /// The address of the server whose copies a sign-in to <paramref name="server"/> sets aside: the one the settings
+    /// name, when it's another. Null when it's the same, or there's none.
+    /// </summary>
+    private string? Leaving(Uri server)
+    {
+        if (HelperSettings.Load(_paths).Server is not { } previous)
+            return null;
+        try
+        {
+            var parsed = ParseAddress(previous);
+            return SameServer(parsed, server) ? null : Address(parsed);
+        }
+        catch (UriFormatException)
+        {
+            return previous; // the copies came from somewhere, but not from this one
+        }
+    }
+
+    /// <summary>
+    /// Spec §5.4: why a sign-in to <paramref name="server"/> can't go on while a copy it would set aside is open in the
+    /// app (<see cref="CopyStore.OpenToSetAside"/>), or null. Setting it aside would move it from under its window,
+    /// whose next save would leave a file with no record in its place. A lock or owner file left while the app isn't
+    /// running is a crash's, so it doesn't count, and quitting the app gets past one it left while running. A folder
+    /// that can't be read isn't a refusal here: setting aside meets it, and says so.
+    /// </summary>
+    private string? OpenToSetAside(Uri server)
+    {
+        if (Leaving(server) is not { } old)
+            return null;
+        IReadOnlyList<OpenCopy> open;
+        try
+        {
+            open = new CopyStore(_paths, Address(server)).OpenToSetAside(Address(server), old);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+        if (open.Count == 0 || !AppRunning())
+            return null;
+        var to = HealdanLink.HostAndPort(server);
+        _log.Info($"Not signing in to {to}: copies it would set aside are open in {_app.Name} ({open.Count})");
+        var others = open.Count switch { 1 => "", 2 => " and 1 other document", _ => $" and {open.Count - 1} other documents" };
+        return $"Close {open[0].Title}{others} in {_app.Name} first. Healdan Helper moves the copies from {open[0].Server} out of "
+            + $"the way before it signs in to {to}, and {(open.Count == 1 ? "that one is" : "those are")} open.";
+    }
+
+    /// <summary>When the process list can't be read, the app counts as running, so no open copy is moved from under it.</summary>
+    private bool AppRunning()
+    {
+        try
+        {
+            return _app.IsRunning();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return true;
         }
     }
 
@@ -854,14 +910,23 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     /// <summary>
     /// Before each resume (spec §5.4): sets aside any copy that names another server, which only a lost settings.json or
-    /// a move that failed leaves in Copies, then brings back the signed-in server's. A setting aside that fails throws,
-    /// so the helper doesn't start; a copy that can't come back stays aside, and the user is told why.
+    /// a move that failed leaves in Copies, then brings back the signed-in server's. One open in the app stays in Copies
+    /// rather than move from under its window, unseen by the store and the channel, until a later start once it's
+    /// closed. A setting aside that fails throws, so the helper doesn't start; a copy that can't come back stays aside,
+    /// and the user is told why.
     /// </summary>
     private void SettleCopies(CopyStore store, Uri server)
     {
         var address = Address(server);
         var name = HealdanLink.HostAndPort(server);
-        TellSetAside(store.SetAside(address, address), name);
+        var open = AppRunning() ? store.OpenToSetAside(address, address) : [];
+        foreach (var copy in open)
+        {
+            _log.Warn($"The copy from {copy.Server} named {copy.FileName} stays in Copies: it's open in {_app.Name}");
+            _notifier.Notify(copy.Title, $"It's a copy from {copy.Server}, open in {_app.Name}, so it stays in Healdan Helper's "
+                + $"Copies folder until you close it. Healdan Helper won't send it to {name}, and sets it aside the next time it starts.");
+        }
+        TellSetAside(store.SetAside(address, address, [.. open.Select(c => c.FileName)]), name);
         BroughtBack back;
         try
         {
