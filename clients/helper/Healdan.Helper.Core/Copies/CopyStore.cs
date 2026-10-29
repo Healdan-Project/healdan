@@ -85,19 +85,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     }
 
     /// <summary>Every copy with a readable record; a damaged record is skipped.</summary>
-    public IReadOnlyList<(string Path, CopyRecord Record)> All()
-    {
-        if (!Directory.Exists(paths.Copies))
-            return [];
-        var list = new List<(string, CopyRecord)>();
-        foreach (var file in Directory.EnumerateFiles(paths.Copies, ".*.healdan.json").Order(StringComparer.Ordinal))
-        {
-            var record = Read(file);
-            if (record is not null)
-                list.Add((PathOf(record), record));
-        }
-        return list;
-    }
+    public IReadOnlyList<(string Path, CopyRecord Record)> All() =>
+        Directory.Exists(paths.Copies) ? Records(paths.Copies).Select(r => (PathOf(r), r)).ToList() : [];
 
     public (string, CopyRecord)? Find(string path)
     {
@@ -324,6 +313,86 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     private static bool IsPart(string name) =>
         name.StartsWith(".healdan-", StringComparison.Ordinal) && name.EndsWith(".part", StringComparison.Ordinal);
 
+    /// <summary>
+    /// Spec §5.4: moves each set-aside copy whose record names <paramref name="server"/> back into Copies with its record
+    /// (<see cref="MoveCopy"/>), from every <c>Copies from</c> folder beside it, and says how many came back and which
+    /// stayed. One stays aside while an app's lock or owner file beside it says it's open there, and when Copies already
+    /// has something of its name; a move that fails leaves it aside too. Each is tried again at the next start. A folder
+    /// left empty is removed. A record without a server is never brought back.
+    /// </summary>
+    public BroughtBack BringBack(string server)
+    {
+        var count = 0;
+        var stayed = new List<StayedAside>();
+        foreach (var folder in AsideFolders())
+        {
+            foreach (var record in Records(folder))
+            {
+                if (!ServerAddress.Same(record.Server, server))
+                    continue;
+                var name = record.FileName;
+                var title = CopyNames.Title(record.DocumentName, record.DocNumber, record.FileVersion, record.ReadOnly);
+                var docRef = CopyNames.DocRef(record.DocNumber, record.FileVersion);
+                var target = System.IO.Path.Combine(paths.Copies, name);
+                if (IsOpen(folder, name))
+                    stayed.Add(new StayedAside(title, docRef, folder,
+                        "it's open in an app. Close it, and it comes back the next time Healdan Helper starts"));
+                else if (System.IO.Path.Exists(target) || System.IO.Path.Exists(RecordPath(target)))
+                    stayed.Add(new StayedAside(title, docRef, folder,
+                        "Healdan Helper's Copies folder already has a file with its name, so it stays there for you to file"));
+                else
+                {
+                    try
+                    {
+                        EnsureFolders();
+                        MoveCopy(folder, paths.Copies, name);
+                        count++;
+                    }
+                    catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                    {
+                        stayed.Add(new StayedAside(title, docRef, folder, e.Message.TrimEnd('.')));
+                    }
+                }
+            }
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(folder).Any())
+                    Directory.Delete(folder);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Removed at a later start instead.
+            }
+        }
+        if (count > 0)
+            lock (_hashes)
+                _hashes.Clear();
+        return new BroughtBack(count, stayed);
+    }
+
+    /// <summary>
+    /// Spec §5.4: the copies set aside, by server, with the first folder holding each server's, for the menu's line per
+    /// server. Only records are read, never a copy, as the menu asks at each rebuild. A record without a server isn't
+    /// counted.
+    /// </summary>
+    public IReadOnlyList<AsideCopies> Aside()
+    {
+        try
+        {
+            return AsideFolders()
+                .SelectMany(folder => Records(folder).Where(r => r.Server is not null)
+                    .Select(r => (Server: ServerAddress.Name(r.Server!), Folder: folder)))
+                .GroupBy(c => c.Server, StringComparer.OrdinalIgnoreCase)
+                .Select(g => new AsideCopies(g.Key, g.Select(c => c.Folder).Min(StringComparer.Ordinal)!, g.Count()))
+                .OrderBy(a => a.Server, StringComparer.Ordinal)
+                .ToList();
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return []; // asked again at the next rebuild
+        }
+    }
+
     /// <summary>The folder holding every copy.</summary>
     internal string Folder => paths.Copies;
 
@@ -356,6 +425,21 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             return null;
         }
     }
+
+    /// <summary>Each readable record in <paramref name="folder"/>, in name order, read before anything moves.</summary>
+    private static List<CopyRecord> Records(string folder) =>
+        Directory.EnumerateFiles(folder, ".*.healdan.json").Order(StringComparer.Ordinal).Select(Read).OfType<CopyRecord>().ToList();
+
+    /// <summary>The folders beside Copies holding copies set aside, in name order.</summary>
+    private List<string> AsideFolders() =>
+        Directory.Exists(paths.Support)
+            ? Directory.EnumerateDirectories(paths.Support, AsidePrefix + "*").Order(StringComparer.Ordinal).ToList()
+            : [];
+
+    /// <summary>Whether an app's lock or owner file beside the copy says the app has it open there.</summary>
+    private static bool IsOpen(string folder, string name) =>
+        File.Exists(System.IO.Path.Combine(folder, CopyNames.LibreOfficeLockName(name)))
+        || CopyNames.WordOwnerNames(name).Any(owner => File.Exists(System.IO.Path.Combine(folder, owner)));
 
     /// <summary>Creates the folders private from the start, rather than narrowing them after.</summary>
     internal void EnsureFolders()

@@ -451,4 +451,86 @@ public class CopyStoreTests : IDisposable
 
         Assert.Null(Store(A).Find(path)!.Value.Item2.Server);
     }
+
+    [Fact]
+    public void BringBackMovesOnlyTheServersCopiesBack()
+    {
+        var a = Write(A, 1, content: "edited");
+        var b = Write(B, 2, "Other.docx");
+        Store("https://third.test").SetAside("https://third.test", "https://third.test");
+
+        var back = Store(A).BringBack(A);
+
+        Assert.Equal(1, back.Count);
+        Assert.Empty(back.Stayed);
+        Assert.Equal("edited", File.ReadAllText(a));
+        Assert.Equal(a, Assert.Single(Store(A).All()).Path);
+        Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.example"))); // emptied, so removed
+        Assert.True(File.Exists(Path.Combine(_root, "Copies from localhost-8080", Path.GetFileName(b))));
+        Assert.Equal(0, Store(A).BringBack(A).Count);
+    }
+
+    [Fact]
+    public void ACopyStaysAsideWhileOpenOrWhileItsNameIsTaken()
+    {
+        var locked = Write(A, 1);
+        var owned = Write(A, 2, "Other.docx");
+        var taken = Write(A, 3, "Third.docx");
+        Store(B).SetAside(B, A);
+        var aside = Path.Combine(_root, "Copies from healdan.example");
+        var lockFile = Path.Combine(aside, $".~lock.{Path.GetFileName(locked)}#"); // opened from that folder in LibreOffice
+        File.WriteAllText(lockFile, "lock");
+        var ownerFile = Path.Combine(aside, "~$" + Path.GetFileName(owned)[2..]); // or in Word
+        File.WriteAllText(ownerFile, "owner");
+        File.WriteAllText(taken, "a file of that name, with no record");
+
+        var back = Store(A).BringBack(A);
+
+        Assert.Equal(0, back.Count);
+        Assert.Equal(3, back.Stayed.Count);
+        Assert.All(back.Stayed, s => Assert.Equal(aside, s.Folder));
+        Assert.Contains(back.Stayed, s => s.DocRef == "#1 v2.1" && s.Why.Contains("open in an app"));
+        Assert.Contains(back.Stayed, s => s.DocRef == "#2 v2.1" && s.Why.Contains("open in an app"));
+        Assert.Contains(back.Stayed, s => s.DocRef == "#3 v2.1" && s.Why.Contains("already has a file with its name"));
+        Assert.True(Directory.Exists(aside));
+
+        File.Delete(lockFile);
+        File.Delete(ownerFile);
+        File.Delete(taken);
+        Assert.Equal(3, Store(A).BringBack(A).Count);
+        Assert.False(Directory.Exists(aside));
+    }
+
+    [Fact]
+    public void ASetAsideRecordWithoutAServerStaysAsideUncounted()
+    {
+        var old = Write(null, 1);
+        // as the set-aside before records named their server left it: everything moved, the record as it was
+        var aside = Path.Combine(_root, "Copies from healdan.example");
+        Directory.Move(Paths.Copies, aside);
+
+        var back = Store(A).BringBack(A);
+
+        Assert.Equal(0, back.Count);
+        Assert.Empty(back.Stayed);
+        Assert.True(File.Exists(Path.Combine(aside, Path.GetFileName(old))));
+        Assert.Empty(Store(A).Aside());
+    }
+
+    [Fact]
+    public void AsideCountsEachServersCopies()
+    {
+        Write(A, 1);
+        Write(A, 2, "Other.docx");
+        Write(B, 3, "Third.docx");
+        Store("https://third.test").SetAside("https://third.test", "https://third.test");
+
+        var aside = Store().Aside();
+
+        Assert.Equal(2, aside.Count);
+        Assert.Equal(new AsideCopies("healdan.example", Path.Combine(_root, "Copies from healdan.example"), 2), aside[0]);
+        Assert.Equal(new AsideCopies("localhost:8080", Path.Combine(_root, "Copies from localhost-8080"), 1), aside[1]);
+        Assert.Equal("2 copies waiting for healdan.example", aside[0].Line);
+        Assert.Equal("1 copy waiting for localhost:8080", aside[1].Line);
+    }
 }
