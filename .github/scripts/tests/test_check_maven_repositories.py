@@ -33,7 +33,7 @@ SOURCEFORGE = "https://logicaldoc.sourceforge.net/maven/"
 
 
 def repositories(*entries, tag="repository"):
-    """A <repositories> (or <pluginRepositories>) element, one <tag> per (id, url) entry, each five lines long."""
+    """A <repositories> (or <pluginRepositories>) element, one <tag> per (id, url) entry, each four lines long."""
     wrapper = {"repository": "repositories", "pluginRepository": "pluginRepositories"}[tag]
     items = "".join(f"    <{tag}>\n      <id>{id_}</id>\n      <url>{url}</url>\n    </{tag}>\n" for id_, url in entries)
     return f"  <{wrapper}>\n{items}  </{wrapper}>"
