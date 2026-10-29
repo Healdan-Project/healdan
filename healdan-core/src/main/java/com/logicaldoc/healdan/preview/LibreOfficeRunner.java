@@ -226,9 +226,14 @@ public class LibreOfficeRunner {
 			} finally {
 				sweep(slotDir);
 			}
-			// A run that hit the timeout fails even if it left a PDF: that file may be cut off mid-write
+			// A run that was interrupted or hit the timeout fails even if it left a PDF: Exec killed
+			// LibreOffice, so that file may be cut off mid-write. The profile may be half-written too:
+			// rebuild it on next use
+			if (Thread.currentThread().isInterrupted()) {
+				unprepareSlot(slot);
+				throw new IOException("Interrupted while converting " + src.getName());
+			}
 			if (seconds >= timeout) {
-				// The killed LibreOffice may have left the profile half-written too: rebuild it on next use
 				unprepareSlot(slot);
 				throw new IOException(timedOut(timeout, src.getName()));
 			}

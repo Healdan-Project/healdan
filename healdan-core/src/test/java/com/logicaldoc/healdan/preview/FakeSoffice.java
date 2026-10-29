@@ -70,6 +70,16 @@ final class FakeSoffice {
 				+ "' \"$IN\"; then\n  sh -c 'sleep 600; :' \"$UI\" &\n  sleep 600\nfi\nwrite_pdf\n");
 	}
 
+	/**
+	 * @param log the file that gets a "written" line once the PDF is there
+	 * @return a converter that writes a PDF, says so, and then never finishes
+	 */
+	static File partialThenHang(File log) throws IOException {
+		String path = log.getAbsolutePath();
+		return script("partial-hang-" + Integer.toHexString(path.hashCode()),
+				"write_pdf\necho written >> '" + path + "'\nsleep 600\n");
+	}
+
 	/** @return a converter that writes a PDF and then never finishes */
 	static File partialThenHang() throws IOException {
 		return script("partial-hang", "write_pdf\nsleep 600\n");
