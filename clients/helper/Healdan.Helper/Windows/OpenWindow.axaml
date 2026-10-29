@@ -54,7 +54,7 @@
               </Button>
             </Grid>
           </Border>
-          <Grid DockPanel.Dock="Top" ColumnDefinitions="24,*,56,52,58,84" Margin="10,6,10,3">
+          <Grid DockPanel.Dock="Top" ColumnDefinitions="24,*,60,52,58,84" Margin="10,6,10,3">
             <TextBlock Grid.Column="1" Classes="column" Text="Title" />
             <TextBlock Grid.Column="2" Classes="column" Text="Doc #" />
             <TextBlock Grid.Column="3" Classes="column" Text="Version" />
@@ -65,7 +65,7 @@
           <ListBox x:Name="EntryList" Classes="rows">
             <ListBox.ItemTemplate>
               <DataTemplate x:DataType="b:Entry">
-                <Grid ColumnDefinitions="24,*,56,52,58,84">
+                <Grid ColumnDefinitions="24,*,60,52,58,84">
                   <local:IconView Data="{Binding Icon, Converter={x:Static local:Icons.ByName}}" Classes="row-icon" Classes.folder="{Binding IsFolder}"
                                   VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,1,0,0" />
                   <StackPanel Grid.Column="1" Margin="0,0,8,0">

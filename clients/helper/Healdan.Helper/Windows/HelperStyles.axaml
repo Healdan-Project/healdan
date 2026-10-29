@@ -299,12 +299,13 @@
     <Setter Property="ClipToBounds" Value="True" />
   </Style>
 
-  <!-- Text keeps all its ink (polish spec §4.2). HarfBuzz lays San Francisco out from the font file's default instance
-       (optical size 28, Display) but Skia draws it at Text size (17), whose glyphs are wider. A … shows it most: at 13 pt
-       it ends 1.7 pt past the box it was measured into. Avalonia clips every text block and templated control to its
-       bounds, which cut the last dot off every "Install…" and "Loading…". Neither clips, so the ink stays
-       whole and no layout changes. :is() covers AccessText (a button's content) and SelectableTextBlock too; Button.link
-       has no padding, so its button must not clip either. -->
+  <!-- Text keeps all its ink (polish spec §4.2). Avalonia clips every text block and templated control to its bounds,
+       and HarfBuzz measures each font at its file's default instance. Skia draws the face it matched, which for a variable
+       font can be wider: San Francisco's Text optical size was, until Platform/SystemFont.cs laid it out as drawn, and
+       cut the last dot off every "Install…". On macOS nothing now reaches past its box, and the renders are the same with
+       or without this. It stays for other desktops' variable fonts at their other weights, which HarfBuzz still measures
+       at the default. :is() covers AccessText (a button's content) and SelectableTextBlock too; Button.link has no
+       padding, so its button must not clip either. -->
   <Style Selector=":is(TextBlock), Button">
     <Setter Property="ClipToBounds" Value="False" />
   </Style>

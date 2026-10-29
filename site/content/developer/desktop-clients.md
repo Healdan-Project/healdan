@@ -23,7 +23,7 @@ app.
 
 ## The Helper
 
-`clients/helper/Healdan.Helper.sln` is .NET 10 (`global.json` pins the SDK), with three projects:
+`clients/helper/Healdan.Helper.sln` is .NET 10 (`global.json` pins the SDK), with four projects:
 
 - **`Healdan.Helper.Core`** has no windows and no Avalonia, so the tests drive all of it:
   - `Api/`: the API client, written by hand against `openapi.yaml`;
@@ -34,14 +34,36 @@ app.
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
-  notifications, login item and extension install (`Platform/`). It stays out of the Dock (`LSUIElement`) and hands
-  the focus back after each window.
+  notifications, login item, extension install and text layout (`Platform/`). It stays out of the Dock
+  (`LSUIElement`) and hands the focus back after each window.
   - **The look** (polish spec, `docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`): the tokens and
     control styles are in `Windows/HelperStyles.axaml`, over Fluent. The icons are Tabler's, in
     `Windows/HelperIcons.axaml`, which `python3 clients/icons/write-helper-icons.py` writes from
     `clients/icons/tabler/` (`IconsTests` fails until it's run, and until a new icon is in its `SpecNames`). The menu
     bar icon is drawn at run time from `HealdanMark`'s shapes (`Tray/TrayIcons.cs`).
 - **`Healdan.Helper.Core.Tests`** is xUnit.
+- **`Healdan.Helper.Tests`** is xUnit too, for the app's own code that needs Avalonia to test. It runs Avalonia
+  headless, with Skia's real drawing.
+
+### San Francisco's Layout
+
+On macOS the windows' text is San Francisco, asked for as `.AppleSystemUIFont`. Avalonia 12 shapes text with
+HarfBuzz at the font file's default instance, which for San Francisco is its Display optical size, while Skia draws
+the face CoreText matched at its Text optical size. Left alone, the text is measured about 15% narrower than it's drawn,
+and SemiBold about 25%.
+
+`Platform/SystemFont.cs` closes the gap. `Program` adds its shaper with `UseSystemFontShaper()`, on macOS only. The
+shaper hands each call on to Avalonia's HarfBuzz shaper. For each San Francisco typeface, it first sets HarfBuzz's font
+to the instance Skia draws: the named instance with the face's PostScript name, at optical size 17. Before each run, it
+sets the point size, from which HarfBuzz applies the font's tracking as CoreText does. Up to 17 pt, which covers every
+size the helper uses, the widths then match CoreText's.
+
+- Avalonia marks `ITextShaperImpl` as not for apps to implement, so the shaper is a `DispatchProxy`, made at run time.
+  It goes in as an `AppBuilder` option, since the service locator isn't in Avalonia's reference assemblies.
+- It reaches two public properties of internal Avalonia classes, `HarfBuzzTypeface.HBFont` and
+  `SkiaTypeface.SKTypeface`, and calls HarfBuzz's C API in HarfBuzzSharp's native library. `SystemFontTests` fails
+  when an Avalonia upgrade moves either property, since the widths go back to the narrow ones.
+- Other fonts, and every font off macOS, go to HarfBuzz unchanged.
 
 ### The Cycle
 
@@ -153,7 +175,9 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   answer. A confirmation answers only once nothing newer is on its way, so the title never stops a version behind.
   A save Healdan refuses for good, or one that fails, answers the same way.
   While the answer says `pending`, the extension asks again after 2, 5, 15, 30, then every 60 seconds, so the title
-  moves on once Healdan is back, however long it was away.
+  moves on once Healdan is back, however long it was away. It asks the same way while the helper can't be reached,
+  which keeps the save on the computer until it's back to send it. Following ends when the window closes, a newer save
+  of the copy takes over, or the copy is saved elsewhere.
 
 - **A second helper's link:** only one helper runs for each user. macOS starts another copy of the app when the copy
   it hands `healdan:` links to isn't the one running, such as an old one in `/Applications` beside a newer one, and
@@ -196,9 +220,12 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   alone.
 - **Long calls** run on a thread of their own while LibreOffice's thread keeps its events going, and what they change
   in the document goes back to LibreOffice's thread.
-- **When the helper can't be reached,** Open and Save fall back to LibreOffice's own boxes, with one notice. A copy's
-  save is still stored, and the helper sends it once it's back. An unexpected error before any helper window was
-  shown falls back the same way.
+- **When the helper can't be reached,** Open and Save fall back to LibreOffice's own boxes, with one notice until the
+  helper answers again. An unexpected error before any helper window was shown falls back the same way.
+  - A copy's save is still stored, and followed like any other until the helper is back and sends it.
+  - Once the helper answers anything, an error included, the infobars saying it isn't running go from the windows
+    still showing one (`withdraw` in `healdan.py`). Every notice goes through `Flows.tell`, so `Flows` knows which
+    windows those are, and leaves a window whose infobar a later notice has replaced.
 
 `clients/libreoffice/build.sh` packages it as `healdan.oxt`, the same bytes from the same sources.
 
@@ -292,6 +319,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   shapes, or when the SVGs aren't the spec's list, `SpecNames`. After adding or changing an icon, run
   `python3 clients/icons/write-helper-icons.py`, and add a new one to `SpecNames`.
 - **`AttentionTests`** pin when the menu bar icon shows its dot, and the reason its tooltip gives.
+- **`SystemFontTests`** lay San Francisco out at each size the helper uses, Regular and SemiBold, and fail when a
+  width is more than 0.2% from CoreText's own layout of the same text. They run on macOS and skip elsewhere.
 - **The extension's tests** cover `healdan_logic.py` (the notices' headlines and details included) with fakes for
   LibreOffice, and build the `.oxt` and check that its files agree: the toolbar, the images and the notice. A real
   LibreOffice isn't part of them.

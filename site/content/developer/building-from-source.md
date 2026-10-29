@@ -61,8 +61,10 @@ The desktop clients are under `clients/`, and build separately from Maven. [Desk
 describes how they work.
 
 - **The helper's core** is a .NET project in `clients/helper/Healdan.Helper.Core`, with its tests in
-  `clients/helper/Healdan.Helper.Core.Tests`. You need the .NET 10 SDK; `clients/helper/global.json` pins the
-  version, and `clients/helper/nuget.config` restores packages from nuget.org only.
+  `clients/helper/Healdan.Helper.Core.Tests`. The app's own tests, which need Avalonia, are in
+  `clients/helper/Healdan.Helper.Tests`, and run only on macOS. You need the .NET 10 SDK;
+  `clients/helper/global.json` pins the version, and `clients/helper/nuget.config` restores packages from nuget.org
+  only.
 - **The LibreOffice extension** is Python, in `clients/libreoffice`. Its tests are Python's `unittest`, in
   `clients/libreoffice/tests`. You need Python 3 and nothing else: the tests use the standard library only.
   `build.sh` packages the extension as `clients/libreoffice/healdan.oxt`, which the tests also build and check.
