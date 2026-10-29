@@ -18,8 +18,8 @@ weight: 4
 
 `build` is the last of several jobs, so that the tests can run side by side:
 
-1. **`checks`** runs the icon and doc-link checks, reads the JDK from the `Dockerfile`, and plans the test shards
-   with `.github/scripts/test-shards.py`.
+1. **`checks`** runs the icon, doc-link, hosts and Maven repository checks, reads the JDK from the `Dockerfile`,
+   and plans the test shards with `.github/scripts/test-shards.py`.
 2. **`Tests (1 of N)` … `Tests (N of N)`** each compile every module except the WAR, without the GWT compile, the
    javadoc or the plugin zips (the Docker build makes all of those), then run their share of the tests.
 3. **`build`** passes when `checks` and every shard passed. It's the check `master` requires.
@@ -42,8 +42,8 @@ others, so one run shows every failing test.
 
 Each shard restores a copy of Maven's local repository before it builds: the copy for the POMs as they are, or else
 the newest copy `master` saved. Only `master`'s runs save one, from a single shard, so a pull request that edits a
-POM downloads only what its edit adds. That matters because some dependencies come only from
-`logicaldoc.sourceforge.net`, which sometimes refuses requests.
+POM downloads only what its edit adds. Some dependencies come only from Healdan's copies at
+`https://maven.healdan.com/`, through the mirror in `docker/maven-settings.xml`.
 
 Maven notes where each file came from in a `_remote.repositories` file beside it, and uses a cached file only when
 that note names one of the build's repositories. Maven 3.9 notes the repository's id, and Maven 3.10 its id and a
@@ -140,7 +140,8 @@ A pull request that changes only `clients/` doesn't build the image, so this tes
   healdan`. In the sync PR, check its licence allows hosting it, import it with `python3 import-artifact.py` in a
   checkout of `Healdan-Project/maven`, push, and re-run CI once
   `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting
-  it is dropped from the build instead, as JAI was.
+  it is dropped from the build instead, as JAI was. A missing `com.logicaldoc:*` artifact is never imported: it
+  means a module or version was left behind, so bump it.
 - **Broken POMs.** Upstream sometimes ships a POM that fails Maven's validation, such as a duplicate dependency. If
   CI fails within a minute, check the POMs, the icon check, the doc-links check, the hosts check and the Maven
   repository check first.
