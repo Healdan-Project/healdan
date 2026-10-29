@@ -4,7 +4,7 @@
 
 **Goal:** Healdan's builds get the artifacts only LogicalDOC's Maven repository has from Healdan's own copies at `https://maven.healdan.com/`, so nothing in the build depends on LogicalDOC's infrastructure.
 
-**Architecture:** A new public repository, `Healdan-Project/maven`, holds the artifacts in Maven's layout and GitHub Pages serves it. Every file gets in through its tested `import-artifact.py`. In this repository, a `<mirror>` of the `logicaldoc` repository in `docker/maven-settings.xml` sends every request for it to Healdan's copies, without touching upstream POMs. A new check in CI keeps any other LogicalDOC repository out. JAI, betelio and ksoap2, whose licences don't allow hosting them, leave the build instead.
+**Architecture:** A new public repository, `Healdan-Project/maven`, holds the artifacts in Maven's layout and GitHub Pages serves it. Every file gets in through its tested `import-artifact.py`. In this repository, a `<mirror>` of the `logicaldoc` repository in `docker/maven-settings.xml` sends every request for it to Healdan's copies, without touching upstream POMs. A new check in CI keeps any other LogicalDOC repository out. JAI, betelio, ksoap2 and Oracle's JDBC driver, whose licences don't allow hosting them, leave the build instead.
 
 **Tech Stack:** Maven 3.9+ settings mirrors, GitHub Pages (custom domain), Python 3 (standard library only, `unittest`), GitHub Actions.
 
@@ -14,7 +14,7 @@
 
 - The hosted URL is exactly `https://maven.healdan.com/`. The mirror's `<id>` is `healdan` and its `<mirrorOf>` is `logicaldoc`.
 - The hosted repository is `Healdan-Project/maven`, default branch `main`, checked out at `~/Projects/healdan-maven` (outside this repository).
-- The only upstream files this plan edits are the three in spec §11: `logicaldoc-core/pom.xml` (drop JAI and betelio), `logicaldoc-webapp/pom.xml` (drop betelio) and the root `pom.xml` (drop the `logicaldoc-webserviceclient` module). Everything else is Healdan's own: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/`, `docs/`.
+- The only upstream files this plan edits are the three in spec §11: `logicaldoc-core/pom.xml` (drop JAI and betelio), `logicaldoc-webapp/pom.xml` (drop betelio and Oracle's JDBC driver) and the root `pom.xml` (drop the `logicaldoc-webserviceclient` module). Everything else is Healdan's own: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/`, `docs/`.
 - Scripts are Python 3 with the standard library only, tested with `unittest`, like `.github/scripts/`.
 - A hosted version never changes once it's published.
 - Outward-facing steps need the owner's OK in chat first, each time: creating the GitHub repository, pushing to it, changing its Pages settings, pushing this branch, opening the PR. The owner adds the DNS record.
@@ -989,12 +989,60 @@ org.timepedia.exporter:gwtexporter:2.0.10
 
 If the list differs, stop. An extra artifact needs its licence settled (spec §3.1) and a row in Task 5 before it's imported. A missing one means the build no longer needs it: leave it out.
 
+**As run (2026-10-29):** the list had a 16th line, `com.oracle.jdbc:ojdbc8:12.2.0.1`, Oracle's JDBC driver. The owner ruled it out (spec §3.1), Task 4a drops it, and `inventory.txt` loses that line, leaving the 15 above.
+
 - [ ] **Step 3: Check no POM-only artifact came from there**
 
 `--scan` lists jars, so it would miss a parent or BOM POM that came from LogicalDOC's repository on its own.
 
 Run: `grep -rlE --include=_remote.repositories '\.pom>logicaldoc(-[0-9a-f]{40})?=' ~/.cache/healdan-m2/inventory | wc -l`
 Expected: `15`, one folder per artifact above. More means a POM-only artifact, which `import-artifact.py` can't import: stop and raise it with the owner.
+
+---
+
+### Task 4a: Drop Oracle's JDBC Driver (added 2026-10-29)
+
+Task 4's inventory found Oracle's JDBC driver, which only LogicalDOC's repository has and whose licence doesn't allow hosting it. Healdan supports only open-source databases (spec §3.1; the rest is Healdan-Project/healdan#110).
+
+**Files:**
+- Modify: `logicaldoc-webapp/pom.xml` (the `ojdbc8` dependency, around line 152)
+
+- [ ] **Step 1: Remove the dependency**
+
+In `logicaldoc-webapp/pom.xml`, delete (tabs and CRLF, as the file has them):
+
+```xml
+		<dependency>
+			<groupId>com.oracle.jdbc</groupId>
+			<artifactId>ojdbc8</artifactId>
+			<version>12.2.0.1</version>
+		</dependency>
+```
+
+- [ ] **Step 2: Check the WAR's dependency tree**
+
+Run: `mvn -B -ntp -pl logicaldoc-webapp dependency:tree | grep -i -e ojdbc -e oracle`
+Expected: no output, after a `BUILD SUCCESS` (run it once without the `grep` to see that).
+
+- [ ] **Step 3: Drop its line from the inventory**
+
+Run: `grep -v '^com.oracle.jdbc:ojdbc8:' ~/.cache/healdan-m2/inventory.txt > ~/.cache/healdan-m2/inventory.tmp && mv ~/.cache/healdan-m2/inventory.tmp ~/.cache/healdan-m2/inventory.txt && wc -l < ~/.cache/healdan-m2/inventory.txt`
+Expected: `15`.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add logicaldoc-webapp/pom.xml
+git commit -m "Drop Oracle's JDBC driver from the build
+
+Only LogicalDOC's Maven repository has com.oracle.jdbc:ojdbc8:12.2.0.1,
+and Oracle's licence for it doesn't allow Healdan to host it. Healdan
+supports only open-source databases; only the setup wizard, which the
+container never runs, names the driver. See the Maven repository spec's
+§3.1 and #110.
+
+Co-Authored-By: <the implementer's model attribution>"
+```
 
 ---
 
@@ -1048,6 +1096,12 @@ python3 import-artifact.py org.timepedia.exporter:gwtexporter:2.0.10 \
 ```
 
 Expected: 15 `Imported … from logicaldoc.sourceforge.net, <today>` lines, and README.md's table has 15 rows.
+
+Then add this row at the end of README.md's Not Hosted table (Task 4a's drop):
+
+```markdown
+| `com.oracle.jdbc:ojdbc8:12.2.0.1` | Oracle's OTN licence, which doesn't allow free redistribution; the jar states none | Healdan supports only open-source databases, so it drops Oracle's driver. |
+```
 
 - [ ] **Step 2: Add the licence texts and NOTICE files**
 
@@ -1598,7 +1652,7 @@ with:
 Insert this bullet after the doc-links bullet (the one starting "Outside the docs site's interim pages") and before the `README.md` bullet:
 
 ```markdown
-- Builds get the artifacts only LogicalDOC's Maven repository has from Healdan's copies at `https://maven.healdan.com/` (repository `Healdan-Project/maven`), through a mirror of the `logicaldoc` repository in `docker/maven-settings.xml`. JAI, betelio and ksoap2 aren't among them: their licences don't allow hosting them, so the build drops JAI and betelio, and leaves `logicaldoc-webserviceclient`, ksoap2's only user, out. `.github/scripts/check-maven-repositories.py` runs next to the doc-links check and fails `build` when a POM or the settings file points a repository at a LogicalDOC host the mirror doesn't cover.
+- Builds get the artifacts only LogicalDOC's Maven repository has from Healdan's copies at `https://maven.healdan.com/` (repository `Healdan-Project/maven`), through a mirror of the `logicaldoc` repository in `docker/maven-settings.xml`. JAI, betelio, ksoap2 and Oracle's JDBC driver aren't among them: their licences don't allow hosting them, so the build drops JAI, betelio and Oracle's driver, and leaves `logicaldoc-webserviceclient`, ksoap2's only user, out. Healdan supports only open-source databases (Healdan-Project/healdan#110). `.github/scripts/check-maven-repositories.py` runs next to the doc-links check and fails `build` when a POM or the settings file points a repository at a LogicalDOC host the mirror doesn't cover.
   - When a sync bumps one of those artifacts or brings a new one, the build fails with `Could not find artifact … in healdan`. In the sync PR, as a merge fix, check its licence allows hosting it, run `python3 import-artifact.py <group>:<artifact>:<version> --project … --licence …` in a checkout of `Healdan-Project/maven`, push, and re-run CI once `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting is dropped instead, as JAI was. When the old GWT UI retires, its GWT libraries leave the build too (the spec's §3.1).
 ```
 
@@ -1730,12 +1784,13 @@ https://maven.healdan.com/ ([Healdan-Project/maven](https://github.com/Healdan-P
 contacts logicaldoc.sourceforge.net. Closes #107.
 
 - `docker/maven-settings.xml` mirrors the `logicaldoc` repository to it, so upstream's POMs stay as they are.
-- Three jars whose licences don't allow hosting them leave the build, the only upstream edits:
+- Four jars whose licences don't allow hosting them leave the build, the only upstream edits:
   - `logicaldoc-core` drops JAI (Sun's Binary Code License, distribution `manual`);
   - `logicaldoc-core` and `logicaldoc-webapp` drop betelio, which has no licence;
+  - `logicaldoc-webapp` drops Oracle's JDBC driver (Oracle's licence; Healdan supports only open-source databases, #110);
   - the root POM drops the `logicaldoc-webserviceclient` module, ksoap2's only user, which no module depends on.
 
-  Nothing in the build references JAI or betelio.
+  Nothing in the build references JAI or betelio, and only the setup wizard, which the container never runs, names Oracle's driver.
 - `.github/scripts/check-maven-repositories.py`, in the `checks` job, fails `build` when a POM or the settings file
   points a repository at a LogicalDOC host the mirror doesn't cover.
 - CLAUDE.md and the Developer Guide say how to import an artifact when a sync needs one.

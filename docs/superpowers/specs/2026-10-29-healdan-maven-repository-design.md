@@ -4,7 +4,8 @@
 - **Date:** 2026-10-29
 - **Status:** approved by the owner on 2026-10-29, and amended that day, with the owner, for licences (§3.1):
   JAI, betelio and ksoap2 aren't hosted. The build drops JAI and betelio, and leaves `logicaldoc-webserviceclient`,
-  ksoap2's only user, out of the reactor.
+  ksoap2's only user, out of the reactor. Amended again that day for Oracle's JDBC driver, which the clean inventory
+  build found: not hosted, and dropped.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
   - the failed `master` runs of `build-logicaldoc.yml` that day (40877494760, 40891327931, 40894089832), and the
@@ -18,7 +19,7 @@ The owner approved each section of the design in conversation.
 
 Healdan's builds stop depending on LogicalDOC's infrastructure. (owner)
 
-Today every build (CI's test shards, the Docker image and local builds) fetches 19 artifacts from LogicalDOC's
+Today every build (CI's test shards, the Docker image and local builds) fetches 20 artifacts from LogicalDOC's
 Maven repository at `https://logicaldoc.sourceforge.net/maven/`, because no other repository has them. SourceForge
 sometimes answers 403. On 2026-10-29 a runner image change had made Maven treat CI's whole cache as foreign, so
 every run fetched every artifact again. Two `master` runs that day failed because SourceForge refused the GUI's
@@ -29,7 +30,7 @@ SourceForge from the build, so a refusal there can't fail Healdan's build howeve
 
 ### Goals (done when)
 
-1. **Healdan hosts the artifacts whose licences allow it,** 15 of the 19, at `https://maven.healdan.com/` (owner: the
+1. **Healdan hosts the artifacts whose licences allow it,** 15 of the 20, at `https://maven.healdan.com/` (owner: the
    address), under the coordinates upstream's POMs already use (§4). The build drops the rest (§3.1).
 2. **No build contacts LogicalDOC.** A full build (GWT compile and WAR included) on an empty local repository
    records none of its artifacts as coming from the `logicaldoc` repository (§8).
@@ -85,6 +86,7 @@ parent and no dependencies, so the set is self-contained. They come to about 54 
 | `org.apache.jackrabbit:jackrabbit-jcr-server:2.22.0-jakarta` | webdav | |
 | `org.apache.jackrabbit:jackrabbit-webdav:2.22.0-jakarta` | webdav | |
 | `org.timepedia.exporter:gwtexporter:2.0.10` | gui | No code references it |
+| `com.oracle.jdbc:ojdbc8:12.2.0.1` | webapp | Oracle's JDBC driver. Only the setup wizard's database list names its driver class. The clean inventory build found it (§4.3). Not hosted, and dropped (§3.1) |
 
 No POM declares `pluginRepositories`, so every plugin already comes from Central.
 
@@ -108,6 +110,12 @@ read every jar's files, source headers and stub POM, and each upstream project's
     user is `logicaldoc-webserviceclient`, a SOAP client library that no module depends on and nothing ships, so
     that module leaves the reactor, as `logicaldoc-webservicesamples` already has. An Android client, if Healdan
     builds one, would use the JSON API. (owner)
+  - **Oracle's JDBC driver** (`com.oracle.jdbc:ojdbc8:12.2.0.1`). The jar states no licence, and Oracle distributed
+    this version under its OTN licence, which doesn't allow free redistribution. Only the setup wizard's database
+    list names its driver class, and Healdan's container never runs the wizard. Healdan supports only open-source
+    databases: MariaDB and MySQL for now, with PostgreSQL as the goal and preferred stack. (owner)
+    `logicaldoc-webapp` drops it. The rest of that decision (SQL Server's driver, the wizard's choices) is
+    [Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110).
 - **Hosted,** with the licence texts the jars lack in the repository's `LICENSES/` (§4.2). The owner is reasonably
   assured of these licences. (owner)
   - **Apache-2.0:** gwt-dnd, gwtchismes, gwtexporter, gwt-incubator (which bundles JavaSWF under BSD-3-Clause and
@@ -282,7 +290,7 @@ Each drops something whose licence doesn't allow hosting it (§3.1):
 
 - **`logicaldoc-core/pom.xml`:** drop the `javax.media:jai-core`, `com.sun.media:jai-codec` and `betelio:betelio`
   dependencies. Nothing references them.
-- **`logicaldoc-webapp/pom.xml`:** drop the `betelio:betelio` dependency.
+- **`logicaldoc-webapp/pom.xml`:** drop the `betelio:betelio` and `com.oracle.jdbc:ojdbc8` dependencies.
 - **`pom.xml`** (the root POM, which already lists Healdan's modules): drop
   `<module>logicaldoc-webserviceclient</module>`, ksoap2's only user. No module depends on it.
 
