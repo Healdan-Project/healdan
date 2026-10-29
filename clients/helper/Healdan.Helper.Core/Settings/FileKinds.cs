@@ -9,7 +9,10 @@ public static class FileKinds
 
     public static readonly FileKind Presentations = new("Presentations", [".ppt", ".pptx", ".pptm", ".odp"]);
 
-    public static readonly IReadOnlyList<FileKind> All = [Documents, Spreadsheets, Presentations];
+    /// <summary>Draw's own format only: Draw opens Visio and Publisher files but can't save them.</summary>
+    public static readonly FileKind Drawings = new("Drawings", [".odg"]);
+
+    public static readonly IReadOnlyList<FileKind> All = [Documents, Spreadsheets, Presentations, Drawings];
 
     /// <summary>
     /// The kind of a file by its own extension, or null. Links and the cycle go by this: a name with no extension, such

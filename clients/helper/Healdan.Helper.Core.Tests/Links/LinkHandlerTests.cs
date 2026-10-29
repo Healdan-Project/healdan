@@ -80,7 +80,7 @@ public sealed class LinkHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task OpensOnlyDocumentsSpreadsheetsAndPresentations()
+    public async Task OpensOnlyTheSpecsKinds()
     {
         // Spec 5.11's kinds; anything else a matter holds opens only from the Open window (the final review's C2).
         _server.Add(7, "Run me.command", "#!/bin/sh");
@@ -94,7 +94,9 @@ public sealed class LinkHandlerTests : IDisposable
         Assert.Empty(opener.Opened);
         Assert.Empty(_app.Opened);
         Assert.Equal(0, _server.Count("GET /documents/7/content"));
-        Assert.Contains("Open it from the web page, or from Open from Healdan", Assert.Single(_events.Errors));
+        var error = Assert.Single(_events.Errors);
+        Assert.Contains("a link opens only documents, spreadsheets, presentations and drawings", error);
+        Assert.Contains("Open it from the web page, or from Open from Healdan", error);
     }
 
     [Fact]

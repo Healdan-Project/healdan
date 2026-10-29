@@ -72,7 +72,7 @@ On the phase's platform (§3.2), against a Healdan server reached over HTTPS, as
 9. **Nothing is lost.**
    - A save made while the server can't be reached is kept and sent later.
    - A crash leaves the document checked out, with its local copy, and the helper offers to reopen it or check it in (owner, §5.10).
-10. **Calc and Impress** get the same open and save flow as Writer; the footer is Writer only (owner, roadmap).
+10. **Calc and Impress** get the same open and save flow as Writer; the footer is Writer only (owner, roadmap). (added after the build, 2026-10-29: Draw too, for `.odg` only, owner.)
 11. **Comments.** Every document has a Comments property, and the Documents search finds a document by the words in it (owner, §9.9).
 12. **Installs cleanly.**
     - On macOS: a signed, notarised disk image.
@@ -276,7 +276,7 @@ Both the check-in and the release are refused if this computer no longer holds t
 1. The user presses Save on a document that isn't in Healdan.
 2. The Save to Healdan window opens (§5.8).
 3. **The format (owner, 2026-10-24).** The window offers the app's own format first, selected, and the other family's format as the alternative:
-   - from LibreOffice, `.odt`, `.ods` or `.odp`, with `.docx`, `.xlsx` or `.pptx` as the alternative;
+   - from LibreOffice, `.odt`, `.ods` or `.odp`, with `.docx`, `.xlsx` or `.pptx` as the alternative (added after the build, 2026-10-29: from Draw, `.odg` alone, as Draw saves no Microsoft format, so the File Format pop-up has the one choice);
    - from Word, Excel and PowerPoint (M3.5), the other way round.
 
    The choice is only offered here, because a document's format can't change later (§3.1).
@@ -374,7 +374,8 @@ The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polis
 - **Kinds (call):**
   - documents: `.doc`, `.docx`, `.docm`, `.dotx`, `.dotm`, `.rtf`, `.odt`, `.ott`;
   - spreadsheets: `.xls`, `.xlsx`, `.xlsm`, `.ods`;
-  - presentations: `.ppt`, `.pptx`, `.pptm`, `.odp`.
+  - presentations: `.ppt`, `.pptx`, `.pptm`, `.odp`;
+  - (added after the build, 2026-10-29) drawings: `.odg`. Draw opens Visio and Publisher files but can't save them, so they stay other files, read-only in the default app, and Draw's templates (`.otg`) stay out, as Calc's and Impress's do (owner). The helper's links and Open from Healdan open drawings in LibreOffice now; the web page's Open in App for `.odg`, and the server's previews of drawings, follow in a pull request of their own, once a helper that takes them is out.
 
   Other files open read-only in the system's default app, with no check-out. (changed in the build: the plan's cycle left these out, and the build added them: `open` on macOS, `xdg-open` on Linux, from the Open window, since Open in App is offered only for the kinds above (§8). The default app keeps no lock file, so such a copy is deleted at the helper's next start, unless it changed. Final review C2: they open only from the Open window, never from a link; each copy gets macOS's `com.apple.quarantine`, so Gatekeeper checks it; and kinds that run a program or change the system when opened (apps, installers, disk images, scripts, Automator and Shortcuts files, internet location files, kernel extensions, configuration profiles: 24 extensions) are never downloaded or handed over, with a notice.)
 - **In M3 every kind opens in LibreOffice.** From M3.5, Settings choose LibreOffice or Microsoft Office for each kind on macOS, with the system's default app as the default. Ubuntu has only LibreOffice (call).
@@ -401,7 +402,7 @@ The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polis
 
 ### 6.1 What it is
 
-- **Python, using LibreOffice's UNO interface,** packaged as an `.oxt` (call; no Java, owner). The same extension runs on Ubuntu and macOS, in Writer, Calc and Impress. The trial's extension ran on LibreOffice 26.8 on macOS and installed on 26.2 in Ubuntu.
+- **Python, using LibreOffice's UNO interface,** packaged as an `.oxt` (call; no Java, owner). The same extension runs on Ubuntu and macOS, in Writer, Calc and Impress (added after the build, 2026-10-29: and Draw, with its own window state for the toolbar, `DrawWindowState.xcu`). The trial's extension ran on LibreOffice 26.8 on macOS and installed on 26.2 in Ubuntu.
 - **Slim:** it talks to the helper, which does the work (owner). It holds no token and calls no server.
 - **Installed by the helper** for the user (§5.12).
 

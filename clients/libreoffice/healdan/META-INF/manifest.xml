@@ -8,4 +8,5 @@
   <manifest:file-entry manifest:full-path="WriterWindowState.xcu" manifest:media-type="application/vnd.sun.star.configuration-data"/>
   <manifest:file-entry manifest:full-path="CalcWindowState.xcu" manifest:media-type="application/vnd.sun.star.configuration-data"/>
   <manifest:file-entry manifest:full-path="ImpressWindowState.xcu" manifest:media-type="application/vnd.sun.star.configuration-data"/>
+  <manifest:file-entry manifest:full-path="DrawWindowState.xcu" manifest:media-type="application/vnd.sun.star.configuration-data"/>
 </manifest:manifest>

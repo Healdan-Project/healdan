@@ -67,7 +67,7 @@ class CommandsTest(unittest.TestCase):
         self.assertEqual("save-new", logic.action(".uno:Save", True, True, read_only=True))
 
     def test_saves_stay_local_where_healdan_cant_file(self):
-        # Draw, Math, Base and the like have no formats to file in, so their saves stay LibreOffice's.
+        # Math, Base and the like have no formats to file in, so their saves stay LibreOffice's.
         self.assertEqual("local", logic.action(".uno:Save", False, False, can_file=False))
         self.assertEqual("local", logic.action(".uno:SaveAs", True, True, can_file=False))
         self.assertEqual("local", logic.action(".uno:Save", True, True, read_only=True, can_file=False))
@@ -83,8 +83,12 @@ class CommandsTest(unittest.TestCase):
     def test_formats_impress(self):
         self.assertEqual(["odp", "pptx"], logic.formats("impress"))
 
+    def test_formats_draw(self):
+        # Draw writes no Microsoft format, so a drawing is filed in its own.
+        self.assertEqual(["odg"], logic.formats("draw"))
+
     def test_formats_elsewhere_none(self):
-        for kind in ("draw", "math", "base", "start", None):
+        for kind in ("math", "base", "start", None):
             self.assertEqual([], logic.formats(kind), kind)
 
     def test_formats_are_a_fresh_list(self):
@@ -96,8 +100,9 @@ class CommandsTest(unittest.TestCase):
             "odt": "writer8", "docx": "MS Word 2007 XML",
             "ods": "calc8", "xlsx": "Calc MS Excel 2007 XML",
             "odp": "impress8", "pptx": "Impress MS PowerPoint 2007 XML",
+            "odg": "draw8",
         }, logic.FILTERS)
-        for kind in ("writer", "calc", "impress"):
+        for kind in ("writer", "calc", "impress", "draw"):
             for fmt in logic.formats(kind):
                 self.assertIn(fmt, logic.FILTERS)
 
@@ -244,6 +249,7 @@ class PathsTest(unittest.TestCase):
         self.assertEqual("notes", logic.document_name("notes.rtf", "file:///Users/rob/notes.rtf"))
         self.assertEqual("Untitled", logic.document_name("", ""))
         self.assertEqual("Lease", logic.document_name("Lease.odt", "vnd.sun.star.webdav://host/Lease.odt"))
+        self.assertEqual("Floor plan", logic.document_name("Floor plan.odg", "vnd.sun.star.webdav://host/Floor%20plan.odg"))
 
     def test_doc_ref_from(self):
         self.assertEqual("#1234 v2.1", logic.doc_ref_from("Lease agreement #1234 v2.1"))
@@ -947,9 +953,19 @@ class FlowsTest(unittest.TestCase):
         self.assertEqual(os.path.join(self.copies, "Budget #7 v1.0 (read-only).ods"), channel.body("save-new")["path"])
         self.assertEqual(["ods", "xlsx"], channel.body("save-new")["formats"])
 
-    def test_draw_saves_stay_libreoffices(self):
+    def test_save_new_files_a_drawing_as_odg(self):
+        answer = self.save_answer("odg")
+        state = self.state("Floor plan #11 v1.0.odg", n=11)
+        channel = FakeChannel(save_new=answer, file=state)
+        doc = FakeDoc(self.log, kind="draw", title="Untitled 3")
+        self.assertTrue(self.flows(channel).command(".uno:Save", doc, self.original()))
+        self.assertEqual(["odg"], channel.body("save-new")["formats"])
+        self.assertIn(("write_to", answer["tempPath"], "draw8"), self.log)
+        self.assertIn(("adopt", state["path"], "draw8", "locked"), self.log)
+
+    def test_math_saves_stay_libreoffices(self):
         channel = FakeChannel()
-        self.assertTrue(self.flows(channel).command(".uno:Save", FakeDoc(self.log, kind="draw"), self.original()))
+        self.assertTrue(self.flows(channel).command(".uno:Save", FakeDoc(self.log, kind="math"), self.original()))
         self.assertEqual([], channel.calls)
         self.assertEqual(["original"], self.log)
 

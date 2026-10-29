@@ -21,7 +21,7 @@ public sealed class IconsTests
         "alert-triangle", "briefcase", "building", "chevron-left", "chevron-right", "chevron-up", "clock", "device-floppy",
         "eye", "file", "file-plus", "file-spreadsheet", "file-text", "file-type-pdf", "folder", "folder-open", "folder-plus",
         "hash", "history", "list-details", "lock", "photo", "power", "presentation", "puzzle", "search", "selector", "server",
-        "star", "versions"
+        "star", "triangle-square-circle", "versions"
     ];
 
     [Fact]
