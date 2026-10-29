@@ -7,7 +7,10 @@ using Healdan.Helper.Platform;
 
 namespace Healdan.Helper;
 
-/// <summary>Starts the helper: one per user, in the menu bar and out of the Dock (spec §5.1).</summary>
+/// <summary>
+/// Starts the helper: one per user, in the menu bar and out of the Dock (spec §5.1). A second start hands the running
+/// helper any link it was started for, and quits.
+/// </summary>
 internal static class Program
 {
     /// <summary>The helper's folders; under <c>HEALDAN_HELPER_DEV_ROOT</c> in a Debug build when it's set.</summary>
@@ -22,9 +25,14 @@ internal static class Program
         Log = new HelperLog(Paths.Log);
         if (AnotherHelperAnswers(Paths))
         {
-            // Two helpers would both send the same copies' saves.
-            Log.Info("Another Healdan Helper is running for this user, so this one quits");
-            return 0;
+            // Two helpers would both send the same copies' saves. macOS starts a second copy of the app for a link
+            // when it hands links to another copy than the one running, and sends the link as an Apple event once
+            // the app runs, so this one starts just far enough to take it.
+            Log.Info("Another Healdan Helper is running for this user, so this one hands it any link it was started for, and quits");
+            if (!OperatingSystem.IsMacOS())
+                return 0;
+            WaitForDisplay();
+            return Configure<HandOverApp>().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
         }
         WaitForDisplay();
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args, ShutdownMode.OnExplicitShutdown);
@@ -44,8 +52,10 @@ internal static class Program
         Log.Info("A display is on, so the start goes on");
     }
 
-    public static AppBuilder BuildAvaloniaApp() =>
-        AppBuilder.Configure<App>()
+    public static AppBuilder BuildAvaloniaApp() => Configure<App>();
+
+    private static AppBuilder Configure<TApp>() where TApp : Application, new() =>
+        AppBuilder.Configure<TApp>()
             .UsePlatformDetect()
             .UseSystemFontShaper()
             .With(new MacOSPlatformOptions { ShowInDock = false })

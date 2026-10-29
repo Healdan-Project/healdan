@@ -37,6 +37,10 @@ public class HoldDevice extends PersistentObject {
 	@Column(name = "hd_lastsaveid", length = 64)
 	private String lastSaveId;
 
+	/** The id of the version record the last save made, so that a repeat is told only while its file is the document's */
+	@Column(name = "hd_lastsaveversionid")
+	private Long lastSaveVersionId;
+
 	public long getDocId() {
 		return docId;
 	}
@@ -75,5 +79,13 @@ public class HoldDevice extends PersistentObject {
 
 	public void setLastSaveId(String lastSaveId) {
 		this.lastSaveId = lastSaveId;
+	}
+
+	public Long getLastSaveVersionId() {
+		return lastSaveVersionId;
+	}
+
+	public void setLastSaveVersionId(Long lastSaveVersionId) {
+		this.lastSaveVersionId = lastSaveVersionId;
 	}
 }

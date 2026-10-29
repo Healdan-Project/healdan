@@ -333,6 +333,8 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 
 **Sign In** and **Settings** (the server's address, which app opens each kind of file, §5.11) (call). (changed in the build: the server's address is read-only in Settings, which says to sign out and in again to change it, as there's one server per helper. Settings also says whether the helper starts at sign-in, and which version of the LibreOffice extension is installed and how.)
 
+The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polish-design.md).
+
 ### 5.9 The doc ID footer
 
 - **Insert Doc ID** (Writer, and Word in M3.5) does two things (owner; call on the property's name):
@@ -419,6 +421,8 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 - (changed in the build) **When the helper can't be reached** (it isn't running, or is signed out), Open, Save and Save As fall back to LibreOffice's own, with one notice until the helper answers again. A copy's save is still stored, and the helper sends it once it's back. An unexpected error in a Healdan command before any of the helper's windows was shown also falls back to LibreOffice's own command, and says so.
 - **Sets the title bar** and refreshes the footer when the helper confirms a save (§5.7, §5.9). It learns about the confirmation by waiting on the helper's channel after each save, in the background. (changed in the build, final review I1: while the answer says `pending`, it asks again after 2, 5, 15, 30, then every 60 seconds, so an outage longer than the helper's 120-second wait still moves the title on once Healdan is back.)
 - **Tells the helper when a document closes** (its close event), and the helper also watches the lock file (§5.5).
+
+The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polish-design.md).
 
 ## 7. The Office add-in (M3.5)
 
@@ -508,7 +512,7 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
 
 - **`ifVersion`:** when the document's `version` isn't that value, the save is `409 version-moved`, and nothing is stored.
 - **`ifHeld: true`:** when the document isn't checked out to the caller (on this device, if the hold has one), the save is `409 not-held`, and nothing is stored. Without it, M2's behaviour stays: a free document is checked out and saved. (changed in the build: the caller's hold on another device is `409 held-elsewhere` with or without `ifHeld`, §9.4, and someone else's is `409 checked-out`, so `not-held` means the document is free: released, or checked in from the web page. R2.)
-- (changed in the build) **`saveId`,** a UUID the client makes for each save and sends again unchanged with a retry. The server keeps the last `saveId` stored for each document, and a save repeating it is answered `201` with the document as it stands, storing nothing. The repeat is checked first, after read access, so a retry is recognised whatever has happened to the document since, its own check-in included; the preconditions alone would refuse it as `version-moved`. A `saveId` that isn't a UUID is `422`. Plan correction 1.
+- (changed in the build) **`saveId`,** a UUID the client makes for each save and sends again unchanged with a retry. The server keeps the last `saveId` stored for each document, and a save repeating it is answered `201` with the document as it stands, storing nothing. The repeat is checked first, after read access, so a retry is recognised whatever has happened to the document since, its own check-in included; the preconditions alone would refuse it as `version-moved`. A `saveId` that isn't a UUID is `422`. Plan correction 1. (changed after the build: the server keeps the version record the save's check-in made beside its `saveId` (V5), and answers a repeat `201` only while that record stands and its `fileVersion` is still the document's. Once newer content has been stored, by any route, or the save's version has been deleted, the repeat is `409 version-moved` with the document, so a late retry is never answered with someone else's content. The record, not the `fileVersion` alone, as CE gives a deleted version's `fileVersion` to the next check-in. A property change alone still gets `201`. The plan's follow-up from final review M5.)
 
 ### 9.6 The title's `#` form
 
@@ -725,7 +729,7 @@ There are no server-side upstream edits. The GUI edits are client code, which CI
 - the preconditions:
   - `version-moved` for a stale `ifVersion`;
   - `not-held` for `ifHeld` on a released document, one checked in from the web page, and one someone else holds (changed in the build: someone else's hold is `409 checked-out`, which comes first, §9.5);
-  - a repeated `saveId` answered `201`, storing nothing (changed in the build);
+  - a repeated `saveId` answered `201`, storing nothing (changed in the build), and `409 version-moved` once newer content was stored over it, after a check-in on closing too, or its version was deleted and other content took its `fileVersion` (changed after the build);
 - stamping:
   - a `.docx` and an `.odt` with the property, filed and saved, carry their own number and version in the property and in the field's shown text;
   - a Save as New Document's file carries the new number;
