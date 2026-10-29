@@ -118,10 +118,14 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
   under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
   (`OpenKept`). The menu asks at each rebuild, so each copy is hashed again only once its size or time changes.
-- **The copies belong to the server in `settings.json`.** A sign-in to another server first moves everything in
-  `Copies/` into `Copies from <host[-port]>/` beside it (`CopyStore.SetAside`), numbered when that's taken, so no copy
-  is resumed against a server where its doc # is another document. `Copies/` itself stays, with any app's access to
-  it. A move that fails refuses the sign-in.
+- **The copies belong to one server.** While the helper runs, `Copies/` holds only the signed-in server's copies.
+  Each record names its server (`CopyRecord.Server`, as `settings.json` holds it; a record without one belongs to the
+  server in `settings.json`). A sign-in to another server, and every start before the resume, set aside each copy
+  naming another server into `Copies from <host[-port]>/` beside `Copies/` (`CopyStore.SetAside`), numbered when a
+  name is taken there; a start then brings back the signed-in server's (`CopyStore.BringBack`), except one open in an
+  app there or whose name is taken in `Copies/`. A copy moves first, then its record, and moves back if the record
+  can't follow. Lock and owner files stay, as the app deletes them by the path it opened. A setting aside that fails
+  refuses the sign-in, or the start. The menu has a line per server with copies waiting (`CopyStore.Aside`).
 
 ### The Helper's Files
 

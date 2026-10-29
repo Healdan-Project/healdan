@@ -133,6 +133,7 @@ Click Healdan's icon in the menu bar.
 | The documents you have open | Each by its title, such as `Lease agreement #1234 v2.1`. Choose one to bring its window to the front. "(closed unexpectedly)" after a crash: see [When Things Go Wrong](../when-things-go-wrong/) |
 | "1 save waiting to be sent" | Saves Healdan couldn't take yet. The helper keeps trying |
 | Not Yet in Healdan | Copies with changes Healdan can't take, such as after your check-out ended, kept once their window closed. Choose one to open it as it is, then use Save as New Document: see [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended) |
+| "2 copies waiting for healdan.example" | Copies left from another server, set aside when you signed in to this one. Choose it to see their folder. They come back when you sign in to that server again: see [Settings](#settings) |
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
 | Open Healdan in Browser | Healdan's web page, on the helper's server, in your usual browser. It works when the helper is signed out too: the web page has its own sign-in |
 | Install the LibreOffice Extension… | Only while the extension isn't installed, or an older version is |
@@ -151,7 +152,8 @@ Settings has three groups:
   another, sign out, then sign in with its address. Before you do, close your documents, and check the menu shows no
   saves waiting and nothing Not Yet in Healdan. Any local copies left from the old server are moved to a folder of
   their own beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them
-  to the new server, where the same doc # can be a different document.
+  to the new server, where the same doc # can be a different document. They come back, with any saves still to send,
+  when you sign in to that server again. Meanwhile the menu shows how many are waiting.
 - **Open Each Kind of File In:** a row each for documents, spreadsheets and presentations, with the file extensions
   it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app for them.
 - **This Computer:**
@@ -199,7 +201,8 @@ this Mac only. That's for a server that's gone for good, or one you're moving aw
   too.
 - **Saves that never reached Healdan** stay on your Mac, in the helper's `Copies` folder, and the window says how
   many there are. The helper sends them the next time you sign in to the same server. If you sign in to another
-  server instead, they're moved to a folder of their own, as for the [Server](#settings) setting, and never sent.
+  server instead, they're moved to a folder of their own, as for the [Server](#settings) setting, and wait there until
+  you sign in to the same server again.
 
 ## Removing the Helper
 
