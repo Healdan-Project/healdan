@@ -1,0 +1,39 @@
+{
+  "groups": [
+    {"name": "Partners", "description": "The firm's partners"}
+  ],
+  "users": [
+    {"username": "hashcombe", "firstName": "Helen", "name": "Ashcombe",
+     "email": "helen.ashcombe@ashcombe-reeve.example", "groups": ["Partners", "author"]},
+    {"username": "pnair", "firstName": "Priya", "name": "Nair",
+     "email": "priya.nair@ashcombe-reeve.example", "groups": ["author"]}
+  ],
+  "classes": [
+    {"name": "Correspondence", "subclasses": ["Letter", "Email"]}
+  ],
+  "stores": [
+    {"name": "Client Work", "acl": {"Everyone": ["READ"], "Partners": ["READ"]}}
+  ],
+  "templates": [
+    {"name": "Litigation",
+     "acl": {"Everyone": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"],
+             "Partners": ["READ", "PREVIEW", "DOWNLOAD", "WRITE"]},
+     "folders": [
+       {"name": "Correspondence"},
+       {"name": "Privileged", "acl": {"Partners": ["READ", "PREVIEW", "DOWNLOAD", "WRITE"]}}
+     ],
+     "searchFolders": [
+       {"name": "My Recent Docs Here", "days": 14, "onlyMine": true, "kind": "ALL"}
+     ]}
+  ],
+  "clients": [
+    {"number": 1001, "name": "Saltmarsh Shipping Ltd"}
+  ],
+  "matters": [
+    {"ref": "1001.1", "name": "Charter Dispute – MV Northern Star", "description": "Owners' claim for demurrage",
+     "store": "Client Work", "owner": "hashcombe", "template": "Litigation"},
+    {"ref": "1001.2", "name": "Vessel Sale", "store": "Client Work", "owner": "hashcombe", "template": "Litigation",
+     "acl": {"Partners": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]}}
+  ],
+  "timeline": []
+}

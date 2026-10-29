@@ -23,7 +23,7 @@ public class SeedRunner {
 	static final List<String> ORDER = List.of("settings", "everyone", "profile", "templates-store", "columns",
 			"search-attributes", "search-client-column", "search-docnumber-column", "reindex-office",
 			"queue-office-previews", "count-office-pages", "throttle-signin", "api-settings", "throttle-alert",
-			"apikey-counters", "profile-comments", "queue-drawing-previews", "smoke-fixture");
+			"apikey-counters", "profile-comments", "queue-drawing-previews", "smoke-fixture", "demo-fixture");
 
 	private static final String MARKER_PREFIX = "seed.";
 
