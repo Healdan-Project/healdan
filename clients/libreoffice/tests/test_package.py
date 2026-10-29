@@ -29,6 +29,9 @@ DOCUMENTS = ("com.sun.star.text.TextDocument", "com.sun.star.sheet.SpreadsheetDo
              "com.sun.star.presentation.PresentationDocument")
 START_CENTER = "com.sun.star.frame.StartModule"
 EVENTS = ("OnStartApp", "onFirstVisibleTask", "OnNew", "OnLoad", "OnViewCreated", "OnUnload", "OnCloseApp")
+ICONS = {"SaveToHealdan": "save-to-healdan", "OpenFromHealdan": "open-from-healdan", "SaveAsNewVersion": "save-as-new-version",
+         "SaveAsNewDocument": "save-as-new-document", "Properties": "properties", "InsertDocId": "insert-doc-id"}
+IMAGES = {"ImageSmallURL": ("", 16), "ImageBigURL": ("", 26), "ImageSmallHCURL": ("-hc", 16), "ImageBigHCURL": ("-hc", 26)}
 
 
 def node(element, *names):
@@ -51,6 +54,12 @@ def prop(element, name):
             value = child.find("value")
             return value.text if value is not None else None
     return None
+
+
+def png_size(data):
+    """A PNG's width and height, from its header."""
+    assert data[:8] == b"\x89PNG\r\n\x1a\n", "not a PNG"
+    return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 
 
 class PackageTest(unittest.TestCase):
@@ -128,8 +137,9 @@ class PackageTest(unittest.TestCase):
         self.assertEqual("application/vnd.sun.star.uno-component;type=Python", entries.pop("healdan.py"))
         xcus = {name for name in self.files if name.endswith(".xcu")}
         self.assertEqual({name: "application/vnd.sun.star.configuration-data" for name in xcus}, entries)
-        self.assertEqual({"META-INF/manifest.xml", "description.xml", "description-en.txt", "healdan.py",
-                          "pythonpath/healdan_logic.py"} | xcus, self.files)
+        icons = {name for name in self.files if name.startswith("icons/")}
+        self.assertEqual({"META-INF/manifest.xml", "description.xml", "description-en.txt", "healdan.py", "THIRD-PARTY-NOTICES.txt",
+                          "pythonpath/healdan_logic.py"} | xcus | icons, self.files)
 
     def test_the_description(self):
         description = self.xml("description.xml")
@@ -186,7 +196,7 @@ class PackageTest(unittest.TestCase):
         addons = self.xml("Addons.xcu")
         toolbars = nodes(node(addons, "AddonUI", "OfficeToolBar"))
         self.assertEqual(1, len(toolbars))
-        urls = [prop(item, "URL") for item in nodes(toolbars[0])]
+        urls = [prop(item, "URL") for item in nodes(toolbars[0]) if prop(item, "URL") != "private:separator"]
         self.assertEqual([logic.PROTOCOL + name for name in logic.BUTTONS], urls)
         for item in nodes(toolbars[0]):
             self.assertNotIn(START_CENTER, prop(item, "Context"))
@@ -195,6 +205,32 @@ class PackageTest(unittest.TestCase):
             state = self.xml(app + "WindowState.xcu")
             self.assertEqual(app + "WindowState", state.get(OOR + "name"))
             self.assertEqual("Healdan", prop(node(state, "UIElements", "States", resource), "UIName"), app)
+
+    def test_the_toolbar_has_three_groups(self):
+        items = [prop(item, "URL") for item in nodes(nodes(node(self.xml("Addons.xcu"), "AddonUI", "OfficeToolBar"))[0])]
+        groups = [[url[len(logic.PROTOCOL):] for url in group] for group in
+                  (g.split("|") for g in "|".join(items).split("|private:separator|"))]
+        self.assertEqual([["SaveToHealdan", "OpenFromHealdan"], ["SaveAsNewVersion", "SaveAsNewDocument"],
+                          ["Properties", "InsertDocId"]], groups)
+
+    def test_every_command_has_its_images(self):
+        images = node(self.xml("Addons.xcu"), "AddonUI", "Images")
+        found = {prop(entry, "URL"): node(entry, "UserDefinedImages") for entry in nodes(images)}
+        self.assertEqual({logic.PROTOCOL + name for name in logic.BUTTONS}, set(found))
+        for name in logic.BUTTONS:
+            for key, (suffix, size) in IMAGES.items():
+                url = prop(found[logic.PROTOCOL + name], key)
+                self.assertEqual("%%origin%%/icons/%s-%d%s.png" % (ICONS[name], size, suffix), url, (name, key))
+                self.assertEqual((size, size), png_size(self.zip.read(url[len("%origin%/"):])), url)
+
+    def test_the_extension_has_its_icon_and_notice(self):
+        icon = self.xml("description.xml").find(DESCRIPTION + "icon")
+        for kind in ("default", "high-contrast"):
+            href = icon.find(DESCRIPTION + kind).get(XLINK + "href")
+            self.assertEqual((42, 42), png_size(self.zip.read(href)), kind)
+        notices = self.zip.read("THIRD-PARTY-NOTICES.txt").decode("utf-8")
+        self.assertIn("Tabler Icons", notices)
+        self.assertIn("Permission is hereby granted, free of charge", notices)
 
 
 if __name__ == "__main__":

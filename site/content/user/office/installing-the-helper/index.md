@@ -90,6 +90,20 @@ The **Healdan** menu is now in Writer, Calc and Impress, with Save to Healdan, O
 Version, Save as New Document, Properties and, in Writer, Insert Doc ID. The same commands are on the Healdan
 toolbar: **View › Toolbars › Healdan** shows or hides it. The Start Center's Healdan menu has Open from Healdan.
 
+The toolbar's buttons are pictures, in this order, with a thin line between each pair:
+
+| Button | Command |
+|---|---|
+| ![Save to Healdan](toolbar-save-to-healdan.png) | Save to Healdan |
+| ![Open from Healdan](toolbar-open-from-healdan.png) | Open from Healdan |
+| ![Save as New Version](toolbar-save-as-new-version.png) | Save as New Version |
+| ![Save as New Document](toolbar-save-as-new-document.png) | Save as New Document |
+| ![Properties](toolbar-properties.png) | Properties |
+| ![Insert Doc ID](toolbar-insert-doc-id.png) | Insert Doc ID (Writer only) |
+
+Point at a button to see its name. Save to Healdan and Open from Healdan carry Healdan's shield, so they aren't
+mistaken for LibreOffice's own Save and Open.
+
 - **If you missed it,** choose **Install the LibreOffice Extension…** in the helper's menu, which asks again. Until
   the extension is in, the helper reminds you each time it starts.
 - **After you install a new version of the helper,** LibreOffice may ask again, if it brings a newer extension.

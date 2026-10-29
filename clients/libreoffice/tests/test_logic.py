@@ -381,6 +381,42 @@ class ChannelTest(unittest.TestCase):
         self.assertEqual(2, len(_Recorder.seen))
 
 
+# --- The notices -----------------------------------------------------------------------------------------------------
+
+class NoticePartsTest(unittest.TestCase):
+    """An infobar's bold headline and regular detail (polish spec 8.3, call 1): the first sentence, then the rest."""
+
+    def test_the_first_sentence_is_the_headline(self):
+        self.assertEqual(("Healdan Helper isn't running.",
+                          "This save is kept on this computer, and goes to Healdan once Healdan Helper is running again."),
+                         logic.notice_parts(logic.HELPER_DOWN_SAVE))
+        self.assertEqual(("This is a read-only copy, so it can't be saved as a new version.",
+                          "Use Save as New Document instead."), logic.notice_parts(logic.READ_ONLY_VERSION))
+
+    def test_one_sentence_has_no_detail(self):
+        self.assertEqual((logic.STORE_FAILED.format(error="disk full"), ""),
+                         logic.notice_parts(logic.STORE_FAILED.format(error="disk full")))
+
+    def test_a_full_stop_inside_brackets_doesnt_split(self):
+        text = logic.FAILED_AFTER.format(error="No such file. Try again")
+        self.assertEqual(("The Healdan extension hit a problem (No such file. Try again).", "Its log has the details."),
+                         logic.notice_parts(text))
+
+    def test_a_version_number_doesnt_split(self):
+        text = logic.NO_COPY.format(ref="#1234 v2.1", it="#1234 v2.1")
+        headline, detail = logic.notice_parts(text)
+        self.assertEqual("#1234 v2.1 is filed in Healdan, but Healdan Helper gave no local copy to save this window as.", headline)
+        self.assertEqual("Close this window without saving, and open #1234 v2.1 from Healdan.", detail)
+
+    def test_every_notice_has_a_headline(self):
+        for name in ("HELPER_DOWN_BOX", "HELPER_DOWN_SAVE", "HELPER_DOWN_OTHER", "READ_ONLY_VERSION", "NOT_FILED_DOC_ID",
+                     "WRITE_FAILED", "STORE_FAILED", "ADOPT_FAILED", "NO_COPY", "ALREADY_FILED", "FAILED_BEFORE", "FAILED_AFTER"):
+            text = getattr(logic, name).format(error="x", ref="#1", it="#1", as_ref="")
+            headline, detail = logic.notice_parts(text)
+            self.assertTrue(headline.endswith("."), name)
+            self.assertEqual(text, (headline + " " + detail).strip(), name)  # nothing lost, nothing reworded
+
+
 # --- The flows, with a fake LibreOffice ------------------------------------------------------------------------------
 
 class FakeChannel:

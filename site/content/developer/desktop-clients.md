@@ -164,8 +164,18 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   - a protocol handler for the Healdan menu and toolbar (`org.healdan.libreoffice:`);
   - a job on LibreOffice's events, which attaches to new windows, sets a copy's title from the helper, tells the
     helper when a copy closes, and takes the copies out of Recent Documents.
-- **The `.xcu` files** declare the menu, the toolbar and its name, the protocol handler and the job.
-  `description.xml` holds the version the helper compares with the installed one.
+- **The `.xcu` files** declare the menu, the toolbar and its name, the protocol handler and the job. `Addons.xcu`
+  divides the toolbar into three groups with separators, and its `Images` node gives each of the six commands its
+  images (see [The Images](#the-images)).
+- **`description.xml`** holds the version the helper compares with the installed one: it installs the bundled
+  extension only when that is newer, so a change to the extension's content comes with a new version. It also names
+  the extension's icon for LibreOffice's Extension Manager.
+- **The notices** show in the document's window as an infobar, with the notice's first sentence in bold and the rest
+  in regular type. The flows and their tests still deal in whole sentences: `notice_parts` in `healdan_logic.py`
+  splits one at its first full stop (not one inside brackets, as in an error's own words, nor one inside a version
+  number), and `tell` in `healdan.py` passes the two parts to the infobar. Where there's no infobar (the Start
+  Center), a message box shows the headline, a blank line and the detail. A notice of one sentence is a headline
+  alone.
 - **Long calls** run on a thread of their own while LibreOffice's thread keeps its events going, and what they change
   in the document goes back to LibreOffice's thread.
 - **When the helper can't be reached,** Open and Save fall back to LibreOffice's own boxes, with one notice. A copy's
@@ -173,6 +183,32 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   shown falls back the same way.
 
 `clients/libreoffice/build.sh` packages it as `healdan.oxt`, the same bytes from the same sources.
+
+### The Images
+
+The toolbar's and menu's images are in `clients/libreoffice/healdan/icons/`, and are committed, so building the
+extension needs no .NET.
+
+- **For each of the six commands,** a 16 px and a 26 px PNG in mid-grey, and a white pair for high contrast
+  (`save-to-healdan-16.png`, `save-to-healdan-26.png`, `save-to-healdan-16-hc.png`, and so on). Save to Healdan and
+  Open from Healdan carry Healdan's shield, so they aren't taken for LibreOffice's own Save and Open. The extension's
+  icon is the mark at 42 px, with a white one (`healdan-42.png`, `healdan-42-hc.png`).
+- **They're rendered, not drawn by hand,** from the helper's icons and mark, so the two look alike:
+
+  ```bash
+  dotnet run --project clients/helper/tools/IconRender
+  ```
+
+  Run it on a Mac whenever an icon changes (after `python3 clients/icons/write-helper-icons.py`, if a Tabler icon
+  did), and commit what it writes. `IconRender` uses Avalonia's headless Skia drawing on
+  `Windows/HelperIcons.axaml`'s geometry and `HealdanMark`'s shapes. It isn't in the solution, so `dotnet test` and
+  CI don't build it, and nothing checks the images against their source. A second run writes the same bytes.
+- **`Addons.xcu`'s `Images` node** maps each command's URL to its four files, through `%origin%`. The same images
+  show beside the Healdan menu's items wherever LibreOffice shows pictures in menus.
+- **The package carries `THIRD-PARTY-NOTICES.txt`,** with Tabler Icons' name, version and MIT licence, which the
+  icons are drawn from. Update it with the icons.
+- **The tests** (`test_package.py`) check that every command has its four images in the package at the right sizes,
+  that the toolbar has its three groups, and that the extension's icon and the notice are there.
 
 ### Installing It by Hand
 
@@ -236,8 +272,9 @@ through `channel.json`, and quits.
   shapes, or when the SVGs aren't the spec's list, `SpecNames`. After adding or changing an icon, run
   `python3 clients/icons/write-helper-icons.py`, and add a new one to `SpecNames`.
 - **`AttentionTests`** pin when the menu bar icon shows its dot, and the reason its tooltip gives.
-- **The extension's tests** cover `healdan_logic.py` with fakes for LibreOffice, and build the `.oxt` and check that
-  its files agree. A real LibreOffice isn't part of them.
+- **The extension's tests** cover `healdan_logic.py` (the notices' headlines and details included) with fakes for
+  LibreOffice, and build the `.oxt` and check that its files agree: the toolbar, the images and the notice. A real
+  LibreOffice isn't part of them.
 
 The windows' look, focus, notifications and LibreOffice's own screens are checked by hand: each pull request that
 changes them lists its checks for the owner.

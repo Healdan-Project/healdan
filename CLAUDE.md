@@ -42,6 +42,7 @@ dotnet test clients/helper/Healdan.Helper.sln             # the desktop helper's
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain" # the real macOS keychain, by hand on a Mac
 python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice extension's tests (standard library only)
 clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt (reproducible)
+dotnet run --project clients/helper/tools/IconRender      # the extension's toolbar images and icon, from the helper's icons (by hand, on a Mac)
 clients/helper/packaging/mac/package.sh 1.2.3             # Healdan Helper.app and its .dmg, on a Mac; signed only with SIGN_IDENTITY set
 HEALDAN_HELPER_DEV_ROOT=/tmp/hh dotnet run --project clients/helper/Healdan.Helper # a Debug helper with its files apart; no links, notifications or .oxt
 ```
@@ -154,6 +155,7 @@ Core's `plugin.xml` defines the extension points other plugins hook into: `DbIni
   - The helper's macOS icon is the docs site's `site/static/favicon.svg` on macOS's rounded square, which `clients/helper/packaging/mac/make-icon.swift` draws each time `package.sh` runs. Changing the favicon changes it too, and fails `MarkTests` until About's mark (`Windows/HealdanMark.axaml`) is redrawn.
   - The menu bar icon is the same mark, drawn in one colour at run time from `HealdanMark`'s shapes (`Tray/TrayIcons.cs`), so it follows the favicon with About's mark.
   - The helper's icons are Tabler's, in `clients/icons/tabler/`. `python3 clients/icons/write-helper-icons.py` writes `HelperIcons.axaml` from them, and `IconsTests` fails until it's run after an icon is added or changed. A new icon also goes in `IconsTests`' `SpecNames`, the spec's list.
+  - The extension's toolbar and menu images are in `clients/libreoffice/healdan/icons/`, rendered from the helper's icons and mark by `clients/helper/tools/IconRender` (outside the solution, so CI doesn't build it; run it by hand on a Mac after an icon changes, and commit the output). The package's own `THIRD-PARTY-NOTICES.txt` carries Tabler's licence. Bump `description.xml`'s version when the extension's content changes: the helper installs only a newer one over an installed copy.
   - `clients/helper/Healdan.Helper/THIRD-PARTY-NOTICES.txt` is About's Open-Source Notices. `NoticesTests` fails when its `Packages:` lines and the packages the helper restores differ, ids and versions both, so a package added or moved needs its notice.
 - **`HealdanHooks`** (`logicaldoc-core/.../core/HealdanHooks.java`, fork-owned) lets CE code that bypasses the listeners call Healdan before it writes. Examples are the JDBC restores, `deleteTree` and `applySecurityToTree`, and the moves, renames, updates, merges and copies that write before a listener could refuse. `healdan-core` registers the implementation.
   - Every Healdan veto throws `HealdanVetoException` or a subclass. The document and folder DAOs roll back on it alone; a plain `PersistenceException` still commits.
