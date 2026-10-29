@@ -336,6 +336,9 @@ the steps and the secrets.
 
 - **The bundle** is `com.healdan.helper`: one self-contained file for Apple silicon, with `healdan.oxt` in
   `Contents/Resources`. It registers `healdan:` and stays out of the Dock.
+- **The hardened runtime** has one exception, `allow-jit`, for .NET's JIT
+  (`clients/helper/packaging/mac/entitlements.plist`). The bundle's native libraries are signed with the helper's
+  own Developer ID, so library validation accepts them.
 - **The icon,** `AppIcon.icns`, is Healdan's mark from the docs site's `site/static/favicon.svg` on macOS's rounded
   square. `clients/helper/packaging/mac/make-icon.swift` draws it each time `package.sh` runs, so changing the
   favicon changes the helper's icon too. About's mark is the same shapes in XAML, as Avalonia doesn't read SVG, and

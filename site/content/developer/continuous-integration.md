@@ -74,7 +74,7 @@ are:
 4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
    nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 
-`Clients` is not yet in `master`'s ruleset. The repository owner adds it after its first green run.
+`Clients` is one of `master`'s required checks.
 
 Two more jobs package the macOS helper. They run only for a `helper-v*` tag or a run by hand, never for a pull
 request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#releasing-the-macos-helper)).
@@ -153,9 +153,12 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
    the repository, and it sees no signing secret.
 
 Actions → Clients → Run workflow packages any branch or tag by hand, under a version you give or
-`0.0.0-dev.<run>`, and attaches nothing to a release.
+`0.0.0-dev.<run>`, and attaches nothing to a release. Only a `helper-v*` tag's run is signed: a branch's is built
+unsigned.
 
-Signing needs six repository secrets, under Settings → Secrets and variables → Actions:
+Signing needs six secrets in the repository's `helper-release` environment (Settings → Environments →
+`helper-release` → Environment secrets). Only `helper-v*` tags may use it, so a run on a branch can't sign with the
+Developer ID. Each is set with `gh secret set <name> --env helper-release --repo Healdan-Project/healdan`:
 
 | Secret | What it holds |
 |---|---|
@@ -167,9 +170,9 @@ Signing needs six repository secrets, under Settings → Secrets and variables �
 | `NOTARY_ISSUER` | The issuer ID shown above the team keys |
 
 The job imports the certificate into a keychain of its own, which it deletes at the end, and decodes the key into
-the runner's temporary folder, which it also clears. Without the first three secrets, as on a fork, the app gets
-only an ad-hoc signature, and without the last three it isn't notarised. Either way the job says so, uploads the
-disk image as its artifact, and attaches nothing to the release.
+the runner's temporary folder, which it also clears. On a branch, or without the first three secrets (as on a fork),
+the app gets only an ad-hoc signature, and without the last three it isn't notarised. Either way the job says so,
+uploads the disk image as its artifact, and attaches nothing to the release.
 
 On a Mac with the Developer ID certificate in the login keychain, the same script builds a signed package
 (`OUT_DIR` sets where it goes, `clients/helper/packaging/mac/out/` by default). A `SIGN_IDENTITY` it can't find
