@@ -14,7 +14,7 @@
 
 - The hosted URL is exactly `https://maven.healdan.com/`. The mirror's `<id>` is `healdan` and its `<mirrorOf>` is `logicaldoc`.
 - The hosted repository is `Healdan-Project/maven`, default branch `main`, checked out at `~/Projects/healdan-maven` (outside this repository).
-- The only upstream files this plan edits are the three in spec §11: `logicaldoc-core/pom.xml` (drop JAI and betelio), `logicaldoc-webapp/pom.xml` (drop betelio and Oracle's JDBC driver) and the root `pom.xml` (drop the `logicaldoc-webserviceclient` module). Everything else is Healdan's own: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/`, `docs/`.
+- The only upstream files this plan edits are the three in spec §11: `logicaldoc-core/pom.xml` (drop JAI and betelio), `logicaldoc-webapp/pom.xml` (drop betelio and Oracle's JDBC driver), `NotesDataServlet.java` (drop its Oracle-only timestamp branch, Task 4a's fix) and the root `pom.xml` (drop the `logicaldoc-webserviceclient` module). Everything else is Healdan's own: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/`, `docs/`.
 - Scripts are Python 3 with the standard library only, tested with `unittest`, like `.github/scripts/`.
 - A hosted version never changes once it's published.
 - Outward-facing steps need the owner's OK in chat first, each time: creating the GitHub repository, pushing to it, changing its Pages settings, pushing this branch, opening the PR. The owner adds the DNS record.

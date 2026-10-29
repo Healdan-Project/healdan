@@ -114,7 +114,8 @@ read every jar's files, source headers and stub POM, and each upstream project's
     this version under its OTN licence, which doesn't allow free redistribution. Only the setup wizard's database
     list names its driver class, and Healdan's container never runs the wizard. Healdan supports only open-source
     databases: MariaDB and MySQL for now, with PostgreSQL as the goal and preferred stack. (owner)
-    `logicaldoc-webapp` drops it. The rest of that decision (SQL Server's driver, the wizard's choices) is
+    `logicaldoc-webapp` drops it, and `NotesDataServlet` loses its Oracle-only timestamp branch, the one class that
+    used the driver at compile time. The rest of that decision (SQL Server's driver, the wizard's choices) is
     [Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110).
 - **Hosted,** with the licence texts the jars lack in the repository's `LICENSES/` (§4.2). The owner is reasonably
   assured of these licences. (owner)
@@ -291,6 +292,9 @@ Each drops something whose licence doesn't allow hosting it (§3.1):
 - **`logicaldoc-core/pom.xml`:** drop the `javax.media:jai-core`, `com.sun.media:jai-codec` and `betelio:betelio`
   dependencies. Nothing references them.
 - **`logicaldoc-webapp/pom.xml`:** drop the `betelio:betelio` and `com.oracle.jdbc:ojdbc8` dependencies.
+- **`logicaldoc-webapp/.../web/data/NotesDataServlet.java`:** drop the branch that unwraps an `oracle.sql.TIMESTAMP`,
+  which only an Oracle database returns, and which can't compile without Oracle's driver. Every other database
+  already takes the `getTimestamp` path. `NotesDataServletTest` joins CI's `UPSTREAM_TESTS`.
 - **`pom.xml`** (the root POM, which already lists Healdan's modules): drop
   `<module>logicaldoc-webserviceclient</module>`, ksoap2's only user. No module depends on it.
 
