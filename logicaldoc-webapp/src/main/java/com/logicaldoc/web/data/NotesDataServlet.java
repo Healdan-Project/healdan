@@ -103,17 +103,7 @@ public class NotesDataServlet extends AbstractDataServlet {
 		writer.print(String.format("<page>%d</page>", set.getInt(8)));
 		writer.print(String.format("<user><![CDATA[%s]]></user>",set.getString(3)));
 
-		Date date = null;
-		Object obj = set.getObject(4);
-		if (obj instanceof oracle.sql.TIMESTAMP timestamp) {
-			try {
-				date = new Date(timestamp.dateValue().getTime());
-			} catch (SQLException e) {
-				logger.warn(e.getMessage());
-			}
-		} else {
-			date = set.getTimestamp(4);
-		}
+		Date date = set.getTimestamp(4);
 
 		if(date!=null)
 		    writer.print(String.format("<date>%s</date>", df.format(date)));
