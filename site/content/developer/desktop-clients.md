@@ -124,8 +124,11 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   naming another server into `Copies from <host[-port]>/` beside `Copies/` (`CopyStore.SetAside`), numbered when a
   name is taken there; a start then brings back the signed-in server's (`CopyStore.BringBack`), except one open in an
   app there or whose name is taken in `Copies/`. A copy moves first, then its record, and moves back if the record
-  can't follow. Lock and owner files stay, as the app deletes them by the path it opened. A setting aside that fails
-  refuses the sign-in, or the start. The menu has a line per server with copies waiting (`CopyStore.Aside`).
+  can't follow. Lock and owner files stay, as the app deletes them by the path it opened, and so does Finder's
+  `.DS_Store`. A setting aside that fails refuses the sign-in, or the start. The menu has a line per server with copies
+  waiting (`CopyStore.Aside`). A store made for a server (`CopyStore.All`) lists only that server's copies and those
+  without one, so the cycle never takes another server's, such as one dragged back into `Copies/`, and `Create` sets
+  one at its target path aside.
 
 ### The Helper's Files
 
