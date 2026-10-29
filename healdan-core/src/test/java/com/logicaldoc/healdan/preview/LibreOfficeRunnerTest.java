@@ -72,6 +72,15 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testDrawingCommandLine() throws IOException {
+		use(FakeSoffice.ok());
+		List<String> cmd = new LibreOfficeRunner().commandLine(in, Kind.DRAWING, new File(dir, "s"),
+				new File(dir, "o"));
+		assertEquals("pdf:draw_pdf_Export:{\"ExportNotes\":{\"type\":\"boolean\",\"value\":\"true\"}}",
+				cmd.get(cmd.indexOf("--convert-to") + 1));
+	}
+
+	@Test
 	public void testConverts() throws IOException {
 		use(FakeSoffice.ok());
 		new LibreOfficeRunner().toPdf(in, Kind.TEXT, dest);

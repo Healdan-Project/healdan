@@ -23,6 +23,16 @@ public class OfficeFormatsTest {
 		assertEquals("impress_pdf_Export", Kind.PRESENTATION.pdfFilter());
 		assertEquals(Optional.of(Kind.SPREADSHEET), OfficeFormats.kindOf("d.ods"));
 		assertEquals(Optional.of(Kind.SPREADSHEET), OfficeFormats.kindOf("e.csv"));
+		assertEquals(Optional.of(Kind.DRAWING), OfficeFormats.kindOf("f.ODG"));
+		assertEquals("draw_pdf_Export", Kind.DRAWING.pdfFilter());
+		assertEquals(Set.of("odg"), Kind.DRAWING.extensions());
+	}
+
+	@Test
+	public void testOnlyOpenDocumentDrawings() {
+		// Draw opens these too, but Healdan counts only .odg as a drawing
+		for (String name : new String[] { "a.otg", "a.vsd", "a.vsdx", "a.pub" })
+			assertFalse(name, OfficeFormats.isOffice(name));
 	}
 
 	@Test
@@ -38,7 +48,7 @@ public class OfficeFormatsTest {
 	public void testExtensions() {
 		assertEquals(Set.of("doc", "docx", "docm", "dot", "dotx", "dotm", "rtf", "odt", "ott", "xls", "xlsx",
 				"xlsm", "xlt", "xltx", "xltm", "csv", "ods", "ots", "ppt", "pptx", "pptm", "pps", "ppsx", "pot",
-				"potx", "odp", "otp"), OfficeFormats.extensions());
+				"potx", "odp", "otp", "odg"), OfficeFormats.extensions());
 	}
 
 	@Test
