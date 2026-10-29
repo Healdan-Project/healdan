@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Copies;
 
@@ -8,7 +10,25 @@ public class CopyStoreTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-copies-").FullName;
     private HelperPaths Paths => HelperPaths.For(_root);
-    private CopyStore Store() => new(Paths);
+
+    private const string A = "https://healdan.example";
+    private const string B = "http://localhost:8080";
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+
+    private CopyStore Store(string? server = A) => new(Paths, server);
+
+    /// <summary>A copy with content, made by a store for <paramref name="server"/> (null: from before records named one).</summary>
+    private string Write(string? server, long number, string name = "Lease agreement.docx", string content = "x")
+    {
+        var (path, _, _) = Store(server).Create(Doc(number, name), false, "LibreOffice");
+        File.WriteAllText(path, content);
+        return path;
+    }
+
+    /// <summary>The record beside <paramref name="copyPath"/>'s file name in <paramref name="folder"/>, read as written.</summary>
+    private static CopyRecord RecordIn(string folder, string copyPath) =>
+        JsonSerializer.Deserialize<CopyRecord>(
+            File.ReadAllText(Path.Combine(folder, "." + Path.GetFileName(copyPath) + ".healdan.json")), Json)!;
 
     public void Dispose() => Directory.Delete(_root, true);
 
@@ -353,5 +373,27 @@ public class CopyStoreTests : IDisposable
         File.WriteAllText(path, "x");
         Assert.Single(Store().All());
         Assert.True(File.Exists(Path.Combine(Paths.Copies, "." + Path.GetFileName(path) + ".healdan.json")));
+    }
+
+    [Fact]
+    public void CreateWritesTheStoresServer()
+    {
+        var (path, record, _) = Store(A).Create(Doc(1), false, "LibreOffice");
+
+        Assert.Equal(A, record.Server);
+        Assert.Equal(A, RecordIn(Paths.Copies, path).Server);
+        Assert.Equal(A, Store(B).Find(path)!.Value.Item2.Server); // the record says, whichever store reads it
+    }
+
+    [Fact]
+    public void ARecordFromBeforeServersWereKeptReadsWithNone()
+    {
+        var (path, _, _) = Store(A).Create(Doc(1), false, "LibreOffice");
+        var recordPath = Path.Combine(Paths.Copies, "." + Path.GetFileName(path) + ".healdan.json");
+        var json = JsonNode.Parse(File.ReadAllText(recordPath))!.AsObject();
+        json.Remove("server");
+        File.WriteAllText(recordPath, json.ToJsonString());
+
+        Assert.Null(Store(A).Find(path)!.Value.Item2.Server);
     }
 }

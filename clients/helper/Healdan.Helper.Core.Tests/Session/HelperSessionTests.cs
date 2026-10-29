@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Channel;
+using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
@@ -770,6 +771,18 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(session.Started);
         Assert.True(File.Exists(path));
         Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.test")));
+    }
+
+    [Fact]
+    public async Task ACopyRecordsTheServerItCameFrom()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+
+        var path = await OpenAsync(session);
+
+        Assert.Equal(Account, new CopyStore(Paths).Find(path)!.Value.Item2.Server);
     }
 
     [Fact]

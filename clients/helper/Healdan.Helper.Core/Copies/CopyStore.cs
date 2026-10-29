@@ -5,10 +5,11 @@ using Healdan.Helper.Core.Cycle;
 namespace Healdan.Helper.Core.Copies;
 
 /// <summary>
-/// The local copies in the helper's one private folder, and the record kept beside each (spec §5.4).
-/// Never deletes the folder, or anything but the files of the copy it is told to delete.
+/// The local copies in the helper's one private folder, and the record kept beside each (spec §5.4), for the server at
+/// <paramref name="server"/>'s address, which each new copy's record names. Never deletes the folder, or anything but
+/// the files of the copy it is told to delete.
 /// </summary>
-public sealed class CopyStore(HelperPaths paths)
+public sealed class CopyStore(HelperPaths paths, string? server = null)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
 
@@ -38,7 +39,7 @@ public sealed class CopyStore(HelperPaths paths)
             return (unconfirmed.Path, unconfirmed.Record, true);
 
         var record = new CopyRecord(doc.DocNumber, doc.Name, doc.Version, doc.FileVersion, readOnly, false, null, null, app, null,
-            CopyNames.FileName(doc.Name, doc.DocNumber, doc.FileVersion, readOnly));
+            CopyNames.FileName(doc.Name, doc.DocNumber, doc.FileVersion, readOnly), Server: server);
         var path = PathOf(record);
         var existing = false;
         if (Find(path) is (_, var old))

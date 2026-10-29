@@ -736,9 +736,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         return uri;
     }
 
-    private static string Address(Uri server) => server.GetLeftPart(UriPartial.Path).TrimEnd('/');
+    private static string Address(Uri server) => ServerAddress.Of(server);
 
-    private static bool SameServer(Uri a, Uri b) => string.Equals(Address(a), Address(b), StringComparison.OrdinalIgnoreCase);
+    private static bool SameServer(Uri a, Uri b) => ServerAddress.Same(a, b);
 
     private static string LinkName(HealdanApi api) => HealdanLink.HostAndPort(api.Server);
 
@@ -762,7 +762,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         CopyCycle? cycle = null;
         try
         {
-            cycle = new CopyCycle(api, new CopyStore(_paths), _app, _device.Id, this, _timings, _otherFiles);
+            cycle = new CopyCycle(api, new CopyStore(_paths, Address(api.Server)), _app, _device.Id, this, _timings, _otherFiles);
             lock (_gate)
                 _resuming = cycle; // its events name copies by their title
             await cycle.ResumeAsync();

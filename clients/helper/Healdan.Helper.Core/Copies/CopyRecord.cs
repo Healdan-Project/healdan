@@ -28,6 +28,10 @@ namespace Healdan.Helper.Core.Copies;
 /// The kind <paramref name="LastSaveId"/> was sent as, read only while <paramref name="PendingHash"/> is set: a retry
 /// repeats it as that kind, whatever newer save waits behind it. Null in a record from before it was kept.
 /// </param>
+/// <param name="Server">
+/// The address of the server the copy came from (<see cref="ServerAddress"/>), written when the copy is made. Null in a
+/// record from before it was kept: that copy belongs to the server in <c>settings.json</c> (spec §5.4).
+/// </param>
 public sealed record CopyRecord(
     long DocNumber,
     string DocumentName,
@@ -41,4 +45,5 @@ public sealed record CopyRecord(
     string? LastSaveId,
     string FileName,
     string? PendingHash = null,
-    string? SentKind = null);
+    string? SentKind = null,
+    string? Server = null);
