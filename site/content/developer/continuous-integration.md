@@ -181,9 +181,9 @@ Developer ID. Each is set with `gh secret set <name> --env helper-release --repo
 | `APPLE_DEVELOPER_ID_P12` | The Developer ID Application certificate and its private key, exported from Keychain Access as a `.p12` file, in base64 (`base64 -i developer-id.p12`) |
 | `APPLE_DEVELOPER_ID_PASSWORD` | The password the `.p12` file was exported with |
 | `APPLE_TEAM_ID` | The Apple developer team's ID, the 10 characters in the certificate's name |
-| `NOTARY_KEY` | An App Store Connect API key (Users and Access → Integrations → Team Keys, with the Developer role), its `.p8` file in base64 |
+| `NOTARY_KEY` | An App Store Connect team API key (Users and Access → Integrations → App Store Connect API → Team Keys → Generate API Key, with the Developer role; notarytool can't use an individual key), its `.p8` file in base64 |
 | `NOTARY_KEY_ID` | That key's ID |
-| `NOTARY_ISSUER` | The issuer ID shown above the team keys |
+| `NOTARY_ISSUER` | The Issuer ID shown above the team keys |
 
 The job imports the certificate into a keychain of its own, which it deletes at the end, and decodes the key into
 the runner's temporary folder, which it also clears. On a branch, or without the first three secrets (as on a fork),
