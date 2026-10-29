@@ -9,7 +9,8 @@
 #   - site/content/, which check-site-sources.py checks (links only inside the interim shortcode), and the vendored
 #     theme in site/_vendor/. The rest of site/ is checked here;
 #   - .github/scripts/tests/, whose tests hold example links;
-#   - upstream's release history and two test fixtures (SKIPPED_FILES);
+#   - upstream's release history, two test fixtures, and check-logicaldoc-hosts.py, whose allow-list quotes the
+#     lines below (SKIPPED_FILES);
 #   - lines in ALLOWED, each with its reason. A line that changes no longer matches, and is flagged again.
 # Binary files (with a NUL byte) are skipped. LogicalDOC's other hosts, such as www (its credit) and ws (the SOAP
 # API's XML namespace), aren't matched.
@@ -34,6 +35,7 @@ SKIPPED_FILES = {
     "logicaldoc-core/src/test/resources/README.md",  # FormatConverterTest reads it
     "logicaldoc-dropbox/src/test/resources/context.properties",  # a test fixture
     ".github/scripts/check-logicaldoc-doc-links.py",
+    ".github/scripts/check-logicaldoc-hosts.py",
 }
 
 REPLACED = "replaced by HealdanSystemInfo, whose own values are what users see"

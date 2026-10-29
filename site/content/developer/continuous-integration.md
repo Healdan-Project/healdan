@@ -9,7 +9,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, and the LibreOffice extension's Python tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -37,6 +37,22 @@ The plan gives each shard about five minutes of tests, with at most eight shards
 the newest successful run, the pull request's own or else `master`'s, or 3 seconds per `@Test` until a run records
 one. The log of `checks`' plan step lists each shard's classes with their times. A failing shard doesn't stop the
 others, so one run shows every failing test.
+
+### The Maven Repository Cache
+
+Each shard restores a copy of Maven's local repository before it builds: the copy for the POMs as they are, or else
+the newest copy `master` saved. Only `master`'s runs save one, from a single shard, so a pull request that edits a
+POM downloads only what its edit adds. That matters because some dependencies come only from
+`logicaldoc.sourceforge.net`, which sometimes refuses requests.
+
+Maven notes where each file came from in a `_remote.repositories` file beside it, and uses a cached file only when
+that note names one of the build's repositories. Maven 3.9 notes the repository's id, and Maven 3.10 its id and a
+hash of its URL. 3.10 accepts 3.9's notes, but 3.9 rejects 3.10's, and `ubuntu-latest`'s images ship both. So each
+shard deletes those files after restoring the copy, and Maven then takes every cached file as installed locally and
+downloads only what's missing. Before that step, on 29 October 2026, shards on Maven 3.9 restored a copy Maven 3.10
+had saved, downloaded every file again, and failed on SourceForge's 403.
+
+The Docker build keeps its own copy, which the `maven:3.9` image both writes and reads, so it doesn't need the step.
 
 ## What a Pull Request Runs
 
@@ -74,7 +90,7 @@ are:
 4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
    nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 
-`Clients` is not yet in `master`'s ruleset. The repository owner adds it after its first green run.
+`Clients` is one of `master`'s required checks.
 
 Two more jobs package the macOS helper. They run only for a `helper-v*` tag or a run by hand, never for a pull
 request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#releasing-the-macos-helper)).
@@ -109,9 +125,16 @@ A pull request that changes only `clients/` doesn't build the image, so this tes
   When a sync brings one in, point it at docs.healdan.com in the sync PR. The docs site's interim pages are checked
   by `check-site-sources.py` instead, and the script's `ALLOWED` list holds the few exact lines Healdan leaves
   alone, each with its reason.
+- **LogicalDOC's servers.** Healdan never contacts LogicalDOC. CE posted usage statistics to `stat.logicaldoc.com`
+  and tested the proxy against `activation.logicaldoc.com`, and a sync can bring a call like those back.
+  `.github/scripts/check-logicaldoc-hosts.py` runs after the doc-links check and fails `build` on any host, URL or
+  email address at logicaldoc.com, .it, .net or .org, naming the file and line. It skips tests, prose, the docs site
+  and the SOAP, CMIS and WebDAV XML namespaces, which are identifiers no one fetches. When a sync brings one in,
+  remove the call in the sync PR. The script's `ALLOWED` list holds the exact lines nothing contacts, such as the
+  POM's credits, each with its reason.
 - **LogicalDOC's Maven repository.** Builds get the artifacts only LogicalDOC's repository has from Healdan's copies
   at `https://maven.healdan.com/` (repository `Healdan-Project/maven`), through a mirror in
-  `docker/maven-settings.xml`. `.github/scripts/check-maven-repositories.py` runs next to the doc-links check and
+  `docker/maven-settings.xml`. `.github/scripts/check-maven-repositories.py` runs after the hosts check and
   fails `build` when a POM or the settings file points a repository at a LogicalDOC host the mirror doesn't cover.
   When a sync bumps a hosted artifact or brings a new one, the build fails with `Could not find artifact … in
   healdan`. In the sync PR, check its licence allows hosting it, import it with `python3 import-artifact.py` in a
@@ -119,7 +142,8 @@ A pull request that changes only `clients/` doesn't build the image, so this tes
   `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting
   it is dropped from the build instead, as JAI was.
 - **Broken POMs.** Upstream sometimes ships a POM that fails Maven's validation, such as a duplicate dependency. If
-  CI fails within a minute, check the POMs, the icon check, the doc-links check and the Maven repository check first.
+  CI fails within a minute, check the POMs, the icon check, the doc-links check, the hosts check and the Maven
+  repository check first.
 
 ## Publishing the Image
 
@@ -162,23 +186,26 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
    the repository, and it sees no signing secret.
 
 Actions → Clients → Run workflow packages any branch or tag by hand, under a version you give or
-`0.0.0-dev.<run>`, and attaches nothing to a release.
+`0.0.0-dev.<run>`, and attaches nothing to a release. Only a `helper-v*` tag's run is signed: a branch's is built
+unsigned.
 
-Signing needs six repository secrets, under Settings → Secrets and variables → Actions:
+Signing needs six secrets in the repository's `helper-release` environment (Settings → Environments →
+`helper-release` → Environment secrets). Only `helper-v*` tags may use it, so a run on a branch can't sign with the
+Developer ID. Each is set with `gh secret set <name> --env helper-release --repo Healdan-Project/healdan`:
 
 | Secret | What it holds |
 |---|---|
 | `APPLE_DEVELOPER_ID_P12` | The Developer ID Application certificate and its private key, exported from Keychain Access as a `.p12` file, in base64 (`base64 -i developer-id.p12`) |
 | `APPLE_DEVELOPER_ID_PASSWORD` | The password the `.p12` file was exported with |
 | `APPLE_TEAM_ID` | The Apple developer team's ID, the 10 characters in the certificate's name |
-| `NOTARY_KEY` | An App Store Connect API key (Users and Access → Integrations → Team Keys, with the Developer role), its `.p8` file in base64 |
+| `NOTARY_KEY` | An App Store Connect team API key (Users and Access → Integrations → App Store Connect API → Team Keys → Generate API Key, with the Developer role; notarytool can't use an individual key), its `.p8` file in base64 |
 | `NOTARY_KEY_ID` | That key's ID |
-| `NOTARY_ISSUER` | The issuer ID shown above the team keys |
+| `NOTARY_ISSUER` | The Issuer ID shown above the team keys |
 
 The job imports the certificate into a keychain of its own, which it deletes at the end, and decodes the key into
-the runner's temporary folder, which it also clears. Without the first three secrets, as on a fork, the app gets
-only an ad-hoc signature, and without the last three it isn't notarised. Either way the job says so, uploads the
-disk image as its artifact, and attaches nothing to the release.
+the runner's temporary folder, which it also clears. On a branch, or without the first three secrets (as on a fork),
+the app gets only an ad-hoc signature, and without the last three it isn't notarised. Either way the job says so,
+uploads the disk image as its artifact, and attaches nothing to the release.
 
 On a Mac with the Developer ID certificate in the login keychain, the same script builds a signed package
 (`OUT_DIR` sets where it goes, `clients/helper/packaging/mac/out/` by default). A `SIGN_IDENTITY` it can't find

@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import com.google.gwt.user.client.Window;
 import com.logicaldoc.gui.common.client.Constants;
@@ -15,7 +14,6 @@ import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIDocument;
 import com.logicaldoc.gui.common.client.beans.GUIFolder;
-import com.logicaldoc.gui.common.client.beans.GUIParameter;
 import com.logicaldoc.gui.common.client.beans.GUITenant;
 import com.logicaldoc.gui.common.client.beans.GUIValue;
 import com.logicaldoc.gui.common.client.controllers.DocumentController;
@@ -45,7 +43,6 @@ import com.logicaldoc.gui.frontend.client.panels.MainPanel;
 import com.logicaldoc.gui.frontend.client.services.ChatGPTService;
 import com.logicaldoc.gui.frontend.client.services.DocuSignService;
 import com.logicaldoc.gui.frontend.client.services.DocumentService;
-import com.logicaldoc.gui.frontend.client.services.SettingService;
 import com.logicaldoc.gui.frontend.client.services.ShareFileService;
 import com.logicaldoc.gui.frontend.client.services.TenantService;
 import com.logicaldoc.gui.frontend.client.sharefile.ShareFileDialog;
@@ -614,16 +611,7 @@ public class MainMenu extends ToolStrip implements FolderObserver, DocumentObser
 
     private void addRegistration(Menu menu, MenuItem develConsole) {
         if (Session.get().getUser().isMemberOf(Constants.GROUP_ADMIN)) {
-            MenuItem registration = new MenuItem(I18N.message("registration"));
-            registration.addClickHandler(registrationClick -> SettingService.Instance.get().loadSettingsByNames(
-                    Arrays.asList("reg.name", "reg.email", "reg.organization", "reg.website"),
-                    new DefaultAsyncCallback<>() {
-                        @Override
-                        public void handleSuccess(List<GUIParameter> reg) {
-                            new Registration(reg.stream().map(r -> r.getValue()).collect(Collectors.toList())).show();
-                        }
-                    }));
-            menu.addItem(registration);
+            // Healdan edit: no Registration item; what it saved only ever went to LogicalDOC's stats site
 
             if (Session.get().isDevel()) {
                 menu.addItem(develConsole);

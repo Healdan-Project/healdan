@@ -20,8 +20,19 @@ h1.hx\:bg-clip-text {
 
 /* Links in dark mode */
 .dark .content a:not(.not-prose a),
-.dark .healdan-devlink a {
+.dark .healdan-devlink a,
+.dark .healdan-status a {
   color: #4aa8f0;
+}
+
+/* The status notice above the landing page's cards. The landing page has no .content, so its link is styled here. */
+.healdan-status {
+  margin-bottom: 1.5rem;
+}
+
+.healdan-status a {
+  color: #0b5dab;
+  text-decoration: underline;
 }
 
 /* The Developer Guide link under the landing page's cards */

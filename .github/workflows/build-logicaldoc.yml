@@ -49,6 +49,10 @@ jobs:
       - name: Check for links to LogicalDOC's docs
         run: python3 .github/scripts/check-logicaldoc-doc-links.py
 
+      # Healdan never contacts LogicalDOC; an upstream sync can bring a call to one of its servers back
+      - name: Check for LogicalDOC's servers
+        run: python3 .github/scripts/check-logicaldoc-hosts.py
+
       # Builds get the artifacts only LogicalDOC's Maven repository has from Healdan's copies; a sync can bring
       # another of LogicalDOC's repositories in
       - name: Check Maven repositories
@@ -88,6 +92,7 @@ jobs:
             DocumentAclEqualityTest
             HibernateFolderDAOTest#testMerge
             StatsCollectorTest
+            SettingServiceImplTest
             FolderServiceImplTest
             SecurityServiceImplTest#testDeleteGroupRefusedKeepsTheMembers
             DocumentServiceImplTest
@@ -155,6 +160,14 @@ jobs:
           restore-keys: |
             m2-
             setup-java-Linux-x64-maven-
+
+      # Maven uses a cached file only when its _remote.repositories names one of this build's repositories, in the form
+      # the running Maven writes: 3.9 the repository's id, 3.10 its id and a hash of its URL. ubuntu-latest's images
+      # ship both, and 3.9 matched nothing in a copy 3.10 saved, so every run downloaded every file again and failed
+      # whenever logicaldoc.sourceforge.net refused. Without those files Maven takes every cached file as installed
+      # here, whichever Maven saved it, and downloads only what's missing. Only master's runs write the copy.
+      - name: Trust the cached Maven repository
+        run: if [ -d ~/.m2/repository ]; then find ~/.m2/repository -name _remote.repositories -delete; fi
 
       # Healdan's copies of the artifacts only LogicalDOC's repository has (a mirror of it), and Terracotta's
       # repository, which have dependencies Maven Central doesn't. The Docker build uses the same file.
