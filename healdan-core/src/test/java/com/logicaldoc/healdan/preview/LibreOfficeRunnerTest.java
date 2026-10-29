@@ -11,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.sql.SQLException;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -334,13 +333,8 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 		} finally {
 			pool.shutdownNow();
 		}
-		List<String> lines = Files.readAllLines(log.toPath());
-		assertEquals(4, lines.size());
-		List<String> kinds = new ArrayList<>();
-		for (String l : lines)
-			kinds.add(l.split(" ")[0]);
-		assertEquals(List.of("start", "end", "start", "end"), kinds);
-		assertTrue(Long.parseLong(lines.get(1).split(" ")[1]) <= Long.parseLong(lines.get(2).split(" ")[1]));
+		// The first run logged "end" before it exited, and the second logged "start" only after that
+		assertEquals(List.of("start", "end", "start", "end"), Files.readAllLines(log.toPath()));
 	}
 
 	@Test

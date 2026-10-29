@@ -76,14 +76,18 @@ final class FakeSoffice {
 	}
 
 	/**
+	 * Logs no times: the wall clock can step back between two runs, so the
+	 * lines' order is what shows whether runs overlapped.
+	 *
 	 * @param seconds how long the conversion takes
-	 * @param log the file that gets "start" and "end" lines with epoch milliseconds
+	 * @param log the file that gets a "start" line as each run begins and an
+	 *        "end" line just before it exits
 	 * @return a converter that takes a while
 	 */
 	static File slow(int seconds, File log) throws IOException {
 		String path = log.getAbsolutePath();
-		return script("slow-" + seconds + "-" + Integer.toHexString(path.hashCode()), "echo \"start $(date +%s%3N)\" >> '"
-				+ path + "'\nsleep " + seconds + "\nwrite_pdf\necho \"end $(date +%s%3N)\" >> '" + path + "'\n");
+		return script("slow-" + seconds + "-" + Integer.toHexString(path.hashCode()),
+				"echo start >> '" + path + "'\nsleep " + seconds + "\nwrite_pdf\necho end >> '" + path + "'\n");
 	}
 
 	private static File script(String name, String body) throws IOException {
