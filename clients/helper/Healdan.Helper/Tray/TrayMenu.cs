@@ -14,11 +14,11 @@ namespace Healdan.Helper.Tray;
 /// <summary>
 /// The menu-bar icon, the mark in one colour with a dot while the helper needs the user (polish spec §7), and its menu
 /// (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
-/// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), Open from Healdan (once the helper
-/// has started), Open Healdan in Browser (once there's a server, signed in or not: #87), Install the LibreOffice
-/// Extension while it isn't installed (spec §5.12, R22), Settings, Sign In or Sign Out, About (#89) and Quit. When
-/// native notifications can't be shown, the last notice is the menu's status line. The menu is rebuilt when it opens
-/// and whenever the session changes.
+/// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), a line for each server with copies
+/// waiting (spec §5.4: set aside), Open from Healdan (once the helper has started), Open Healdan in Browser (once
+/// there's a server, signed in or not: #87), Install the LibreOffice Extension while it isn't installed (spec §5.12,
+/// R22), Settings, Sign In or Sign Out, About (#89) and Quit. When native notifications can't be shown, the last notice
+/// is the menu's status line. The menu is rebuilt when it opens and whenever the session changes.
 /// </summary>
 internal sealed class TrayMenu : IDisposable
 {
@@ -106,6 +106,13 @@ internal sealed class TrayMenu : IDisposable
             items.Add(Label("Not Yet in Healdan"));
             foreach (var copy in kept)
                 items.Add(Item(copy.Title, () => _session.OpenKept(copy)));
+        }
+        var aside = _session.CopiesAside();
+        if (aside.Count > 0)
+        {
+            items.Add(new NativeMenuItemSeparator());
+            foreach (var group in aside)
+                items.Add(Item(group.Line, () => _windows.ShowFolder(group.Folder)));
         }
         items.Add(new NativeMenuItemSeparator());
 

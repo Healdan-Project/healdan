@@ -225,6 +225,23 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         }
     });
 
+    /// <summary>
+    /// Shows a folder in Finder (or the file manager), off the UI thread, for the menu's line per server with copies
+    /// set aside (spec §5.4). Nothing in it is opened. When it can't be shown, the user is told.
+    /// </summary>
+    public void ShowFolder(string folder) => _ = Task.Run(() =>
+    {
+        try
+        {
+            SystemOpener.Open(folder);
+        }
+        catch (Exception e)
+        {
+            log.Error($"{folder} couldn't be shown", e);
+            notifier.Notify("Healdan Helper", "Healdan Helper couldn't show the folder.");
+        }
+    });
+
     /// <summary>UI thread: shows a window that asks nothing, or brings the one of that kind up if it's open.</summary>
     private void ShowOnly(string key, Func<Window> make)
     {
