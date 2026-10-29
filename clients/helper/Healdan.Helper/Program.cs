@@ -57,6 +57,7 @@ internal static class Program
     private static AppBuilder Configure<TApp>() where TApp : Application, new() =>
         AppBuilder.Configure<TApp>()
             .UsePlatformDetect()
+            .UseSystemFontShaper()
             .With(new MacOSPlatformOptions { ShowInDock = false })
             .LogToTrace();
 

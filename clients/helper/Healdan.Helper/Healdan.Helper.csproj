@@ -22,6 +22,9 @@
     <PackageReference Include="Avalonia.Themes.Fluent" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Healdan.Helper.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../Healdan.Helper.Core/Healdan.Helper.Core.csproj" />
   </ItemGroup>
 </Project>
