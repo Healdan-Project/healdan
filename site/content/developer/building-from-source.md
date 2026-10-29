@@ -11,10 +11,10 @@ builds it for you. This page is for working on the code.
 - **JDK 25.** It's the JDK the `Dockerfile`'s `MAVEN_IMAGE` and `TOMCAT_IMAGE` name. CI's `build` check reads it
   from there, and fails if the two differ.
 - **Maven 3.9 or newer.**
-- **Two extra Maven repositories.** Some dependencies aren't on Maven Central. They come from
-  `https://logicaldoc.sourceforge.net/maven/` and `https://repo.terracotta.org/maven2`.
-  `docker/maven-settings.xml` lists them. CI and the Docker build copy it to `~/.m2/settings.xml`; copy it there
-  for local builds.
+- **Two extra Maven repositories.** Some dependencies aren't on Maven Central. They come from Healdan's copies at
+  `https://maven.healdan.com/`, of the artifacts only LogicalDOC's repository has, and from
+  `https://repo.terracotta.org/maven2`. `docker/maven-settings.xml` lists them. CI and the Docker build copy it to
+  `~/.m2/settings.xml`; copy it there for local builds.
 - **`~/logicaldoc-dev.properties`.** Spring-based tests fail in `setUp` without it. An empty file works.
 
 ## Commands
@@ -92,4 +92,4 @@ Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_
 
 - `logicaldoc-parent` is a module of the build, and the root POM inherits from it, so dependency and plugin
   versions live there. Its `source.level` sets the Java language level. The GWT client compiles at level 17.
-- `logicaldoc-webservicesamples` isn't part of the build.
+- `logicaldoc-webservicesamples` and `logicaldoc-webserviceclient` aren't part of the build.

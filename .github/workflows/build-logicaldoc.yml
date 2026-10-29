@@ -53,6 +53,11 @@ jobs:
       - name: Check for LogicalDOC's servers
         run: python3 .github/scripts/check-logicaldoc-hosts.py
 
+      # Builds get the artifacts only LogicalDOC's Maven repository has from Healdan's copies; a sync can bring
+      # another of LogicalDOC's repositories in
+      - name: Check Maven repositories
+        run: python3 .github/scripts/check-maven-repositories.py
+
       # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
       - name: JDK version (from the Dockerfile)
         id: jdk
@@ -164,8 +169,8 @@ jobs:
       - name: Trust the cached Maven repository
         run: if [ -d ~/.m2/repository ]; then find ~/.m2/repository -name _remote.repositories -delete; fi
 
-      # The LogicalDOC and Terracotta repositories, which have dependencies Maven Central doesn't. The Docker build
-      # uses the same file.
+      # Healdan's copies of the artifacts only LogicalDOC's repository has (a mirror of it), and Terracotta's
+      # repository, which have dependencies Maven Central doesn't. The Docker build uses the same file.
       - name: Configure Maven settings
         run: |
           mkdir -p ~/.m2
