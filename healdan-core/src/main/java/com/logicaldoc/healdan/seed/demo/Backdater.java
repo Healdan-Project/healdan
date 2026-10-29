@@ -10,13 +10,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.hibernate.SessionFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import com.logicaldoc.util.spring.Context;
 
 /**
  * Dates what the demo fixture creates (demo spec §5.2; plan call 3). It
  * remembers each table's highest id; {@link #stamp} dates every newer row
  * and moves the mark. Ids grow within a run, so each action's rows get that
  * action's date.
+ * <p>
+ * Both {@link #stamp} and {@link #touch} clear Hibernate's second-level cache
+ * once their JDBC writes are done. The cache keeps each loaded row as it was
+ * loaded, with the real date its action gave it, and CE's DAOs read through
+ * it. Without the clear, a later action that loads a backdated folder or
+ * document and saves it would write the real date back over the backdated one.
  * <p>
  * For the demo only: nothing else writes dates behind CE's back.
  */
@@ -45,10 +54,13 @@ public final class Backdater {
 
 	private final JdbcTemplate jdbc;
 
+	private final SessionFactory sessionFactory;
+
 	private final Map<String, Long> marks = new HashMap<>();
 
 	public Backdater(JdbcTemplate jdbc) {
 		this.jdbc = jdbc;
+		this.sessionFactory = Context.get(SessionFactory.class);
 		mark();
 	}
 
@@ -66,6 +78,7 @@ public final class Backdater {
 			args.add(marks.get(table.getKey()));
 			jdbc.update("update %s set %s where ld_id > ?".formatted(table.getKey(), set), args.toArray());
 		}
+		evictCache();
 		mark();
 	}
 
@@ -82,6 +95,15 @@ public final class Backdater {
 			jdbc.update("update ld_document set ld_lastmodified = ?, ld_date = ? where ld_id = ?", at, at, docId);
 		else
 			jdbc.update("update ld_document set ld_lastmodified = ? where ld_id = ?", at, docId);
+		evictCache();
+	}
+
+	/**
+	 * Clears every region of the second-level cache (entities, collections and
+	 * queries), since the writes above can touch any of the tables
+	 */
+	private void evictCache() {
+		sessionFactory.getCache().evictAllRegions();
 	}
 
 	private void mark() {
