@@ -574,7 +574,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     @Override
     public Boolean testProxy(String host, int port, String username, String password) throws ServerException {
         Session session = validateSession();
-        HttpGet get = new HttpGet("https://activation.logicaldoc.com");
+        // Healdan edit: Healdan's docs site, never LogicalDOC's licence server
+        HttpGet get = new HttpGet("https://docs.healdan.com");
         try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(40, host, port, username, password);) {
             return httpClient.execute(get, new AbstractHttpClientResponseHandler<Boolean>() {
 

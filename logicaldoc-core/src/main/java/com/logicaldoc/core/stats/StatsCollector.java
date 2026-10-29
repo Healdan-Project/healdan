@@ -8,7 +8,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -345,11 +344,8 @@ public class StatsCollector extends Task {
             statistics.add(new BasicNameValuePair("reg_organization", regOrganization != null ? regOrganization : ""));
             statistics.add(new BasicNameValuePair("reg_website", regWebsite != null ? regWebsite : ""));
 
-            // Healdan edit: nothing is sent to LogicalDOC's stats site; the local statistics above are kept
-
-            if (log.isDebugEnabled())
-                log.debug("Send statistics: {}", statistics.stream()
-                        .map(st -> "%s=%s".formatted(st.getName(), st.getValue())).collect(Collectors.joining(",")));
+            // Healdan edit: nothing is sent to LogicalDOC's stats site, or logged as if it were (the registration's
+            // email included); the local statistics above are kept
 
             next();
         } catch (PersistenceException e) {

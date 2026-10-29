@@ -43,7 +43,8 @@ class CheckLogicalDocDocLinksTest(unittest.TestCase):
 
     def test_skipped_prefixes_and_files(self):
         for name in ("docs/x.md", "site/content/x.md", "site/_vendor/x.html", ".github/scripts/tests/x.py",
-                     "ReleaseNotes.md", "logicaldoc-core/src/test/resources/README.md"):
+                     "ReleaseNotes.md", "logicaldoc-core/src/test/resources/README.md",
+                     ".github/scripts/check-logicaldoc-hosts.py"):
             self.write(name, "http://wiki.logicaldoc.com/wiki/Developer_Guide\n")
         self.assertEqual([], self.links())
         self.write("site/layouts/x.html", '<a href="https://docs.logicaldoc.com">x</a>\n')
