@@ -3,14 +3,21 @@ using System.Text.Json.Nodes;
 namespace Healdan.Helper.Core.Tests.Browse;
 
 /// <summary>
-/// The API's views as JSON, for the windows' tests: Store "Healdan", matter 998.1's workspace (folder 10) with its
-/// Documents folder (11) and Drafts inside that (12).
+/// The API's views as JSON, for the windows' tests: Store "Healdan", client 998 "Northwind Properties", matter 998.1's
+/// workspace (folder 10) with its Documents folder (11) and Drafts inside that (12).
 /// </summary>
 public static class Views
 {
     public const long Me = 1;
 
     public static JsonObject Ref(long id, string name, string kind) => new() { ["id"] = id, ["name"] = name, ["kind"] = kind };
+
+    public static JsonObject Client() => new() { ["id"] = 2, ["number"] = 998, ["name"] = "Northwind Properties" };
+
+    /// <summary>Matter 998.1 as a document or folder names it; an older server's has no client.</summary>
+    public static JsonObject MatterRef(bool client = true) => client
+        ? new() { ["id"] = 3, ["display"] = "998.1 – Healdan Demo", ["client"] = Client() }
+        : new() { ["id"] = 3, ["display"] = "998.1 – Healdan Demo" };
 
     public static JsonArray PathTo(long id) => id switch
     {
@@ -27,7 +34,7 @@ public static class Views
         return new JsonObject
         {
             ["type"] = "folder", ["id"] = id, ["name"] = (string)self["name"]!, ["kind"] = (string)self["kind"]!,
-            ["matter"] = new JsonObject { ["id"] = 3, ["display"] = "998.1 – Healdan Demo" },
+            ["matter"] = MatterRef(),
             ["store"] = new JsonObject { ["id"] = 1, ["name"] = "Healdan" },
             ["path"] = path, ["canFile"] = id != 10
         };
@@ -45,14 +52,14 @@ public static class Views
     {
         ["type"] = "document", ["docNumber"] = n, ["name"] = name, ["size"] = 100, ["version"] = version ?? fileVersion,
         ["fileVersion"] = fileVersion, ["reference"] = $"{n}.{fileVersion}", ["folder"] = Ref(folder, folder == 12 ? "Drafts" : "Documents", "folder"),
-        ["matter"] = new JsonObject { ["id"] = 3, ["display"] = "998.1 – Healdan Demo" },
+        ["matter"] = MatterRef(),
         ["dateFiled"] = "2026-10-01T09:00:00Z", ["lastModified"] = "2026-10-25T10:50:00Z", ["hold"] = hold, ["canEdit"] = hold is null
     };
 
     public static JsonObject MatterView(long id, long folderId, string? lastChange = null) => new()
     {
         ["type"] = "matter", ["id"] = id, ["number"] = 1, ["display"] = "998.1 – Healdan Demo", ["name"] = "Healdan Demo",
-        ["description"] = null, ["client"] = new JsonObject { ["id"] = 2, ["number"] = 998, ["name"] = "Healdan" },
+        ["description"] = null, ["client"] = Client(),
         ["store"] = new JsonObject { ["id"] = 1, ["name"] = "Healdan" }, ["folderId"] = folderId, ["lastChange"] = lastChange
     };
 

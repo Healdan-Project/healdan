@@ -186,8 +186,8 @@ public partial class SaveWindow : Window
         if (!ReferenceEquals(form, _form))
         {
             form.Changed += UpdateSave;
-            var matter = folder.Matter is { } m ? $"{m.Display} ({folder.Store.Name})" : null;
-            FormHost.Content = new PropertiesForm(form, _api!, matter: matter).View;
+            // The crumbs above name the Store, so the matter's line is the client's and the matter's alone, as in Properties.
+            FormHost.Content = new PropertiesForm(form, _api!, matter: folder.Matter).View;
         }
         (_form, _formFolder) = (form, folder);
         FormHost.IsVisible = true;

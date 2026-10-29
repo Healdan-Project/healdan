@@ -100,6 +100,8 @@ public class FolderResourceTest extends ApiTestCase {
 		JsonNode w = folder(workspace, clerk);
 		assertEquals("matter", w.path("kind").textValue());
 		assertEquals("998.1 \u2013 Demo", w.path("matter").path("display").textValue());
+		assertEquals("Healdan", w.path("matter").path("client").path("name").textValue());
+		assertEquals(998, w.path("matter").path("client").path("number").asLong());
 
 		JsonNode d = folder(documents, clerk);
 		assertEquals("folder", d.path("kind").textValue());

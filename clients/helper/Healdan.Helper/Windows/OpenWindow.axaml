@@ -69,7 +69,8 @@
                   <local:IconView Data="{Binding Icon, Converter={x:Static local:Icons.ByName}}" Classes="row-icon" Classes.folder="{Binding IsFolder}"
                                   VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,1,0,0" />
                   <StackPanel Grid.Column="1" Margin="0,0,8,0">
-                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                    <!-- A matter's client after it, smaller; cut off first when the row is too long. -->
+                    <TextBlock TextTrimming="CharacterEllipsis"><Run Text="{Binding Title}" /><Run Text=" " /><Run Classes="label" Text="{Binding ClientText}" /></TextBlock>
                     <StackPanel Orientation="Horizontal" Spacing="3" IsVisible="{Binding HasHolder}" Classes="holder" Classes.mine="{Binding HeldByMe}">
                       <local:IconView Data="{StaticResource Icon.lock}" Width="11" Height="11" VerticalAlignment="Center" />
                       <TextBlock Text="{Binding Holder}" />
@@ -77,7 +78,7 @@
                   </StackPanel>
                   <TextBlock Grid.Column="2" Text="{Binding DocNumber}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
                   <TextBlock Grid.Column="3" Text="{Binding Version}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
-                  <TextBlock Grid.Column="4" Text="{Binding MatterText}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" />
+                  <TextBlock Grid.Column="4" Text="{Binding MatterText}" TextTrimming="CharacterEllipsis" Margin="0,0,4,0" ToolTip.Tip="{Binding MatterTip}" />
                   <TextBlock Grid.Column="5" Text="{Binding Edited}" Classes="muted" TextTrimming="CharacterEllipsis" />
                 </Grid>
               </DataTemplate>

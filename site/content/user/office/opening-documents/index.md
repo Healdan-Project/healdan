@@ -34,16 +34,18 @@ Double-clicking a document in the web page still shows its preview.
 Any of LibreOffice's ways of opening shows the **Open from Healdan** window: **⌘O**, **File › Open**, **Open File**
 in the Start Center, and **Healdan › Open from Healdan…**. So does **Open from Healdan…** in the helper's menu.
 
-![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details on the right, under a header with its name, #1234 and v2.1, and Properties and Versions tabs, with Properties showing](open-from-healdan.png)
+![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details on the right, under a header with its name, #1234 and v2.1, and Properties and Versions tabs, with Properties showing, its Client row under Matter](open-from-healdan.png)
 
 - **On the left:** Recent Documents (where it starts), Checked Out to Me and Favorites, then Recent Matters, My
   Matters and Recent Folders to browse.
 - **In the middle:** each document's title, doc #, version, matter, and when it was last saved. Under the title,
-  who has it checked out: "checked out to you on MacBook", or "checked out to Jane Smith".
+  who has it checked out: "checked out to you on MacBook", or "checked out to Jane Smith". The Matter column shows
+  the matter's number: point at it to see the matter's name and its client.
+- **Matters** are listed with their client's name after them, in smaller type: `998.1 – Healdan Demo (Healdan)`.
 - **On the right:** the selected document's details. A header names it, with its doc # and version, as in
   `#1234 · v2.1`. Its star adds the document to your Favorites, or takes it off. Two tabs sit under the header:
   - **Properties,** where each Open window starts, shows a small preview of the first page, when Healdan has made
-    one, and the document's main properties.
+    one, and the document's main properties, with the matter's client under the matter.
   - **Versions** lists the document's versions, the number of them in brackets.
 
   The tab stays as you left it while you choose other documents. Before you choose a document, the pane asks you to.

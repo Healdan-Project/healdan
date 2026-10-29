@@ -314,9 +314,10 @@
   <Style Selector="TextBlock.muted">
     <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
   </Style>
-  <Style Selector="TextBlock.label">
-    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
-    <Setter Property="FontSize" Value="11" />
+  <!-- A Run too: a matter's client after it in a list row (owner, 2026-10-28). -->
+  <Style Selector="TextBlock.label, Run.label">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+    <Setter Property="TextElement.FontSize" Value="11" />
   </Style>
   <Style Selector="TextBlock.heading, TextBlock.headline">
     <Setter Property="FontSize" Value="13" />
@@ -460,6 +461,10 @@
   <Style Selector="ListBox.rows:focus-within ListBoxItem:selected TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource HdOnAccentBrush}" />
   </Style>
+  <!-- A matter's client sets its own colour, so it needs saying too. -->
+  <Style Selector="ListBox.rows:focus-within ListBoxItem:selected Run.label">
+    <Setter Property="Foreground" Value="{DynamicResource HdOnAccentBrush}" />
+  </Style>
   <Style Selector="ListBox.rows:focus-within ListBoxItem:selected local|IconView">
     <Setter Property="Foreground" Value="{DynamicResource HdOnAccentBrush}" />
   </Style>
@@ -520,6 +525,9 @@
        pill and on the inactive selection. Icons keep their own colours. A focused list's accent selection is not here:
        its white text rule above stays. These come after the class rules, so they win over them. -->
   <Style Selector="ListBox.places ListBoxItem:selected TextBlock, ListBox.versions ListBoxItem:selected TextBlock, ListBox.rows:not(:focus-within) ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows:not(:focus-within) ListBoxItem:selected Run.label">
     <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
   </Style>
 

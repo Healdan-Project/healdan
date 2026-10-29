@@ -23,8 +23,9 @@ public sealed record UserRef(long Id, string? Name);
 [Schema("FolderRef")]
 public sealed record FolderRef(long Id, string Name, string Kind);
 
+/// <summary>A matter named in a document or folder. <see cref="Client"/> is null from a server older than it.</summary>
 [Schema("MatterRef")]
-public sealed record MatterRef(long Id, string Display);
+public sealed record MatterRef(long Id, string Display, ClientRef? Client = null);
 
 [Schema("DeviceView")]
 public sealed record DeviceView(string Id, string Name, string? App);

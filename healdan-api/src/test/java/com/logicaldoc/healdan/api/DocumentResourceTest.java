@@ -115,6 +115,9 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals("folder", doc.path("folder").path("kind").textValue());
 		assertEquals("998.1 \u2013 Demo", doc.path("matter").path("display").textValue());
 		assertTrue(doc.path("matter").path("id").asLong() > 0);
+		assertEquals(998, doc.path("matter").path("client").path("number").asLong());
+		assertEquals("Healdan", doc.path("matter").path("client").path("name").textValue());
+		assertTrue(doc.path("matter").path("client").path("id").asLong() > 0);
 		assertTrue(doc.path("dateFiled").textValue(), doc.path("dateFiled").textValue().endsWith("Z"));
 		assertTrue(doc.path("lastModified").textValue().endsWith("Z"));
 		assertTrue(doc.path("hold").toString(), doc.path("hold").isNull());

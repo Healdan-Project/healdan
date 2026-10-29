@@ -217,17 +217,24 @@ internal sealed class BrowseControls
 
     private Control CrumbControl(Crumb crumb, bool last)
     {
-        if (last)
-            return new TextBlock { Text = crumb.Text, Classes = { "heading" }, VerticalAlignment = VerticalAlignment.Center };
         var step = new StackPanel { Orientation = Orientation.Horizontal };
-        var button = new Button { Content = crumb.Text, Classes = { "link" } };
-        button.Click += (_, _) => _ = _browser.OpenFolderAsync(crumb.FolderId);
-        step.Children.Add(button);
-        step.Children.Add(new IconView
+        if (last)
+            step.Children.Add(new TextBlock { Text = crumb.Text, Classes = { "heading" }, VerticalAlignment = VerticalAlignment.Center });
+        else
         {
-            Data = Icons.Get("chevron-right"), Width = 12, Height = 12, Margin = new Avalonia.Thickness(4, 0),
-            Classes = { "row-icon" }, VerticalAlignment = VerticalAlignment.Center
-        });
+            var button = new Button { Content = crumb.Text, Classes = { "link" } };
+            button.Click += (_, _) => _ = _browser.OpenFolderAsync(crumb.FolderId);
+            step.Children.Add(button);
+        }
+        // The matter's client and Store, smaller (owner, 2026-10-28).
+        if (crumb.Note.Length > 0)
+            step.Children.Add(new TextBlock { Text = crumb.Note, Classes = { "label" }, Margin = new Avalonia.Thickness(5, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center });
+        if (!last)
+            step.Children.Add(new IconView
+            {
+                Data = Icons.Get("chevron-right"), Width = 12, Height = 12, Margin = new Avalonia.Thickness(4, 0),
+                Classes = { "row-icon" }, VerticalAlignment = VerticalAlignment.Center
+            });
         return step;
     }
 }

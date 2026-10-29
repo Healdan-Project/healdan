@@ -42,7 +42,7 @@ public partial class PropertiesWindow : Window
             var doc = _api!.DocumentAsync(_docNumber);
             var form = new FormModel(await _api.PropertiesAsync(_docNumber));
             var d = await doc;
-            var matter = d.Matter?.Display;
+            var matter = d.Matter;
             DocTitle.Text = d.Name;
             Subtitle.Text = $"#{d.DocNumber} · v{d.FileVersion}";
             DocIcon.Data = Icons.Get(FileIcons.For(d.Name));

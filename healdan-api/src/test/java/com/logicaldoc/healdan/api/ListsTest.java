@@ -94,6 +94,7 @@ public class ListsTest extends ApiTestCase {
 		assertEquals("folder", items.get(0).path("type").textValue());
 		assertEquals("folder", items.get(0).path("kind").textValue());
 		assertEquals("998.1 \u2013 Demo", items.get(0).path("matter").path("display").textValue());
+		assertEquals("Healdan", items.get(0).path("matter").path("client").path("name").textValue());
 		assertEquals(documents.getId(), items.get(1).path("id").asLong());
 
 		ApiResponse docs = get("/api/v1/documents/recent").token(token).send();

@@ -33,13 +33,15 @@ public sealed record DocumentDetails(DocumentView Document, IReadOnlyList<Detail
         return new DocumentDetails(await doc, rows, Versions.Saves(timeline), image);
     }
 
-    /// <summary>Doc #, Matter, Folder, Author, Class and Subclass, when it was last saved, and who has it checked out.</summary>
+    /// <summary>Doc #, Matter and its Client, Folder, Author, Class and Subclass, when it was last saved, and who has it checked out.</summary>
     public static IReadOnlyList<Detail> RowsFor(DocumentView doc, FormModel properties, DateTimeOffset? lastSaved, long? me, DateTimeOffset now,
         TimeZoneInfo? zone = null)
     {
         var rows = new List<Detail> { new("Doc #", $"{doc.DocNumber} v{doc.FileVersion}") };
         if (doc.Matter is { } matter)
             rows.Add(new Detail("Matter", matter.Display));
+        if (doc.Matter?.Client is { } client)
+            rows.Add(new Detail("Client", client.Name));
         rows.Add(new Detail("Folder", doc.Folder.Name));
         foreach (var name in new[] { "author", FormModel.ClassField, "docsubclass" })
             if (properties.Field(name) is { HasValue: true } field)
