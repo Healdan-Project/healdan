@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Office preview checks (M1.5 spec §11.1). Uploads Word, Excel, PowerPoint and OpenDocument files into a matter
-# folder, each holding a nonsense token, and checks that:
+# Office preview checks (M1.5 spec §11.1). Uploads Word, Excel, PowerPoint and OpenDocument files, a Draw drawing
+# among them, into a matter folder, each holding a nonsense token, and checks that:
 # - the background worker converts them ahead of time, before anyone asks for a preview;
 # - the PDFs hold the tokens, show tracked changes the file hides, and carry the comment as a PDF note;
 # - the thumbnails are PNGs;
@@ -139,6 +139,19 @@ def pptx(name, text):
 docx("preview.docx", para("Healdan preview fixture zqxword"))
 xlsx("preview.xlsx", '<c r="A1" t="inlineStr"><is><t>zqxcell</t></is></c>')
 pptx("preview.pptx", "zqxslide")
+# A drawing with one text box, which LibreOffice opens with Draw
+ODF = "urn:oasis:names:tc:opendocument:xmlns:"
+with zipfile.ZipFile(out / "preview.odg", "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr(zipfile.ZipInfo("mimetype"), "application/vnd.oasis.opendocument.graphics")  # first, stored
+    z.writestr("content.xml", X + '<office:document-content xmlns:office="%soffice:1.0" xmlns:draw="%sdrawing:1.0" '
+               'xmlns:text="%stext:1.0" xmlns:svg="%ssvg-compatible:1.0" office:version="1.3"><office:body>'
+               '<office:drawing><draw:page draw:name="page1"><draw:frame svg:x="2cm" svg:y="2cm" svg:width="12cm" '
+               'svg:height="3cm"><draw:text-box><text:p>zqxdrawing</text:p></draw:text-box></draw:frame></draw:page>'
+               '</office:drawing></office:body></office:document-content>' % (ODF, ODF, ODF, ODF))
+    z.writestr("META-INF/manifest.xml", X + '<manifest:manifest xmlns:manifest="%smanifest:1.0" manifest:version="1.3">'
+               % ODF + "".join('<manifest:file-entry manifest:full-path="%s" manifest:media-type="%s"/>' % e for e in (
+                   ("/", "application/vnd.oasis.opendocument.graphics"), ("content.xml", "text/xml")))
+               + "</manifest:manifest>")
 docx("name.docx", para("Healdan preview fixture zqxname"))
 # A tracked insertion and deletion that the file's own view setting hides, and a comment
 docx("markup.docx",
@@ -165,7 +178,6 @@ xlsx("webservice.xlsx", '<c r="A1"><f>_xlfn.WEBSERVICE("http://127.0.0.1:%s/zqxp
      '<c r="B1" t="inlineStr"><is><t>zqxsheet</t></is></c>' % port)
 # An OpenDocument text whose Basic macro, bound to the open event, leaves a marker file. The ooo: and dom:
 # prefixes must be declared, or LibreOffice drops the binding.
-ODF = "urn:oasis:names:tc:opendocument:xmlns:"
 with zipfile.ZipFile(out / "macro.odt", "w", zipfile.ZIP_DEFLATED) as z:
     z.writestr(zipfile.ZipInfo("mimetype"), "application/vnd.oasis.opendocument.text")  # first, stored
     z.writestr("content.xml", X + '<office:document-content xmlns:office="%soffice:1.0" xmlns:text="%stext:1.0" '
@@ -232,19 +244,21 @@ webservice_id=$(upload webservice.xlsx webservice.xlsx || true)
 link_id=$(upload link.docx link.docx || true)
 markup_id=$(upload markup.docx markup.docx || true)
 named_id=$(upload name.docx "$NAMED" || true)
+odg_id=$(upload preview.odg preview.odg || true)
 pptx_id=$(upload preview.pptx preview.pptx || true)
 xlsx_id=$(upload preview.xlsx preview.xlsx || true)
 docx_id=$(upload preview.docx preview.docx || true)
 uploaded=$SECONDS
 all_ok=0
-for id in "$bad_id" "$macro_id" "$webservice_id" "$link_id" "$markup_id" "$named_id" "$pptx_id" "$xlsx_id" "$docx_id"; do
+for id in "$bad_id" "$macro_id" "$webservice_id" "$link_id" "$markup_id" "$named_id" "$odg_id" "$pptx_id" "$xlsx_id" \
+  "$docx_id"; do
   grep -Eq '^[0-9]+$' <<<"$id" || all_ok=1
 done
-check "nine Office files uploaded" test "$all_ok" = 0
+check "ten Office files uploaded" test "$all_ok" = 0
 [ "$FAILED" = 0 ] || exit 1
-READABLE="$docx_id $xlsx_id $pptx_id $named_id $markup_id"
-echo "  documents: docx $docx_id, xlsx $xlsx_id, pptx $pptx_id, named $named_id, markup $markup_id, link $link_id," \
-  "webservice $webservice_id, macro $macro_id, bad $bad_id"
+READABLE="$docx_id $xlsx_id $pptx_id $odg_id $named_id $markup_id"
+echo "  documents: docx $docx_id, xlsx $xlsx_id, pptx $pptx_id, odg $odg_id, named $named_id, markup $markup_id," \
+  "link $link_id, webservice $webservice_id, macro $macro_id, bad $bad_id"
 
 # queued <ids...>: prints how many of the documents still have a job.
 queued() { db_query "select count(*) from hd_preview_job where hd_docid in ($(echo "$*" | tr ' ' ','))"; }
@@ -274,7 +288,7 @@ stored() {
   app test -s "/opt/logicaldoc/repository/docs/$rel/doc/$fv-conversion.pdf"
 }
 
-check "the five readable files converted ahead of time, within ${TIMEOUT}s" drained $READABLE
+check "the six readable files converted ahead of time, within ${TIMEOUT}s" drained $READABLE
 for id in $READABLE; do
   check "document $id's PDF stored before any preview was asked for" stored "$id"
 done
@@ -353,6 +367,7 @@ has_token() { # <id> <token>
 check "preview.docx's PDF holds zqxword" has_token "$docx_id" zqxword
 check "preview.xlsx's PDF holds zqxcell" has_token "$xlsx_id" zqxcell
 check "preview.pptx's PDF holds zqxslide" has_token "$pptx_id" zqxslide
+check "preview.odg's PDF holds zqxdrawing" has_token "$odg_id" zqxdrawing
 check "$NAMED's PDF holds zqxname" has_token "$named_id" zqxname
 check "markup.docx's PDF shows the tracked insertion" has_token "$markup_id" zqxinserted
 check "markup.docx's PDF shows the tracked deletion the file hides" has_token "$markup_id" zqxdeleted
@@ -368,11 +383,14 @@ PY
 check "markup.docx's PDF carries the comment as a note" comment_note
 
 # Thumbnails: by path, as the smoke test asks for the PNG's and the PDF's.
-docx_name=$(api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$docx_id" \
-  | jq -r '.fileName | @uri' || true)
-for type in thumb tile; do
-  api -o "$WORK/$type.png" "$BASE/services/rest/document/thumbnail/$type$DOC_PATH/$docx_name" || true
-  check "preview.docx's $type is a PNG" is_png "$WORK/$type.png"
+for fixture in "preview.docx $docx_id" "preview.odg $odg_id"; do
+  read -r label id <<<"$fixture"
+  name=$(api -H 'Accept: application/json' "$BASE/services/rest/document/getDocument?docId=$id" \
+    | jq -r '.fileName | @uri' || true)
+  for type in thumb tile; do
+    api -o "$WORK/$id-$type.png" "$BASE/services/rest/document/thumbnail/$type$DOC_PATH/$name" || true
+    check "$label's $type is a PNG" is_png "$WORK/$id-$type.png"
+  done
 done
 
 # Hardening (spec §5.3). LibreOffice opened the three files: their PDFs hold their text.

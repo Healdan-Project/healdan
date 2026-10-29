@@ -2,6 +2,7 @@ package com.logicaldoc.core.stats;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -15,6 +16,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.logicaldoc.core.AbstractCoreTestCase;
+import com.logicaldoc.core.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
@@ -65,6 +67,19 @@ public class StatsCollectorTest extends AbstractCoreTestCase {
 			} finally {
 				config.setProperty("proxy.enabled", "false");
 			}
+		}
+	}
+
+	@Test
+	public void testLogsNoRegistration() {
+		// Healdan: nothing is sent, so nothing logs what would have been, the registration's email included
+		ContextProperties config = Context.get().getConfig();
+		config.setProperty("reg.email", "registrant@example.com");
+		try (LogCapture log = new LogCapture(StatsCollector.class)) {
+			testSubject.run();
+			assertTrue(log.getMessages().stream().noneMatch(m -> m.contains("registrant@example.com")));
+		} finally {
+			config.setProperty("reg.email", "");
 		}
 	}
 

@@ -218,10 +218,10 @@ echo "== 5a. full text in Office and email files (spec §9)"
 check "full-text tokens found in the .docx and the .eml" env BASE="$BASE" FOLDER_ID="$doc_folder" bash docker/tests/test-fulltext.sh
 
 echo "== 5b. Office previews (M1.5 spec §11.1)"
-# Uploads Office files into the Smoke Matter and checks their PDFs, thumbnails and the conversion's hardening; its
-# output carries its own PASS/FAIL lines
-check "Office previews, markup and hardening" env BASE="$BASE" FOLDER_ID="$doc_folder" DOC_PATH="$doc_path" SID="$sid" \
-  APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" bash docker/tests/test-previews.sh
+# Uploads Office files and a Draw drawing into the Smoke Matter and checks their PDFs, thumbnails and the
+# conversion's hardening; its output carries its own PASS/FAIL lines
+check "Office and drawing previews, markup and hardening" env BASE="$BASE" FOLDER_ID="$doc_folder" DOC_PATH="$doc_path" \
+  SID="$sid" APP_CONTAINER="$(compose ps -q app)" DB_CONTAINER="$(compose ps -q db)" bash docker/tests/test-previews.sh
 
 echo "== 5c. the add-in flow through the JSON API (M2 spec §14.1)"
 # Signs in as a new non-admin user and files, checks out and saves a .docx in the Smoke Matter through /api/v1 with a

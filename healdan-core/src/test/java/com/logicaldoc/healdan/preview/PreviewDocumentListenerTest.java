@@ -69,6 +69,16 @@ public class PreviewDocumentListenerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testUploadQueuesDrawings() throws Exception {
+		Document a = fx.upload(folder, "a.odg", "a", fx.admin());
+		Document b = fx.upload(folder, "b.vsdx", "b", fx.admin());
+		Document c = fx.upload(folder, "c.otg", "c", fx.admin());
+		assertTrue(queued(a.getId(), "1.0"));
+		assertFalse(queued(b.getId(), "1.0"));
+		assertFalse(queued(c.getId(), "1.0"));
+	}
+
+	@Test
 	public void testCheckinQueuesNewVersion() throws Exception {
 		Document a = fx.upload(folder, "a.docx", "a", fx.admin());
 		DocumentManager.get().checkout(a.getId(), fx.documentHistory(fx.admin()));

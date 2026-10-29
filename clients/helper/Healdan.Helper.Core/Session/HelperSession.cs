@@ -13,11 +13,12 @@ namespace Healdan.Helper.Core.Session;
 
 /// <summary>
 /// The helper while it runs, signed in to one server (spec §5.1). Starting goes in a fixed order: the sign-in (the kept
-/// token, or the Sign In window), then the copies' resume, which sweeps the downloads a stop left half done, and only
-/// then the channel and links, so no open runs before the sweep. It also turns the cycle's events into what the user
-/// is told (spec §5.1, §5.10): quiet when things work, a notice when something needs them, a window when it needs an
-/// answer. Every API client it makes reports a refused token, whichever call met it, so a <c>401</c> anywhere asks
-/// for the password again (spec §5.2). Nothing here logs a token, a password or a file's contents.
+/// token, or the Sign In window), then the copies' resume, after another server's copies are set aside and this one's
+/// brought back (spec §5.4), which sweeps the downloads a stop left half done, and only then the channel and links, so
+/// no open runs before the sweep. It also turns the cycle's events into what the user is told (spec §5.1, §5.10):
+/// quiet when things work, a notice when something needs them, a window when it needs an answer. Every API client it
+/// makes reports a refused token, whichever call met it, so a <c>401</c> anywhere asks for the password again
+/// (spec §5.2). Nothing here logs a token, a password or a file's contents.
 /// </summary>
 public sealed class HelperSession : ICycleEvents, IDisposable
 {
@@ -232,6 +233,12 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// Healdan (<see cref="CopyCycle.KeptCopies"/>).
     /// </summary>
     public IReadOnlyList<CopyState> KeptCopies() => Cycle?.KeptCopies() ?? [];
+
+    /// <summary>
+    /// Spec §5.4: the copies set aside for each server, for the menu's line per server, whether signed in or not. Read at
+    /// each rebuild, from the records alone.
+    /// </summary>
+    public IReadOnlyList<AsideCopies> CopiesAside() => new CopyStore(_paths).Aside();
 
     /// <summary>
     /// The menu's click on a copy Not Yet in Healdan: opens it as it is, with no check-out or download, and says how
@@ -571,6 +578,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return e is ArgumentException { ParamName: { } name } ? e.Message.Replace($" (Parameter '{name}')", "") : e.Message;
         }
 
+        // Before the sign-in, so no token is made for a server the helper then doesn't sign in to.
+        if (OpenToSetAside(server) is { } open)
+            return open;
+
         using var timeout = new CancellationTokenSource(SignInTimeout);
         try
         {
@@ -616,42 +627,102 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     /// <summary>
-    /// A sign-in to another server than the settings name (spec §5.4): the copies are all from that one, so they're set
-    /// aside first (<see cref="CopyStore.SetAside"/>), and none goes to the new server, where the same doc # can be
-    /// another document. The user is told where they are. Returns why the sign-in can't go on, or null.
+    /// A sign-in to another server than the settings name (spec §5.4): every copy that doesn't name the new server is
+    /// set aside first (<see cref="CopyStore.SetAside"/>), and a record without a server, from before records named one,
+    /// counts as the old server's. None goes to the new server, where the same doc # can be another document. The user
+    /// is told where they are. Returns why the sign-in can't go on, or null: a move that failed, or a copy opened in the
+    /// app while the server answered (<see cref="OpenToSetAside(Uri)"/>).
     /// </summary>
     private string? SetCopiesAside(Uri server)
     {
-        if (HelperSettings.Load(_paths).Server is not { } previous)
+        if (Leaving(server) is not { } old)
             return null;
-        string from;
-        try
-        {
-            var old = ParseAddress(previous);
-            if (SameServer(old, server))
-                return null;
-            from = HealdanLink.HostAndPort(old);
-        }
-        catch (UriFormatException)
-        {
-            from = "an earlier server"; // the copies came from somewhere, but not from this one
-        }
+        if (OpenToSetAside(server) is { } open)
+            return open;
         var to = HealdanLink.HostAndPort(server);
         try
         {
-            if (new CopyStore(_paths).SetAside(from) is { } aside)
-            {
-                var folder = Path.GetFileName(aside);
-                _log.Info($"Signing in to {to}: the copies from {from} are set aside in {folder}");
-                _notifier.Notify(Helper, $"The copies from {from} are now in the {folder} folder, beside Healdan Helper's Copies "
-                    + $"folder. Healdan Helper won't send them to {to}.");
-            }
+            TellSetAside(new CopyStore(_paths, Address(server)).SetAside(Address(server), old), to);
             return null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            var from = ServerAddress.Name(old);
             _log.Warn($"The copies from {from} couldn't be set aside: {e.Message}");
             return $"Healdan Helper couldn't move the copies from {from} out of the way, so it hasn't signed in to {to}: {e.Message}";
+        }
+    }
+
+    /// <summary>
+    /// The address of the server whose copies a sign-in to <paramref name="server"/> sets aside: the one the settings
+    /// name, when it's another. Null when it's the same, or there's none.
+    /// </summary>
+    private string? Leaving(Uri server)
+    {
+        if (HelperSettings.Load(_paths).Server is not { } previous)
+            return null;
+        try
+        {
+            var parsed = ParseAddress(previous);
+            return SameServer(parsed, server) ? null : Address(parsed);
+        }
+        catch (UriFormatException)
+        {
+            return previous; // the copies came from somewhere, but not from this one
+        }
+    }
+
+    /// <summary>
+    /// Spec §5.4: why a sign-in to <paramref name="server"/> can't go on while a copy it would set aside is open in the
+    /// app (<see cref="CopyStore.OpenToSetAside"/>), or null. Setting it aside would move it from under its window,
+    /// whose next save would leave a file with no record in its place. A lock or owner file left while the app isn't
+    /// running is a crash's, so it doesn't count, and quitting the app gets past one it left while running. A folder
+    /// that can't be read isn't a refusal here: setting aside meets it, and says so.
+    /// </summary>
+    private string? OpenToSetAside(Uri server)
+    {
+        if (Leaving(server) is not { } old)
+            return null;
+        IReadOnlyList<OpenCopy> open;
+        try
+        {
+            open = new CopyStore(_paths, Address(server)).OpenToSetAside(Address(server), old);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+        if (open.Count == 0 || !AppRunning())
+            return null;
+        var to = HealdanLink.HostAndPort(server);
+        _log.Info($"Not signing in to {to}: copies it would set aside are open in {_app.Name} ({open.Count})");
+        var others = open.Count switch { 1 => "", 2 => " and 1 other document", _ => $" and {open.Count - 1} other documents" };
+        return $"Close {open[0].Title}{others} in {_app.Name} first. Healdan Helper moves the copies from {open[0].Server} out of "
+            + $"the way before it signs in to {to}, and {(open.Count == 1 ? "that one is" : "those are")} open.";
+    }
+
+    /// <summary>When the process list can't be read, the app counts as running, so no open copy is moved from under it.</summary>
+    private bool AppRunning()
+    {
+        try
+        {
+            return _app.IsRunning();
+        }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Tells the user where each server's copies went, and that they come back (spec §5.4).</summary>
+    private void TellSetAside(IReadOnlyList<AsideCopies> moved, string to)
+    {
+        foreach (var group in moved)
+        {
+            var folder = Path.GetFileName(group.Folder);
+            _log.Info($"Set aside for {to}: the copies from {group.Server} are in {folder}");
+            _notifier.Notify(Helper, $"The copies from {group.Server} are now in the {folder} folder, beside Healdan Helper's "
+                + $"Copies folder. Healdan Helper won't send them to {to}, and brings them back when you sign in to {group.Server} again.");
         }
     }
 
@@ -736,17 +807,18 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         return uri;
     }
 
-    private static string Address(Uri server) => server.GetLeftPart(UriPartial.Path).TrimEnd('/');
+    private static string Address(Uri server) => ServerAddress.Of(server);
 
-    private static bool SameServer(Uri a, Uri b) => string.Equals(Address(a), Address(b), StringComparison.OrdinalIgnoreCase);
+    private static bool SameServer(Uri a, Uri b) => ServerAddress.Same(a, b);
 
     private static string LinkName(HealdanApi api) => HealdanLink.HostAndPort(api.Server);
 
     // --- Starting and stopping -------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Under <see cref="_lifecycle"/>: the copies' resume, then the channel, then links. The menu and windows see the
-    /// cycle only once its resume has finished; a resume that fails is told to the user, and nothing starts.
+    /// Under <see cref="_lifecycle"/>: the copies settled (<see cref="SettleCopies"/>), their resume, then the channel,
+    /// then links. The menu and windows see the cycle only once its resume has finished; a settling or a resume that
+    /// fails is told to the user, and nothing starts.
     /// </summary>
     private async Task BeginAsync()
     {
@@ -762,7 +834,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         CopyCycle? cycle = null;
         try
         {
-            cycle = new CopyCycle(api, new CopyStore(_paths), _app, _device.Id, this, _timings, _otherFiles);
+            var store = new CopyStore(_paths, Address(api.Server));
+            SettleCopies(store, api.Server);
+            cycle = new CopyCycle(api, store, _app, _device.Id, this, _timings, _otherFiles);
             lock (_gate)
                 _resuming = cycle; // its events name copies by their title
             await cycle.ResumeAsync();
@@ -832,6 +906,51 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             _started = _cycle == cycle;
         _ = Links.Ready(api.Server, cycle);
         RaiseChanged();
+    }
+
+    /// <summary>
+    /// Before each resume (spec §5.4): sets aside any copy that names another server, which only a lost settings.json or
+    /// a move that failed leaves in Copies, then brings back the signed-in server's. One open in the app stays in Copies
+    /// rather than move from under its window, unseen by the store and the channel, until a later start once it's
+    /// closed. A setting aside that fails throws, so the helper doesn't start; a copy that can't come back stays aside,
+    /// and the user is told why.
+    /// </summary>
+    private void SettleCopies(CopyStore store, Uri server)
+    {
+        var address = Address(server);
+        var name = HealdanLink.HostAndPort(server);
+        var open = AppRunning() ? store.OpenToSetAside(address, address) : [];
+        foreach (var copy in open)
+        {
+            _log.Warn($"The copy from {copy.Server} named {copy.FileName} stays in Copies: it's open in {_app.Name}");
+            _notifier.Notify(copy.Title, $"It's a copy from {copy.Server}, open in {_app.Name}, so it stays in Healdan Helper's "
+                + $"Copies folder until you close it. Healdan Helper won't send it to {name}, and sets it aside the next time it starts.");
+        }
+        TellSetAside(store.SetAside(address, address, [.. open.Select(c => c.FileName)]), name);
+        BroughtBack back;
+        try
+        {
+            back = store.BringBack(address);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log.Warn($"The copies set aside from {name} couldn't be brought back: {e.Message}");
+            _notifier.Notify(Helper, $"Healdan Helper couldn't bring back the copies set aside from {name}: {e.Message}");
+            return;
+        }
+        if (back.Count > 0)
+        {
+            _log.Info($"Brought back {back.Count} copies set aside from {name}");
+            _notifier.Notify(Helper, back.Count == 1
+                ? $"The copy set aside from {name} is back, and Healdan Helper looks after it again."
+                : $"The {back.Count} copies set aside from {name} are back, and Healdan Helper looks after them again.");
+        }
+        foreach (var stayed in back.Stayed)
+        {
+            var folder = Path.GetFileName(stayed.Folder);
+            _log.Warn($"The copy of {stayed.DocRef} stayed in {folder}: {stayed.Why}");
+            _notifier.Notify(stayed.Title, $"It stayed in the {folder} folder: {stayed.Why}.");
+        }
     }
 
     /// <summary>Stops the channel, links and the cycle; copies and records stay as they are.</summary>

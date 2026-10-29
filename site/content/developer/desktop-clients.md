@@ -118,10 +118,24 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
   under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
   (`OpenKept`). The menu asks at each rebuild, so each copy is hashed again only once its size or time changes.
-- **The copies belong to the server in `settings.json`.** A sign-in to another server first moves everything in
-  `Copies/` into `Copies from <host[-port]>/` beside it (`CopyStore.SetAside`), numbered when that's taken, so no copy
-  is resumed against a server where its doc # is another document. `Copies/` itself stays, with any app's access to
-  it. A move that fails refuses the sign-in.
+- **The copies belong to one server.** While the helper runs, `Copies/` holds only the signed-in server's copies.
+  Each record names its server (`CopyRecord.Server`, as `settings.json` holds it; a record without one belongs to the
+  server in `settings.json`). A sign-in to another server, and every start before the resume, set aside each copy
+  naming another server into `Copies from <host[-port]>/` beside `Copies/` (`CopyStore.SetAside`), numbered when a
+  name is taken there; a start then brings back the signed-in server's (`CopyStore.BringBack`), except one open in an
+  app there or whose name is taken in `Copies/`. A copy moves first, then its record, and moves back if the record
+  can't follow. Lock and owner files stay, as the app deletes them by the path it opened, and so does Finder's
+  `.DS_Store`. A setting aside that fails refuses the sign-in, or the start. The menu has a line per server with
+  copies waiting (`CopyStore.Aside`).
+- **No open copy is moved from under its window.** A sign-in to another server is refused, before the helper signs
+  in and again just before the move, while anything it would set aside has its lock or owner file beside it in
+  `Copies/` and the app is running (`CopyStore.OpenToSetAside`, `IOfficeApp.IsRunning`); the window would otherwise
+  save a file with no record to the old path. A lock file with the app not running is a crash's, and doesn't count.
+  A start leaves such a copy in `Copies/` (`SetAside`'s `leave`) until a later start. A read-only copy has no lock
+  file, so it moves.
+- **A store made for a server** (`CopyStore.All`, and `Find`, through which the cycle and the channel's path routes
+  reach a record) sees only that server's copies and those without one, so the cycle never takes another server's,
+  such as one dragged back into `Copies/` or one left open at a start, and `Create` sets one at its target path aside.
 
 ### The Helper's Files
 
@@ -336,6 +350,9 @@ the steps and the secrets.
 
 - **The bundle** is `com.healdan.helper`: one self-contained file for Apple silicon, with `healdan.oxt` in
   `Contents/Resources`. It registers `healdan:` and stays out of the Dock.
+- **The hardened runtime** has one exception, `allow-jit`, for .NET's JIT
+  (`clients/helper/packaging/mac/entitlements.plist`). The bundle's native libraries are signed with the helper's
+  own Developer ID, so library validation accepts them.
 - **The icon,** `AppIcon.icns`, is Healdan's mark from the docs site's `site/static/favicon.svg` on macOS's rounded
   square. `clients/helper/packaging/mac/make-icon.swift` draws it each time `package.sh` runs, so changing the
   favicon changes the helper's icon too. About's mark is the same shapes in XAML, as Avalonia doesn't read SVG, and

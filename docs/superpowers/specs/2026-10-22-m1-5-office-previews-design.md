@@ -39,7 +39,7 @@ On the Docker stack, signed in as an ordinary non-admin user:
 ### Non-goals
 
 - **Pixel-perfect rendering.** LibreOffice's rendering of Office files is good, not identical (§5.4).
-- **Formats beyond §4.** Apple Pages, Numbers and Keynote, Visio, and drawing formats need more LibreOffice packages and convert less reliably. Adding one later is a line in the format list plus, for drawings, one package. (call)
+- **Formats beyond §4.** Apple Pages, Numbers and Keynote, Visio, and drawing formats need more LibreOffice packages and convert less reliably. Adding one later is a line in the format list plus, for drawings, one package. (call) (added after the build, 2026-10-29: LibreOffice Draw's drawings, `.odg` only, when M3 added Draw to the helper (owner). It took what this said: a fourth kind in `OfficeFormats`, `DRAWING`, with Draw's filter `draw_pdf_Export`, which `plugin.xml`'s converter and thumbnail builder list too, and Draw's package, `libreoffice-draw-nogui`. Impress's package already depends on it, so naming it in the `Dockerfile` adds nothing to the image. Draw's templates (`.otg`), Visio and Publisher stay out. A new seed step, `queue-drawing-previews`, queues the drawings already in Healdan, as §7.3's does the Office files: CE's catch-all parser can have cached the "not available" page for one, which the worker clears. The smoke test's previews step converts an `.odg` and checks its text and thumbnails.)
 - **Editing in the browser.** That's the backlog's Collabora/OnlyOffice item.
 - **Converting other formats ahead of time.** PDFs and images keep CE's behaviour: their thumbnails are made the first time someone looks. The queue (§7) is built so they could be added later. (call)
 - **A settings screen.** The converter has no on/off switch and no admin page (§5.5). (call)
@@ -93,6 +93,7 @@ LibreOffice's Writer, Calc and Impress convert these to PDF:
 | Excel | `xls`, `xlsx`, `xlsm`, `xlt`, `xltx`, `xltm`, `csv` |
 | PowerPoint | `ppt`, `pptx`, `pptm`, `pps`, `ppsx`, `pot`, `potx` |
 | OpenDocument | `odt`, `ott`, `ods`, `ots`, `odp`, `otp` |
+| Drawing (added after the build, 2026-10-29, with Draw) | `odg` |
 
 The list lives in one place in code and in `plugin.xml`, so adding a format is one change. `csv` is in because the GUI sends it to the PDF viewer, which shows "not available" today.
 
@@ -101,6 +102,7 @@ How each kind comes out:
 - **Word:** pages as they'd print.
 - **Excel:** every visible sheet, using its print settings. A wide sheet without print settings is split across pages. That's fine for a quick check.
 - **PowerPoint:** one slide per page, without speaker notes.
+- **Drawing** (added after the build, 2026-10-29)**:** one page of the drawing per page.
 
 ### 4.1 Markup (owner)
 

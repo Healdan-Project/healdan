@@ -114,14 +114,17 @@ jobs:
           echo "::error::The client checks didn't pass"
           exit 1
 
-  # The macOS package (spec §5.12), for a helper-v* tag or a run by hand, once the tests passed. With the six signing
-  # secrets it's signed with the Developer ID and notarised; without them (a fork, say) it's built unsigned. Either
-  # way the disk image is uploaded as an artifact; release-mac attaches it to the tag's release only from a tag push,
-  # and only once its notarisation ticket is checked.
+  # The macOS package (spec §5.12), for a helper-v* tag or a run by hand, once the tests passed. The six signing
+  # secrets are the helper-release environment's, which only helper-v* tags may use, so only a tag's run is signed
+  # with the Developer ID and notarised; a run by hand on a branch (or in a fork) is built unsigned. Either way the
+  # disk image is uploaded as an artifact; release-mac attaches it to the tag's release only from a tag push, and only
+  # once its notarisation ticket is checked.
   package-mac:
     name: Package (macos-15)
     needs: [ helper, extension ]
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/helper-v')
+    # No environment for a branch: the environment would refuse it, failing the job instead of building unsigned.
+    environment: ${{ startsWith(github.ref, 'refs/tags/helper-v') && 'helper-release' || '' }}
     runs-on: macos-15
     timeout-minutes: 60
     outputs:
@@ -174,7 +177,7 @@ jobs:
           echo "signing=$signing" >> "$GITHUB_OUTPUT"
           echo "notary=$notary" >> "$GITHUB_OUTPUT"
           if [ "$signing" = false ]; then
-            echo "::warning::The APPLE_DEVELOPER_ID_* and APPLE_TEAM_ID secrets aren't set, so the package is built unsigned"
+            echo "::warning::The APPLE_DEVELOPER_ID_* and APPLE_TEAM_ID secrets aren't available (they're the helper-release environment's, for helper-v* tags), so the package is built unsigned"
           elif [ "$notary" = false ]; then
             echo "::warning::The NOTARY_* secrets aren't set, so the package is signed but not notarised"
           fi

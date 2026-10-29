@@ -29,12 +29,13 @@ RUN bash /tools/build.sh /build/ROOT/WEB-INF/lib /build/ROOT/WEB-INF/classes/con
 # ---- runtime: Tomcat 11 serving the exploded WAR at / ----
 FROM ${TOMCAT_IMAGE} AS runtime
 # Thumbnails and previews: ImageMagick (images; uses Ghostscript for PS/PDF input), Poppler (PDF).
-# LibreOffice (headless writer, calc, impress) converts Office files for previews; Carlito, Caladea and Liberation
+# LibreOffice (headless Writer, Calc, Impress and Draw) converts Office files and drawings for previews; Impress's
+# package already pulls in Draw's, which is named for the drawings it converts. Carlito, Caladea and Liberation
 # are metric-compatible with Calibri, Cambria and Arial/Times, so the layout survives. tini is PID 1 and reaps the
 # soffice processes the converter kills after a timeout. curl serves the healthcheck.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends imagemagick poppler-utils ghostscript curl tini \
-    libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+    libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui libreoffice-draw-nogui \
     fonts-crosextra-carlito fonts-crosextra-caladea fonts-liberation \
  && rm -rf /var/lib/apt/lists/*
 

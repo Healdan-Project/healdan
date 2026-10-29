@@ -15,9 +15,9 @@ Select one document, then choose **Open in App** on the toolbar, or right-click 
 document opens in LibreOffice, and the helper's menu lists it.
 
 - **It's on** for one document at a time, of a kind LibreOffice edits: `.doc`, `.docx`, `.docm`, `.dotx`, `.dotm`,
-  `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm` and `.odp`. You need permission
-  to download it. The helper opens only these kinds from the web page: a link to any other file is refused, with a
-  notice (see [Other Kinds of File](#other-kinds-of-file)).
+  `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm`, `.odp` and `.odg`. You need
+  permission to download it. The helper opens only these kinds from the web page: a link to any other file is
+  refused, with a notice (see [Other Kinds of File](#other-kinds-of-file)).
 - **It's on while the document is checked out** too, so you can reopen your own, and others get a read-only copy.
 - **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
   remember, if there is one.

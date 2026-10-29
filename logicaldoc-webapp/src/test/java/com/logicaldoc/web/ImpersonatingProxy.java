@@ -38,6 +38,8 @@ public class ImpersonatingProxy implements AutoCloseable {
 
     private final ServerSocket socket = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
 
+    private final AtomicReference<String> connect = new AtomicReference<>();
+
     private final AtomicReference<String> request = new AtomicReference<>();
 
     private final Thread thread;
@@ -62,6 +64,17 @@ public class ImpersonatingProxy implements AutoCloseable {
     /**
      * Waits for the client to finish
      *
+     * @return the request line of the client's CONNECT, which names the server
+     *         it asked for, or null if it never connected
+     */
+    public String getConnect() throws InterruptedException {
+        thread.join(10000);
+        return connect.get();
+    }
+
+    /**
+     * Waits for the client to finish
+     *
      * @return the head of the request the client sent through the tunnel, or
      *         null if it aborted the handshake
      */
@@ -78,7 +91,7 @@ public class ImpersonatingProxy implements AutoCloseable {
     private void serve(String host, String page) {
         try (Socket client = socket.accept()) {
             client.setSoTimeout(10000);
-            readHead(client.getInputStream());
+            connect.set(readHead(client.getInputStream()).lines().findFirst().orElse(null));
             client.getOutputStream().write("HTTP/1.1 200 Connection established\r\n\r\n".getBytes());
             client.getOutputStream().flush();
 

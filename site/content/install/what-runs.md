@@ -26,18 +26,20 @@ weight: 2
 ## External Programs
 
 The image includes ImageMagick, Poppler and Ghostscript for thumbnails and previews, and LibreOffice for Office
-previews. Healdan only runs external programs listed in `conf/allowed-commands.txt`, in the configuration volume.
-The app puts its own entries back in that file on every start; add your own lines there if you need more.
+and drawing previews. Healdan only runs external programs listed in `conf/allowed-commands.txt`, in the
+configuration volume. The app puts its own entries back in that file on every start; add your own lines there if
+you need more.
 Ghostscript isn't listed, because ImageMagick calls it directly.
 
 ## Office Previews
 
-The image includes LibreOffice (headless Writer, Calc and Impress) and fonts metrically compatible with
-Microsoft's (Carlito, Caladea and Liberation), so Word, Excel and PowerPoint files get a PDF preview and a
-thumbnail. Nothing needs configuring.
+The image includes LibreOffice (headless Writer, Calc, Impress and Draw) and fonts metrically compatible with
+Microsoft's (Carlito, Caladea and Liberation), so Word, Excel, PowerPoint and OpenDocument files, LibreOffice Draw's
+`.odg` drawings among them, get a PDF preview and a thumbnail. Nothing needs configuring.
 
 - **When conversions run.** In the background, after upload. After an upgrade, Office documents already in Healdan
-  are converted in the background too, newest first, alongside new uploads.
+  are converted in the background too, newest first, alongside new uploads, and so are drawings, after the upgrade
+  that adds their previews.
 - **When a conversion fails,** the preview says "not available". To find out why, search
   `repository/logs/dms.log` for `LibreOffice` or `com.logicaldoc.healdan.preview`.
 - **Files that keep timing out.** After a version first times out, its previews say "not available" straight

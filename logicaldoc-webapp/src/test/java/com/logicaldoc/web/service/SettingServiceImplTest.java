@@ -234,11 +234,21 @@ public class SettingServiceImplTest extends AbstractWPTestCase {
     public void testProxyRejectsServerWithUntrustedCertificate() throws Exception {
         // A proxy that intercepts TLS fails for the clients that check
         // certificates, so the test must fail too
-        try (ImpersonatingProxy proxy = new ImpersonatingProxy("activation.logicaldoc.com",
-                "<html><body></body></html>")) {
+        try (ImpersonatingProxy proxy = new ImpersonatingProxy("docs.healdan.com", "<html><body></body></html>")) {
             assertThrows(ServerException.class,
                     () -> testSubject.testProxy(proxy.getHost(), proxy.getPort(), null, null));
             assertNull(proxy.getRequest());
+        }
+    }
+
+    @Test
+    public void testProxyAsksForHealdanNotLogicalDoc() throws Exception {
+        // Healdan: the test goes to Healdan's docs site, never to LogicalDOC's
+        // licence server
+        try (ImpersonatingProxy proxy = new ImpersonatingProxy("docs.healdan.com", "<html><body></body></html>")) {
+            assertThrows(ServerException.class,
+                    () -> testSubject.testProxy(proxy.getHost(), proxy.getPort(), null, null));
+            assertEquals("CONNECT docs.healdan.com:443 HTTP/1.1", proxy.getConnect());
         }
     }
 }
