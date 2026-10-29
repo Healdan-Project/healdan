@@ -2,7 +2,9 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#107](https://github.com/Healdan-Project/healdan/issues/107)
 - **Date:** 2026-10-29
-- **Status:** approved by the owner on 2026-10-29.
+- **Status:** approved by the owner on 2026-10-29, and amended that day, with the owner, for licences (§3.1):
+  JAI, betelio and ksoap2 aren't hosted. The build drops JAI and betelio, and leaves `logicaldoc-webserviceclient`,
+  ksoap2's only user, out of the reactor.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
   - the failed `master` runs of `build-logicaldoc.yml` that day (40877494760, 40891327931, 40894089832), and the
@@ -27,12 +29,13 @@ SourceForge from the build, so a refusal there can't fail Healdan's build howeve
 
 ### Goals (done when)
 
-1. **Healdan hosts the 19 artifacts** at `https://maven.healdan.com/` (owner: the address), under the coordinates
-   upstream's POMs already use (§4).
+1. **Healdan hosts the artifacts whose licences allow it,** 15 of the 19, at `https://maven.healdan.com/` (owner: the
+   address), under the coordinates upstream's POMs already use (§4). The build drops the rest (§3.1).
 2. **No build contacts LogicalDOC.** A full build (GWT compile and WAR included) on an empty local repository
    records none of its artifacts as coming from the `logicaldoc` repository (§8).
-3. **No upstream POM changes.** A mirror in `docker/maven-settings.xml` sends the `logicaldoc` repository's
-   requests to Healdan's (§5). (owner: approach A)
+3. **Upstream POMs stay as they are,** apart from dropping jars whose licence doesn't allow hosting them (§3.1). A
+   mirror in `docker/maven-settings.xml` sends the `logicaldoc` repository's requests to Healdan's (§5). (owner:
+   approach A)
 4. **CI keeps it that way.** A check fails `build` when a POM or the settings file points a repository at a
    LogicalDOC host that the mirror doesn't cover (§6).
 5. **Syncs have a procedure.** When an upstream sync needs an artifact Healdan doesn't host yet, the sync PR imports
@@ -63,19 +66,19 @@ parent and no dependencies, so the set is self-contained. They come to about 54 
 
 | Coordinates | Used by | Notes |
 |---|---|---|
-| `betelio:betelio:1.0` | core (provided), webapp | No code references it |
+| `betelio:betelio:1.0` | core (provided), webapp | No code references it. Not hosted, and dropped (§3.1) |
 | `com.allen_sauer.gwt.dnd:gwt-dnd:3.0.1` | gui | Used by the GUI's copy of gwt-links' source. Central has `com.allen-sauer.gwt.dnd:gwt-dnd` 3.2.3 and later |
-| `com.google.code.ksoap2-android:ksoap2-android-assembly:3.3.0:jar-with-dependencies` | webserviceclient | Classifier `jar-with-dependencies` |
+| `com.google.code.ksoap2-android:ksoap2-android-assembly:3.3.0:jar-with-dependencies` | webserviceclient | Classifier `jar-with-dependencies`. Not hosted: its module leaves the build (§3.1) |
 | `com.google.gwt:gwt-incubator:2.1.0` | gui | Central stops at 2.0.1 |
 | `com.orange.links:gwt-links:1.4.2` | gui | Part of its source is copied into the GUI |
 | `com.smartgwt:smartgwt:14.1p` | gui | 42 MB. Isomorphic doesn't publish the LGPL build to Central |
 | `com.smartgwt:smartgwt-skins:14.1p` | gui (provided) | |
-| `com.sun.media:jai-codec:1.1.3` | core | In core's plugin assembly |
+| `com.sun.media:jai-codec:1.1.3` | core | In core's plugin assembly. Not hosted, and dropped (§3.1) |
 | `com.timgroup:jgravatar:1.2.ld` | core | LogicalDOC's build. Central has 1.2 |
 | `commons-fileupload:commons-fileupload:1.6.0-jakarta` | gui, webapp | LogicalDOC's Jakarta build. Central has 1.6.0 for `javax` only |
 | `gdurelle.tagcloud:tagcloud:0.4` | gui | |
 | `gwtchismes:gwtchismes:0.9.8` | gui | No code references it |
-| `javax.media:jai-core:1.1.3` | core | In core's plugin assembly. Central has `jai_core` |
+| `javax.media:jai-core:1.1.3` | core | Central has `jai_core`'s POM but not its jar. Not hosted, and dropped (§3.1) |
 | `net.sf.jpf:jpf:1.5.1` | every module | Central stops at 1.5 |
 | `net.sf.jpf:jpf-boot:1.5.1` | every module | |
 | `org.apache.jackrabbit:jackrabbit-jcr-commons:2.22.0-jakarta` | webdav | LogicalDOC's Jakarta builds. Apache's 2.22.0 is `javax` only |
@@ -86,6 +89,42 @@ parent and no dependencies, so the set is self-contained. They come to about 54 
 No POM declares `pluginRepositories`, so every plugin already comes from Central.
 
 The first import takes its list from a fresh build, not from this table (§4.3).
+
+### 3.1 Licences
+
+A jar is hosted only when its licence allows public redistribution. One that doesn't, and that nothing references,
+is dropped from the build instead. One that's referenced goes to the owner. (owner) On 2026-10-29 a licence audit
+read every jar's files, source headers and stub POM, and each upstream project's pages. It found:
+
+- **Not hosted, and out of the build:** (owner)
+  - **JAI** (`jai-core`, `jai-codec`). Sun's Binary Code License, and its POM marks distribution `manual`: Central
+    carries the POM but not the jar. A scan of every jar in a local Maven repository built from this repository,
+    for JAI's class references and its dotted names, found nothing outside JAI's own jars, and no file here names it.
+    `logicaldoc-core` drops it.
+  - **betelio.** No licence and no confirmed author. It's a 2006 upload-progress helper for Commons FileUpload that
+    needs DWR 1.x and `javax.servlet`, neither of which is in the build. Nothing references `be.telio`.
+    `logicaldoc-core` and `logicaldoc-webapp` drop it.
+  - **ksoap2-android-assembly.** MIT, but its bundled kObjects code is partly GPLv2 and partly unlicensed. Its only
+    user is `logicaldoc-webserviceclient`, a SOAP client library that no module depends on and nothing ships, so
+    that module leaves the reactor, as `logicaldoc-webservicesamples` already has. An Android client, if Healdan
+    builds one, would use the JSON API. (owner)
+- **Hosted,** with the licence texts the jars lack in the repository's `LICENSES/` (§4.2). The owner is reasonably
+  assured of these licences. (owner)
+  - **Apache-2.0:** gwt-dnd, gwtchismes, gwtexporter, gwt-incubator (which bundles JavaSWF under BSD-3-Clause and
+    W3C's CSS parser under W3C's notice), and gwt-links and tagcloud, whose licences are declared only on their
+    Google Code project pages.
+  - **Apache-2.0, LogicalDOC's modified builds:** commons-fileupload `1.6.0-jakarta`, which has no LICENSE or
+    NOTICE inside, and the three Jackrabbit `2.22.0-jakarta` jars, of which `jcr-server` lacks its NOTICE. The
+    README says they're modified, and `LICENSES/` carries Apache's text and the upstream NOTICEs.
+  - **LGPL-2.1:** JPF and jpf-boot. The jars contain no source, so the README points to JPF's.
+  - **LGPL-3.0:** SmartGWT and its skins, Isomorphic's LGPL edition. Its Java sources and Isomorphic's licensing FAQ
+    say LGPL-3.0, though 342 of its debug and tool JavaScript files carry Isomorphic's proprietary boilerplate. The
+    README notes that.
+  - **BSD-3-Clause (or LGPL-3.0):** jgravatar, which bundles Guava under Apache-2.0.
+
+**Later.** When the old GWT UI retires (the roadmap's Admin app, then retiring the old UI), `logicaldoc-gui` and its
+eight GWT libraries leave the build: SmartGWT and its skins, gwt-links, gwt-dnd, gwt-incubator, tagcloud,
+gwtexporter and gwtchismes. The hosted repository keeps them for old tags. (owner)
 
 ## 4. The repository
 
@@ -107,7 +146,10 @@ hosting ever moves off Pages. (call)
 - `CNAME` (`maven.healdan.com`) and `.nojekyll`, so Pages serves every path as it is.
 - `README.md`, with a table of every artifact: its coordinates, its upstream project, its licence and where it came
   from (for the first import, `logicaldoc.sourceforge.net` on the import date). Healdan's image already ships these
-  jars, so hosting them adds no new redistribution. The table makes that visible.
+  jars, so hosting them adds no new redistribution. The table makes that visible. A Not Hosted table lists what
+  stays out and why (§3.1).
+- `LICENSES/`, with the licence texts and NOTICE files the hosted jars lack: Apache-2.0, LGPL-2.1, LGPL-3.0 and
+  GPL-3.0 (which LGPL-3.0 builds on), and the NOTICEs of Apache Commons FileUpload and Apache Jackrabbit (§3.1).
 - `import.sh`, §4.3.
 
 Old versions stay when a new one arrives, so old tags keep building.
@@ -124,7 +166,8 @@ writes the files and their `.sha1`s into the layout, and adds the artifact's REA
 - Files only get in through the script, so the repository's history says where every artifact came from.
 
 The first import's list comes from a full build (GWT compile and WAR included) on an empty local repository, with
-today's settings. Every artifact that build records as coming from `logicaldoc` gets imported. It should match §3.
+today's settings, once the drops of §3.1 are in. Every artifact that build records as coming from `logicaldoc` gets
+imported. It should match §3's hosted artifacts.
 
 ### 4.4 Setup
 
@@ -157,8 +200,8 @@ repository, whatever URL a POM gives it. Central and Terracotta stay as they are
   changes.
 - **The mirror's id shows in errors.** A missing artifact reads `Could not find artifact … in healdan
   (https://maven.healdan.com/)`, which says where to look.
-- **Caches.** Local repositories, CI's cache and the Docker build's cache record the 19 as coming from `logicaldoc`,
-  which doesn't match `healdan`. Each fetches them again from Healdan's repository once (about 54 MB). Artifacts from
+- **Caches.** Local repositories, CI's cache and the Docker build's cache record the hosted artifacts as coming from
+  `logicaldoc`, which doesn't match `healdan`. Each fetches them again from Healdan's repository once (about 50 MB). Artifacts from
   Central stay cached.
 
 ## 6. The guard
@@ -183,8 +226,10 @@ When a sync bumps a hosted artifact (SmartGWT is the likeliest) or brings in a n
 sync PR's build fails within a few minutes at dependency resolution, with "not found in healdan". The fix goes in
 the sync PR itself, as a merge fix like the Font Awesome icons:
 
-1. In a checkout of `Healdan-Project/maven`, run `import.sh` for each missing artifact and push.
-2. Once Pages has published it, re-run the sync PR's CI.
+1. Check the artifact's licence allows hosting it. One that doesn't is dropped from the build instead, as in §3.1,
+   and goes in the README's Not Hosted table. One that's referenced goes to the owner.
+2. In a checkout of `Healdan-Project/maven`, run `import.sh` for each missing artifact and push.
+3. Once Pages has published it, re-run the sync PR's CI.
 
 This gives a deliberate point to look at what LogicalDOC ships before Healdan builds with it.
 
@@ -195,7 +240,10 @@ This gives a deliberate point to look at what LogicalDOC ships before Healdan bu
   each fail with file and line, `<distributionManagement>` is ignored, and a settings file without the mirror fails.
 - **A clean build before the PR.** `mvn -B -ntp -DskipTests install` (GWT compile and WAR included), with the new
   settings and `-Dmaven.repo.local` set to an empty directory. Afterwards no `_remote.repositories` record names
-  `logicaldoc`, and the artifacts of §3 name `healdan`.
+  `logicaldoc`, and the hosted artifacts of §3 name `healdan`.
+- **The drops.** Core's plugin zip and dependency tree have no JAI or betelio, the WAR's dependency tree has no
+  betelio, and the reactor builds without `logicaldoc-webserviceclient`. Core's imaging tests (`ImageUtilTest`,
+  `PDFImageExtractorTest`) and Healdan's tests pass. CI's Docker smoke test runs the WAR.
 - **The PR's CI.** The eight test shards, both Docker image builds and the smoke test all resolve through the
   mirror.
 
@@ -204,12 +252,14 @@ This gives a deliberate point to look at what LogicalDOC ships before Healdan bu
 In the same PR:
 
 - `CLAUDE.md`:
-  - "Build and test": the extra repositories are now Healdan's (via the mirror) and Terracotta's;
+  - "Build and test": the extra repositories are now Healdan's (via the mirror) and Terracotta's, and
+    `logicaldoc-webserviceclient` joins `logicaldoc-webservicesamples` outside the reactor;
   - the CI cache bullet: drop the note that `logicaldoc.sourceforge.net` sometimes refuses requests;
   - "If CI fails within a minute": add the repository check and the "not found in healdan" error;
   - a bullet on importing a hosted artifact during a sync (§7).
 - The Developer Guide:
-  - Building from Source (`site/content/developer/building-from-source.md`, "Two extra Maven repositories");
+  - Building from Source (`site/content/developer/building-from-source.md`: "Two extra Maven repositories", and
+    the modules outside the build);
   - Continuous Integration (`site/content/developer/continuous-integration.md`): the `build` row of the checks
     table, and "Things That Catch Upstream Syncs".
 
@@ -228,5 +278,16 @@ move: the custom domain lets it go elsewhere without changing a settings file.
 
 ## 11. Upstream edits
 
-None. Every change is in Healdan's own files: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/` and
+Each drops something whose licence doesn't allow hosting it (§3.1):
+
+- **`logicaldoc-core/pom.xml`:** drop the `javax.media:jai-core`, `com.sun.media:jai-codec` and `betelio:betelio`
+  dependencies. Nothing references them.
+- **`logicaldoc-webapp/pom.xml`:** drop the `betelio:betelio` dependency.
+- **`pom.xml`** (the root POM, which already lists Healdan's modules): drop
+  `<module>logicaldoc-webserviceclient</module>`, ksoap2's only user. No module depends on it.
+
+The parent POM's `dependencyManagement` entries and core's assembly includes (`javax.media:*`, `com.sun.media:*`)
+stay. They download nothing, and leaving them keeps the edits small.
+
+Every other change is in Healdan's own files: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/` and
 this spec.
