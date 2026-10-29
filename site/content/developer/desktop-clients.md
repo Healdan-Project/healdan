@@ -175,7 +175,9 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   answer. A confirmation answers only once nothing newer is on its way, so the title never stops a version behind.
   A save Healdan refuses for good, or one that fails, answers the same way.
   While the answer says `pending`, the extension asks again after 2, 5, 15, 30, then every 60 seconds, so the title
-  moves on once Healdan is back, however long it was away.
+  moves on once Healdan is back, however long it was away. It asks the same way while the helper can't be reached,
+  which keeps the save on the computer until it's back to send it. Following ends when the window closes, a newer save
+  of the copy takes over, or the copy is saved elsewhere.
 
 - **A second helper's link:** only one helper runs for each user. macOS starts another copy of the app when the copy
   it hands `healdan:` links to isn't the one running, such as an old one in `/Applications` beside a newer one, and
@@ -218,9 +220,12 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   alone.
 - **Long calls** run on a thread of their own while LibreOffice's thread keeps its events going, and what they change
   in the document goes back to LibreOffice's thread.
-- **When the helper can't be reached,** Open and Save fall back to LibreOffice's own boxes, with one notice. A copy's
-  save is still stored, and the helper sends it once it's back. An unexpected error before any helper window was
-  shown falls back the same way.
+- **When the helper can't be reached,** Open and Save fall back to LibreOffice's own boxes, with one notice until the
+  helper answers again. An unexpected error before any helper window was shown falls back the same way.
+  - A copy's save is still stored, and followed like any other until the helper is back and sends it.
+  - Once the helper answers anything, an error included, the infobars saying it isn't running go from the windows
+    still showing one (`withdraw` in `healdan.py`). Every notice goes through `Flows.tell`, so `Flows` knows which
+    windows those are, and leaves a window whose infobar a later notice has replaced.
 
 `clients/libreoffice/build.sh` packages it as `healdan.oxt`, the same bytes from the same sources.
 

@@ -228,6 +228,15 @@ class Ui:
         except Exception:
             self.ext.log.exception("The notice couldn't be shown: %s", text)
 
+    def withdraw(self, doc):
+        """Takes the extension's infobar out of the document's window, if it shows one."""
+        try:
+            controller = doc.frame.getController()
+            if controller is not None and hasattr(controller, "hasInfobar") and controller.hasInfobar(INFOBAR):
+                controller.removeInfobar(INFOBAR)
+        except Exception:
+            self.ext.log.exception("The infobar couldn't be removed")
+
 
 class Doc:
     """healdan_logic.Flows' doc (see there): a LibreOffice document, through its model."""
@@ -595,7 +604,7 @@ class Extension:
     def failed(self, frame, command, error):
         """What escapes the flows is LibreOffice's own command failing: logged, and told briefly."""
         self.log.error("%s failed: %s", command, logic.said(error))
-        self.ui.tell(self.doc_for(frame), logic.FAILED_AFTER.format(error=logic.said(error)))
+        self.flows.tell(self.doc_for(frame), logic.FAILED_AFTER.format(error=logic.said(error)))
 
     # -- Recent Documents
 

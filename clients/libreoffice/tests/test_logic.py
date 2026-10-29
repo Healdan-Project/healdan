@@ -446,6 +446,9 @@ class FakeUi:
     def __init__(self, log):
         self.log = log
         self.told = []
+        self.shown = {}  # the notice each window shows, by its doc
+        self.withdrawn = []  # the windows whose notice was taken away
+        self.held = None  # a list while background calls wait for run_later(); else they run at once
 
     def wait(self, fn):
         self.log.append("wait")
@@ -453,12 +456,29 @@ class FakeUi:
 
     def later(self, fn):
         self.log.append("later")
+        if self.held is not None:
+            self.held.append(fn)
+            return
         then = fn()
         if callable(then):
             then()
 
+    def run_later(self):
+        """Runs the background calls held so far; any they start wait for the next run."""
+        held, self.held = self.held, []
+        for fn in held:
+            then = fn()
+            if callable(then):
+                then()
+
     def tell(self, doc, text, warning=True):
         self.told.append(text)
+        if doc is not None:
+            self.shown[doc] = text
+
+    def withdraw(self, doc):
+        self.withdrawn.append(doc)
+        self.shown.pop(doc, None)
 
 
 class FakeDoc:
@@ -990,21 +1010,149 @@ class FlowsTest(unittest.TestCase):
         self.assertEqual(["saved"], channel.routes())
         self.assertEqual([], self.slept)
 
-    def test_following_stops_quietly_once_the_helper_has_gone(self):
-        waiting = dict(self.state("Lease #1 v1.0.odt", n=1), pending=True)
-        channel = FakeChannel(saved=[waiting, logic.ChannelUnreachable("gone")])
-        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
-        self.flows(channel).command(".uno:Save", doc, self.original())
-        self.assertEqual(["saved", "saved"], channel.routes())
-        self.assertEqual([logic.HELPER_DOWN_SAVE], self.ui.told)
-
     def test_save_on_copy_with_the_helper_down_still_stores(self):
+        self.ui.held = []
         channel = FakeChannel(saved=logic.ChannelUnreachable("gone"))
         doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
         self.assertTrue(self.flows(channel).command(".uno:Save", doc, self.original()))
+        self.ui.run_later()
         self.assertEqual(("store",), self.log[0])
         self.assertEqual([logic.HELPER_DOWN_SAVE], self.ui.told)
         self.assertNotIn("original", self.log)
+
+    def test_a_save_is_followed_while_the_helper_is_away_until_it_answers(self):
+        # Quit the helper, save, start it again: it sends the kept save, and the title moves on.
+        path = os.path.join(self.copies, "Lease #1 v1.0.odt")
+        gone = logic.ChannelUnreachable("gone")
+        stored = dict(self.state("Lease #1 v1.1.odt", n=1, version="1.1"), path=path, pending=False)
+        channel = FakeChannel(saved=[gone, gone, gone, stored])
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"), title="Lease #1 v1.0", has_doc_id=True)
+        self.assertTrue(self.flows(channel).command(".uno:Save", doc, self.original()))
+        self.assertEqual(["saved"] * 4, channel.routes())
+        self.assertEqual(list(logic.FOLLOW_BACKOFF[:3]), self.slept)
+        self.assertEqual("Lease #1 v1.1", doc.title)
+        self.assertEqual("#1 v1.1", doc.doc_id)
+        self.assertEqual([logic.HELPER_DOWN_SAVE], self.ui.told)  # once, however long it's away
+
+    def test_a_save_still_on_its_way_is_followed_when_the_helper_goes_meanwhile(self):
+        path = os.path.join(self.copies, "Lease #1 v1.0.odt")
+        waiting = dict(self.state("Lease #1 v1.0.odt", n=1), pending=True)
+        stored = dict(self.state("Lease #1 v1.1.odt", n=1, version="1.1"), path=path, pending=False)
+        channel = FakeChannel(saved=[waiting, logic.ChannelUnreachable("gone"), stored])
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+        self.flows(channel).command(".uno:Save", doc, self.original())
+        self.assertEqual(["saved"] * 3, channel.routes())
+        self.assertEqual(list(logic.FOLLOW_BACKOFF[:2]), self.slept)
+        self.assertEqual("Lease #1 v1.1", doc.title)
+
+    def test_the_helper_down_notice_goes_once_the_helper_answers(self):
+        self.ui.held = []
+        path = os.path.join(self.copies, "Lease #1 v1.0.odt")
+        stored = dict(self.state("Lease #1 v1.1.odt", n=1, version="1.1"), path=path)
+        channel = FakeChannel(saved=[logic.ChannelUnreachable("gone"), stored])
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+        read_only = FakeDoc(self.log, url=self.copy_url("Memo #2 v1.0 (read-only).odt"), read_only=True)
+        flows = self.flows(channel)
+        flows.command(".uno:Save", doc, self.original())
+        self.ui.run_later()  # the helper's away
+        flows.save_as_new_version(read_only, self.original())  # another window, another notice
+        self.assertEqual({doc: logic.HELPER_DOWN_SAVE, read_only: logic.READ_ONLY_VERSION}, self.ui.shown)
+        self.ui.run_later()  # the helper's back, and answers
+        self.assertEqual([doc], self.ui.withdrawn)
+        self.assertEqual({read_only: logic.READ_ONLY_VERSION}, self.ui.shown)
+
+    def test_each_helper_down_notice_goes_once_the_helper_answers_anything(self):
+        gone = logic.ChannelUnreachable("gone")
+        steps = {
+            logic.HELPER_DOWN_BOX: lambda flows, doc: flows.command(".uno:SaveAs", doc, self.original()),
+            logic.HELPER_DOWN_OTHER: lambda flows, doc: flows.properties(doc, self.original()),
+            logic.HELPER_DOWN_SAVE: lambda flows, doc: flows.save_as_new_version(doc, self.original()),
+        }
+        for notice, step in steps.items():
+            with self.subTest(notice=notice):
+                self.ui = FakeUi(self.log)
+                self.ui.held = []  # a save's following waits
+                channel = FakeChannel(save_new=gone, properties=gone, new_version=gone)
+                doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+                flows = self.flows(channel)
+                step(flows, doc)
+                self.assertEqual({doc: notice}, self.ui.shown)
+                channel.answers = {"open-dialog": {"action": "cancel"}}
+                flows.open_from_healdan(None, self.original())  # from the Start Center
+                self.assertEqual([doc], self.ui.withdrawn)
+                self.assertEqual({}, self.ui.shown)
+
+    def test_an_error_answer_still_means_the_helper_is_running(self):
+        channel = FakeChannel(properties=logic.ChannelUnreachable("gone"), open_dialog=logic.ChannelError(500))
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+        flows = self.flows(channel)
+        flows.properties(doc, self.original())
+        flows.open_from_healdan(None, self.original())
+        self.assertEqual([doc], self.ui.withdrawn)
+        flows.properties(doc, self.original())  # away again: told again
+        self.assertEqual([logic.HELPER_DOWN_OTHER] * 2, self.ui.told)
+
+    def test_a_notice_that_replaced_the_helper_down_one_stays(self):
+        self.ui.held = []
+        path = os.path.join(self.copies, "Lease #1 v1.0.odt")
+        stored = dict(self.state("Lease #1 v1.1.odt", n=1, version="1.1"), path=path)
+        channel = FakeChannel(saved=[logic.ChannelUnreachable("gone"), stored])
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"), title="Lease #1 v1.0")
+        flows = self.flows(channel)
+        flows.command(".uno:Save", doc, self.original())
+        self.ui.run_later()  # the helper's away
+        doc.fail["store"] = OSError("disk full")
+        flows.command(".uno:Save", doc, self.original())  # the window's notice now says why the save failed
+        self.ui.run_later()  # the helper answers the first save
+        self.assertEqual("Lease #1 v1.1", doc.title)
+        self.assertEqual([], self.ui.withdrawn)
+        self.assertEqual({doc: logic.STORE_FAILED.format(error="disk full")}, self.ui.shown)
+
+    def test_a_notice_told_through_the_flows_from_outside_replaces_the_helper_down_one(self):
+        # healdan.py tells of LibreOffice's own command failing through Flows.tell, with a new doc for the window.
+        channel = FakeChannel(properties=logic.ChannelUnreachable("gone"), open_dialog={"action": "cancel"})
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+        again = FakeDoc(self.log, url=doc.url)
+        again.model = doc.model
+        flows = self.flows(channel)
+        flows.properties(doc, self.original())
+        flows.tell(again, logic.FAILED_AFTER.format(error="disk full"))
+        flows.open_from_healdan(None, self.original())
+        self.assertEqual([], self.ui.withdrawn)
+
+    def test_following_stops_once_the_window_has_closed_while_the_helper_is_away(self):
+        self.ui.held = []
+        gone = logic.ChannelUnreachable("gone")
+        channel = FakeChannel(saved=[gone, gone], closed={})
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+        flows = self.flows(channel)
+        flows.command(".uno:Save", doc, self.original())
+        self.ui.run_later()  # the helper's away: told, and asked again after a pause
+        doc.alive = False  # closed: LibreOffice's OnUnload
+        flows.window_closed(doc.model)
+        flows.closed(doc.url, still_open=False)
+        self.ui.run_later()
+        self.assertEqual(["saved", "closed"], channel.routes())  # not asked again after the pause
+        self.assertEqual([], self.ui.held)
+        self.assertEqual([], self.ui.withdrawn)  # its notice went with its window
+
+    def test_a_newer_save_takes_the_following_over_while_the_helper_is_away(self):
+        self.ui.held = []
+        path = os.path.join(self.copies, "Lease #1 v1.0.odt")
+        gone = logic.ChannelUnreachable("gone")
+        stored = dict(self.state("Lease #1 v1.2.odt", n=1, version="1.2"), path=path)
+        channel = FakeChannel(saved=[gone, gone, stored])
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.0.odt"))
+        flows = self.flows(channel)
+        flows.command(".uno:Save", doc, self.original())
+        self.ui.run_later()  # the helper's away
+        flows.command(".uno:Save", doc, self.original())
+        self.ui.run_later()  # the first save's following ends after its pause; the second's is asked
+        self.ui.run_later()
+        self.assertEqual(["saved"] * 3, channel.routes())
+        self.assertEqual([logic.FOLLOW_BACKOFF[0]] * 2, self.slept)
+        self.assertEqual("Lease #1 v1.2", doc.title)
+        self.assertEqual([], self.ui.held)
 
     def test_save_on_copy_that_fails_is_told(self):
         channel = FakeChannel()
@@ -1066,11 +1214,21 @@ class FlowsTest(unittest.TestCase):
         self.assertNotIn(("store",), self.log)
 
     def test_new_version_with_the_helper_down_keeps_the_changes(self):
-        channel = FakeChannel(new_version=logic.ChannelUnreachable("gone"))
+        path = os.path.join(self.copies, "Lease #1 v1.2.odt")
+        gone = logic.ChannelUnreachable("gone")
+        stored = dict(self.state("Lease #1 v1.3.odt", n=1, version="1.3"), path=path)
+        channel = FakeChannel(new_version=gone, saved=[gone, stored])
         doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.2.odt"), modified=True)
         self.assertFalse(self.flows(channel).save_as_new_version(doc, self.original()))
         self.assertIn(("store",), self.log)
         self.assertEqual([logic.HELPER_DOWN_SAVE], self.ui.told)
+        self.assertEqual("Lease #1 v1.3", doc.title)  # followed like any save, once the helper's back
+
+    def test_new_version_with_the_helper_down_and_no_changes_follows_nothing(self):
+        channel = FakeChannel(new_version=logic.ChannelUnreachable("gone"))
+        doc = FakeDoc(self.log, url=self.copy_url("Lease #1 v1.2.odt"), modified=False)
+        self.assertFalse(self.flows(channel).save_as_new_version(doc, self.original()))
+        self.assertEqual(["new-version"], channel.routes())
 
     def test_new_version_on_a_read_only_copy_is_refused(self):
         channel = FakeChannel()
