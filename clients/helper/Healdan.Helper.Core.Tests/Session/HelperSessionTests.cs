@@ -872,6 +872,70 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task ASignInToAnotherServerRefusedForAMoveThatFailedChangesNothing()
+    {
+        if (OperatingSystem.IsWindows())
+            return;
+        SignedInBefore();
+        _keychain.Items.Clear(); // no kept token, so the start asks for a sign-in, and the user types another server
+        var (path, _, _) = new CopyStore(Paths, Account).Create(View(5), false, "LibreOffice");
+        File.WriteAllText(path, "healdan.test's document 5");
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInAsync("https://second.test", "robert", Password);
+            return false;
+        };
+        File.SetUnixFileMode(Paths.Copies, UnixFileMode.UserRead | UnixFileMode.UserExecute); // nothing can leave it
+        try
+        {
+            var session = Make();
+            await session.StartAsync();
+
+            Assert.Contains("couldn't move the copies from healdan.test out of the way", refusal);
+            Assert.Equal(Account, HelperSettings.Load(Paths).Server);
+            Assert.False(session.Started);
+            Assert.False(session.SignedIn);
+            Assert.True(File.Exists(path));
+            Assert.Empty(session.CopiesAside());
+        }
+        finally
+        {
+            File.SetUnixFileMode(Paths.Copies, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+    }
+
+    [Fact]
+    public async Task ACopyOpenInAnAppWhenAnotherServerSignsInIsLookedAfterAsOpenWhenItsServerReturns()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var path = await OpenAsync(session);
+        var lockFile = FakeApp.LockPath(path);
+        await session.SignOutAsync();
+        Assert.True(File.Exists(path)); // still checked out on healdan.test, so its copy stays
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync("https://second.test", "robert", Password) is null;
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.False(File.Exists(path));
+        Assert.True(File.Exists(Path.Combine(_root, "Copies from healdan.test", Path.GetFileName(path))));
+        Assert.True(File.Exists(lockFile)); // the app deletes its lock file by the path it opened, so it stays
+        await session.SignOutAsync();
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(Account, "robert", Password) is null;
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.True(File.Exists(path));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.test")));
+        Assert.True(File.Exists(lockFile));
+        Assert.Equal(path, Assert.Single(session.OpenCopies()).Path); // the cycle looks after it as open
+    }
+
+    [Fact]
     public async Task ASetAsideCopyOpenInAnAppComesBackOnceClosed()
     {
         var (path, _, _) = new CopyStore(Paths, Account).Create(View(5), false, "LibreOffice");

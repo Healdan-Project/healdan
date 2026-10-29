@@ -6,7 +6,9 @@ namespace Healdan.Helper.Core.Copies;
 
 /// <summary>
 /// The local copies in the helper's one private folder, and the record kept beside each (spec §5.4), for the server at
-/// <paramref name="server"/>'s address, which each new copy's record names. Never deletes the folder, or anything but
+/// <paramref name="server"/>'s address, which each new copy's record names. A store for a server sees only that
+/// server's copies, and those from before records named one (<see cref="All"/>): another server's copy is never taken
+/// for this one's, even when it lands in the folder while the helper runs. Never deletes the folder, or anything but
 /// the files of the copy it is told to delete.
 /// </summary>
 public sealed class CopyStore(HelperPaths paths, string? server = null)
@@ -26,6 +28,9 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// no usable record, a record with no confirmed hash is written for it, so it counts as unconfirmed and is kept.
     /// Otherwise the record is written, carrying <c>CheckedOutHere</c> and <c>LastSaveId</c> over from a record already
     /// at that path. Other copies of the document, at other paths, are left alone.
+    /// A copy at the target path whose record names another server isn't this document's, though the doc # may match:
+    /// it is set aside first (<see cref="MoveCopy"/>), whatever its changes, and the new copy starts as any other, with
+    /// nothing carried over from it and nothing downloaded over it.
     /// <para><c>Existing</c> is true when the path already holds a copy the helper must keep (one with unconfirmed
     /// changes, or an unrecorded file): the caller reopens it and must not download over it. It is false for a new copy,
     /// and for a path whose copy Healdan had confirmed, which is safe to refresh.</para>
@@ -42,7 +47,15 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             CopyNames.FileName(doc.Name, doc.DocNumber, doc.FileVersion, readOnly), Server: server);
         var path = PathOf(record);
         var existing = false;
-        if (Find(path) is (_, var old))
+        var found = Find(path);
+        if (found is (_, var theirs) && !Ours(theirs))
+        {
+            var name = System.IO.Path.GetFileName(path);
+            MoveCopy(paths.Copies, AsideFolder(theirs.Server!, [name, CopyNames.RecordName(name)]), name);
+            lock (_hashes)
+                _hashes.Remove(name);
+        }
+        else if (found is (_, var old))
             record = record with { CheckedOutHere = old.CheckedOutHere, LastSaveId = old.LastSaveId };
         else
             existing = File.Exists(path); // a file with no usable record: protect it, report it
@@ -84,9 +97,16 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         }
     }
 
-    /// <summary>Every copy with a readable record; a damaged record is skipped.</summary>
+    /// <summary>
+    /// Every copy with a readable record that this store's server owns, or that names none; a damaged record is skipped.
+    /// Another server's record is left out, so a copy of that server's, which can share a doc # with one of this
+    /// server's, is never taken for it. A store with no server returns every record.
+    /// </summary>
     public IReadOnlyList<(string Path, CopyRecord Record)> All() =>
-        Directory.Exists(paths.Copies) ? Records(paths.Copies).Select(r => (PathOf(r), r)).ToList() : [];
+        Directory.Exists(paths.Copies) ? Records(paths.Copies).Where(Ours).Select(r => (PathOf(r), r)).ToList() : [];
+
+    /// <summary>Whether the record is this store's server's, or from before records named a server.</summary>
+    private bool Ours(CopyRecord r) => server is null || r.Server is null || ServerAddress.Same(r.Server, server);
 
     public (string, CopyRecord)? Find(string path)
     {
@@ -191,8 +211,9 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// it written in as it moves, so it can come back there. When <paramref name="unrecorded"/> isn't
     /// <paramref name="keep"/>, anything else in the folder goes to that server's folder too, such as a copy with no
     /// usable record, except an app's lock and owner files (<see cref="CopyNames.IsAppFile"/>), which the app deletes
-    /// by the path it opened, and a download's temporary part, which the resume sweeps. Copies itself stays, so an app's
-    /// access to it does too. A move that fails throws; the copies moved before it stay moved.
+    /// by the path it opened, a download's temporary part, which the resume sweeps, and Finder's <c>.DS_Store</c>, which
+    /// is no one's. Copies itself stays, so an app's access to it does too. A move that fails throws; the copies moved
+    /// before it stay moved. It reads every server's records, not just the store's (<see cref="All"/>).
     /// </summary>
     /// <param name="keep">The address of the server whose copies stay, such as <c>https://healdan.example</c>.</param>
     /// <param name="unrecorded">The address of the server that records without one, and files without a record, belong to.</param>
@@ -202,9 +223,9 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             return [];
         var moved = new List<(string Server, string Folder, bool Copy)>();
         var stays = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (path, record) in All())
+        foreach (var record in Records(paths.Copies)) // every server's, which All() leaves out
         {
-            var name = System.IO.Path.GetFileName(path);
+            var name = record.FileName;
             var owner = record.Server ?? unrecorded;
             if (ServerAddress.Same(owner, keep))
             {
@@ -220,7 +241,7 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         {
             var strays = Directory.EnumerateFileSystemEntries(paths.Copies)
                 .Select(entry => System.IO.Path.GetFileName(entry))
-                .Where(name => !stays.Contains(name) && !CopyNames.IsAppFile(name) && !IsPart(name))
+                .Where(name => !stays.Contains(name) && !CopyNames.IsAppFile(name) && !IsPart(name) && name != FinderFile)
                 .Order(StringComparer.Ordinal)
                 .ToList();
             if (strays.Count > 0)
@@ -309,6 +330,12 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         }
     }
 
+    /// <summary>
+    /// Finder's file for a folder's view settings, which it writes into any folder the user opens, such as a
+    /// <c>Copies from</c> one. It is not a copy, so it isn't set aside, and it doesn't keep a folder from counting as empty.
+    /// </summary>
+    private const string FinderFile = ".DS_Store";
+
     /// <summary>A download's temporary part (<c>.healdan-*.part</c>), which the resume sweeps.</summary>
     private static bool IsPart(string name) =>
         name.StartsWith(".healdan-", StringComparison.Ordinal) && name.EndsWith(".part", StringComparison.Ordinal);
@@ -318,7 +345,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// (<see cref="MoveCopy"/>), from every <c>Copies from</c> folder beside it, and says how many came back and which
     /// stayed. One stays aside while an app's lock or owner file beside it says it's open there, and when Copies already
     /// has something of its name; a move that fails leaves it aside too. Each is tried again at the next start. A folder
-    /// left empty is removed. A record without a server is never brought back.
+    /// left empty is removed, and so is one left holding nothing but Finder's <c>.DS_Store</c>, which goes with it:
+    /// nothing else is ever deleted. A record without a server is never brought back.
     /// </summary>
     public BroughtBack BringBack(string server)
     {
@@ -356,8 +384,13 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             }
             try
             {
-                if (!Directory.EnumerateFileSystemEntries(folder).Any())
+                var left = Directory.EnumerateFileSystemEntries(folder).ToList();
+                if (left.All(entry => System.IO.Path.GetFileName(entry) == FinderFile && File.Exists(entry)))
+                {
+                    foreach (var entry in left)
+                        File.Delete(entry);
                     Directory.Delete(folder);
+                }
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {

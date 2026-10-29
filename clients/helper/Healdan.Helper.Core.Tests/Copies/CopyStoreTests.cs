@@ -453,6 +453,101 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void AStoreForAServerListsOnlyItsCopies()
+    {
+        var a = Write(A, 1);
+        var b = Write(B, 2, "Other.docx");
+        var old = Write(null, 3, "Old.docx"); // from before records named their server
+
+        Assert.Equal(new[] { a, old }.Order(StringComparer.Ordinal), Store(A).All().Select(c => c.Path).Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { b, old }.Order(StringComparer.Ordinal), Store(B).All().Select(c => c.Path).Order(StringComparer.Ordinal));
+        Assert.Equal(3, new CopyStore(Paths).All().Count); // a store with no server sees every record
+    }
+
+    [Fact]
+    public void CreateSetsAsideAnotherServersCopyAtTheTargetPathNotTakingItForItsOwn()
+    {
+        var (path, theirs, _) = Store(B).Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(path, "localhost:8080's document 1, edited");
+        Store(B).Save(theirs with { CheckedOutHere = true, LastSaveId = "s1" }); // unconfirmed, and checked out there
+
+        var (again, record, existing) = Store(A).Create(Doc(1), false, "LibreOffice");
+
+        Assert.Equal(path, again); // the same name, for this server's document 1
+        Assert.False(existing);
+        Assert.Equal(A, record.Server);
+        Assert.False(record.CheckedOutHere);
+        Assert.Null(record.LastSaveId);
+        Assert.False(File.Exists(path)); // nothing of B's left to download over
+        var aside = Path.Combine(_root, "Copies from localhost-8080");
+        Assert.Equal("localhost:8080's document 1, edited", File.ReadAllText(Path.Combine(aside, Path.GetFileName(path))));
+        var kept = RecordIn(aside, path);
+        Assert.Equal(B, kept.Server);
+        Assert.True(kept.CheckedOutHere);
+        Assert.Equal("s1", kept.LastSaveId);
+        Assert.Equal(A, RecordIn(Paths.Copies, path).Server);
+        Assert.Equal(A, Assert.Single(Store(A).All()).Record.Server);
+    }
+
+    [Fact]
+    public void CreateSetsAsideAnotherServersConfirmedCopyAtTheTargetPathToo()
+    {
+        var (path, theirs, _) = Store(B).Create(Doc(1), false, "LibreOffice");
+        File.WriteAllText(path, "x");
+        Store(B).Save(theirs with { ConfirmedHash = Hash(path), CheckedOutHere = true, LastSaveId = "s9" });
+
+        var (_, record, existing) = Store(A).Create(Doc(1), false, "LibreOffice");
+
+        Assert.False(existing);
+        Assert.Equal(A, record.Server);
+        Assert.False(record.CheckedOutHere); // B's check-out isn't carried over to A's document
+        Assert.Null(record.LastSaveId);
+        var kept = RecordIn(Path.Combine(_root, "Copies from localhost-8080"), path);
+        Assert.Equal(B, kept.Server);
+        Assert.True(kept.CheckedOutHere);
+        Assert.Equal("s9", kept.LastSaveId);
+    }
+
+    [Fact]
+    public void FindersFileInCopiesIsNotAStrayAtASignIn()
+    {
+        Directory.CreateDirectory(Paths.Copies);
+        var finder = Path.Combine(Paths.Copies, ".DS_Store");
+        File.WriteAllText(finder, "Finder's view settings");
+
+        Assert.Empty(Store(B).SetAside(B, A)); // nothing to announce for it alone
+        Assert.True(File.Exists(finder));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.example")));
+
+        var stray = Path.Combine(Paths.Copies, "Stray #4 v1.0.docx");
+        File.WriteAllText(stray, "no record");
+        var moved = Assert.Single(Store(B).SetAside(B, A));
+
+        Assert.Equal(0, moved.Count);
+        Assert.True(File.Exists(Path.Combine(moved.Folder, "Stray #4 v1.0.docx")));
+        Assert.True(File.Exists(finder)); // it stays whatever else moves
+        Assert.False(File.Exists(Path.Combine(moved.Folder, ".DS_Store")));
+    }
+
+    [Fact]
+    public void AnAsideFolderLeftWithOnlyFindersFileIsRemoved()
+    {
+        Write(A, 1);
+        var b = Write(B, 2, "Other.docx");
+        Store("https://third.test").SetAside("https://third.test", "https://third.test");
+        var forA = Path.Combine(_root, "Copies from healdan.example");
+        var forB = Path.Combine(_root, "Copies from localhost-8080");
+        File.WriteAllText(Path.Combine(forA, ".DS_Store"), "Finder's view settings");
+        File.WriteAllText(Path.Combine(forB, ".DS_Store"), "Finder's view settings");
+
+        Assert.Equal(1, Store(A).BringBack(A).Count);
+
+        Assert.False(Directory.Exists(forA)); // nothing but Finder's file was left
+        Assert.True(File.Exists(Path.Combine(forB, ".DS_Store"))); // B's copy is still in this one, so nothing of it goes
+        Assert.True(File.Exists(Path.Combine(forB, Path.GetFileName(b))));
+    }
+
+    [Fact]
     public void BringBackMovesOnlyTheServersCopiesBack()
     {
         var a = Write(A, 1, content: "edited");
