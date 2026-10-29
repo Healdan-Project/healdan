@@ -67,7 +67,7 @@ Choose where it goes, change what you need to, and save. Then:
 Choose **Healdan › Properties…**, or **Properties** on the Healdan toolbar, to see or change the document's
 properties without leaving LibreOffice. They're the properties of the Ext. Properties tab in the web page.
 
-![The Properties window for #1234: a header with the document's icon, Lease agreement.docx, and #1234 · v2.1, then Client / Matter 998.1 – Healdan Demo from the matter, Author and Typist, Class and Subclass from Drafts, Comments, and two more properties, with Cancel and Save](properties.png)
+![The Properties window for #1234: a header with the document's icon, Lease agreement.docx, and #1234 · v2.1, then Client / Matter 998.1 – Healdan Demo from the matter, with the client Healdan under it, Author and Typist, Class and Subclass from Drafts, Comments, and two more properties, with Cancel and Save](properties.png)
 
 - **Client / Matter,** marked "from the matter", shows the matter, with its client's name under it. It can't be
   changed here.

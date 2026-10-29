@@ -34,7 +34,7 @@ Double-clicking a document in the web page still shows its preview.
 Any of LibreOffice's ways of opening shows the **Open from Healdan** window: **⌘O**, **File › Open**, **Open File**
 in the Start Center, and **Healdan › Open from Healdan…**. So does **Open from Healdan…** in the helper's menu.
 
-![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details on the right, under a header with its name, #1234 and v2.1, and Properties and Versions tabs, with Properties showing](open-from-healdan.png)
+![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details on the right, under a header with its name, #1234 and v2.1, and Properties and Versions tabs, with Properties showing, its Client row under Matter](open-from-healdan.png)
 
 - **On the left:** Recent Documents (where it starts), Checked Out to Me and Favorites, then Recent Matters, My
   Matters and Recent Folders to browse.

@@ -17,7 +17,7 @@ On a document that isn't in Healdan yet, any of these opens Save to Healdan:
 - **Healdan › Save to Healdan…**, or **Save to Healdan** on the Healdan toolbar;
 - **Save** when LibreOffice asks whether to save your changes as you close the document.
 
-![The Save to Healdan window: places on the left, matter 998.1 – Healdan Demo's Documents folder in the middle with its Drafts folder selected, and the new document's properties on the right, with a File Format pop-up under the properties showing OpenDocument Text (.odt)](save-to-healdan.png)
+![The Save to Healdan window: places on the left, matter 998.1 – Healdan Demo's Documents folder in the middle, its client Healdan and Store Client Work beside the matter, with the Drafts folder selected, and the new document's properties on the right, Client / Matter showing the matter with Healdan under it, with a File Format pop-up under the properties showing OpenDocument Text (.odt)](save-to-healdan.png)
 
 ## Choosing a Folder
 
