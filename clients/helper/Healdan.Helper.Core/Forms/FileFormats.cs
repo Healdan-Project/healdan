@@ -11,6 +11,7 @@ public static class FileFormats
         ["xlsx"] = "Excel Workbook",
         ["odp"] = "OpenDocument Presentation",
         ["pptx"] = "PowerPoint Presentation",
+        ["odg"] = "OpenDocument Drawing",
     };
 
     /// <summary>Such as "OpenDocument Text (.odt)"; just ".rtf" for a format without a name here.</summary>

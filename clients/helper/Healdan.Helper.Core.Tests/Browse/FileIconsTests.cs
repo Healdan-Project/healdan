@@ -13,6 +13,8 @@ public sealed class FileIconsTests
     [InlineData("Schedule of dilapidations.xlsx", "file-spreadsheet")]
     [InlineData("Costs.ods", "file-spreadsheet")]
     [InlineData("Pitch.pptx", "presentation")]
+    [InlineData("Floor plan.odg", "triangle-square-circle")]
+    [InlineData("Site layout.vsdx", "file")]
     [InlineData("Signed NDA.pdf", "file-type-pdf")]
     [InlineData("Site photo.JPG", "photo")]
     [InlineData("Plan.heic", "photo")]
@@ -22,5 +24,5 @@ public sealed class FileIconsTests
 
     [Fact]
     public void SettingsRowsGetTheirKindsIcon() =>
-        Assert.Equal(["file-text", "file-spreadsheet", "presentation"], FileKinds.All.Select(FileIcons.For));
+        Assert.Equal(["file-text", "file-spreadsheet", "presentation", "triangle-square-circle"], FileKinds.All.Select(FileIcons.For));
 }

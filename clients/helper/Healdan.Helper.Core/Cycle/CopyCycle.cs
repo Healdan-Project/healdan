@@ -566,8 +566,8 @@ public sealed class CopyCycle : IDisposable
         {
             if (link)
             {
-                Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets and presentations. "
-                    + "Open it from the web page, or from Open from Healdan."));
+                Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations and "
+                    + "drawings. Open it from the web page, or from Open from Healdan."));
                 return;
             }
             if (_other is not null)

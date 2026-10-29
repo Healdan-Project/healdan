@@ -26,7 +26,7 @@ LO = "{http://libreoffice.org/extensions/description/2011}"
 XLINK = "{http://www.w3.org/1999/xlink}"
 
 DOCUMENTS = ("com.sun.star.text.TextDocument", "com.sun.star.sheet.SpreadsheetDocument",
-             "com.sun.star.presentation.PresentationDocument")
+             "com.sun.star.presentation.PresentationDocument", "com.sun.star.drawing.DrawingDocument")
 START_CENTER = "com.sun.star.frame.StartModule"
 EVENTS = ("OnStartApp", "onFirstVisibleTask", "OnNew", "OnLoad", "OnViewCreated", "OnUnload", "OnCloseApp")
 ICONS = {"SaveToHealdan": "save-to-healdan", "OpenFromHealdan": "open-from-healdan", "SaveAsNewVersion": "save-as-new-version",
@@ -201,7 +201,7 @@ class PackageTest(unittest.TestCase):
         for item in nodes(toolbars[0]):
             self.assertNotIn(START_CENTER, prop(item, "Context"))
         resource = "private:resource/toolbar/addon_" + toolbars[0].get(OOR + "name")
-        for app in ("Writer", "Calc", "Impress"):
+        for app in ("Writer", "Calc", "Impress", "Draw"):
             state = self.xml(app + "WindowState.xcu")
             self.assertEqual(app + "WindowState", state.get(OOR + "name"))
             self.assertEqual("Healdan", prop(node(state, "UIElements", "States", resource), "UIName"), app)

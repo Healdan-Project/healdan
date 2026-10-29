@@ -44,4 +44,4 @@ Properties**, and save. Without the property, Healdan stores the file as it is.
 
 ## Only in Writer
 
-Calc and Impress have no Insert Doc ID. Their documents still show the doc # and version in the title bar.
+Calc, Impress and Draw have no Insert Doc ID. Their documents still show the doc # and version in the title bar.

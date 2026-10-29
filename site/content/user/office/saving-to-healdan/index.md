@@ -7,7 +7,7 @@ weight: 2
 data, not a screenshot. Replace it with a screenshot during the owner's acceptance (M3 plan, Task 21). -->
 
 A new document goes into Healdan the first time you save it, through the **Save to Healdan** window. It works the
-same in Writer, Calc and Impress.
+same in Writer, Calc, Impress and Draw.
 
 ## Opening the Window
 
@@ -90,6 +90,9 @@ until you change it:
 | Writer | OpenDocument Text (`.odt`) | Word Document (`.docx`) |
 | Calc | OpenDocument Spreadsheet (`.ods`) | Excel Workbook (`.xlsx`) |
 | Impress | OpenDocument Presentation (`.odp`) | PowerPoint Presentation (`.pptx`) |
+| Draw | OpenDocument Drawing (`.odg`) | None |
+
+Draw saves no Microsoft format, so a drawing is always filed as `.odg`, the pop-up's only choice.
 
 Choose with care: a document keeps the format it was filed in for life. To have it in the other format later, save it
 as a new document (see [Editing and Versions](../editing-and-versions/#save-as-new-document)).

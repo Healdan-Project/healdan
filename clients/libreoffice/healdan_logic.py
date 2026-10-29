@@ -29,11 +29,12 @@ SAVE = ".uno:Save"
 SAVE_AS = ".uno:SaveAs"
 INTERCEPTED = OPENS + (SAVE, SAVE_AS)
 
-# The formats a new document can be filed in, the app's own family first (spec 5.6).
+# The formats a new document can be filed in, the app's own family first (spec 5.6). Draw writes no Microsoft format.
 _FORMATS = {
     "writer": ("odt", "docx"),
     "calc": ("ods", "xlsx"),
     "impress": ("odp", "pptx"),
+    "draw": ("odg",),
 }
 
 # LibreOffice's export filter for each format, as LibreOffice 26.8's registry names them.
@@ -44,6 +45,7 @@ FILTERS = {
     "xlsx": "Calc MS Excel 2007 XML",
     "odp": "impress8",
     "pptx": "Impress MS PowerPoint 2007 XML",
+    "odg": "draw8",
 }
 
 # LibreOffice's module for each app. Writer/Web and master documents aren't filed: Writer's formats don't hold them.
@@ -137,7 +139,7 @@ def action(command, is_copy, has_location, read_only=False, can_file=True):
     format), "save-new" (Save to Healdan, or Save as New Document on a copy) or "local" (LibreOffice's own command).
 
     A read-only copy can't be saved over, so its Save is Save as New Document. Where Healdan can't file the document
-    (can_file is false: Draw, Math, Base), Save and Save As stay LibreOffice's, apart from a copy's own save.
+    (can_file is false: Math, Base), Save and Save As stay LibreOffice's, apart from a copy's own save.
     """
     command = _main(command)
     if command in OPENS:
@@ -298,7 +300,7 @@ def document_name(title, url):
 
 
 _ALL_EXTENSIONS = {"odt", "ott", "docx", "docm", "dotx", "dotm", "doc", "rtf", "ods", "xlsx", "xlsm", "xls", "odp",
-                   "pptx", "pptm", "ppt"}
+                   "pptx", "pptm", "ppt", "odg"}
 
 _DOC_REF = re.compile(r"#(\d+) v(\d+(?:\.\d+)*)(?: \(read-only\))?(?:\.[A-Za-z0-9]+)?$")
 

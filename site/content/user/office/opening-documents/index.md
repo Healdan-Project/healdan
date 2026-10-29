@@ -104,9 +104,9 @@ A document checked out in the web page isn't held on any computer, so it opens f
 A PDF, an image or any other file LibreOffice doesn't edit opens read-only in your Mac's usual app for it, from the
 Open from Healdan window. It isn't checked out.
 
-- **Only from Open from Healdan.** Open in App, and any other link, opens only documents, spreadsheets and
-  presentations. A link to another kind of file says "… wasn't opened: a link opens only documents, spreadsheets and
-  presentations". Open it from the Open from Healdan window, or download it from the web page.
+- **Only from Open from Healdan.** Open in App, and any other link, opens only documents, spreadsheets, presentations
+  and drawings. A link to another kind of file says "… wasn't opened: a link opens only documents, spreadsheets,
+  presentations and drawings". Open it from the Open from Healdan window, or download it from the web page.
 - **Your Mac checks it.** The helper marks the copy as downloaded from the internet, so macOS checks it as it would
   any download.
 - **Never the kinds on its list.** The helper keeps a list of the common kinds of file that can run a program or
