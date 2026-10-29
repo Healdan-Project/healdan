@@ -437,7 +437,7 @@ public class CopyStoreTests : IDisposable
 
         Assert.Equal(A, record.Server);
         Assert.Equal(A, RecordIn(Paths.Copies, path).Server);
-        Assert.Equal(A, Store(B).Find(path)!.Value.Item2.Server); // the record says, whichever store reads it
+        Assert.Equal(A, new CopyStore(Paths).Find(path)!.Value.Item2.Server); // the record says
     }
 
     [Fact]
@@ -462,6 +462,62 @@ public class CopyStoreTests : IDisposable
         Assert.Equal(new[] { a, old }.Order(StringComparer.Ordinal), Store(A).All().Select(c => c.Path).Order(StringComparer.Ordinal));
         Assert.Equal(new[] { b, old }.Order(StringComparer.Ordinal), Store(B).All().Select(c => c.Path).Order(StringComparer.Ordinal));
         Assert.Equal(3, new CopyStore(Paths).All().Count); // a store with no server sees every record
+    }
+
+    [Fact]
+    public void AStoreForAServerFindsOnlyItsCopies()
+    {
+        var a = Write(A, 1);
+        var old = Write(null, 3, "Old.docx"); // from before records named their server
+
+        Assert.NotNull(Store(A).Find(a));
+        Assert.Null(Store(B).Find(a)); // so a window left on A's copy never reaches B through the channel
+        Assert.NotNull(Store(B).Find(old)); // the server in settings.json's, which is the store's
+        Assert.NotNull(new CopyStore(Paths).Find(a)); // a store with no server finds every record
+    }
+
+    [Fact]
+    public void OpenToSetAsideListsWhatSetAsideWouldMoveThatAnAppHasOpen()
+    {
+        var a = Write(A, 1);
+        var closed = Write(A, 2, "Closed.docx");
+        var b = Write(B, 3, "Stays.docx");
+        var old = Write(null, 4, "Old.docx"); // from before records named their server
+        var stray = Path.Combine(Paths.Copies, "Stray #5 v1.0.docx");
+        File.WriteAllText(stray, "no record");
+        var unfinished = Write(A, 6, "Unfinished.docx");
+        File.Delete(unfinished); // a download that never finished leaves only its record
+        foreach (var path in new[] { a, b, stray, unfinished })
+            File.WriteAllText(Path.Combine(Paths.Copies, $".~lock.{Path.GetFileName(path)}#"), "open in LibreOffice");
+        File.WriteAllText(Path.Combine(Paths.Copies, "~$" + Path.GetFileName(old)[2..]), "open in Word");
+
+        var open = Store(B).OpenToSetAside(B, A);
+
+        Assert.Equal(
+            [
+                new OpenCopy("Lease agreement #1 v2.1", Path.GetFileName(a), "healdan.example"),
+                new OpenCopy("Old #4 v2.1", Path.GetFileName(old), "healdan.example"),
+                new OpenCopy("Stray #5 v1.0", "Stray #5 v1.0.docx", "healdan.example")
+            ], open);
+        Assert.All(new[] { a, closed, b, old, stray }, path => Assert.True(File.Exists(path), path)); // nothing moves
+        // At a start, only a copy naming another server would move.
+        Assert.Equal([new OpenCopy("Stays #3 v2.1", Path.GetFileName(b), "localhost:8080")], Store(A).OpenToSetAside(A, A));
+    }
+
+    [Fact]
+    public void SetAsideLeavesTheCopiesItIsToldTo()
+    {
+        var open = Write(A, 1);
+        var closed = Write(A, 2, "Closed.docx");
+
+        var moved = Store(B).SetAside(B, A, [Path.GetFileName(open)]);
+
+        var aside = Path.Combine(_root, "Copies from healdan.example");
+        Assert.Equal(new AsideCopies("healdan.example", aside, 1), Assert.Single(moved));
+        Assert.True(File.Exists(Path.Combine(aside, Path.GetFileName(closed))));
+        Assert.Equal("x", File.ReadAllText(open));
+        Assert.Equal(A, RecordIn(Paths.Copies, open).Server); // its record stays too, not taken for a file without one
+        Assert.False(File.Exists(Path.Combine(aside, "." + Path.GetFileName(open) + ".healdan.json")));
     }
 
     [Fact]

@@ -150,8 +150,10 @@ Settings has three groups:
 
 - **Server:** the server the helper is signed in to, as you'd type it to sign in, such as `healdan.example`. To use
   another, sign out, then sign in with its address. Before you do, close your documents, and check the menu shows no
-  saves waiting and nothing Not Yet in Healdan. Any local copies left from the old server are moved to a folder of
-  their own beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them
+  saves waiting and nothing Not Yet in Healdan. While a document from the old server is still open in LibreOffice, the
+  helper doesn't sign in: the Sign In window names the document for you to close first. If it names one you've
+  already closed, quit LibreOffice and sign in again. Any local copies left from the old server are moved to a folder
+  of their own beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them
   to the new server, where the same doc # can be a different document. They come back, with any saves still to send,
   when you sign in to the old server again. Meanwhile the menu shows how many are waiting.
 - **Open Each Kind of File In:** a row each for documents, spreadsheets and presentations, with the file extensions

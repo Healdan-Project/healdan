@@ -7,9 +7,9 @@ namespace Healdan.Helper.Core.Copies;
 /// <summary>
 /// The local copies in the helper's one private folder, and the record kept beside each (spec §5.4), for the server at
 /// <paramref name="server"/>'s address, which each new copy's record names. A store for a server sees only that
-/// server's copies, and those from before records named one (<see cref="All"/>): another server's copy is never taken
-/// for this one's, even when it lands in the folder while the helper runs. Never deletes the folder, or anything but
-/// the files of the copy it is told to delete.
+/// server's copies, and those from before records named one (<see cref="All"/>, <see cref="Find"/>): another server's
+/// copy is never taken for this one's, even when it lands in the folder while the helper runs. Never deletes the
+/// folder, or anything but the files of the copy it is told to delete.
 /// </summary>
 public sealed class CopyStore(HelperPaths paths, string? server = null)
 {
@@ -47,15 +47,15 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             CopyNames.FileName(doc.Name, doc.DocNumber, doc.FileVersion, readOnly), Server: server);
         var path = PathOf(record);
         var existing = false;
-        var found = Find(path);
-        if (found is (_, var theirs) && !Ours(theirs))
+        var found = Read(RecordPath(path)); // any server's, which Find leaves out
+        if (found is { } theirs && !Ours(theirs))
         {
             var name = System.IO.Path.GetFileName(path);
             MoveCopy(paths.Copies, AsideFolder(theirs.Server!, [name, CopyNames.RecordName(name)]), name);
             lock (_hashes)
                 _hashes.Remove(name);
         }
-        else if (found is (_, var old))
+        else if (found is { } old)
             record = record with { CheckedOutHere = old.CheckedOutHere, LastSaveId = old.LastSaveId };
         else
             existing = File.Exists(path); // a file with no usable record: protect it, report it
@@ -108,10 +108,15 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// <summary>Whether the record is this store's server's, or from before records named a server.</summary>
     private bool Ours(CopyRecord r) => server is null || r.Server is null || ServerAddress.Same(r.Server, server);
 
+    /// <summary>
+    /// The copy at <paramref name="path"/> with its record, when the record is readable and this store's server owns it
+    /// or it names none, as <see cref="All"/>. So the cycle, which the channel's routes reach a copy through by its path,
+    /// never takes another server's copy left in Copies, such as one open in an app at a start, for this one's.
+    /// </summary>
     public (string, CopyRecord)? Find(string path)
     {
         var record = Read(RecordPath(path));
-        return record is null ? null : (path, record);
+        return record is null || !Ours(record) ? null : (path, record);
     }
 
     /// <summary>
@@ -212,51 +217,41 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// <paramref name="keep"/>, anything else in the folder goes to that server's folder too, such as a copy with no
     /// usable record, except an app's lock and owner files (<see cref="CopyNames.IsAppFile"/>), which the app deletes
     /// by the path it opened, a download's temporary part, which the resume sweeps, and Finder's <c>.DS_Store</c>, which
-    /// is no one's. Copies itself stays, so an app's access to it does too. A move that fails throws; the copies moved
-    /// before it stay moved. It reads every server's records, not just the store's (<see cref="All"/>).
+    /// is no one's. The copies named in <paramref name="leave"/>, such as those an app has open
+    /// (<see cref="OpenToSetAside"/>), stay with their records. Copies itself stays, so an app's access to it does too.
+    /// A move that fails throws; the copies moved before it stay moved. It reads every server's records, not just the
+    /// store's (<see cref="All"/>).
     /// </summary>
     /// <param name="keep">The address of the server whose copies stay, such as <c>https://healdan.example</c>.</param>
     /// <param name="unrecorded">The address of the server that records without one, and files without a record, belong to.</param>
-    public IReadOnlyList<AsideCopies> SetAside(string keep, string unrecorded)
+    /// <param name="leave">The file names in Copies of copies that stay wherever they belong.</param>
+    public IReadOnlyList<AsideCopies> SetAside(string keep, string unrecorded, IReadOnlyCollection<string>? leave = null)
     {
         if (!Directory.Exists(paths.Copies))
             return [];
+        var left = new HashSet<string>(leave ?? [], StringComparer.Ordinal);
+        var (copies, strays) = ToSetAside(keep, unrecorded);
         var moved = new List<(string Server, string Folder, bool Copy)>();
-        var stays = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var record in Records(paths.Copies)) // every server's, which All() leaves out
+        foreach (var (record, owner) in copies.Where(c => !left.Contains(c.Record.FileName)))
         {
             var name = record.FileName;
-            var owner = record.Server ?? unrecorded;
-            if (ServerAddress.Same(owner, keep))
-            {
-                stays.Add(name);
-                stays.Add(CopyNames.RecordName(name));
-                continue;
-            }
             var folder = AsideFolder(owner, [name, CopyNames.RecordName(name)]);
             MoveCopy(paths.Copies, folder, name, record.Server is null ? record with { Server = owner } : null);
             moved.Add((owner, folder, true));
         }
-        if (!ServerAddress.Same(unrecorded, keep))
+        strays.RemoveAll(left.Contains);
+        if (strays.Count > 0)
         {
-            var strays = Directory.EnumerateFileSystemEntries(paths.Copies)
-                .Select(entry => System.IO.Path.GetFileName(entry))
-                .Where(name => !stays.Contains(name) && !CopyNames.IsAppFile(name) && !IsPart(name) && name != FinderFile)
-                .Order(StringComparer.Ordinal)
-                .ToList();
-            if (strays.Count > 0)
+            var folder = AsideFolder(unrecorded, strays);
+            foreach (var name in strays)
             {
-                var folder = AsideFolder(unrecorded, strays);
-                foreach (var name in strays)
-                {
-                    var from = System.IO.Path.Combine(paths.Copies, name);
-                    if (Directory.Exists(from))
-                        Directory.Move(from, System.IO.Path.Combine(folder, name));
-                    else
-                        File.Move(from, System.IO.Path.Combine(folder, name));
-                }
-                moved.Add((unrecorded, folder, false));
+                var from = System.IO.Path.Combine(paths.Copies, name);
+                if (Directory.Exists(from))
+                    Directory.Move(from, System.IO.Path.Combine(folder, name));
+                else
+                    File.Move(from, System.IO.Path.Combine(folder, name));
             }
+            moved.Add((unrecorded, folder, false));
         }
         lock (_hashes)
             _hashes.Clear();
@@ -265,6 +260,56 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             .Select(g => new AsideCopies(g.Key, g.Select(m => m.Folder).Min(StringComparer.Ordinal)!, g.Count(m => m.Copy)))
             .OrderBy(a => a.Server, StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>
+    /// Spec §5.4: what <see cref="SetAside"/> with the same servers would move that an app has open in Copies, by its
+    /// lock or owner file beside it, so it isn't moved from under its window, whose next save would leave a file with no
+    /// record in its place. LibreOffice keeps no lock file for a read-only copy, so one open there isn't listed. Whether
+    /// the app is running, and so whether a lock file is a crash's, is the caller's to tell. Nothing moves.
+    /// </summary>
+    public IReadOnlyList<OpenCopy> OpenToSetAside(string keep, string unrecorded)
+    {
+        if (!Directory.Exists(paths.Copies))
+            return [];
+        var (copies, strays) = ToSetAside(keep, unrecorded);
+        return copies
+            .Where(c => Open(c.Record.FileName))
+            .Select(c => new OpenCopy(CopyNames.Title(c.Record.DocumentName, c.Record.DocNumber, c.Record.FileVersion, c.Record.ReadOnly),
+                c.Record.FileName, ServerAddress.Name(c.Owner)))
+            .Concat(strays.Where(Open).Select(name => new OpenCopy(System.IO.Path.GetFileNameWithoutExtension(name), name,
+                ServerAddress.Name(unrecorded))))
+            .ToList();
+
+        bool Open(string name) => File.Exists(System.IO.Path.Combine(paths.Copies, name)) && IsOpen(paths.Copies, name);
+    }
+
+    /// <summary>
+    /// What setting aside for <paramref name="keep"/> moves (<see cref="SetAside"/>), read before anything moves: each
+    /// readable record of every server's that doesn't name it, in name order, with the server it goes to, and when
+    /// <paramref name="unrecorded"/> isn't <paramref name="keep"/>, every other file in Copies by name, but an app's lock
+    /// and owner files, a download's temporary part and Finder's <c>.DS_Store</c>.
+    /// </summary>
+    private (List<(CopyRecord Record, string Owner)> Copies, List<string> Strays) ToSetAside(string keep, string unrecorded)
+    {
+        var copies = new List<(CopyRecord, string)>();
+        var recorded = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var record in Records(paths.Copies)) // every server's, which All() leaves out
+        {
+            recorded.Add(record.FileName);
+            recorded.Add(CopyNames.RecordName(record.FileName));
+            var owner = record.Server ?? unrecorded;
+            if (!ServerAddress.Same(owner, keep))
+                copies.Add((record, owner));
+        }
+        var strays = ServerAddress.Same(unrecorded, keep)
+            ? []
+            : Directory.EnumerateFileSystemEntries(paths.Copies)
+                .Select(entry => System.IO.Path.GetFileName(entry))
+                .Where(name => !recorded.Contains(name) && !CopyNames.IsAppFile(name) && !IsPart(name) && name != FinderFile)
+                .Order(StringComparer.Ordinal)
+                .ToList();
+        return (copies, strays);
     }
 
     /// <summary>

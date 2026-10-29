@@ -19,3 +19,9 @@ public sealed record BroughtBack(int Count, IReadOnlyList<StayedAside> Stayed);
 /// <param name="Folder">The folder it stays in.</param>
 /// <param name="Why">Why, as the clause the notice ends with.</param>
 public sealed record StayedAside(string Title, string DocRef, string Folder, string Why);
+
+/// <summary>A copy an app has open in <c>Copies</c>, which setting aside would move from under its window (spec §5.4).</summary>
+/// <param name="Title">Its title, as its window shows it.</param>
+/// <param name="FileName">Its file name in <c>Copies</c>.</param>
+/// <param name="Server">The server it would be set aside for, as the user knows it, such as <c>healdan.example</c>.</param>
+public sealed record OpenCopy(string Title, string FileName, string Server);
