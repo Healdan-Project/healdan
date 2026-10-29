@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.preview;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Test;
 
@@ -256,6 +258,62 @@ public class LibreOfficeRunnerTest extends AbstractHealdanTestCase {
 			assertTrue(e.getMessage(), e.getMessage().contains("timed out"));
 		}
 		assertFalse(dest.exists());
+	}
+
+	/** What an interrupted conversion threw, and whether its thread was still interrupted then */
+	private record Outcome(Throwable thrown, boolean interrupted) {
+	}
+
+	/**
+	 * Converts on a thread of its own, interrupted once the fake has written its PDF.
+	 *
+	 * @return what the conversion threw; null if it threw nothing
+	 */
+	private Outcome convertAndInterrupt(LibreOfficeRunner runner) throws Exception {
+		File log = new File(dir, "log.txt");
+		use(FakeSoffice.partialThenHang(log));
+		AtomicReference<Outcome> outcome = new AtomicReference<>();
+		Thread t = new Thread(() -> {
+			try {
+				runner.toPdf(in, Kind.TEXT, dest);
+			} catch (Throwable e) {
+				outcome.set(new Outcome(e, Thread.currentThread().isInterrupted()));
+			}
+		});
+		t.start();
+		awaitStarts(log, 1);
+		t.interrupt();
+		t.join(10000);
+		assertFalse("the conversion is still running", t.isAlive());
+		return outcome.get();
+	}
+
+	@Test
+	public void testInterruptWithPartialOutputFails() throws Exception {
+		Outcome outcome = convertAndInterrupt(new LibreOfficeRunner());
+		assertNotNull("expected IOException", outcome);
+		assertTrue(String.valueOf(outcome.thrown()), outcome.thrown() instanceof IOException);
+		// PreviewWorker reads the flag to keep the job queued
+		assertTrue(outcome.interrupted());
+		assertFalse(dest.exists());
+	}
+
+	@Test
+	public void testSlotRebuiltAfterInterrupt() throws Exception {
+		LibreOfficeRunner runner = new LibreOfficeRunner();
+		convertAndInterrupt(runner);
+		// What a killed LibreOffice may leave in the profile
+		File profile = new File(slot0(), "user/registrymodifications.xcu");
+		Files.writeString(profile.toPath(), "half-written");
+
+		// Slot 0 went to the back of the queue: the second run gets it
+		use(FakeSoffice.ok());
+		runner.toPdf(in, Kind.TEXT, dest);
+		runner.toPdf(in, Kind.TEXT, dest);
+
+		byte[] template = getClass().getResourceAsStream("/healdan/libreoffice/registrymodifications.xcu")
+				.readAllBytes();
+		assertTrue(java.util.Arrays.equals(template, Files.readAllBytes(profile.toPath())));
 	}
 
 	private Future<Void> inBackground(ExecutorService pool, LibreOfficeRunner runner, String name) {
