@@ -15,7 +15,8 @@ git remote add upstream https://github.com/logicaldoc/community.git
 - **Merge `upstream/master` into a branch of its own,** and open a pull request to `master`. Always merge: never
   squash or rebase, so the shared history stays intact.
 - **Keep sync pull requests free of feature work.** Fixes the merge needs, such as swapping a Font Awesome Pro icon
-  for a Free one, or a link to LogicalDOC's docs for one to Healdan's, belong in the sync itself.
+  for a Free one, a link to LogicalDOC's docs for one to Healdan's, or importing an artifact into Healdan's Maven
+  repository, belong in the sync itself.
 - **`.github/workflows/upstream-sync.yml`** runs a sync every week. `.github/scripts/upstream-sync.sh` does the
   merge.
 

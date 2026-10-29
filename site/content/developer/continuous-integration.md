@@ -9,7 +9,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`) and for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, and the LibreOffice extension's Python tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -109,8 +109,17 @@ A pull request that changes only `clients/` doesn't build the image, so this tes
   When a sync brings one in, point it at docs.healdan.com in the sync PR. The docs site's interim pages are checked
   by `check-site-sources.py` instead, and the script's `ALLOWED` list holds the few exact lines Healdan leaves
   alone, each with its reason.
+- **LogicalDOC's Maven repository.** Builds get the artifacts only LogicalDOC's repository has from Healdan's copies
+  at `https://maven.healdan.com/` (repository `Healdan-Project/maven`), through a mirror in
+  `docker/maven-settings.xml`. `.github/scripts/check-maven-repositories.py` runs next to the doc-links check and
+  fails `build` when a POM or the settings file points a repository at a LogicalDOC host the mirror doesn't cover.
+  When a sync bumps a hosted artifact or brings a new one, the build fails with `Could not find artifact … in
+  healdan`. In the sync PR, check its licence allows hosting it, import it with `python3 import-artifact.py` in a
+  checkout of `Healdan-Project/maven`, push, and re-run CI once
+  `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting
+  it is dropped from the build instead, as JAI was.
 - **Broken POMs.** Upstream sometimes ships a POM that fails Maven's validation, such as a duplicate dependency. If
-  CI fails within a minute, check the POMs, the icon check and the doc-links check first.
+  CI fails within a minute, check the POMs, the icon check, the doc-links check and the Maven repository check first.
 
 ## Publishing the Image
 

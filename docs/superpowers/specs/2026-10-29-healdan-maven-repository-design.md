@@ -2,10 +2,9 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#107](https://github.com/Healdan-Project/healdan/issues/107)
 - **Date:** 2026-10-29
-- **Status:** approved by the owner on 2026-10-29, and amended that day, with the owner, for licences (§3.1):
-  JAI, betelio and ksoap2 aren't hosted. The build drops JAI and betelio, and leaves `logicaldoc-webserviceclient`,
-  ksoap2's only user, out of the reactor. Amended again that day for Oracle's JDBC driver, which the clean inventory
-  build found: not hosted, and dropped.
+- **Status:** approved by the owner on 2026-10-29, and amended that day for licences (§3.1). Built from
+  [`docs/superpowers/plans/2026-10-29-healdan-maven-repository.md`](../plans/2026-10-29-healdan-maven-repository.md).
+  `https://maven.healdan.com/` serves the 15 hosted artifacts from `Healdan-Project/maven`.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
   - the failed `master` runs of `build-logicaldoc.yml` that day (40877494760, 40891327931, 40894089832), and the
