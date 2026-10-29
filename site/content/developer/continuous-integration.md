@@ -9,7 +9,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`) and for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`) and for LogicalDOC's servers (`check-logicaldoc-hosts.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, and the LibreOffice extension's Python tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -109,8 +109,15 @@ A pull request that changes only `clients/` doesn't build the image, so this tes
   When a sync brings one in, point it at docs.healdan.com in the sync PR. The docs site's interim pages are checked
   by `check-site-sources.py` instead, and the script's `ALLOWED` list holds the few exact lines Healdan leaves
   alone, each with its reason.
+- **LogicalDOC's servers.** Healdan never contacts LogicalDOC. CE posted usage statistics to `stat.logicaldoc.com`
+  and tested the proxy against `activation.logicaldoc.com`, and a sync can bring a call like those back.
+  `.github/scripts/check-logicaldoc-hosts.py` runs after the doc-links check and fails `build` on any host, URL or
+  email address at logicaldoc.com, .it, .net or .org, naming the file and line. It skips tests, prose, the docs site
+  and the SOAP, CMIS and WebDAV XML namespaces, which are identifiers no one fetches. When a sync brings one in,
+  remove the call in the sync PR. The script's `ALLOWED` list holds the exact lines nothing contacts, such as the
+  POM's credits, each with its reason.
 - **Broken POMs.** Upstream sometimes ships a POM that fails Maven's validation, such as a duplicate dependency. If
-  CI fails within a minute, check the POMs, the icon check and the doc-links check first.
+  CI fails within a minute, check the POMs, the icon check, the doc-links check and the hosts check first.
 
 ## Publishing the Image
 

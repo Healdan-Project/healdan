@@ -49,6 +49,10 @@ jobs:
       - name: Check for links to LogicalDOC's docs
         run: python3 .github/scripts/check-logicaldoc-doc-links.py
 
+      # Healdan never contacts LogicalDOC; an upstream sync can bring a call to one of its servers back
+      - name: Check for LogicalDOC's servers
+        run: python3 .github/scripts/check-logicaldoc-hosts.py
+
       # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
       - name: JDK version (from the Dockerfile)
         id: jdk
@@ -83,6 +87,7 @@ jobs:
             DocumentAclEqualityTest
             HibernateFolderDAOTest#testMerge
             StatsCollectorTest
+            SettingServiceImplTest
             FolderServiceImplTest
             SecurityServiceImplTest#testDeleteGroupRefusedKeepsTheMembers
             DocumentServiceImplTest
