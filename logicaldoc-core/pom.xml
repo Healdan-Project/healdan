@@ -67,12 +67,6 @@
 			<scope>provided</scope>
 		</dependency>
 		<dependency>
-			<groupId>betelio</groupId>
-			<artifactId>betelio</artifactId>
-			<version>1.0</version>
-			<scope>provided</scope>
-		</dependency>
-		<dependency>
 			<groupId>commons-lang</groupId>
 			<artifactId>commons-lang</artifactId>
 			<scope>provided</scope>
@@ -306,14 +300,6 @@
 					<artifactId>commons-logging</artifactId>
 				</exclusion>
 			</exclusions>
-		</dependency>
-		<dependency>
-			<groupId>javax.media</groupId>
-			<artifactId>jai-core</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>com.sun.media</groupId>
-			<artifactId>jai-codec</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.httpcomponents.client5</groupId>
