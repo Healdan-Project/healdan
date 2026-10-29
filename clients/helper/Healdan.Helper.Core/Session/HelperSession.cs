@@ -616,42 +616,50 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     /// <summary>
-    /// A sign-in to another server than the settings name (spec §5.4): the copies are all from that one, so they're set
-    /// aside first (<see cref="CopyStore.SetAside"/>), and none goes to the new server, where the same doc # can be
-    /// another document. The user is told where they are. Returns why the sign-in can't go on, or null.
+    /// A sign-in to another server than the settings name (spec §5.4): every copy that doesn't name the new server is
+    /// set aside first (<see cref="CopyStore.SetAside"/>), and a record without a server, from before records named one,
+    /// counts as the old server's. None goes to the new server, where the same doc # can be another document. The user
+    /// is told where they are. Returns why the sign-in can't go on, or null.
     /// </summary>
     private string? SetCopiesAside(Uri server)
     {
         if (HelperSettings.Load(_paths).Server is not { } previous)
             return null;
-        string from;
+        string old;
         try
         {
-            var old = ParseAddress(previous);
-            if (SameServer(old, server))
+            var parsed = ParseAddress(previous);
+            if (SameServer(parsed, server))
                 return null;
-            from = HealdanLink.HostAndPort(old);
+            old = Address(parsed);
         }
         catch (UriFormatException)
         {
-            from = "an earlier server"; // the copies came from somewhere, but not from this one
+            old = previous; // the copies came from somewhere, but not from this one
         }
         var to = HealdanLink.HostAndPort(server);
         try
         {
-            if (new CopyStore(_paths).SetAside(from) is { } aside)
-            {
-                var folder = Path.GetFileName(aside);
-                _log.Info($"Signing in to {to}: the copies from {from} are set aside in {folder}");
-                _notifier.Notify(Helper, $"The copies from {from} are now in the {folder} folder, beside Healdan Helper's Copies "
-                    + $"folder. Healdan Helper won't send them to {to}.");
-            }
+            TellSetAside(new CopyStore(_paths, Address(server)).SetAside(Address(server), old), to);
             return null;
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
+            var from = ServerAddress.Name(old);
             _log.Warn($"The copies from {from} couldn't be set aside: {e.Message}");
             return $"Healdan Helper couldn't move the copies from {from} out of the way, so it hasn't signed in to {to}: {e.Message}";
+        }
+    }
+
+    /// <summary>Tells the user where each server's copies went, and that they come back (spec §5.4).</summary>
+    private void TellSetAside(IReadOnlyList<AsideCopies> moved, string to)
+    {
+        foreach (var group in moved)
+        {
+            var folder = Path.GetFileName(group.Folder);
+            _log.Info($"Set aside for {to}: the copies from {group.Server} are in {folder}");
+            _notifier.Notify(Helper, $"The copies from {group.Server} are now in the {folder} folder, beside Healdan Helper's "
+                + $"Copies folder. Healdan Helper won't send them to {to}, and brings them back when you sign in to {group.Server} again.");
         }
     }
 

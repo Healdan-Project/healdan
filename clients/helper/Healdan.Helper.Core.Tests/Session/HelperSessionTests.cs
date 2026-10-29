@@ -754,6 +754,7 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(File.Exists(Path.Combine(aside, "." + Path.GetFileName(path) + ".healdan.json")));
         Assert.DoesNotContain(_http.Calls, c => c.Contains("second.test/api/v1/documents/5", StringComparison.Ordinal)); // not resumed there
         Assert.Contains("Copies from healdan.test", _notifier.All);
+        Assert.Contains("brings them back when you sign in to healdan.test again", _notifier.All);
     }
 
     [Fact]

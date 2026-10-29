@@ -60,8 +60,17 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             || r.FileName is "." or ".." || r.FileName.IndexOfAny(['/', '\\', '\0']) >= 0)
             throw new ArgumentException("A copy's file name is a plain file name.", nameof(r));
         EnsureFolders();
-        var target = RecordPath(PathOf(r));
-        var temp = System.IO.Path.Combine(paths.Copies, $".{Guid.NewGuid():N}.tmp");
+        Write(r, paths.Copies);
+    }
+
+    /// <summary>
+    /// Writes the record whole into <paramref name="folder"/>, beside the copy its <see cref="CopyRecord.FileName"/>
+    /// names, through a temporary file renamed over the old one, so a crash leaves either.
+    /// </summary>
+    private static void Write(CopyRecord r, string folder)
+    {
+        var target = System.IO.Path.Combine(folder, CopyNames.RecordName(r.FileName));
+        var temp = System.IO.Path.Combine(folder, $".{Guid.NewGuid():N}.tmp");
         try
         {
             File.WriteAllText(temp, JsonSerializer.Serialize(r, Json));
@@ -183,38 +192,137 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         return !last.Hash.Equals(record.ConfirmedHash, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>The start of the name of each folder beside Copies that holds copies set aside (spec §5.4).</summary>
+    private const string AsidePrefix = "Copies from ";
+
     /// <summary>
-    /// Moves everything in the folder, every copy with its record and lock files, into a folder of its own beside it,
-    /// <c>Copies from &lt;server&gt;</c> (numbered when that's taken), and returns that folder's path; null when there's
-    /// nothing to move. For a sign-in to another server (spec §5.4): the copies belong to the server they came from,
-    /// where the same doc # can be another document, so none of them may go to the new one. The folder itself stays,
-    /// so an app's access to it does too. A move that fails part way leaves the rest where they were, and throws.
+    /// Spec §5.4: moves each copy whose record doesn't name <paramref name="keep"/>, with its record, into the folder
+    /// beside Copies for the server its record names (<see cref="MoveCopy"/>), and returns where each server's copies
+    /// went. A record without a server, from before records named one, counts as <paramref name="unrecorded"/>'s and has
+    /// it written in as it moves, so it can come back there. When <paramref name="unrecorded"/> isn't
+    /// <paramref name="keep"/>, anything else in the folder goes to that server's folder too, such as a copy with no
+    /// usable record, except an app's lock and owner files (<see cref="CopyNames.IsAppFile"/>), which the app deletes
+    /// by the path it opened, and a download's temporary part, which the resume sweeps. Copies itself stays, so an app's
+    /// access to it does too. A move that fails throws; the copies moved before it stay moved.
     /// </summary>
-    /// <param name="server">The server the copies came from, as the user knows it, such as <c>healdan.example</c>.</param>
-    public string? SetAside(string server)
+    /// <param name="keep">The address of the server whose copies stay, such as <c>https://healdan.example</c>.</param>
+    /// <param name="unrecorded">The address of the server that records without one, and files without a record, belong to.</param>
+    public IReadOnlyList<AsideCopies> SetAside(string keep, string unrecorded)
     {
-        if (!Directory.Exists(paths.Copies) || !Directory.EnumerateFileSystemEntries(paths.Copies).Any())
-            return null;
-        var name = "Copies from " + string.Concat(server.Select(c => c is '/' or ':' or '\\' || char.IsControl(c) ? '-' : c));
-        var aside = System.IO.Path.Combine(paths.Support, name);
-        for (var n = 2; Directory.Exists(aside) || File.Exists(aside); n++)
-            aside = System.IO.Path.Combine(paths.Support, $"{name} {n}");
-        if (OperatingSystem.IsWindows())
-            Directory.CreateDirectory(aside);
-        else
-            Directory.CreateDirectory(aside, PrivateMode);
-        foreach (var entry in Directory.EnumerateFileSystemEntries(paths.Copies).ToList())
+        if (!Directory.Exists(paths.Copies))
+            return [];
+        var moved = new List<(string Server, string Folder, bool Copy)>();
+        var stays = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (path, record) in All())
         {
-            var target = System.IO.Path.Combine(aside, System.IO.Path.GetFileName(entry));
-            if (Directory.Exists(entry))
-                Directory.Move(entry, target);
-            else
-                File.Move(entry, target);
+            var name = System.IO.Path.GetFileName(path);
+            var owner = record.Server ?? unrecorded;
+            if (ServerAddress.Same(owner, keep))
+            {
+                stays.Add(name);
+                stays.Add(CopyNames.RecordName(name));
+                continue;
+            }
+            var folder = AsideFolder(owner, [name, CopyNames.RecordName(name)]);
+            MoveCopy(paths.Copies, folder, name, record.Server is null ? record with { Server = owner } : null);
+            moved.Add((owner, folder, true));
+        }
+        if (!ServerAddress.Same(unrecorded, keep))
+        {
+            var strays = Directory.EnumerateFileSystemEntries(paths.Copies)
+                .Select(entry => System.IO.Path.GetFileName(entry))
+                .Where(name => !stays.Contains(name) && !CopyNames.IsAppFile(name) && !IsPart(name))
+                .Order(StringComparer.Ordinal)
+                .ToList();
+            if (strays.Count > 0)
+            {
+                var folder = AsideFolder(unrecorded, strays);
+                foreach (var name in strays)
+                {
+                    var from = System.IO.Path.Combine(paths.Copies, name);
+                    if (Directory.Exists(from))
+                        Directory.Move(from, System.IO.Path.Combine(folder, name));
+                    else
+                        File.Move(from, System.IO.Path.Combine(folder, name));
+                }
+                moved.Add((unrecorded, folder, false));
+            }
         }
         lock (_hashes)
             _hashes.Clear();
-        return aside;
+        return moved
+            .GroupBy(m => ServerAddress.Name(m.Server), StringComparer.OrdinalIgnoreCase)
+            .Select(g => new AsideCopies(g.Key, g.Select(m => m.Folder).Min(StringComparer.Ordinal)!, g.Count(m => m.Copy)))
+            .OrderBy(a => a.Server, StringComparer.Ordinal)
+            .ToList();
     }
+
+    /// <summary>
+    /// Moves one copy and its record from <paramref name="from"/> to <paramref name="to"/>, never over anything: the copy
+    /// first, then its record, written as <paramref name="rewrite"/> when that's given. If the record can't follow, the
+    /// copy moves back, so neither is left without the other. A record with no copy, from a download that never
+    /// finished, moves alone.
+    /// </summary>
+    internal static void MoveCopy(string from, string to, string fileName, CopyRecord? rewrite = null)
+    {
+        var copy = System.IO.Path.Combine(from, fileName);
+        var record = System.IO.Path.Combine(from, CopyNames.RecordName(fileName));
+        var movedCopy = System.IO.Path.Combine(to, fileName);
+        var movedRecord = System.IO.Path.Combine(to, CopyNames.RecordName(fileName));
+        var hasCopy = File.Exists(copy);
+        if (hasCopy)
+            File.Move(copy, movedCopy);
+        var written = false;
+        try
+        {
+            if (rewrite is null)
+                File.Move(record, movedRecord);
+            else
+            {
+                Write(rewrite, to);
+                written = true;
+                File.Delete(record);
+            }
+        }
+        catch
+        {
+            if (written)
+                File.Delete(movedRecord);
+            if (hasCopy)
+                File.Move(movedCopy, copy);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The folder beside Copies for <paramref name="server"/>'s copies set aside, <c>Copies from &lt;host[-port]&gt;</c>,
+    /// or the next numbered one where none of <paramref name="names"/> is taken, made private when it isn't there yet.
+    /// The records say exactly which server, so servers with the same host and port share it.
+    /// </summary>
+    private string AsideFolder(string server, IReadOnlyCollection<string> names)
+    {
+        var name = AsidePrefix + string.Concat(ServerAddress.Name(server).Select(c => c is '/' or ':' or '\\' || char.IsControl(c) ? '-' : c));
+        for (var n = 1; ; n++)
+        {
+            var folder = System.IO.Path.Combine(paths.Support, n == 1 ? name : $"{name} {n}");
+            if (File.Exists(folder))
+                continue;
+            if (!Directory.Exists(folder))
+            {
+                if (OperatingSystem.IsWindows())
+                    Directory.CreateDirectory(folder);
+                else
+                    Directory.CreateDirectory(folder, PrivateMode);
+                return folder;
+            }
+            if (names.All(x => !System.IO.Path.Exists(System.IO.Path.Combine(folder, x))))
+                return folder;
+        }
+    }
+
+    /// <summary>A download's temporary part (<c>.healdan-*.part</c>), which the resume sweeps.</summary>
+    private static bool IsPart(string name) =>
+        name.StartsWith(".healdan-", StringComparison.Ordinal) && name.EndsWith(".part", StringComparison.Ordinal);
 
     /// <summary>The folder holding every copy.</summary>
     internal string Folder => paths.Copies;
