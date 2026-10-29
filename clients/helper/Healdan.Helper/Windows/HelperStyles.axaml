@@ -1,90 +1,289 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <!-- The helper's windows share one look (spec §5.8; the mockups in docs/superpowers/specs/2026-10-24-m3-mockups/). -->
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Healdan.Helper.Windows">
+  <!-- The helper's look (polish spec §4): a Mac's controls in Healdan's colours, over Fluent. -->
   <Styles.Resources>
-    <!-- The colours, from the mockups, with a dark set for a dark menu bar and windows; and the rows' icons. -->
     <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://HealdanHelper/Windows/HelperIcons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
       <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Light">
+          <!-- Healdan's tokens (polish spec §4.1). -->
           <SolidColorBrush x:Key="HdWindowBrush" Color="#FFFFFF" />
-          <SolidColorBrush x:Key="HdToolbarBrush" Color="#F7F7F9" />
-          <SolidColorBrush x:Key="HdNavBrush" Color="#FBFBFD" />
-          <SolidColorBrush x:Key="HdSeparatorBrush" Color="#F2F2F5" />
-          <SolidColorBrush x:Key="HdLineBrush" Color="#E0E0E5" />
-          <SolidColorBrush x:Key="HdSelectedBrush" Color="#E8F0FE" />
+          <SolidColorBrush x:Key="HdBarBrush" Color="#F6F6F6" />
+          <SolidColorBrush x:Key="HdSidebarBrush" Color="#F5F5F7" />
+          <SolidColorBrush x:Key="HdGroupedBrush" Color="#F2F2F4" />
+          <SolidColorBrush x:Key="HdGroupBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HdLineBrush" Color="#E5E5EA" />
+          <SolidColorBrush x:Key="HdAltRowBrush" Color="#F4F5F5" />
+          <SolidColorBrush x:Key="HdPillBrush" Color="#E1E1E6" />
+          <SolidColorBrush x:Key="HdSegmentBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HdInactiveSelectionBrush" Color="#DCDCDC" />
           <SolidColorBrush x:Key="HdTextBrush" Color="#1D1D1F" />
-          <SolidColorBrush x:Key="HdLabelBrush" Color="#6E6E73" />
+          <SolidColorBrush x:Key="HdSecondaryBrush" Color="#6E6E73" />
           <SolidColorBrush x:Key="HdMutedBrush" Color="#8E8E93" />
-          <SolidColorBrush x:Key="HdAccentBrush" Color="#3B5BDB" />
+          <SolidColorBrush x:Key="HdAccentBrush" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HdAccentTextBrush" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HdOnAccentBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HdFieldBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HdFieldLineBrush" Color="#C7C7CC" />
+          <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#F5F5F7" />
+          <SolidColorBrush x:Key="HdYoursBrush" Color="#1E7B34" />
+          <!-- Settings' status dot: on, and off (detail the spec's §4.1 table leaves to the builder). -->
+          <SolidColorBrush x:Key="HdOnBrush" Color="#28A745" />
+          <SolidColorBrush x:Key="HdOffBrush" Color="#8E8E93" />
+          <SolidColorBrush x:Key="HdTheirsBrush" Color="#B3261E" />
+          <SolidColorBrush x:Key="HdCautionBrush" Color="#C77700" />
+          <SolidColorBrush x:Key="HdCautionTextBrush" Color="#9A5B00" />
+          <SolidColorBrush x:Key="HdWarnBrush" Color="#FFF6E5" />
+          <SolidColorBrush x:Key="HdWarnLineBrush" Color="#F2C26B" />
+          <SolidColorBrush x:Key="HdWarnTextBrush" Color="#6B3D00" />
           <SolidColorBrush x:Key="HdRequiredBrush" Color="#D70015" />
+          <SolidColorBrush x:Key="HdProblemBrush" Color="#C42B1C" />
+          <SolidColorBrush x:Key="HdStarBrush" Color="#F59F00" />
           <SolidColorBrush x:Key="HdChipBrush" Color="#EEF3FC" />
           <SolidColorBrush x:Key="HdChipTextBrush" Color="#3B5BDB" />
-          <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#F5F5F7" />
-          <SolidColorBrush x:Key="HdReadOnlyLineBrush" Color="#D1D1D6" />
-          <SolidColorBrush x:Key="HdMineBrush" Color="#1B6B2A" />
-          <SolidColorBrush x:Key="HdHeldBrush" Color="#A61E4D" />
-          <SolidColorBrush x:Key="HdWarnBrush" Color="#FFF4E6" />
-          <SolidColorBrush x:Key="HdWarnLineBrush" Color="#FFC078" />
-          <SolidColorBrush x:Key="HdWarnTextBrush" Color="#7A3E00" />
-          <SolidColorBrush x:Key="HdFolderBrush" Color="#5C7CFA" />
-          <SolidColorBrush x:Key="HdStarBrush" Color="#F59F00" />
-          <SolidColorBrush x:Key="HdProblemBrush" Color="#C42B1C" />
+          <BoxShadows x:Key="HdFocusRing">0 0 0 3 #6622A2E0</BoxShadows>
+          <!-- Fluent's own, set to them (polish spec §4.3). -->
+          <SolidColorBrush x:Key="ButtonBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#F2F2F4" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#E5E5EA" />
+          <SolidColorBrush x:Key="ButtonBorderBrush" Color="#C7C7CC" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="ButtonForeground" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="AccentButtonBackground" Color="#0C69C0" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#0B5FAE" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#0A5499" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#800C69C0" />
+          <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#CCFFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#C7C7CC" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#0C69C0" />
+          <SolidColorBrush x:Key="TextControlForeground" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8E8E93" />
+          <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#F2F2F4" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#C7C7CC" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#6E6E73" />
+          <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#0C69C0" />
+          <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeChecked" Color="#0C69C0" />
+          <!-- The date picker's field, as a text box's; its glyph Secondary. TextForeground is the "Choose a date" text. -->
+          <SolidColorBrush x:Key="CalendarDatePickerBackground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPressed" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundFocused" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrush" Color="#C7C7CC" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPointerOver" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPressed" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="CalendarDatePickerForeground" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForeground" Color="#8E8E93" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForegroundSelected" Color="#1D1D1F" />
+          <SolidColorBrush x:Key="CalendarDatePickerCalendarGlyphForeground" Color="#6E6E73" />
+          <!-- Links are Accent text, not the accent (polish spec §4.1); a disabled one is Muted. -->
+          <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#0C69C0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundDisabled" Color="#8E8E93" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
-          <SolidColorBrush x:Key="HdWindowBrush" Color="#1E1E1F" />
-          <SolidColorBrush x:Key="HdToolbarBrush" Color="#2A2A2C" />
-          <SolidColorBrush x:Key="HdNavBrush" Color="#252527" />
-          <SolidColorBrush x:Key="HdSeparatorBrush" Color="#2F2F31" />
-          <SolidColorBrush x:Key="HdLineBrush" Color="#3A3A3C" />
-          <SolidColorBrush x:Key="HdSelectedBrush" Color="#243B6B" />
+          <SolidColorBrush x:Key="HdWindowBrush" Color="#1E1E1E" />
+          <SolidColorBrush x:Key="HdBarBrush" Color="#2A2A2C" />
+          <SolidColorBrush x:Key="HdSidebarBrush" Color="#262628" />
+          <SolidColorBrush x:Key="HdGroupedBrush" Color="#1E1E1E" />
+          <SolidColorBrush x:Key="HdGroupBrush" Color="#2A2A2C" />
+          <SolidColorBrush x:Key="HdLineBrush" Color="#38383A" />
+          <SolidColorBrush x:Key="HdAltRowBrush" Color="#232325" />
+          <SolidColorBrush x:Key="HdPillBrush" Color="#3A3A3C" />
+          <SolidColorBrush x:Key="HdSegmentBrush" Color="#636366" />
+          <SolidColorBrush x:Key="HdInactiveSelectionBrush" Color="#464646" />
           <SolidColorBrush x:Key="HdTextBrush" Color="#F2F2F7" />
-          <SolidColorBrush x:Key="HdLabelBrush" Color="#AEAEB2" />
-          <SolidColorBrush x:Key="HdMutedBrush" Color="#98989D" />
-          <SolidColorBrush x:Key="HdAccentBrush" Color="#748FFC" />
-          <SolidColorBrush x:Key="HdRequiredBrush" Color="#FF6961" />
-          <SolidColorBrush x:Key="HdChipBrush" Color="#23314F" />
-          <SolidColorBrush x:Key="HdChipTextBrush" Color="#91A7FF" />
-          <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#2C2C2E" />
-          <SolidColorBrush x:Key="HdReadOnlyLineBrush" Color="#48484A" />
-          <SolidColorBrush x:Key="HdMineBrush" Color="#69DB7C" />
-          <SolidColorBrush x:Key="HdHeldBrush" Color="#F783AC" />
+          <SolidColorBrush x:Key="HdSecondaryBrush" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="HdMutedBrush" Color="#8E8E93" />
+          <SolidColorBrush x:Key="HdAccentBrush" Color="#1A74C4" />
+          <SolidColorBrush x:Key="HdAccentTextBrush" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HdOnAccentBrush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="HdFieldBrush" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="HdFieldLineBrush" Color="#48484A" />
+          <SolidColorBrush x:Key="HdReadOnlyBrush" Color="#2A2A2C" />
+          <SolidColorBrush x:Key="HdYoursBrush" Color="#69DB7C" />
+          <SolidColorBrush x:Key="HdOnBrush" Color="#30D158" />
+          <SolidColorBrush x:Key="HdOffBrush" Color="#8E8E93" />
+          <SolidColorBrush x:Key="HdTheirsBrush" Color="#FF8A80" />
+          <SolidColorBrush x:Key="HdCautionBrush" Color="#F5A623" />
+          <SolidColorBrush x:Key="HdCautionTextBrush" Color="#F5A623" />
           <SolidColorBrush x:Key="HdWarnBrush" Color="#3B2A14" />
           <SolidColorBrush x:Key="HdWarnLineBrush" Color="#A0611B" />
           <SolidColorBrush x:Key="HdWarnTextBrush" Color="#FFD8A8" />
-          <SolidColorBrush x:Key="HdFolderBrush" Color="#748FFC" />
-          <SolidColorBrush x:Key="HdStarBrush" Color="#FCC419" />
+          <SolidColorBrush x:Key="HdRequiredBrush" Color="#FF6961" />
           <SolidColorBrush x:Key="HdProblemBrush" Color="#FF6961" />
+          <SolidColorBrush x:Key="HdStarBrush" Color="#FCC419" />
+          <SolidColorBrush x:Key="HdChipBrush" Color="#23314F" />
+          <SolidColorBrush x:Key="HdChipTextBrush" Color="#91A7FF" />
+          <BoxShadows x:Key="HdFocusRing">0 0 0 3 #6622A2E0</BoxShadows>
+          <SolidColorBrush x:Key="ButtonBackground" Color="#4A4A4D" />
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#545457" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#5E5E62" />
+          <SolidColorBrush x:Key="ButtonBorderBrush" Color="#4A4A4D" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPointerOver" Color="#545457" />
+          <SolidColorBrush x:Key="ButtonBorderBrushPressed" Color="#5E5E62" />
+          <SolidColorBrush x:Key="ButtonForeground" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="ButtonForegroundPressed" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="AccentButtonBackground" Color="#1A74C4" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#1F7BCC" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundPressed" Color="#2383D6" />
+          <SolidColorBrush x:Key="AccentButtonBackgroundDisabled" Color="#801A74C4" />
+          <SolidColorBrush x:Key="AccentButtonForeground" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundPressed" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="AccentButtonForegroundDisabled" Color="#CCFFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackground" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#48484A" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#5A5A5E" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#1A74C4" />
+          <SolidColorBrush x:Key="TextControlForeground" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#8E8E93" />
+          <SolidColorBrush x:Key="ComboBoxBackground" Color="#4A4A4D" />
+          <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#545457" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#4A4A4D" />
+          <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="#545457" />
+          <SolidColorBrush x:Key="ComboBoxDropDownGlyphForeground" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="CheckBoxCheckBackgroundFillChecked" Color="#1A74C4" />
+          <SolidColorBrush x:Key="CheckBoxCheckBackgroundStrokeChecked" Color="#1A74C4" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackground" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPointerOver" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundPressed" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBackgroundFocused" Color="#2C2C2E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrush" Color="#48484A" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPointerOver" Color="#5A5A5E" />
+          <SolidColorBrush x:Key="CalendarDatePickerBorderBrushPressed" Color="#5A5A5E" />
+          <SolidColorBrush x:Key="CalendarDatePickerForeground" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForeground" Color="#8E8E93" />
+          <SolidColorBrush x:Key="CalendarDatePickerTextForegroundSelected" Color="#F2F2F7" />
+          <SolidColorBrush x:Key="CalendarDatePickerCalendarGlyphForeground" Color="#AEAEB2" />
+          <SolidColorBrush x:Key="HyperlinkButtonForeground" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPointerOver" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundPressed" Color="#5CB3F0" />
+          <SolidColorBrush x:Key="HyperlinkButtonForegroundDisabled" Color="#8E8E93" />
         </ResourceDictionary>
       </ResourceDictionary.ThemeDictionaries>
-      <StreamGeometry x:Key="HdFolderIcon">M0,2 C0,0.9 0.9,0 2,0 L6,0 L8,2 L14,2 C15.1,2 16,2.9 16,4 L16,11 C16,12.1 15.1,13 14,13 L2,13 C0.9,13 0,12.1 0,11 Z</StreamGeometry>
-      <StreamGeometry x:Key="HdDocumentIcon">M1,1 L8,1 L11,4 L11,14 L1,14 Z M8,1 L8,4 L11,4</StreamGeometry>
-      <StreamGeometry x:Key="HdStarIcon">M10,1 L12.6,7 L19,7.4 L14.1,11.5 L15.6,18 L10,14.5 L4.4,18 L5.9,11.5 L1,7.4 L7.4,7 Z</StreamGeometry>
+      <CornerRadius x:Key="ControlCornerRadius">6</CornerRadius>
+      <Thickness x:Key="TextControlBorderThemeThickness">1</Thickness>
+      <Thickness x:Key="TextControlBorderThemeThicknessFocused">1</Thickness>
     </ResourceDictionary>
   </Styles.Resources>
+
   <Style Selector="Window">
     <Setter Property="Background" Value="{DynamicResource HdWindowBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
     <Setter Property="FontSize" Value="13" />
   </Style>
 
-  <!-- The bars: the toolbar over the panes and the footer under them. -->
+  <!-- Controls at the Mac's sizes (polish spec §4.3). -->
+  <Style Selector="Button">
+    <Setter Property="MinHeight" Value="22" />
+    <Setter Property="Padding" Value="12,2" />
+    <Setter Property="FontSize" Value="13" />
+  </Style>
+  <Style Selector="TextBox">
+    <Setter Property="MinHeight" Value="22" />
+    <Setter Property="Padding" Value="6,2" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <!-- The text box and its template's DataValidationErrors both clip to their bounds by default, which cuts the focus
+         ring down to the triangles at the corners. -->
+    <Setter Property="ClipToBounds" Value="False" />
+  </Style>
+  <Style Selector="TextBox /template/ DataValidationErrors">
+    <Setter Property="ClipToBounds" Value="False" />
+  </Style>
+  <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BoxShadow" Value="{DynamicResource HdFocusRing}" />
+  </Style>
+  <!-- Placeholders in Muted at full strength (polish spec §4.1). Fluent's template draws them at Opacity 0.5, which would
+       halve Muted's contrast to about 1.7:1 on white; a plain style loses to the template, so it's the pseudo-class pair. -->
+  <Style Selector="TextBox:not(:disabled) /template/ TextBlock#PART_Placeholder, TextBox:disabled /template/ TextBlock#PART_Placeholder">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <Style Selector="ComboBox">
+    <Setter Property="MinHeight" Value="22" />
+    <Setter Property="Padding" Value="10,2,8,2" />
+  </Style>
+  <!-- A pop-up button's ⌃⌄: Tabler's selector, filled, in place of Fluent's chevron. Fluent's template sets the glyph's
+       Data, Width and Height itself, and a plain style loses to the template; one with a pseudo-class wins. So each of
+       these is written for enabled and disabled, which together are always. -->
+  <Style Selector="ComboBox:not(:disabled) /template/ PathIcon#DropDownGlyph, ComboBox:disabled /template/ PathIcon#DropDownGlyph">
+    <Setter Property="Data" Value="{StaticResource Icon.selector}" />
+    <Setter Property="Width" Value="9" />
+    <Setter Property="Height" Value="12" />
+  </Style>
+  <!-- The date picker's field at a text field's size (polish spec §4.3). Fluent gives it MinHeight 32 and Padding 4, which its
+       inner text box takes (and the text box's own MinHeight 22 plus its 1 pt margin would make 24); the calendar glyph's Grid
+       is Height 24 in the template, so it is set with the pseudo-class pair (a plain style loses to the template). -->
+  <Style Selector="CalendarDatePicker">
+    <Setter Property="MinHeight" Value="22" />
+    <Setter Property="Padding" Value="6,2,0,2" />
+  </Style>
+  <Style Selector="CalendarDatePicker /template/ TextBox#PART_TextBox">
+    <Setter Property="MinHeight" Value="20" />
+  </Style>
+  <Style Selector="CalendarDatePicker:not(:disabled) /template/ Button#PART_Button > Grid, CalendarDatePicker:disabled /template/ Button#PART_Button > Grid">
+    <Setter Property="Height" Value="18" />
+  </Style>
+  <!-- Its focus ring goes round the whole field, as a text box's, and not round the text box inside it (whose ring would show
+       as patches within the border). Like a text box's, the picker and its DataValidationErrors must not clip, or the ring is cut. -->
+  <Style Selector="CalendarDatePicker /template/ TextBox#PART_TextBox:focus /template/ Border#PART_BorderElement">
+    <Setter Property="BoxShadow" Value="none" />
+  </Style>
+  <Style Selector="CalendarDatePicker:focus-within /template/ Panel#LayoutRoot > Border#Background">
+    <Setter Property="BoxShadow" Value="{DynamicResource HdFocusRing}" />
+  </Style>
+  <Style Selector="CalendarDatePicker, CalendarDatePicker /template/ DataValidationErrors">
+    <Setter Property="ClipToBounds" Value="False" />
+  </Style>
+  <Style Selector="CheckBox">
+    <Setter Property="MinHeight" Value="22" />
+  </Style>
+  <Style Selector="CheckBox:not(:disabled) /template/ Border#NormalRectangle, CheckBox:disabled /template/ Border#NormalRectangle">
+    <Setter Property="Width" Value="14" />
+    <Setter Property="Height" Value="14" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+
+  <!-- Bars and panes. Forms have none: their content sits on the window (polish spec §5.1). -->
   <Style Selector="Border.toolbar">
-    <Setter Property="Background" Value="{DynamicResource HdToolbarBrush}" />
+    <Setter Property="Background" Value="{DynamicResource HdBarBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
     <Setter Property="BorderThickness" Value="0,0,0,1" />
     <Setter Property="Padding" Value="12,8" />
   </Style>
   <Style Selector="Border.footer">
-    <Setter Property="Background" Value="{DynamicResource HdToolbarBrush}" />
+    <Setter Property="Padding" Value="20,12,20,16" />
+  </Style>
+  <Style Selector="Border.footer.line">
     <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
     <Setter Property="BorderThickness" Value="0,1,0,0" />
-    <Setter Property="Padding" Value="16,10" />
+    <Setter Property="Padding" Value="14,10" />
   </Style>
   <Style Selector="Border.pane">
     <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
     <Setter Property="BorderThickness" Value="0,0,1,0" />
   </Style>
   <Style Selector="Border.nav">
-    <Setter Property="Background" Value="{DynamicResource HdNavBrush}" />
+    <Setter Property="Background" Value="{DynamicResource HdSidebarBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
     <Setter Property="BorderThickness" Value="0,0,1,0" />
   </Style>
@@ -93,17 +292,33 @@
     <Setter Property="BorderThickness" Value="0,0,0,1" />
     <Setter Property="Padding" Value="12,6" />
   </Style>
-
-  <!-- Text: the theme's colour, except for these. -->
-  <Style Selector="TextBlock.muted">
-    <Setter Property="Foreground" Value="{DynamicResource HdMutedBrush}" />
+  <Style Selector="Border.thumbnail">
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="ClipToBounds" Value="True" />
   </Style>
-  <!-- A Run too: a matter's client after it in a list row. -->
+
+  <!-- Text keeps all its ink (polish spec §4.2). HarfBuzz lays San Francisco out from the font file's default instance
+       (optical size 28, Display) but Skia draws it at Text size (17), whose glyphs are wider. A … shows it most: at 13 pt
+       it ends 1.7 pt past the box it was measured into. Avalonia clips every text block and templated control to its
+       bounds, which cut the last dot off every "Install…" and "Loading…". Neither clips, so the ink stays
+       whole and no layout changes. :is() covers AccessText (a button's content) and SelectableTextBlock too; Button.link
+       has no padding, so its button must not clip either. -->
+  <Style Selector=":is(TextBlock), Button">
+    <Setter Property="ClipToBounds" Value="False" />
+  </Style>
+
+  <!-- Text (polish spec §4.2). "muted" is Secondary, as the windows use it for text people read (call 8). -->
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+  </Style>
+  <!-- A Run too: a matter's client after it in a list row (owner, 2026-10-28). -->
   <Style Selector="TextBlock.label, Run.label">
-    <Setter Property="TextElement.Foreground" Value="{DynamicResource HdLabelBrush}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource HdSecondaryBrush}" />
     <Setter Property="TextElement.FontSize" Value="11" />
   </Style>
-  <Style Selector="TextBlock.heading">
+  <Style Selector="TextBlock.heading, TextBlock.headline">
     <Setter Property="FontSize" Value="13" />
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
@@ -112,8 +327,20 @@
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
   <Style Selector="TextBlock.column">
-    <Setter Property="Foreground" Value="{DynamicResource HdLabelBrush}" />
-    <Setter Property="FontSize" Value="12" />
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="TextBlock.group-header">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Margin" Value="4,14,4,5" />
+  </Style>
+  <Style Selector="TextBlock.footnote">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Margin" Value="4,5,4,0" />
   </Style>
   <Style Selector="TextBlock.required">
     <Setter Property="Foreground" Value="{DynamicResource HdRequiredBrush}" />
@@ -123,12 +350,9 @@
     <Setter Property="FontSize" Value="11" />
     <Setter Property="TextWrapping" Value="Wrap" />
   </Style>
-  <Style Selector="TextBlock.holder">
-    <Setter Property="Foreground" Value="{DynamicResource HdHeldBrush}" />
-    <Setter Property="FontSize" Value="11" />
-  </Style>
-  <Style Selector="TextBlock.holder.mine">
-    <Setter Property="Foreground" Value="{DynamicResource HdMineBrush}" />
+  <Style Selector="SelectableTextBlock.value">
+    <Setter Property="TextWrapping" Value="Wrap" />
+    <Setter Property="Margin" Value="0,1,0,2" />
   </Style>
 
   <!-- "from the matter", "from Drafts". -->
@@ -143,69 +367,189 @@
     <Setter Property="Foreground" Value="{DynamicResource HdChipTextBrush}" />
     <Setter Property="FontSize" Value="10" />
   </Style>
-
-  <!-- A value the form shows but never sends: Client and Matter, from the matter. -->
   <Style Selector="TextBox.readonly">
     <Setter Property="Background" Value="{DynamicResource HdReadOnlyBrush}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource HdReadOnlyLineBrush}" />
-    <Setter Property="Foreground" Value="{DynamicResource HdLabelBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
   </Style>
-
-  <!-- The warning box of Checked Out on Another Computer. -->
+  <!-- Open-Source Notices: the file on the window's colours, unwrapped (polish spec §6.7). -->
+  <Style Selector="TextBox.notices, TextBox.notices:focus, TextBox.notices:pointerover">
+    <Setter Property="Background" Value="{DynamicResource HdWindowBrush}" />
+  </Style>
+  <Style Selector="TextBox.notices /template/ Border#PART_BorderElement, TextBox.notices:focus /template/ Border#PART_BorderElement, TextBox.notices:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="{DynamicResource HdWindowBrush}" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="BoxShadow" Value="none" />
+  </Style>
   <Style Selector="Border.warn">
     <Setter Property="Background" Value="{DynamicResource HdWarnBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource HdWarnLineBrush}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="8" />
+    <Setter Property="CornerRadius" Value="7" />
     <Setter Property="Padding" Value="10,8" />
   </Style>
   <Style Selector="Border.warn TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource HdWarnTextBrush}" />
   </Style>
 
-  <!-- The panes' lists: rows as in the mockups, selected rows light blue. -->
-  <Style Selector="ListBox.rows">
+  <!-- Settings' groups (polish spec §6.5). -->
+  <Style Selector="Border.group">
+    <Setter Property="Background" Value="{DynamicResource HdGroupBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="8" />
+  </Style>
+  <Style Selector="Grid.row">
+    <Setter Property="MinHeight" Value="30" />
+    <Setter Property="Margin" Value="10,4" />
+  </Style>
+  <Style Selector="Border.divided">
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+  </Style>
+
+  <!-- Icons (polish spec §4.4). -->
+  <Style Selector="local|IconView.row-icon">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+  </Style>
+  <Style Selector="local|IconView.folder">
+    <Setter Property="Foreground" Value="{DynamicResource HdAccentTextBrush}" />
+  </Style>
+  <Style Selector="local|IconView.star">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+  </Style>
+  <Style Selector="local|IconView.star.on">
+    <Setter Property="Foreground" Value="{DynamicResource HdStarBrush}" />
+    <Setter Property="Fill" Value="{DynamicResource HdStarBrush}" />
+  </Style>
+
+  <!-- Who holds a document: a lock and today's words, yours green, someone else's red (polish spec §6.2). -->
+  <Style Selector="StackPanel.holder TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdTheirsBrush}" />
+  </Style>
+  <Style Selector="StackPanel.holder local|IconView">
+    <Setter Property="Foreground" Value="{DynamicResource HdTheirsBrush}" />
+  </Style>
+  <Style Selector="StackPanel.holder TextBlock">
+    <Setter Property="FontSize" Value="11" />
+  </Style>
+  <Style Selector="StackPanel.holder.mine TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdYoursBrush}" />
+  </Style>
+  <Style Selector="StackPanel.holder.mine local|IconView">
+    <Setter Property="Foreground" Value="{DynamicResource HdYoursBrush}" />
+  </Style>
+
+  <!-- The lists: alternating rows; the Mac's selection, grey when the list isn't focused (polish spec §4.3). -->
+  <Style Selector="ListBox.rows, ListBox.places, ListBox.versions, ListBox.segmented">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
   </Style>
   <Style Selector="ListBox.rows ListBoxItem">
-    <Setter Property="Padding" Value="10,5" />
-    <Setter Property="MinHeight" Value="28" />
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="MinHeight" Value="24" />
   </Style>
-  <Style Selector="ListBox.places">
+  <Style Selector="ListBox.rows ListBoxItem:nth-child(2n)">
+    <Setter Property="Background" Value="{DynamicResource HdAltRowBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.rows ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdInactiveSelectionBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows:focus-within ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.rows:focus-within ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdAccentBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows:focus-within ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdOnAccentBrush}" />
+  </Style>
+  <!-- A matter's client sets its own colour, so it needs saying too. -->
+  <Style Selector="ListBox.rows:focus-within ListBoxItem:selected Run.label">
+    <Setter Property="Foreground" Value="{DynamicResource HdOnAccentBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows:focus-within ListBoxItem:selected local|IconView">
+    <Setter Property="Foreground" Value="{DynamicResource HdOnAccentBrush}" />
+  </Style>
+
+  <!-- The places: Finder's sidebar, a pill for the one shown (polish spec §6.2). -->
+  <Style Selector="ListBox.places ListBoxItem">
+    <Setter Property="Padding" Value="8,4" />
+    <Setter Property="Margin" Value="6,1" />
+    <Setter Property="MinHeight" Value="24" />
+    <Setter Property="CornerRadius" Value="6" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem local|IconView">
+    <Setter Property="Foreground" Value="{DynamicResource HdAccentTextBrush}" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.places ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdPillBrush}" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem.group">
+    <Setter Property="Padding" Value="8,10,8,3" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.places ListBoxItem.group TextBlock">
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
+  </Style>
+
+  <!-- Versions: the pill, as the places (polish spec §6.2). -->
+  <Style Selector="ListBox.versions ListBoxItem">
+    <Setter Property="Padding" Value="7,4" />
+    <Setter Property="CornerRadius" Value="5" />
+  </Style>
+  <Style Selector="ListBox.versions ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.versions ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdPillBrush}" />
+  </Style>
+
+  <!-- The segmented control: a track and a raised segment (polish spec §4.3). -->
+  <Style Selector="ListBox.segmented">
+    <Setter Property="Background" Value="{DynamicResource HdPillBrush}" />
+    <Setter Property="CornerRadius" Value="6" />
+    <Setter Property="Padding" Value="2" />
+  </Style>
+  <Style Selector="ListBox.segmented ListBoxItem">
+    <Setter Property="Padding" Value="0,2" />
+    <Setter Property="MinHeight" Value="20" />
+    <Setter Property="CornerRadius" Value="5" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ListBox.segmented ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.segmented ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource HdSegmentBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource HdLineBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+
+  <!-- Text on a grey selection is the Text colour, whatever class it has: Secondary, and Yours green, fall below AA on the
+       pill and on the inactive selection. Icons keep their own colours. A focused list's accent selection is not here:
+       its white text rule above stays. These come after the class rules, so they win over them. -->
+  <Style Selector="ListBox.places ListBoxItem:selected TextBlock, ListBox.versions ListBoxItem:selected TextBlock, ListBox.rows:not(:focus-within) ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
+  </Style>
+  <Style Selector="ListBox.rows:not(:focus-within) ListBoxItem:selected Run.label">
+    <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
+  </Style>
+
+  <!-- Buttons: icon-only tools, links, footers. -->
+  <Style Selector="Button.tool">
+    <Setter Property="Padding" Value="5,3" />
+    <Setter Property="MinWidth" Value="26" />
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
   </Style>
-  <Style Selector="ListBox.places ListBoxItem">
-    <Setter Property="Padding" Value="14,9" />
+  <Style Selector="Button.tool local|IconView">
+    <Setter Property="Foreground" Value="{DynamicResource HdTextBrush}" />
   </Style>
-  <Style Selector="ListBox.places ListBoxItem.sep">
-    <Setter Property="Padding" Value="14,3" />
-    <Setter Property="MinHeight" Value="0" />
-    <Setter Property="Background" Value="{DynamicResource HdSeparatorBrush}" />
-  </Style>
-  <Style Selector="ListBox.places ListBoxItem.sep TextBlock">
-    <Setter Property="FontSize" Value="10" />
+  <Style Selector="Button.tool:disabled local|IconView">
     <Setter Property="Foreground" Value="{DynamicResource HdMutedBrush}" />
   </Style>
-
-  <!-- A selected row is the mockups' light blue, not the theme's accent. -->
-  <Style Selector="ListBox.rows ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ListBox.places ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource HdSelectedBrush}" />
+  <!-- A star in a tool button keeps its own colours: Avalonia has no specificity, so these come after the two rules above. -->
+  <Style Selector="Button.tool local|IconView.star">
+    <Setter Property="Foreground" Value="{DynamicResource HdSecondaryBrush}" />
   </Style>
-  <Style Selector="ListBox.rows ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter, ListBox.places ListBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource HdSelectedBrush}" />
-  </Style>
-  <Style Selector="ListBox.places ListBoxItem:selected">
-    <Setter Property="FontWeight" Value="SemiBold" />
-  </Style>
-
-  <!-- Small square buttons in the toolbar: back, forward, up, the star. -->
-  <Style Selector="Button.tool">
-    <Setter Property="Padding" Value="7,3" />
-    <Setter Property="MinWidth" Value="28" />
-    <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderThickness" Value="0" />
+  <Style Selector="Button.tool local|IconView.star.on">
+    <Setter Property="Foreground" Value="{DynamicResource HdStarBrush}" />
+    <Setter Property="Fill" Value="{DynamicResource HdStarBrush}" />
   </Style>
   <Style Selector="Button.tool:disabled /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
@@ -214,40 +558,14 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="Padding" Value="0" />
-    <Setter Property="Foreground" Value="{DynamicResource HdAccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource HdAccentTextBrush}" />
   </Style>
   <Style Selector="Button.link:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.link:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="Foreground" Value="{DynamicResource HdAccentBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource HdAccentTextBrush}" />
   </Style>
   <Style Selector="Button.footer">
-    <Setter Property="MinWidth" Value="84" />
+    <Setter Property="MinWidth" Value="80" />
     <Setter Property="HorizontalContentAlignment" Value="Center" />
-  </Style>
-
-  <!-- Icons in the rows. -->
-  <Style Selector="Path.folder">
-    <Setter Property="Fill" Value="{DynamicResource HdFolderBrush}" />
-    <Setter Property="Width" Value="16" />
-    <Setter Property="Height" Value="13" />
-    <Setter Property="Stretch" Value="Uniform" />
-  </Style>
-  <Style Selector="Path.document">
-    <Setter Property="Stroke" Value="{DynamicResource HdLabelBrush}" />
-    <Setter Property="StrokeThickness" Value="1.2" />
-    <Setter Property="Width" Value="12" />
-    <Setter Property="Height" Value="15" />
-    <Setter Property="Stretch" Value="Uniform" />
-  </Style>
-  <Style Selector="Path.star">
-    <Setter Property="Stroke" Value="{DynamicResource HdMutedBrush}" />
-    <Setter Property="StrokeThickness" Value="1.2" />
-    <Setter Property="Width" Value="15" />
-    <Setter Property="Height" Value="15" />
-    <Setter Property="Stretch" Value="Uniform" />
-  </Style>
-  <Style Selector="Path.star.on">
-    <Setter Property="Fill" Value="{DynamicResource HdStarBrush}" />
-    <Setter Property="Stroke" Value="{DynamicResource HdStarBrush}" />
   </Style>
 </Styles>

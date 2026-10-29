@@ -60,11 +60,11 @@ internal sealed class PropertiesForm
         var label = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Avalonia.Thickness(0, 0, 0, 2) };
         label.Children.Add(new TextBlock { Text = "Client / Matter", Classes = { "label" } });
         label.Children.Add(new Border { Classes = { "chip" }, Child = new TextBlock { Text = "from the matter" } });
-        var value = new TextBox { Text = matter.Display, IsReadOnly = true, Focusable = false, Classes = { "readonly" }, TextWrapping = TextWrapping.Wrap };
+        var value = new SelectableTextBlock { Text = matter.Display, Classes = { "value" }, IsTabStop = false };
         var row = new StackPanel { Children = { label, value } };
         // A server older than the client in a matter's reference sends none.
         if (matter.Client is { } client)
-            row.Children.Add(new TextBlock { Text = client.Name, Classes = { "label" }, TextWrapping = TextWrapping.Wrap, Margin = new Avalonia.Thickness(0, 2, 0, 0) });
+            row.Children.Add(new TextBlock { Text = client.Name, Classes = { "label" }, TextWrapping = TextWrapping.Wrap });
         return row;
     }
 
@@ -93,13 +93,15 @@ internal sealed class PropertiesForm
         : field.Source == "inherited" && field.InheritedFrom is { } folder ? $"from {folder}"
         : null;
 
-    private static Control ReadOnly(FormField field) => new TextBox
+    /// <summary>
+    /// Not a Tab stop, as the Mac's selectable labels aren't (a focused one would also draw Fluent's black rectangle). It stays
+    /// focusable, so a click still selects it and Ctrl+C copies the selection; <c>Focusable = false</c> would lose Ctrl+C.
+    /// </summary>
+    private static Control ReadOnly(FormField field) => new SelectableTextBlock
     {
         Text = field.Options is null ? field.Text : field.LabelOf(field.Text),
-        IsReadOnly = true,
-        Focusable = false,
-        Classes = { "readonly" },
-        TextWrapping = TextWrapping.Wrap
+        Classes = { "value" },
+        IsTabStop = false
     };
 
     private Control Editor(FormField field)
@@ -126,6 +128,8 @@ internal sealed class PropertiesForm
             AcceptsReturn = lines,
             TextWrapping = lines ? TextWrapping.Wrap : TextWrapping.NoWrap,
             Height = lines ? 64 : double.NaN,
+            // Comments' text starts at the top: the text-field style centres a single line, which would float it in the middle.
+            VerticalContentAlignment = lines ? VerticalAlignment.Top : VerticalAlignment.Center,
             PlaceholderText = field.Type switch { "integer" => "A whole number", "decimal" => "A number", _ => null }
         };
         box.TextChanged += (_, _) => Quietly(() => _model.SetText(field.Name, box.Text));

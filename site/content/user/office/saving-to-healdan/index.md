@@ -17,7 +17,7 @@ On a document that isn't in Healdan yet, any of these opens Save to Healdan:
 - **Healdan › Save to Healdan…**, or **Save to Healdan** on the Healdan toolbar;
 - **Save** when LibreOffice asks whether to save your changes as you close the document.
 
-![The Save to Healdan window: places on the left, matter 998.1 – Healdan Demo's Documents folder in the middle with its Drafts folder selected, and the new document's properties on the right, with OpenDocument Text (.odt) chosen as the format](save-to-healdan.png)
+![The Save to Healdan window: places on the left, matter 998.1 – Healdan Demo's Documents folder in the middle with its Drafts folder selected, and the new document's properties on the right, with a File Format pop-up under the properties showing OpenDocument Text (.odt)](save-to-healdan.png)
 
 ## Choosing a Folder
 
@@ -64,8 +64,8 @@ your bookmarks in the web page, apart from your matters, which are My Matters. S
 
 ## The Properties
 
-The right of the window holds the new document's properties, mostly filled in from the folder you chose. Required
-ones are marked with a red star.
+The right of the window, headed **New Document Properties**, holds the new document's properties, mostly filled in
+from the folder you chose. Required ones are marked with a red star.
 
 - **Name:** the document's name. It starts from the name LibreOffice gave it, or the file's name if it was saved on
   your Mac before. Healdan adds the extension.
@@ -80,9 +80,10 @@ ones are marked with a red star.
 
 See [Properties](../../working-with-matters/properties/) for what each one holds.
 
-## The Format
+## The File Format
 
-Below the properties, choose the file format. The app's own comes first, and is chosen until you change it:
+Below the properties, the **File Format** pop-up chooses the file format. The app's own comes first, and is chosen
+until you change it:
 
 | App | Its own format | The other |
 |---|---|---|
@@ -104,7 +105,7 @@ version: `Lease agreement #1235 v1.0`.
 
 ## Saving to Your Mac Instead
 
-**Save to Local Computer**, at the bottom left, shows LibreOffice's own Save As box instead. A document saved there
+**Save to Local Computer…**, at the bottom left, shows LibreOffice's own Save As box instead. A document saved there
 isn't in Healdan. Choose **Healdan › Save to Healdan…** whenever you want to file it.
 
 ## If It Doesn't Work

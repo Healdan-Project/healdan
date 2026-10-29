@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   The Healdan menu and toolbar (spec 6.2), in Writer, Calc and Impress. The menu is in the Start Center too, with Open
-  from Healdan only. Insert Doc ID is Writer's. A Context is matched as text against the window's module.
+  from Healdan only. Insert Doc ID is Writer's. A Context is matched as text against the window's module. The toolbar's
+  buttons come in three groups, and the Images node gives each command its icon, in two sizes and a high-contrast pair.
 -->
 <oor:component-data xmlns:oor="http://openoffice.org/2001/registry" xmlns:xs="http://www.w3.org/2001/XMLSchema"
                     oor:name="Addons" oor:package="org.openoffice.Office">
@@ -150,6 +151,14 @@
         </node>
         <node oor:name="t03" oor:op="replace">
           <prop oor:name="URL" oor:type="xs:string">
+            <value>private:separator</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t04" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
             <value>org.healdan.libreoffice:SaveAsNewVersion</value>
           </prop>
           <prop oor:name="Title" oor:type="xs:string">
@@ -162,7 +171,7 @@
             <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
           </prop>
         </node>
-        <node oor:name="t04" oor:op="replace">
+        <node oor:name="t05" oor:op="replace">
           <prop oor:name="URL" oor:type="xs:string">
             <value>org.healdan.libreoffice:SaveAsNewDocument</value>
           </prop>
@@ -176,7 +185,15 @@
             <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
           </prop>
         </node>
-        <node oor:name="t05" oor:op="replace">
+        <node oor:name="t06" oor:op="replace">
+          <prop oor:name="URL" oor:type="xs:string">
+            <value>private:separator</value>
+          </prop>
+          <prop oor:name="Context" oor:type="xs:string">
+            <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
+          </prop>
+        </node>
+        <node oor:name="t07" oor:op="replace">
           <prop oor:name="URL" oor:type="xs:string">
             <value>org.healdan.libreoffice:Properties</value>
           </prop>
@@ -190,7 +207,7 @@
             <value>com.sun.star.text.TextDocument,com.sun.star.sheet.SpreadsheetDocument,com.sun.star.presentation.PresentationDocument</value>
           </prop>
         </node>
-        <node oor:name="t06" oor:op="replace">
+        <node oor:name="t08" oor:op="replace">
           <prop oor:name="URL" oor:type="xs:string">
             <value>org.healdan.libreoffice:InsertDocId</value>
           </prop>
@@ -203,6 +220,74 @@
           <prop oor:name="Context" oor:type="xs:string">
             <value>com.sun.star.text.TextDocument</value>
           </prop>
+        </node>
+      </node>
+    </node>
+    <node oor:name="Images">
+      <node oor:name="org.healdan.libreoffice.image.SaveToHealdan" oor:op="replace">
+        <prop oor:name="URL" oor:type="xs:string">
+          <value>org.healdan.libreoffice:SaveToHealdan</value>
+        </prop>
+        <node oor:name="UserDefinedImages">
+          <prop oor:name="ImageSmallURL" oor:type="xs:string"><value>%origin%/icons/save-to-healdan-16.png</value></prop>
+          <prop oor:name="ImageBigURL" oor:type="xs:string"><value>%origin%/icons/save-to-healdan-26.png</value></prop>
+          <prop oor:name="ImageSmallHCURL" oor:type="xs:string"><value>%origin%/icons/save-to-healdan-16-hc.png</value></prop>
+          <prop oor:name="ImageBigHCURL" oor:type="xs:string"><value>%origin%/icons/save-to-healdan-26-hc.png</value></prop>
+        </node>
+      </node>
+      <node oor:name="org.healdan.libreoffice.image.OpenFromHealdan" oor:op="replace">
+        <prop oor:name="URL" oor:type="xs:string">
+          <value>org.healdan.libreoffice:OpenFromHealdan</value>
+        </prop>
+        <node oor:name="UserDefinedImages">
+          <prop oor:name="ImageSmallURL" oor:type="xs:string"><value>%origin%/icons/open-from-healdan-16.png</value></prop>
+          <prop oor:name="ImageBigURL" oor:type="xs:string"><value>%origin%/icons/open-from-healdan-26.png</value></prop>
+          <prop oor:name="ImageSmallHCURL" oor:type="xs:string"><value>%origin%/icons/open-from-healdan-16-hc.png</value></prop>
+          <prop oor:name="ImageBigHCURL" oor:type="xs:string"><value>%origin%/icons/open-from-healdan-26-hc.png</value></prop>
+        </node>
+      </node>
+      <node oor:name="org.healdan.libreoffice.image.SaveAsNewVersion" oor:op="replace">
+        <prop oor:name="URL" oor:type="xs:string">
+          <value>org.healdan.libreoffice:SaveAsNewVersion</value>
+        </prop>
+        <node oor:name="UserDefinedImages">
+          <prop oor:name="ImageSmallURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-version-16.png</value></prop>
+          <prop oor:name="ImageBigURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-version-26.png</value></prop>
+          <prop oor:name="ImageSmallHCURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-version-16-hc.png</value></prop>
+          <prop oor:name="ImageBigHCURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-version-26-hc.png</value></prop>
+        </node>
+      </node>
+      <node oor:name="org.healdan.libreoffice.image.SaveAsNewDocument" oor:op="replace">
+        <prop oor:name="URL" oor:type="xs:string">
+          <value>org.healdan.libreoffice:SaveAsNewDocument</value>
+        </prop>
+        <node oor:name="UserDefinedImages">
+          <prop oor:name="ImageSmallURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-document-16.png</value></prop>
+          <prop oor:name="ImageBigURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-document-26.png</value></prop>
+          <prop oor:name="ImageSmallHCURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-document-16-hc.png</value></prop>
+          <prop oor:name="ImageBigHCURL" oor:type="xs:string"><value>%origin%/icons/save-as-new-document-26-hc.png</value></prop>
+        </node>
+      </node>
+      <node oor:name="org.healdan.libreoffice.image.Properties" oor:op="replace">
+        <prop oor:name="URL" oor:type="xs:string">
+          <value>org.healdan.libreoffice:Properties</value>
+        </prop>
+        <node oor:name="UserDefinedImages">
+          <prop oor:name="ImageSmallURL" oor:type="xs:string"><value>%origin%/icons/properties-16.png</value></prop>
+          <prop oor:name="ImageBigURL" oor:type="xs:string"><value>%origin%/icons/properties-26.png</value></prop>
+          <prop oor:name="ImageSmallHCURL" oor:type="xs:string"><value>%origin%/icons/properties-16-hc.png</value></prop>
+          <prop oor:name="ImageBigHCURL" oor:type="xs:string"><value>%origin%/icons/properties-26-hc.png</value></prop>
+        </node>
+      </node>
+      <node oor:name="org.healdan.libreoffice.image.InsertDocId" oor:op="replace">
+        <prop oor:name="URL" oor:type="xs:string">
+          <value>org.healdan.libreoffice:InsertDocId</value>
+        </prop>
+        <node oor:name="UserDefinedImages">
+          <prop oor:name="ImageSmallURL" oor:type="xs:string"><value>%origin%/icons/insert-doc-id-16.png</value></prop>
+          <prop oor:name="ImageBigURL" oor:type="xs:string"><value>%origin%/icons/insert-doc-id-26.png</value></prop>
+          <prop oor:name="ImageSmallHCURL" oor:type="xs:string"><value>%origin%/icons/insert-doc-id-16-hc.png</value></prop>
+          <prop oor:name="ImageBigHCURL" oor:type="xs:string"><value>%origin%/icons/insert-doc-id-26-hc.png</value></prop>
         </node>
       </node>
     </node>

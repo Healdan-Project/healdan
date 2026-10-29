@@ -192,6 +192,23 @@ public class FilingTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testCheckOutPastABackgroundWrite() throws Exception {
+		// The Office preview saves a new document when its conversion ends, which can fall in CE's check-out
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.conversion(0).start()) {
+			response = file(signIn(clerk), document(documents, null, null, true), "a.docx", CONTENT);
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals(clerk.getId(), response.json().path("hold").path("by").path("id").asLong());
+		assertEquals(1, jdbc().queryForObject(
+				"select count(*) from ld_history where ld_event = 'event.checkedout' and ld_userid = ?", Integer.class,
+				clerk.getId()).intValue());
+	}
+
+	@Test
 	public void testUnrecordedFirstVersionIsAnError() throws Exception {
 		// As for a save (SaveTest): CE writes the version record after it creates the document, and only logs a
 		// failure. Here the document is created, but its version record can't be written

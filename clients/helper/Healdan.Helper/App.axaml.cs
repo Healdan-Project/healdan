@@ -3,8 +3,12 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
+using Healdan.Helper.Core;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
@@ -29,7 +33,18 @@ public partial class App : Application
     private bool _stopped;
     private int _afterStart;
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        // San Francisco on macOS (polish spec §4.2): Skia's default there is Helvetica. Every top level, so pop-ups and
+        // tooltips too; elsewhere the desktop's own font.
+        if (OperatingSystem.IsMacOS())
+        {
+            var font = new Style(x => x.Is<TopLevel>());
+            font.Setters.Add(new Setter(TemplatedControl.FontFamilyProperty, new FontFamily(".AppleSystemUIFont")));
+            Styles.Add(font);
+        }
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -58,7 +73,7 @@ public partial class App : Application
         var notifier = new Notifier(_log);
         var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
-        var session = new HelperSession(paths, Keychain(), device, new LibreOfficeApp(), windows, notifier, _log, otherFiles: new DefaultApp());
+        var session = new HelperSession(paths, Keychain(paths, device), device, new LibreOfficeApp(), windows, notifier, _log, otherFiles: new DefaultApp());
         _session = session;
         windows.Session = session;
         var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);
@@ -139,17 +154,20 @@ public partial class App : Application
         link.ContinueWith(t => _log.Error("A link failed", t.Exception), TaskContinuationOptions.OnlyOnFaulted);
     }
 
-    /// <summary>The system's keychain; a Debug build run by hand can take a token from <c>HEALDAN_HELPER_DEV_TOKEN</c> instead.</summary>
-    private IKeychain Keychain()
+    /// <summary>
+    /// The system's keychain, under the service <paramref name="paths"/> names, so a Debug build with its files apart has
+    /// its own entry; one run by hand can take a token from <c>HEALDAN_HELPER_DEV_TOKEN</c> instead.
+    /// </summary>
+    private IKeychain Keychain(HelperPaths paths, DeviceIdentity device)
     {
 #if DEBUG
         if (Environment.GetEnvironmentVariable("HEALDAN_HELPER_DEV_TOKEN") is { Length: > 0 } token)
         {
-            _log.Warn("Debug build: the sign-in comes from HEALDAN_HELPER_DEV_TOKEN, not the keychain");
-            return new DevKeychain(token);
+            _log.Warn("Debug build: the sign-in comes from HEALDAN_HELPER_DEV_TOKEN, not the keychain, as this device's");
+            return new DevKeychain(token, device.Id);
         }
 #endif
-        return OperatingSystem.IsMacOS() ? new MacKeychain() : new SecretToolKeychain();
+        return OperatingSystem.IsMacOS() ? new MacKeychain(paths.KeychainService) : new SecretToolKeychain(paths.KeychainService);
     }
 
     private void Stop()

@@ -1,17 +1,19 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Platform;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Session;
+using Healdan.Helper.Core.Ui;
 using Healdan.Helper.Platform;
 using Healdan.Helper.Windows;
 
 namespace Healdan.Helper.Tray;
 
 /// <summary>
-/// The menu-bar icon and its menu (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
+/// The menu-bar icon, the mark in one colour with a dot while the helper needs the user (polish spec §7), and its menu
+/// (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
 /// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), Open from Healdan (once the helper
 /// has started), Open Healdan in Browser (once there's a server, signed in or not: #87), Install the LibreOffice
 /// Extension while it isn't installed (spec §5.12, R22), Settings, Sign In or Sign Out, About (#89) and Quit. When
@@ -30,6 +32,14 @@ internal sealed class TrayMenu : IDisposable
     private readonly Action _quit;
     private readonly NativeMenu _menu = new();
     private readonly TrayIcon _icon;
+    private readonly WindowIcon _plain;
+    private readonly WindowIcon _attention;
+    /// <summary>
+    /// macOS: LibreOffice's registry read again while the extension is missing, so the dot and the menu item go once the
+    /// user has accepted it there, without waiting for the menu to open.
+    /// </summary>
+    private readonly DispatcherTimer _registry = new() { Interval = TimeSpan.FromSeconds(5) };
+    private bool? _dotShown;
 
     public TrayMenu(Application app, HelperSession session, Notifier notifier, AppWindows windows, ExtensionCheck extension, Action quit)
     {
@@ -38,10 +48,10 @@ internal sealed class TrayMenu : IDisposable
         _windows = windows;
         _notifier = notifier;
         _quit = quit;
-        // Black on transparent, used as a template image so the menu bar tints it; GNOME's dark top bar takes the light one.
-        var asset = OperatingSystem.IsLinux() ? "tray-light.png" : "tray.png";
-        using var png = AssetLoader.Open(new Uri($"avares://HealdanHelper/Assets/{asset}"));
-        _icon = new TrayIcon { Icon = new WindowIcon(png), ToolTipText = "Healdan Helper", Menu = _menu, IsVisible = true };
+        // Black on transparent, used as a template image so the menu bar tints it; GNOME's dark top bar takes white (polish spec §7.1).
+        var color = OperatingSystem.IsLinux() ? Colors.White : Colors.Black;
+        (_plain, _attention) = (TrayIcons.Draw(false, color), TrayIcons.Draw(true, color));
+        _icon = new TrayIcon { Icon = _plain, ToolTipText = Attention.ToolTip(null), Menu = _menu, IsVisible = true };
         if (OperatingSystem.IsMacOS())
             MacOSProperties.SetIsTemplateIcon(_icon, true);
         TrayIcon.SetIcons(app, [_icon]);
@@ -50,6 +60,7 @@ internal sealed class TrayMenu : IDisposable
         session.Changed += Refresh;
         notifier.StatusChanged += Refresh;
         extension.Changed += Refresh;
+        _registry.Tick += (_, _) => _extension.Refresh(); // a change raises Changed, which rebuilds the menu
         Build();
     }
 
@@ -58,6 +69,7 @@ internal sealed class TrayMenu : IDisposable
         _session.Changed -= Refresh;
         _notifier.StatusChanged -= Refresh;
         _extension.Changed -= Refresh;
+        _registry.Stop();
         _icon.IsVisible = false;
         _icon.Dispose();
     }
@@ -66,6 +78,13 @@ internal sealed class TrayMenu : IDisposable
 
     private void Build()
     {
+        var missing = _extension.Refresh(); // reads LibreOffice's registry, so the item goes once the user has accepted it
+        var copies = _session.OpenCopies();
+        var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, copies.Any(_session.HasCrashed), _session.KeptCopies().Count, missing,
+            _extension.Older is not null);
+        ShowDot(reason);
+        _registry.IsEnabled = missing && OperatingSystem.IsMacOS();
+
         var items = _menu.Items;
         items.Clear();
         items.Add(Label(Who()));
@@ -73,7 +92,6 @@ internal sealed class TrayMenu : IDisposable
             items.Add(Item(status.Length <= MaxStatus ? status : status[..MaxStatus] + "…", _notifier.ClearStatus));
         items.Add(new NativeMenuItemSeparator());
 
-        var copies = _session.OpenCopies();
         if (copies.Count == 0)
             items.Add(Label("No documents open"));
         foreach (var copy in copies)
@@ -101,7 +119,7 @@ internal sealed class TrayMenu : IDisposable
         });
         browse.IsEnabled = _session.WebPage is not null;
         items.Add(browse);
-        if (_extension.Refresh()) // reads LibreOffice's registry, so the item goes once the user has accepted it
+        if (missing)
             items.Add(Item(ExtensionCheck.MenuItem, InstallExtension));
         items.Add(Item("Settings…", _windows.ShowSettings));
         items.Add(_session.SignedIn
@@ -110,6 +128,18 @@ internal sealed class TrayMenu : IDisposable
         items.Add(new NativeMenuItemSeparator());
         items.Add(Item("About Healdan Helper", _windows.ShowAbout));
         items.Add(Item("Quit Healdan Helper", _quit));
+    }
+
+    /// <summary>The dot while the helper needs the user, and the tooltip saying why (polish spec §7.2).</summary>
+    private void ShowDot(string? reason)
+    {
+        _icon.ToolTipText = Attention.ToolTip(reason);
+        if (_dotShown == (reason is not null))
+            return;
+        _dotShown = reason is not null;
+        _icon.Icon = reason is null ? _plain : _attention;
+        if (OperatingSystem.IsMacOS())
+            MacOSProperties.SetIsTemplateIcon(_icon, true);
     }
 
     private void InstallExtension() => _ = Task.Run(() =>

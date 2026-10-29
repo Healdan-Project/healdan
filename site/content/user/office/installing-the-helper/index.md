@@ -42,6 +42,11 @@ checked by Apple, so macOS doesn't warn about it otherwise.
 
 Healdan's icon appears in the menu bar. The helper has no Dock icon, and shows a window only when it needs you.
 
+A dot on the icon means the helper needs you: you're signed out, it couldn't start, a document closed unexpectedly, a
+copy is Not Yet in Healdan, or LibreOffice's extension isn't installed or needs updating. Point at the icon to see
+which, such as "LibreOffice Extension Needs Updating". The extension's dot goes by itself a few seconds after you
+accept the extension in LibreOffice.
+
 ### Sign In
 
 The Sign In to Healdan window opens: see [The Sign In Window](#the-sign-in-window). Once you're signed in,
@@ -55,7 +60,7 @@ The helper for Ubuntu isn't ready yet. Until it is, Healdan works in LibreOffice
 
 ## The Sign In Window
 
-![The Sign In to Healdan window: Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
+![The Sign In to Healdan window: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
 
 Type the server's address, your username and your password, and choose **Sign In**.
 
@@ -84,6 +89,20 @@ and a notice from the helper says the same.
 The **Healdan** menu is now in Writer, Calc and Impress, with Save to Healdan, Open from Healdan, Save as New
 Version, Save as New Document, Properties and, in Writer, Insert Doc ID. The same commands are on the Healdan
 toolbar: **View › Toolbars › Healdan** shows or hides it. The Start Center's Healdan menu has Open from Healdan.
+
+The toolbar's buttons are pictures, in this order, with a thin line between each pair:
+
+| Button | Command |
+|---|---|
+| ![Save to Healdan](toolbar-save-to-healdan.png) | Save to Healdan |
+| ![Open from Healdan](toolbar-open-from-healdan.png) | Open from Healdan |
+| ![Save as New Version](toolbar-save-as-new-version.png) | Save as New Version |
+| ![Save as New Document](toolbar-save-as-new-document.png) | Save as New Document |
+| ![Properties](toolbar-properties.png) | Properties |
+| ![Insert Doc ID](toolbar-insert-doc-id.png) | Insert Doc ID (Writer only) |
+
+Point at a button to see its name. Save to Healdan and Open from Healdan carry Healdan's shield, so they aren't
+mistaken for LibreOffice's own Save and Open.
 
 - **If you missed it,** choose **Install the LibreOffice Extension…** in the helper's menu, which asks again. Until
   the extension is in, the helper reminds you each time it starts.
@@ -116,7 +135,7 @@ Click Healdan's icon in the menu bar.
 | Not Yet in Healdan | Copies with changes Healdan can't take, such as after your check-out ended, kept once their window closed. Choose one to open it as it is, then use Save as New Document: see [When Things Go Wrong](../when-things-go-wrong/#your-check-out-ended) |
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
 | Open Healdan in Browser | Healdan's web page, on the helper's server, in your usual browser. It works when the helper is signed out too: the web page has its own sign-in |
-| Install the LibreOffice Extension… | Only while the extension isn't installed |
+| Install the LibreOffice Extension… | Only while the extension isn't installed, or an older version is |
 | Settings… | See [Settings](#settings) |
 | Sign Out, or Sign In… | See [Signing Out](#signing-out) |
 | About Healdan Helper | The helper's version, and the server's: see [About Healdan Helper](#about-healdan-helper) |
@@ -124,18 +143,26 @@ Click Healdan's icon in the menu bar.
 
 ## Settings
 
-![The Healdan Helper Settings window: the server https://healdan.example, read-only; Documents, Spreadsheets and Presentations each opening in LibreOffice; Start at Sign-In on; and the LibreOffice extension's version](settings.png)
+![The Healdan Helper Settings window in three groups: Server, with the address healdan.example; Open Each Kind of File In, with Documents, Spreadsheets and Presentations, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version and when it was installed](settings.png)
 
-- **Server:** the server the helper is signed in to. To use another, sign out, then sign in with its address.
-  Before you do, close your documents, and check the menu shows no saves waiting and nothing Not Yet in Healdan.
-  Any local copies left from the old server are moved to a folder of their own beside `Copies`, such as
-  `Copies from healdan.example`, and a notice says so. The helper never sends them to the new server, where the
-  same doc # can be a different document.
-- **Open Each Kind of File In:** documents, spreadsheets and presentations open in LibreOffice. Other files, such as
-  PDFs, open read-only in your Mac's usual app for them.
-- **Start at Sign-In:** after your first sign-in, the helper starts whenever you sign in to your Mac. To stop it,
-  turn it off in **System Settings › General › Login Items & Extensions**.
-- **LibreOffice Extension:** the version installed, or what to do to install it.
+Settings has three groups:
+
+- **Server:** the server the helper is signed in to, as you'd type it to sign in, such as `healdan.example`. To use
+  another, sign out, then sign in with its address. Before you do, close your documents, and check the menu shows no
+  saves waiting and nothing Not Yet in Healdan. Any local copies left from the old server are moved to a folder of
+  their own beside `Copies`, such as `Copies from healdan.example`, and a notice says so. The helper never sends them
+  to the new server, where the same doc # can be a different document.
+- **Open Each Kind of File In:** a row each for documents, spreadsheets and presentations, with the file extensions
+  it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app for them.
+- **This Computer:**
+  - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
+    To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it isn't on, a line
+    under it says why, or how to turn it on.
+  - **LibreOffice Extension:** the version installed, and when it was installed, or **Not Installed**. While the
+    extension isn't installed, **Install…** asks LibreOffice to add it, as the menu's **Install the LibreOffice
+    Extension…** does. While an older version is installed, the row shows that version, with **Update…**, which asks
+    LibreOffice to add the helper's newer one in the same way. A line under the row says when LibreOffice is waiting
+    for you to accept it, and the row shows the new version a few seconds after you do.
 
 ## About Healdan Helper
 
@@ -146,7 +173,7 @@ Choose **About Healdan Helper** in the helper's menu.
 - **Copy for Support** copies the helper's version, your Mac's, and the server with its version, as one line to
   paste into an email or an issue.
 - **Healdan Docs** opens these pages, and **Licence: GNU LGPL v3** the licence the helper is free software under.
-- **Open-Source Notices…** lists the open-source software the helper is built with, and each one's licence.
+- **Open-Source Notices** lists the open-source software the helper is built with, and each one's licence.
 
 ## Signing Out
 

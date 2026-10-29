@@ -15,6 +15,7 @@ person's computer, and **Healdan's LibreOffice extension**. They build apart fro
 |---|---|---|
 | The web page's Open in App | The helper | A `healdan://open/<doc #>?server=<host>` link, which macOS hands the app bundle as an Apple event, started or not |
 | The LibreOffice extension | The helper | The channel: HTTP on `127.0.0.1`, with a secret (below) |
+| A second helper | The running helper | The channel's `/v1/link`, for a link macOS gave another copy of the app (below) |
 | The helper | Healdan | The [API](../api/) under `/api/v1`, with a device token |
 
 The extension holds no token and calls no server. The helper does the work, and draws every window, once for every
@@ -35,6 +36,11 @@ app.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
   notifications, login item and extension install (`Platform/`). It stays out of the Dock (`LSUIElement`) and hands
   the focus back after each window.
+  - **The look** (polish spec, `docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`): the tokens and
+    control styles are in `Windows/HelperStyles.axaml`, over Fluent. The icons are Tabler's, in
+    `Windows/HelperIcons.axaml`, which `python3 clients/icons/write-helper-icons.py` writes from
+    `clients/icons/tabler/` (`IconsTests` fails until it's run, and until a new icon is in its `SpecNames`). The menu
+    bar icon is drawn at run time from `HealdanMark`'s shapes (`Tray/TrayIcons.cs`).
 - **`Healdan.Helper.Core.Tests`** is xUnit.
 
 ### The Cycle
@@ -73,7 +79,8 @@ app.
   name, but only while the document is still checked out here and its `fileVersion` hasn't moved. A repeated
   `saveId` gets `version-moved` too once newer content has been stored over the save, so it's never resent.
 - **This computer's hold** is one whose `hold.device.id` is this computer's device id. Device names aren't compared,
-  as two computers can share one.
+  as two computers can share one. The server records a hold under the device id of the token that made it, which is
+  why the helper never uses a token issued to another device id (below).
 
 ### Local Copies
 
@@ -110,15 +117,24 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 The token is in the keychain, never in a file: service `Healdan Helper`, account the server's base URL
 (`https://host[:port]`). Nothing logs a token, a password, the channel's secret or a file's contents.
 
+- **The item holds `{"device", "token"}`** (`KeptToken`): the token and the device id it was issued for, as the API
+  doesn't say which device a token is. At start, `SignIn.TryResumeAsync` uses the token only when `device` is this
+  computer's id in `device.json`. Otherwise it revokes the token (`DELETE /auth/tokens/current`, which may fail when
+  Healdan can't be reached), removes it, and the helper asks for the sign-in. That covers a bare token kept by a helper
+  before this check, so everyone signs in once after the update, and a `device.json` that was lost or remade.
+- **A helper with its files elsewhere** (`HEALDAN_HELPER_DEV_ROOT`) uses the service `Healdan Helper (<root>)`
+  (`HelperPaths.KeychainService`), so it never takes the installed helper's token, nor the installed helper its.
+
 ## The Channel
 
-The extension calls the helper over HTTP on `127.0.0.1`, at the port in `channel.json`. Every request but
+The extension, and a second helper handing over a link, call the helper over HTTP on `127.0.0.1`, at the port in
+`channel.json`. Every request but
 `GET /v1/ping` sends the secret as `X-Healdan-Secret`; a missing or wrong one is `403`. Bodies are JSON.
 
 | Route | Body | Answer |
 |---|---|---|
 | `GET /v1/ping` | none | `{"ok": true}` |
-| `POST /v1/link` | `{"url"}` | `{}` at once; the open runs in the background |
+| `POST /v1/link` | `{"url"}` | `{}` at once; the open runs in the background, as for an Apple event's link |
 | `POST /v1/open-dialog` | `{"app"}` | `{"action": "opened" \| "local" \| "cancel"}`, once the window closes |
 | `POST /v1/save-new` | `{"app", "name", "formats", "path"}` | `{"action": "save" \| "local" \| "cancel", "folderId", "name", "format", "properties", "tempPath"}`; `path` is the copy for Save as New Document |
 | `POST /v1/file` | `{"tempPath", "folderId", "name", "format", "properties", "app", "replaces"}` | the new copy's state |
@@ -138,6 +154,13 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   A save Healdan refuses for good, or one that fails, answers the same way.
   While the answer says `pending`, the extension asks again after 2, 5, 15, 30, then every 60 seconds, so the title
   moves on once Healdan is back, however long it was away.
+
+- **A second helper's link:** only one helper runs for each user. macOS starts another copy of the app when the copy
+  it hands `healdan:` links to isn't the one running, such as an old one in `/Applications` beside a newer one, and
+  sends the link as an Apple event once the app runs, not in its arguments. So a start that finds a helper answering
+  its channel runs `HandOverApp` instead of the helper: Avalonia with no window or icon, which takes each link's event
+  and posts it to `/v1/link` (`LinkHandOver`), then quits a second after the last, or after 5 seconds when none came.
+  A link it can't hand over is logged as dropped, with why. An old copy can't do any of this, so its links are lost.
 
 - **The window routes** answer when the user closes the window, which can take minutes, so their callers mustn't time
   out. A second request while one of a window is open is answered `cancel`, and brings the open one up.
@@ -159,8 +182,18 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   - a protocol handler for the Healdan menu and toolbar (`org.healdan.libreoffice:`);
   - a job on LibreOffice's events, which attaches to new windows, sets a copy's title from the helper, tells the
     helper when a copy closes, and takes the copies out of Recent Documents.
-- **The `.xcu` files** declare the menu, the toolbar and its name, the protocol handler and the job.
-  `description.xml` holds the version the helper compares with the installed one.
+- **The `.xcu` files** declare the menu, the toolbar and its name, the protocol handler and the job. `Addons.xcu`
+  divides the toolbar into three groups with separators, and its `Images` node gives each of the six commands its
+  images (see [The Images](#the-images)).
+- **`description.xml`** holds the version the helper compares with the installed one: it installs the bundled
+  extension only when that is newer, so a change to the extension's content comes with a new version. It also names
+  the extension's icon for LibreOffice's Extension Manager.
+- **The notices** show in the document's window as an infobar, with the notice's first sentence in bold and the rest
+  in regular type. The flows and their tests still deal in whole sentences: `notice_parts` in `healdan_logic.py`
+  splits one at its first full stop (not one inside brackets, as in an error's own words, nor one inside a version
+  number), and `tell` in `healdan.py` passes the two parts to the infobar. Where there's no infobar (the Start
+  Center), a message box shows the headline, a blank line and the detail. A notice of one sentence is a headline
+  alone.
 - **Long calls** run on a thread of their own while LibreOffice's thread keeps its events going, and what they change
   in the document goes back to LibreOffice's thread.
 - **When the helper can't be reached,** Open and Save fall back to LibreOffice's own boxes, with one notice. A copy's
@@ -168,6 +201,32 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   shown falls back the same way.
 
 `clients/libreoffice/build.sh` packages it as `healdan.oxt`, the same bytes from the same sources.
+
+### The Images
+
+The toolbar's and menu's images are in `clients/libreoffice/healdan/icons/`, and are committed, so building the
+extension needs no .NET.
+
+- **For each of the six commands,** a 16 px and a 26 px PNG in mid-grey, and a white pair for high contrast
+  (`save-to-healdan-16.png`, `save-to-healdan-26.png`, `save-to-healdan-16-hc.png`, and so on). Save to Healdan and
+  Open from Healdan carry Healdan's shield, so they aren't taken for LibreOffice's own Save and Open. The extension's
+  icon is the mark at 42 px, with a white one (`healdan-42.png`, `healdan-42-hc.png`).
+- **They're rendered, not drawn by hand,** from the helper's icons and mark, so the two look alike:
+
+  ```bash
+  dotnet run --project clients/helper/tools/IconRender
+  ```
+
+  Run it on a Mac whenever an icon changes (after `python3 clients/icons/write-helper-icons.py`, if a Tabler icon
+  did), and commit what it writes. `IconRender` uses Avalonia's headless Skia drawing on
+  `Windows/HelperIcons.axaml`'s geometry and `HealdanMark`'s shapes. It isn't in the solution, so `dotnet test` and
+  CI don't build it, and nothing checks the images against their source. A second run writes the same bytes.
+- **`Addons.xcu`'s `Images` node** maps each command's URL to its four files, through `%origin%`. The same images
+  show beside the Healdan menu's items wherever LibreOffice shows pictures in menus.
+- **The package carries `THIRD-PARTY-NOTICES.txt`,** with Tabler Icons' name, version and MIT licence, which the
+  icons are drawn from. Update it with the icons.
+- **The tests** (`test_package.py`) check that every command has its four images in the package at the right sizes,
+  that the toolbar has its three groups, and that the extension's icon and the notice are there.
 
 ### Installing It by Hand
 
@@ -179,7 +238,9 @@ Don't use `unopkg` on macOS. With LibreOffice 26.8 on macOS 27 it fails to reach
 (`NoConnectException`), even with LibreOffice closed and `TMPDIR=/tmp`, and `unopkg list` hangs beside a running
 LibreOffice. So the packaged helper never runs it on macOS: it opens its own `.oxt` in LibreOffice, once for each
 helper version that brings a newer extension, and reads LibreOffice's registry under
-`~/Library/Application Support/LibreOffice/4/user/` to see what's installed. On Ubuntu, `unopkg` works.
+`~/Library/Application Support/LibreOffice/4/user/` to see what's installed: at each start, as the menu opens, and
+every 5 seconds while the extension is missing or older, so the menu, the menu bar icon's dot and Settings follow
+what the user accepts. On Ubuntu, `unopkg` works.
 
 ## Running the Helper from Source
 
@@ -192,8 +253,10 @@ HEALDAN_HELPER_DEV_ROOT=$PWD/scratch/helper dotnet run --project clients/helper/
 Sign in with the stack's address, such as `http://localhost:8080`: the helper allows plain HTTP for `localhost`
 only. A Debug build run this way:
 
-- keeps its files under `HEALDAN_HELPER_DEV_ROOT` when it's set, away from an installed helper's;
-- takes its token from `HEALDAN_HELPER_DEV_TOKEN` instead of the keychain, when that's set;
+- keeps its files under `HEALDAN_HELPER_DEV_ROOT` when it's set, away from an installed helper's, and its sign-in
+  under a keychain service of its own;
+- takes its token from `HEALDAN_HELPER_DEV_TOKEN` instead of the keychain, when that's set, as one issued to its own
+  device id: check-outs read as this computer's only when the token was;
 - answers the windows from the JSON file `HEALDAN_HELPER_DEV_ANSWERS` names, for a check with nobody at the screen;
 - isn't an app bundle, so macOS doesn't hand it links, it posts no notifications (its notices become the menu's
   status line), it doesn't start at sign-in, and it carries no `.oxt`.
@@ -201,7 +264,7 @@ only. A Debug build run this way:
 Release builds have none of the variables. For links, notifications and the extension's install, build the app with
 `clients/helper/packaging/mac/package.sh` (unsigned, without `SIGN_IDENTITY`, it runs on your own Mac) and open
 `clients/helper/packaging/mac/out/Healdan Helper.app`. Only one helper runs per user: a second start finds the first
-through `channel.json`, and quits.
+through `channel.json`, hands it any link it was started for, and quits (see [The Channel](#the-channel)).
 
 ## Tests
 
@@ -225,8 +288,13 @@ through `channel.json`, and quits.
   helper moves to a new .NET release.
 - **`MarkTests`** fail when About's mark, `Windows/HealdanMark.axaml`, and the docs site's `site/static/favicon.svg`
   draw different shapes.
-- **The extension's tests** cover `healdan_logic.py` with fakes for LibreOffice, and build the `.oxt` and check that
-  its files agree. A real LibreOffice isn't part of them.
+- **`IconsTests`** fail when `Windows/HelperIcons.axaml` and the SVGs in `clients/icons/tabler/` draw different
+  shapes, or when the SVGs aren't the spec's list, `SpecNames`. After adding or changing an icon, run
+  `python3 clients/icons/write-helper-icons.py`, and add a new one to `SpecNames`.
+- **`AttentionTests`** pin when the menu bar icon shows its dot, and the reason its tooltip gives.
+- **The extension's tests** cover `healdan_logic.py` (the notices' headlines and details included) with fakes for
+  LibreOffice, and build the `.oxt` and check that its files agree: the toolbar, the images and the notice. A real
+  LibreOffice isn't part of them.
 
 The windows' look, focus, notifications and LibreOffice's own screens are checked by hand: each pull request that
 changes them lists its checks for the owner.
@@ -242,7 +310,8 @@ the steps and the secrets.
 - **The icon,** `AppIcon.icns`, is Healdan's mark from the docs site's `site/static/favicon.svg` on macOS's rounded
   square. `clients/helper/packaging/mac/make-icon.swift` draws it each time `package.sh` runs, so changing the
   favicon changes the helper's icon too. About's mark is the same shapes in XAML, as Avalonia doesn't read SVG, and
-  `MarkTests` fails until it's redrawn.
+  `MarkTests` fails until it's redrawn. The menu bar icon follows the mark too: it's drawn at run time from
+  `HealdanMark`'s shapes, in one colour.
 - **The version** is the helper's own, from its tag. The helper checks `GET /server`'s `apiVersion`, and refuses a
   server whose API it doesn't speak.
 - **The login item:** after its first sign-in, the installed helper registers itself to start at sign-in, with

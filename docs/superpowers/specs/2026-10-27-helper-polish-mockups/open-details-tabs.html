@@ -1,0 +1,40 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Helper polish: Open's details tabs</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>:root{--text-primary:#1d1d1f;--text-secondary:#6e6e73;--surface-1:#f3f3f2;--border:rgba(0,0,0,.12)}body{margin:24px auto;max-width:680px;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<style>
+.p{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;background:#FFFFFF;color:#1D1D1F;border:0.5px solid #C7C7CC;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px;font-size:12px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#EDEDF0;border-radius:6px;padding:2px;font-size:11.5px;text-align:center}
+.seg span{padding:2px 0;border-radius:5px;color:#3A3A3C}
+.seg .on{background:#FFFFFF;border:0.5px solid #D1D1D6;color:#1D1D1F;font-weight:500}
+.dl{display:grid;grid-template-columns:70px minmax(0,1fr);gap:5px 8px;font-size:11.5px}
+.dl span:nth-child(odd){color:#6E6E73}
+.v{border-radius:5px;padding:4px 7px;font-size:11.5px}
+.v div{color:#6E6E73;font-size:10.5px}
+.cap{font-size:11px;color:#6E6E73;text-align:center}
+</style>
+<h2 class="sr-only">Proposed details pane for Open from Healdan with a fixed header and a Properties / Versions segmented control, shown with each tab selected.</h2>
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;padding:0.5rem 0;max-width:560px;margin:0 auto">
+<div style="display:flex;flex-direction:column;gap:6px">
+<div class="p">
+<div style="display:flex;gap:9px;align-items:flex-start"><i class="ti ti-file-text" style="font-size:32px;color:#0C69C0" aria-hidden="true"></i><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">Lease agreement.docx</div><div style="font-size:11px;color:#6E6E73">#1234 · v2.1</div></div><i class="ti ti-star" style="font-size:16px;color:#F59F00" aria-hidden="true"></i></div>
+<div class="seg"><span class="on">Properties</span><span>Versions (3)</span></div>
+<div style="height:96px;border-radius:6px;border:0.5px solid #E5E5EA;background:#F5F5F7;display:flex;justify-content:center;align-items:flex-end;overflow:hidden"><div style="width:70px;height:86px;background:#fff;border:0.5px solid #D1D1D6;border-bottom:0;padding:8px 7px;display:flex;flex-direction:column;gap:4px"><span style="height:3px;background:#C7C7CC;width:70%"></span><span style="height:2px;background:#E5E5EA"></span><span style="height:2px;background:#E5E5EA"></span><span style="height:2px;background:#E5E5EA;width:80%"></span><span style="height:2px;background:#E5E5EA"></span><span style="height:2px;background:#E5E5EA;width:60%"></span></div></div>
+<div class="dl"><span>Matter</span><span>1.1 Acme v Beta: Lease Dispute</span><span>Folder</span><span>Drafts</span><span>Author</span><span>Sarah Collins</span><span>Class</span><span>Correspondence</span><span>Subclass</span><span>Letter</span><span>Last Saved</span><span>Today at 09:42</span><span>Checked Out</span><span>To you on Sarah's MacBook Pro</span></div>
+</div>
+<div class="cap">Properties: the thumbnail, when there is one, then the fields</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:6px">
+<div class="p">
+<div style="display:flex;gap:9px;align-items:flex-start"><i class="ti ti-file-text" style="font-size:32px;color:#0C69C0" aria-hidden="true"></i><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">Lease agreement.docx</div><div style="font-size:11px;color:#6E6E73">#1234 · v2.0</div><div style="font-size:11px;color:#C77700;display:flex;align-items:center;gap:3px;margin-top:1px"><i class="ti ti-eye" style="font-size:12px" aria-hidden="true"></i>Older version: opens read-only</div></div><i class="ti ti-star" style="font-size:16px;color:#F59F00" aria-hidden="true"></i></div>
+<div class="seg"><span>Properties</span><span class="on">Versions (3)</span></div>
+<div style="display:flex;flex-direction:column;gap:3px">
+<div class="v">v2.1 <span style="color:#6E6E73">current</span><div>Today at 09:42 · Sarah Collins</div></div>
+<div class="v" style="background:#0C69C0;color:#FFFFFF">v2.0<div style="color:#DCEBFA">23 Oct at 20:34 · Sarah Collins</div></div>
+<div class="v">v1.0<div>20 Oct at 01:22 · Jane Smith</div></div>
+</div>
+</div>
+<div class="cap">Versions: picking an older one changes the header</div>
+</div>
+</div>

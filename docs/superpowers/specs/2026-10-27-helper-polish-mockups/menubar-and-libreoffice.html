@@ -1,0 +1,49 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Helper polish: menu bar and LibreOffice</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>:root{--text-primary:#1d1d1f;--text-secondary:#6e6e73;--surface-1:#f3f3f2;--border:rgba(0,0,0,.12)}body{margin:24px auto;max-width:680px;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<style>
+.m{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;font-size:12px}
+.bar{height:24px;display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:0 12px;border-radius:6px}
+.lab{font-size:11px;color:var(--text-secondary);margin:12px 0 5px}
+.tbx{display:flex;align-items:center;gap:2px;background:#F0F0F0;border:0.5px solid #D6D6D6;border-radius:6px;padding:3px 6px;color:#1D1D1F;flex-wrap:wrap}
+.tbx span.t{padding:2px 7px;border-radius:4px;white-space:nowrap}
+.tbx i{font-size:17px;padding:3px 5px;border-radius:4px;color:#3A3A3C}
+.sep{width:0.5px;height:18px;background:#C7C7CC;margin:0 4px}
+.ib{display:flex;align-items:flex-start;gap:8px;background:#FFF4D6;border:0.5px solid #E8C35A;border-radius:6px;padding:7px 10px;color:#3D2E00;line-height:1.4}
+</style>
+<h2 class="sr-only">Proposed menu bar icon as a monochrome Healdan mark in light and dark, the LibreOffice Healdan toolbar going from six text buttons to six grouped icons, and an infobar split into a bold headline and regular detail.</h2>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="tm" viewBox="0 0 260 260"><g transform="translate(22,5)"><clipPath id="te"><polygon points="34,59.65 135,93.69 135,210.35 34,172.31"/></clipPath><clipPath id="tf"><polygon points="58,43.65 159,77.69 159,194.35 58,156.31"/></clipPath><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 L108,250 C166,232 216,200 216,140 L216,30 Z" fill="currentColor"/><polygon points="88,36 177,66 177,170 88,136" fill="var(--hole)"/><g clip-path="url(#tf)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 C166,232 216,200 216,140 L216,30 Z" fill="currentColor"/></g><polygon points="64,52 153,82 153,186 64,152" fill="var(--hole)"/><g clip-path="url(#te)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 C166,232 216,200 216,140 L216,30 Z" fill="currentColor"/></g><polygon points="40,68 129,98 129,202 40,168" fill="var(--hole)"/></g></symbol></defs></svg>
+<div class="m" style="padding:0.5rem 0">
+<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">
+<div>
+<div class="bar" style="background:#E9E9EB;color:#1D1D1F;--hole:#E9E9EB"><i class="ti ti-wifi" style="font-size:14px" aria-hidden="true"></i><svg width="17" height="17" aria-hidden="true"><use href="#tm"/></svg><span>Tue 27 Oct 09:42</span></div>
+<div style="margin:4px 0 0 auto;width:250px;background:#F6F6F6;border:0.5px solid #C7C7CC;border-radius:8px;padding:5px;color:#1D1D1F;font-size:12px;line-height:1.75">
+<div style="padding:0 8px;color:#8E8E93">Signed in as sarah.collins on dms.smithpartners…</div>
+<div style="height:0.5px;background:#D6D6D6;margin:3px 6px"></div>
+<div style="padding:0 8px">Lease agreement #1234 v2.1</div>
+<div style="height:0.5px;background:#D6D6D6;margin:3px 6px"></div>
+<div style="padding:0 8px;background:#0C69C0;color:#fff;border-radius:4px">Open from Healdan…</div>
+<div style="padding:0 8px">Open Healdan in Browser</div>
+<div style="padding:0 8px">Settings…</div>
+</div>
+</div>
+<div>
+<div class="bar" style="background:#2B2B2D;color:#F2F2F7;--hole:#2B2B2D"><i class="ti ti-wifi" style="font-size:14px" aria-hidden="true"></i><svg width="17" height="17" aria-hidden="true"><use href="#tm"/></svg><span>Tue 27 Oct 09:42</span></div>
+<div class="lab">Today's icon, for comparison</div>
+<div class="bar" style="background:#E9E9EB;color:#1D1D1F;justify-content:flex-start"><i class="ti ti-file-text" style="font-size:16px" aria-hidden="true"></i></div>
+</div>
+</div>
+<div class="lab" style="margin-top:16px">LibreOffice toolbar, today</div>
+<div class="tbx"><span class="t">Save to Healdan</span><span class="t">Open from Healdan</span><span class="t">Save as New Version</span><span class="t">Save as New Document</span><span class="t">Properties</span><span class="t">Insert Doc ID</span></div>
+<div class="lab">Proposed: icons only, in three groups, with tooltips</div>
+<div style="display:flex;align-items:flex-start;gap:12px">
+<div class="tbx" style="display:inline-flex"><i class="ti ti-file-upload" style="color:#0C69C0;background:#E2E2E2" aria-label="Save to Healdan"></i><i class="ti ti-file-download" style="color:#0C69C0" aria-label="Open from Healdan"></i><span class="sep"></span><i class="ti ti-versions" aria-label="Save as New Version"></i><i class="ti ti-file-plus" aria-label="Save as New Document"></i><span class="sep"></span><i class="ti ti-list-details" aria-label="Properties"></i><i class="ti ti-hash" aria-label="Insert Doc ID"></i></div>
+<span style="background:#FFFFE1;border:0.5px solid #AEAEB2;padding:1px 6px;font-size:11px;color:#1D1D1F;margin-top:24px">Save to Healdan</span>
+</div>
+<div class="lab" style="margin-top:16px">Infobar, today</div>
+<div class="ib"><i class="ti ti-alert-triangle" style="font-size:16px;color:#B07800" aria-hidden="true"></i><div style="font-weight:600">Healdan Helper isn't running. This save is kept on this computer, and goes to Healdan once Healdan Helper is running again.</div></div>
+<div class="lab">Proposed: a short headline, then the detail</div>
+<div class="ib"><i class="ti ti-alert-triangle" style="font-size:16px;color:#B07800" aria-hidden="true"></i><div><span style="font-weight:600">Healdan Helper isn't running.</span> This save is kept on this computer, and goes to Healdan once Healdan Helper is running again.</div></div>
+</div>

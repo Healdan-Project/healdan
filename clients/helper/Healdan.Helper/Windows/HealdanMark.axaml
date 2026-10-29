@@ -5,7 +5,7 @@
        260-point square, with the shapes offset by 22,5 and each group's clip a filled polyline. MarkTests checks it. -->
   <Viewbox Stretch="Uniform">
     <Canvas Width="260" Height="260">
-      <Canvas Canvas.Left="22" Canvas.Top="5" Width="216" Height="250">
+      <Canvas x:Name="Shapes" Canvas.Left="22" Canvas.Top="5" Width="216" Height="250">
         <Path Data="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" Fill="#0b5dab" />
         <Path Data="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" Fill="#22a2e0" />
         <Polygon Points="88.00,36.00 177.00,66.00 177.00,170.00 88.00,136.00" Fill="#ffffff" />

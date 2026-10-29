@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Helper polish: Settings and About</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<style>:root{--text-primary:#1d1d1f;--text-secondary:#6e6e73;--surface-1:#f3f3f2;--border:rgba(0,0,0,.12)}body{margin:24px auto;max-width:680px;font-family:-apple-system,BlinkMacSystemFont,sans-serif}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style>
+<style>
+.w{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;background:#ECECEE;color:#1D1D1F;border:0.5px solid #C7C7CC;border-radius:10px;overflow:hidden;font-size:12px}
+.tb{height:26px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:12px;font-weight:600}
+.tl{width:10px;height:10px;border-radius:50%;display:inline-block}
+.gh{font-size:11px;font-weight:600;color:#6E6E73;margin:10px 4px 4px}
+.grp{background:#FFFFFF;border:0.5px solid #DCDCE0;border-radius:8px}
+.r{display:flex;align-items:center;gap:8px;padding:6px 10px;min-height:24px}
+.r+.r{border-top:0.5px solid #E5E5EA}
+.r i{font-size:15px;color:#0C69C0}
+.sub{font-size:10.5px;color:#8E8E93}
+.val{margin-left:auto;color:#6E6E73;text-align:right}
+.fn{font-size:10.5px;color:#8E8E93;margin:4px 4px 0;line-height:1.4}
+.b{font-size:12px;height:21px;padding:0 12px;border-radius:6px;display:inline-flex;align-items:center;white-space:nowrap}
+.sec{background:#FFFFFF;border:0.5px solid #C7C7CC}.pri{background:#0C69C0;color:#FFFFFF}
+</style>
+<h2 class="sr-only">Proposed Settings window as grouped rows with plain read-only values, and a centred About window with the Healdan mark.</h2>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="mk2" viewBox="0 0 260 260"><g transform="translate(22,5)"><clipPath id="cc"><polygon points="34,59.65 135,93.69 135,210.35 34,172.31"/></clipPath><clipPath id="cd"><polygon points="58,43.65 159,77.69 159,194.35 58,156.31"/></clipPath><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/><polygon points="88,36 177,66 177,170 88,136" fill="#fff"/><g clip-path="url(#cd)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/></g><polygon points="64,52 153,82 153,186 64,152" fill="#fff"/><g clip-path="url(#cc)"><path d="M108,0 L0,30 L0,140 C0,200 50,232 108,250 Z" fill="#0b5dab"/><path d="M108,0 L216,30 L216,140 C216,200 166,232 108,250 Z" fill="#22a2e0"/></g><polygon points="40,68 129,98 129,202 40,168" fill="#fff"/></g></symbol></defs></svg>
+<div style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:14px;padding:0.5rem 0;align-items:start">
+<div class="w">
+<div class="tb"><span class="tl" style="background:#FF5F57"></span><span class="tl" style="background:#FEBC2E"></span><span class="tl" style="background:#D9D9D9"></span><span style="flex:1;text-align:center;margin-right:40px">Healdan Helper Settings</span></div>
+<div style="padding:2px 14px 12px">
+<div class="gh">Server</div>
+<div class="grp"><div class="r"><i class="ti ti-server" aria-hidden="true"></i>Address<span class="val">dms.smithpartners.example</span></div></div>
+<div class="fn">To use another server, sign out from the Healdan Helper menu, then sign in with its address.</div>
+<div class="gh">Open Each Kind of File In</div>
+<div class="grp">
+<div class="r"><i class="ti ti-file-text" aria-hidden="true"></i><div>Documents<div class="sub">.doc .docx .odt .rtf …</div></div><span class="val">LibreOffice</span></div>
+<div class="r"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i><div>Spreadsheets<div class="sub">.xls .xlsx .xlsm .ods</div></div><span class="val">LibreOffice</span></div>
+<div class="r"><i class="ti ti-presentation" aria-hidden="true"></i><div>Presentations<div class="sub">.ppt .pptx .pptm .odp</div></div><span class="val">LibreOffice</span></div>
+</div>
+<div class="fn">Other files open read-only in the computer's default app.</div>
+<div class="gh">This Computer</div>
+<div class="grp">
+<div class="r"><i class="ti ti-power" aria-hidden="true"></i>Start at Sign-In<span class="val" style="display:flex;align-items:center;gap:5px"><span style="width:7px;height:7px;border-radius:50%;background:#28A745"></span>On</span></div>
+<div class="r"><i class="ti ti-puzzle" aria-hidden="true"></i><div>LibreOffice Extension<div class="sub">Installed 25 October 2026</div></div><span class="val">0.1.0</span></div>
+</div>
+<div style="display:flex;justify-content:flex-end;margin-top:12px"><span class="b pri">Done</span></div>
+</div>
+</div>
+<div class="w" style="background:#FFFFFF">
+<div class="tb" style="background:#FFFFFF"><span class="tl" style="background:#FF5F57"></span><span class="tl" style="background:#FEBC2E"></span><span class="tl" style="background:#D9D9D9"></span></div>
+<div style="padding:8px 18px 14px;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center">
+<svg width="64" height="64" aria-hidden="true"><use href="#mk2"/></svg>
+<div style="font-size:15px;font-weight:600;margin-top:6px">Healdan Helper</div>
+<div style="color:#6E6E73">Version 1.0.0 (7510601)</div>
+<div style="font-size:10.5px;color:#8E8E93">© 2026 Healdan Project. Based on LogicalDOC CE.</div>
+<div style="margin-top:8px;font-size:11px">Signed in to dms.smithpartners.example<div style="color:#6E6E73">Healdan 9.3.1</div></div>
+<div style="display:flex;gap:10px;margin-top:8px;font-size:11px;color:#0C69C0"><span>Healdan Docs</span><span>Licence</span><span>Open-Source Notices</span></div>
+</div>
+<div style="display:flex;justify-content:space-between;padding:0 14px 12px"><span class="b sec">Copy for Support</span><span class="b pri">Done</span></div>
+</div>
+</div>

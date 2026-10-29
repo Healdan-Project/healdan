@@ -103,10 +103,13 @@ public sealed class Browser : IDisposable
     /// <summary>Up stops at the matter's workspace: a Store can't be browsed.</summary>
     public bool CanUp => Parent is not null;
 
+    /// <summary>The search box's hint. Only the Documents scope mentions that a typed doc # jumps (polish spec §6.2, call 2).</summary>
     public string SearchPlaceholder => Scope switch
     {
         SearchScope.Clients => "Search clients by number or name",
         SearchScope.Matters => "Search matters",
+        SearchScope.Documents when _withinName is not null => $"Search documents within {_withinName}, or type #1234",
+        SearchScope.Documents => "Search documents, or type #1234",
         _ when _withinName is not null => $"Search {Scope.ApiName()} within {_withinName}",
         _ => $"Search {Scope.ApiName()}"
     };
