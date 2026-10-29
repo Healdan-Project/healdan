@@ -47,8 +47,8 @@ SourceForge from the build, so a refusal there can't fail Healdan's build howeve
 - **Moving artifacts to Maven Central coordinates.** Several have near equivalents on Central (§3). Switching means
   editing upstream POMs, and several switches are version changes that need checking against the GUI. It's a
   possible later clean-up, on top of this. (owner: approach B, later)
-- **The CI cache.** Another session versions the Maven cache key by runner image. This design works with or without
-  that change.
+- **The CI cache.** A separate change on `master` makes CI's test shards trust their cached Maven repository (§5).
+  This design works with or without that change.
 - **Runtime calls to LogicalDOC.** The shipped `context.properties` turns on `StatsCollector`, which posts usage
   statistics to `stat.logicaldoc.com`. The news feed comes from `logicaldoc.com`, and `SettingServiceImpl`
   references `activation.logicaldoc.com`. Those are server code and config, so they're a separate task. (owner)
@@ -153,18 +153,20 @@ hosting ever moves off Pages. (call)
   jar (ksoap2's). There's no `maven-metadata.xml`, because nothing asks for a version range or `LATEST`.
 - `CNAME` (`maven.healdan.com`) and `.nojekyll`, so Pages serves every path as it is.
 - `README.md`, with a table of every artifact: its coordinates, its upstream project, its licence and where it came
-  from (for the first import, `logicaldoc.sourceforge.net` on the import date). Healdan's image already ships these
-  jars, so hosting them adds no new redistribution. The table makes that visible. A Not Hosted table lists what
-  stays out and why (§3.1).
+  from (for the first import, `logicaldoc.sourceforge.net` on the import date). Healdan's image already ships 8 of
+  these jars, so hosting those adds no new redistribution. The other 7, the GUI's GWT libraries (smartgwt-skins,
+  gwt-dnd, gwt-incubator, gwt-links, tagcloud, gwtchismes and gwtexporter), aren't in the image as jars: what the
+  GUI uses of them ships only as the GWT compile's JavaScript and resources. The table makes each one's source and
+  licence visible. A Not Hosted table lists what stays out and why (§3.1).
 - `LICENSES/`, with the licence texts and NOTICE files the hosted jars lack: Apache-2.0, LGPL-2.1, LGPL-3.0 and
   GPL-3.0 (which LGPL-3.0 builds on), and the NOTICEs of Apache Commons FileUpload and Apache Jackrabbit (§3.1).
-- `import.sh`, §4.3.
+- `import-artifact.py` and its tests, §4.3.
 
 Old versions stay when a new one arrives, so old tags keep building.
 
-### 4.3 `import.sh`
+### 4.3 `import-artifact.py`
 
-`import.sh <group>:<artifact>:<version>[:<classifier>]` fetches the artifact's jar and POM from
+`python3 import-artifact.py <group>:<artifact>:<version>[:<classifier>]` fetches the artifact's jar and POM from
 `https://logicaldoc.sourceforge.net/maven/`. It checks each against the `.sha1` SourceForge publishes beside it,
 writes the files and their `.sha1`s into the layout, and adds the artifact's README row.
 
@@ -172,6 +174,8 @@ writes the files and their `.sha1`s into the layout, and adds the artifact's REA
   SourceForge refuses or has gone.
 - The script refuses to overwrite a version that's already there, so a hosted artifact never changes.
 - Files only get in through the script, so the repository's history says where every artifact came from.
+- It's Python, tested with `unittest` like Healdan's other scripts. `--scan` lists what a local Maven repository
+  took from a given repository, and `--verify` checks the hosted files and what Pages serves (the plan's call 1).
 
 The first import's list comes from a full build (GWT compile and WAR included) on an empty local repository, with
 today's settings, once the drops of §3.1 are in. Every artifact that build records as coming from `logicaldoc` gets
@@ -208,8 +212,11 @@ repository, whatever URL a POM gives it. Central and Terracotta stay as they are
   changes.
 - **The mirror's id shows in errors.** A missing artifact reads `Could not find artifact … in healdan
   (https://maven.healdan.com/)`, which says where to look.
-- **Caches.** Local repositories, CI's cache and the Docker build's cache record the hosted artifacts as coming from
-  `logicaldoc`, which doesn't match `healdan`. Each fetches them again from Healdan's repository once (about 50 MB). Artifacts from
+- **Caches.** Local repositories and the Docker build's cache record the hosted artifacts as coming from
+  `logicaldoc`, which doesn't match `healdan`. Each fetches them again from Healdan's repository once (about 50 MB).
+  CI's test shards don't: since `master`'s cache fix, each deletes its restored copy's `_remote.repositories`
+  records ("Trust the cached Maven repository" in `build-logicaldoc.yml`), so Maven takes every cached file as
+  installed locally, uses the copies it has, and fetches from the mirror only what the cache lacks. Artifacts from
   Central stay cached.
 
 ## 6. The guard
@@ -236,8 +243,9 @@ the sync PR itself, as a merge fix like the Font Awesome icons:
 
 1. Check the artifact's licence allows hosting it. One that doesn't is dropped from the build instead, as in §3.1,
    and goes in the README's Not Hosted table. One that's referenced goes to the owner.
-2. In a checkout of `Healdan-Project/maven`, run `import.sh` for each missing artifact and push.
-3. Once Pages has published it, re-run the sync PR's CI.
+2. In a checkout of `Healdan-Project/maven`, run `import-artifact.py` for each missing artifact and push.
+3. Once Pages has published it (`python3 import-artifact.py --verify https://maven.healdan.com/` passes), re-run
+   the sync PR's CI.
 
 This gives a deliberate point to look at what LogicalDOC ships before Healdan builds with it.
 
@@ -252,8 +260,10 @@ This gives a deliberate point to look at what LogicalDOC ships before Healdan bu
 - **The drops.** Core's plugin zip and dependency tree have no JAI or betelio, the WAR's dependency tree has no
   betelio, and the reactor builds without `logicaldoc-webserviceclient`. Core's imaging tests (`ImageUtilTest`,
   `PDFImageExtractorTest`) and Healdan's tests pass. CI's Docker smoke test runs the WAR.
-- **The PR's CI.** The eight test shards, both Docker image builds and the smoke test all resolve through the
-  mirror.
+- **The PR's CI.** Both Docker image builds resolve the hosted artifacts through the mirror: their cached copies
+  record `logicaldoc`, so each fetches them from Healdan's repository, and the smoke test runs the image they build.
+  The test shards trust their cached Maven repository (§5), so they build from cached copies and fetch from the
+  mirror only what the cache lacks.
 
 ## 9. Docs
 

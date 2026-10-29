@@ -14,7 +14,7 @@
 
 - The hosted URL is exactly `https://maven.healdan.com/`. The mirror's `<id>` is `healdan` and its `<mirrorOf>` is `logicaldoc`.
 - The hosted repository is `Healdan-Project/maven`, default branch `main`, checked out at `~/Projects/healdan-maven` (outside this repository).
-- The only upstream files this plan edits are the three in spec §11: `logicaldoc-core/pom.xml` (drop JAI and betelio), `logicaldoc-webapp/pom.xml` (drop betelio and Oracle's JDBC driver), `NotesDataServlet.java` (drop its Oracle-only timestamp branch, Task 4a's fix) and the root `pom.xml` (drop the `logicaldoc-webserviceclient` module). Everything else is Healdan's own: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/`, `docs/`.
+- The only upstream files this plan edits are the four in spec §11: `logicaldoc-core/pom.xml` (drop JAI and betelio), `logicaldoc-webapp/pom.xml` (drop betelio and Oracle's JDBC driver), `NotesDataServlet.java` (drop its Oracle-only timestamp branch, Task 4a's fix) and the root `pom.xml` (drop the `logicaldoc-webserviceclient` module). Everything else is Healdan's own: `docker/maven-settings.xml`, `.github/`, `CLAUDE.md`, `site/`, `docs/`.
 - Scripts are Python 3 with the standard library only, tested with `unittest`, like `.github/scripts/`.
 - A hosted version never changes once it's published.
 - Outward-facing steps need the owner's OK in chat first, each time: creating the GitHub repository, pushing to it, changing its Pages settings, pushing this branch, opening the PR. The owner adds the DNS record.
@@ -33,6 +33,7 @@
 3. **The assembly stays as it is.** `logicaldoc-core/src/main/assembly/assemblyplugin.xml` includes `javax.media:*` and `com.sun.media:*`. Once JAI's gone they match nothing, and the assembly plugin (no strict filtering) only warns, so the upstream edits stay in the POMs.
 4. **`site/content/developer/upstream-syncs.md`** also gets a clause, beside its Font Awesome and doc-link examples of merge fixes. §9 didn't list it.
 5. **No `UPSTREAM_TESTS` addition.** The drops change no code, and nothing references JAI or betelio (spec §3.1). Task 3 runs core's imaging tests locally, and CI's Docker smoke test runs the WAR.
+   - *Later:* Task 4a's fix removed `NotesDataServlet`'s Oracle-only timestamp branch, a code change. It adds no upstream test either: `NotesDataServletTest` already fails on `master` (spec §11).
 6. **`LICENSES/` also carries jgravatar's BSD licence,** which its jar lacks too (spec §4.2 lists the others). For JPF's source, the README points to JPF's project, https://jpf.sourceforge.net/, rather than hosting a copy.
 
 ## File Structure
@@ -1784,16 +1785,18 @@ https://maven.healdan.com/ ([Healdan-Project/maven](https://github.com/Healdan-P
 contacts logicaldoc.sourceforge.net. Closes #107.
 
 - `docker/maven-settings.xml` mirrors the `logicaldoc` repository to it, so upstream's POMs stay as they are.
-- Four jars whose licences don't allow hosting them leave the build, the only upstream edits:
+- Four jars whose licences don't allow hosting them, or that have none, leave the build. These are the only upstream edits:
   - `logicaldoc-core` drops JAI (Sun's Binary Code License, distribution `manual`);
   - `logicaldoc-core` and `logicaldoc-webapp` drop betelio, which has no licence;
   - `logicaldoc-webapp` drops Oracle's JDBC driver (Oracle's licence; Healdan supports only open-source databases, #110);
-  - the root POM drops the `logicaldoc-webserviceclient` module, ksoap2's only user, which no module depends on.
+  - the root POM drops the `logicaldoc-webserviceclient` module, ksoap2's only user, which no module depends on;
+  - `NotesDataServlet` drops its branch that unwrapped an `oracle.sql.TIMESTAMP`, which only an Oracle database returns, and which can't compile without Oracle's driver.
 
-  Nothing in the build references JAI or betelio, and only the setup wizard, which the container never runs, names Oracle's driver.
+  Nothing in the build references JAI or betelio. Only `NotesDataServlet` used Oracle's driver at compile time, and that branch is gone. No upstream test joins CI for it: `NotesDataServletTest` already fails on `master`.
 - `.github/scripts/check-maven-repositories.py`, in the `checks` job, fails `build` when a POM or the settings file
   points a repository at a LogicalDOC host the mirror doesn't cover.
 - CLAUDE.md and the Developer Guide say how to import an artifact when a sync needs one.
+- Local builds: re-copy `docker/maven-settings.xml` to `~/.m2/settings.xml`. An old copy keeps using SourceForge, with no error.
 
 A full build (GWT compile and WAR) on an empty local repository with the new settings took nothing from
 LogicalDOC's repository, and the 15 artifacts from Healdan's.
