@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -18,6 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -42,6 +44,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
@@ -171,7 +174,8 @@ public class SaveTest extends ApiTestCase {
 		String token = signIn(clerk);
 		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
-		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
+		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId())
+				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
 			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
 			conversion.assertWritten();
 		}
@@ -194,7 +198,8 @@ public class SaveTest extends ApiTestCase {
 		String token = signIn(clerk);
 		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
-		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).overtaking(DocumentEvent.CHECKEDOUT)
+				.start()) {
 			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
 			conversion.assertWritten();
 		}
@@ -219,11 +224,8 @@ public class SaveTest extends ApiTestCase {
 		String token = signIn(clerk);
 		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
-		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, document -> {
-			document.setStatus(DocumentStatus.CHECKEDOUT);
-			document.setLockUserId(boss.getId());
-			document.setLockUser(boss.getFullName());
-		}).start()) {
+		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
+				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
 			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
 			webPage.assertWritten();
 		}
@@ -246,11 +248,8 @@ public class SaveTest extends ApiTestCase {
 		String token = signIn(clerk);
 		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
 		ApiResponse response;
-		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, document -> {
-			document.setStatus(DocumentStatus.CHECKEDOUT);
-			document.setLockUserId(boss.getId());
-			document.setLockUser(boss.getFullName());
-		}).start()) {
+		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
+				.overtaking(DocumentEvent.CHECKEDOUT).start()) {
 			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
 			webPage.assertWritten();
 		}
@@ -261,6 +260,129 @@ public class SaveTest extends ApiTestCase {
 		Document saved = DocumentDAO.get().findById(d.getId());
 		assertEquals(DocumentStatus.CHECKEDOUT, saved.getStatus());
 		assertEquals(Long.valueOf(boss.getId()), saved.getLockUserId());
+	}
+
+	@Test
+	public void testSavePastABackgroundWrite() throws Exception {
+		// The Office preview saves the document when its conversion of the last save ends, between CE's read and write
+		// of this save's check-in: CE's write fails before it stores the file, and the save answered 500
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).overtaking(DocumentEvent.CHECKEDIN)
+				.start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			conversion.assertWritten();
+		}
+
+		assertSavedOnce(token, d, response);
+	}
+
+	@Test
+	public void testSavePastABackgroundWriteAtTheFlush() throws Exception {
+		// The preview's save commits just before CE's UPDATE of the check-in, whose failure CE's DAO swallows: CE
+		// stored the file and kept a version 1.1 the document never reached, which took the number from a save sent
+		// again
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).overtaking(DocumentEvent.CHECKEDIN)
+				.start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			conversion.assertWritten();
+		}
+
+		assertSavedOnce(token, d, response);
+	}
+
+	@Test
+	public void testCheckinTakenOverInTheMoment() throws Exception {
+		// Between CE's read and write of the clerk's check-in, the boss broke the clerk's check-out in the web page
+		// and took the document: CE's check-in never looks at the hold, so it isn't asked for again
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite webPage = BackgroundWrite.of(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
+				.overtaking(DocumentEvent.CHECKEDIN).start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			webPage.assertWritten();
+		}
+
+		assertEquals(response.toString(), 500, response.status());
+		assertEquals("server-error", response.code());
+		assertEquals("Document #%d's save wasn't stored: its content is as it was. It isn't checked out to you. "
+				.formatted(number(d)) + "Send the save again.", response.json().path("detail").textValue());
+		assertNotSaved(d);
+	}
+
+	@Test
+	public void testCheckinTakenOverAtTheFlush() throws Exception {
+		// The boss's check-out commits just before CE's UPDATE of the clerk's check-in, which is lost unseen: it isn't
+		// asked for again, and the version CE kept of it goes, with its file
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, takenBy(boss))
+				.overtaking(DocumentEvent.CHECKEDIN).start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			webPage.assertWritten();
+		}
+
+		assertEquals(response.toString(), 500, response.status());
+		assertEquals("server-error", response.code());
+		assertEquals("Document #%d's save wasn't stored: its content is as it was. It isn't checked out to you. "
+				.formatted(number(d)) + "Send the save again.", response.json().path("detail").textValue());
+		assertNotSaved(d);
+		assertFalse(Store.get().exists(StoreResource.builder().docId(d.getId()).fileVersion("1.1").build()));
+		assertArrayEquals(bytes("one"), content(signIn(boss), d, null));
+	}
+
+	/**
+	 * The save of "two", kept checked out, stored once as 1.1 past the
+	 * background write
+	 */
+	private void assertSavedOnce(String token, Document d, ApiResponse response) throws PersistenceException {
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals("1.1", response.json().path("fileVersion").textValue());
+		assertEquals(clerk.getId(), response.json().path("hold").path("by").path("id").asLong());
+		Document saved = DocumentDAO.get().findById(d.getId());
+		assertEquals("1.1", saved.getVersion());
+		assertEquals(DocumentStatus.CHECKEDOUT, saved.getStatus());
+		assertEquals(Long.valueOf(clerk.getId()), saved.getLockUserId());
+		assertArrayEquals(bytes("two"), content(token, d, null));
+		assertArrayEquals(bytes("two"), content(token, d, "1.1"));
+		JsonNode versions = get(path(d)).token(token).send().json().path("items");
+		assertEquals(List.of("1.1 snapshot", "1.0 version"), versionsAndKinds(versions));
+		assertEquals(clerk.getId(), versions.get(0).path("by").path("id").asLong());
+		assertEquals(List.of("1.0", "1.1"), versions(d));
+		assertEquals(List.of("event.checkedout", "event.checkedin", "event.checkedout"), holdEvents(d));
+	}
+
+	/** The document is as it was, at 1.0, but checked out to the boss */
+	private void assertNotSaved(Document d) throws PersistenceException {
+		Document taken = DocumentDAO.get().findById(d.getId());
+		assertEquals("1.0", taken.getVersion());
+		assertEquals("1.0", taken.getFileVersion());
+		assertEquals(DocumentStatus.CHECKEDOUT, taken.getStatus());
+		assertEquals(Long.valueOf(boss.getId()), taken.getLockUserId());
+		assertEquals(List.of("1.0"), versions(d));
+	}
+
+	/** The web page's check-out by someone else, over the clerk's */
+	private static Consumer<Document> takenBy(User user) {
+		return document -> {
+			document.setStatus(DocumentStatus.CHECKEDOUT);
+			document.setLockUserId(user.getId());
+			document.setLockUser(user.getFullName());
+		};
 	}
 
 	@Test
@@ -392,13 +514,22 @@ public class SaveTest extends ApiTestCase {
 		Document d = file("a.docx");
 		String token = signIn(clerk);
 
-		ApiResponse failed = saveFailing(token, d, List.of("ld_version", "ld_document"),
-				version("snapshot", "Sent to the client", null));
+		CheckinCount checkins = new CheckinCount(d.getId());
+		DocumentListenerManager.get().getListeners().add(checkins);
+		ApiResponse failed;
+		try {
+			failed = saveFailing(token, d, List.of("ld_version", "ld_document"),
+					version("snapshot", "Sent to the client", null));
+		} finally {
+			DocumentListenerManager.get().getListeners().remove(checkins);
+		}
 
 		assertEquals(failed.toString(), 500, failed.status());
 		assertEquals("server-error", failed.code());
 		assertEquals("Document #%d's save wasn't stored: its content is as it was. It's still checked out to you. "
 				.formatted(number(d)) + "Send the save again.", failed.json().path("detail").textValue());
+		// No other write overtook CE's check-in, which kept no version of the save, so it isn't asked for again
+		assertEquals(1, checkins.count);
 		JsonNode doc = get("/api/v1/documents/" + number(d)).token(token).send().json();
 		assertEquals("1.0", doc.path("fileVersion").textValue());
 		assertEquals("checkout", doc.path("hold").path("kind").textValue());
@@ -733,6 +864,13 @@ public class SaveTest extends ApiTestCase {
 				.stream().filter(HOLD_EVENTS::contains).toList();
 	}
 
+	/** The document's versions that aren't deleted, oldest first */
+	private List<String> versions(Document d) {
+		return jdbc().queryForList(
+				"select ld_version from ld_version where ld_documentid = ? and ld_deleted = 0 order by ld_id",
+				String.class, d.getId());
+	}
+
 	private static List<String> versionsAndKinds(JsonNode items) {
 		List<String> versions = new ArrayList<>();
 		for (JsonNode v : items)
@@ -793,6 +931,49 @@ public class SaveTest extends ApiTestCase {
 		@Override
 		public void afterSaveHistory(Document document, DocumentHistory event, Map<String, Object> dictionary) {
 			// Nothing to refuse
+		}
+	}
+
+	/** Counts the check-ins CE begins of one document */
+	private static final class CheckinCount implements DocumentListener {
+
+		private final long docId;
+
+		private int count;
+
+		CheckinCount(long docId) {
+			this.docId = docId;
+		}
+
+		@Override
+		public void beforeCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			if (document.getId() == docId)
+				count++;
+		}
+
+		@Override
+		public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to count
+		}
+
+		@Override
+		public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to count
+		}
+
+		@Override
+		public void afterFileStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to count
+		}
+
+		@Override
+		public void afterCheckin(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
+			// Nothing to count
+		}
+
+		@Override
+		public void afterSaveHistory(Document document, DocumentHistory event, Map<String, Object> dictionary) {
+			// Nothing to count
 		}
 	}
 }
