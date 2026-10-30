@@ -19,6 +19,7 @@ import com.logicaldoc.core.job.JobManager;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.TenantDAO;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.util.spring.Context;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,9 +38,16 @@ public class JobsDataServlet extends AbstractDataServlet {
 
 	private static final Logger logger = LoggerFactory.getLogger(JobsDataServlet.class);
 
+	// Healdan: System, whose Scheduled tasks screen lists them in its Jobs
+	// tab, as the jobs RPCs need
+	private static final long SYSTEM_MENU = 80L;
+
 	@Override
 	protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
 			Locale locale) throws PersistenceException, IOException {
+
+		if (!MenuDAO.get().isReadAllowed(SYSTEM_MENU, session.getUserId()))
+			throw new IOException("User %s cannot access the menu %d".formatted(session.getUsername(), SYSTEM_MENU));
 
 		int maxRecords = max != null ? max : 100;
 
