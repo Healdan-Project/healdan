@@ -32,6 +32,7 @@ import com.logicaldoc.core.generic.GenericDAO;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.menu.Menu;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.sequence.SequenceDAO;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
@@ -101,6 +102,17 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     // Healdan: Impex > Format converters, whose Extension aliases dialog calls
     // saveExtensionAliases()
     private static final long FORMAT_CONVERTERS_MENU = 1750L;
+
+    // Healdan: the settings loadSettingsByNames() gives the screens Healdan
+    // shows that read them, to the holders of each screen's menu. Any other
+    // name, and any prefix ending in *, needs an administrator: only
+    // LogicalDOC's paid screens ask for them.
+    private static final Map<String, Long> SETTING_MENUS = Map.ofEntries(Map.entry("conf.dbdir", STORES_MENU),
+            Map.entry("conf.exportdir", STORES_MENU), Map.entry("conf.importdir", STORES_MENU),
+            Map.entry("conf.logdir", STORES_MENU), Map.entry("conf.plugindir", STORES_MENU),
+            Map.entry("conf.userdir", STORES_MENU), Map.entry("proxy.enabled", PROXY_MENU),
+            Map.entry("proxy.host", PROXY_MENU), Map.entry("proxy.port", PROXY_MENU),
+            Map.entry("proxy.username", PROXY_MENU), Map.entry("proxy.password", PROXY_MENU));
 
     private static final long serialVersionUID = 1L;
 
@@ -371,6 +383,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     @Override
     public List<GUIParameter> loadSettingsByNames(List<String> names) throws ServerException {
         Session session = validateSession();
+        // Healdan: each name needs the menu of the screen that reads it
+        checkSettingMenus(session, names);
 
         List<GUIParameter> values = new ArrayList<>();
         try {
@@ -388,6 +402,29 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
             throwServerException(session, log, e);
         }
         return values;
+    }
+
+    /**
+     * Healdan: refuses the whole call unless the user may read every name. A
+     * name in {@link #SETTING_MENUS} needs its screen's menu, and any other
+     * name or prefix an administrator.
+     *
+     * @param session the current session
+     * @param names the names asked for
+     *
+     * @throws AccessDeniedException a name the user may not read
+     */
+    private static void checkSettingMenus(Session session, List<String> names) throws AccessDeniedException {
+        if (names == null || session.getUser().isAdmin())
+            return;
+
+        MenuDAO dao = MenuDAO.get();
+        for (String name : names) {
+            Long menuId = name != null ? SETTING_MENUS.get(name) : null;
+            if (menuId == null || !dao.isReadAllowed(menuId, session.getUserId()))
+                throw new AccessDeniedException(
+                        "User %s cannot read the setting %s".formatted(session.getUsername(), name));
+        }
     }
 
     @Override
