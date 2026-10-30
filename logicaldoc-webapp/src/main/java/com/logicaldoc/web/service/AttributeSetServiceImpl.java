@@ -38,11 +38,16 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     private static final long serialVersionUID = 1L;
 
+    // Healdan: Document metadata, whose Templates screen has the Attribute sets
+    // tab. Attribute sets have no permissions of their own, so every change
+    // needs it. Reads need only a session: the document screens read the sets.
+    private static final long DOCUMENT_METADATA_MENU = 25L;
+
     private static final Logger log = LoggerFactory.getLogger(AttributeSetServiceImpl.class);
 
     @Override
     public void delete(long setId) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
 
         try {
             AttributeSetDAO dao = AttributeSetDAO.get();
@@ -54,7 +59,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public void saveOptions(long setId, String attribute, List<GUIValue> values) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
 
         try {
             AttributeOptionDAO dao = AttributeOptionDAO.get();
@@ -81,7 +86,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public void deleteOptions(long setId, String attribute, List<String> values) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
         try {
             AttributeOptionDAO dao = AttributeOptionDAO.get();
             List<AttributeOption> options = dao.findByAttribute(setId, attribute);
@@ -107,7 +112,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public GUIAttributeSet save(GUIAttributeSet guiAttributeSet) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
 
         try {
             AttributeSet attributeSet;
@@ -318,7 +323,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public List<GUIValue> parseOptions(long setId, String attribute) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
 
         Map<String, File> uploadedFilesMap = UploadServlet.getUploads(session.getSid());
         File file = uploadedFilesMap.values().iterator().next();
@@ -348,7 +353,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public void applyValidationToTemplates(long setId, String attribute) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
         try {
             AttributeSetDAO dao = AttributeSetDAO.get();
             AttributeSet set = dao.findById(setId, true);
@@ -372,7 +377,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public void applyInitializationToTemplates(long setId, String attribute) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
         try {
             AttributeSetDAO dao = AttributeSetDAO.get();
             AttributeSet set = dao.findById(setId, true);
@@ -395,7 +400,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
     @Override
     public void applyAllToTemplates(long setId, String attributeName) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(DOCUMENT_METADATA_MENU);
         try {
             AttributeSetDAO dao = AttributeSetDAO.get();
             AttributeSet set = dao.findById(setId, true);

@@ -49,13 +49,17 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     private static final String INDEX_TOKENFILTER = "index.tokenfilter.";
 
+    // Healdan: Settings > Search and indexing, the screen that calls every RPC
+    // here. The query searches the raw index, with no permission filter.
+    private static final long SEARCH_AND_INDEXING_MENU = 101L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SearchEngineServiceImpl.class);
 
     @Override
     public GUISearchEngine getInfo() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             GUISearchEngine searchEngine = new GUISearchEngine();
@@ -102,7 +106,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void rescheduleAll(final boolean dropIndex) throws ServerException {
-        final Session session = validateSession();
+        final Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         if (dropIndex)
             try {
@@ -125,7 +129,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void unlock() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             SearchEngine.get().unlock();
@@ -136,7 +140,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public String check() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             return SearchEngine.get().check();
@@ -147,7 +151,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void save(GUISearchEngine searchEngine) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             ContextProperties conf = Context.get().getConfig();
@@ -189,7 +193,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void setLanguageStatus(String language, boolean active) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             ContextProperties conf = Context.get().getConfig();
@@ -202,7 +206,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void setAliases(String extension, String aliases) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             StringTokenizer st = new StringTokenizer(aliases, ",", false);
@@ -218,7 +222,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public long countEntries() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
         try {
             return SearchEngine.get().getCount();
         } catch (Exception t) {
@@ -228,7 +232,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void reorderTokenFilters(List<String> filters) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
         try {
             ContextProperties conf = Context.get().getConfig();
             int i = 1;
@@ -242,7 +246,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void saveTokenFilterSettings(String filter, List<GUIParameter> settings) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
         try {
             String prefix = INDEX_TOKENFILTER + filter + ".";
             ContextProperties conf = Context.get().getConfig();
@@ -256,7 +260,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void setTokenFilterStatus(String filter, boolean active) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
         try {
             ContextProperties conf = Context.get().getConfig();
             conf.setProperty(INDEX_TOKENFILTER + filter, active ? "enabled" : "disabled");
@@ -268,7 +272,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void purge() throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             executeLongRunningOperation("Purge Index", () -> {
@@ -282,7 +286,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public void remove(List<Long> entryIds) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
 
         try {
             Callable<Void> callable = () -> {
@@ -331,7 +335,7 @@ public class SearchEngineServiceImpl extends AbstractRemoteService implements Se
 
     @Override
     public GUIResult query(String query, int page, int size) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(SEARCH_AND_INDEXING_MENU);
         try {
             Hits hits = SearchEngine.get().query(query, page, size);
 
