@@ -94,6 +94,9 @@ api() { curl -fsS -u admin:admin "$@"; }
 # Not grep -q: it exits at the first match and, under pipefail, the SIGPIPE'd compose logs fails the check.
 app_logs_have() { compose logs app 2>&1 | grep -- "$1" >/dev/null; }
 is_png() { [ "$(od -An -tx1 -N4 "$1" | tr -d ' \n')" = 89504e47 ]; }
+# cache_control <url>: the Cache-Control header of a successful GET, empty for an error.
+cache_control() { curl -fsS -o /dev/null -D - "$1" | tr -d '\r' | awk -F': ' 'tolower($1) == "cache-control" { print $2 }'; }
+LOADER=$BASE/login/login.nocache.js
 
 echo "== 1. build and start"
 if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -d --build; fi
@@ -105,6 +108,12 @@ check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
 # The healdan-api plugin is in the WAR and /api reaches its servlet, past CE's security chain.
 api_product() { curl -fsS "$BASE/api/v1/server" | jq -er .product; }
 check "GET /api/v1/server answers JSON naming Healdan" test "$(api_product)" = Healdan
+# A GWT loader names its build's *.cache.js files, so the browser checks it on every load (Docker spec §13).
+check "login.nocache.js is revalidated on every load" test "$(cache_control "$LOADER")" = no-cache
+loader=$(curl -fsS "$LOADER" || true)
+build=
+[[ $loader =~ [0-9A-F]{32} ]] && build=${BASH_REMATCH[0]}
+check "its $build.cache.js keeps max-age=600" test "$(cache_control "$BASE/login/$build.cache.js")" = max-age=600
 
 echo "== 2b. forwarded addresses (docker/tests/test-proxies.sh)"
 # Fails three sign-ins with made-up X-Forwarded-For headers and checks which address the throttle counted; its
@@ -258,7 +267,11 @@ check "ld_webservicecall exists" compose exec -T db sh -c \
 echo "== 7. setup wizard blocked"
 check "GET /setup is 403" test "$(http_code "$BASE/setup")" = 403
 
-echo "== 8. data survives down/up"
+echo "== 8. data survives down/up, and an earlier image's default is replaced"
+# As a conf volume written before 2026-10-30 holds it: cachecontrol without the loaders' rule (Docker spec §13).
+compose exec -T -u logicaldoc app sed -i 's/\*\.nocache\.js:no-cache;//' /opt/logicaldoc/conf/context.properties
+check "the conf volume holds the old cachecontrol" \
+  test "$(compose exec -T app grep -c 'nocache\.js:' /opt/logicaldoc/conf/context.properties)" = 0
 compose down
 compose up -d
 check "app healthy again" wait_healthy "$(compose ps -q app)" 900
@@ -266,5 +279,7 @@ names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?fol
 check "smoke.pdf still listed" grep -qx smoke.pdf <<<"$names"
 check "smoke.png still listed" grep -qx smoke.png <<<"$names"
 check "no re-initialization" app_logs_have 'schema present, skipping'
+check "the old cachecontrol replaced" app_logs_have "replaced an earlier image's default with this image's: cachecontrol"
+check "login.nocache.js is revalidated on every load again" test "$(cache_control "$LOADER")" = no-cache
 
 finish

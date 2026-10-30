@@ -3,9 +3,11 @@ title: "Clearing Your Browser's Cache"
 weight: 3
 ---
 
-Your browser keeps copies of the pages and scripts that make up Healdan's interface, so it starts quickly. After
-Healdan is upgraded, those copies can be out of date. When Healdan notices that your browser is running an older
-version than the server, it shows a page asking you to clear your browser's cache and then sign in again.
+Your browser keeps copies of the pages, scripts, styles and pictures that make up Healdan's interface, so it
+starts quickly. Each time it opens Healdan, it checks with the server for a newer interface. But a tab left open
+while Healdan was upgraded keeps running the old one, and styles and pictures are kept for longer, so after an
+upgrade some copies can be out of date. When Healdan notices that your browser is running an older version than the
+server, it shows a page asking you to clear your browser's cache and then sign in again.
 
 ## A Quick Reload
 

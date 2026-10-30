@@ -167,6 +167,7 @@ Compose-only variables:
 
 - **Env-owned keys** are re-applied on **every** boot, so `.env` is the source of truth for them: `jdbc.url`, `jdbc.username`, `jdbc.password`, and `server.url` when `LOGICALDOC_PUBLIC_URL` is set.
 - **Image-owned keys** are taken from `defaults/context.properties` on **every** boot, because they describe the image rather than the install: `product.release` and `product.year` (`ConfigPlan.IMAGE_KEYS`). Before this rule, an upgraded install kept reporting the release its conf file was first written by; the 9.3.2 sync found it.
+- **Replaced defaults** are defaults an earlier image shipped that this image's defaults replace (`ConfigPlan.REPLACED_DEFAULTS`, by key). On **every** boot, a key still holding one of those exact values takes the image's default. Any other value is the admin's and stays. The only one so far is `cachecontrol` (§13).
 - **Seed-once keys** are written only while `LDOCHOME` is absent from `conf/context.properties`. The shipped defaults lack it and the seed adds it. So a first boot that crashes before seeding still gets seeded on the next boot. After that the keys belong to the app and its Settings UI:
 
   | Key | Value |
@@ -203,7 +204,7 @@ The entrypoint runs `set -euo pipefail`. Steps, in order:
 4. **Run `DockerInit`** as `logicaldoc`: `java -cp '<webapp>/WEB-INF/lib/*:/opt/logicaldoc/lib/docker-init.jar' DockerInit`, in the background (see **Stopping during init** below). It reads everything from the environment and behaves as follows:
    - **Validate** the env vars (§5). Errors exit 1 with `[docker-init] ERROR: …`.
    - **Apply config.**
-     - It adds every key of `defaults/context.properties` that the conf file lacks, so settings upstream adds over time reach existing installs. It never overwrites a value, except an image-owned key whose value differs from the defaults'.
+     - It adds every key of `defaults/context.properties` that the conf file lacks, so settings upstream adds over time reach existing installs. It never overwrites a value, except an image-owned key whose value differs from the defaults', and a key still holding a default an earlier image shipped that this image replaces (§13).
      - It applies the seed-once keys if `LDOCHOME` is absent, then the env-owned keys, and writes once.
      - It then re-reads the file. LogicalDOC writes it one byte per character, so an env-owned value outside Latin-1, or one containing a line break, comes back changed. That exits 1, naming the variable.
    - **Wait for the DB.** It retries a connection with `select 1` every 2 s, for up to `DB_WAIT_SECONDS` (default 60). If the DB is still unreachable, it exits 1 ("not reachable"). An authentication error (SQLSTATE class 28) exits 1 at once ("database authentication failed").
@@ -355,3 +356,16 @@ Platform: the smoke test runs on arm64 (the developer's machine). amd64 is verif
 1. A CI workflow that builds the image on PRs and publishes multi-arch (amd64 + arm64) images to GHCR on `master`/tags. It reuses `smoke-test.sh`.
 2. Offer the `plugin.xml` SQL filename fix upstream (logicaldoc/community).
 3. A PostgreSQL support and migration track (long-term goal).
+
+## 13. The GUI's loaders and the browser cache (2026-10-30)
+
+- **The problem.** GWT's loaders (`frontend/frontend.nocache.js`, `login/login.nocache.js` and `setup/setup.nocache.js`) name the build's `*.cache.js` files. CE's `CacheControlFilter` sets `Cache-Control` from `cachecontrol` in `context.properties`, a list of pattern:value pairs where the first match wins. Its shipped value gave every `*.js` `max-age=600`. So for up to ten minutes after an upgrade, a browser that had opened Healdan before it ran the old GUI against the new server, whose RPC policies don't match it. Found on a demo stack while checking Healdan-Project/healdan#122, where a hard reload in the built-in browser didn't help.
+- **The default.** `*.nocache.js:no-cache` goes just before `*.js:max-age=600`. The browser then checks the loader with the server on every load. Tomcat sends an ETag and `Last-Modified` with it, so an unchanged loader costs a 304. The hashed `*.cache.js` files keep `max-age=600`. It's a change to the setting, not to CE's filter, so an admin can still change it.
+- **Existing installs.** The conf volume keeps its `cachecontrol`, since DockerInit never overwrites a value (§5). A new rule, replaced defaults (`ConfigPlan.REPLACED_DEFAULTS`), lists by key the defaults earlier images shipped that this image replaces. On every start, a key that still holds one of them exactly takes the image's default, and DockerInit logs `replaced an earlier image's default with this image's: <keys>`. Any other value is the admin's and stays. Its only entry is the `cachecontrol` every Healdan image has shipped (upstream's since February 2024). Making `cachecontrol` an image-owned key was the other option, but that would undo an admin's change on every start.
+- **The first upgrade.** A browser that cached a loader under the old rule keeps it for up to ten minutes after the upgrade that brings this change. After that, each upgrade reaches a browser the next time it loads Healdan.
+- **A later change to a default** that existing installs should get adds the value it replaces to `REPLACED_DEFAULTS`. That includes an upstream sync that brings a new `cachecontrol` default: it keeps the loaders' rule before `*.js`, and adds Healdan's previous default.
+- **Tests.**
+  - `CacheControlFilterTest` (`logicaldoc-webapp`, in `UPSTREAM_TESTS`) runs CE's filter with the shipped value. The three loaders get `no-cache`, `*.cache.js` and other scripts `max-age=600`, and upstream's other rules are unchanged.
+  - `ConfigFileTest` (the init tool's) checks that the shipped value puts the loaders' rule before `*.js`'s, that every replaced default is replaced with the shipped one, and that an admin's value is kept.
+  - `docker/smoke-test.sh` checks the headers on a fresh stack in step 2. In step 8 it puts the old default back in the conf volume before the restart, then checks that DockerInit replaced it and the loader is `no-cache` again.
+- **Upstream edits.** One: the `cachecontrol` line of `logicaldoc-webapp/src/main/resources/context.properties` gains `*.nocache.js:no-cache;` before `*.js:max-age=600`, for the reason above. CE's filter is unchanged.

@@ -22,8 +22,12 @@ fails, because the app's image is built here and can't be pulled.
 
 - **Your data stays.** The volumes are kept.
 - **New default settings are added** to your `context.properties` when the app starts. Values you already have
-  aren't changed, apart from the release number and copyright years (`product.release` and `product.year`), which
-  the new image updates.
+  aren't changed, apart from two kinds:
+  - the release number and copyright years (`product.release` and `product.year`), which the new image updates;
+  - a setting still holding an older image's default that the new image replaces. If you changed it yourself, your
+    value stays. So far that's `cachecontrol`, which tells browsers how long to keep Healdan's files.
+- **Browsers load the new interface** the next time they open Healdan. A tab left open during the upgrade keeps the
+  old one until it's reloaded.
 - **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).

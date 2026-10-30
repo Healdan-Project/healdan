@@ -104,6 +104,7 @@ jobs:
             SoapPermissionGapsTest
             DocumentsDataServletTest
             ConvertPdfTest
+            CacheControlFilterTest
             HealdanDocNumberSortTest
             InitializeReadOnlyTest
             EventEndpointTest

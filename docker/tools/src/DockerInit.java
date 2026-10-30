@@ -85,9 +85,10 @@ public final class DockerInit {
 
     /**
      * Adds keys the file lacks from the image defaults (upstream adds settings over time, and LogicalDOC fails to
-     * start on an unresolvable one) and takes the image-owned keys from them, seeds the container's paths and DB
-     * settings the first time (recognised by a missing LDOCHOME, which the shipped defaults lack), then applies the
-     * env-owned keys. Returns true when this call seeded the file.
+     * start on an unresolvable one), takes the image-owned keys from them, replaces a default an earlier image
+     * shipped with this image's, seeds the container's paths and DB settings the first time (recognised by a missing
+     * LDOCHOME, which the shipped defaults lack), then applies the env-owned keys. Returns true when this call seeded
+     * the file.
      */
     static boolean applyConfig(File file, File defaults, Map<String, String> envKeys) throws IOException {
         ContextProperties config = new ContextProperties(file);
@@ -98,6 +99,9 @@ public final class DockerInit {
         TreeSet<String> updated = applyImageKeys(config, pristine);
         if (!updated.isEmpty())
             log("updated from the image: " + String.join(", ", updated));
+        TreeSet<String> replaced = replaceOldDefaults(config, pristine);
+        if (!replaced.isEmpty())
+            log("replaced an earlier image's default with this image's: " + String.join(", ", replaced));
         String home = config.getProperty("LDOCHOME");
         boolean seed = home == null || home.isBlank();
         if (seed) {
@@ -142,6 +146,19 @@ public final class DockerInit {
             }
         }
         return updated;
+    }
+
+    /** Gives each key still holding a default an earlier image shipped (ConfigPlan.REPLACED_DEFAULTS) the image's. */
+    private static TreeSet<String> replaceOldDefaults(ContextProperties config, Properties pristine) {
+        TreeSet<String> replaced = new TreeSet<>();
+        ConfigPlan.REPLACED_DEFAULTS.forEach((key, oldValues) -> {
+            String value = pristine.getProperty(key);
+            if (value != null && oldValues.contains(config.getProperty(key))) {
+                config.setProperty(key, value);
+                replaced.add(key);
+            }
+        });
+        return replaced;
     }
 
     /**
