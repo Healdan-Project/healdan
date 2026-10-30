@@ -279,16 +279,6 @@ class SiteBuild(unittest.TestCase):
 
     # Task 3
 
-    def test_interim_box_renders(self):
-        # A page that isn't written yet: the User Guide's Tags page stays interim until the demo docs' PR 3 writes it
-        page = self.html("/user/documents/tags/")
-        box = self.text(page, "div", "healdan-interim")
-        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Tags covers similar ground.", box)
-        self.assertIn("LogicalDOC's docs describe its Enterprise edition, so some features there aren't in Healdan, "
-                      "and their workspace isn't a Healdan Workspace.", box)
-        self.assertIn("https://docs.logicaldoc.com/en/document-metadata/tags",
-                      [link.href for link in self.links(page, "healdan-interim")])
-
     def test_api_page_written(self):
         # M2 replaced the API page's interim box with Healdan's own API; RestAuthService's key hint links here
         page = self.html("/developer/api/")
@@ -410,6 +400,29 @@ class SiteBuild(unittest.TestCase):
             self.assertNotIn("healdan-interim", page, slug)
         for page in ("documents/checking-out-and-checking-in", "documents/bookmarks"):
             self.assertNotIn("healdan-interim", self.html(f"/user/{page}/"), page)
+
+    # The demo stack and docs gaps spec, PR 3
+
+    USER_GAP_PAGES = {
+        "documents/copying-moving-and-deleting": "Copying, Moving and Deleting", "documents/the-trash": "The Trash",
+        "documents/document-history": "Document History", "documents/downloading-documents": "Downloading Documents",
+        "documents/links-between-documents": "Links Between Documents",
+        "documents/locking-a-document": "Locking a Document", "documents/notes": "Notes", "documents/tags": "Tags",
+        "documents/sharing-a-document": "Sharing a Document", "documents/aliases": "Aliases",
+        "getting-started/messages": "Messages", "getting-started/your-profile-and-password": "Your Profile and Password"}
+
+    def test_user_gap_pages_written(self):
+        for slug, title in self.USER_GAP_PAGES.items():
+            page = self.html(f"/user/{slug}/")
+            self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
+            self.assertNotIn("healdan-interim", page, slug)
+
+    def test_dropbox_page_redirects_to_downloading(self):
+        # Healdan hides Dropbox (the hide-dropbox seed), and old links to its page land on Downloading Documents
+        page = self.html("/user/documents/dropbox/")
+        self.assertIn(f"url={BASE_URL}user/documents/downloading-documents/", page)
+        self.assertNotIn("/user/documents/dropbox/",
+                         [link.href for link in self.links(self.html("/user/documents/"), page="/user/documents/")])
 
     def test_open_in_apps_notice_links_to_the_install_page(self):
         # The web page's Open in App notice links here, so the page must keep its address
