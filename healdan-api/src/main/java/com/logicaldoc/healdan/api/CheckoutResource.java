@@ -307,24 +307,39 @@ public class CheckoutResource {
 	 * {@code DocumentManager}, which reads the document and then writes it. A
 	 * write by another thread in that moment, such as the Office preview
 	 * saving the document when a conversion ends, leaves CE's copy a record
-	 * version behind, and CE's write fails; so CE is asked again, and reads
-	 * the document as it is then. Any other refusal, such as a check-out
-	 * someone else took meanwhile, stands.
+	 * version behind. When that write commits before CE's DAO reads the
+	 * document again to merge its copy, CE's write fails. When it commits
+	 * after, just before CE's {@code UPDATE}, CE's DAO swallows the failure
+	 * of its flush and its transaction rolls back at the commit, unseen and
+	 * unlogged (CI, 2026-10-30). So the document is read back, and either
+	 * way CE is asked again, and reads the document as it is then. Any other
+	 * refusal, such as a check-out someone else took meanwhile, stands.
 	 *
 	 * @param docId the document's id
 	 * @param session the caller's session
-	 * @throws PersistenceException CE's refusal, or its last failure
+	 * @throws PersistenceException CE's refusal, or its last failure; also
+	 *         when CE answered but someone else holds the document, or it's
+	 *         still free after the last try
 	 */
 	static void checkOut(long docId, Session session) throws PersistenceException {
 		for (int tries = 1;; tries++) {
 			try {
 				DocumentManager.get().checkout(docId, history(session, DocumentEvent.CHECKEDOUT));
-				return;
 			} catch (PersistenceException | RuntimeException e) {
 				if (tries >= CHECKOUT_TRIES || !overtaken(e))
 					throw e;
 				log.info("Checking out document {} again, as another write came first: {}", docId, e.getMessage());
+				continue;
 			}
+			Document document = DocumentDAO.get().findById(docId);
+			if (document != null && ApiViews.checkedOutBy(document, session.getUser()))
+				return;
+			if (document == null || document.getStatus() != DocumentStatus.UNLOCKED)
+				throw new PersistenceException("Document %d is held by someone else now".formatted(docId));
+			if (tries >= CHECKOUT_TRIES)
+				throw new PersistenceException(
+						"Document %d's check-out wasn't stored: other writes kept overtaking it".formatted(docId));
+			log.info("Checking out document {} again, as another write overtook the check-out in its flush", docId);
 		}
 	}
 
