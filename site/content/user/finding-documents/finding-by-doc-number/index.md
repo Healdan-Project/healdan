@@ -18,7 +18,7 @@ With the search box's scope on **Documents**, type the doc # with a `#` in front
 | `#1234.2` or `#1234v2` | version 2 as it stands: its latest snapshot |
 | `#1234.2.1`, `#1234v2.1` or `#1234 v2.1` | exactly snapshot 2.1 |
 
-![The search box with #3 typed in, and the result list showing one document: Charterparty – MV Northern Star.docx, doc # 3](doc-number-lookup.png)
+![The search box with #10 typed in, and the result list showing one document: Letter to Dunmere Pryce – Laytime and Demurrage.docx, doc # 10](doc-number-lookup.png)
 
 A space after the `#` is fine, and so is one before the `v`. `#1234 v2.1` is the doc ID: the form the title bar
 shows in LibreOffice (`Lease agreement #1234 v2.1`) and the [doc ID footer](../../office/doc-id-footer/) prints, so you

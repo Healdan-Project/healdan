@@ -9,6 +9,7 @@ import java.util.Properties;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.menu.MenuDAO;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -29,9 +30,17 @@ public class EnvironmentDataServlet extends AbstractDataServlet {
 
 	private static final long serialVersionUID = 1L;
 
+	// Healdan: System > General, whose Environment tab has no menu of its own.
+	// The environment holds the database password in Healdan's container.
+	private static final long GENERAL_MENU = 70L;
+
 	@Override
 	protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
 			Locale locale) throws PersistenceException, IOException {
+
+		if (!MenuDAO.get().isReadAllowed(GENERAL_MENU, session.getUserId()))
+			throw new IOException(
+					"User %s cannot access the menu %d".formatted(session.getUsername(), GENERAL_MENU));
 
 		PrintWriter writer = response.getWriter();
 		writer.write("<list>");

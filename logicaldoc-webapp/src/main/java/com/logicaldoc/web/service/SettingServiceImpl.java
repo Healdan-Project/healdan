@@ -88,6 +88,9 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     private static final String SMTP_HOST = "smtp.host";
 
+    // Healdan: Settings > Outgoing email
+    private static final long OUTGOING_EMAIL_MENU = 103L;
+
     private static final long serialVersionUID = 1L;
 
     private static final Logger log = LoggerFactory.getLogger(SettingServiceImpl.class);
@@ -418,7 +421,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public boolean testEmail(String email) throws ServerException {
-        Session session = validateSession();
+        // Healdan: Settings > Outgoing email, whose Test button calls it
+        Session session = checkMenu(getThreadLocalRequest(), OUTGOING_EMAIL_MENU);
 
         ContextProperties config = Context.get().getConfig();
         EMailSender sender = new EMailSender(session.getTenantName());

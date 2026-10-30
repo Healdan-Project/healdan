@@ -19,7 +19,7 @@ can change the 30 days. A matter leaves the list once you haven't worked in it f
 
 ## In Both Lists
 
-- **Each entry** shows the matter, then its client's name in smaller text: `998.1 – Healdan Demo (Healdan)`. Hover
+- **Each entry** shows the matter, then its client's name in smaller text: `1002.1 – Commercial Lease (Brightwell Bakeries Ltd)`. Hover
   over an entry that's cut off to see all of it.
 - **Click an entry** to open the matter in the folder tree below.
 - **A matter you can no longer open,** or one that's been deleted, doesn't appear.

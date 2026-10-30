@@ -19,7 +19,7 @@ A client has a number, a positive whole number, and a name. Client numbers are u
 
 Right-click the Store the matter belongs in and choose **New Matter…**.
 
-![The New Matter dialog, filled in: client 1001 – Harbour Shipping Ltd, number 2, name Fuel Quality Claim, a description, Store Smoke, owner admin and template Smoke template](new-matter.png)
+![The New Matter dialog, filled in: client 1004 – Marsh Lane Community Trust, number 2, name Community Hall Lease, a description, Store Client Work, owner hashcombe and template Transactional](new-matter.png)
 
 | Field | What to put |
 |---|---|
@@ -32,7 +32,7 @@ Right-click the Store the matter belongs in and choose **New Matter…**.
 
 When you click **Create**, Healdan:
 
-1. copies the template into the Store as the matter's workspace, named like `1001.2 – Fuel Quality Claim`;
+1. copies the template into the Store as the matter's workspace, named like `1004.2 – Community Hall Lease`;
 2. stamps the workspace with its client and matter, which pass down to everything in it;
 3. gives the owner every permission on the workspace.
 

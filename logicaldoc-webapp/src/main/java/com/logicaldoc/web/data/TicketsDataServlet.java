@@ -12,6 +12,7 @@ import org.apache.commons.lang.StringUtils;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.core.ticket.TicketDAO;
 import com.logicaldoc.core.util.IconSelector;
@@ -31,6 +32,9 @@ public class TicketsDataServlet extends AbstractDataServlet {
 
     private static final long serialVersionUID = 1L;
 
+    // Healdan: Reports > Tickets. A ticket's ID is all a download link needs.
+    private static final long TICKETS_MENU = -7L;
+
     @Override
     protected void service(
             HttpServletRequest request,
@@ -38,6 +42,10 @@ public class TicketsDataServlet extends AbstractDataServlet {
             Session session,
             Integer max,
             Locale locale) throws PersistenceException, IOException {
+
+        if (!MenuDAO.get().isReadAllowed(TICKETS_MENU, session.getUserId()))
+            throw new IOException(
+                    "User %s cannot access the menu %d".formatted(session.getUsername(), TICKETS_MENU));
 
         PrintWriter writer = response.getWriter();
         writer.write("<list>");
