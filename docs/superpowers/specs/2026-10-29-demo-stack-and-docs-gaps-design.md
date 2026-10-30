@@ -2,7 +2,7 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56)
 - **Date:** 2026-10-29
-- **Status:** design approved by the owner on 2026-10-29, section by section. Not built yet.
+- **Status:** design approved by the owner on 2026-10-29, section by section. PR 1 (the demo stack) is built, not yet merged; PRs 2 to 4 are not started. Where the plan or the build changed the design, the text says "(changed in the plan)" or "(changed in the build)", and the plan's decision log has the reasons.
 - **Follows:** the [docs site's spec](2026-10-23-docs-site-design.md), whose §6.2 created the interim pages, whose §6.4 took screenshots from the smoke fixture, and whose §13 left "the demo data for screenshots" to the builder.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;
@@ -84,6 +84,7 @@ Everyone is also in Healdan's Everyone group. The built-in `admin` is left as th
 - **Litigation template:** Correspondence, Pleadings, Evidence, Drafts, Emails and Privileged, with search folders such as "My Recent Docs Here" and "Emails in This Matter".
 - **Transactional template:** Correspondence, Drafts, Due Diligence, Executed and Emails.
 - **Firm template:** Documents and Policies.
+- **Who can read them.** Healdan's P1 and P2 rules check each group separately, so a grant to Everyone doesn't cover Partners. The manifest grants Partners on the Litigation template's root, and READ on each Store besides Everyone. (changed in the build)
 
 ### 4.3 Clients and matters
 
@@ -105,7 +106,8 @@ The Charter Dispute carries over from the current web screenshots, and client 99
 
 - **998.3 HR** is readable by Partners only.
 - **1001.1's Privileged folder** is narrower than its matter: Partners only, in a matter Fee Earners can read.
-- **One document in 998.3** is granted to Priya Nair, who can't see its folder (M1's document-only grant).
+- **One document in 998.3** is granted to Priya Nair, who can't see its folder (M1's document-only grant). The grant gives READ, PREVIEW and DOWNLOAD, because M1 says a document-only grant must open, preview and download. (changed in the build)
+- **998.3's restriction is an ACL on its workspace.** A matter whose manifest entry has an `acl` gets that ACL in place of the template's, plus every permission for the owner's personal group, as an admin would set it in the web page. (changed in the plan)
 
 ### 4.5 Documents
 
@@ -123,6 +125,8 @@ About 60, most of them in the three busy matters (the Charter Dispute, the Comme
 | `.png`, `.jpg` | 2 | A scanned receipt, an exported plan |
 
 No `.msg`: Outlook's format can't be built from text sources, and Healdan treats `.eml` and `.msg` alike. (call)
+
+The real manifest has 123 steps and files 64 documents, 61 of them live and 3 deleted (§4.6), from 67 files of 2.8 MB in all. (changed in the build)
 
 ### 4.6 Activity
 
@@ -144,6 +148,14 @@ What the pages need on screen, each done as a user on a given day:
 | Emails with From, To, CC and Subject | Emails |
 
 Dates are spread over the six weeks before the stack's first start, and doc #s follow the order the documents were filed. (call)
+
+- **Emails' dates move with their filing.** The seed rewrites a filed `.eml`'s `Date:` header to 25 minutes before its filing, and its `Received:` header to 5 minutes before, so its Sent and Received properties agree with the timeline. (changed in the plan)
+- **Messages last 60 days.** CE purges a message after its `dateScope`, 10 days by default, so the demo's messages are given 60. (changed in the plan)
+- **The timeline's day 0 is refused.** Every action is in the past, so a demo built at 08:00 never shows something filed at 14:00 today. (changed in the plan)
+- **A note re-indexes and re-dates its document,** because CE's note save marks the document to index and stamps it now. The seed indexes it again inside the action and dates it back. (changed in the build)
+- **A move makes a new subversion,** as CE records it. (changed in the build)
+- **Deleting a document or a folder re-dates it,** because the Trash lists by last-modified. (changed in the build)
+- **The printed dates assume a first start on 2026-10-29.** The seed dates everything relative to the first start, so a stack built months later shows letters whose printed dates differ from their filing dates. (changed in the build)
 
 ## 5. The seed step and the overlay
 
@@ -170,14 +182,22 @@ LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p heald
   - the users, groups, Stores, templates, search folders, clients and matters, with their permissions;
   - each document, with its file, folder, Author, Typist, Class and Subclass;
   - a timeline of actions, each on a day: new version, note, tag, link, move, check-out, lock, password, delete, bookmark, message, ticket.
-- **It acts as each user, through the same services the UI uses,** so doc #s, inherited properties, the filing rule and permissions all apply as they would for a real person. A manifest that breaks one of Healdan's rules fails the seed, so the demo can't show what Healdan wouldn't allow.
-- **Backdating.** A last pass rewrites, with JDBC, the dates of everything the step created to the manifest's days, counted back from the first start. Only the demo does this.
+- **It acts as each user, through the same services the UI uses,** so doc #s, inherited properties and the filing rule apply as they would for a real person. A manifest that breaks one of Healdan's rules fails the seed, so the demo can't show what Healdan wouldn't allow.
+- **The seed checks permissions itself** (the design said the services do). Inside a seed every actor counts as an admin (`FilingRules.isAdmin`, the `SEED` operation), and `DocumentManager.create` checks where a document goes but not who files it. So `DemoTimeline` checks, before each action, the permission the web page asks for, and fails on a refusal naming the user, the permission and the target. (changed in the plan)
+  - Because Healdan counts everyone as an admin inside a seed, the timeline also runs the web page's own tree check before deleting a folder, and refuses a non-admin at a matter's top level. Only a manifest user in the `admin` group, `sokafor`, counts as an admin. (changed in the build)
+  - It logs the history event the web page logs for each action (CHANGED, PERMISSION, DELETED, CHECKEDOUT and LOCKED), because CE's History event defaults to an empty string, so CE's own "if no event" checks never fire. (changed in the build)
+- **Each document is indexed inside its own action** (changed in the plan). `DocumentManager.index` saves the document, which resets its last-modified date, and adds an Indexed history entry. Indexed by the background task, every document would show today's date.
+  - CE reads a file no parser knows, an image for one, through its PDF conversion, and the conversion saves the document under the indexing that asked for it, which then fails on a stale record. So the timeline makes that conversion first. The tests' context has no working ImageMagick and never saw it; the first start of the real stack did. (changed in the build)
+- **Backdating by watermark** (changed in the plan; the design had one last pass). `Backdater` remembers each table's highest id before an action and, afterwards, dates every newer row with the action's date, in each table the demo writes. It also sets the last-modified date of a document an action changed. `EmailDocumentListener` forces every new document's creation date to now, so the creation date can't be set before the create. Only the demo does this.
+  - `Backdater` clears Hibernate's second-level cache after its updates, since Document and Folder are cached and a later save would write the stale dates back. (changed in the build)
+  - `Backdater.touchFolder` dates a folder, for the deletes. (changed in the build)
+- **Users are also in CE's `author` group,** which holds the menus everyday users need (`ld_menu_acl`); a new group holds none. Sam Okafor is in `admin`. (changed in the plan)
 
 ### 5.3 Guards and failure
 
-- **It refuses a repository that already holds documents** outside the Templates Store. If the variable is set on a real server by mistake, startup stops with a message, rather than mixing invented data in. (The smoke fixture creates folders only, so the two overlays can be used together.)
+- **It refuses a repository that already holds a document, any document at all** (changed in the plan; the design said "outside the Templates Store"). The filing rule keeps documents out of the Templates Store, so the two are the same, and the simpler query can't be wrong. If the variable is set on a real server by mistake, startup stops with a message, rather than mixing invented data in. (The smoke fixture creates folders only, so the two overlays can be used together.)
 - **A failure stops startup,** as any seed step's does. Documents write their files outside the database transaction, so the fix is `down -v` and a fresh start, which is fine for a throwaway stack.
-- **Previews, thumbnails and the full-text index** come from Healdan's usual background work, a few minutes after the first start.
+- **Previews and thumbnails** of Office files come from Healdan's usual background work, a few minutes after the first start; CE makes a PDF's, an email's or an image's the first time someone opens it. The full-text index doesn't wait: each document is indexed inside its own action (§5.2). (changed in the plan; the Office-only limit changed in the build)
 
 ### 5.4 Tests
 
@@ -187,7 +207,9 @@ LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p heald
 - that doc # order matches the backdated filing dates;
 - that only Partners can read 998.3, and that the document-only grant works;
 - that the checked-out document is checked out, by Jamie Clarke;
-- that the guard refuses a repository with documents in it.
+- that the guard refuses a repository with any document in it.
+
+The test context sets `hibernate.jdbc.time_zone`, so in the tests Hibernate reads dates in another zone than the seed's JDBC writes them in. The tests read backdated dates through JDBC. (changed in the build) `testTheRealManifest` runs the real manifest in about 100 seconds. (changed in the build)
 
 CI's `build` runs it like any `healdan-core` test, so a code change that breaks the demo fails the check. A change under `docker/` counts as code, so it runs then too.
 
@@ -213,6 +235,8 @@ CI's `build` runs it like any `healdan-core` test, so a code change that breaks 
 - converts everything else with `soffice --headless`, run inside the Healdan image, so everyone gets the same LibreOffice whatever's installed locally.
 
 Its output goes to `docker/demo/files/`, which is committed, so the stack needs nothing beyond the overlay. The manifest names files from there.
+
+`build.py` passes `HOME=/tmp` to LibreOffice, and refuses a `.docx` or `.odt` built from an `.html` that carries a comment, because LibreOffice turns unknown `<meta>` tags into comments. Letters stay HTML. (changed in the build)
 
 **One known limit.** LibreOffice stamps the time of conversion into what it writes, so the output isn't byte-for-byte reproducible, and CI can't tell that a source changed without its file being rebuilt. The convention: rebuild in the same commit as the source change. `DemoFixtureSeedTest` still fails on any file the manifest names that's missing.
 

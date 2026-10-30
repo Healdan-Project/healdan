@@ -15,7 +15,7 @@
 
 **Spec:** [`docs/superpowers/specs/2026-10-29-demo-stack-and-docs-gaps-design.md`](../specs/2026-10-29-demo-stack-and-docs-gaps-design.md), approved by the owner on 2026-10-29. Every § below points into it. Where the two disagree, the spec wins, except for "Spec corrections and calls this plan makes".
 
-**Status:** not started.
+**Status:** PR 1 (Tasks 1 to 6, the demo stack) is built, not yet merged. PRs 2 to 4 are not started.
 
 ## Global Constraints
 
@@ -2899,6 +2899,20 @@ Runs in whichever of PR 3 and PR 4 merges last (spec §8). Before starting, `gre
 
 | Date | Task | Decision | Why |
 |---|---|---|---|
+| 2026-10-29 | 2 | `Backdater` clears Hibernate's second-level cache after its updates. | Hibernate's second-level cache keeps each loaded row with the date it was loaded with, and the demo's JDBC dates never reach it. Document and Folder are cached, so a later save would write the stale date back over the backdated one. |
+| 2026-10-29 | 2 to 5 | The test context sets `hibernate.jdbc.time_zone`, so the tests read backdated dates through JDBC. | In the tests Hibernate reads dates in another zone than the seed's JDBC writes them in. |
+| 2026-10-29 | 3 | Healdan's P1 and P2 rules check each group separately, so the manifest grants Partners on the Litigation template's root, and READ on each Store besides Everyone. | A grant to Everyone doesn't cover Partners. |
+| 2026-10-29 | 4 | Inside a seed Healdan counts everyone as an admin, so the timeline also runs the web page's own tree check before deleting a folder and refuses a non-admin at a matter's top level. Only a manifest user in the `admin` group (`sokafor`) counts as an admin. | The web page's checks that rely on Healdan's own rules were skipped inside a seed, so the demo could show what Healdan would refuse a real user. The timeline now runs `HealdanTreeChecks.deletedTrees` before a folder delete, and a top-level add or delete is refused for a non-admin. |
+| 2026-10-29 | 4 | A note re-indexes and re-dates its document. | CE's note save marks the document to index and stamps it now, so the timeline indexes it again inside the action and dates it back. |
+| 2026-10-29 | 4 | A grant gives READ, PREVIEW and DOWNLOAD. | M1: a document-only grant must open, preview and download. |
+| 2026-10-29 | 4 | Deleting a document or a folder re-dates it, and `Backdater.touchFolder` was added. | `deleteTree` saves the folder with the real time and the Trash lists by last-modified, so the deletion needs its own date. |
+| 2026-10-29 | 4 | A move makes a new subversion. | CE records one on a move, and the demo shows what CE does. |
+| 2026-10-29 | 5b | The seed logs the history event the web page logs for each action (CHANGED, PERMISSION, DELETED, CHECKEDOUT, LOCKED), in `DemoTimeline`. | CE's History event defaults to an empty string, so CE's own "if no event" checks never fire. |
+| 2026-10-29 | 5a | `build.py` passes `HOME=/tmp`, and refuses a `.docx` or `.odt` built from an `.html` that carries a comment. Letters stay HTML. The files were built with the existing local image. | LibreOffice's HTML import turns a `<meta>` tag it doesn't read into a comment, which a headless PDF doesn't show. The user has no home inside the image, and fontconfig and dconf complain without one. |
+| 2026-10-29 | 5a | The documents' printed dates assume a first start on 2026-10-29, while the seed dates relative to the first start. | The files print fixed dates. A stack built months later shows letters whose printed dates differ from their filing dates. |
+| 2026-10-29 | 5 | The real manifest has 123 steps and files 64 documents (61 live, 3 deleted) from 67 files of 2.8 MB. `DemoFixtureSeedTest.testTheRealManifest` runs it in about 100 seconds. | Recorded so a later change can see what it grew from. |
+| 2026-10-29 | 6 | `DemoTimeline.index` makes the PDF conversion first for a file CE reads through it (an image), then indexes. `DemoTimelineTest` stands in a converter that works. | The first start of the real stack stopped at the harbour receipt (`.jpg`): CE's conversion saves the document under the indexing, which then failed on a stale record. The tests' context has no working ImageMagick, so they never saw it. |
+| 2026-10-29 | 6 | Spec §5.3 and §5.4 say the guard refuses any document at all (call 4), not only those outside the Templates Store. | The wording in the spec still said "outside the Templates Store". |
 
 ## Follow-Ups
 

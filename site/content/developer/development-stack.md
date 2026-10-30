@@ -50,3 +50,44 @@ Without the variable that step does nothing, so it runs on a later start if you 
 {{< callout type="warning" >}}
 Never use the smoke overlay on a server with real data.
 {{< /callout >}}
+
+## A Demo Firm for Screenshots
+
+The docs' screenshots come from a demo stack that holds an invented law firm, Ashcombe Reeve LLP: six users,
+seven clients, twelve matters and about sixty documents, with six weeks of their work on them. Run it as a stack
+of its own:
+
+```bash
+LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p healdan-demo -f compose.yaml -f docker/demo/compose.demo.yaml up -d --build
+```
+
+The overlay sets `HEALDAN_DEMO_FIXTURE=true`, so Healdan's first start fills the empty stack from
+`docker/demo/manifest.json`. Everything is dated over the six weeks before that start. The previews and
+thumbnails of Office files follow a few minutes later; those of PDFs, emails and images are made the first time
+someone opens them.
+
+| User | Name | Role |
+|---|---|---|
+| `hashcombe` | Helen Ashcombe | Partner |
+| `treeve` | Tom Reeve | Partner |
+| `pnair` | Priya Nair | Associate, the day-to-day user in most screenshots |
+| `jclarke` | Jamie Clarke | Paralegal |
+| `cdoyle` | Chris Doyle | Legal assistant |
+| `sokafor` | Sam Okafor | IT and office manager, an admin |
+
+Each signs in with the password `Demo-Firm-2026`. Remove the stack with `down -v` and the same `-p`.
+
+- **Changing the firm.** Edit `docker/demo/manifest.json`, and the documents' text sources in
+  `docker/demo/sources/`. Then rebuild their files with `python3 docker/demo/build.py`, which runs LibreOffice
+  inside the Healdan image, and commit the sources and files together.
+- **Restart once for the sign-in page.** After the first start the sign-in page says "The application has to be
+  restarted", because the plugins ask for a restart on a fresh stack. `docker compose -p healdan-demo restart app`
+  clears it, and doesn't fill the firm a second time.
+- **Browsing adds to it.** Opening a document logs a Viewed event dated then, so a stack someone has browsed
+  shows today's date in some documents' History. Take screenshots from a stack that was used as little as you can.
+- **It refuses real data.** The step runs only on a repository with no documents in it, and a failure stops
+  startup. Start over with `down -v`.
+
+{{< callout type="warning" >}}
+Never use the demo overlay on a server with real data.
+{{< /callout >}}
