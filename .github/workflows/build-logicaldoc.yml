@@ -120,6 +120,7 @@ jobs:
             SettingServiceImplAuthorizationTest
             TasksDataServletTest
             JobsDataServletTest
+            HealdanNamesTest
             LockedDocsDataServletTest
         run: python3 .github/scripts/test-shards.py plan --times test-times.txt --minutes 5 --max-shards 8 "$UPSTREAM_TESTS"
 
@@ -199,14 +200,14 @@ jobs:
           -Dassembly.skipAssembly=true -Dmaven.source.skip=true -pl '!logicaldoc-webapp' install
 
       # Each module gets the whole -Dtest list and runs the classes it has. -fae runs every module's tests even when
-      # one module's fail.
+      # one module's fail. logicaldoc-gui's tests don't need the GWT compile, which its compile phase would run.
       - name: Test
         env:
           MODULES: ${{ matrix.modules }}
           TESTS: ${{ matrix.tests }}
         run: |
           touch ~/logicaldoc-dev.properties
-          mvn -B -ntp -fae -pl "$MODULES" test -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
+          mvn -B -ntp -fae -pl "$MODULES" test -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true -Dsurefire.failIfNoSpecifiedTests=false -Dtest="$TESTS"
 
       - name: Record test times
         run: python3 .github/scripts/test-shards.py times ./*/target/surefire-reports > test-times-${{ matrix.shard }}.txt

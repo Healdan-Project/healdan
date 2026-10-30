@@ -283,6 +283,8 @@ PRs 2, 3 and 4 touch different files, so once PR 1 has merged they can run in pa
 
 None. The demo fixture and `hide-dropbox` are Healdan seed steps, which change data, never CE's files or the structure of its tables.
 
+§14's follow-up, found while writing PR 4, edits two GUI files.
+
 ## 11. Done when
 
 1. One command starts the demo stack, and the firm in §4 is there with its activity, dated over the past six weeks.
@@ -316,3 +318,28 @@ None. The demo fixture and `hide-dropbox` are Healdan seed steps, which change d
 | The sources, the build and the content rules (§6) | call, approved by the owner |
 | Four PRs (§8) | call, approved by the owner |
 | The owner's two looks, and whichever of PRs 3 and 4 merges last carrying the cleanup | call, new in the written spec |
+
+## 14. Follow-up: saving the Healdan profile (2026-10-30)
+
+Writing Property Templates (PR 4, Healdan-Project/healdan#117) showed that the Healdan profile's template and attribute set can't be saved from **Administration → Document metadata → Templates**. Both are named "Healdan profile" (`HealdanConstants.PROFILE_TEMPLATE`), and LogicalDOC's forms check the name against `^([a-zA-Z0-9]+)$` at every save, changed or not: `TemplateNameTextValidator` in `TemplatePropertiesPanel`, and `SimpleTextValidator`, through `ItemFactory.newSimpleTextItem`, in `AttributeSetPropertiesPanel`. Save shows "Use alphanumeric chars only". So no admin could add a property to the profile, though the User Guide's Properties page says one can. Only the **Options** window, which saves on its own, worked.
+
+**The fix is a GUI hook that lets a template or attribute set keep the name it has** (call). `HealdanNames.keepCurrent` (`com.logicaldoc.gui.frontend.client.healdan`) gives the name field a validator that accepts the name the object was loaded with, as well as anything LogicalDOC's rule accepts, with the rule's own expression and message. A new name still has to pass the rule.
+
+The other way, a seed step renaming both to a name without a space, was bigger:
+
+- every version records its template's name (`ld_version.ld_templatename`), and CMIS looks an old version's template up by it, so old versions would name a template that no longer exists, unless the step also rewrote CE's version rows;
+- admins would see the new name in the Templates and Attribute sets lists, the documents list's Template column and a version's details, so the docs' pages and screenshots that name the profile would change with it;
+- the shipped `profile` and `profile-comments` steps would have to keep the old name, and the new step would need a guard for a template an admin had already given the new name.
+
+The hook changes no data, and nothing anyone sees except that Save works.
+
+**The demo stack then showed a second fault, in the template alone** (changed in the build). `TemplatePropertiesPanel.validate` reads each attribute's set with `Long.parseLong(rec.getAttributeAsString(SET_ID))`, which throws for an attribute that has no set, so the template's Save did nothing, without a message. LogicalDOC's own screens only add attributes from a set, but the `profile` step put twelve of the profile's attributes, all but Class and Subclass, on the template directly. The fix reads the set with `rec.getAttributeAsLong(SET_ID)`, as the panel's `addAttributes` already does; the server stores an attribute without a set as it is. Putting the twelve in the attribute set instead would have changed what the set's **Apply … to templates** buttons and options do to them, and what the Property Templates page says the set holds.
+
+**Upstream edits**, each marked `Healdan:`:
+
+- a line and an import in `TemplatePropertiesPanel.prepareTemplateForm`, after CE sets the name field's validator, and in `AttributeSetPropertiesPanel.addMetadata`, after CE makes the name field: the hook;
+- a changed line in `TemplatePropertiesPanel.validate`: the set read as a `Long`, which may be null.
+
+**Tests:** `HealdanNamesTest`, `logicaldoc-gui`'s first test, checks the rule the hook applies: the current name passes even with a space, a new one only if LogicalDOC's rule passes it, and an empty one never. It's in the build workflow's `UPSTREAM_TESTS`, and the shards' test step skips the GWT compile (`-Dgwt.skipCompilation=true`), which `logicaldoc-gui`'s compile phase would otherwise run. The `validate` fix has no unit test, since the panel needs a browser. On a demo stack, an admin added a property to the attribute set and to the template, and a value set on a folder showed on a document's Ext. Properties below it.
+
+**Docs:** Property Templates' "What Can't Be Changed Here" becomes "Adding a Property", with the steps, and keeps the warning not to rename or delete the profile. The User Guide's Properties page already said "Your administrator can add more properties", which is now true, so it stays as it is.
