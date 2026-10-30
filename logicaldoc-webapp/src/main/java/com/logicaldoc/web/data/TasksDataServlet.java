@@ -8,6 +8,7 @@ import java.util.Locale;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.menu.MenuDAO;
 import com.logicaldoc.core.task.Task;
 import com.logicaldoc.core.task.TaskManager;
 import com.logicaldoc.core.task.TaskTrigger;
@@ -29,9 +30,16 @@ public class TasksDataServlet extends AbstractDataServlet {
     private static final String SCHEDULING = "<scheduling>%s</scheduling>";
     private static final long serialVersionUID = 1L;
 
+    // Healdan: System, whose Scheduled tasks screen lists them, as the task
+    // RPCs need
+    private static final long SYSTEM_MENU = 80L;
+
     @Override
     protected void service(HttpServletRequest request, HttpServletResponse response, Session session, Integer max,
             Locale locale) throws PersistenceException, IOException {
+
+        if (!MenuDAO.get().isReadAllowed(SYSTEM_MENU, session.getUserId()))
+            throw new IOException("User %s cannot access the menu %d".formatted(session.getUsername(), SYSTEM_MENU));
 
         TaskManager manager = Context.get(TaskManager.class);
 
