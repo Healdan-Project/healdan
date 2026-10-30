@@ -108,6 +108,24 @@ public class CheckoutResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testCheckOutPastABackgroundWriteAtTheFlush() throws Exception {
+		// The preview's save commits just before CE's UPDATE of the check-out, whose failure CE's DAO swallows
+		Document d = file();
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
+			response = post(path(d)).token(token).send();
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(clerk.getId(), response.json().path("hold").path("by").path("id").asLong());
+		assertEquals(DocumentStatus.CHECKEDOUT, DocumentDAO.get().findById(d.getId()).getStatus());
+		assertEquals(List.of("event.stored", "event.converted", "event.checkedout"), events(d));
+	}
+
+	@Test
 	public void testHeldByOthers() throws Exception {
 		Document d = file();
 		String token = signIn(clerk);

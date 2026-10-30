@@ -186,6 +186,32 @@ public class SaveTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testKeptCheckedOutPastABackgroundWriteAtTheFlush() throws Exception {
+		// The preview's save can also commit after CE read the document again to write the check-out, just before
+		// the UPDATE: CE's DAO swallows the stale write, and the save answered 201 with hold null (CI, 2026-10-30)
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals("1.1", response.json().path("fileVersion").textValue());
+		assertEquals(clerk.getId(), response.json().path("hold").path("by").path("id").asLong());
+		Document saved = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.CHECKEDOUT, saved.getStatus());
+		assertEquals(Long.valueOf(clerk.getId()), saved.getLockUserId());
+		assertEquals(List.of("event.checkedout", "event.checkedin", "event.checkedout"), holdEvents(d));
+		assertEquals(1, jdbc().queryForObject(
+				"select count(*) from ld_history where ld_docid = ? and ld_event = 'event.converted'", Integer.class,
+				d.getId()).intValue());
+	}
+
+	@Test
 	public void testTakenInTheMomentBetween() throws Exception {
 		// The old web page can check it out between the check-in and the check-out that keeps it (spec section 6.6)
 		Document d = file("a.docx");
@@ -203,6 +229,32 @@ public class SaveTest extends ApiTestCase {
 		}
 
 		// The save stands, and the answer shows who has the document
+		assertEquals(response.toString(), 201, response.status());
+		assertEquals("1.1", response.json().path("fileVersion").textValue());
+		assertEquals(boss.getId(), response.json().path("hold").path("by").path("id").asLong());
+		Document saved = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.CHECKEDOUT, saved.getStatus());
+		assertEquals(Long.valueOf(boss.getId()), saved.getLockUserId());
+	}
+
+	@Test
+	public void testTakenInTheMomentBetweenAtTheFlush() throws Exception {
+		// The web page's check-out commits just before CE's UPDATE of the one that keeps it, which is lost unseen:
+		// the save stands, and the answer shows who has the document
+		Document d = file("a.docx");
+		checkout(d, clerk);
+		String token = signIn(clerk);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, document -> {
+			document.setStatus(DocumentStatus.CHECKEDOUT);
+			document.setLockUserId(boss.getId());
+			document.setLockUser(boss.getFullName());
+		}).start()) {
+			response = save(token, d, version("snapshot", null, true), "a.docx", "two");
+			webPage.assertWritten();
+		}
+
 		assertEquals(response.toString(), 201, response.status());
 		assertEquals("1.1", response.json().path("fileVersion").textValue());
 		assertEquals(boss.getId(), response.json().path("hold").path("by").path("id").asLong());
