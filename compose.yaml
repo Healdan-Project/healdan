@@ -1,5 +1,6 @@
 # LogicalDOC Community: production baseline (home lab behind your own reverse proxy).
-# Overlays: compose.dev.yaml (development), compose.proxy.yaml (Nginx Proxy Manager). See docker/README.md.
+# Overlays: compose.dev.yaml (development), compose.proxy.yaml (Nginx Proxy Manager), docker/demo/compose.demo.yaml
+# (a throwaway demo stack for the docs' screenshots). See docker/README.md.
 name: logicaldoc
 
 services:

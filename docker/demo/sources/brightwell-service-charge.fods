@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The service charge budget for the Weir Lane Trading Estate for 1 October 2026 to 30 September 2027, issued by Harrow & Lund
+  on 30 September 2026 (1002.1 Due Diligence). Every result is a real formula, and each formula cell also carries the
+  value it works out to (office:value), which LibreOffice shows until it recalculates. If a figure changes, change the
+  cached value beside it. The sums, for checking by hand:
+
+    estate costs  6,200 + 3,800 + 2,400 + 1,100 + 9,600 + 850 + 1,450 + 2,000 = 27,400.00
+    management fee  10% of 27,400.00 = 2,740.00; total 30,140.00
+    Unit 1 22% 6,630.80; Unit 2 18% 5,425.20; Unit 3 15% 4,521.00; Unit 4 8.5% 2,561.90; Unit 5 16.5% 4,973.10;
+    Unit 6 20% 6,028.00; together 30,140.00. Quarterly = yearly / 4, rounded to the penny.
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Fiona Lund</meta:initial-creator>
+    <dc:creator>Fiona Lund</dc:creator>
+    <dc:title>Service Charge Budget 2026–27 – Weir Lane Trading Estate</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-29T14:00:00</meta:creation-date>
+    <dc:date>2026-09-30T11:25:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NInt">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDate">
+      <number:day/><number:text> </number:text><number:month number:textual="true"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowInt" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NInt">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDate" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDate">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateIn" style:family="table-cell" style:parent-style-name="RowDate">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="HiRow" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff3d1"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="HiMoney" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NGBP"/>
+    <style:style style:name="HiPct" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="SubPct" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="TotalPct" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct"/>
+    <style:style style:name="Due" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="DueMoney" style:family="table-cell" style:parent-style-name="Due" style:data-style-name="NGBP">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="co0" style:family="table-column"><style:table-column-properties style:column-width="7.2cm"/></style:style><style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="3.0cm"/></style:style><style:style style:name="co2" style:family="table-column"><style:table-column-properties style:column-width="3.6cm"/></style:style><style:style style:name="co3" style:family="table-column"><style:table-column-properties style:column-width="3.6cm"/></style:style>
+    <style:style style:name="rh0_9" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_0" style:family="table-row"><style:table-row-properties style:row-height="1.0cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_6" style:family="table-row"><style:table-row-properties style:row-height="0.6cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:print-orientation="portrait"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Service charge budget">
+        <table:table-column table:style-name="co0"/><table:table-column table:style-name="co1"/><table:table-column table:style-name="co2"/><table:table-column table:style-name="co3"/>
+                <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Title" table:number-columns-spanned="4" office:value-type="string"><text:p>Weir Lane Trading Estate – service charge budget</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="4" office:value-type="string"><text:p>1 October 2026 to 30 September 2027</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row table:style-name="rh1_0"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="4" office:value-type="string"><text:p>Issued by Harrow &amp; Lund, Commercial Agents, for Penwick Property Limited on 30 September 2026. Prepared by Fiona Lund. Figures are before VAT. Blue figures are inputs; the rest are worked out.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="4" office:value-type="string"><text:p>Estate costs for the year</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="ColHead" table:number-columns-spanned="2" office:value-type="string"><text:p>Item</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Budget</text:p></table:table-cell><table:table-cell table:style-name="ColHead"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Estate road repairs</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="6200.0"><text:p>£6,200.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Landscaping</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="3800.0"><text:p>£3,800.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Lighting: electricity</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="2400.0"><text:p>£2,400.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Lighting: maintenance</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="1100.0"><text:p>£1,100.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Security patrols</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="9600.0"><text:p>£9,600.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Gate maintenance</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="850.0"><text:p>£850.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Insurance of common parts</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="1450.0"><text:p>£1,450.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Reserve fund</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="2000.0"><text:p>£2,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Sub" table:number-columns-spanned="2" office:value-type="string"><text:p>Estate costs</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.C7:.C14])" office:value-type="currency" office:currency="GBP" office:value="27400.0"><text:p>£27,400.00</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Management fee, as a percentage of the estate costs</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.1"><text:p>10%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Management fee</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.C15]*[.C16];2)" office:value-type="currency" office:currency="GBP" office:value="2740.0"><text:p>£2,740.00</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" table:number-columns-spanned="2" office:value-type="string"><text:p>Total to be recovered from the units</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.C15]+[.C17]" office:value-type="currency" office:currency="GBP" office:value="30140.0"><text:p>£30,140.00</text:p></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="4" office:value-type="string"><text:p>Each unit’s share</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Unit</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Share of the total</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Yearly charge</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Quarterly charge</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Unit 1</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.22"><text:p>22%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.$C$18]*[.B22];2)" office:value-type="currency" office:currency="GBP" office:value="6630.8"><text:p>£6,630.80</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.C22]/4;2)" office:value-type="currency" office:currency="GBP" office:value="1657.7"><text:p>£1,657.70</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Unit 2</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.18"><text:p>18%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.$C$18]*[.B23];2)" office:value-type="currency" office:currency="GBP" office:value="5425.2"><text:p>£5,425.20</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.C23]/4;2)" office:value-type="currency" office:currency="GBP" office:value="1356.3"><text:p>£1,356.30</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Unit 3</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.15"><text:p>15%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.$C$18]*[.B24];2)" office:value-type="currency" office:currency="GBP" office:value="4521.0"><text:p>£4,521.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.C24]/4;2)" office:value-type="currency" office:currency="GBP" office:value="1130.25"><text:p>£1,130.25</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="HiRow" office:value-type="string"><text:p>Unit 4 (Brightwell Bakeries Ltd)</text:p></table:table-cell><table:table-cell table:style-name="HiPct" office:value-type="percentage" office:value="0.085"><text:p>8.5%</text:p></table:table-cell><table:table-cell table:style-name="HiMoney" table:formula="of:=ROUND([.$C$18]*[.B25];2)" office:value-type="currency" office:currency="GBP" office:value="2561.9"><text:p>£2,561.90</text:p></table:table-cell><table:table-cell table:style-name="HiMoney" table:formula="of:=ROUND([.C25]/4;2)" office:value-type="currency" office:currency="GBP" office:value="640.48"><text:p>£640.48</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Unit 5</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.165"><text:p>16.5%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.$C$18]*[.B26];2)" office:value-type="currency" office:currency="GBP" office:value="4973.1"><text:p>£4,973.10</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.C26]/4;2)" office:value-type="currency" office:currency="GBP" office:value="1243.28"><text:p>£1,243.28</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Unit 6</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.2"><text:p>20%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.$C$18]*[.B27];2)" office:value-type="currency" office:currency="GBP" office:value="6028.0"><text:p>£6,028.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.C27]/4;2)" office:value-type="currency" office:currency="GBP" office:value="1507.0"><text:p>£1,507.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" office:value-type="string"><text:p>All six units</text:p></table:table-cell><table:table-cell table:style-name="TotalPct" table:formula="of:=SUM([.B22:.B27])" office:value-type="percentage" office:value="1.0"><text:p>100%</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=SUM([.C22:.C27])" office:value-type="currency" office:currency="GBP" office:value="30140.0"><text:p>£30,140.00</text:p></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="4" office:value-type="string"><text:p>Notes</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row table:style-name="rh0_6"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="4" office:value-type="string"><text:p>1.  Each unit pays its fixed share of the total in four equal quarterly instalments, rounded to the nearest penny.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row table:style-name="rh0_6"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="4" office:value-type="string"><text:p>2.  The reserve fund is held for future repairs to the road and gates and is not spent in this year.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row table:style-name="rh0_6"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="4" office:value-type="string"><text:p>3.  The shares add up to 100%. Unit 4’s share is 8.5%, which is about £2,560 a year on this budget.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

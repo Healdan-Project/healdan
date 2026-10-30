@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The lease plan for 1002.1 (Brightwell Bakeries Ltd, Unit 4, Weir Lane Trading Estate), drawing WL/04/01, as
+  drawn by Penwick Property Limited's surveyors in August 2026. A4 landscape, simple labelled shapes, not to scale.
+  North is up. Units 1 to 6 run west to east above the estate road, each with its yard in front; Unit 4 is edged
+  red with its yard hatched, the loading bay and the bin store at the foot of the yard, and parking spaces 7 and 8
+  (shaded) opposite it. Parking spaces 1 to 12 and the landscaped area lie between the road and Weir Lane.
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.graphics">
+
+  <office:meta>
+    <meta:initial-creator>Penwick Property Limited</meta:initial-creator>
+    <dc:creator>Penwick Property Limited</dc:creator>
+    <dc:title>Lease Plan – Unit 4, Weir Lane Trading Estate</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-08-20T10:10:00</meta:creation-date>
+    <dc:date>2026-08-27T16:20:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <draw:hatch draw:name="YardHatch" draw:style="single" draw:color="#7f7f7f" draw:distance="0.16cm" draw:rotation="450"/>
+
+    <style:style style:name="Frame" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="solid" svg:stroke-width="0.05cm" svg:stroke-color="#000000"/>
+    </style:style>
+    <style:style style:name="Unit" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#ececec" draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Unit4" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#ffffff" draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="YardOther" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="dash" draw:stroke-dash="Dashed" svg:stroke-width="0.02cm" svg:stroke-color="#999999"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="YardHatched" style:family="graphic">
+      <style:graphic-properties draw:fill="hatch" draw:fill-hatch-name="YardHatch" draw:fill-hatch-solid="true" draw:fill-color="#ffffff" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#555555"/>
+    </style:style>
+    <style:style style:name="Bay" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#f4e8c4" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#555555"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Bin" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#bdbdbd" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#555555"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="RedEdge" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="solid" svg:stroke-width="0.10cm" svg:stroke-color="#d11a1a"/>
+    </style:style>
+    <style:style style:name="RedEdgeKey" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="solid" svg:stroke-width="0.10cm" svg:stroke-color="#d11a1a"/>
+    </style:style>
+    <style:style style:name="Road" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#d9d9d9" draw:stroke="solid" svg:stroke-width="0.02cm" svg:stroke-color="#999999"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Lane" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#c4c4c4" draw:stroke="solid" svg:stroke-width="0.02cm" svg:stroke-color="#999999"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Centre" style:family="graphic">
+      <style:graphic-properties draw:stroke="dash" draw:stroke-dash="Dashed" svg:stroke-width="0.02cm" svg:stroke-color="#ffffff"/>
+    </style:style>
+    <style:style style:name="Space" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#ffffff" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#555555"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Shaded" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#9dbac6" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#555555"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Green" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#dfead6" draw:stroke="none"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Arrow" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#555555" draw:stroke="none"/>
+    </style:style>
+    <style:style style:name="NArrowL" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#000000" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#000000"/>
+    </style:style>
+    <style:style style:name="NArrowR" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#ffffff" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#000000"/>
+    </style:style>
+    <style:style style:name="Key" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#555555"/>
+    </style:style>
+    <style:style style:name="Title" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#f4f6f7" draw:stroke="solid" svg:stroke-width="0.05cm" svg:stroke-color="#000000"
+        draw:textarea-horizontal-align="left" draw:textarea-vertical-align="middle" draw:auto-grow-height="false" fo:padding-left="0.3cm" fo:padding-right="0.2cm" fo:padding-top="0.1cm" fo:padding-bottom="0.1cm"/>
+    </style:style>
+    <style:style style:name="Label" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#ffffff" draw:stroke="none"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="TxtC" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="none" draw:auto-grow-height="false" draw:auto-grow-width="false"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/>
+    </style:style>
+    <style:style style:name="TxtL" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="none" draw:auto-grow-height="false" draw:auto-grow-width="false"
+        draw:textarea-horizontal-align="left" draw:textarea-vertical-align="middle" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/>
+    </style:style>
+    <style:style style:name="TxtR" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="none" draw:auto-grow-height="false" draw:auto-grow-width="false"
+        draw:textarea-horizontal-align="right" draw:textarea-vertical-align="middle" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="Pc" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="9pt"/></style:style>
+    <style:style style:name="Pl" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="9.5pt"/></style:style>
+    <style:style style:name="Phead" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="13pt" fo:font-weight="bold" fo:color="#1d4e5f"/></style:style>
+    <style:style style:name="Pu" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="10pt" fo:color="#444444"/></style:style>
+    <style:style style:name="Pu4" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="14pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pgrey" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="8pt" fo:color="#666666"/></style:style>
+    <style:style style:name="PgreyR" style:family="paragraph"><style:paragraph-properties fo:text-align="end"/><style:text-properties style:font-name="Calibri" fo:font-size="8.5pt" fo:color="#444444"/></style:style>
+    <style:style style:name="PgreyR2" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="8pt" fo:color="#666666"/></style:style>
+    <style:style style:name="Pbin" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="7.5pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pbay" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="8pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Proad" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:font-weight="bold" fo:color="#4a4a4a"/></style:style>
+    <style:style style:name="Pn" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="11pt"/></style:style>
+    <style:style style:name="Pn7" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="11pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pn14" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="16pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pkey" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="11pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pnote" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="8.5pt" fo:font-style="italic" fo:color="#555555"/></style:style>
+    <style:style style:name="Ptb1" style:family="paragraph"><style:paragraph-properties fo:text-align="start" fo:margin-bottom="0.15cm"/><style:text-properties style:font-name="Calibri" fo:font-size="12pt" fo:font-weight="bold" fo:color="#1d4e5f"/></style:style>
+    <style:style style:name="Ptb2" style:family="paragraph"><style:paragraph-properties fo:text-align="start" fo:margin-bottom="0.1cm"/><style:text-properties style:font-name="Calibri" fo:font-size="15pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Ptb3" style:family="paragraph"><style:paragraph-properties fo:text-align="start" fo:margin-bottom="0.3cm"/><style:text-properties style:font-name="Calibri" fo:font-size="12pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Ptb4" style:family="paragraph"><style:paragraph-properties fo:text-align="start" fo:margin-bottom="0.1cm"/><style:text-properties style:font-name="Calibri" fo:font-size="10.5pt"/></style:style>
+    <style:style style:name="Ptb5" style:family="paragraph"><style:paragraph-properties fo:text-align="start" fo:margin-top="0.3cm"/><style:text-properties style:font-name="Calibri" fo:font-size="8.5pt" fo:color="#555555"/></style:style>
+    <style:page-layout style:name="PM1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm"/>
+    </style:page-layout>
+    <style:style style:name="dp1" style:family="drawing-page">
+      <style:drawing-page-properties draw:background-size="border" draw:fill="none"/>
+    </style:style>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="PM1" draw:style-name="dp1"/>
+  </office:master-styles>
+
+  <office:body>
+    <office:drawing>
+      <draw:page draw:name="Lease plan" draw:style-name="dp1" draw:master-page-name="Default">
+        <draw:rect draw:style-name="Frame" draw:text-style-name="Pc" svg:x="0.80cm" svg:y="0.80cm" svg:width="28.10cm" svg:height="19.40cm"></draw:rect>
+        <draw:line draw:style-name="Frame" svg:x1="21.40cm" svg:y1="0.80cm" svg:x2="21.40cm" svg:y2="20.20cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Phead" svg:x="1.20cm" svg:y="1.10cm" svg:width="19.80cm" svg:height="0.70cm"><text:p text:style-name="Phead">Weir Lane Trading Estate – Units 1 to 6</text:p></draw:rect>
+        <draw:rect draw:style-name="Unit" draw:text-style-name="Pu" svg:x="2.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="4.40cm"><text:p text:style-name="Pu">Unit 1</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pgrey" svg:x="2.00cm" svg:y="7.00cm" svg:width="3.00cm" svg:height="2.40cm"><text:p text:style-name="Pgrey">Yard</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pc" svg:x="2.00cm" svg:y="9.40cm" svg:width="3.00cm" svg:height="1.60cm"></draw:rect>
+        <draw:rect draw:style-name="Unit" draw:text-style-name="Pu" svg:x="5.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="4.40cm"><text:p text:style-name="Pu">Unit 2</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pgrey" svg:x="5.00cm" svg:y="7.00cm" svg:width="3.00cm" svg:height="2.40cm"><text:p text:style-name="Pgrey">Yard</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pc" svg:x="5.00cm" svg:y="9.40cm" svg:width="3.00cm" svg:height="1.60cm"></draw:rect>
+        <draw:rect draw:style-name="Unit" draw:text-style-name="Pu" svg:x="8.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="4.40cm"><text:p text:style-name="Pu">Unit 3</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pgrey" svg:x="8.00cm" svg:y="7.00cm" svg:width="3.00cm" svg:height="2.40cm"><text:p text:style-name="Pgrey">Yard</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pc" svg:x="8.00cm" svg:y="9.40cm" svg:width="3.00cm" svg:height="1.60cm"></draw:rect>
+        <draw:rect draw:style-name="Unit" draw:text-style-name="Pu" svg:x="14.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="4.40cm"><text:p text:style-name="Pu">Unit 5</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pgrey" svg:x="14.00cm" svg:y="7.00cm" svg:width="3.00cm" svg:height="2.40cm"><text:p text:style-name="Pgrey">Yard</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pc" svg:x="14.00cm" svg:y="9.40cm" svg:width="3.00cm" svg:height="1.60cm"></draw:rect>
+        <draw:rect draw:style-name="Unit" draw:text-style-name="Pu" svg:x="17.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="4.40cm"><text:p text:style-name="Pu">Unit 6</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pgrey" svg:x="17.00cm" svg:y="7.00cm" svg:width="3.00cm" svg:height="2.40cm"><text:p text:style-name="Pgrey">Yard</text:p></draw:rect>
+        <draw:rect draw:style-name="YardOther" draw:text-style-name="Pc" svg:x="17.00cm" svg:y="9.40cm" svg:width="3.00cm" svg:height="1.60cm"></draw:rect>
+        <draw:rect draw:style-name="Unit4" draw:text-style-name="Pu4" svg:x="11.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="4.40cm"><text:p text:style-name="Pu4">Unit 4</text:p></draw:rect>
+        <draw:rect draw:style-name="YardHatched" draw:text-style-name="Pc" svg:x="11.00cm" svg:y="7.00cm" svg:width="3.00cm" svg:height="2.40cm"></draw:rect>
+        <draw:rect draw:style-name="Label" draw:text-style-name="Pc" svg:x="11.65cm" svg:y="7.95cm" svg:width="1.70cm" svg:height="0.50cm"><text:p text:style-name="Pc">Yard</text:p></draw:rect>
+        <draw:rect draw:style-name="Bin" draw:text-style-name="Pbin" svg:x="11.00cm" svg:y="9.40cm" svg:width="1.30cm" svg:height="1.60cm"><text:p text:style-name="Pbin">Bin store</text:p></draw:rect>
+        <draw:rect draw:style-name="Bay" draw:text-style-name="Pbay" svg:x="12.30cm" svg:y="9.40cm" svg:width="1.70cm" svg:height="1.60cm"><text:p text:style-name="Pbay">Loading bay</text:p></draw:rect>
+        <draw:rect draw:style-name="RedEdge" draw:text-style-name="Pc" svg:x="11.00cm" svg:y="2.60cm" svg:width="3.00cm" svg:height="8.40cm"></draw:rect>
+        <draw:rect draw:style-name="Road" draw:text-style-name="Pc" svg:x="1.00cm" svg:y="11.00cm" svg:width="20.20cm" svg:height="2.00cm"></draw:rect>
+        <draw:rect draw:style-name="Road" draw:text-style-name="Pc" svg:x="20.00cm" svg:y="13.00cm" svg:width="1.20cm" svg:height="5.20cm"></draw:rect>
+        <draw:line draw:style-name="Centre" svg:x1="1.20cm" svg:y1="12.00cm" svg:x2="20.60cm" svg:y2="12.00cm"/>
+        <draw:rect draw:style-name="Label" draw:text-style-name="Proad" svg:x="2.40cm" svg:y="11.50cm" svg:width="3.20cm" svg:height="0.60cm"><text:p text:style-name="Proad">ESTATE ROAD</text:p></draw:rect>
+        <draw:line draw:style-name="Centre" svg:x1="20.60cm" svg:y1="12.00cm" svg:x2="20.60cm" svg:y2="17.90cm"/>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="2.00cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">1</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="3.50cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">2</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="5.00cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">3</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="6.50cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">4</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="8.00cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">5</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="9.50cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">6</text:p></draw:rect>
+        <draw:rect draw:style-name="Shaded" draw:text-style-name="Pn7" svg:x="11.00cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn7">7</text:p></draw:rect>
+        <draw:rect draw:style-name="Shaded" draw:text-style-name="Pn7" svg:x="12.50cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn7">8</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="14.00cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">9</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="15.50cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">10</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="17.00cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">11</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pn" svg:x="18.50cm" svg:y="13.00cm" svg:width="1.50cm" svg:height="2.20cm"><text:p text:style-name="Pn">12</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Pgrey" svg:x="2.00cm" svg:y="15.25cm" svg:width="18.00cm" svg:height="0.55cm"><text:p text:style-name="Pgrey">Car parking spaces 1 to 12</text:p></draw:rect>
+        <draw:rect draw:style-name="Green" draw:text-style-name="Pgrey" svg:x="1.00cm" svg:y="15.95cm" svg:width="19.00cm" svg:height="2.25cm"><text:p text:style-name="Pgrey">Landscaped area</text:p></draw:rect>
+        <draw:rect draw:style-name="Lane" draw:text-style-name="Proad" svg:x="1.00cm" svg:y="18.20cm" svg:width="20.20cm" svg:height="1.80cm"><text:p text:style-name="Proad">WEIR LANE</text:p></draw:rect>
+        <draw:polygon draw:style-name="Arrow" svg:x="20.25cm" svg:y="16.60cm" svg:width="0.70cm" svg:height="1.20cm" svg:viewBox="0 0 70 120" draw:points="35,0 70,60 45,60 45,120 25,120 25,60 0,60"/>
+        <draw:rect draw:style-name="TxtR" draw:text-style-name="PgreyR" svg:x="14.40cm" svg:y="16.55cm" svg:width="5.40cm" svg:height="0.60cm"><text:p text:style-name="PgreyR">Estate entrance from Weir Lane</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Pn14" svg:x="24.40cm" svg:y="1.00cm" svg:width="1.60cm" svg:height="0.80cm"><text:p text:style-name="Pn14">N</text:p></draw:rect>
+        <draw:polygon draw:style-name="NArrowL" svg:x="24.45cm" svg:y="1.85cm" svg:width="0.75cm" svg:height="2.30cm" svg:viewBox="0 0 75 230" draw:points="75,0 75,230 0,230"/>
+        <draw:polygon draw:style-name="NArrowR" svg:x="25.20cm" svg:y="1.85cm" svg:width="0.75cm" svg:height="2.30cm" svg:viewBox="0 0 75 230" draw:points="0,0 75,230 0,230"/>
+        <draw:rect draw:style-name="Key" draw:text-style-name="Pc" svg:x="21.80cm" svg:y="4.70cm" svg:width="6.90cm" svg:height="8.30cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pkey" svg:x="22.00cm" svg:y="4.80cm" svg:width="5.00cm" svg:height="0.60cm"><text:p text:style-name="Pkey">Key</text:p></draw:rect>
+        <draw:rect draw:style-name="RedEdgeKey" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="5.50cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="5.40cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Unit 4, the premises (edged red)</text:p></draw:rect>
+        <draw:rect draw:style-name="YardHatched" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="6.34cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="6.24cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Yard to Unit 4</text:p></draw:rect>
+        <draw:rect draw:style-name="Bay" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="7.18cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="7.08cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Loading bay to Unit 4</text:p></draw:rect>
+        <draw:rect draw:style-name="Bin" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="8.02cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="7.92cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Bin store</text:p></draw:rect>
+        <draw:rect draw:style-name="Shaded" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="8.86cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="8.76cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Parking spaces 7 and 8, for Unit 4</text:p></draw:rect>
+        <draw:rect draw:style-name="Space" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="9.70cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="9.60cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Other parking spaces</text:p></draw:rect>
+        <draw:rect draw:style-name="Road" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="10.54cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="10.44cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Estate road and Weir Lane</text:p></draw:rect>
+        <draw:rect draw:style-name="Green" draw:text-style-name="Pc" svg:x="22.10cm" svg:y="11.38cm" svg:width="1.20cm" svg:height="0.60cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pl" svg:x="23.55cm" svg:y="11.28cm" svg:width="5.00cm" svg:height="0.80cm"><text:p text:style-name="Pl">Landscaped area</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pnote" svg:x="22.00cm" svg:y="12.25cm" svg:width="6.60cm" svg:height="0.60cm"><text:p text:style-name="Pnote">Layout only. Do not scale from this drawing.</text:p></draw:rect>
+        <draw:rect draw:style-name="Title" draw:text-style-name="Ptb1" svg:x="21.80cm" svg:y="13.45cm" svg:width="6.90cm" svg:height="6.35cm"><text:p text:style-name="Ptb1">Penwick Property Limited</text:p><text:p text:style-name="Ptb2">Weir Lane Trading Estate</text:p><text:p text:style-name="Ptb3">Lease plan – Unit 4</text:p><text:p text:style-name="Ptb4">Drawing WL/04/01</text:p><text:p text:style-name="Ptb4">August 2026</text:p><text:p text:style-name="Ptb4">Not to scale</text:p><text:p text:style-name="Ptb5">Weir Lane Trading Estate, Marlbridge WX2 6DN</text:p></draw:rect>
+      </draw:page>
+    </office:drawing>
+  </office:body>
+</office:document>

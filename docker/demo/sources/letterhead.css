@@ -1,0 +1,63 @@
+/* Ashcombe Reeve LLP's letterhead, shared by every .html source in this folder.
+
+   LibreOffice's HTML import reads only part of CSS, so write the HTML to suit it, and
+   check a new rule by building the file and looking at it, never in a browser:
+
+   - A class on a <p> or <h1>-<h6> becomes a paragraph style. Rules on a table cell
+     (td.x, .x td) are ignored: use the cell's own attributes (align, valign, width,
+     bgcolor) and put the text in a classed <p>, or in <b>.
+   - A margin of 0 is ignored. Use 0.1pt for none.
+   - font-family takes one name. A list such as "Calibri", sans-serif is kept whole as
+     the font's name, which Word can't find. Use Word's fonts: the image has
+     metric-compatible stand-ins (Carlito for Calibri, Liberation Serif for Times New
+     Roman), so the layout is the same here and in Word.
+   - <div title="header"> and <div title="footer"> become the page's header and footer,
+     on every page. Put the page's small print in a footer and its head in the body,
+     so only the first page carries the letterhead.
+   - Float, position, letter-spacing and text-transform do nothing. font-variant:
+     small-caps works.
+   - <meta name="author|created|changedby|changed|keywords|description"> in the <head>
+     sets the file's own properties, and lang="en-GB" on <html> and <body> sets its
+     language. Set them: the person who typed the file, and the day it was filed.
+     Any other <meta>, including http-equiv, becomes a Word comment in the built file
+     (build.py refuses a file that has one).
+   - Copy the head, footer and letterhead block from saltmarsh-letter-to-owners.html.
+
+   One accent colour, #1d4e5f. Everything else is black or grey. */
+
+@page { size: 21cm 29.7cm; margin: 1.7cm 2.2cm 1.7cm 2.2cm }
+
+body { font-family: Calibri; font-size: 10.5pt; color: #000000 }
+p { margin-bottom: 6pt; line-height: 115% }
+h1 { font-family: Calibri; font-size: 15pt; font-weight: bold; color: #1d4e5f; margin-top: 12pt; margin-bottom: 6pt }
+h2 { font-family: Calibri; font-size: 12pt; font-weight: bold; color: #1d4e5f; margin-top: 10pt; margin-bottom: 4pt }
+h3 { font-family: Calibri; font-size: 10.5pt; font-weight: bold; color: #000000; margin-top: 8pt; margin-bottom: 3pt }
+
+/* The head of the first page: the firm's name on the left, its details on the right, then a rule */
+.lh-name { font-family: Calibri; font-size: 22pt; font-weight: bold; color: #1d4e5f; margin-top: 0.1pt; margin-bottom: 0.1pt; line-height: 100% }
+.lh-sub { font-family: Calibri; font-size: 9pt; font-variant: small-caps; color: #555555; margin-top: 0.1pt; margin-bottom: 0.1pt }
+.lh-details { font-family: Calibri; font-size: 8.5pt; color: #333333; text-align: right; margin-top: 0.1pt; margin-bottom: 0.1pt; line-height: 120% }
+.lh-rule { font-size: 2pt; line-height: 2pt; margin-top: 3pt; margin-bottom: 12pt; border-bottom: 1.5pt solid #1d4e5f }
+
+/* The small print, in a <div title="footer"> */
+.lh-foot { font-family: Calibri; font-size: 7.5pt; color: #555555; text-align: center; margin-top: 0.1pt; margin-bottom: 0.1pt; padding-top: 3pt; border-top: 0.5pt solid #999999; line-height: 120% }
+
+/* A letter */
+.addr { margin-top: 0.1pt; margin-bottom: 0.1pt; line-height: 120% }
+.refs { font-size: 9.5pt; margin-top: 0.1pt; margin-bottom: 0.1pt; line-height: 125% }
+.via { font-weight: bold; margin-top: 10pt; margin-bottom: 8pt }
+.subject { font-weight: bold; margin-top: 6pt; margin-bottom: 6pt }
+.signoff { margin-top: 10pt; margin-bottom: 0.1pt }
+.signature { margin-top: 28pt; margin-bottom: 8pt }
+.small { font-size: 9pt }
+
+/* An agreement, a memo or a note: a title block under the letterhead */
+.doc-title { font-family: Calibri; font-size: 16pt; font-weight: bold; color: #000000; margin-top: 4pt; margin-bottom: 3pt }
+.doc-meta { font-size: 9.5pt; color: #333333; margin-top: 0.1pt; margin-bottom: 8pt }
+
+/* Numbered clauses. The number is followed by three non-breaking spaces (&nbsp;), and the
+   paragraph hangs so a second line lines up with the first line's text:
+   .clause for "1." and "(a)", .clause2 for "1.1", .sub for "(a)" under a "1.1" */
+.clause { margin-left: 0.45cm; text-indent: -0.45cm }
+.clause2 { margin-left: 0.8cm; text-indent: -0.8cm }
+.sub { margin-left: 1.55cm; text-indent: -0.65cm }

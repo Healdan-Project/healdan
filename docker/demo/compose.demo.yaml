@@ -1,0 +1,18 @@
+# The demo stack: fills a fresh stack with an invented law firm, for the docs' screenshots
+# (docs/superpowers/specs/2026-10-29-demo-stack-and-docs-gaps-design.md). Never use it on a
+# server with real data. Run it as a stack of its own:
+#   LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p healdan-demo \
+#     -f compose.yaml -f docker/demo/compose.demo.yaml up -d --build
+# The project's name, so that a forgotten -p can't start this on the production project, logicaldoc: the later
+# file's name: wins over compose.yaml's. -p and COMPOSE_PROJECT_NAME still win over it, so keep -p in the command.
+name: healdan-demo
+
+services:
+  app:
+    environment:
+      HEALDAN_DEMO_FIXTURE: "true"
+      HEALDAN_DEMO_DIR: /opt/healdan-demo
+      # A test password for the six demo users, not a secret. It meets CE's default password policy.
+      HEALDAN_DEMO_PASSWORD: Demo-Firm-2026
+    volumes:
+      - ./docker/demo:/opt/healdan-demo:ro

@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The costs schedule for 1001.1 (Charter Dispute - MV Northern Star), to 28 September 2026 (day -31).
+
+  Every total is a real formula, and each formula cell also carries the value it works out to
+  (office:value), which LibreOffice shows until it recalculates. If a figure here changes, change the
+  cached value beside it. The sums, for checking by hand:
+
+    profit costs  5,727.50 + 7,644.00 + 3,762.00 + 660.00   = 17,793.50  (74.5 hours)
+    disbursements 3,600.00 + 2,150.00 + 410.00 + 86.40      =  6,246.40
+    total before VAT                                        = 24,039.90
+    VAT at 20%                                              =  4,807.98
+    total including VAT                                     = 28,847.88
+    less payments on account                                = 10,000.00
+    balance due                                             = 18,847.88
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Jamie Clarke</meta:initial-creator>
+    <dc:creator>Jamie Clarke</dc:creator>
+    <dc:title>Costs Schedule to Date – Charter Dispute, MV Northern Star</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-28T15:10:00</meta:creation-date>
+    <dc:date>2026-09-28T16:35:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="10pt" fo:language="en" fo:country="GB"/>
+    </style:default-style>
+
+    <number:number-style style:name="NHours">
+      <number:number number:decimal-places="1" number:min-decimal-places="1" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="18pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="12pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="Note" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:color="#555555"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm"/>
+    </style:style>
+    <style:style style:name="RowHours" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NHours"/>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubHours" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NHours"/>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="coA" style:family="table-column"><style:table-column-properties style:column-width="5.8cm"/></style:style>
+    <style:style style:name="coB" style:family="table-column"><style:table-column-properties style:column-width="4.4cm"/></style:style>
+    <style:style style:name="coC" style:family="table-column"><style:table-column-properties style:column-width="1.8cm"/></style:style>
+    <style:style style:name="coD" style:family="table-column"><style:table-column-properties style:column-width="2.6cm"/></style:style>
+    <style:style style:name="coE" style:family="table-column"><style:table-column-properties style:column-width="3cm"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:print-orientation="portrait"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Costs to Date">
+        <table:table-column table:style-name="coA"/>
+        <table:table-column table:style-name="coB"/>
+        <table:table-column table:style-name="coC"/>
+        <table:table-column table:style-name="coD"/>
+        <table:table-column table:style-name="coE"/>
+
+        <!-- 1-4: who and what -->
+        <table:table-row>
+          <table:table-cell table:style-name="Title" table:number-columns-spanned="5" office:value-type="string"><text:p>Ashcombe Reeve LLP</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Heading" table:number-columns-spanned="5" office:value-type="string"><text:p>Schedule of costs – Saltmarsh Shipping Ltd</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Default" table:number-columns-spanned="5" office:value-type="string"><text:p>Charter Dispute – MV Northern Star (matter 1001.1)</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Note" table:number-columns-spanned="5" office:value-type="string"><text:p>Costs incurred to 28 September 2026. Disbursements are shown before VAT.</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="5"/></table:table-row>
+
+        <!-- 6-12: profit costs -->
+        <table:table-row>
+          <table:table-cell table:style-name="Section" table:number-columns-spanned="5" office:value-type="string"><text:p>Profit costs</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Fee earner</text:p></table:table-cell>
+          <table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Grade</text:p></table:table-cell>
+          <table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Hours</text:p></table:table-cell>
+          <table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Rate an hour</text:p></table:table-cell>
+          <table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Amount</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Tom Reeve</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Partner</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowHours" office:value-type="float" office:value="14.5"><text:p>14.5</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="395"><text:p>£395.00</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=[.C8]*[.D8]" office:value-type="currency" office:currency="GBP" office:value="5727.5"><text:p>£5,727.50</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Priya Nair</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Solicitor</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowHours" office:value-type="float" office:value="31.2"><text:p>31.2</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="245"><text:p>£245.00</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=[.C9]*[.D9]" office:value-type="currency" office:currency="GBP" office:value="7644"><text:p>£7,644.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Jamie Clarke</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Paralegal</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowHours" office:value-type="float" office:value="22.8"><text:p>22.8</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="165"><text:p>£165.00</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=[.C10]*[.D10]" office:value-type="currency" office:currency="GBP" office:value="3762"><text:p>£3,762.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Chris Doyle</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Legal assistant</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowHours" office:value-type="float" office:value="6"><text:p>6.0</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="110"><text:p>£110.00</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=[.C11]*[.D11]" office:value-type="currency" office:currency="GBP" office:value="660"><text:p>£660.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Sub" table:number-columns-spanned="2" office:value-type="string"><text:p>Subtotal – profit costs</text:p></table:table-cell>
+          <table:covered-table-cell/>
+          <table:table-cell table:style-name="SubHours" table:formula="of:=SUM([.C8:.C11])" office:value-type="float" office:value="74.5"><text:p>74.5</text:p></table:table-cell>
+          <table:table-cell table:style-name="Sub"><text:p/></table:table-cell>
+          <table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.E8:.E11])" office:value-type="currency" office:currency="GBP" office:value="17793.5"><text:p>£17,793.50</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="5"/></table:table-row>
+
+        <!-- 14-20: disbursements -->
+        <table:table-row>
+          <table:table-cell table:style-name="Section" table:number-columns-spanned="5" office:value-type="string"><text:p>Disbursements</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Description</text:p></table:table-cell>
+          <table:table-cell table:style-name="ColHead" table:number-columns-spanned="3" office:value-type="string"><text:p>Paid to</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="2"/>
+          <table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Amount</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Advice from counsel on laytime</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Mr A. Venn, counsel</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="2"/>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="3600"><text:p>£3,600.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Report on the vessel’s weather log</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Calder Marine Consultants</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="2"/>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="2150"><text:p>£2,150.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Translation of the terminal’s records</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Fjord Language Services</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="2"/>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="410"><text:p>£410.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" office:value-type="string"><text:p>Courier and copying</text:p></table:table-cell>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Various</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="2"/>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="86.4"><text:p>£86.40</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Sub" table:number-columns-spanned="4" office:value-type="string"><text:p>Subtotal – disbursements</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.E16:.E19])" office:value-type="currency" office:currency="GBP" office:value="6246.4"><text:p>£6,246.40</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="5"/></table:table-row>
+
+        <!-- 22-29: the total, with VAT at 20% -->
+        <table:table-row>
+          <table:table-cell table:style-name="Section" table:number-columns-spanned="5" office:value-type="string"><text:p>Summary</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="4"/>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="4" office:value-type="string"><text:p>Profit costs</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=[.E12]" office:value-type="currency" office:currency="GBP" office:value="17793.5"><text:p>£17,793.50</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="4" office:value-type="string"><text:p>Disbursements</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=[.E20]" office:value-type="currency" office:currency="GBP" office:value="6246.4"><text:p>£6,246.40</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Sub" table:number-columns-spanned="4" office:value-type="string"><text:p>Total before VAT</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="SubMoney" table:formula="of:=[.E23]+[.E24]" office:value-type="currency" office:currency="GBP" office:value="24039.9"><text:p>£24,039.90</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>VAT at</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="2"/>
+          <table:table-cell table:style-name="RowPct" office:value-type="percentage" office:value="0.2"><text:p>20%</text:p></table:table-cell>
+          <table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.E25]*[.D26];2)" office:value-type="currency" office:currency="GBP" office:value="4807.98"><text:p>£4,807.98</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Total" table:number-columns-spanned="4" office:value-type="string"><text:p>Total including VAT</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="TotalMoney" table:formula="of:=[.E25]+[.E26]" office:value-type="currency" office:currency="GBP" office:value="28847.88"><text:p>£28,847.88</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Row" table:number-columns-spanned="4" office:value-type="string"><text:p>Less payments on account</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="RowMoney" office:value-type="currency" office:currency="GBP" office:value="10000"><text:p>£10,000.00</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell table:style-name="Sub" table:number-columns-spanned="4" office:value-type="string"><text:p>Balance due</text:p></table:table-cell>
+          <table:covered-table-cell table:number-columns-repeated="3"/>
+          <table:table-cell table:style-name="SubMoney" table:formula="of:=[.E27]-[.E28]" office:value-type="currency" office:currency="GBP" office:value="18847.88"><text:p>£18,847.88</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

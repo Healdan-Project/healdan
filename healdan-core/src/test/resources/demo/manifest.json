@@ -1,0 +1,73 @@
+{
+  "groups": [
+    {"name": "Partners", "description": "The firm's partners"}
+  ],
+  "users": [
+    {"username": "hashcombe", "firstName": "Helen", "name": "Ashcombe",
+     "email": "helen.ashcombe@ashcombe-reeve.example", "groups": ["Partners", "author"]},
+    {"username": "pnair", "firstName": "Priya", "name": "Nair",
+     "email": "priya.nair@ashcombe-reeve.example", "groups": ["author"]},
+    {"username": "mvance", "firstName": "Mira", "name": "Vance",
+     "email": "mira.vance@ashcombe-reeve.example", "groups": ["admin"]}
+  ],
+  "classes": [
+    {"name": "Correspondence", "subclasses": ["Letter", "Email"]}
+  ],
+  "stores": [
+    {"name": "Client Work", "acl": {"Everyone": ["READ"], "Partners": ["READ"]}}
+  ],
+  "templates": [
+    {"name": "Litigation",
+     "acl": {"Everyone": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"],
+             "Partners": ["READ", "PREVIEW", "DOWNLOAD", "WRITE"]},
+     "folders": [
+       {"name": "Correspondence"},
+       {"name": "Privileged", "acl": {"Partners": ["READ", "PREVIEW", "DOWNLOAD", "WRITE"]}}
+     ],
+     "searchFolders": [
+       {"name": "My Recent Docs Here", "days": 14, "onlyMine": true, "kind": "ALL"}
+     ]}
+  ],
+  "clients": [
+    {"number": 1001, "name": "Saltmarsh Shipping Ltd"}
+  ],
+  "matters": [
+    {"ref": "1001.1", "name": "Charter Dispute – MV Northern Star", "description": "Owners' claim for demurrage",
+     "store": "Client Work", "owner": "hashcombe", "template": "Litigation"},
+    {"ref": "1001.2", "name": "Vessel Sale", "store": "Client Work", "owner": "hashcombe", "template": "Litigation",
+     "acl": {"Partners": ["READ", "PREVIEW", "DOWNLOAD", "PRINT", "EMAIL", "WRITE", "ADD", "RENAME", "MOVE", "DELETE"]}}
+  ],
+  "timeline": [
+    {"day": -10, "time": "09:30", "as": "pnair", "do": "file", "key": "letter", "matter": "1001.1",
+     "folder": "Correspondence", "file": "letter.txt", "name": "Letter to Owners.txt", "author": "hashcombe",
+     "typist": "pnair", "class": "Correspondence", "subclass": "Letter", "tags": ["charter"]},
+    {"day": -9, "time": "11:00", "as": "pnair", "do": "file", "key": "reply", "matter": "1001.1",
+     "folder": "Correspondence", "file": "reply.eml"},
+    {"day": -9, "time": "11:05", "as": "pnair", "do": "link", "doc": "letter", "target": "reply"},
+    {"day": -8, "as": "hashcombe", "do": "checkin", "doc": "letter", "file": "letter-v2.txt", "release": true},
+    {"day": -8, "time": "10:00", "as": "pnair", "do": "note", "doc": "letter", "text": "Owners want an answer by Friday."},
+    {"day": -7, "as": "pnair", "do": "tag", "doc": "letter", "tags": ["urgent"]},
+    {"day": -7, "time": "10:00", "as": "pnair", "do": "file", "key": "memo", "matter": "1001.1",
+     "folder": "Correspondence", "file": "memo.txt", "name": "Attendance Note.txt"},
+    {"day": -6, "as": "pnair", "do": "folder", "matter": "1001.1", "folder": "Correspondence", "name": "Superseded"},
+    {"day": -6, "time": "09:10", "as": "pnair", "do": "file", "key": "old", "matter": "1001.1",
+     "folder": "Correspondence/Superseded", "file": "letter.txt", "name": "Old Draft.txt"},
+    {"day": -5, "as": "pnair", "do": "delete", "doc": "old"},
+    {"day": -5, "time": "09:30", "as": "pnair", "do": "deleteFolder", "matter": "1001.1",
+     "folder": "Correspondence/Superseded"},
+    {"day": -4, "as": "pnair", "do": "checkout", "doc": "memo"},
+    {"day": -3, "time": "11:00", "as": "pnair", "do": "note", "doc": "memo",
+     "text": "The club will send its laytime figures on Monday."},
+    {"day": -4, "time": "12:00", "as": "hashcombe", "do": "file", "key": "terms", "matter": "1001.2",
+     "folder": "Correspondence", "file": "letter.txt", "name": "Heads of Terms.txt"},
+    {"day": -3, "as": "hashcombe", "do": "lock", "doc": "terms"},
+    {"day": -3, "time": "09:30", "as": "hashcombe", "do": "grant", "doc": "terms", "to": ["pnair"]},
+    {"day": -3, "time": "10:00", "as": "hashcombe", "do": "password", "doc": "reply", "password": "Owners-2026"},
+    {"day": -2, "as": "hashcombe", "do": "move", "doc": "letter", "matter": "1001.2", "folder": "Correspondence"},
+    {"day": -2, "time": "10:00", "as": "pnair", "do": "bookmark", "doc": "memo"},
+    {"day": -2, "time": "10:05", "as": "pnair", "do": "myMatter", "matter": "1001.1"},
+    {"day": -1, "as": "hashcombe", "do": "message", "to": ["pnair"], "subject": "Laytime",
+     "text": "Can we speak about the laytime calculation this afternoon?"},
+    {"day": -1, "time": "10:00", "as": "hashcombe", "do": "ticket", "doc": "terms"}
+  ]
+}

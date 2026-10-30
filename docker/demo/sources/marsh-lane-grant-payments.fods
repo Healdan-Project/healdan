@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The payments and budget sheet for the Wexmoor Foundation's grant to Marsh Lane Community Trust (1004.1 Drafts), prepared by
+  Jamie Clarke on 1 October 2026 from the draft grant agreement of 24 September 2026. Every result is a real formula, and each
+  formula cell also carries the value it works out to (office:value), which LibreOffice shows until it recalculates. If a figure
+  changes, change the cached value beside it. The sums, for checking by hand:
+
+    six instalments of 15,000.00 on 1 Jan and 1 Jul 2027, 2028, 2029; running totals 15,000 ... 90,000
+    each report is due a month before the instalment that waits for it: 1 Jun 2027, 1 Dec 2027, 1 Jun 2028, 1 Dec 2028, 1 Jun 2029
+    each year: 21,000 + 6,000 + 3,000 = 30,000.00 of grant, plus 10,000.00 of match funding = 40,000.00; three years 90,000, 30,000, 120,000
+    instalments paid in each calendar year: 15,000 x 2 = 30,000.00, which equals the grant's costs for the year, so each difference is nil
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Jamie Clarke</meta:initial-creator>
+    <dc:creator>Jamie Clarke</dc:creator>
+    <dc:title>Grant Payment Schedule – Marsh Lane Community Trust</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-10-01T09:20:00</meta:creation-date>
+    <dc:date>2026-10-01T11:10:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NInt">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDate">
+      <number:day/><number:text> </number:text><number:month number:textual="true"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowPad" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="ColHeadPad" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowInt" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NInt">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDate" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDate">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateIn" style:family="table-cell" style:parent-style-name="RowDate">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="HiRow" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff3d1"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="HiMoney" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NGBP"/>
+    <style:style style:name="HiPct" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="SubPct" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="TotalPct" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct"/>
+    <style:style style:name="Due" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="DueMoney" style:family="table-cell" style:parent-style-name="Due" style:data-style-name="NGBP">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="co0" style:family="table-column"><style:table-column-properties style:column-width="6.4cm"/></style:style><style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="3.4cm"/></style:style><style:style style:name="co2" style:family="table-column"><style:table-column-properties style:column-width="2.9cm"/></style:style><style:style style:name="co3" style:family="table-column"><style:table-column-properties style:column-width="2.9cm"/></style:style><style:style style:name="co4" style:family="table-column"><style:table-column-properties style:column-width="4.2cm"/></style:style><style:style style:name="co5" style:family="table-column"><style:table-column-properties style:column-width="4.0cm"/></style:style><style:style style:name="co6" style:family="table-column"><style:table-column-properties style:column-width="2.8cm"/></style:style>
+    <style:style style:name="rh0_9" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_15" style:family="table-row"><style:table-row-properties style:row-height="1.15cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_75" style:family="table-row"><style:table-row-properties style:row-height="0.75cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_62" style:family="table-row"><style:table-row-properties style:row-height="0.62cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_95" style:family="table-row"><style:table-row-properties style:row-height="0.95cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Payments and budget">
+        <table:table-column table:style-name="co0"/><table:table-column table:style-name="co1"/><table:table-column table:style-name="co2"/><table:table-column table:style-name="co3"/><table:table-column table:style-name="co4"/><table:table-column table:style-name="co5"/><table:table-column table:style-name="co6"/>
+                <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Title" table:number-columns-spanned="7" office:value-type="string"><text:p>Marsh Lane Community Trust – Wexmoor Foundation grant: payments and budget</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="7" office:value-type="string"><text:p>The Marsh Lane Youth Centre evening programme, 1 January 2027 to 31 December 2029</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row table:style-name="rh1_15"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="7" office:value-type="string"><text:p>Prepared by Jamie Clarke, Ashcombe Reeve LLP (ref HA/1004.1/JC), on 1 October 2026 from the draft grant agreement of 24 September 2026. The grant is £90,000 in six half-yearly instalments of £15,000. Each instalment after the first is paid only once the progress report due a month before it has been accepted. Blue figures are inputs; the rest are worked out.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="7" office:value-type="string"><text:p>The instalments</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row table:style-name="rh0_75"><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Instalment</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Payment date</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Amount</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Running total</text:p></table:table-cell><table:table-cell table:style-name="ColHeadPad" table:number-columns-spanned="2" office:value-type="string"><text:p>Report to be accepted first</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Report due</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_62"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Instalment 1</text:p></table:table-cell><table:table-cell table:style-name="RowDateIn" office:value-type="date" office:date-value="2027-01-01"><text:p>1 January 2027</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.$C$7:.C7])" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowPad" table:number-columns-spanned="2" office:value-type="string"><text:p>None: the first instalment is paid on the start date</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_62"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Instalment 2</text:p></table:table-cell><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B7];6)" office:value-type="date" office:date-value="2027-07-01"><text:p>1 July 2027</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.$C$7:.C8])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowPad" table:number-columns-spanned="2" office:value-type="string"><text:p>Progress report 1: 1 January to 31 May 2027</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B8];-1)" office:value-type="date" office:date-value="2027-06-01"><text:p>1 June 2027</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_62"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Instalment 3</text:p></table:table-cell><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B8];6)" office:value-type="date" office:date-value="2028-01-01"><text:p>1 January 2028</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.$C$7:.C9])" office:value-type="currency" office:currency="GBP" office:value="45000.0"><text:p>£45,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowPad" table:number-columns-spanned="2" office:value-type="string"><text:p>Progress report 2: 1 June to 30 November 2027</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B9];-1)" office:value-type="date" office:date-value="2027-12-01"><text:p>1 December 2027</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_62"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Instalment 4</text:p></table:table-cell><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B9];6)" office:value-type="date" office:date-value="2028-07-01"><text:p>1 July 2028</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.$C$7:.C10])" office:value-type="currency" office:currency="GBP" office:value="60000.0"><text:p>£60,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowPad" table:number-columns-spanned="2" office:value-type="string"><text:p>Progress report 3: 1 December 2027 to 31 May 2028</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B10];-1)" office:value-type="date" office:date-value="2028-06-01"><text:p>1 June 2028</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_62"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Instalment 5</text:p></table:table-cell><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B10];6)" office:value-type="date" office:date-value="2029-01-01"><text:p>1 January 2029</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.$C$7:.C11])" office:value-type="currency" office:currency="GBP" office:value="75000.0"><text:p>£75,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowPad" table:number-columns-spanned="2" office:value-type="string"><text:p>Progress report 4: 1 June to 30 November 2028</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B11];-1)" office:value-type="date" office:date-value="2028-12-01"><text:p>1 December 2028</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_62"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Instalment 6</text:p></table:table-cell><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B11];6)" office:value-type="date" office:date-value="2029-07-01"><text:p>1 July 2029</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="15000.0"><text:p>£15,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.$C$7:.C12])" office:value-type="currency" office:currency="GBP" office:value="90000.0"><text:p>£90,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowPad" table:number-columns-spanned="2" office:value-type="string"><text:p>Progress report 5: 1 December 2028 to 31 May 2029</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowDate" table:formula="of:=EDATE([.B12];-1)" office:value-type="date" office:date-value="2029-06-01"><text:p>1 June 2029</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" office:value-type="string"><text:p>All six</text:p></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=SUM([.C7:.C12])" office:value-type="currency" office:currency="GBP" office:value="90000.0"><text:p>£90,000.00</text:p></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="Total" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="7" office:value-type="string"><text:p>The evening programme’s budget for each year</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p></text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="float" office:value="2027.0"><text:p>2027</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="float" office:value="2028.0"><text:p>2028</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="float" office:value="2029.0"><text:p>2029</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Three years</text:p></table:table-cell><table:table-cell table:style-name="ColHead" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Youth worker, three days a week</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="21000.0"><text:p>£21,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B17]" office:value-type="currency" office:currency="GBP" office:value="21000.0"><text:p>£21,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.C17]" office:value-type="currency" office:currency="GBP" office:value="21000.0"><text:p>£21,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.B17:.D17])" office:value-type="currency" office:currency="GBP" office:value="63000.0"><text:p>£63,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Sessional workers</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="6000.0"><text:p>£6,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B18]" office:value-type="currency" office:currency="GBP" office:value="6000.0"><text:p>£6,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.C18]" office:value-type="currency" office:currency="GBP" office:value="6000.0"><text:p>£6,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.B18:.D18])" office:value-type="currency" office:currency="GBP" office:value="18000.0"><text:p>£18,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Activities and trips</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="3000.0"><text:p>£3,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B19]" office:value-type="currency" office:currency="GBP" office:value="3000.0"><text:p>£3,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.C19]" office:value-type="currency" office:currency="GBP" office:value="3000.0"><text:p>£3,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.B19:.D19])" office:value-type="currency" office:currency="GBP" office:value="9000.0"><text:p>£9,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Paid for by the grant</text:p></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.B17:.B19])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.C17:.C19])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.D17:.D19])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.B20:.D20])" office:value-type="currency" office:currency="GBP" office:value="90000.0"><text:p>£90,000.00</text:p></table:table-cell><table:table-cell table:style-name="Sub" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Match funding from the Trust: the centre’s running costs for the evening sessions</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="10000.0"><text:p>£10,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B21]" office:value-type="currency" office:currency="GBP" office:value="10000.0"><text:p>£10,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.C21]" office:value-type="currency" office:currency="GBP" office:value="10000.0"><text:p>£10,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.B21:.D21])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" office:value-type="string"><text:p>Total cost of the evening programme</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.B20]+[.B21]" office:value-type="currency" office:currency="GBP" office:value="40000.0"><text:p>£40,000.00</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.C20]+[.C21]" office:value-type="currency" office:currency="GBP" office:value="40000.0"><text:p>£40,000.00</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.D20]+[.D21]" office:value-type="currency" office:currency="GBP" office:value="40000.0"><text:p>£40,000.00</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=SUM([.B22:.D22])" office:value-type="currency" office:currency="GBP" office:value="120000.0"><text:p>£120,000.00</text:p></table:table-cell><table:table-cell table:style-name="Total" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Check: grant instalments paid in the year</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUMPRODUCT((YEAR([.$B$7:.$B$12])=[.B16])*[.$C$7:.$C$12])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUMPRODUCT((YEAR([.$B$7:.$B$12])=[.C16])*[.$C$7:.$C$12])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUMPRODUCT((YEAR([.$B$7:.$B$12])=[.D16])*[.$C$7:.$C$12])" office:value-type="currency" office:currency="GBP" office:value="30000.0"><text:p>£30,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=SUM([.B24:.D24])" office:value-type="currency" office:currency="GBP" office:value="90000.0"><text:p>£90,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Difference between the grant’s costs and the instalments</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B20]-[.B24]" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.C20]-[.C24]" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D20]-[.D24]" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.E20]-[.E24]" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="2"><text:p/></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh0_95"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="7" office:value-type="string"><text:p>The Trust must find £10,000 a year of match funding, which is £30,000 over the three years. The final report on the grant is due after 31 December 2029 and does not hold up any instalment.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Kestrel Software Ltd's capitalisation table before and after the Series A, as at 24 September 2026, sent to Ashcombe Reeve
+  LLP by Ines Kowalczyk (1003.1 Due Diligence). Every result is a real formula, and each formula cell also carries the value it
+  works out to (office:value), which LibreOffice shows until it recalculates. If a figure changes, change the cached value beside it.
+  The sums, for checking by hand:
+
+    before  4,600,000 + 3,400,000 + 600,000 + 400,000 = 9,000,000 ordinary; 640,000 + 360,000 = 1,000,000 options; 10,000,000 in all
+    Series A  1,875,000 + 625,000 = 2,500,000 shares at 1.60 = 4,000,000.00 (3,000,000.00 and 1,000,000.00)
+    after  10,000,000 + 2,500,000 = 12,500,000; pre-money 10,000,000 x 1.60 = 16,000,000.00; post-money 12,500,000 x 1.60 = 20,000,000.00
+    Series A investors 2,500,000 / 12,500,000 = 20.00%; Ines 4,600,000 / 10,000,000 = 46.00% before, 4,600,000 / 12,500,000 = 36.80% after
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Ines Kowalczyk</meta:initial-creator>
+    <dc:creator>Ines Kowalczyk</dc:creator>
+    <dc:title>Kestrel Software Ltd – Capitalisation Table – Series A</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-24T09:40:00</meta:creation-date>
+    <dc:date>2026-09-24T10:52:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NInt">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDate">
+      <number:day/><number:text> </number:text><number:month number:textual="true"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#8a4b12"/>
+    </style:style>
+    <style:style style:name="TitleWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#8a4b12"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#8a4b12" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#f5ece3" fo:border-bottom="0.75pt solid #8a4b12" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowPad" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="ColHeadPad" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowInt" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NInt">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDate" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDate">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateIn" style:family="table-cell" style:parent-style-name="RowDate">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="HiRow" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff3d1"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="HiMoney" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NGBP"/>
+    <style:style style:name="HiPct" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="SubPct" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#f5ece3" fo:border-top="0.75pt solid #8a4b12" fo:border-bottom="1.5pt double #8a4b12" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="TotalPct" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct"/>
+    <style:style style:name="Due" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#8a4b12" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="DueMoney" style:family="table-cell" style:parent-style-name="Due" style:data-style-name="NGBP">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+
+    <number:number-style style:name="NIntG">
+      <number:number number:decimal-places="0" number:min-integer-digits="1" number:grouping="true"/>
+    </number:number-style>
+    <number:percentage-style style:name="NPct2">
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDateShort">
+      <number:day/><number:text> </number:text><number:month number:textual="true" number:style="short"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+    <number:date-style style:name="NDateDow">
+      <number:day-of-week number:style="short"/><number:text> </number:text><number:day/><number:text> </number:text><number:month number:textual="true" number:style="short"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+    <number:number-style style:name="NDays">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+
+    <style:style style:name="RowShares" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowSharesIn" style:family="table-cell" style:parent-style-name="RowShares">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="SubShares" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="TotalShares" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowPct2" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="SubPct2" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="TotalPct2" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateShort" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDateShort">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateShortIn" style:family="table-cell" style:parent-style-name="RowDateShort">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDateDow" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDateDow">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateDowIn" style:family="table-cell" style:parent-style-name="RowDateDow">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDays" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDays">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowTop" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties style:vertical-align="top"/>
+    </style:style>
+    <style:style style:name="StDone" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#dff0e0" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StClient" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff1c9" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StOpen" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#f7d9d4" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StPost" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#d9e4f5" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateTop" style:family="table-cell" style:parent-style-name="RowDateShort">
+      <style:table-cell-properties style:vertical-align="top"/>
+    </style:style>
+    <style:style style:name="TotalLabelCount" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="SubCount" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowCount" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="co0" style:family="table-column"><style:table-column-properties style:column-width="6.4cm"/></style:style><style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="3.7cm"/></style:style><style:style style:name="co2" style:family="table-column"><style:table-column-properties style:column-width="2.9cm"/></style:style><style:style style:name="co3" style:family="table-column"><style:table-column-properties style:column-width="2.3cm"/></style:style><style:style style:name="co4" style:family="table-column"><style:table-column-properties style:column-width="2.9cm"/></style:style><style:style style:name="co5" style:family="table-column"><style:table-column-properties style:column-width="2.9cm"/></style:style><style:style style:name="co6" style:family="table-column"><style:table-column-properties style:column-width="2.3cm"/></style:style><style:style style:name="co7" style:family="table-column"><style:table-column-properties style:column-width="3.3cm"/></style:style>
+    <style:style style:name="rh0_9" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_0" style:family="table-row"><style:table-row-properties style:row-height="1.0cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_6" style:family="table-row"><style:table-row-properties style:row-height="0.6cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Cap table">
+        <table:table-column table:style-name="co0"/><table:table-column table:style-name="co1"/><table:table-column table:style-name="co2"/><table:table-column table:style-name="co3"/><table:table-column table:style-name="co4"/><table:table-column table:style-name="co5"/><table:table-column table:style-name="co6"/><table:table-column table:style-name="co7"/>
+                <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Title" table:number-columns-spanned="8" office:value-type="string"><text:p>Kestrel Software Ltd – capitalisation table before and after the Series A</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="8" office:value-type="string"><text:p>As at 24 September 2026, on the term sheet’s numbers</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh1_0"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>Prepared by Ines Kowalczyk, Chief Executive. Blue figures are inputs; the rest are worked out. Percentages are fully diluted: every option, granted or not, counts as a share.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="8" office:value-type="string"><text:p>Shareholders and options</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh1_0"><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Holder</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Class</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Shares before</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Before, % fully diluted</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Series A shares</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Shares after</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>After, % fully diluted</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Money invested</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ordinary</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="4600000.0"><text:p>4,600,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C7]/[.C$17]" office:value-type="percentage" office:value="0.46"><text:p>46.00%</text:p></table:table-cell><table:table-cell table:style-name="Row"/><table:table-cell table:style-name="RowShares" table:formula="of:=[.C7]+[.E7]" office:value-type="float" office:value="4600000.0"><text:p>4,600,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F7]/[.F$17]" office:value-type="percentage" office:value="0.368"><text:p>36.80%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ordinary</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="3400000.0"><text:p>3,400,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C8]/[.C$17]" office:value-type="percentage" office:value="0.34"><text:p>34.00%</text:p></table:table-cell><table:table-cell table:style-name="Row"/><table:table-cell table:style-name="RowShares" table:formula="of:=[.C8]+[.E8]" office:value-type="float" office:value="3400000.0"><text:p>3,400,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F8]/[.F$17]" office:value-type="percentage" office:value="0.272"><text:p>27.20%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ruth Calloway</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ordinary</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="600000.0"><text:p>600,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C9]/[.C$17]" office:value-type="percentage" office:value="0.06"><text:p>6.00%</text:p></table:table-cell><table:table-cell table:style-name="Row"/><table:table-cell table:style-name="RowShares" table:formula="of:=[.C9]+[.E9]" office:value-type="float" office:value="600000.0"><text:p>600,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F9]/[.F$17]" office:value-type="percentage" office:value="0.048"><text:p>4.80%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Dev Mistry</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ordinary</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="400000.0"><text:p>400,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C10]/[.C$17]" office:value-type="percentage" office:value="0.04"><text:p>4.00%</text:p></table:table-cell><table:table-cell table:style-name="Row"/><table:table-cell table:style-name="RowShares" table:formula="of:=[.C10]+[.E10]" office:value-type="float" office:value="400000.0"><text:p>400,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F10]/[.F$17]" office:value-type="percentage" office:value="0.032"><text:p>3.20%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Ordinary shares in issue</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubShares" table:formula="of:=SUM([.C7:.C10])" office:value-type="float" office:value="9000000.0"><text:p>9,000,000</text:p></table:table-cell><table:table-cell table:style-name="SubPct2" table:formula="of:=[.C11]/[.C$17]" office:value-type="percentage" office:value="0.9"><text:p>90.00%</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubShares" table:formula="of:=SUM([.F7:.F10])" office:value-type="float" office:value="9000000.0"><text:p>9,000,000</text:p></table:table-cell><table:table-cell table:style-name="SubPct2" table:formula="of:=[.F11]/[.F$17]" office:value-type="percentage" office:value="0.72"><text:p>72.00%</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Options granted</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Share option plan</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="640000.0"><text:p>640,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C12]/[.C$17]" office:value-type="percentage" office:value="0.064"><text:p>6.40%</text:p></table:table-cell><table:table-cell table:style-name="Row"/><table:table-cell table:style-name="RowShares" table:formula="of:=[.C12]+[.E12]" office:value-type="float" office:value="640000.0"><text:p>640,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F12]/[.F$17]" office:value-type="percentage" office:value="0.0512"><text:p>5.12%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Options not yet allocated</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Share option plan</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="360000.0"><text:p>360,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C13]/[.C$17]" office:value-type="percentage" office:value="0.036"><text:p>3.60%</text:p></table:table-cell><table:table-cell table:style-name="Row"/><table:table-cell table:style-name="RowShares" table:formula="of:=[.C13]+[.E13]" office:value-type="float" office:value="360000.0"><text:p>360,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F13]/[.F$17]" office:value-type="percentage" office:value="0.0288"><text:p>2.88%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Option pool</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubShares" table:formula="of:=SUM([.C12:.C13])" office:value-type="float" office:value="1000000.0"><text:p>1,000,000</text:p></table:table-cell><table:table-cell table:style-name="SubPct2" table:formula="of:=[.C14]/[.C$17]" office:value-type="percentage" office:value="0.1"><text:p>10.00%</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubShares" table:formula="of:=SUM([.F12:.F13])" office:value-type="float" office:value="1000000.0"><text:p>1,000,000</text:p></table:table-cell><table:table-cell table:style-name="SubPct2" table:formula="of:=[.F14]/[.F$17]" office:value-type="percentage" office:value="0.08"><text:p>8.00%</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Merrowdown Ventures LLP</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Series A preferred</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="0.0"><text:p>0</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C15]/[.C$17]" office:value-type="percentage" office:value="0.0"><text:p>0.00%</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="1875000.0"><text:p>1,875,000</text:p></table:table-cell><table:table-cell table:style-name="RowShares" table:formula="of:=[.C15]+[.E15]" office:value-type="float" office:value="1875000.0"><text:p>1,875,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F15]/[.F$17]" office:value-type="percentage" office:value="0.15"><text:p>15.00%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.E15]*[.$C$20]" office:value-type="currency" office:currency="GBP" office:value="3000000.0"><text:p>£3,000,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Pellridge Capital Partners LP</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Series A preferred</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="0.0"><text:p>0</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C16]/[.C$17]" office:value-type="percentage" office:value="0.0"><text:p>0.00%</text:p></table:table-cell><table:table-cell table:style-name="RowSharesIn" office:value-type="float" office:value="625000.0"><text:p>625,000</text:p></table:table-cell><table:table-cell table:style-name="RowShares" table:formula="of:=[.C16]+[.E16]" office:value-type="float" office:value="625000.0"><text:p>625,000</text:p></table:table-cell><table:table-cell table:style-name="RowPct2" table:formula="of:=[.F16]/[.F$17]" office:value-type="percentage" office:value="0.05"><text:p>5.00%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.E16]*[.$C$20]" office:value-type="currency" office:currency="GBP" office:value="1000000.0"><text:p>£1,000,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" office:value-type="string"><text:p>Total, fully diluted</text:p></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="TotalShares" table:formula="of:=[.C11]+[.C14]+SUM([.C15:.C16])" office:value-type="float" office:value="10000000.0"><text:p>10,000,000</text:p></table:table-cell><table:table-cell table:style-name="TotalPct2" table:formula="of:=[.C17]/[.C$17]" office:value-type="percentage" office:value="1.0"><text:p>100.00%</text:p></table:table-cell><table:table-cell table:style-name="TotalShares" table:formula="of:=SUM([.E15:.E16])" office:value-type="float" office:value="2500000.0"><text:p>2,500,000</text:p></table:table-cell><table:table-cell table:style-name="TotalShares" table:formula="of:=[.F11]+[.F14]+SUM([.F15:.F16])" office:value-type="float" office:value="12500000.0"><text:p>12,500,000</text:p></table:table-cell><table:table-cell table:style-name="TotalPct2" table:formula="of:=[.F17]/[.F$17]" office:value-type="percentage" office:value="1.0"><text:p>100.00%</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=SUM([.H15:.H16])" office:value-type="currency" office:currency="GBP" office:value="4000000.0"><text:p>£4,000,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="8" office:value-type="string"><text:p>The round</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Price of a Series A share</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="1.6"><text:p>£1.60</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Series A shares issued</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowShares" table:formula="of:=[.E17]" office:value-type="float" office:value="2500000.0"><text:p>2,500,000</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Money raised</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowMoney" table:formula="of:=[.C21]*[.C20]" office:value-type="currency" office:currency="GBP" office:value="4000000.0"><text:p>£4,000,000.00</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="HiRow" table:number-columns-spanned="2" office:value-type="string"><text:p>Pre-money valuation (shares before × price)</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="HiMoney" table:formula="of:=[.C17]*[.C20]" office:value-type="currency" office:currency="GBP" office:value="16000000.0"><text:p>£16,000,000.00</text:p></table:table-cell><table:table-cell table:style-name="HiRow" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="HiRow" table:number-columns-spanned="2" office:value-type="string"><text:p>Post-money valuation (shares after × price)</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="HiMoney" table:formula="of:=[.F17]*[.C20]" office:value-type="currency" office:currency="GBP" office:value="20000000.0"><text:p>£20,000,000.00</text:p></table:table-cell><table:table-cell table:style-name="HiRow" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="2" office:value-type="string"><text:p>Series A investors’ share after the round</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="RowPct2" table:formula="of:=[.C21]/[.F17]" office:value-type="percentage" office:value="0.2"><text:p>20.00%</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" table:number-columns-spanned="2" office:value-type="string"><text:p>Check: post-money less pre-money less money raised (nil)</text:p></table:table-cell><table:covered-table-cell/><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.C24]-[.C23]-[.C22]" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="Total" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="8" office:value-type="string"><text:p>Notes</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh0_6"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>1.  The ordinary shares and the option pool agree with the register of members and the share option plan: 9,000,000 shares in issue and 1,000,000 options.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh0_6"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>2.  Of the 1,000,000 options in the pool, 640,000 are granted and 360,000 are not yet allocated.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh0_6"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>3.  Merrowdown Ventures LLP invests £3,000,000 for 1,875,000 shares and Pellridge Capital Partners LP £1,000,000 for 625,000 shares, both at £1.60.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

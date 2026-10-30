@@ -1,0 +1,285 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Ashcombe Reeve LLP's software and renewals register as at 1 October 2026, kept by Sam Okafor (998.2 Documents). Every result is
+  a real formula, and each formula cell also carries the value it works out to (office:value), which LibreOffice shows until it
+  recalculates. If a figure or a date changes, change the cached values beside it. The sums, for checking by hand:
+
+    a year  0 + 380 + 1,080 + 2,520 + 3,600 + 420 + 1,260 + 24 + 180 + 310 = 9,774.00; a month 9,774.00 / 12 = 814.50
+    days to renewal  the renewal date less 1 October 2026 (Tallyfold Practice, 1 November 2026: 31 days; the next renewal)
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Sam Okafor</meta:initial-creator>
+    <dc:creator>Sam Okafor</dc:creator>
+    <dc:title>Software and Renewals Register</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-30T15:20:00</meta:creation-date>
+    <dc:date>2026-10-01T09:45:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NInt">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDate">
+      <number:day/><number:text> </number:text><number:month number:textual="true"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="TitleWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowPad" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="ColHeadPad" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowInt" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NInt">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDate" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDate">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateIn" style:family="table-cell" style:parent-style-name="RowDate">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="HiRow" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff3d1"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="HiMoney" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NGBP"/>
+    <style:style style:name="HiPct" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="SubPct" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="TotalPct" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct"/>
+    <style:style style:name="Due" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="DueMoney" style:family="table-cell" style:parent-style-name="Due" style:data-style-name="NGBP">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+
+    <number:number-style style:name="NIntG">
+      <number:number number:decimal-places="0" number:min-integer-digits="1" number:grouping="true"/>
+    </number:number-style>
+    <number:percentage-style style:name="NPct2">
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDateShort">
+      <number:day/><number:text> </number:text><number:month number:textual="true" number:style="short"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+    <number:date-style style:name="NDateDow">
+      <number:day-of-week number:style="short"/><number:text> </number:text><number:day/><number:text> </number:text><number:month number:textual="true" number:style="short"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+    <number:number-style style:name="NDays">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+
+    <style:style style:name="RowShares" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowSharesIn" style:family="table-cell" style:parent-style-name="RowShares">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="SubShares" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="TotalShares" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowPct2" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="SubPct2" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="TotalPct2" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateShort" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDateShort">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateShortIn" style:family="table-cell" style:parent-style-name="RowDateShort">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDateDow" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDateDow">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateDowIn" style:family="table-cell" style:parent-style-name="RowDateDow">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDays" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDays">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="HiDateShort" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NDateShort">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="HiDays" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NDays">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowNote" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="RowTop" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties style:vertical-align="top"/>
+    </style:style>
+    <style:style style:name="StDone" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#dff0e0" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StClient" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff1c9" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StOpen" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#f7d9d4" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StPost" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#d9e4f5" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateTop" style:family="table-cell" style:parent-style-name="RowDateShort">
+      <style:table-cell-properties style:vertical-align="top"/>
+    </style:style>
+    <style:style style:name="TotalLabelCount" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="SubCount" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowCount" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="co0" style:family="table-column"><style:table-column-properties style:column-width="5.0cm"/></style:style><style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="4.9cm"/></style:style><style:style style:name="co2" style:family="table-column"><style:table-column-properties style:column-width="2.6cm"/></style:style><style:style style:name="co3" style:family="table-column"><style:table-column-properties style:column-width="2.2cm"/></style:style><style:style style:name="co4" style:family="table-column"><style:table-column-properties style:column-width="2.6cm"/></style:style><style:style style:name="co5" style:family="table-column"><style:table-column-properties style:column-width="1.8cm"/></style:style><style:style style:name="co6" style:family="table-column"><style:table-column-properties style:column-width="1.9cm"/></style:style><style:style style:name="co7" style:family="table-column"><style:table-column-properties style:column-width="5.7cm"/></style:style>
+    <style:style style:name="rh0_9" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_0" style:family="table-row"><style:table-row-properties style:row-height="1.0cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Renewals">
+        <table:table-column table:style-name="co0"/><table:table-column table:style-name="co1"/><table:table-column table:style-name="co2"/><table:table-column table:style-name="co3"/><table:table-column table:style-name="co4"/><table:table-column table:style-name="co5"/><table:table-column table:style-name="co6"/><table:table-column table:style-name="co7"/>
+                <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Title" table:number-columns-spanned="8" office:value-type="string"><text:p>Ashcombe Reeve LLP – software and renewals register</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="8" office:value-type="string"><text:p>Kept by Sam Okafor, IT and Office Manager</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>As at</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2026-10-01"><text:p>1 Oct 2026</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="6"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="5"/></table:table-row>
+        <table:table-row table:style-name="rh1_0"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>Blue figures and dates are inputs; the rest are worked out. Days to renewal count from the as-at date. Yearly costs are before VAT where it applies.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row table:style-name="rh1_0"><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>System</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Supplier</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Phone</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Yearly cost</text:p></table:table-cell><table:table-cell table:style-name="ColHeadCentre" office:value-type="string"><text:p>Renewal date</text:p></table:table-cell><table:table-cell table:style-name="ColHeadCentre" office:value-type="string"><text:p>Notice</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Days to renewal</text:p></table:table-cell><table:table-cell table:style-name="ColHeadPad" office:value-type="string"><text:p>Notes</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Healdan (documents and matters)</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Self-hosted</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>–</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>None</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>None</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E7]);[.E7]-[.$B$3];&quot;n/a&quot;)" office:value-type="string" office:string-value="n/a"><text:p>n/a</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>No licence fee. Supported in-house by Sam Okafor and backed up every night.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Office server warranty</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Marlbridge Computer Services Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960610</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="380.0"><text:p>£380.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2026-12-14"><text:p>14 Dec 2026</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>30 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E8]);[.E8]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="74.0"><text:p>74</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Covers parts and repair of the office server.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Offsite backup</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Marlvault Backup Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960622</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="1080.0"><text:p>£1,080.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2027-04-01"><text:p>1 Apr 2027</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>60 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E9]);[.E9]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="182.0"><text:p>182</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Weekly encrypted copies; twelve are kept.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Email and calendars</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Fernlea Cloud Services Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960634</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="2520.0"><text:p>£2,520.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2027-03-01"><text:p>1 Mar 2027</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>30 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E10]);[.E10]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="151.0"><text:p>151</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Six mailboxes and the shared calendars.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Accounts and time recording (Tallyfold Practice)</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Tallyfold Software Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960646</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="3600.0"><text:p>£3,600.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2026-11-01"><text:p>1 Nov 2026</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>30 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E11]);[.E11]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="31.0"><text:p>31</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Notice for 1 November would be due by 2 October. No change planned.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Antivirus and endpoint protection</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Hollybush Security Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960652</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="420.0"><text:p>£420.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2027-01-15"><text:p>15 Jan 2027</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>30 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E12]);[.E12]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="106.0"><text:p>106</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Covers every office computer and the server.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Phone system</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Ringwell Telecom Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960664</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="1260.0"><text:p>£1,260.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2027-03-31"><text:p>31 Mar 2027</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>90 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E13]);[.E13]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="181.0"><text:p>181</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Handsets and lines. Notice would be due by 31 December.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Domain ashcombe-reeve.example</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Nameharbour Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960676</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="24.0"><text:p>£24.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2026-11-20"><text:p>20 Nov 2026</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>None</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E14]);[.E14]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="50.0"><text:p>50</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Renews itself on 20 November.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Website hosting</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Nameharbour Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960676</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="180.0"><text:p>£180.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2027-05-05"><text:p>5 May 2027</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>30 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E15]);[.E15]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="216.0"><text:p>216</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>The firm’s public website.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Scanner and printer maintenance</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Marlbridge Office Equipment Ltd</text:p></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>01632 960688</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="310.0"><text:p>£310.00</text:p></table:table-cell><table:table-cell table:style-name="RowDateShortIn" office:value-type="date" office:date-value="2027-07-01"><text:p>1 Jul 2027</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>30 days</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF(ISNUMBER([.E16]);[.E16]-[.$B$3];&quot;n/a&quot;)" office:value-type="float" office:value="273.0"><text:p>273</text:p></table:table-cell><table:table-cell table:style-name="RowNote" office:value-type="string"><text:p>Covers the two scanners and the office printer.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" table:number-columns-spanned="3" office:value-type="string"><text:p>Total a year</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="TotalMoney" table:formula="of:=SUM([.D7:.D16])" office:value-type="currency" office:currency="GBP" office:value="9774.0"><text:p>£9,774.00</text:p></table:table-cell><table:table-cell table:style-name="Total" table:number-columns-spanned="4"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Average a month</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.D17]/12;2)" office:value-type="currency" office:currency="GBP" office:value="814.5"><text:p>£814.50</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="4"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="HiRow" table:number-columns-spanned="3" office:value-type="string"><text:p>Next renewal</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="HiRow"><text:p/></table:table-cell><table:table-cell table:style-name="HiDateShort" table:formula="of:=MIN([.E7:.E16])" office:value-type="date" office:date-value="2026-11-01"><text:p>1 Nov 2026</text:p></table:table-cell><table:table-cell table:style-name="HiRow"><text:p/></table:table-cell><table:table-cell table:style-name="HiDays" table:formula="of:=MIN([.G7:.G16])" office:value-type="float" office:value="31.0"><text:p>31</text:p></table:table-cell><table:table-cell table:style-name="HiRow"><text:p/></table:table-cell></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

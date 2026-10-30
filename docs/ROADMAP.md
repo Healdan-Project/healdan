@@ -543,7 +543,7 @@ These are calls unless CLAUDE.md already says the same thing.
 - **Keeping this file current.** After each milestone, update its status here and record any decision that changed.
 - **Docs ship with the code.** A PR that changes behaviour a manual describes, or adds behaviour a manual should describe, updates the docs site (`site/`, published at docs.healdan.com) in the same PR. (owner, 2026-10-23) The site's [spec](superpowers/specs/2026-10-23-docs-site-design.md) and [plan](superpowers/plans/2026-10-23-docs-site.md) are tracked in [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56).
   - The site has been live since 2026-10-23, and the app's and the repo's links have pointed at it since 2026-10-24 ([Healdan-Project/healdan#61](https://github.com/Healdan-Project/healdan/pull/61)).
-  - 21 pages, all about CE features Healdan uses unchanged, are still interim pages that link to LogicalDOC's. The feature PRs that touch them replace them, and #56 closes when none are left. (M3 replaced Checking Out and Checking In, and Bookmarks.)
+  - 21 pages, all about CE features Healdan uses unchanged, are still interim pages that link to LogicalDOC's. The feature PRs that touch them replace them, and #56 closes when none are left. (M3 replaced Checking Out and Checking In, and Bookmarks.) The [demo stack and docs gaps spec](superpowers/specs/2026-10-29-demo-stack-and-docs-gaps-design.md) plans the rest.
 
 ## 7. Open decisions for the owner
 
