@@ -55,8 +55,8 @@ public class CheckoutResource {
 
 	private static final Logger log = LoggerFactory.getLogger(CheckoutResource.class);
 
-	/** How many times CE is asked to check a document out while other writes keep overtaking it */
-	private static final int CHECKOUT_TRIES = 3;
+	/** How many times CE is asked to write a document while other writes keep overtaking it */
+	static final int TRIES = 3;
 
 	/** The code of a refusal by the document's state, or by one of Healdan's rules */
 	static final String REFUSED = "refused";
@@ -163,7 +163,7 @@ public class CheckoutResource {
 					throw conflict(hold, docNumber, user);
 				refuseElsewhere(document, caller, docNumber);
 
-				DocumentManager.get().unlock(document.getId(), history(caller.session(), DocumentEvent.UNLOCKED));
+				unlock(document, caller.session());
 				Document released = DocumentDAO.get().findById(document.getId());
 				DeviceHolds.get().clear(released);
 				return ApiViews.document(released, user);
@@ -326,7 +326,7 @@ public class CheckoutResource {
 			try {
 				DocumentManager.get().checkout(docId, history(session, DocumentEvent.CHECKEDOUT));
 			} catch (PersistenceException | RuntimeException e) {
-				if (tries >= CHECKOUT_TRIES || !overtaken(e))
+				if (tries >= TRIES || !overtaken(e))
 					throw e;
 				log.info("Checking out document {} again, as another write came first: {}", docId, e.getMessage());
 				continue;
@@ -336,7 +336,7 @@ public class CheckoutResource {
 				return;
 			if (document == null || document.getStatus() != DocumentStatus.UNLOCKED)
 				throw new PersistenceException("Document %d is held by someone else now".formatted(docId));
-			if (tries >= CHECKOUT_TRIES)
+			if (tries >= TRIES)
 				throw new PersistenceException(
 						"Document %d's check-out wasn't stored: other writes kept overtaking it".formatted(docId));
 			log.info("Checking out document {} again, as another write overtook the check-out in its flush", docId);
@@ -344,10 +344,53 @@ public class CheckoutResource {
 	}
 
 	/**
+	 * Releases the document's check-out or lock through CE's
+	 * {@code DocumentManager}, which reads the document and then writes it, as
+	 * its check-out does: another write in that moment makes CE's write fail,
+	 * or be lost unseen at the commit ({@link #checkOut}). So while the
+	 * document is held as it was, CE is asked again. Anything else is CE's
+	 * own result: its refusal, or a document someone else freed or took in
+	 * that moment, which is answered as it is.
+	 *
+	 * @param held the document, as read with its hold
+	 * @param session the caller's session
+	 * @throws PersistenceException CE's refusal, or its last failure; also
+	 *         when the hold is still there after the last try
+	 */
+	static void unlock(Document held, Session session) throws PersistenceException {
+		HoldView hold = ApiViews.hold(held);
+		for (int tries = 1;; tries++) {
+			try {
+				DocumentManager.get().unlock(held.getId(), history(session, DocumentEvent.UNLOCKED));
+			} catch (PersistenceException | RuntimeException e) {
+				if (tries >= TRIES || !overtaken(e) || !heldAsBefore(held.getId(), hold))
+					throw e;
+				log.info("Releasing document {} again, as another write came first: {}", held.getId(), e.getMessage());
+				continue;
+			}
+			if (!heldAsBefore(held.getId(), hold))
+				return;
+			if (tries >= TRIES)
+				throw new PersistenceException(
+						"Document %d's release wasn't stored: other writes kept overtaking it".formatted(held.getId()));
+			log.info("Releasing document {} again, as another write overtook the release in its flush", held.getId());
+		}
+	}
+
+	/**
+	 * @return true if the document is held by the same user, the same way,
+	 *         since the same moment
+	 */
+	private static boolean heldAsBefore(long docId, HoldView hold) throws PersistenceException {
+		Document document = DocumentDAO.get().findById(docId);
+		return document != null && hold.equals(ApiViews.hold(document));
+	}
+
+	/**
 	 * @return true if the failure is a write over a newer version of the
 	 *         record, which Hibernate refuses
 	 */
-	private static boolean overtaken(Throwable failure) {
+	static boolean overtaken(Throwable failure) {
 		for (Throwable t = failure; t != null; t = t.getCause())
 			if (t instanceof OptimisticLockException || t instanceof StaleStateException)
 				return true;
