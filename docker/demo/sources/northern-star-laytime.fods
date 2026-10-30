@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The laytime calculation for 1001.1 (Charter Dispute - MV Northern Star), prepared 22 September 2026.
+
+  Every result is a real formula, and each formula cell also carries the value it works out to
+  (office:value), which LibreOffice shows until it recalculates. If a figure changes, change the
+  cached value beside it. The sums, for checking by hand:
+
+    owners:      6 days from 10:24 Mon 3 Aug to 10:24 Sun 9 Aug; then to 16:24 Wed 19 Aug = 10.25 days; x USD 18,000 = USD 184,500.00
+    charterers:  08:00 Tue 4 Aug to 00:00 Fri 7 Aug = 2.6667 days; weather and Sunday 9 Aug excepted to 00:00 Tue 11 Aug;
+                 then 3.3333 days to 08:00 Fri 14 Aug (6.0000 in all); then to 16:24 Wed 19 Aug = 5.35 days;
+                 x USD 18,000 = USD 96,300.00
+    difference:  USD 184,500.00 - USD 96,300.00 = USD 88,200.00
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Priya Nair</meta:initial-creator>
+    <dc:creator>Priya Nair</dc:creator>
+    <dc:title>Laytime Calculation – MV Northern Star</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-22T09:20:00</meta:creation-date>
+    <dc:date>2026-09-22T10:25:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NDays4">
+      <number:number number:decimal-places="4" number:min-decimal-places="4" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NDays2">
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NUSD">
+      <number:text>USD </number:text>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:number-style>
+    <number:date-style style:name="NDT">
+      <number:day-of-week number:style="short"/>
+      <number:text> </number:text>
+      <number:day/>
+      <number:text> </number:text>
+      <number:month number:textual="true"/>
+      <number:text> </number:text>
+      <number:hours number:style="long"/>
+      <number:text>:</number:text>
+      <number:minutes number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="16pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="Note" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:color="#555555"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowText" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding-top="0.08cm" fo:padding-bottom="0.08cm" fo:padding-left="0.3cm" fo:padding-right="0.08cm"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDays" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDays4"/>
+    <style:style style:name="RowDays2" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDays2"/>
+    <style:style style:name="RowUSD" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NUSD"/>
+    <style:style style:name="RowDT" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDT">
+      <style:paragraph-properties fo:text-align="start"/>
+    </style:style>
+    <style:style style:name="RowDTIn" style:family="table-cell" style:parent-style-name="RowDT">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubDays" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NDays4"/>
+    <style:style style:name="SubDays2" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NDays2"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalUSD" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NUSD"/>
+    <style:style style:name="Diff" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="DiffUSD" style:family="table-cell" style:parent-style-name="Diff" style:data-style-name="NUSD"/>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="coA" style:family="table-column"><style:table-column-properties style:column-width="4.4cm"/></style:style>
+    <style:style style:name="coB" style:family="table-column"><style:table-column-properties style:column-width="2.8cm"/></style:style>
+    <style:style style:name="coD" style:family="table-column"><style:table-column-properties style:column-width="2.6cm"/></style:style>
+    <style:style style:name="coE" style:family="table-column"><style:table-column-properties style:column-width="0.3cm"/></style:style>
+    <style:style style:name="coF" style:family="table-column"><style:table-column-properties style:column-width="5.5cm"/></style:style>
+    <style:style style:name="coI" style:family="table-column"><style:table-column-properties style:column-width="1.3cm"/></style:style>
+    <style:style style:name="rowNote" style:family="table-row"><style:table-row-properties style:row-height="0.5cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowNote2" style:family="table-row"><style:table-row-properties style:row-height="0.95cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowTitle" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowDiff" style:family="table-row"><style:table-row-properties style:row-height="0.75cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowStd" style:family="table-row"><style:table-row-properties style:row-height="0.58cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="1cm" fo:margin-bottom="1cm" fo:margin-left="0.9cm" fo:margin-right="0.9cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Laytime">
+        <table:table-column table:style-name="coA"/>
+        <table:table-column table:style-name="coB"/>
+        <table:table-column table:style-name="coB"/>
+        <table:table-column table:style-name="coD"/>
+        <table:table-column table:style-name="coE"/>
+        <table:table-column table:style-name="coF"/>
+        <table:table-column table:style-name="coB"/>
+        <table:table-column table:style-name="coB"/>
+        <table:table-column table:style-name="coI"/>
+        <table:table-column table:style-name="coD"/>
+        <table:table-row table:style-name="rowTitle"><table:table-cell table:style-name="Title" table:number-columns-spanned="10" office:value-type="string"><text:p>Saltmarsh Shipping Ltd – laytime calculation, MV Northern Star</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="9"/></table:table-row>
+        <table:table-row table:style-name="rowNote2"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="10" office:value-type="string"><text:p>Voyage charterparty dated 12 March 2026 – 5,200 tonnes of packaged sawn timber discharged at Hartmouth – laytime and demurrage under clauses 9 and 10. Prepared by Priya Nair, Ashcombe Reeve LLP, 22 September 2026 (our ref TR/1001.1/PN). All times are in 2026, local time at Hartmouth; times in blue are taken from the master’s log and the harbour notices, and everything else is calculated.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="9"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:number-columns-repeated="10"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Section" table:number-columns-spanned="4" office:value-type="string"><text:p>From the charterparty and the master’s log</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Laytime allowed (clause 9)</text:p></table:table-cell><table:table-cell table:style-name="RowDays2" office:value-type="float" office:value="6.0"><text:p>6.00</text:p></table:table-cell><table:table-cell table:style-name="RowText" office:value-type="string"><text:p>weather working days</text:p></table:table-cell><table:table-cell table:style-name="RowText"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Demurrage rate (clause 10)</text:p></table:table-cell><table:table-cell table:style-name="RowUSD" office:value-type="float" office:value="18000.0"><text:p>USD 18,000.00</text:p></table:table-cell><table:table-cell table:style-name="RowText" office:value-type="string"><text:p>a day, pro rata</text:p></table:table-cell><table:table-cell table:style-name="RowText"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Notice of readiness given</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-03T10:24:00"><text:p>Mon 3 Aug 10:24</text:p></table:table-cell><table:table-cell table:style-name="RowText"><text:p/></table:table-cell><table:table-cell table:style-name="RowText"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Discharge completed</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-19T16:24:00"><text:p>Wed 19 Aug 16:24</text:p></table:table-cell><table:table-cell table:style-name="RowText"><text:p/></table:table-cell><table:table-cell table:style-name="RowText"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="5"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:number-columns-repeated="10"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Section" table:number-columns-spanned="4" office:value-type="string"><text:p>Owners’ calculation (Dunmere Pryce LLP, 15 September 2026)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Section" table:number-columns-spanned="5" office:value-type="string"><text:p>Charterers’ calculation (clause 9)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="4"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Period</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>From</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>To</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Days</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Period</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>From</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>To</text:p></table:table-cell><table:table-cell table:style-name="ColHeadCentre" office:value-type="string"><text:p>Counts?</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Days</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Laytime from notice</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.B7]" office:value-type="date" office:date-value="2026-08-03T10:24:00"><text:p>Mon 3 Aug 10:24</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.B12]+[.B5]" office:value-type="date" office:date-value="2026-08-09T10:24:00"><text:p>Sun 9 Aug 10:24</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=ROUND([.C12]-[.B12];4)" office:value-type="float" office:value="6.0"><text:p>6.0000</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Laytime starts (clause 9.2)</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-04T08:00:00"><text:p>Tue 4 Aug 08:00</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-07T00:00:00"><text:p>Fri 7 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>Yes</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF([.I12]=&quot;Yes&quot;;[.H12]-[.G12];0)" office:value-type="float" office:value="2.6666666666666665"><text:p>2.6667</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Demurrage to completion</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.C12]" office:value-type="date" office:date-value="2026-08-09T10:24:00"><text:p>Sun 9 Aug 10:24</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.B8]" office:value-type="date" office:date-value="2026-08-19T16:24:00"><text:p>Wed 19 Aug 16:24</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=ROUND([.C13]-[.B13];4)" office:value-type="float" office:value="10.25"><text:p>10.2500</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Weather stoppage (41/26, 42/26)</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.H12]" office:value-type="date" office:date-value="2026-08-07T00:00:00"><text:p>Fri 7 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-09T00:00:00"><text:p>Sun 9 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>No</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF([.I13]=&quot;Yes&quot;;[.H13]-[.G13];0)" office:value-type="float" office:value="0.0"><text:p>0.0000</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Sunday 9 August, also weather</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.H13]" office:value-type="date" office:date-value="2026-08-09T00:00:00"><text:p>Sun 9 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-10T00:00:00"><text:p>Mon 10 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>No</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF([.I14]=&quot;Yes&quot;;[.H14]-[.G14];0)" office:value-type="float" office:value="0.0"><text:p>0.0000</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Weather stoppage continues</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.H14]" office:value-type="date" office:date-value="2026-08-10T00:00:00"><text:p>Mon 10 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowDTIn" office:value-type="date" office:date-value="2026-08-11T00:00:00"><text:p>Tue 11 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>No</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF([.I15]=&quot;Yes&quot;;[.H15]-[.G15];0)" office:value-type="float" office:value="0.0"><text:p>0.0000</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Discharge resumes; laytime runs out</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.H15]" office:value-type="date" office:date-value="2026-08-11T00:00:00"><text:p>Tue 11 Aug 00:00</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=ROUND(([.G16]+([.B5]-SUM([.J12:.J15])))*1440;0)/1440" office:value-type="date" office:date-value="2026-08-14T08:00:00"><text:p>Fri 14 Aug 08:00</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>Yes</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF([.I16]=&quot;Yes&quot;;[.H16]-[.G16];0)" office:value-type="float" office:value="3.3333333333333335"><text:p>3.3333</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Sub" table:number-columns-spanned="4" office:value-type="string"><text:p>Laytime used</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="SubDays" table:formula="of:=SUM([.J12:.J16])" office:value-type="float" office:value="6.0"><text:p>6.0000</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row" office:value-type="string"><text:p>On demurrage: every hour counts</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.H16]" office:value-type="date" office:date-value="2026-08-14T08:00:00"><text:p>Fri 14 Aug 08:00</text:p></table:table-cell><table:table-cell table:style-name="RowDT" table:formula="of:=[.B8]" office:value-type="date" office:date-value="2026-08-19T16:24:00"><text:p>Wed 19 Aug 16:24</text:p></table:table-cell><table:table-cell table:style-name="RowCentre" office:value-type="string"><text:p>Yes</text:p></table:table-cell><table:table-cell table:style-name="RowDays" table:formula="of:=IF([.I18]=&quot;Yes&quot;;ROUND([.H18]-[.G18];4);0)" office:value-type="float" office:value="5.35"><text:p>5.3500</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:number-columns-repeated="10"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Sub" table:number-columns-spanned="3" office:value-type="string"><text:p>Days on demurrage</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="SubDays2" table:formula="of:=[.D13]" office:value-type="float" office:value="10.25"><text:p>10.25</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Sub" table:number-columns-spanned="4" office:value-type="string"><text:p>Days on demurrage</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="SubDays2" table:formula="of:=[.J18]" office:value-type="float" office:value="5.35"><text:p>5.35</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Total" table:number-columns-spanned="3" office:value-type="string"><text:p>Demurrage at the daily rate</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="TotalUSD" table:formula="of:=ROUND([.D20]*[.B6];2)" office:value-type="float" office:value="184500.0"><text:p>USD 184,500.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Total" table:number-columns-spanned="4" office:value-type="string"><text:p>Demurrage at the daily rate</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="TotalUSD" table:formula="of:=ROUND([.J20]*[.B6];2)" office:value-type="float" office:value="96300.0"><text:p>USD 96,300.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:number-columns-repeated="10"/></table:table-row>
+        <table:table-row table:style-name="rowDiff"><table:table-cell table:style-name="Diff" table:number-columns-spanned="9" office:value-type="string"><text:p>Difference between the two calculations (owners’ figure less charterers’ figure)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="8"/><table:table-cell table:style-name="DiffUSD" table:formula="of:=[.D21]-[.J21]" office:value-type="float" office:value="88200.0"><text:p>USD 88,200.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:number-columns-repeated="10"/></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Heading" table:number-columns-spanned="10" office:value-type="string"><text:p>Notes</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="9"/></table:table-row>
+        <table:table-row table:style-name="rowNote"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="10" office:value-type="string"><text:p>1.  Clause 9.2 starts laytime at 08:00 on the working day after notice of readiness, so the charterers’ calculation starts at 08:00 on Tuesday 4 August; the owners count from the notice itself.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="9"/></table:table-row>
+        <table:table-row table:style-name="rowNote2"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="10" office:value-type="string"><text:p>2.  Clause 9.4: no time counts while weather stops discharge. Harbour notices 41/26 and 42/26 and the master’s log put the stoppage at 00:00 on Friday 7 August to 24:00 on Monday 10 August; 9 August was also a Sunday, not used.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="9"/></table:table-row>
+        <table:table-row table:style-name="rowNote"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="10" office:value-type="string"><text:p>3.  Sunday 16 August counts in full because the vessel was already on demurrage (clause 10.2): once on demurrage, every hour counts, including Sundays, holidays and weather.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="9"/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

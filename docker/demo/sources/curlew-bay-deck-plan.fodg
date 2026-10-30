@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The general arrangement of the MV Curlew Bay for 1001.2 (Vessel Sale), drawn by Saltmarsh Shipping Ltd's
+  operations team for the buyer's inspection on 8 October 2026. A4 landscape, simple labelled shapes, not to scale.
+  Particulars: built 2009, length overall 89.95 m, beam 13.20 m, deadweight 4,100 tonnes, gearless.
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.graphics">
+
+  <office:meta>
+    <meta:initial-creator>Saltmarsh Shipping Ltd</meta:initial-creator>
+    <dc:creator>Saltmarsh Shipping Ltd</dc:creator>
+    <dc:title>Deck Plan – MV Curlew Bay</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-10-05T11:30:00</meta:creation-date>
+    <dc:date>2026-10-05T15:10:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <draw:marker draw:name="Arrow" svg:viewBox="0 0 20 30" svg:d="M10 0l-10 30h20z"/>
+
+    <style:style style:name="Hull" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#e6eef0" draw:stroke="solid" svg:stroke-width="0.06cm" svg:stroke-color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Block" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#ffffff" draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Window" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#b9d3dd" draw:stroke="solid" svg:stroke-width="0.02cm" svg:stroke-color="#333333"/>
+    </style:style>
+    <style:style style:name="Funnel" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#c8d4d8" draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"/>
+    </style:style>
+    <style:style style:name="FunnelTop" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#1d4e5f" draw:stroke="solid" svg:stroke-width="0.02cm" svg:stroke-color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Hatch" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#d4dde1" draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"/>
+    </style:style>
+    <style:style style:name="HoldBox" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="dash" draw:stroke-dash="Dashed" svg:stroke-width="0.03cm" svg:stroke-color="#555555"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Gear" style:family="graphic">
+      <style:graphic-properties draw:fill="solid" draw:fill-color="#f3ede0" draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle"/>
+    </style:style>
+    <style:style style:name="Fold" style:family="graphic">
+      <style:graphic-properties draw:stroke="solid" svg:stroke-width="0.025cm" svg:stroke-color="#555555"/>
+    </style:style>
+    <style:style style:name="Mast" style:family="graphic">
+      <style:graphic-properties draw:stroke="solid" svg:stroke-width="0.04cm" svg:stroke-color="#333333"/>
+    </style:style>
+    <style:style style:name="Water" style:family="graphic">
+      <style:graphic-properties draw:stroke="dash" draw:stroke-dash="Dashed" svg:stroke-width="0.03cm" svg:stroke-color="#3a6ea5"/>
+    </style:style>
+    <style:style style:name="Dim" style:family="graphic">
+      <style:graphic-properties draw:stroke="solid" svg:stroke-width="0.03cm" svg:stroke-color="#000000"
+        draw:marker-start="Arrow" draw:marker-start-width="0.25cm" draw:marker-end="Arrow" draw:marker-end-width="0.25cm"/>
+    </style:style>
+    <style:style style:name="Frame" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="solid" svg:stroke-width="0.05cm" svg:stroke-color="#000000"/>
+    </style:style>
+    <style:style style:name="TxtC" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="none" draw:auto-grow-height="false" draw:auto-grow-width="false"
+        draw:textarea-horizontal-align="center" draw:textarea-vertical-align="middle" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/>
+    </style:style>
+    <style:style style:name="TxtL" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="none" draw:auto-grow-height="false" draw:auto-grow-width="false"
+        draw:textarea-horizontal-align="left" draw:textarea-vertical-align="middle" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/>
+    </style:style>
+    <style:style style:name="TxtR" style:family="graphic">
+      <style:graphic-properties draw:fill="none" draw:stroke="none" draw:auto-grow-height="false" draw:auto-grow-width="false"
+        draw:textarea-horizontal-align="right" draw:textarea-vertical-align="middle" fo:padding-top="0cm" fo:padding-bottom="0cm" fo:padding-left="0cm" fo:padding-right="0cm"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="Pc" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="9pt"/></style:style>
+    <style:style style:name="Pl" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="9pt"/></style:style>
+    <style:style style:name="Pr" style:family="paragraph"><style:paragraph-properties fo:text-align="end"/><style:text-properties style:font-name="Calibri" fo:font-size="9pt"/></style:style>
+    <style:style style:name="Ph" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="20pt" fo:font-weight="bold" fo:color="#1d4e5f"/></style:style>
+    <style:style style:name="Ps" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="9pt" fo:color="#333333"/></style:style>
+    <style:style style:name="Ps8" style:family="paragraph"><style:paragraph-properties fo:text-align="center"/><style:text-properties style:font-name="Calibri" fo:font-size="8pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pw" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="8pt" fo:color="#3a6ea5"/></style:style>
+    <style:style style:name="Pcap" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="10pt" fo:font-weight="bold" fo:color="#555555"/></style:style>
+    <style:style style:name="PcapR" style:family="paragraph"><style:paragraph-properties fo:text-align="end"/><style:text-properties style:font-name="Calibri" fo:font-size="10pt" fo:font-weight="bold" fo:color="#555555"/></style:style>
+    <style:style style:name="Pt2" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="14pt" fo:font-weight="bold"/></style:style>
+    <style:style style:name="Pv" style:family="paragraph"><style:paragraph-properties fo:text-align="start"/><style:text-properties style:font-name="Calibri" fo:font-size="12pt" fo:font-weight="bold"/></style:style>
+    <style:page-layout style:name="PM1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="0cm" fo:margin-bottom="0cm" fo:margin-left="0cm" fo:margin-right="0cm"/>
+    </style:page-layout>
+    <style:style style:name="dp1" style:family="drawing-page">
+      <style:drawing-page-properties draw:background-size="border" draw:fill="none"/>
+    </style:style>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="PM1" draw:style-name="dp1"/>
+  </office:master-styles>
+
+  <office:body>
+    <office:drawing>
+      <draw:page draw:name="General arrangement" draw:style-name="dp1" draw:master-page-name="Default">
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ph" svg:x="1.00cm" svg:y="0.50cm" svg:width="20.00cm" svg:height="0.90cm"><text:p text:style-name="Ph">MV Curlew Bay – general arrangement</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="1.00cm" svg:y="1.35cm" svg:width="22.00cm" svg:height="0.50cm"><text:p text:style-name="Ps">Side profile above, main deck plan below. Bow to the right. Not to scale.</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtR" draw:text-style-name="PcapR" svg:x="24.70cm" svg:y="2.00cm" svg:width="4.00cm" svg:height="0.50cm"><text:p text:style-name="PcapR">SIDE PROFILE</text:p></draw:rect>
+        <draw:polygon draw:style-name="Hull" svg:x="2.00cm" svg:y="5.20cm" svg:width="25.40cm" svg:height="3.50cm" svg:viewBox="0 0 2540 350" draw:points="0,40 2000,40 2000,0 2540,0 2090,350 120,350 0,280"/>
+        <draw:rect draw:style-name="HoldBox" draw:text-style-name="Pc" svg:x="9.70cm" svg:y="5.75cm" svg:width="5.40cm" svg:height="2.60cm"><text:p text:style-name="Pc">Hold 2</text:p></draw:rect>
+        <draw:rect draw:style-name="HoldBox" draw:text-style-name="Pc" svg:x="15.90cm" svg:y="5.75cm" svg:width="5.40cm" svg:height="2.60cm"><text:p text:style-name="Pc">Hold 1</text:p></draw:rect>
+        <draw:rect draw:style-name="Hatch" draw:text-style-name="Pc" svg:x="9.80cm" svg:y="5.10cm" svg:width="5.20cm" svg:height="0.50cm"></draw:rect>
+        <draw:rect draw:style-name="Hatch" draw:text-style-name="Pc" svg:x="16.00cm" svg:y="5.10cm" svg:width="5.20cm" svg:height="0.50cm"></draw:rect>
+        <draw:rect draw:style-name="Block" draw:text-style-name="Pc" svg:x="2.60cm" svg:y="3.60cm" svg:width="5.60cm" svg:height="2.00cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="3.00cm" svg:y="3.95cm" svg:width="0.50cm" svg:height="0.35cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="4.00cm" svg:y="3.95cm" svg:width="0.50cm" svg:height="0.35cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="5.00cm" svg:y="3.95cm" svg:width="0.50cm" svg:height="0.35cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="6.00cm" svg:y="3.95cm" svg:width="0.50cm" svg:height="0.35cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="7.00cm" svg:y="3.95cm" svg:width="0.50cm" svg:height="0.35cm"></draw:rect>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Pc" svg:x="2.60cm" svg:y="4.55cm" svg:width="5.60cm" svg:height="0.80cm"><text:p text:style-name="Pc">Accommodation</text:p></draw:rect>
+        <draw:rect draw:style-name="Block" draw:text-style-name="Pc" svg:x="5.00cm" svg:y="2.80cm" svg:width="3.20cm" svg:height="0.80cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="5.30cm" svg:y="3.05cm" svg:width="0.55cm" svg:height="0.30cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="6.20cm" svg:y="3.05cm" svg:width="0.55cm" svg:height="0.30cm"></draw:rect>
+        <draw:rect draw:style-name="Window" draw:text-style-name="Pc" svg:x="7.10cm" svg:y="3.05cm" svg:width="0.55cm" svg:height="0.30cm"></draw:rect>
+        <draw:rect draw:style-name="Funnel" draw:text-style-name="Pc" svg:x="3.20cm" svg:y="2.50cm" svg:width="1.20cm" svg:height="1.10cm"></draw:rect>
+        <draw:rect draw:style-name="FunnelTop" draw:text-style-name="Pc" svg:x="3.20cm" svg:y="2.50cm" svg:width="1.20cm" svg:height="0.30cm"></draw:rect>
+        <draw:line draw:style-name="Mast" svg:x1="6.60cm" svg:y1="1.90cm" svg:x2="6.60cm" svg:y2="2.80cm"/>
+        <draw:line draw:style-name="Mast" svg:x1="6.20cm" svg:y1="2.15cm" svg:x2="7.00cm" svg:y2="2.15cm"/>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Pc" svg:x="24.40cm" svg:y="4.75cm" svg:width="0.90cm" svg:height="0.45cm"></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="8.40cm" svg:y="4.90cm" svg:width="0.80cm" svg:height="0.70cm"><text:p text:style-name="Ps8">LR</text:p></draw:rect>
+        <draw:line draw:style-name="Water" svg:x1="1.20cm" svg:y1="7.60cm" svg:x2="25.80cm" svg:y2="7.60cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pw" svg:x="26.00cm" svg:y="7.40cm" svg:width="2.40cm" svg:height="0.40cm"><text:p text:style-name="Pw">Waterline</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="2.40cm" svg:y="1.85cm" svg:width="2.40cm" svg:height="0.50cm"><text:p text:style-name="Ps">Funnel</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="7.10cm" svg:y="2.45cm" svg:width="2.60cm" svg:height="0.50cm"><text:p text:style-name="Ps">Wheelhouse</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="22.40cm" svg:y="4.15cm" svg:width="3.00cm" svg:height="0.50cm"><text:p text:style-name="Ps">Forecastle</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="7.80cm" svg:y="4.10cm" svg:width="2.00cm" svg:height="0.45cm"><text:p text:style-name="Ps">Liferaft</text:p></draw:rect>
+        <draw:line draw:style-name="Dim" svg:x1="2.00cm" svg:y1="9.45cm" svg:x2="27.40cm" svg:y2="9.45cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="2.00cm" svg:y1="9.25cm" svg:x2="2.00cm" svg:y2="9.65cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="27.40cm" svg:y1="9.25cm" svg:x2="27.40cm" svg:y2="9.65cm"/>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="9.00cm" svg:y="9.50cm" svg:width="11.40cm" svg:height="0.50cm"><text:p text:style-name="Ps">Length overall 89.95 m</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtR" draw:text-style-name="PcapR" svg:x="24.70cm" svg:y="10.30cm" svg:width="4.00cm" svg:height="0.50cm"><text:p text:style-name="PcapR">MAIN DECK PLAN</text:p></draw:rect>
+        <draw:polygon draw:style-name="Hull" svg:x="2.00cm" svg:y="11.20cm" svg:width="25.40cm" svg:height="4.20cm" svg:viewBox="0 0 2540 420" draw:points="0,0 2020,0 2540,210 2020,420 0,420"/>
+        <draw:line draw:style-name="Water" svg:x1="22.20cm" svg:y1="11.20cm" svg:x2="22.20cm" svg:y2="15.40cm"/>
+        <draw:rect draw:style-name="Block" draw:text-style-name="Pc" svg:x="2.60cm" svg:y="11.60cm" svg:width="5.60cm" svg:height="3.40cm"></draw:rect>
+        <draw:rect draw:style-name="HoldBox" draw:text-style-name="Ps" svg:x="5.00cm" svg:y="12.20cm" svg:width="3.00cm" svg:height="2.20cm"><text:p text:style-name="Ps">Wheelhouse</text:p></draw:rect>
+        <draw:ellipse draw:style-name="Funnel" svg:x="3.10cm" svg:y="12.95cm" svg:width="1.10cm" svg:height="1.10cm"/>
+        <draw:ellipse draw:style-name="FunnelTop" svg:x="3.45cm" svg:y="13.30cm" svg:width="0.40cm" svg:height="0.40cm"/>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="2.60cm" svg:y="11.75cm" svg:width="2.40cm" svg:height="0.50cm"><text:p text:style-name="Ps">Accommodation</text:p></draw:rect>
+        <draw:rect draw:style-name="Hatch" draw:text-style-name="Pc" svg:x="9.80cm" svg:y="12.00cm" svg:width="5.20cm" svg:height="2.60cm"></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="11.10cm" svg:y1="12.00cm" svg:x2="11.10cm" svg:y2="14.60cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="12.40cm" svg:y1="12.00cm" svg:x2="12.40cm" svg:y2="14.60cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="13.70cm" svg:y1="12.00cm" svg:x2="13.70cm" svg:y2="14.60cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="9.80cm" svg:y1="13.30cm" svg:x2="15.00cm" svg:y2="13.30cm"/>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="9.80cm" svg:y="14.65cm" svg:width="5.20cm" svg:height="0.55cm"><text:p text:style-name="Ps">Hold 2 – folding hatch covers</text:p></draw:rect>
+        <draw:rect draw:style-name="Hatch" draw:text-style-name="Pc" svg:x="16.00cm" svg:y="12.00cm" svg:width="5.20cm" svg:height="2.60cm"></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="17.30cm" svg:y1="12.00cm" svg:x2="17.30cm" svg:y2="14.60cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="18.60cm" svg:y1="12.00cm" svg:x2="18.60cm" svg:y2="14.60cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="19.90cm" svg:y1="12.00cm" svg:x2="19.90cm" svg:y2="14.60cm"/>
+        <draw:line draw:style-name="Fold" svg:x1="16.00cm" svg:y1="13.30cm" svg:x2="21.20cm" svg:y2="13.30cm"/>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="16.00cm" svg:y="14.65cm" svg:width="5.20cm" svg:height="0.55cm"><text:p text:style-name="Ps">Hold 1 – folding hatch covers</text:p></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="8.60cm" svg:y="11.35cm" svg:width="0.90cm" svg:height="0.50cm"><text:p text:style-name="Ps8">MW</text:p></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="8.60cm" svg:y="14.90cm" svg:width="0.90cm" svg:height="0.50cm"><text:p text:style-name="Ps8">MW</text:p></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="21.10cm" svg:y="11.35cm" svg:width="0.90cm" svg:height="0.50cm"><text:p text:style-name="Ps8">MW</text:p></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="21.10cm" svg:y="14.90cm" svg:width="0.90cm" svg:height="0.50cm"><text:p text:style-name="Ps8">MW</text:p></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="8.60cm" svg:y="12.10cm" svg:width="0.90cm" svg:height="0.70cm"><text:p text:style-name="Ps8">LR</text:p></draw:rect>
+        <draw:rect draw:style-name="Gear" draw:text-style-name="Ps8" svg:x="8.60cm" svg:y="14.10cm" svg:width="0.90cm" svg:height="0.70cm"><text:p text:style-name="Ps8">LR</text:p></draw:rect>
+        <draw:ellipse draw:style-name="Gear" svg:x="23.40cm" svg:y="12.85cm" svg:width="0.90cm" svg:height="0.90cm"/>
+        <draw:rect draw:style-name="TxtC" draw:text-style-name="Ps" svg:x="22.60cm" svg:y="13.80cm" svg:width="2.50cm" svg:height="0.45cm"><text:p text:style-name="Ps">Windlass</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="22.60cm" svg:y="12.30cm" svg:width="2.20cm" svg:height="0.45cm"><text:p text:style-name="Ps">Forecastle</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="1.00cm" svg:y="16.20cm" svg:width="27.00cm" svg:height="0.50cm"><text:p text:style-name="Ps">Key: LR = liferaft station; MW = mooring winch. Dashed boxes in the profile are the holds below deck. Hatch covers fold along the lines shown.</text:p></draw:rect>
+        <draw:rect draw:style-name="Frame" draw:text-style-name="Pc" svg:x="1.00cm" svg:y="17.00cm" svg:width="27.70cm" svg:height="3.40cm"></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pt2" svg:x="1.10cm" svg:y="17.05cm" svg:width="20.00cm" svg:height="1.15cm"><text:p text:style-name="Pt2">Saltmarsh Shipping Ltd – MV Curlew Bay – general arrangement – for the buyer’s inspection, October 2026</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtR" draw:text-style-name="Ps" svg:x="22.00cm" svg:y="17.05cm" svg:width="6.50cm" svg:height="1.15cm"><text:p text:style-name="Ps">Not to scale</text:p></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="1.00cm" svg:y1="18.25cm" svg:x2="28.70cm" svg:y2="18.25cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="1.10cm" svg:y="18.30cm" svg:width="5.34cm" svg:height="0.45cm"><text:p text:style-name="Ps">Built</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pv" svg:x="1.10cm" svg:y="18.70cm" svg:width="5.34cm" svg:height="0.60cm"><text:p text:style-name="Pv">2009</text:p></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="6.54cm" svg:y1="18.25cm" svg:x2="6.54cm" svg:y2="19.40cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="6.64cm" svg:y="18.30cm" svg:width="5.34cm" svg:height="0.45cm"><text:p text:style-name="Ps">Length overall</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pv" svg:x="6.64cm" svg:y="18.70cm" svg:width="5.34cm" svg:height="0.60cm"><text:p text:style-name="Pv">89.95 m</text:p></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="12.08cm" svg:y1="18.25cm" svg:x2="12.08cm" svg:y2="19.40cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="12.18cm" svg:y="18.30cm" svg:width="5.34cm" svg:height="0.45cm"><text:p text:style-name="Ps">Beam</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pv" svg:x="12.18cm" svg:y="18.70cm" svg:width="5.34cm" svg:height="0.60cm"><text:p text:style-name="Pv">13.20 m</text:p></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="17.62cm" svg:y1="18.25cm" svg:x2="17.62cm" svg:y2="19.40cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="17.72cm" svg:y="18.30cm" svg:width="5.34cm" svg:height="0.45cm"><text:p text:style-name="Ps">Deadweight</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pv" svg:x="17.72cm" svg:y="18.70cm" svg:width="5.34cm" svg:height="0.60cm"><text:p text:style-name="Pv">4,100 tonnes</text:p></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="23.16cm" svg:y1="18.25cm" svg:x2="23.16cm" svg:y2="19.40cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="23.26cm" svg:y="18.30cm" svg:width="5.34cm" svg:height="0.45cm"><text:p text:style-name="Ps">Cargo gear</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Pv" svg:x="23.26cm" svg:y="18.70cm" svg:width="5.34cm" svg:height="0.60cm"><text:p text:style-name="Pv">None (gearless)</text:p></draw:rect>
+        <draw:line draw:style-name="Fold" svg:x1="1.00cm" svg:y1="19.40cm" svg:x2="28.70cm" svg:y2="19.40cm"/>
+        <draw:rect draw:style-name="TxtL" draw:text-style-name="Ps" svg:x="1.10cm" svg:y="19.50cm" svg:width="17.00cm" svg:height="0.80cm"><text:p text:style-name="Ps">Prepared by the operations team, Saltmarsh Shipping Ltd, Saltmarsh House, 2 Wharf Road, Eastwick EW1 3SB</text:p></draw:rect>
+        <draw:rect draw:style-name="TxtR" draw:text-style-name="Ps" svg:x="18.20cm" svg:y="19.50cm" svg:width="10.40cm" svg:height="0.80cm"><text:p text:style-name="Ps">Drawing SS/CB/GA/01  –  issue A  –  5 October 2026</text:p></draw:rect>
+      </draw:page>
+    </office:drawing>
+  </office:body>
+</office:document>

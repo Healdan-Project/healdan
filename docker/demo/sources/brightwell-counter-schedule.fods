@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The respondent's counter-schedule of loss for 1002.2 (Employment Tribunal, Mr K Stott), dated 19 October 2026.
+
+  Every result is a real formula, and each formula cell also carries the value it works out to (office:value),
+  which LibreOffice shows until it recalculates. If a figure changes, change the cached value beside it.
+  The sums, for checking by hand:
+
+    claimant:    basic 7 x 540 = 3,780; lost earnings 11.5 x 440 = 5,060; continuing 52 x 60 = 3,120; statutory rights 500
+                 compensatory 5,060 + 3,120 + 500 = 8,680; no reductions; total 3,780 + 8,680 = 12,460
+    respondent:  basic 7 x 540 = 3,780; lost earnings 4.4 x 440 = 1,936; continuing 13 x 60 = 780; statutory rights 400
+                 compensatory 1,936 + 780 + 400 = 3,116; less 25% (779.00) = 2,337.00
+                 conduct 50%: basic 3,780 -> 1,890.00; compensatory 2,337.00 -> 1,168.50; total 3,058.50
+    difference:  12,460.00 - 3,058.50 = 9,401.50
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Jamie Clarke</meta:initial-creator>
+    <dc:creator>Jamie Clarke</dc:creator>
+    <dc:title>Counter-Schedule of Loss – Mr K Stott v Brightwell Bakeries Limited</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-10-19T10:05:00</meta:creation-date>
+    <dc:date>2026-10-19T16:40:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="16pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowNumIn" style:family="table-cell" style:parent-style-name="RowNum">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="Diff" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="DiffMoney" style:family="table-cell" style:parent-style-name="Diff" style:data-style-name="NGBP"/>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="coA" style:family="table-column"><style:table-column-properties style:column-width="5.9cm"/></style:style>
+    <style:style style:name="coN" style:family="table-column"><style:table-column-properties style:column-width="1.3cm"/></style:style>
+    <style:style style:name="coM" style:family="table-column"><style:table-column-properties style:column-width="1.9cm"/></style:style>
+    <style:style style:name="coD" style:family="table-column"><style:table-column-properties style:column-width="2.3cm"/></style:style>
+    <style:style style:name="coE" style:family="table-column"><style:table-column-properties style:column-width="0.25cm"/></style:style>
+    <style:style style:name="coH" style:family="table-column"><style:table-column-properties style:column-width="2.5cm"/></style:style>
+    <style:style style:name="rowTitle" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowStd" style:family="table-row"><style:table-row-properties style:row-height="0.58cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="row2" style:family="table-row"><style:table-row-properties style:row-height="1.0cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowDiff" style:family="table-row"><style:table-row-properties style:row-height="0.75cm" style:use-optimal-row-height="false"/></style:style>
+    <style:style style:name="rowNote3" style:family="table-row"><style:table-row-properties style:row-height="1.25cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:print-orientation="portrait"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Counter-Schedule">
+        <table:table-column table:style-name="coA"/>
+        <table:table-column table:style-name="coN"/>
+        <table:table-column table:style-name="coM"/>
+        <table:table-column table:style-name="coD"/>
+        <table:table-column table:style-name="coE"/>
+        <table:table-column table:style-name="coN"/>
+        <table:table-column table:style-name="coM"/>
+        <table:table-column table:style-name="coH"/>
+        <table:table-row table:style-name="rowTitle"><table:table-cell table:style-name="Title" table:number-columns-spanned="8" office:value-type="string"><text:p>Mr K Stott v Brightwell Bakeries Limited</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="8" office:value-type="string"><text:p>Respondent’s counter-schedule of loss</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rowNote3"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>Employment Tribunal case no. 9900417/2026. Prepared by Jamie Clarke, Ashcombe Reeve LLP (ref TR/1002.2/JC), 19 October 2026. The claimant’s figures are as he claims them. The respondent’s are what it would allow if the dismissal were found unfair; it says that it was fair.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="4" office:value-type="string"><text:p>The facts the figures rest on</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Gross weekly pay</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="540.0"><text:p>£540.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Net weekly pay</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="440.0"><text:p>£440.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Complete years’ service (3 April 2019 to 12 June 2026)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowNumIn" office:value-type="float" office:value="7.0"><text:p>7</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Net weekly pay in the new job from 1 September 2026</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="380.0"><text:p>£380.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Weekly loss in the new job (net pay less new pay)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D7]-[.D9]" office:value-type="currency" office:currency="GBP" office:value="60.0"><text:p>£60.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Default" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="4" office:value-type="string"><text:p>Claimant’s schedule</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="3"/><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Section" table:number-columns-spanned="3" office:value-type="string"><text:p>Respondent’s counter-schedule</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Head of loss</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>No.</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>At</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Amount</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>No.</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>At</text:p></table:table-cell><table:table-cell table:style-name="ColHeadRight" office:value-type="string"><text:p>Amount</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="row2"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Basic award: years of service × gross week’s pay</text:p></table:table-cell><table:table-cell table:style-name="RowNum" table:formula="of:=[.D8]" office:value-type="float" office:value="7.0"><text:p>7</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D6]" office:value-type="currency" office:currency="GBP" office:value="540.0"><text:p>£540.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B14]*[.C14]" office:value-type="currency" office:currency="GBP" office:value="3780.0"><text:p>£3,780.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="RowNum" table:formula="of:=[.D8]" office:value-type="float" office:value="7.0"><text:p>7</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D6]" office:value-type="currency" office:currency="GBP" office:value="540.0"><text:p>£540.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.F14]*[.G14]" office:value-type="currency" office:currency="GBP" office:value="3780.0"><text:p>£3,780.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="row2"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Lost earnings to 31 August 2026: weeks × net pay (note 1)</text:p></table:table-cell><table:table-cell table:style-name="RowNumIn" office:value-type="float" office:value="11.5"><text:p>11.5</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D7]" office:value-type="currency" office:currency="GBP" office:value="440.0"><text:p>£440.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.B15]*[.C15];2)" office:value-type="currency" office:currency="GBP" office:value="5060.0"><text:p>£5,060.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="RowNumIn" office:value-type="float" office:value="4.4"><text:p>4.4</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D7]" office:value-type="currency" office:currency="GBP" office:value="440.0"><text:p>£440.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.F15]*[.G15];2)" office:value-type="currency" office:currency="GBP" office:value="1936.0"><text:p>£1,936.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="row2"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Continuing loss from 1 September 2026: weeks × weekly loss (note 2)</text:p></table:table-cell><table:table-cell table:style-name="RowNumIn" office:value-type="float" office:value="52.0"><text:p>52</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D10]" office:value-type="currency" office:currency="GBP" office:value="60.0"><text:p>£60.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.B16]*[.C16];2)" office:value-type="currency" office:currency="GBP" office:value="3120.0"><text:p>£3,120.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="RowNumIn" office:value-type="float" office:value="13.0"><text:p>13</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D10]" office:value-type="currency" office:currency="GBP" office:value="60.0"><text:p>£60.00</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND([.F16]*[.G16];2)" office:value-type="currency" office:currency="GBP" office:value="780.0"><text:p>£780.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Loss of statutory rights</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="500.0"><text:p>£500.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="400.0"><text:p>£400.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Compensatory award before reductions</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.D15:.D17])" office:value-type="currency" office:currency="GBP" office:value="8680.0"><text:p>£8,680.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=SUM([.H15:.H17])" office:value-type="currency" office:currency="GBP" office:value="3116.0"><text:p>£3,116.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="row2"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Less: he would have been dismissed anyway (note 3)</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.0"><text:p>0%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=-ROUND([.D18]*[.C19];2)" office:value-type="currency" office:currency="GBP" office:value="0.0"><text:p>£0.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.25"><text:p>25%</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=-ROUND([.H18]*[.G19];2)" office:value-type="currency" office:currency="GBP" office:value="-779.0"><text:p>-£779.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Compensatory award, as reduced</text:p></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=[.D18]+[.D19]" office:value-type="currency" office:currency="GBP" office:value="8680.0"><text:p>£8,680.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="Sub"><text:p/></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=[.H18]+[.H19]" office:value-type="currency" office:currency="GBP" office:value="2337.0"><text:p>£2,337.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="row2"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Reduction for his own conduct, taken off both awards (note 3)</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.0"><text:p>0%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.5"><text:p>50%</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Basic award after conduct</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D14]-ROUND([.D14]*[.C21];2)" office:value-type="currency" office:currency="GBP" office:value="3780.0"><text:p>£3,780.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.H14]-ROUND([.H14]*[.G21];2)" office:value-type="currency" office:currency="GBP" office:value="1890.0"><text:p>£1,890.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Compensatory award after conduct</text:p></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.D20]-ROUND([.D20]*[.C21];2)" office:value-type="currency" office:currency="GBP" office:value="8680.0"><text:p>£8,680.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="Row"><text:p/></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.H20]-ROUND([.H20]*[.G21];2)" office:value-type="currency" office:currency="GBP" office:value="1168.5"><text:p>£1,168.50</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rowStd"><table:table-cell table:style-name="Total" office:value-type="string"><text:p>Total</text:p></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.D22]+[.D23]" office:value-type="currency" office:currency="GBP" office:value="12460.0"><text:p>£12,460.00</text:p></table:table-cell><table:table-cell table:style-name="Default"><text:p/></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="Total"><text:p/></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.H22]+[.H23]" office:value-type="currency" office:currency="GBP" office:value="3058.5"><text:p>£3,058.50</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row table:style-name="rowDiff"><table:table-cell table:style-name="Diff" table:number-columns-spanned="7" office:value-type="string"><text:p>Difference between the two schedules (claimant’s total less respondent’s total)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/><table:table-cell table:style-name="DiffMoney" table:formula="of:=[.D24]-[.H24]" office:value-type="currency" office:currency="GBP" office:value="9401.5"><text:p>£9,401.50</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="8"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="8" office:value-type="string"><text:p>Notes</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rowNote3"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>1.  Mr Stott was dismissed on 12 June 2026 and was paid seven weeks’ pay in lieu of notice, which took him to 31 July 2026. The respondent counts lost earnings only for August: 4.4 weeks. The claimant counts 11.5 weeks from 12 June.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rowNote3"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>2.  Mr Stott started a new job on 1 September 2026 at £380 net a week, which is £60 a week less than the £440 he earned with the respondent. The respondent allows 13 weeks’ continuing loss; the claimant claims 52.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rowNote3"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="8" office:value-type="string"><text:p>3.  The respondent takes 25% off the compensatory award because he would have been dismissed anyway, and then 50% off both awards for his own conduct. The claimant allows no reduction. Figures are before interest, and are not an admission that the dismissal was unfair.</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="7"/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>
