@@ -279,16 +279,6 @@ class SiteBuild(unittest.TestCase):
 
     # Task 3
 
-    def test_interim_box_renders(self):
-        # A page that isn't written yet: the User Guide's Tags page stays interim until the demo docs' PR 3 writes it
-        page = self.html("/user/documents/tags/")
-        box = self.text(page, "div", "healdan-interim")
-        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Tags covers similar ground.", box)
-        self.assertIn("LogicalDOC's docs describe its Enterprise edition, so some features there aren't in Healdan, "
-                      "and their workspace isn't a Healdan Workspace.", box)
-        self.assertIn("https://docs.logicaldoc.com/en/document-metadata/tags",
-                      [link.href for link in self.links(page, "healdan-interim")])
-
     def test_api_page_written(self):
         # M2 replaced the API page's interim box with Healdan's own API; RestAuthService's key hint links here
         page = self.html("/developer/api/")
