@@ -52,6 +52,7 @@ import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.navigation.MyMatters;
 import com.logicaldoc.healdan.seed.demo.DemoClock;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.spring.Context;
 
 public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
@@ -168,6 +169,46 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 		// Nothing was built beside it
 		assertNull(ClientDAO.get().findByNumber(1001));
 		assertNull(UserDAO.get().findByUsername("pnair"));
+	}
+
+	/**
+	 * Demo spec §5.3: a user besides CE's admin and _system means the stack has been used. A real install with
+	 * users, Stores and clients but no documents yet must not get the demo's users, whose password is published
+	 */
+	@Test
+	public void testRefusesARepositoryWithUsers() throws Exception {
+		// A fresh stack has only these two, so the guard can leave them out
+		assertEquals(List.of("_system", "admin"),
+				jdbc().queryForList("select ld_username from ld_user order by ld_username", String.class));
+		new HealdanFixtures().user("realuser");
+
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> run(seed(TEST_DIR)));
+		assertTrue(e.getMessage(), e.getMessage().contains("down -v"));
+		assertTrue(e.getMessage(), e.getMessage().contains("1 user"));
+		// Nothing was built beside them
+		assertNull(ClientDAO.get().findByNumber(1001));
+		assertNull(UserDAO.get().findByUsername("pnair"));
+		assertNull(GroupDAO.get().findByName("Partners", Tenant.DEFAULT_ID));
+	}
+
+	/**
+	 * A failure partway through the firm leaves its first users behind, and the next start must stop at the
+	 * guard, not at a constraint error from making them again
+	 */
+	@Test
+	public void testRefusesAFirmThatFailedPartway() throws Exception {
+		Path dir = tempDir.toPath().resolve("partway");
+		Files.createDirectories(dir);
+		Files.writeString(dir.resolve("manifest.json"), """
+				{"users": [{"username": "first", "firstName": "F", "name": "One", "email": "f@demo.example"},
+				{"username": "second", "firstName": "S", "name": "Two", "email": "s@demo.example",
+				"groups": ["Nobody"]}]}
+				""");
+		assertThrows(Exception.class, () -> run(seed(dir.toString())));
+		assertNotNull(UserDAO.get().findByUsername("first"));
+
+		IllegalStateException e = assertThrows(IllegalStateException.class, () -> run(seed(dir.toString())));
+		assertTrue(e.getMessage(), e.getMessage().contains("down -v"));
 	}
 
 	@Test
@@ -385,6 +426,11 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 		// Indexed inside their actions, so the background indexer has nothing left to do and re-date them
 		assertEquals(0, count("select count(*) from ld_document where ld_deleted = 0 and ld_indexed <> ?",
 				IndexingStatus.INDEXED.ordinal()));
+
+		// Doc #s follow the order of filing (demo spec section 5.4)
+		List<Long> numbers = jdbc().queryForList("select ld_customid from ld_document order by ld_creation, ld_id",
+				String.class).stream().map(Long::valueOf).toList();
+		assertEquals(numbers.stream().sorted().toList(), numbers);
 
 		// Nothing is dated today. Dates are read through JDBC, not the entities, because in the tests Hibernate
 		// reads them in another zone than JDBC writes them

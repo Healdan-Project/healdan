@@ -164,13 +164,19 @@ def main():
         for output in jpgs:
             stem = Path(output).stem
             docker(options.image, [(out, "/out")], "convert", [f"/out/{stem}.png", "-quality", "85", f"/out/{output}"])
-        for output in outputs:
+        # soffice can exit 0 without writing a file, so look for each output rather than trusting its exit status.
+        # Nothing is copied until every one is there, so a failed build leaves the committed files as they were.
+        converted = [o for o in outputs if source_for(o).suffix != ".eml"]
+        missing = [o for o in converted if not (out / o).exists()]
+        if missing:
+            sys.exit("LibreOffice or ImageMagick wrote nothing for " + ", ".join(missing)
+                     + f" ({len(missing)} of {len(converted)}). Nothing was copied to {FILES.name}/.")
+        for output in converted:
             source = source_for(output)
-            if source.suffix == ".html" and Path(output).suffix.lower() in (".docx", ".odt") and (out / output).exists():
+            if source.suffix == ".html" and Path(output).suffix.lower() in (".docx", ".odt"):
                 refuse_stray_comments(source, out / output)
-        for output in outputs:
-            if (out / output).exists():
-                shutil.copyfile(out / output, FILES / output)
+        for output in converted:
+            shutil.copyfile(out / output, FILES / output)
     for source, output in emails:
         build_email(source, output)
     print(f"Built {len(outputs)} files in {FILES.relative_to(HERE.parent.parent)}")

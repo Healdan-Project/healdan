@@ -102,11 +102,19 @@ public final class DemoFirm {
 
 	/**
 	 * @param path a folder inside the matter's workspace, such as
-	 *        {@code Correspondence/Superseded}
+	 *        {@code Correspondence/Superseded}. A leading, trailing or doubled
+	 *        slash is refused: {@code Correspondence/} would name the
+	 *        top-level folder, which the timeline's check for a top-level
+	 *        folder wouldn't take for one.
 	 */
 	public Folder folder(String ref, String path) throws PersistenceException {
 		Folder folder = workspace(ref);
-		for (String name : path.split("/")) {
+		String[] names = path.split("/", -1);
+		for (String name : names)
+			if (name.isBlank())
+				throw new IllegalArgumentException(
+						"Matter %s: the folder path '%s' has an empty part".formatted(ref, path));
+		for (String name : names) {
 			List<Folder> found = FolderDAO.get().findByName(folder, name, Tenant.DEFAULT_ID, true);
 			if (found.isEmpty())
 				throw new IllegalArgumentException("Matter %s has no folder %s".formatted(ref, path));
@@ -251,8 +259,9 @@ public final class DemoFirm {
 			current.addAccessControlEntry(ace);
 		}
 		if (owner != null) {
+			// With its groups: without them CE logs that the user has lost association with his group
 			FolderAccessControlEntry ace = new FolderAccessControlEntry(
-					UserDAO.get().findById(owner.getId()).getUserGroup().getId());
+					UserDAO.get().findById(owner.getId(), true).getUserGroup().getId());
 			ace.grantPermissions(Permission.all());
 			current.addAccessControlEntry(ace);
 		}

@@ -154,6 +154,38 @@ public class DemoTimelineTest extends AbstractHealdanTestCase {
 		assertTrue(e.getMessage(), e.getMessage().contains("workspace"));
 	}
 
+	/**
+	 * {@code Correspondence/} names the top-level folder, but a check on whether the path has a slash takes it for
+	 * a deeper one, so a non-admin would delete a top-level folder
+	 */
+	@Test
+	public void testAFolderPathWithAnEmptyPartIsRefused() throws Exception {
+		for (String path : List.of("Correspondence/", "/Correspondence", "Correspondence//Drafts")) {
+			IllegalArgumentException e = assertThrows(path, IllegalArgumentException.class,
+					() -> firm.folder("1001.1", path));
+			assertTrue(e.getMessage(), e.getMessage().contains("empty"));
+		}
+		Exception e = assertThrows(Exception.class, () -> play(deleteFolder("hashcombe", "Correspondence/")));
+		assertTrue(e.getMessage(), e.getMessage().contains("empty"));
+		// It's still there
+		assertTrue(firm.folder("1001.1", "Correspondence").getId() > 0);
+	}
+
+	/** The error says which step, so a long manifest's mistake can be found */
+	@Test
+	public void testAStepWithNoPastDayOrABadTimeNamesItself() {
+		Step noDay = new Step(0, null, "hashcombe", "file", "k", "1001.1", "Correspondence", "letter.txt", null, null,
+				null, null, null, null, null, null, null, false, null, null, null, null);
+		Exception e = assertThrows(Exception.class, () -> play(noDay));
+		assertTrue(e.getMessage(), e.getMessage().contains("Demo step 'file' by hashcombe"));
+
+		Step badTime = new Step(-1, "9am", "hashcombe", "file", "k", "1001.1", "Correspondence", "letter.txt", null,
+				null, null, null, null, null, null, null, null, false, null, null, null, null);
+		e = assertThrows(Exception.class, () -> play(badTime));
+		assertTrue(e.getMessage(), e.getMessage().contains("Demo step 'file' by hashcombe"));
+		assertTrue(e.getMessage(), e.getMessage().contains("9am"));
+	}
+
 	@Test
 	public void testMovingADocumentToAMattersTopLevelIsRefusedByHealdan() {
 		Exception e = assertThrows(Exception.class, () -> play(

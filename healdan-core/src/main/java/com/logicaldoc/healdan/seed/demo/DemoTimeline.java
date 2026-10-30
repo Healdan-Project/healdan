@@ -316,14 +316,15 @@ public final class DemoTimeline {
 		List<Step> ordered = new ArrayList<>(timeline);
 		ordered.sort(Comparator.comparingInt(Step::day).thenComparing(s -> s.time() == null ? "09:00" : s.time()));
 		for (Step step : ordered) {
-			Date when = clock.at(step.day(), step.time());
 			try {
+				// Inside the try, so a day that isn't in the past or a time that isn't HH:mm names its step
+				Date when = clock.at(step.day(), step.time());
 				perform(step, when);
+				backdater.stamp(when);
 			} catch (Exception e) {
 				throw new IllegalStateException("Demo step '%s' by %s on day %d failed: %s".formatted(step.action(),
 						step.as(), step.day(), e.getMessage()), e);
 			}
-			backdater.stamp(when);
 		}
 	}
 

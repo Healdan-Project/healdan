@@ -30,8 +30,9 @@ import com.logicaldoc.util.spring.Context;
  * overlay sets all three.
  * <p>
  * Without the flag the step does nothing and writes no marker. It refuses a
- * repository that holds any document, so it never mixes invented data into
- * real data (demo spec §5.3).
+ * repository that holds any document, or any user besides CE's own
+ * {@code admin} and {@code _system}, so it never mixes invented data into real
+ * data (demo spec §5.3).
  */
 @Component
 public class DemoFixtureSeed implements SeedStep {
@@ -69,15 +70,15 @@ public class DemoFixtureSeed implements SeedStep {
 	/**
 	 * Not one transaction: CE saves versions in the background, which a
 	 * transaction held open here would block. A failure leaves a partial
-	 * firm, and the next start's guard asks for a fresh stack (demo spec
-	 * §5.3).
+	 * firm, whose users the next start's guard finds, so it asks for a fresh
+	 * stack instead of failing on the users it made before (demo spec §5.3).
 	 */
 	@Override
 	public void run() throws Exception {
 		Path dir = Path.of(required(DIR_ENV));
 		String password = required(PASSWORD_ENV);
 		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
-		refuseARepositoryWithDocuments(jdbc);
+		refuseARepositoryInUse(jdbc);
 
 		Path manifestFile = dir.resolve("manifest.json");
 		if (!Files.isRegularFile(manifestFile))
@@ -100,11 +101,24 @@ public class DemoFixtureSeed implements SeedStep {
 		return value;
 	}
 
-	/** Plan call 4: the filing rule keeps documents out of the Templates Store, so any document is real data */
-	private static void refuseARepositoryWithDocuments(JdbcTemplate jdbc) {
+	/**
+	 * Plan call 4: the filing rule keeps documents out of the Templates Store,
+	 * so any document is real data. So is any user besides CE's own (plan
+	 * Decision Log, 2026-10-30): a real install that has people, Stores and
+	 * clients but no documents yet would otherwise get the demo's users, whose
+	 * password is published in the repository, and a firm that failed partway
+	 * would fail again on the users it made.
+	 */
+	private static void refuseARepositoryInUse(JdbcTemplate jdbc) {
 		Long documents = jdbc.queryForObject("select count(*) from ld_document", Long.class);
 		if (documents != null && documents > 0)
 			throw new IllegalStateException(("The demo fixture runs only on a fresh stack, and this one holds %d "
 					+ "documents. Unset %s, or start over with docker compose down -v.").formatted(documents, ENV));
+		Long users = jdbc.queryForObject("select count(*) from ld_user where ld_username not in ('admin', '_system')",
+				Long.class);
+		if (users != null && users > 0)
+			throw new IllegalStateException(("The demo fixture runs only on a fresh stack, and this one holds %d "
+					+ "%s besides admin. Unset %s, or start over with docker compose down -v.").formatted(users,
+							users == 1 ? "user" : "users", ENV));
 	}
 }
