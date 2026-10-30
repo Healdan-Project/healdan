@@ -34,6 +34,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.menu.Menu;
 import com.logicaldoc.core.sequence.SequenceDAO;
 import com.logicaldoc.core.store.Store;
+import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.InvalidSessionServerException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIEmailSettings;
@@ -90,6 +91,16 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     // Healdan: Settings > Outgoing email
     private static final long OUTGOING_EMAIL_MENU = 103L;
+
+    // Healdan: Settings > Proxy, whose Test button calls testProxy()
+    private static final long PROXY_MENU = 99L;
+
+    // Healdan: Settings > Stores, whose Test button calls testStore()
+    private static final long STORES_MENU = 105L;
+
+    // Healdan: Impex > Format converters, whose Extension aliases dialog calls
+    // saveExtensionAliases()
+    private static final long FORMAT_CONVERTERS_MENU = 1750L;
 
     private static final long serialVersionUID = 1L;
 
@@ -451,7 +462,7 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public boolean testStore(int id) throws ServerException {
-        validateSession();
+        checkMenu(STORES_MENU);
         try {
             Store store = Store.get().newStore(id);
             log.info("Testing store {}", store);
@@ -466,6 +477,11 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     public void saveRegistration(String name, String email, String organization, String website)
             throws ServerException {
         Session session = validateSession();
+        // Healdan: the Registration item that called it showed only to the
+        // admin group, and no menu covered it
+        if (!session.getUser().isAdmin())
+            throw new AccessDeniedException(
+                    "User %s cannot save the registration".formatted(session.getUsername()));
 
         try {
             ContextProperties conf = Context.get().getConfig();
@@ -500,7 +516,7 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public void saveExtensionAliases(String extension, String aliases) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(FORMAT_CONVERTERS_MENU);
 
         try {
             ContextProperties config = Context.get().getConfig();
@@ -577,7 +593,7 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public Boolean testProxy(String host, int port, String username, String password) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(PROXY_MENU);
         // Healdan edit: Healdan's docs site, never LogicalDOC's licence server
         HttpGet get = new HttpGet("https://docs.healdan.com");
         try (CloseableHttpClient httpClient = HttpUtil.getValidatingClient(40, host, port, username, password);) {
