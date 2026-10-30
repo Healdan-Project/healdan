@@ -28,6 +28,7 @@ import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentAccessControlEntry;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentLink;
 import com.logicaldoc.core.document.DocumentLinkDAO;
@@ -59,7 +60,9 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * its day, through the services the web page uses. Before each action it
  * checks the permission the web page would ask for, since inside a seed
  * Healdan counts everyone as an admin and CE's create checks no permission
- * (plan call 1). After each, {@link Backdater} dates what it wrote.
+ * (plan call 1). Each history row gets the event the web page's RPC logs,
+ * set here where CE's call leaves it to the caller. After each action,
+ * {@link Backdater} dates what it wrote.
  * <p>
  * The actions, with the fields each needs (any other field is ignored), the
  * permission it checks, and what it calls. A refusal reads
@@ -88,21 +91,22 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * <td>{@code doc}, {@code file}</td>
  * <td>{@code release}</td>
  * <td>WRITE on the document</td>
- * <td>checks it out if it isn't, {@code checkin}, then indexes</td>
+ * <td>checks it out if it isn't (logged as CHECKEDOUT), {@code checkin}, then
+ * indexes</td>
  * </tr>
  * <tr>
  * <td>{@code checkout}</td>
  * <td>{@code doc}</td>
  * <td></td>
  * <td>WRITE</td>
- * <td>{@code DocumentManager.checkout}</td>
+ * <td>{@code DocumentManager.checkout}, logged as CHECKEDOUT</td>
  * </tr>
  * <tr>
  * <td>{@code lock}</td>
  * <td>{@code doc}</td>
  * <td></td>
  * <td>WRITE</td>
- * <td>{@code DocumentManager.lock(…, LOCKED, …)}</td>
+ * <td>{@code DocumentManager.lock(…, LOCKED, …)}, logged as LOCKED</td>
  * </tr>
  * <tr>
  * <td>{@code password}</td>
@@ -123,7 +127,7 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * <td>{@code doc}, {@code tags}</td>
  * <td></td>
  * <td>WRITE</td>
- * <td>{@code addTag}, {@code DocumentDAO.store}</td>
+ * <td>{@code addTag}, {@code DocumentDAO.store}, logged as CHANGED</td>
  * </tr>
  * <tr>
  * <td>{@code link}</td>
@@ -151,7 +155,7 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * <td>{@code doc}</td>
  * <td></td>
  * <td>DELETE</td>
- * <td>{@code DocumentDAO.delete}</td>
+ * <td>{@code DocumentDAO.delete}, logged as DELETED</td>
  * </tr>
  * <tr>
  * <td>{@code deleteFolder}</td>
@@ -198,7 +202,7 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  * <td></td>
  * <td>SECURITY</td>
  * <td>adds READ, PREVIEW and DOWNLOAD for that user's personal group to the
- * document's own ACL</td>
+ * document's own ACL, logged as PERMISSION</td>
  * </tr>
  * </table>
  * <p>
@@ -303,12 +307,12 @@ public final class DemoTimeline {
 		case "checkin" -> checkin(step, actor, when);
 		case "checkout" -> {
 			Document doc = need(actor, Permission.WRITE, step.doc());
-			DocumentManager.get().checkout(doc.getId(), history(actor, when));
+			DocumentManager.get().checkout(doc.getId(), history(actor, when, DocumentEvent.CHECKEDOUT));
 			backdater.touch(doc.getId(), when, false);
 		}
 		case "lock" -> {
 			Document doc = need(actor, Permission.WRITE, step.doc());
-			DocumentManager.get().lock(doc.getId(), DocumentStatus.LOCKED, history(actor, when));
+			DocumentManager.get().lock(doc.getId(), DocumentStatus.LOCKED, history(actor, when, DocumentEvent.LOCKED));
 			backdater.touch(doc.getId(), when, false);
 		}
 		case "password" -> {
@@ -323,7 +327,8 @@ public final class DemoTimeline {
 		case "folder" -> folder(step, actor, when);
 		case "delete" -> {
 			Document doc = need(actor, Permission.DELETE, step.doc());
-			DocumentDAO.get().delete(doc.getId(), history(actor, when));
+			// The event the web page's delete logs; CE's delete leaves it to the caller
+			DocumentDAO.get().delete(doc.getId(), history(actor, when, DocumentEvent.DELETED));
 			// The Recycle Bin lists a deleted document by its last change
 			backdater.touch(doc.getId(), when, false);
 		}
@@ -438,7 +443,7 @@ public final class DemoTimeline {
 		Document doc = need(actor, Permission.WRITE, step.doc());
 		DocumentManager manager = DocumentManager.get();
 		if (doc.getStatus() != DocumentStatus.CHECKEDOUT)
-			manager.checkout(doc.getId(), history(actor, when));
+			manager.checkout(doc.getId(), history(actor, when, DocumentEvent.CHECKEDOUT));
 		File content = content(step.file(), when);
 		try (InputStream in = new FileInputStream(content)) {
 			manager.checkin(doc.getId(), in, doc.getFileName(), step.release(), null, history(actor, when))
@@ -473,7 +478,8 @@ public final class DemoTimeline {
 		// initialize returns the document with its collections loaded; the one it was given stays lazy
 		Document doc = dao.initialize(need(actor, Permission.WRITE, step.doc()));
 		step.tags().forEach(doc::addTag);
-		dao.store(doc, history(actor, when));
+		// A change, as the web page's save logs it, so Recent Matters counts it
+		dao.store(doc, history(actor, when, DocumentEvent.CHANGED));
 		reindexIfNeeded(doc.getId(), actor, when);
 		backdater.touch(doc.getId(), when, false);
 	}
@@ -562,7 +568,7 @@ public final class DemoTimeline {
 		DocumentAccessControlEntry ace = new DocumentAccessControlEntry(to.getUserGroup().getId());
 		ace.grantPermissions(Set.of(Permission.READ, Permission.PREVIEW, Permission.DOWNLOAD));
 		doc.addAccessControlEntry(ace);
-		DocumentDAO.get().store(doc, history(actor, when));
+		DocumentDAO.get().store(doc, history(actor, when, DocumentEvent.PERMISSION));
 		backdater.touch(doc.getId(), when, false);
 	}
 
@@ -618,10 +624,26 @@ public final class DemoTimeline {
 					.formatted(actor.getUsername(), permission, where));
 	}
 
+	/**
+	 * For a call that always sets its own event, as CE's create, checkin, move,
+	 * setPassword, createTicket, index and note store do
+	 */
 	private static DocumentHistory history(User actor, Date when) {
 		DocumentHistory history = new DocumentHistory();
 		history.setUser(actor);
 		history.setDate(when);
+		return history;
+	}
+
+	/**
+	 * For a call that leaves the event to its caller, with the one the web
+	 * page's RPC sets: without it the row shows a blank event in Document
+	 * History, and Recent Matters doesn't see it. CE's checkout and lock set
+	 * theirs only when it's null, and a new history's is empty, not null.
+	 */
+	private static DocumentHistory history(User actor, Date when, DocumentEvent event) {
+		DocumentHistory history = history(actor, when);
+		history.setEvent(event);
 		return history;
 	}
 

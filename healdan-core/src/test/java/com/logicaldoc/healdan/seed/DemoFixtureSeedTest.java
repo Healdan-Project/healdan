@@ -27,6 +27,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.document.IndexingStatus;
@@ -296,6 +297,40 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 				Timestamp.valueOf(TODAY.atStartOfDay()), Timestamp.valueOf(TODAY.atStartOfDay())));
 		assertEquals(clock.at(-5, "09:30").getTime(), jdbc().queryForObject(
 				"select ld_lastmodified from ld_folder where ld_name = 'Superseded'", Timestamp.class).getTime());
+	}
+
+	@Test
+	public void testLogsTheWebPagesEvents() throws Exception {
+		// CE's history starts with an empty event, and stores it so if nothing sets one
+		String blank = "select count(*) from %s where ld_event is null or ld_event = ''";
+		int documentRows = count(blank.formatted("ld_history"));
+		int folderRows = count(blank.formatted("ld_folder_history"));
+		run(seed(TEST_DIR));
+
+		// A row without an event would show blank in Document History
+		assertEquals(documentRows, count(blank.formatted("ld_history")));
+		assertEquals(folderRows, count(blank.formatted("ld_folder_history")));
+
+		DemoClock clock = new DemoClock(TODAY, ZoneId.systemDefault());
+		User pnair = UserDAO.get().findByUsername("pnair");
+		User hashcombe = UserDAO.get().findByUsername("hashcombe");
+		// The tag is a change, as the web page's save logs it, so Recent Matters counts it
+		assertEquals(clock.at(-7, null).getTime(),
+				eventDate(byName("Letter to Owners.txt"), DocumentEvent.CHANGED.toString(), pnair).getTime());
+		assertEquals(clock.at(-3, "09:30").getTime(),
+				eventDate(byName("Heads of Terms.txt"), DocumentEvent.PERMISSION.toString(), hashcombe).getTime());
+		// CE's checkout and lock set their events only on a null one, and a new history's is empty
+		assertEquals(clock.at(-4, null).getTime(),
+				eventDate(byName("Attendance Note.txt"), DocumentEvent.CHECKEDOUT.toString(), pnair).getTime());
+		assertEquals(clock.at(-3, null).getTime(),
+				eventDate(byName("Heads of Terms.txt"), DocumentEvent.LOCKED.toString(), hashcombe).getTime());
+		// A check-in of a document nobody has checked out checks it out first, as its user
+		assertEquals(clock.at(-8, null).getTime(),
+				eventDate(byName("Letter to Owners.txt"), DocumentEvent.CHECKEDOUT.toString(), hashcombe).getTime());
+		assertEquals(clock.at(-5, null).getTime(), jdbc().queryForObject(
+				"select h.ld_date from ld_history h join ld_document d on d.ld_id = h.ld_docid "
+						+ "where d.ld_filename = 'Old Draft.txt' and h.ld_event = ? and h.ld_userid = ?",
+				Timestamp.class, DocumentEvent.DELETED.toString(), pnair.getId()).getTime());
 	}
 
 	@Test
