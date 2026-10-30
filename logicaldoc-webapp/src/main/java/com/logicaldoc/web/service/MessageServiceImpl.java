@@ -42,6 +42,11 @@ public class MessageServiceImpl extends AbstractRemoteService implements Message
 
     private static final long serialVersionUID = 1L;
 
+    // Healdan: Settings > Outgoing email, whose Message templates tab edits the
+    // templates. Reads need only a session: any user's Send by email dialog
+    // lists the user templates.
+    private static final long OUTGOING_EMAIL_MENU = 103L;
+
     @Override
     public void delete(List<Long> ids) throws ServerException {
         validateSession();
@@ -201,7 +206,7 @@ public class MessageServiceImpl extends AbstractRemoteService implements Message
 
     @Override
     public void saveTemplates(List<GUIMessageTemplate> templates) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(OUTGOING_EMAIL_MENU);
 
         try {
 
@@ -238,7 +243,7 @@ public class MessageServiceImpl extends AbstractRemoteService implements Message
 
     @Override
     public void deleteTemplates(List<Long> ids) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(OUTGOING_EMAIL_MENU);
 
         try {
             MessageTemplateDAO dao = MessageTemplateDAO.get();
@@ -263,7 +268,7 @@ public class MessageServiceImpl extends AbstractRemoteService implements Message
 
     @Override
     public void deleteTemplates(String name) throws ServerException {
-        Session session = validateSession();
+        Session session = checkMenu(OUTGOING_EMAIL_MENU);
 
         try {
             MessageTemplateDAO dao = MessageTemplateDAO.get();
