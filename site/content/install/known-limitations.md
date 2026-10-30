@@ -32,5 +32,5 @@ weight: 10
 - **Dates west of UTC in the web page.** The helper treats a date property as a calendar date, stored as midnight
   UTC. West of UTC, as in the Americas, the web page shows such a date as the day before.
 - **A new document's check-out has no app.** For a document filed from LibreOffice and still open, another of the
-  person's computers warns that it's "checked out to you on MacBook", without "(LibreOffice)". Once it's opened again,
+  person's computers warns that it's "checked out to you on Office PC", without "(LibreOffice)". Once it's opened again,
   the warning names the app.

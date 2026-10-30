@@ -3,9 +3,6 @@ title: Editing and Versions
 weight: 4
 ---
 
-<!-- The picture of the Properties window is a render of the helper's real window, drawn offscreen with test data,
-not a screenshot. Replace it with a screenshot during the owner's acceptance (M3 plan, Task 21). -->
-
 While a Healdan document is open in LibreOffice, it's checked out to you, and the window is the helper's local copy
 of it. You edit and save as usual, and the helper sends each save to Healdan.
 
@@ -67,7 +64,7 @@ Choose where it goes, change what you need to, and save. Then:
 Choose **Healdan › Properties…**, or **Properties** on the Healdan toolbar, to see or change the document's
 properties without leaving LibreOffice. They're the properties of the Ext. Properties tab in the web page.
 
-![The Properties window for #1234: a header with the document's icon, Lease agreement.docx, and #1234 · v2.1, then Client / Matter 998.1 – Healdan Demo from the matter, with the client Healdan under it, Author and Typist, Class and Subclass from Drafts, Comments, and two more properties, with Cancel and Save](properties.png)
+![The Properties window for #32: a header with the document's icon, Subscription Agreement – Draft.docx, and #32 · v2.0, then Client / Matter 1003.1 – Series A Investment from the matter, with the client Kestrel Software Ltd under it, Author Helen Ashcombe, Typist Chris Doyle, Class Agreements, Subclass Draft, Comments and Legacy doc #, with Cancel and Save](properties.png)
 
 - **Client / Matter,** marked "from the matter", shows the matter, with its client's name under it. It can't be
   changed here.

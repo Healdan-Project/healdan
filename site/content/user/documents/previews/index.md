@@ -23,7 +23,7 @@ The layout is recognisably the document, but not always identical to Office's.
 
 A preview shows the markup a document still carries, so you can catch a draft that isn't clean before it goes out.
 
-![A Word document's preview: an inserted phrase underlined, a deleted one struck through, and a note icon after a commented sentence](markup.png)
+![A draft lease's preview: a deleted rent struck through beside the inserted one, underlined, a note icon after the commented clause, an inserted clause underlined, and a deleted phrase struck through before its replacement](markup.png)
 
 - **Tracked changes** show as redlines, even if the document was saved with markup hidden. This works for `docx`,
   `docm`, `dotx` and `dotm` files. Older formats show markup only if they were saved showing it.

@@ -3,7 +3,7 @@ title: Getting Around
 weight: 2
 ---
 
-![The Documents screen: the left pane's folder tree is open at a matter's Documents folder, the list shows three documents with their doc #s, and the details below show the selected document's properties](documents-screen.png)
+![The Documents screen: the left pane's folder tree is open at matter 1001.1's Correspondence folder, the list shows four documents with their doc #s, the details below show the selected letter's properties, and its preview is on the right](documents-screen.png)
 
 ## The Top Bar
 

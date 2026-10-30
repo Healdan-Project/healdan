@@ -87,7 +87,15 @@ what's left.
   page is about: `pnair` for most User Guide pages, `sokafor` for the Admin Guide. Never use real client data.
 - Light mode, with the browser at 1280 × 800, cropped to the part that matters. Save them as PNG beside the page,
   and give each one alt text.
-- Take them at a true 1280 × 800, with headless Chrome: the browser pane scales the page down.
+- Take them at a true 1280 × 800, with headless Chrome: the browser pane scales the page down. Start Chrome with
+  `TZ=Europe/London`, the demo stack's time zone, so the times it shows are the firm's, not your computer's.
+- The Healdan Helper's windows come from a [helper run from source](../desktop-clients/#running-the-helper-from-source),
+  started with `TZ=Europe/London` and signed in to the demo stack as `pnair`. For the pictures only, add the
+  `AvaloniaUI.DiagnosticsSupport` package and `this.AttachDeveloperTools(o => o.EnableDiscovery = true)` to a local
+  build, without committing them. Avalonia's Developer Tools (`avdt mcp`) then find each window, click and type in it,
+  and save it as a PNG. The channel's routes open the windows the menu bar doesn't (see
+  [The Channel](../desktop-clients/#the-channel)). A computer the pictures name is a neutral one, such as a device
+  signed in through the API as "Healdan Helper on Office PC".
 - A pull request that changes a screen updates the screenshots it makes wrong.
 
 ## Adding or Retiring a Manual
