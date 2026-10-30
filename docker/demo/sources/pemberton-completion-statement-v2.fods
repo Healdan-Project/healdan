@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The second completion statement for 1006.1 (the Pembertons' purchase of 14 Orchard Rise), dated 26 October 2026 (row 41 with
+  the changes of the day -3 snapshot). Every result is a real formula, and each formula cell also carries the value it works
+  out to (office:value), which LibreOffice shows until it recalculates. If a figure changes, change the cached value beside it.
+  The sums, for checking by hand:
+
+    deposit 10% of 385,000.00 = 38,500.00; balance 346,500.00; stamp duty land tax 5% of (385,000 - 300,000) = 4,250.00
+    VAT 20% of (1,450.00 + 40.00) = 298.00
+    needed 346,500.00 + 4,250.00 + 150.00 + 412.80 + 1,450.00 + 40.00 + 298.00 = 353,100.80
+    advance 300,000.00 - 999.00 = 299,001.00; due from the buyers 353,100.80 - 299,001.00 = 54,099.80
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Jamie Clarke</meta:initial-creator>
+    <dc:creator>Jamie Clarke</dc:creator>
+    <dc:title>Completion Statement (updated 26 October 2026)</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-10-19T14:30:00</meta:creation-date>
+    <dc:date>2026-10-26T14:45:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NInt">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDate">
+      <number:day/><number:text> </number:text><number:month number:textual="true"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="TitleWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowPad" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="ColHeadPad" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowInt" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NInt">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDate" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDate">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateIn" style:family="table-cell" style:parent-style-name="RowDate">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="HiRow" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff3d1"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="HiMoney" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NGBP"/>
+    <style:style style:name="HiPct" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="SubPct" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="TotalPct" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct"/>
+    <style:style style:name="Due" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="DueMoney" style:family="table-cell" style:parent-style-name="Due" style:data-style-name="NGBP">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="co0" style:family="table-column"><style:table-column-properties style:column-width="11.9cm"/></style:style><style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="4.0cm"/></style:style>
+    <style:style style:name="rh1_45" style:family="table-row"><style:table-row-properties style:row-height="1.45cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_15" style:family="table-row"><style:table-row-properties style:row-height="1.15cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_8" style:family="table-row"><style:table-row-properties style:row-height="0.8cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_46" style:family="table-row"><style:table-row-properties style:row-height="1.46cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_04" style:family="table-row"><style:table-row-properties style:row-height="1.04cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="21cm" fo:page-height="29.7cm" style:print-orientation="portrait"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Completion statement">
+        <table:table-column table:style-name="co0"/><table:table-column table:style-name="co1"/>
+                <table:table-row table:style-name="rh1_45"><table:table-cell table:style-name="TitleWrap" table:number-columns-spanned="2" office:value-type="string"><text:p>Completion statement – Oliver and Grace Pemberton – purchase of 14 Orchard Rise</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="2" office:value-type="string"><text:p>14 Orchard Rise, Marlbridge WX4 3QT – completion on Friday 6 November 2026</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh1_15"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="2" office:value-type="string"><text:p>Prepared by Jamie Clarke for Helen Ashcombe, Ashcombe Reeve LLP (ref HA/1006.1/JC), 26 October 2026. The seller is Mrs Dorothy Lyle (solicitors Tasker &amp; Wynn). The lender is Eastwick and District Building Society. Blue figures are inputs; the rest are worked out.</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="2" office:value-type="string"><text:p>The figures this statement uses</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Purchase price</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="385000.0"><text:p>£385,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Deposit, as a percentage of the price</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.1"><text:p>10%</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>First-time buyers’ nil-rate band for stamp duty land tax</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="300000.0"><text:p>£300,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Stamp duty land tax rate on the price above that band</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.05"><text:p>5%</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>VAT rate</text:p></table:table-cell><table:table-cell table:style-name="RowPctIn" office:value-type="percentage" office:value="0.2"><text:p>20%</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="2" office:value-type="string"><text:p>What the buyers must find</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Purchase price</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=[.B6]" office:value-type="currency" office:currency="GBP" office:value="385000.0"><text:p>£385,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Less: deposit, paid on exchange on 23 October 2026</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=-ROUND([.B6]*[.B7];2)" office:value-type="currency" office:currency="GBP" office:value="-38500.0"><text:p>-£38,500.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Balance of the price</text:p></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=[.B13]+[.B14]" office:value-type="currency" office:currency="GBP" office:value="346500.0"><text:p>£346,500.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Plus: stamp duty land tax (first-time buyers’ relief)</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND(MAX([.B6]-[.B8];0)*[.B9];2)" office:value-type="currency" office:currency="GBP" office:value="4250.0"><text:p>£4,250.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Plus: registration fee</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="150.0"><text:p>£150.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Plus: search fees</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="412.8"><text:p>£412.80</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Plus: our fees</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="1450.0"><text:p>£1,450.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Plus: telegraphic transfer fee</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="40.0"><text:p>£40.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Plus: VAT on our fees and the transfer fee</text:p></table:table-cell><table:table-cell table:style-name="RowMoney" table:formula="of:=ROUND(([.B19]+[.B20])*[.B10];2)" office:value-type="currency" office:currency="GBP" office:value="298.0"><text:p>£298.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" office:value-type="string"><text:p>Total needed to complete</text:p></table:table-cell><table:table-cell table:style-name="TotalMoney" table:formula="of:=[.B15]+SUM([.B16:.B21])" office:value-type="currency" office:currency="GBP" office:value="353100.8"><text:p>£353,100.80</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Mortgage advance offered by Eastwick and District Building Society</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="300000.0"><text:p>£300,000.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" office:value-type="string"><text:p>Less: the lender’s product fee, taken from the advance</text:p></table:table-cell><table:table-cell table:style-name="RowMoneyIn" office:value-type="currency" office:currency="GBP" office:value="-999.0"><text:p>-£999.00</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Sub" office:value-type="string"><text:p>Mortgage advance we shall receive</text:p></table:table-cell><table:table-cell table:style-name="SubMoney" table:formula="of:=[.B23]+[.B24]" office:value-type="currency" office:currency="GBP" office:value="299001.0"><text:p>£299,001.00</text:p></table:table-cell></table:table-row>
+        <table:table-row table:style-name="rh0_8"><table:table-cell table:style-name="Due" office:value-type="string"><text:p>Due from the buyers by Wednesday 4 November 2026</text:p></table:table-cell><table:table-cell table:style-name="DueMoney" table:formula="of:=[.B22]-[.B25]" office:value-type="currency" office:currency="GBP" office:value="54099.8"><text:p>£54,099.80</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="2" office:value-type="string"><text:p>Notes</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh1_46"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="2" office:value-type="string"><text:p>1.  Contracts were exchanged on Friday 23 October 2026 and the deposit of £38,500.00 has been paid. The balance above is due from you in cleared funds by Wednesday 4 November 2026, so that completion can take place on Friday 6 November.</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh1_04"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="2" office:value-type="string"><text:p>2.  Stamp duty land tax is £4,250.00 because you are first-time buyers: nothing is due on the first £300,000 and 5% is due on the other £85,000.</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh1_04"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="2" office:value-type="string"><text:p>3.  Changes since 20 October: the lender’s product fee of £999.00 is now taken from the advance, and a telegraphic transfer fee of £40.00 is added to our charges, with VAT.</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+        <table:table-row table:style-name="rh1_04"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="2" office:value-type="string"><text:p>4.  These figures are not final. Any apportionments and the lender’s last figures are still to come, and we shall send a final statement before completion.</text:p></table:table-cell><table:covered-table-cell/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>
