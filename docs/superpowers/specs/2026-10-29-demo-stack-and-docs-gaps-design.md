@@ -333,8 +333,13 @@ The other way, a seed step renaming both to a name without a space, was bigger:
 
 The hook changes no data, and nothing anyone sees except that Save works.
 
-**Upstream edits:** a line and an import in each of `TemplatePropertiesPanel.prepareTemplateForm`, after CE sets the name field's validator, and `AttributeSetPropertiesPanel.addMetadata`, after CE makes the name field. Each is marked `Healdan:`.
+**The demo stack then showed a second fault, in the template alone** (changed in the build). `TemplatePropertiesPanel.validate` reads each attribute's set with `Long.parseLong(rec.getAttributeAsString(SET_ID))`, which throws for an attribute that has no set, so the template's Save did nothing, without a message. LogicalDOC's own screens only add attributes from a set, but the `profile` step put twelve of the profile's attributes, all but Class and Subclass, on the template directly. The fix reads the set with `rec.getAttributeAsLong(SET_ID)`, as the panel's `addAttributes` already does; the server stores an attribute without a set as it is. Putting the twelve in the attribute set instead would have changed what the set's **Apply … to templates** buttons and options do to them, and what the Property Templates page says the set holds.
 
-**Tests:** `HealdanNamesTest`, `logicaldoc-gui`'s first test, checks the rule the hook applies: the current name passes even with a space, a new one only if LogicalDOC's rule passes it, and an empty one never. It's in the build workflow's `UPSTREAM_TESTS`, and the shards' test step skips the GWT compile (`-Dgwt.skipCompilation=true`), which `logicaldoc-gui`'s compile phase would otherwise run. On a demo stack, an admin added a property to the attribute set and to the template, and a value set on a folder showed on a document's Ext. Properties below it.
+**Upstream edits**, each marked `Healdan:`:
 
-**Docs:** Property Templates' "What Can't Be Changed Here" becomes "Adding a Property", with the steps, and keeps the warning not to rename or delete the profile. The User Guide's Properties page links to it.
+- a line and an import in `TemplatePropertiesPanel.prepareTemplateForm`, after CE sets the name field's validator, and in `AttributeSetPropertiesPanel.addMetadata`, after CE makes the name field: the hook;
+- a changed line in `TemplatePropertiesPanel.validate`: the set read as a `Long`, which may be null.
+
+**Tests:** `HealdanNamesTest`, `logicaldoc-gui`'s first test, checks the rule the hook applies: the current name passes even with a space, a new one only if LogicalDOC's rule passes it, and an empty one never. It's in the build workflow's `UPSTREAM_TESTS`, and the shards' test step skips the GWT compile (`-Dgwt.skipCompilation=true`), which `logicaldoc-gui`'s compile phase would otherwise run. The `validate` fix has no unit test, since the panel needs a browser. On a demo stack, an admin added a property to the attribute set and to the template, and a value set on a folder showed on a document's Ext. Properties below it.
+
+**Docs:** Property Templates' "What Can't Be Changed Here" becomes "Adding a Property", with the steps, and keeps the warning not to rename or delete the profile. The User Guide's Properties page already said "Your administrator can add more properties", which is now true, so it stays as it is.

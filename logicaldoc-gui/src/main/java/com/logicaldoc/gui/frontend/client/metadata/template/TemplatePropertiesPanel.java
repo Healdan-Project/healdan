@@ -820,7 +820,8 @@ public class TemplatePropertiesPanel extends HLayout implements AttributeSelecto
 					att.setLabel(rec.getAttributeAsString(LABEL));
 					att.setType(Integer.parseInt(rec.getAttributeAsString("type")));
 					att.setSet(rec.getAttributeAsString("set"));
-					att.setSetId(Long.parseLong(rec.getAttributeAsString(SET_ID)));
+					// Healdan: most of the profile's attributes have no set, which parseLong refused
+					att.setSetId(rec.getAttributeAsLong(SET_ID));
 					att.setEditor(Integer.parseInt(rec.getAttributeAsString(EDITOR)));
 					att.setDependsOn(rec.getAttributeAsString(DEPENDSON));
 					att.setMandatory(Boolean.TRUE.equals(rec.getAttributeAsBoolean(MANDATORY)));
