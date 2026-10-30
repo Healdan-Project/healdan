@@ -16,12 +16,15 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIEmailSettings;
 import com.logicaldoc.gui.common.client.beans.GUIParameter;
 import com.logicaldoc.util.spring.Context;
 import com.logicaldoc.web.AbstractWPTestCase;
+import com.logicaldoc.web.AuthorMenus;
 import com.logicaldoc.web.ImpersonatingProxy;
 
 /**
@@ -222,6 +225,17 @@ public class SettingServiceImplTest extends AbstractWPTestCase {
 
     @Test
     public void testTestEmail() throws ServerException {
+        assertTrue(testSubject.testEmail("john@acme.com"));
+    }
+
+    @Test
+    public void testTestEmailNeedsTheOutgoingEmailMenu() throws ServerException, PersistenceException {
+        // Healdan: the Test button is on Settings > Outgoing email (103)
+        AuthorMenus.revoke(103L);
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.testEmail("john@acme.com"));
+
+        AuthorMenus.grant(103L);
         assertTrue(testSubject.testEmail("john@acme.com"));
     }
 

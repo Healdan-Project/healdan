@@ -62,7 +62,8 @@ LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p heald
 ```
 
 The overlay sets `HEALDAN_DEMO_FIXTURE=true`, so Healdan's first start fills the empty stack from
-`docker/demo/manifest.json`. Everything is dated over the six weeks before that start. The previews and
+`docker/demo/manifest.json`. Everything is dated over the six weeks before that start, at times in London's time
+zone, which the overlay gives the stack because the firm is in England. The previews and
 thumbnails of Office files follow a few minutes later; those of PDFs, emails and images are made the first time
 someone opens them.
 

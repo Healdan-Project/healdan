@@ -13,7 +13,7 @@ Stores and decides who can see each one. Stores show at the top of the folder tr
 ## Matters
 
 - **A matter belongs to a client.** Both have numbers. A matter is shown as its client's number, a dot, its own
-  number, an en dash and its name: `998.1 – Healdan Demo` is matter 1 of client 998. Your install may call matters
+  number, an en dash and its name: `998.1 – Firm Policies` is matter 1 of client 998. Your install may call matters
   *projects* instead.
 - **A matter's workspace** is its folder in a Store. It's built from a workspace template, so matters of the same
   kind start with the same folders, for example Documents, Secured Documents, Emails, and search folders such as

@@ -1272,5 +1272,5 @@ Filled in as the build found them, under the same headings as M2's, with one mor
 - `CopyCycle.cs` is about 1,500 lines; split it.
 
 **Docs**
-- The helper's pictures on the docs site are renders, and the Properties page's Ext. Properties screenshot predates Comments: replace them with screenshots during the acceptance (Task 20).
+- ~~The helper's pictures on the docs site are renders, and the Properties page's Ext. Properties screenshot predates Comments: replace them with screenshots during the acceptance (Task 20).~~ Done in PR 2 of `2026-10-29-demo-stack-and-docs-gaps.md`: all seven are screenshots of the demo firm, and Ext. Properties shows Comments.
 - `openapi.yaml`'s `lookupDocNumber` description doesn't give the `#1234 v2.1` form, though the lookup takes it (Task 8).

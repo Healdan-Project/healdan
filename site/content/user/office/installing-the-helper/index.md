@@ -4,9 +4,6 @@ linkTitle: Installing the Helper
 weight: 1
 ---
 
-<!-- The pictures of the helper's windows on this page are renders of its real windows, drawn offscreen with test
-data, not screenshots. Replace them with screenshots during the owner's acceptance (M3 plan, Task 21). -->
-
 The Healdan Helper runs in your Mac's menu bar, and adds Healdan's menu and toolbar to LibreOffice. Install it on
 each Mac you work on.
 
@@ -144,7 +141,7 @@ Click Healdan's icon in the menu bar.
 
 ## Settings
 
-![The Healdan Helper Settings window in three groups: Server, with the address healdan.example; Open Each Kind of File In, with Documents, Spreadsheets, Presentations and Drawings, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version and when it was installed](settings.png)
+![The Healdan Helper Settings window below its Server group: Open Each Kind of File In, with Documents, Spreadsheets, Presentations and Drawings, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version, 0.3.0, installed on 29 October 2026](settings.png)
 
 Settings has three groups:
 
