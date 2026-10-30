@@ -87,7 +87,8 @@ what's left.
   page is about: `pnair` for most User Guide pages, `sokafor` for the Admin Guide. Never use real client data.
 - Light mode, with the browser at 1280 × 800, cropped to the part that matters. Save them as PNG beside the page,
   and give each one alt text.
-- Take them at a true 1280 × 800, with headless Chrome: the browser pane scales the page down.
+- Take them at a true 1280 × 800, with headless Chrome: the browser pane scales the page down. Start Chrome with
+  `TZ=Europe/London`, the demo stack's time zone, so the times it shows are the firm's, not your computer's.
 - A pull request that changes a screen updates the screenshots it makes wrong.
 
 ## Adding or Retiring a Manual
