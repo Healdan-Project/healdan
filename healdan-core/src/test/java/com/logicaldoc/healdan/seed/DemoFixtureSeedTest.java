@@ -12,6 +12,7 @@ import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -331,6 +332,82 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 				"select h.ld_date from ld_history h join ld_document d on d.ld_id = h.ld_docid "
 						+ "where d.ld_filename = 'Old Draft.txt' and h.ld_event = ? and h.ld_userid = ?",
 				Timestamp.class, DocumentEvent.DELETED.toString(), pnair.getId()).getTime());
+	}
+
+	/**
+	 * The firm that ships in {@code docker/demo}: every step of its timeline
+	 * runs as its user, with its files, and leaves what the screenshots need.
+	 * The working directory is {@code healdan-core}.
+	 */
+	@Test
+	public void testTheRealManifest() throws Exception {
+		String blank = "select count(*) from %s where ld_event is null or ld_event = ''";
+		int documentRows = count(blank.formatted("ld_history"));
+		int folderRows = count(blank.formatted("ld_folder_history"));
+		run(seed("../docker/demo"));
+
+		// The firm: six people, twelve matters
+		assertEquals(6, count("select count(*) from ld_user where ld_username in "
+				+ "('hashcombe','treeve','pnair','jclarke','cdoyle','sokafor')"));
+		assertEquals(12, count("select count(*) from hd_matter"));
+		int documents = count("select count(*) from ld_document where ld_deleted = 0");
+		assertTrue("documents: " + documents, documents >= 55 && documents <= 70);
+		// The trash isn't empty: three documents and a subfolder
+		assertEquals(3, count("select count(*) from ld_document where ld_deleted <> 0"));
+		assertEquals(1, count("select count(*) from ld_folder where ld_deleted <> 0 and ld_name = 'Old Drafts'"));
+
+		// Every step ran as its user, and none left a history row without an event
+		assertEquals(documentRows, count(blank.formatted("ld_history")));
+		assertEquals(folderRows, count(blank.formatted("ld_folder_history")));
+
+		// Every kind of file the screenshots show is there
+		for (String ext : List.of("odt", "ods", "odg", "docx", "xlsx", "pdf", "eml", "png", "jpg"))
+			assertTrue(ext, count("select count(*) from ld_document where ld_deleted = 0 and "
+					+ "lower(ld_filename) like ?", "%." + ext) > 0);
+
+		// Priya Nair can't read 998.3 HR, but she can read the one letter granted to her there
+		User pnair = UserDAO.get().findByUsername("pnair");
+		User treeve = UserDAO.get().findByUsername("treeve");
+		User jclarke = UserDAO.get().findByUsername("jclarke");
+		assertFalse(FolderDAO.get().isReadAllowed(matter(998, 3).getFolderId(), pnair.getId()));
+		assertTrue(FolderDAO.get().isReadAllowed(matter(998, 3).getFolderId(), treeve.getId()));
+		Document salary = byName("Letter to Priya Nair \u2013 Salary Review.pdf");
+		assertTrue(DocumentDAO.get().isReadAllowed(salary.getId(), pnair.getId()));
+		assertFalse(FolderDAO.get().isReadAllowed(salary.getFolder().getId(), pnair.getId()));
+
+		// Jamie Clarke's checkout is still open (the column holds the status's ordinal)
+		assertEquals(1, count("select count(*) from ld_document where ld_deleted = 0 and ld_status = ? and "
+				+ "ld_lockuserid = ?", DocumentStatus.CHECKEDOUT.ordinal(), jclarke.getId()));
+		Document statement = byName("Completion Statement.ods");
+		assertEquals(DocumentStatus.CHECKEDOUT, statement.getStatus());
+		assertEquals(Long.valueOf(jclarke.getId()), statement.getLockUserId());
+
+		// Indexed inside their actions, so the background indexer has nothing left to do and re-date them
+		assertEquals(0, count("select count(*) from ld_document where ld_deleted = 0 and ld_indexed <> ?",
+				IndexingStatus.INDEXED.ordinal()));
+
+		// Nothing is dated today. Dates are read through JDBC, not the entities, because in the tests Hibernate
+		// reads them in another zone than JDBC writes them
+		Timestamp today = Timestamp.valueOf(TODAY.atStartOfDay());
+		List<String> datedToday = new ArrayList<>();
+		datedToday.addAll(dated("document", "select ld_filename, ld_lastmodified from ld_document "
+				+ "where ld_deleted = 0 and ld_lastmodified >= ?", today));
+		datedToday.addAll(dated("history", "select ld_event, ld_date from ld_history where ld_date >= ?", today));
+		// The folders the stack made before the demo, such as the Templates Store, are dated today, so look at
+		// the ones the demo made
+		datedToday.addAll(dated("folder history", "select h.ld_event || ' ' || h.ld_path, h.ld_date "
+				+ "from ld_folder_history h join ld_folder f on f.ld_id = h.ld_folderid "
+				+ "where f.ld_creation < ? and h.ld_date >= ?", today, today));
+		datedToday.addAll(dated("version", "select ld_version, ld_versiondate from ld_version "
+				+ "where ld_versiondate >= ?", today));
+		datedToday.addAll(dated("folder", "select ld_name, ld_lastmodified from ld_folder "
+				+ "where ld_creation < ? and ld_lastmodified >= ?", today, today));
+		assertEquals(List.of(), datedToday);
+	}
+
+	/** What a table holds that the query finds, each as its name and date */
+	private static List<String> dated(String what, String sql, Object... args) {
+		return jdbc().query(sql, (rs, row) -> what + " " + rs.getString(1) + " " + rs.getTimestamp(2), args);
 	}
 
 	@Test
