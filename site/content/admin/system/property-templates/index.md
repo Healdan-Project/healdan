@@ -17,7 +17,8 @@ The **Healdan profile** template holds the properties every document and folder 
 
 - **Healdan puts it on every document and folder in a matter** each time one is saved, so one given another
   template there gets the Healdan profile back at its next save.
-- **The Healdan profile attribute set** holds the choices for Class (`docclass`) and Subclass (`docsubclass`).
+- **The Healdan profile attribute set** holds the choices for Class (`docclass`) and Subclass (`docsubclass`), and
+  the properties added to the profile ([Adding a Property](#adding-a-property)).
 
 ## Changing the Class and Subclass Lists
 
@@ -34,15 +35,34 @@ move a Subclass to another Class, right-click it, choose **Delete**, which takes
 
 Keep the Class that [Healdan Settings](../../healdan-settings/) names as the **Default Class** in the list.
 
-## What Can't Be Changed Here
+## Adding a Property
 
-The Healdan profile template and attribute set can't be saved from this screen: LogicalDOC's form accepts a name of
-letters and numbers only, and refuses theirs for its space. So the profile's properties can't be changed, and no
-property can be added to it from the web page. The **Options** window saves on its own, so the Class and Subclass
-lists can still be changed.
+A new property goes into the **Healdan profile** attribute set first, then into the template. To give documents a
+court reference, for example:
 
-Don't rename them or delete them, either. Healdan finds the profile by its name when it upgrades it, and every
-document and folder in a matter needs it.
+1. On the **Attribute sets** tab, select **Healdan profile**.
+2. In the form on the right, fill in the **Attribute name**, which is how LogicalDOC knows the property, in letters
+   and digits only, such as `courtref`; the **Label**, which is what users see, such as "Court reference"; and the
+   **Type**, such as **Text**.
+3. Click **Save** under the form. The property joins the set's list, and a yellow bar appears above the tabs.
+4. Click **Save** in the yellow bar.
+5. On the **Templates** tab, select **Healdan profile**, and click **Add attributes** under its list of properties.
+6. In the **Attributes Selector**, choose **Healdan profile** as the **Attribute set**, select the new property,
+   click **Select**, then **Close**.
+7. Click **Save** in the yellow bar.
+
+The property then shows at the end of the **Ext. Properties** tab of every document and folder in a matter. It
+passes down like Class: set it on a folder, and the folders and documents inside that have no value of their own
+take the folder's. Every property you add passes down. Only Author, Typist, Comments, Legacy doc # and the email
+details belong to one document.
+
+## What to Leave Alone
+
+- **The profile's name.** Don't rename the template or the attribute set, or delete them. Healdan finds the profile
+  by its name when it upgrades it, and every document and folder in a matter needs it.
+- **Healdan's own properties.** Don't delete them, rename them or change their type: Healdan's rules, its search and
+  its API use them. The Matter property's label comes from the matter label in
+  [Healdan Settings](../../healdan-settings/), which sets it again each time they're saved.
 
 ## Other Templates
 
