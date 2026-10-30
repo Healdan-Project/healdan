@@ -37,6 +37,8 @@ Tooling note: `logicaldoc-webapp/src/main/resources/context.properties` is ISO-8
 
 27 (SPLIT) and 110 (AUTOFILL) are declared, but their RPC services have no implementation.
 
+Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hide-dropbox` seed step withdraws from every group and marks deleted, so admins don't get it either.
+
 | # | Name | In CE? | Server reality |
 |---|---|---|---|
 | 5 / 11 / 53 / 56 | TAGS / TRASH / BOOKMARKS / TEMPLATE | yes | present |

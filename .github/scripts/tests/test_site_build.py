@@ -397,6 +397,29 @@ class SiteBuild(unittest.TestCase):
         for page in ("documents/checking-out-and-checking-in", "documents/bookmarks"):
             self.assertNotIn("healdan-interim", self.html(f"/user/{page}/"), page)
 
+    # The demo stack and docs gaps spec, PR 3
+
+    USER_GAP_PAGES = {
+        "documents/copying-moving-and-deleting": "Copying, Moving and Deleting", "documents/the-trash": "The Trash",
+        "documents/document-history": "Document History", "documents/downloading-documents": "Downloading Documents",
+        "documents/links-between-documents": "Links Between Documents",
+        "documents/locking-a-document": "Locking a Document", "documents/notes": "Notes", "documents/tags": "Tags",
+        "documents/sharing-a-document": "Sharing a Document", "documents/aliases": "Aliases",
+        "getting-started/messages": "Messages", "getting-started/your-profile-and-password": "Your Profile and Password"}
+
+    def test_user_gap_pages_written(self):
+        for slug, title in self.USER_GAP_PAGES.items():
+            page = self.html(f"/user/{slug}/")
+            self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
+            self.assertNotIn("healdan-interim", page, slug)
+
+    def test_dropbox_page_redirects_to_downloading(self):
+        # Healdan hides Dropbox (the hide-dropbox seed), and old links to its page land on Downloading Documents
+        page = self.html("/user/documents/dropbox/")
+        self.assertIn(f"url={BASE_URL}user/documents/downloading-documents/", page)
+        self.assertNotIn("/user/documents/dropbox/",
+                         [link.href for link in self.links(self.html("/user/documents/"), page="/user/documents/")])
+
     def test_open_in_apps_notice_links_to_the_install_page(self):
         # The web page's Open in App notice links here, so the page must keep its address
         opener = _scripts.REPO / ("logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/healdan/"
