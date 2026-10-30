@@ -8,8 +8,13 @@
 name: healdan-demo
 
 services:
+  # The firm is in England, so its timeline's times are London's, and the screenshots show them in that zone
+  db:
+    environment:
+      TZ: Europe/London
   app:
     environment:
+      TZ: Europe/London
       HEALDAN_DEMO_FIXTURE: "true"
       HEALDAN_DEMO_DIR: /opt/healdan-demo
       # A test password for the six demo users, not a secret. It meets CE's default password policy.

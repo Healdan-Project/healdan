@@ -3,9 +3,6 @@ title: When Things Go Wrong
 weight: 6
 ---
 
-<!-- The picture of the crash window is a render of the helper's real window, drawn offscreen with test data, not a
-screenshot. Replace it with a screenshot during the owner's acceptance (M3 plan, Task 21). -->
-
 The helper's first rule is that nothing you save is lost. When something goes wrong, it keeps your work on your Mac
 and tells you, through a notification or, when it needs an answer, a window of its own.
 
@@ -40,7 +37,7 @@ Start **Healdan Helper** from your Applications folder.
 The document stays checked out to you, and your local copy is kept as you last saved it. Within about ten seconds of
 LibreOffice going, or as soon as the helper starts after your Mac restarts, this window opens:
 
-![The crash window: Healdan's mark with a warning triangle, and the headline Lease agreement #1234 v2.1 closed unexpectedly. It's still checked out to you, and your local copy is kept. With the Send and Check In and Reopen buttons](after-a-crash.png)
+![The crash window: Healdan's mark with a warning triangle, and the headline Subscription Agreement – Draft #32 v2.0 closed unexpectedly. It's still checked out to you, and your local copy is kept. With the Send and Check In and Reopen buttons](after-a-crash.png)
 
 - **Reopen** opens your kept copy, with what you last saved, and carries on as before.
 - **Send and Check In** sends what Healdan hasn't had yet, and checks the document in.

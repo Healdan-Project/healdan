@@ -279,16 +279,6 @@ class SiteBuild(unittest.TestCase):
 
     # Task 3
 
-    def test_interim_box_renders(self):
-        # A page that isn't written yet: the Admin Guide's protocols page stays interim until Healdan documents them
-        page = self.html("/admin/system/webdav-cmis-and-web-services/")
-        box = self.text(page, "div", "healdan-interim")
-        self.assertIn("This page isn't written yet. Until it is, LogicalDOC's Protocols covers similar ground.", box)
-        self.assertIn("LogicalDOC's docs describe its Enterprise edition, so some features there aren't in Healdan, "
-                      "and their workspace isn't a Healdan Workspace.", box)
-        self.assertIn("https://docs.logicaldoc.com/en/settings/protocols",
-                      [link.href for link in self.links(page, "healdan-interim")])
-
     def test_api_page_written(self):
         # M2 replaced the API page's interim box with Healdan's own API; RestAuthService's key hint links here
         page = self.html("/developer/api/")
@@ -371,6 +361,20 @@ class SiteBuild(unittest.TestCase):
     def test_admin_launch_pages_written(self):
         unwritten = [page for page in self.ADMIN_LAUNCH_PAGES if "healdan-interim" in self.html(f"/admin/{page}/")]
         self.assertEqual([], unwritten)
+
+    # The demo stack and docs gaps, PR 4
+
+    ADMIN_SYSTEM_PAGES = {"property-templates": "Property Templates", "interface-settings": "Interface Settings",
+                          "search-and-indexing": "Search and Indexing", "outgoing-email": "Outgoing Email",
+                          "webdav-cmis-and-web-services": "WebDAV, CMIS and Web Services",
+                          "scheduled-tasks": "Scheduled Tasks", "system-information": "System Information",
+                          "reports": "Reports"}
+
+    def test_admin_system_pages_written(self):
+        for slug, title in self.ADMIN_SYSTEM_PAGES.items():
+            page = self.html(f"/admin/system/{slug}/")
+            self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
+            self.assertNotIn("healdan-interim", page, slug)
 
     # Task 17
 
