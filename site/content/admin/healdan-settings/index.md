@@ -6,7 +6,7 @@ weight: 7
 Healdan's own settings are under **Administration → Healdan → Settings**. Click **Save** after changing them.
 Clients are saved from their own window, without Save.
 
-![The Healdan settings panel: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit](healdan-settings.png)
+![The Healdan settings panel: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
 | Setting | What it does |
 |---|---|

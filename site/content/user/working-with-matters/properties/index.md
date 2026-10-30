@@ -7,10 +7,7 @@ Every document and folder carries the same set of properties, the **Healdan prof
 its **Ext. Properties** tab to see them. Its **Properties** tab shows the doc #, which can't be edited, and the Date
 filed.
 
-<!-- This screenshot predates the Comments property, which now comes after Subclass. Retake it during the owner's
-acceptance of M3 (its plan, Task 21). -->
-
-![The Ext. Properties tab: the Healdan profile, with Client 1001 and Matter 1 read-only, then Author, Typist, Class Docs, Subclass, Legacy doc # and the email fields](ext-properties.png)
+![The Ext. Properties tab: the Healdan profile, with Client 1001 and Matter 1 read-only, then Author treeve, Typist pnair, Class Correspondence, Subclass Letter, Comments, Legacy doc # and the email fields](ext-properties.png)
 
 ## The Properties
 
