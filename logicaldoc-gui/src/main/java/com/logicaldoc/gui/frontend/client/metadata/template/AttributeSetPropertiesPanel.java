@@ -12,6 +12,8 @@ import com.logicaldoc.gui.common.client.beans.GUIAttributeSet;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
 import com.logicaldoc.gui.common.client.util.LD;
+import com.logicaldoc.gui.common.client.validators.SimpleTextValidator;
+import com.logicaldoc.gui.frontend.client.healdan.HealdanNames;
 import com.logicaldoc.gui.frontend.client.services.AttributeSetService;
 import com.smartgwt.client.data.AdvancedCriteria;
 import com.smartgwt.client.data.Criterion;
@@ -571,6 +573,8 @@ public class AttributeSetPropertiesPanel extends HLayout {
 		StaticTextItem id = ItemFactory.newStaticTextItem("id", Long.toString(attributeSet.getId()));
 
 		TextItem name = ItemFactory.newSimpleTextItem("name", attributeSet.getName());
+		// Healdan: the Healdan profile's name has a space, so a set can keep the name it has
+		HealdanNames.keepCurrent(name, attributeSet.getName(), new SimpleTextValidator());
 		name.setRequired(true);
 		name.setDisabled(attributeSet.isReadonly());
 		if (!attributeSet.isReadonly())

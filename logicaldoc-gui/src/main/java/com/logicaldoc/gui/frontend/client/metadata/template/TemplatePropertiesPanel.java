@@ -16,6 +16,7 @@ import com.logicaldoc.gui.common.client.util.LD;
 import com.logicaldoc.gui.common.client.util.Util;
 import com.logicaldoc.gui.common.client.util.ValuesCallback;
 import com.logicaldoc.gui.common.client.validators.TemplateNameTextValidator;
+import com.logicaldoc.gui.frontend.client.healdan.HealdanNames;
 import com.logicaldoc.gui.frontend.client.services.AttributeSetService;
 import com.logicaldoc.gui.frontend.client.services.TemplateService;
 import com.smartgwt.client.data.AdvancedCriteria;
@@ -757,6 +758,8 @@ public class TemplatePropertiesPanel extends HLayout implements AttributeSelecto
 		TextItem name = ItemFactory.newSimpleTextItem("name", template.getName());
 		name.setRequired(true);
 		name.setValidators(new TemplateNameTextValidator());
+		// Healdan: the Healdan profile's name has a space, so a template can keep the name it has
+		HealdanNames.keepCurrent(name, template.getName(), new TemplateNameTextValidator());
 		name.setDisabled(template.isReadonly() || !template.isWrite());
 		if (!template.isReadonly() && template.isWrite())
 			name.addChangedHandler(changedHandler);
