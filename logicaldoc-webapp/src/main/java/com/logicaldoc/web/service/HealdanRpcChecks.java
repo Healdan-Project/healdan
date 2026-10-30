@@ -646,10 +646,31 @@ public final class HealdanRpcChecks {
      * @throws IOException the refusal of another user's deletions
      */
     public static Long trashUser(Session session, long menuId, Long userId) throws IOException {
+        return reportUser(session, menuId, userId, "User %s can only list what they deleted");
+    }
+
+    /**
+     * The locked documents report lists what one user, or everyone, has
+     * checked out or locked. A user without the report's menu sees only what
+     * they hold themselves.
+     *
+     * @param session the user's session
+     * @param menuId the report's menu
+     * @param userId the user whose documents are asked for, null for everyone's
+     *
+     * @return the user whose documents are listed, null for everyone's
+     *
+     * @throws IOException the refusal of another user's documents
+     */
+    public static Long lockUser(Session session, long menuId, Long userId) throws IOException {
+        return reportUser(session, menuId, userId, "User %s can only list the documents they hold");
+    }
+
+    private static Long reportUser(Session session, long menuId, Long userId, String refusal) throws IOException {
         if (MenuDAO.get().isReadAllowed(menuId, session.getUserId()))
             return userId;
         if (userId != null && userId != session.getUserId())
-            throw new IOException("User %s can only list what they deleted".formatted(session.getUsername()));
+            throw new IOException(refusal.formatted(session.getUsername()));
         return session.getUserId();
     }
 
