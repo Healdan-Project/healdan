@@ -37,6 +37,8 @@ public class LockedDocsDataServlet extends AbstractDataServlet {
 			Locale locale) throws PersistenceException, IOException {
 
 		Long userId = request.getParameter("userId") != null ? Long.parseLong(request.getParameter("userId")) : null;
+		// Healdan: the report's menu, else only what the user holds
+		userId = com.logicaldoc.web.service.HealdanRpcChecks.lockUser(session, com.logicaldoc.gui.common.client.Menu.LOCKED_DOCS, userId);
 
 		DocumentDAO docDao = DocumentDAO.get();
 		DateFormat df = getDateFormat();
@@ -44,9 +46,10 @@ public class LockedDocsDataServlet extends AbstractDataServlet {
 		PrintWriter writer = response.getWriter();
 		writer.write("<list>");
 
+		// Healdan: the comma after A.ld_lockuserid, without which the database refused the query
 		StringBuilder query = new StringBuilder("""
-                                                select A.ld_id, A.ld_customid, A.ld_type, A.ld_version, A.ld_lastmodified, 
-                                                       A.ld_publisher, A.ld_filesize, A.ld_filename, A.ld_immutable, A.ld_folderid, A.ld_status, A.ld_lockuserid
+                                                select A.ld_id, A.ld_customid, A.ld_type, A.ld_version, A.ld_lastmodified,
+                                                       A.ld_publisher, A.ld_filesize, A.ld_filename, A.ld_immutable, A.ld_folderid, A.ld_status, A.ld_lockuserid,
                                                        B.ld_firstname, B.ld_name, A.ld_fileversion, A.ld_color, A.ld_fileversion
                                                   from ld_document A 
                                                   left outer join ld_user B on A.ld_lockuserid = B.ld_id
@@ -111,7 +114,8 @@ public class LockedDocsDataServlet extends AbstractDataServlet {
 			writer.print(String.format("<immutable>%b</immutable>", doc.isImmutable()));
 			writer.print(String.format("<folderId>%d</folderId>", doc.getFolder().getId()));
 			writer.print(String.format("<type>%s</type>", doc.getType()));
-			writer.print(String.format("<status>%s</status>", doc.getStatus()));
+			// Healdan: the number the report's grid reads, as DocumentsDataServlet writes it, not the enum's name
+			writer.print(String.format("<status>%d</status>", doc.getStatus().ordinal()));
 			writer.print(String.format("<userId>%d</userId>", doc.getLockUserId()));
 			writer.print(String.format("<avatar>%d</avatar>", doc.getLockUserId()));
 			if (doc.getComment() != null)
