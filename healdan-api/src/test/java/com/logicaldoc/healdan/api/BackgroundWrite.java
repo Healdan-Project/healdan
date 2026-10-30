@@ -23,12 +23,13 @@ import com.logicaldoc.util.spring.Context;
 
 /**
  * Saves a document from another thread just as CE is about to write its
- * check-out, its release or a change of its properties, after the document
- * was read: as the Office preview does when a conversion ends in that moment
- * (CI, 2026-10-28), or the old web page when it takes the document. The save
- * is committed before CE's write goes on, so CE's copy is a record version
- * behind. It happens once; the test database must read what's committed
- * while a transaction is open, as MariaDB does
+ * check-out, its check-in, its release or a change of its properties, after
+ * the document was read: as the Office preview does when a conversion ends
+ * in that moment (CI, 2026-10-28), or the old web page when it takes the
+ * document. The save is committed before CE's write goes on, so CE's copy is
+ * a record version behind. It happens once, at the first of those writes
+ * unless it's told which ({@link #overtaking}); the test database must read
+ * what's committed while a transaction is open, as MariaDB does
  * ({@code SET DATABASE TRANSACTION CONTROL MVCC}).
  * <p>
  * {@link #atFlush} commits it later, in the flush of CE's write, after CE's
@@ -41,7 +42,7 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 
 	/** The events of CE's writes it overtakes: those the API asks for after reading the document */
 	private static final Set<String> OVERTAKEN = Set.of(DocumentEvent.CHECKEDOUT.toKey(),
-			DocumentEvent.UNLOCKED.toKey(), DocumentEvent.CHANGED.toKey());
+			DocumentEvent.CHECKEDIN.toKey(), DocumentEvent.UNLOCKED.toKey(), DocumentEvent.CHANGED.toKey());
 
 	/** The document whose write it overtakes; 0 for the first one checked out, such as a document just filed */
 	private final long docId;
@@ -52,6 +53,9 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 
 	/** True to commit in the flush of CE's write rather than before CE's DAO reads the document again */
 	private final boolean atFlush;
+
+	/** The event of the one write of CE's it overtakes; null for the first of {@link #OVERTAKEN} */
+	private String overtaken;
 
 	private final ExecutorService other = Executors.newSingleThreadExecutor();
 
@@ -110,6 +114,16 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	}
 
 	/**
+	 * @return this write, overtaking only CE's write with the event given, for
+	 *         a request that makes several, such as a save that checks the
+	 *         document in and then out again
+	 */
+	BackgroundWrite overtaking(DocumentEvent write) {
+		overtaken = write.toKey();
+		return this;
+	}
+
+	/**
 	 * Listens until closed. Hibernate can't drop a listener, so the one
 	 * {@link #atFlush} adds stays with the test's context, idle once closed.
 	 */
@@ -142,7 +156,8 @@ final class BackgroundWrite implements DocumentListener, PreUpdateEventListener,
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		if (!listening || writes > 0 || (docId != 0 && document.getId() != docId) || transaction == null
-				|| !OVERTAKEN.contains(transaction.getEvent()))
+				|| !OVERTAKEN.contains(transaction.getEvent())
+				|| (overtaken != null && !overtaken.equals(transaction.getEvent())))
 			return;
 		if (atFlush) {
 			// CE's DAO is about to read the document again, merge this copy and flush

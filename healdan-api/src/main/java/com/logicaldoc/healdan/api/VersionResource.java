@@ -19,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
@@ -32,6 +33,7 @@ import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.api.model.HoldView;
 import com.logicaldoc.healdan.api.model.NewVersion;
 import com.logicaldoc.healdan.api.model.Page;
 import com.logicaldoc.healdan.api.model.VersionView;
@@ -165,7 +167,8 @@ public class VersionResource {
 	 * in the same write as the device. A
 	 * rule that refuses the check-in ({@code 409 refused}) leaves the
 	 * document as it was, but checked out to the caller: CE writes nothing
-	 * when a rule refuses it. A
+	 * when a rule refuses it. A check-in another write overtook is asked for
+	 * again ({@link #checkIn}). A
 	 * save CE didn't store is a {@code 500} ({@link #confirmStored}) that says
 	 * what's left: the document as it was, or its content the file sent as a
 	 * version missing from its timeline; either way the previous version and
@@ -263,14 +266,7 @@ public class VersionResource {
 				// So that if the check-in is refused, the check-out it leaves is this device's
 				devices.record(DocumentDAO.get().findById(document.getId()), caller.token(), app);
 			}
-			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
-			checkin.setComment(comment);
-			String before = document.getVersion();
-			// Waits for CE's version record, so the timeline shows the save at once
-			DocumentFuture checkedIn = DocumentManager.get().checkin(document.getId(), upload, name, major, null,
-					checkin);
-			checkedIn.get();
-			confirmStored(document.getId(), docNumber, before, user);
+			DocumentFuture checkedIn = checkIn(document.getId(), docNumber, upload, name, major, comment, session);
 			// The check-in's own version, as the web page can store newer content before the document is read again
 			Version stored = VersionDAO.get().findByVersion(document.getId(), checkedIn.getObject().getVersion());
 
@@ -296,6 +292,102 @@ public class VersionResource {
 		} finally {
 			FileUtils.deleteQuietly(upload);
 		}
+	}
+
+	/**
+	 * Checks the file in through CE's check-in, which reads the document and
+	 * writes it, and then writes its version record. Another write after that
+	 * read, such as the Office preview saving the document when a conversion
+	 * ends, makes CE's write of the new version fail before the file is
+	 * stored. When that write commits at the flush instead, CE's write is lost
+	 * unseen ({@link CheckoutResource#checkOut}) and CE goes on: it stores the
+	 * file and keeps a version record the document never reached, whose
+	 * number a save sent again can't take. So the document is read back, and
+	 * while it's at the version read, the record CE kept goes, as CE deletes
+	 * a version, which also deletes the file stored for it. Either way, while
+	 * the document is also held as it was, CE is asked again, with the same
+	 * file under the same number. A check-in CE lost otherwise, keeping no
+	 * record, isn't. CE's check-in never looks at the hold, so once someone
+	 * else holds the document, as when an administrator broke the caller's
+	 * check-out in the web page, it isn't asked again either: the answer says
+	 * what's left ({@link #confirmStored}).
+	 *
+	 * @return CE's check-in, once its version record is written
+	 * @throws ApiProblem {@code 500 server-error} ({@link #confirmStored})
+	 *         when the save still wasn't stored
+	 * @throws PersistenceException CE's refusal, or its last failure
+	 */
+	private static DocumentFuture checkIn(long docId, long docNumber, File upload, String name, boolean major,
+			String comment, Session session) throws Exception {
+		User user = session.getUser();
+		Document read = DocumentDAO.get().findById(docId);
+		String before = read.getVersion();
+		HoldView hold = ApiViews.hold(read);
+		DocumentFuture checkedIn;
+		for (int tries = 1;; tries++) {
+			DocumentHistory checkin = CheckoutResource.history(session, DocumentEvent.CHECKEDIN);
+			checkin.setComment(comment);
+			try {
+				// Waits for CE's version record, so the timeline shows the save at once
+				checkedIn = DocumentManager.get().checkin(docId, upload, name, major, null, checkin);
+				checkedIn.get();
+			} catch (PersistenceException | RuntimeException e) {
+				if (!CheckoutResource.overtaken(e))
+					throw e;
+				if (tries < CheckoutResource.TRIES && asRead(docId, before, hold)) {
+					log.info("Checking in document {} again, as another write came first: {}", docId, e.getMessage());
+					continue;
+				}
+				// Says what's left
+				confirmStored(docId, docNumber, before, user);
+				throw e;
+			}
+			Document after = DocumentDAO.get().findById(docId);
+			if (after == null || !Objects.equals(before, after.getVersion()))
+				break;
+			// CE's check-in gave the document its new version number; it kept no record when it failed otherwise
+			if (!dropLostVersion(docId, nextVersion(read, major), DocumentEvent.CHECKEDIN, user)
+					|| tries >= CheckoutResource.TRIES || !Objects.equals(hold, ApiViews.hold(after)))
+				break;
+			log.info("Checking in document {} again, as another write overtook the check-in in its flush", docId);
+		}
+		confirmStored(docId, docNumber, before, user);
+		return checkedIn;
+	}
+
+	/**
+	 * @return true if the document is at the version read, held as it was
+	 */
+	private static boolean asRead(long docId, String version, HoldView hold) throws PersistenceException {
+		Document document = DocumentDAO.get().findById(docId);
+		return document != null && Objects.equals(version, document.getVersion())
+				&& Objects.equals(hold, ApiViews.hold(document));
+	}
+
+	/**
+	 * Deletes the version CE kept of the user's write whose write of the
+	 * document was lost ({@link CheckoutResource#checkOut}), as CE deletes a
+	 * version: that frees its number for the write made again, and deletes
+	 * the file stored for it unless another version has that file
+	 *
+	 * @param docId the document's id
+	 * @param number the version number CE gave the write; null when it can't
+	 *        be told, when nothing is deleted
+	 * @param event the write's event
+	 * @param user the caller, whose version alone is deleted
+	 * @return true if CE kept the version, which is deleted
+	 * @throws PersistenceException error at data layer
+	 */
+	static boolean dropLostVersion(long docId, String number, DocumentEvent event, User user)
+			throws PersistenceException {
+		if (number == null)
+			return false;
+		VersionDAO versions = VersionDAO.get();
+		Version kept = versions.findByVersion(docId, number);
+		if (kept == null || !event.toKey().equals(kept.getEvent()) || kept.getUserId() != user.getId())
+			return false;
+		versions.delete(kept.getId(), PersistentObject.DELETED_CODE_DEFAULT);
+		return true;
 	}
 
 	/**

@@ -11,14 +11,11 @@ import org.springframework.stereotype.Component;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
-import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
-import com.logicaldoc.core.document.Version;
-import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
@@ -182,24 +179,12 @@ public class PropertiesResource {
 			if (stored == null || !read.equals(stored.getVersion()))
 				return true;
 			// CE's update gave the document its new version number
-			dropLostVersion(docId, document.getVersion(), caller.user());
+			VersionResource.dropLostVersion(docId, document.getVersion(), DocumentEvent.CHANGED, caller.user());
 			if (tries >= CheckoutResource.TRIES)
 				throw new PersistenceException(
 						"Document %d's change wasn't stored: other writes kept overtaking it".formatted(docId));
 			log.info("Changing document {} again, as another write overtook the change in its flush", docId);
 		}
-	}
-
-	/**
-	 * Deletes the version CE kept of the user's change whose write of the
-	 * document was lost, as CE deletes a version, which frees its number for
-	 * the change made again
-	 */
-	private static void dropLostVersion(long docId, String number, User user) throws PersistenceException {
-		VersionDAO versions = VersionDAO.get();
-		Version kept = versions.findByVersion(docId, number);
-		if (kept != null && DocumentEvent.CHANGED.toKey().equals(kept.getEvent()) && kept.getUserId() == user.getId())
-			versions.delete(kept.getId(), PersistentObject.DELETED_CODE_DEFAULT);
 	}
 
 	/**
