@@ -18,11 +18,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.logicaldoc.core.HealdanTreeChecks;
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.Message;
 import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.communication.SystemMessage;
 import com.logicaldoc.core.communication.SystemMessageDAO;
+import com.logicaldoc.core.conversion.FormatConversionManager;
 import com.logicaldoc.core.document.Bookmark;
 import com.logicaldoc.core.document.BookmarkDAO;
 import com.logicaldoc.core.document.Document;
@@ -42,6 +47,8 @@ import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.metadata.Attribute;
 import com.logicaldoc.core.metadata.Template;
+import com.logicaldoc.core.parser.CatchAllParser;
+import com.logicaldoc.core.parser.ParserFactory;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.authorization.PermissionException;
@@ -219,6 +226,8 @@ import com.logicaldoc.healdan.seed.demo.DemoManifest.Step;
  */
 public final class DemoTimeline {
 
+	private static final Logger log = LoggerFactory.getLogger(DemoTimeline.class);
+
 	/** Indexes a document inside the action that filed or changed it (plan call 2) */
 	@FunctionalInterface
 	public interface Indexing {
@@ -263,7 +272,37 @@ public final class DemoTimeline {
 	 * @throws Exception the document can't be indexed
 	 */
 	public static void index(long docId, DocumentHistory transaction) throws Exception {
+		convertFirst(docId);
 		DocumentManager.get().index(docId, null, transaction);
+	}
+
+	/**
+	 * @param fileName a file's name
+	 * @return whether CE reads the file's text through its PDF conversion, as
+	 *         it does for a file no parser knows, an image for one
+	 */
+	static boolean readThroughConversion(String fileName) {
+		return ParserFactory.getParser(fileName) instanceof CatchAllParser;
+	}
+
+	/**
+	 * Makes the PDF conversion of a file CE reads through it before CE indexes
+	 * the document. CE's indexing loads the document, then parses it, and the
+	 * conversion saves the document (event Converted, a new record version)
+	 * under it, so the save that ends the indexing finds the document changed
+	 * and fails, which stops the seed. With the conversion already there,
+	 * parsing only reads it. A conversion that fails is logged and the
+	 * document is indexed without text, as CE's own parser does.
+	 */
+	private static void convertFirst(long docId) throws PersistenceException {
+		Document doc = DocumentDAO.get().findById(docId);
+		if (doc == null || !readThroughConversion(doc.getFileName()))
+			return;
+		try {
+			FormatConversionManager.get().convertToPdf(doc, null, null);
+		} catch (IOException | PersistenceException | RuntimeException e) {
+			log.warn("Cannot convert {} to PDF before indexing it: {}", doc.getFileName(), e.getMessage());
+		}
 	}
 
 	/**

@@ -1,19 +1,33 @@
 package com.logicaldoc.healdan.seed.demo;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.conversion.AbstractFormatConverter;
+import com.logicaldoc.core.conversion.FormatConversionManager;
+import com.logicaldoc.core.conversion.FormatConverter;
+import com.logicaldoc.core.document.AbstractDocument;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.IndexingStatus;
+import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanOperation;
 import com.logicaldoc.healdan.HealdanOperation.Kind;
@@ -146,6 +160,59 @@ public class DemoTimelineTest extends AbstractHealdanTestCase {
 				step("hashcombe", "file", "k", "1001.1", "Correspondence", "letter.txt", "Letter.txt", null, null),
 				step("hashcombe", "move", null, "1001.1", null, null, null, "k", null)));
 		assertTrue(e.getMessage(), e.getMessage().contains("top level"));
+	}
+
+	@Test
+	public void testAnImageIsReadThroughItsConversionAndADocumentIsNot() {
+		assertTrue(DemoTimeline.readThroughConversion("receipt.jpg"));
+		assertTrue(DemoTimeline.readThroughConversion("plan.png"));
+		assertFalse(DemoTimeline.readThroughConversion("letter.txt"));
+		assertFalse(DemoTimeline.readThroughConversion("reply.eml"));
+	}
+
+	/**
+	 * CE reads an image through its PDF conversion, and the conversion saves the document under the indexing that
+	 * asked for it, so the indexing's own save used to fail on the stack (where ImageMagick converts) and stop
+	 * the seed. The tests' context has no converter that works, so this one stands in for ImageMagick's.
+	 */
+	@Test
+	public void testAnImageIsIndexedAfterItsConversionSavedTheDocument() throws Exception {
+		Map<String, List<FormatConverter>> converters = FormatConversionManager.get().getConverters();
+		converters.put("jpg-pdf", List.of(new BlankPdfConverter()));
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		try {
+			play(step("hashcombe", "file", "receipt", "1001.1", "Correspondence", "receipt.jpg", "Receipt.jpg", null,
+					null));
+		} finally {
+			converters.remove("jpg-pdf");
+			// The store is on disk and the next run files the same id: a PDF left here would hide the conversion
+			jdbc.queryForList("select ld_id from ld_document where ld_filename = 'Receipt.jpg'", Long.class)
+					.forEach(Store.get()::delete);
+		}
+
+		assertEquals(Integer.valueOf(IndexingStatus.INDEXED.ordinal()), jdbc
+				.queryForObject("select ld_indexed from ld_document where ld_filename = 'Receipt.jpg'", Integer.class));
+		for (DocumentEvent event : List.of(DocumentEvent.CONVERTED, DocumentEvent.INDEXED))
+			assertEquals(event.toKey(), Integer.valueOf(1),
+					jdbc.queryForObject("select count(*) from ld_history h join ld_document d on d.ld_id = h.ld_docid "
+							+ "where d.ld_filename = 'Receipt.jpg' and h.ld_event = ?", Integer.class, event.toKey()));
+	}
+
+	/** Stands in for ImageMagick: writes a PDF of one blank page */
+	private static final class BlankPdfConverter extends AbstractFormatConverter {
+		@Override
+		public boolean isEnabled() {
+			return true;
+		}
+
+		@Override
+		protected void internalConvert(String sid, AbstractDocument document, File src, File dest)
+				throws IOException {
+			try (PDDocument pdf = new PDDocument()) {
+				pdf.addPage(new PDPage());
+				pdf.save(dest);
+			}
+		}
 	}
 
 	private static Step draftsFolder() {
