@@ -316,20 +316,23 @@ public class SecurityServiceImplTest extends AbstractWPTestCase {
     }
 
     @Test
-    public void testKill() {
+    public void testKill() throws ServerException {
         SessionManager sm = SessionManager.get();
         sm.clear();
+        // Healdan: kill checks the caller's Sessions menu, so the caller needs a
+        // session
+        prepareSession("admin", "admin");
         Session session1 = sm.newSession("admin", "admin", (Client) null);
         assertNotNull(session1);
         Session session2 = sm.newSession("admin", "admin", (Client) null);
         assertNotNull(session2);
         assertNotSame(session1, session2);
-        assertEquals(2, sm.getSessions().size());
+        assertEquals(3, sm.getSessions().size());
 
         testSubject.kill(session1.getSid());
         assertTrue(sm.isOpen(session2.getSid()));
         assertFalse(sm.isOpen(session1.getSid()));
-        assertEquals(2, sm.getSessions().size());
+        assertEquals(3, sm.getSessions().size());
     }
 
     @Test

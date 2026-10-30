@@ -300,7 +300,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
             FileUtils.forceDelete(UserUtil.getUserResource(session.getUserId(), "temp"));
             log.info("User {} logged out and closed session {}", session.getUsername(), session.getSid());
-            kill(session.getSid());
+            // Healdan: the user's own session, which needs no menu
+            killSession(session.getSid());
         } catch (InvalidSessionServerException | IOException e) {
             log.error(e.getMessage(), e);
         }
@@ -998,7 +999,13 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     }
 
     @Override
-    public void kill(String sid) {
+    public void kill(String sid) throws ServerException {
+        // Healdan: the Sessions tab's menu, as the sessions data servlet's kill
+        checkMenu(getThreadLocalRequest(), Menu.ADMIN_SESSIONS);
+        killSession(sid);
+    }
+
+    private void killSession(String sid) {
         // Kill the LogicalDOC session
         SessionManager.get().kill(sid);
 
