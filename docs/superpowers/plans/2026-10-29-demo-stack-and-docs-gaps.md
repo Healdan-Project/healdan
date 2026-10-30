@@ -6,7 +6,7 @@
 
 **Architecture:**
 - **The demo firm is data, not code.** `docker/demo/manifest.json` describes the firm: groups, users, Classes, Stores, templates, clients, matters, and a timeline of dated actions. Its documents are text sources in `docker/demo/sources/`, which `docker/demo/build.py` turns into real files in `docker/demo/files/` with the Healdan image's LibreOffice. Both the built files and the manifest are committed.
-- **A seed step reads it.** `DemoFixtureSeed` (`demo-fixture`) runs only with `HEALDAN_DEMO_FIXTURE=true`. It refuses a repository that holds documents, builds the firm's structure (`DemoFirm`), then plays the timeline (`DemoTimeline`) as each user through CE's and Healdan's services. Before each action it checks that the user has the permission the web page would ask for.
+- **A seed step reads it.** `DemoFixtureSeed` (`demo-fixture`) runs only with `HEALDAN_DEMO_FIXTURE=true`. It refuses a repository that holds documents, or users besides `admin` and `_system` (Decision Log, 2026-10-30), builds the firm's structure (`DemoFirm`), then plays the timeline (`DemoTimeline`) as each user through CE's and Healdan's services. Before each action it checks that the user has the permission the web page would ask for.
 - **Backdating.** `Backdater` remembers each table's highest id before an action and dates every newer row with the action's date afterwards. Documents are indexed inside the action that filed or changed them, so the background indexer never re-saves them with today's date.
 - **A Compose overlay** (`docker/demo/compose.demo.yaml`) sets the variables and mounts `docker/demo/` read-only.
 - **The docs work** follows in three more pull requests: the retaken screenshots, the User Guide's 13 pages with Dropbox hidden by a seed step, and the Admin Guide's 8 pages with the interim shortcode's removal.
@@ -22,7 +22,7 @@
 Every task's requirements include these.
 
 - **No upstream file changes** (spec §10). Code goes in `healdan-core`; CE's tables change only in their data, never their structure.
-- **Never run the demo seed against real data.** The step refuses a repository with documents; nothing in this plan weakens that guard.
+- **Never run the demo seed against real data.** The step refuses a repository with documents or with users besides `admin` and `_system`; nothing in this plan weakens that guard.
 - **Every name is invented** (spec §4, §6.3): `.example` email domains, Ofcom's drama numbers (01632 960000–960999), no real companies, people, case law, court forms or Land Registry forms. British English. Every word written fresh, never copied from LogicalDOC's docs or anywhere else.
 - **No real hostnames, internal addresses or the owner's surname** in any file, screenshot, commit or PR. A server address in a screenshot reads `healdan.example`; a computer name is neutral or cropped out.
 - **The demo password is `Demo-Firm-2026`.** It meets CE's default policy (`context.properties` lines 45–53: 8+ characters, 2 uppercase, 2 lowercase, a digit, a symbol, no 4-character sequence, no character more than 3 times).
@@ -36,7 +36,7 @@ Every task's requirements include these.
 
 The risks a unit test doesn't reach. Each task names the ones it must check.
 
-1. **The demo never touches real data.** The guard refuses any repository with a document in it, and the overlay is the only way the variable gets set.
+1. **The demo never touches real data.** The guard refuses any repository with a document in it or a user besides `admin` and `_system`, and the overlay is the only way the variable gets set.
 2. **The demo shows only what Healdan allows.** Every action passes the permission check the web page would make, and Healdan's own rules (filing, P1, P2, Subclass) run on it unchanged.
 3. **The dates hold after the stack settles.** Ten minutes after the first start, the Documents list, History, Versions, Notes, Messages and Recent Matters still show the timeline's dates, not today's.
 4. **Nothing real leaks into a screenshot**: no hostname, IP address, `/Users/…` path, real name or real email address.
@@ -49,7 +49,7 @@ The owner hears about these when the plan is handed over. Task 6 folds 1–6 int
 1. **The seed checks permissions itself** (spec §5.2 said the services do). Inside a seed every actor counts as an admin (`FilingRules.isAdmin`, the `SEED` operation), and `DocumentManager.create` checks where a document goes but not who files it. So `DemoTimeline` checks, before each action, the permission the web page asks for (Task 4's table), and fails on a refusal naming the user, the permission and the target.
 2. **Each document is indexed inside its own action.** `DocumentManager.index` saves the document, which resets its last-modified date, and adds an Indexed history entry. Indexed by the background task, every document would show today's date.
 3. **Backdating by watermark.** `Backdater` dates every row newer than the last action's highest id, in each table the demo writes, plus the last-modified date of a document an action changed. `EmailDocumentListener` forces every new document's creation date to now, so the creation date can't be set before the create.
-4. **The guard refuses any document at all,** not only those outside the Templates Store. The filing rule keeps documents out of the Templates Store, so the two are the same, and the simpler query can't be wrong.
+4. **The guard refuses any document at all,** not only those outside the Templates Store. The filing rule keeps documents out of the Templates Store, so the two are the same, and the simpler query can't be wrong. A user besides CE's `admin` and `_system` is refused too (Decision Log, 2026-10-30).
 5. **An email's dates move with its filing.** The seed rewrites a filed `.eml`'s `Date:` header to 25 minutes before its filing, and its `Received:` header to 5 minutes before, so its Sent and Received properties agree with the timeline.
 6. **Messages last 60 days.** CE purges a message after its `dateScope` (10 days by default), so the demo's are given 60.
 7. **Users are also in CE's `author` group,** which holds the menus everyday users need (`ld_menu_acl`); a new group holds none. Sam Okafor is in `admin`.
@@ -2910,10 +2910,40 @@ Runs in whichever of PR 3 and PR 4 merges last (spec §8). Before starting, `gre
 | 2026-10-29 | 5b | The seed logs the history event the web page logs for each action (CHANGED, PERMISSION, DELETED, CHECKEDOUT, LOCKED), in `DemoTimeline`. | CE's History event defaults to an empty string, so CE's own "if no event" checks never fire. |
 | 2026-10-29 | 5a | `build.py` passes `HOME=/tmp`, and refuses a `.docx` or `.odt` built from an `.html` that carries a comment. Letters stay HTML. The files were built with the existing local image. | LibreOffice's HTML import turns a `<meta>` tag it doesn't read into a comment, which a headless PDF doesn't show. The user has no home inside the image, and fontconfig and dconf complain without one. |
 | 2026-10-29 | 5a | The documents' printed dates assume a first start on 2026-10-29, while the seed dates relative to the first start. | The files print fixed dates. A stack built months later shows letters whose printed dates differ from their filing dates. |
-| 2026-10-29 | 5 | The real manifest has 123 steps and files 64 documents (61 live, 3 deleted) from 67 files of 2.8 MB. `DemoFixtureSeedTest.testTheRealManifest` runs it in about 100 seconds. | Recorded so a later change can see what it grew from. |
+| 2026-10-29 | 5 | The real manifest has 123 steps and files 64 documents (61 live, 3 deleted) from 67 files of 2.8 MB. `DemoFixtureSeedTest.testTheRealManifest` runs it in about two and a half minutes (144 s measured; first noted as about 100 seconds). | Recorded so a later change can see what it grew from. |
 | 2026-10-29 | 6 | `DemoTimeline.index` makes the PDF conversion first for a file CE reads through it (an image), then indexes. `DemoTimelineTest` stands in a converter that works. | The first start of the real stack stopped at the harbour receipt (`.jpg`): CE's conversion saves the document under the indexing, which then failed on a stale record. The tests' context has no working ImageMagick, so they never saw it. |
 | 2026-10-29 | 6 | Spec §5.3 and §5.4 say the guard refuses any document at all (call 4), not only those outside the Templates Store. | The wording in the spec still said "outside the Templates Store". |
+| 2026-10-30 | final review | The guard also refuses any `ld_user` other than CE's `admin` and `_system`. Spec §5.3 and §5.4, the Developer Guide and CLAUDE.md say so. The Task snippets above keep the wording they were written with. | "Any document" let in a real install that has users, Stores and clients but no documents yet: the demo would add `sokafor` to its `admin`, with a password the repository publishes. After a failure partway through the firm, the next start passed the guard and failed on a raw `AK_GROUP` constraint error. A fresh stack has only those two users, and the smoke fixture creates none. |
+| 2026-10-30 | final review | `DemoFirm.folder` refuses a path with an empty part (`Correspondence/`, `/Correspondence`, `Correspondence//Drafts`). A step's day and time are read inside the step's `try`, so a day that isn't in the past or a bad time names the step. `setAcl` loads the owner with its groups. `build.py` exits non-zero and lists any output LibreOffice or ImageMagick didn't write, and copies nothing. | `isTopLevel` took `Correspondence/` for a deeper folder, so a non-admin's `deleteFolder` got through on a malformed manifest. A bad step failed without saying which. CE logged "User hashcombe has lost association with his group" on every demo start. `soffice` can exit 0 without writing a file, which `build.py` skipped silently. |
 
 ## Follow-Ups
 
-None yet.
+Left by the final review of PR 1, for the pull request that can use each. The ledger that tracked them is git-ignored, so this is the only record.
+
+### PR 2: Screenshots
+
+- **Time zone.** Run headless Chrome in the time zone `Europe/London` (for example with `Emulation.setTimezoneOverride`). The browser pane showed times in the Mac's zone, so a screenshot taken there shows other times than the stack's.
+- **Printed dates.** The letters print dates that assume a first start on 2026-10-29. On a stack first started after midnight UTC on the 30th they are a day off, and they drift further for each later build. Build the screenshot stack on the day the files assume, or check each printed date against its filing before a screenshot shows it.
+- **The lease, before `previews/markup.png`.** The engrossment, the counterpart and the draft never grant parking spaces 7 and 8 or attach the lease plan that the correspondence promises. The inserted clause 6.2's number sits outside its tracked insertion. Fix both in the sources and rebuild.
+- **The Saltmarsh settlement letter** should be marked "Without prejudice save as to costs".
+- **Other content polish,** only where a screenshot shows it: the costs schedule's grade for Priya and its counsel timing; "pilot station" against "harbour" in 1001.1; the 14:22 quote in `brightwell-client-reply.eml`; the licence terms' cl 5.3 against the 5.5 table.
+
+### Dates the demo leaves at today (PRs 2 to 4: keep them out of a screenshot)
+
+None is shown in the Documents list.
+
+- `ld_startpublishing` on documents and versions, four `ld_version.ld_lastmodified` values, and `ld_user.ld_passwordchanged` and `ld_lastlogin`.
+- The Converted history rows for images and drawings have a blank user, as CE's background indexing writes them.
+- A date-filtered full-text search sees every document as dated the first start, because CE puts the date in the index when it indexes (`StandardSearchEngine` about lines 107 to 108, `FulltextSearch` about lines 111 to 118). Take no screenshot of a date-filtered search.
+
+### Docs
+
+- **The sign-in page of a fresh stack** shows "The application has to be restarted" (CE's `CorePlugin.install` calls `setRestartRequired`), and a restart clears it. The Developer Guide says so; the Install manual could too.
+- **PR 3:** Recent Matters counts filing, check-ins, changes, renames and moves. Notes don't count.
+
+### Test gaps, later
+
+- The matter owner's grant (call 8) isn't asserted.
+- The web page's status checks aren't mirrored by the timeline: a move or delete of a locked or immutable document, and a check-in of a document that someone else has checked out.
+- The manifest's per-action "Needs" fields aren't enforced.
+- `testTheRealManifest` takes about two and a half minutes. Move it into a class of its own, so CI's shard planner can place it.

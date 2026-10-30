@@ -165,7 +165,8 @@ Dates are spread over the six weeks before the stack's first start, and doc #s f
 
 - sets `HEALDAN_DEMO_FIXTURE=true`;
 - sets one test password for all six demo users. It's written in the file because it isn't a secret, and it must pass CE's password policy;
-- mounts `docker/demo/` read-only into the container.
+- mounts `docker/demo/` read-only into the container;
+- names the project `healdan-demo` with a top-level `name:`, which wins over `compose.yaml`'s when the overlay comes after it, so a forgotten `-p` can't start the demo on the production project. `-p` and `COMPOSE_PROJECT_NAME` still override it, so the command keeps `-p`. (changed in the build)
 
 It's a throwaway stack with its own project name and port, like the smoke overlay:
 
@@ -196,6 +197,7 @@ LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p heald
 ### 5.3 Guards and failure
 
 - **It refuses a repository that already holds a document, any document at all** (changed in the plan; the design said "outside the Templates Store"). The filing rule keeps documents out of the Templates Store, so the two are the same, and the simpler query can't be wrong. If the variable is set on a real server by mistake, startup stops with a message, rather than mixing invented data in. (The smoke fixture creates folders only, so the two overlays can be used together.)
+- **It also refuses a repository that holds any user besides CE's own `admin` and `_system`** (changed in the build). A real install that has people, Stores and clients but no documents yet passes the document check, and the demo would add `sokafor` to its `admin`, with a password the repository publishes. The check also stops a start after a firm that failed partway, whose users are in the database, before it fails again on a constraint. A fresh stack has only those two users, and the smoke fixture creates none.
 - **A failure stops startup,** as any seed step's does. Documents write their files outside the database transaction, so the fix is `down -v` and a fresh start, which is fine for a throwaway stack.
 - **Previews and thumbnails** of Office files come from Healdan's usual background work, a few minutes after the first start; CE makes a PDF's, an email's or an image's the first time someone opens it. The full-text index doesn't wait: each document is indexed inside its own action (§5.2). (changed in the plan; the Office-only limit changed in the build)
 
@@ -207,9 +209,9 @@ LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p heald
 - that doc # order matches the backdated filing dates;
 - that only Partners can read 998.3, and that the document-only grant works;
 - that the checked-out document is checked out, by Jamie Clarke;
-- that the guard refuses a repository with any document in it.
+- that the guard refuses a repository with any document in it, and one with a user besides `admin`, whether that user was there before or a firm that failed partway left it. (changed in the build)
 
-The test context sets `hibernate.jdbc.time_zone`, so in the tests Hibernate reads dates in another zone than the seed's JDBC writes them in. The tests read backdated dates through JDBC. (changed in the build) `testTheRealManifest` runs the real manifest in about 100 seconds. (changed in the build)
+The test context sets `hibernate.jdbc.time_zone`, so in the tests Hibernate reads dates in another zone than the seed's JDBC writes them in. The tests read backdated dates through JDBC. (changed in the build) `testTheRealManifest` runs the real manifest in about two and a half minutes. (changed in the build)
 
 CI's `build` runs it like any `healdan-core` test, so a code change that breaks the demo fails the check. A change under `docker/` counts as code, so it runs then too.
 
@@ -236,7 +238,7 @@ CI's `build` runs it like any `healdan-core` test, so a code change that breaks 
 
 Its output goes to `docker/demo/files/`, which is committed, so the stack needs nothing beyond the overlay. The manifest names files from there.
 
-`build.py` passes `HOME=/tmp` to LibreOffice, and refuses a `.docx` or `.odt` built from an `.html` that carries a comment, because LibreOffice turns unknown `<meta>` tags into comments. Letters stay HTML. (changed in the build)
+`build.py` passes `HOME=/tmp` to LibreOffice, and refuses a `.docx` or `.odt` built from an `.html` that carries a comment, because LibreOffice turns unknown `<meta>` tags into comments. Letters stay HTML. (changed in the build) It exits non-zero, naming them, if LibreOffice or ImageMagick wrote no file for an output (`soffice` can exit 0 without one), and copies nothing then. (changed in the build)
 
 **One known limit.** LibreOffice stamps the time of conversion into what it writes, so the output isn't byte-for-byte reproducible, and CI can't tell that a source changed without its file being rebuilt. The convention: rebuild in the same commit as the source change. `DemoFixtureSeedTest` still fails on any file the manifest names that's missing.
 

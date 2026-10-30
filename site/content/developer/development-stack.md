@@ -66,6 +66,10 @@ The overlay sets `HEALDAN_DEMO_FIXTURE=true`, so Healdan's first start fills the
 thumbnails of Office files follow a few minutes later; those of PDFs, emails and images are made the first time
 someone opens them.
 
+The overlay also names the project `healdan-demo`, so a forgotten `-p` can't start the demo on the `logicaldoc`
+project of a production stack. Keep `-p` in the command anyway: `-p` and the `COMPOSE_PROJECT_NAME` variable both
+override the overlay's name.
+
 | User | Name | Role |
 |---|---|---|
 | `hashcombe` | Helen Ashcombe | Partner |
@@ -79,14 +83,17 @@ Each signs in with the password `Demo-Firm-2026`. Remove the stack with `down -v
 
 - **Changing the firm.** Edit `docker/demo/manifest.json`, and the documents' text sources in
   `docker/demo/sources/`. Then rebuild their files with `python3 docker/demo/build.py`, which runs LibreOffice
-  inside the Healdan image, and commit the sources and files together.
+  inside a built Healdan image: `healdan-demo:local`, which the command above builds, or any other
+  built image that `--image` names. It stops and lists any file that LibreOffice didn't write. Commit the sources
+  and files together.
 - **Restart once for the sign-in page.** After the first start the sign-in page says "The application has to be
   restarted", because the plugins ask for a restart on a fresh stack. `docker compose -p healdan-demo restart app`
   clears it, and doesn't fill the firm a second time.
 - **Browsing adds to it.** Opening a document logs a Viewed event dated then, so a stack someone has browsed
   shows today's date in some documents' History. Take screenshots from a stack that was used as little as you can.
-- **It refuses real data.** The step runs only on a repository with no documents in it, and a failure stops
-  startup. Start over with `down -v`.
+- **It refuses real data.** The step runs only on a repository with no documents in it and no users besides CE's
+  own `admin` and `_system`, and a failure stops startup. A firm that failed partway leaves its first users
+  behind, so the next start stops at that check. Start over with `down -v`.
 
 {{< callout type="warning" >}}
 Never use the demo overlay on a server with real data.
