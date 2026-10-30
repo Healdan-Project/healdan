@@ -3,9 +3,6 @@ title: Opening Documents
 weight: 3
 ---
 
-<!-- The pictures of the helper's windows on this page are renders of its real windows, drawn offscreen with test
-data, not screenshots. Replace them with screenshots during the owner's acceptance (M3 plan, Task 21). -->
-
 You can open a Healdan document in LibreOffice from the web page, or from inside LibreOffice. Either way, a document
 you can edit opens checked out to you, and one you can't opens as a read-only copy.
 
@@ -34,14 +31,14 @@ Double-clicking a document in the web page still shows its preview.
 Any of LibreOffice's ways of opening shows the **Open from Healdan** window: **⌘O**, **File › Open**, **Open File**
 in the Start Center, and **Healdan › Open from Healdan…**. So does **Open from Healdan…** in the helper's menu.
 
-![The Open from Healdan window: Recent Documents listed in the middle, Lease agreement.docx selected and checked out to you on MacBook, and its details on the right, under a header with its name, #1234 and v2.1, and Properties and Versions tabs, with Properties showing, its Client row under Matter](open-from-healdan.png)
+![The Open from Healdan window: Recent Documents listed in the middle, Particulars of Claim – Draft.docx selected and checked out to you on Office PC, and its details on the right, under a header with its name, #54 and v2.0, and Properties and Versions tabs, with Properties showing its thumbnail, its matter 1001.1 – Charter Dispute – MV Northern Star, its client, folder, author, Class and Subclass, when it was last saved, and that it's checked out to you on Office PC](open-from-healdan.png)
 
 - **On the left:** Recent Documents (where it starts), Checked Out to Me and Favorites, then Recent Matters, My
   Matters and Recent Folders to browse.
 - **In the middle:** each document's title, doc #, version, matter, and when it was last saved. Under the title,
-  who has it checked out: "checked out to you on MacBook", or "checked out to Jane Smith". The Matter column shows
+  who has it checked out: "checked out to you on Office PC", or "checked out to Jamie Clarke". The Matter column shows
   the matter's number: point at it to see the matter's name and its client.
-- **Matters** are listed with their client's name after them, in smaller type: `998.1 – Healdan Demo (Healdan)`.
+- **Matters** are listed with their client's name after them, in smaller type: `1002.1 – Commercial Lease (Brightwell Bakeries Ltd)`.
 - **On the right:** the selected document's details. A header names it, with its doc # and version, as in
   `#1234 · v2.1`. Its star adds the document to your Favorites, or takes it off. Two tabs sit under the header:
   - **Properties,** where each Open window starts, shows a small preview of the first page, when Healdan has made
@@ -80,7 +77,7 @@ A document opens as a read-only copy when:
 - you may read it but not edit it;
 - you ticked Open Read-Only, or chose an older version.
 
-Its title ends in "(read-only)", and a notice says why, such as "Opened read-only: Jane Smith has it checked out."
+Its title ends in "(read-only)", and a notice says why, such as "Opened read-only: Jamie Clarke has it checked out."
 LibreOffice opens it read-only. Nothing you do to it reaches the document: saving it shows Save as New Document
 instead, which files your changes as a new document (see
 [Editing and Versions](../editing-and-versions/#save-as-new-document)). The copy is deleted when you close it.
@@ -89,7 +86,7 @@ instead, which files your changes as a new document (see
 
 If you have the document checked out on another of your computers, the helper asks first:
 
-![The Checked Out on Another Computer window: Healdan's mark with a warning triangle, then #1234 is checked out to you on MacBook (LibreOffice), when it was last saved to Healdan, a warning that edits on MacBook that haven't reached Healdan won't be in this copy, and the Open Read-Only, Edit Here Instead and Cancel buttons](checked-out-on-another-computer.png)
+![The Checked Out on Another Computer window: Healdan's mark with a warning triangle, then #54 is checked out to you on Office PC (LibreOffice), when it was last saved to Healdan, a warning that edits on Office PC that haven't reached Healdan won't be in this copy, and the Open Read-Only, Edit Here Instead and Cancel buttons](checked-out-on-another-computer.png)
 
 - **Open Read-Only** opens a read-only copy here, and leaves the check-out where it is.
 - **Edit Here Instead** moves the check-out to this computer and opens the document for editing. What you saved on

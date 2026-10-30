@@ -32,7 +32,7 @@ token, as `Authorization: Bearer`. With `curl`, against a stack on your own mach
 ```bash
 BASE=http://127.0.0.1:8080        # or your install's address, such as https://docs.example.org
 curl -s -X POST "$BASE/api/v1/auth/tokens" -H 'Content-Type: application/json' \
-  -d '{"username": "jsmith", "password": "…", "name": "Word on MacBook"}'
+  -d '{"username": "pnair", "password": "…", "name": "Word on Office PC"}'
 ```
 
 The answer is `201`:
@@ -41,9 +41,9 @@ The answer is `201`:
 {
   "token": "hd_bm90LWEtcmVhbC1kZXZpY2UtdG9rZW4tZXhhbXBsZSE",
   "id": 12,
-  "name": "Word on MacBook",
+  "name": "Word on Office PC",
   "expiresAt": "2027-10-24T09:15:00Z",
-  "user": { "id": 7, "username": "jsmith", "name": "Jane Smith", "email": "jane@example.org", "language": "en", "admin": false }
+  "user": { "id": 7, "username": "pnair", "name": "Priya Nair", "email": "priya.nair@ashcombe-reeve.example", "language": "en", "admin": false }
 }
 ```
 
@@ -66,7 +66,7 @@ curl -s "$BASE/api/v1/me" -H "Authorization: Bearer $TOKEN"
 
 ## Device Sign-Ins
 
-Each token is one device's sign-in, such as Word on a MacBook. `name` labels it, so people can tell their devices
+Each token is one device's sign-in, such as Word on a laptop. `name` labels it, so people can tell their devices
 apart; a blank name is "Unnamed device".
 
 - **A token stops working** when it hasn't been used for 30 days, 365 days after sign-in at the latest
@@ -95,9 +95,9 @@ Errors are RFC 9457 problems, sent as `application/problem+json`:
   "type": "https://healdan.com/problems/checked-out",
   "title": "Checked out",
   "status": 409,
-  "detail": "Document #1234 is checked out to Jane Smith.",
+  "detail": "Document #1234 is checked out to Jamie Clarke.",
   "code": "checked-out",
-  "hold": { "kind": "checkout", "by": { "id": 5, "name": "Jane Smith" }, "since": "2026-10-23T15:00:00Z" }
+  "hold": { "kind": "checkout", "by": { "id": 8, "name": "Jamie Clarke" }, "since": "2026-10-23T15:00:00Z" }
 }
 ```
 

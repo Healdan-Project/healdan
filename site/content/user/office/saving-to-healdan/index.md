@@ -3,9 +3,6 @@ title: Saving to Healdan
 weight: 2
 ---
 
-<!-- The picture of the Save to Healdan window is a render of the helper's real window, drawn offscreen with test
-data, not a screenshot. Replace it with a screenshot during the owner's acceptance (M3 plan, Task 21). -->
-
 A new document goes into Healdan the first time you save it, through the **Save to Healdan** window. It works the
 same in Writer, Calc, Impress and Draw.
 
@@ -17,7 +14,7 @@ On a document that isn't in Healdan yet, any of these opens Save to Healdan:
 - **Healdan › Save to Healdan…**, or **Save to Healdan** on the Healdan toolbar;
 - **Save** when LibreOffice asks whether to save your changes as you close the document.
 
-![The Save to Healdan window: places on the left, matter 998.1 – Healdan Demo's Documents folder in the middle, its client Healdan and Store Client Work beside the matter, with the Drafts folder selected, and the new document's properties on the right, Client / Matter showing the matter with Healdan under it, with a File Format pop-up under the properties showing OpenDocument Text (.odt)](save-to-healdan.png)
+![The Save to Healdan window: places on the left, matter 1002.1 – Commercial Lease in the middle, its client Brightwell Bakeries Ltd and Store Client Work beside the matter, with the Drafts folder selected, and the new document's properties on the right: Name Rent Deposit Deed, Client / Matter showing the matter with Brightwell Bakeries Ltd under it, Author and Typist Priya Nair, Class Docs, Subclass, Comments and Legacy doc #, with a File Format pop-up under the properties showing OpenDocument Text (.odt)](save-to-healdan.png)
 
 ## Choosing a Folder
 
@@ -31,9 +28,9 @@ The window starts on **Recent Folders**. Choose where the document goes from the
 | Clients | nothing by itself: it sets the search to Clients, so you can type a client's number or name |
 | Favorites | your favourite folders: see [Favourites](#favourites) |
 
-- **Matters** are listed with their client's name after them, in smaller type: `998.1 – Healdan Demo (Healdan)`.
+- **Matters** are listed with their client's name after them, in smaller type: `1002.1 – Commercial Lease (Brightwell Bakeries Ltd)`.
 - **Double-click a matter or a folder** to go into it. The bar above the list shows where you are, from the matter
-  down, with the matter's client and Store after it: `998.1 – Healdan Demo (Healdan · Client Work) › Documents`.
+  down, with the matter's client and Store after it: `1002.1 – Commercial Lease (Brightwell Bakeries Ltd · Client Work) › Drafts`.
   Click any part of it to go back there. The arrows at the top go back, forward and up.
 - **Click a folder in the list** to file into it, or leave nothing selected to file into the folder shown.
 - **Save turns on** once you've chosen a folder that can hold documents, inside a matter, and every required
@@ -42,8 +39,8 @@ The window starts on **Recent Folders**. Choose where the document goes from the
 ### Searching
 
 The picker beside the search box chooses what to search for: **Folders**, **Documents**, **Matters** or **Clients**.
-Inside a matter, Folders and Documents search only that matter: the box says so, as in "Search folders within 998.1
-– Healdan Demo". Type and press Enter.
+Inside a matter, Folders and Documents search only that matter: the box says so, as in "Search folders within
+1002.1 – Commercial Lease". Type and press Enter.
 
 - **A matter number** such as `998.1`, with Matters chosen, finds that matter.
 - **`#1234`** and Enter goes to the folder of document 1234, with the document selected.
