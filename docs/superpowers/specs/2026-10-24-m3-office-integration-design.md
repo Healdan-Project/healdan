@@ -439,7 +439,7 @@ The look changed in the polish: see [the polish spec](2026-10-27-helper-ui-polis
 
 ## 7. The Office add-in (M3.5)
 
-Microsoft Office on the Mac comes after M3 (owner, §2.1). This section records what the trial learned, as M3.5's starting point.
+Microsoft Office on the Mac comes after M3 (owner, §2.1). This section records what the trial learned, as M3.5's starting point. (2026-10-30: the [M3.5 spec](2026-10-30-m3-5-microsoft-office-design.md) settles its three questions: a web add-in from the admin centre, pairing by a typed code, and pages from the Healdan server.)
 
 **What it must do (owner):** a Healdan group on the ribbon with the same buttons as LibreOffice's toolbar, Insert Doc ID in Word, and taking over Open, Save and Save As where Word allows. **Where Word won't let Healdan take a command over, Healdan's button sits beside Word's own** (owner).
 
