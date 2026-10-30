@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Kestrel Software Ltd's Series A due diligence tracker, kept by Priya Nair in 1003.1 Due Diligence
+  (updated 28 September 2026). The counts at the foot are real formulas
+  (COUNTIF over the Status column), and each carries the value it works out to (office:value), which LibreOffice shows until it
+  recalculates. If a status changes, change the cached counts beside it.
+-->
+<office:document
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"
+  xmlns:dc="http://purl.org/dc/elements/1.1/"
+  xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  xmlns:number="urn:oasis:names:tc:opendocument:xmlns:datastyle:1.0"
+  xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0"
+  xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2"
+  office:version="1.3"
+  office:mimetype="application/vnd.oasis.opendocument.spreadsheet">
+
+  <office:meta>
+    <meta:initial-creator>Priya Nair</meta:initial-creator>
+    <dc:creator>Priya Nair</dc:creator>
+    <dc:title>Series A Due Diligence Tracker</dc:title>
+    <dc:language>en-GB</dc:language>
+    <meta:creation-date>2026-09-24T15:10:00</meta:creation-date>
+    <dc:date>2026-09-28T16:20:00</dc:date>
+  </office:meta>
+
+  <office:font-face-decls>
+    <style:font-face style:name="Calibri" svg:font-family="Calibri" style:font-family-generic="swiss" style:font-pitch="variable"/>
+  </office:font-face-decls>
+
+  <office:styles>
+    <style:default-style style:family="table-cell">
+      <style:text-properties style:font-name="Calibri" fo:font-size="9.5pt" fo:language="en" fo:country="GB"/>
+      <style:table-cell-properties style:vertical-align="middle"/>
+    </style:default-style>
+
+    <number:number-style style:name="NNum">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:number-style style:name="NInt">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+    <number:currency-style style:name="NGBP">
+      <number:currency-symbol number:language="en" number:country="GB">£</number:currency-symbol>
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1" number:grouping="true"/>
+    </number:currency-style>
+    <number:percentage-style style:name="NPct">
+      <number:number number:decimal-places="1" number:min-decimal-places="0" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDate">
+      <number:day/><number:text> </number:text><number:month number:textual="true"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+
+    <style:style style:name="Default" style:family="table-cell"/>
+    <style:style style:name="Title" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="TitleWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:font-size="15pt" fo:font-weight="bold" fo:color="#1d4e5f"/>
+    </style:style>
+    <style:style style:name="Heading" style:family="table-cell" style:parent-style-name="Default">
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="NoteWrap" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:wrap-option="wrap" style:vertical-align="top"/>
+      <style:text-properties fo:color="#333333"/>
+    </style:style>
+    <style:style style:name="Section" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.08cm"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="ColHead" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-bottom="0.75pt solid #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="ColHeadRight" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="ColHeadCentre" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="Row" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-bottom="0.5pt solid #cccccc" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+    </style:style>
+    <style:style style:name="RowPad" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="ColHeadPad" style:family="table-cell" style:parent-style-name="ColHead">
+      <style:table-cell-properties fo:padding-left="0.45cm"/>
+    </style:style>
+    <style:style style:name="RowCentre" style:family="table-cell" style:parent-style-name="Row">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowNum" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NNum"/>
+    <style:style style:name="RowInt" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NInt">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowMoney" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NGBP"/>
+    <style:style style:name="RowMoneyIn" style:family="table-cell" style:parent-style-name="RowMoney">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowPct" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct"/>
+    <style:style style:name="RowPctIn" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDate" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDate">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateIn" style:family="table-cell" style:parent-style-name="RowDate">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="HiRow" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff3d1"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="HiMoney" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NGBP"/>
+    <style:style style:name="HiPct" style:family="table-cell" style:parent-style-name="HiRow" style:data-style-name="NPct"/>
+    <style:style style:name="Sub" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:border-top="0.75pt solid #000000" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="SubMoney" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NGBP"/>
+    <style:style style:name="SubPct" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct"/>
+    <style:style style:name="Total" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#e6eef0" fo:border-top="0.75pt solid #1d4e5f" fo:border-bottom="1.5pt double #1d4e5f" fo:padding="0.08cm" fo:wrap-option="wrap"/>
+      <style:text-properties fo:font-size="10.5pt" fo:font-weight="bold"/>
+    </style:style>
+    <style:style style:name="TotalMoney" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NGBP"/>
+    <style:style style:name="TotalPct" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct"/>
+    <style:style style:name="Due" style:family="table-cell" style:parent-style-name="Default">
+      <style:table-cell-properties fo:background-color="#1d4e5f" fo:padding="0.1cm"/>
+      <style:text-properties fo:font-size="11pt" fo:font-weight="bold" fo:color="#ffffff"/>
+    </style:style>
+    <style:style style:name="DueMoney" style:family="table-cell" style:parent-style-name="Due" style:data-style-name="NGBP">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+
+    <number:number-style style:name="NIntG">
+      <number:number number:decimal-places="0" number:min-integer-digits="1" number:grouping="true"/>
+    </number:number-style>
+    <number:percentage-style style:name="NPct2">
+      <number:number number:decimal-places="2" number:min-decimal-places="2" number:min-integer-digits="1"/>
+      <number:text>%</number:text>
+    </number:percentage-style>
+    <number:date-style style:name="NDateShort">
+      <number:day/><number:text> </number:text><number:month number:textual="true" number:style="short"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+    <number:date-style style:name="NDateDow">
+      <number:day-of-week number:style="short"/><number:text> </number:text><number:day/><number:text> </number:text><number:month number:textual="true" number:style="short"/><number:text> </number:text><number:year number:style="long"/>
+    </number:date-style>
+    <number:number-style style:name="NDays">
+      <number:number number:decimal-places="0" number:min-integer-digits="1"/>
+    </number:number-style>
+
+    <style:style style:name="RowShares" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowSharesIn" style:family="table-cell" style:parent-style-name="RowShares">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="SubShares" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="TotalShares" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowPct2" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="SubPct2" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="TotalPct2" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NPct2">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowDateShort" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDateShort">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateShortIn" style:family="table-cell" style:parent-style-name="RowDateShort">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDateDow" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDateDow">
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateDowIn" style:family="table-cell" style:parent-style-name="RowDateDow">
+      <style:text-properties fo:color="#0b3d91"/>
+    </style:style>
+    <style:style style:name="RowDays" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NDays">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowTop" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties style:vertical-align="top"/>
+    </style:style>
+    <style:style style:name="StDone" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#dff0e0" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StClient" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#fff1c9" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StOpen" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#f7d9d4" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="StPost" style:family="table-cell" style:parent-style-name="Row">
+      <style:table-cell-properties fo:background-color="#d9e4f5" style:vertical-align="top"/>
+      <style:paragraph-properties fo:text-align="center"/>
+    </style:style>
+    <style:style style:name="RowDateTop" style:family="table-cell" style:parent-style-name="RowDateShort">
+      <style:table-cell-properties style:vertical-align="top"/>
+    </style:style>
+    <style:style style:name="TotalLabelCount" style:family="table-cell" style:parent-style-name="Total" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="SubCount" style:family="table-cell" style:parent-style-name="Sub" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+    <style:style style:name="RowCount" style:family="table-cell" style:parent-style-name="Row" style:data-style-name="NIntG">
+      <style:paragraph-properties fo:text-align="end"/>
+    </style:style>
+  </office:styles>
+
+  <office:automatic-styles>
+    <style:style style:name="co0" style:family="table-column"><style:table-column-properties style:column-width="1.5cm"/></style:style><style:style style:name="co1" style:family="table-column"><style:table-column-properties style:column-width="3.0cm"/></style:style><style:style style:name="co2" style:family="table-column"><style:table-column-properties style:column-width="7.4cm"/></style:style><style:style style:name="co3" style:family="table-column"><style:table-column-properties style:column-width="2.9cm"/></style:style><style:style style:name="co4" style:family="table-column"><style:table-column-properties style:column-width="2.7cm"/></style:style><style:style style:name="co5" style:family="table-column"><style:table-column-properties style:column-width="2.7cm"/></style:style><style:style style:name="co6" style:family="table-column"><style:table-column-properties style:column-width="6.5cm"/></style:style>
+    <style:style style:name="rh0_9" style:family="table-row"><style:table-row-properties style:row-height="0.9cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh1_0" style:family="table-row"><style:table-row-properties style:row-height="1.0cm" style:use-optimal-row-height="false"/></style:style><style:style style:name="rh0_8" style:family="table-row"><style:table-row-properties style:row-height="0.8cm" style:use-optimal-row-height="false"/></style:style>
+    <style:page-layout style:name="pm1">
+      <style:page-layout-properties fo:page-width="29.7cm" fo:page-height="21cm" style:print-orientation="landscape"
+        fo:margin-top="1.5cm" fo:margin-bottom="1.5cm" fo:margin-left="1.5cm" fo:margin-right="1.5cm" style:scale-to-pages="1"/>
+      <style:header-style><style:header-footer-properties fo:min-height="0cm" fo:margin-bottom="0cm"/></style:header-style>
+      <style:footer-style><style:header-footer-properties fo:min-height="0cm" fo:margin-top="0cm"/></style:footer-style>
+    </style:page-layout>
+  </office:automatic-styles>
+
+  <office:master-styles>
+    <style:master-page style:name="Default" style:page-layout-name="pm1">
+      <style:header style:display="false"/>
+      <style:footer style:display="false"/>
+    </style:master-page>
+  </office:master-styles>
+
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name="Due diligence">
+        <table:table-column table:style-name="co0"/><table:table-column table:style-name="co1"/><table:table-column table:style-name="co2"/><table:table-column table:style-name="co3"/><table:table-column table:style-name="co4"/><table:table-column table:style-name="co5"/><table:table-column table:style-name="co6"/>
+                <table:table-row table:style-name="rh0_9"><table:table-cell table:style-name="Title" table:number-columns-spanned="7" office:value-type="string"><text:p>Kestrel Software Ltd – Series A due diligence tracker</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Heading" table:number-columns-spanned="7" office:value-type="string"><text:p>Updated 28 September 2026</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row table:style-name="rh1_0"><table:table-cell table:style-name="NoteWrap" table:number-columns-spanned="7" office:value-type="string"><text:p>Prepared by Priya Nair for Helen Ashcombe (matter 1003.1). The requests are those of Brindley Moss LLP’s list of 21 September 2026. With is who provides the item. Status is Done, With client (the company has the next step) or Open (not yet started or not yet found).</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row table:style-name="rh0_8"><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Ref</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Area</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Request</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>With</text:p></table:table-cell><table:table-cell table:style-name="ColHeadCentre" office:value-type="string"><text:p>Status</text:p></table:table-cell><table:table-cell table:style-name="ColHeadCentre" office:value-type="string"><text:p>Date provided</text:p></table:table-cell><table:table-cell table:style-name="ColHead" office:value-type="string"><text:p>Notes</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD01</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Corporate</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Certificate of incorporation and current articles of association</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-22"><text:p>22 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>In the data room.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD02</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Corporate</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Registers of members, directors and people with significant control; share certificates</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-24"><text:p>24 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Agree with the cap table: 9,000,000 ordinary shares.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD03</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Corporate</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Share option plan rules and register of options granted</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-24"><text:p>24 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>640,000 granted; 360,000 not yet allocated.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD04</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Corporate</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Board minutes and shareholder resolutions for the last three years</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Minutes for 2024 still being found.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD05</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Corporate</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Waivers of pre-emption rights from Ruth Calloway and Dev Mistry</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Helen has advised; Ines to ask both angels to sign.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD06</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Intellectual property</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>IP assignment from Owain Rhys for the 2021 reporting module</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StOpen" office:value-type="string"><text:p>Open</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>None signed. Tobias to contact Owain Rhys.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD07</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Intellectual property</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>IP clauses in the contracts of staff and contractors who have written code</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-25"><text:p>25 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Staff contracts assign IP to the company. Contractors: see the row above.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD08</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Intellectual property</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Open-source components in Kestrel Rota and the desktop app, with their licences</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias is running a scan of both.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD09</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Customers</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Top ten customer contracts</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-25"><text:p>25 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Brackenmoor Care Homes contract has a change-of-control clause.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD10</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Customers</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Revenue by customer for the last two years</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-23"><text:p>23 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Brackenmoor Care Homes Ltd is 22% of revenue.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD11</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Customers</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Standard customer licence terms</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Review under way (matter 1003.2).</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD12</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Employment</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>List of staff with job titles, salaries and notice periods</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-24"><text:p>24 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD13</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Employment</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Employment contracts for all staff and the founders’ service agreements</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Founders’ agreements received; staff contracts to follow.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD14</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Data protection</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Privacy policy, records of processing and registration with the data protection regulator</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-25"><text:p>25 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD15</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Data protection</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Record of data incidents in the last three years</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StOpen" office:value-type="string"><text:p>Open</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>One customer incident, May 2026. Tobias to send the file.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD16</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Data protection</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Customer data-processing terms and list of sub-processors</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Tobias Wren</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Sub-processor list being checked.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD17</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Property</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Lease of the office at Kingfisher Yard</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-23"><text:p>23 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Lease ends March 2027.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD18</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Disputes</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Any claims, disputes or grievances in the last three years</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-24"><text:p>24 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>None.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD19</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Finance</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Statutory accounts for the last two years</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-22"><text:p>22 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD20</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Finance</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Management accounts to 31 August 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StClient" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Due from Ines this week.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD21</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Finance</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Confirmation that VAT and payroll taxes are up to date</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StOpen" office:value-type="string"><text:p>Open</text:p></table:table-cell><table:table-cell table:style-name="RowTop"/><table:table-cell table:style-name="RowTop"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>DD22</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Finance</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Loans, overdrafts and any charges over the company’s assets</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>Ines Kowalczyk</text:p></table:table-cell><table:table-cell table:style-name="StDone" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:table-cell table:style-name="RowDateTop" office:value-type="date" office:date-value="2026-09-23"><text:p>23 Sep 2026</text:p></table:table-cell><table:table-cell table:style-name="RowTop" office:value-type="string"><text:p>None.</text:p></table:table-cell></table:table-row>
+        <table:table-row><table:table-cell table:number-columns-repeated="7"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Section" table:number-columns-spanned="7" office:value-type="string"><text:p>Where things stand</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="6"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Done</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowCount" table:formula="of:=COUNTIF([.E6:.E27];&quot;Done&quot;)" office:value-type="float" office:value="12.0"><text:p>12</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>With client</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowCount" table:formula="of:=COUNTIF([.E6:.E27];&quot;With client&quot;)" office:value-type="float" office:value="7.0"><text:p>7</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Open</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowCount" table:formula="of:=COUNTIF([.E6:.E27];&quot;Open&quot;)" office:value-type="float" office:value="3.0"><text:p>3</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Total" table:number-columns-spanned="3" office:value-type="string"><text:p>All requests</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="TotalLabelCount" table:formula="of:=COUNTA([.A6:.A27])" office:value-type="float" office:value="22.0"><text:p>22</text:p></table:table-cell><table:table-cell table:style-name="Total" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Done, as a share of all requests</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowPct2" table:formula="of:=[.D30]/[.D33]" office:value-type="percentage" office:value="0.5454545454545454"><text:p>54.55%</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+        <table:table-row><table:table-cell table:style-name="Row" table:number-columns-spanned="3" office:value-type="string"><text:p>Check: the counts above less all requests (nil)</text:p></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/><table:table-cell table:style-name="RowCount" table:formula="of:=SUM([.D30:.D32])-[.D33]" office:value-type="float" office:value="0.0"><text:p>0</text:p></table:table-cell><table:table-cell table:style-name="Row" table:number-columns-spanned="3"><text:p/></table:table-cell><table:covered-table-cell table:number-columns-repeated="2"/></table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document>

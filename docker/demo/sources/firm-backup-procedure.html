@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="author" content="Sam Okafor">
+<meta name="created" content="2026-10-13T14:30:00">
+<meta name="changedby" content="Sam Okafor">
+<meta name="changed" content="2026-10-15T09:35:00">
+<meta name="keywords" content="backup, restore, procedure, IT">
+<title>Backup and Restore Procedure</title>
+<link rel="stylesheet" type="text/css" href="letterhead.css">
+<style>
+.sec { page-break-after: avoid; font-weight: bold; color: #1d4e5f; margin-top: 9pt; margin-bottom: 3pt }
+.cell { margin-top: 2pt; margin-bottom: 2pt; line-height: 115%; font-size: 9.5pt }
+</style>
+</head>
+<body lang="en-GB">
+
+<div title="footer">
+<p class="lh-foot">Ashcombe Reeve LLP is a limited liability partnership registered in England and Wales. Authorised and regulated by the Solicitors Regulation Authority.<br>
+A list of the members is open to inspection at Ashcombe House, 9 Quay Street, Marlbridge WX1 4AB.</p>
+</div>
+
+<table width="100%" cellpadding="0" cellspacing="0">
+<tr>
+<td width="52%" valign="bottom">
+<p class="lh-name">Ashcombe Reeve LLP</p>
+<p class="lh-sub">Solicitors</p>
+</td>
+<td width="48%" valign="bottom">
+<p class="lh-details">Ashcombe House, 9 Quay Street<br>Marlbridge WX1 4AB<br>
+Telephone 01632 960200<br>enquiries@ashcombe-reeve.example<br>www.ashcombe-reeve.example</p>
+</td>
+</tr>
+</table>
+<p class="lh-rule">&nbsp;</p>
+
+<p class="doc-title">Backup and Restore Procedure</p>
+<p class="doc-meta">Version 1 &ndash; 15 October 2026 &ndash; owner Sam Okafor, IT and Office Manager &ndash; approved by Helen Ashcombe, Partner</p>
+
+<p class="sec">1.&nbsp;&nbsp;&nbsp;What we back up</p>
+<table width="100%" cellpadding="4" cellspacing="0" border="1" bordercolor="#999999">
+<tr bgcolor="#eef2f3"><td width="40%"><p class="cell"><b>What</b></p></td><td width="60%"><p class="cell"><b>Where it lives</b></p></td></tr>
+<tr><td><p class="cell">Healdan: its database and its document store</p></td><td><p class="cell">The server, healdan.ashcombe-reeve.example</p></td></tr>
+<tr><td><p class="cell">The accounts and time-recording system</p></td><td><p class="cell">The office server, office.ashcombe-reeve.example</p></td></tr>
+<tr><td><p class="cell">The email archive (an export of every mailbox)</p></td><td><p class="cell">The office server, office.ashcombe-reeve.example</p></td></tr>
+</table>
+
+<p class="sec">2.&nbsp;&nbsp;&nbsp;When and where</p>
+<p class="clause">2.1&nbsp;&nbsp;&nbsp;<b>Nightly</b> at 23:00, a copy of everything in step 1 goes to the office network storage, nas.ashcombe-reeve.example. We keep 30 nightly copies.</p>
+<p class="clause">2.2&nbsp;&nbsp;&nbsp;<b>Weekly</b>, early on Sunday, the newest nightly copy is encrypted and sent to Marlvault Backup Ltd. We keep 12 weekly copies.</p>
+<p class="clause">2.3&nbsp;&nbsp;&nbsp;<b>Monthly</b>, on the first Saturday, a copy is written to an encrypted drive that is kept off site. We keep 12 monthly copies.</p>
+
+<p class="sec">3.&nbsp;&nbsp;&nbsp;Who does what</p>
+<p class="clause">3.1&nbsp;&nbsp;&nbsp;<b>Sam Okafor</b> runs the backups. He reads the backup report that arrives by email each morning, and if a nightly copy has failed he fixes it that day. If two nights in a row fail he tells Helen Ashcombe. Tom Reeve stands in when Sam is away.</p>
+<p class="clause">3.2&nbsp;&nbsp;&nbsp;<b>Helen Ashcombe</b> keeps the off-site drive. The key that opens the encrypted copies is in a sealed envelope in the strongroom, and Helen holds a second copy.</p>
+<p class="clause">3.3&nbsp;&nbsp;&nbsp;<b>Everyone else</b> keeps client documents in Healdan only, never on a personal device, and tells Sam at once if a file goes missing.</p>
+
+<p class="sec">4.&nbsp;&nbsp;&nbsp;Testing a restore</p>
+<p class="clause">4.1&nbsp;&nbsp;&nbsp;Every quarter, on a Saturday, Sam restores the latest nightly copy of Healdan onto a spare machine, checks that the database is complete and that a sample of documents opens, and writes the result in the backup log.</p>
+<p class="clause">4.2&nbsp;&nbsp;&nbsp;The last test was on Saturday 25 July 2026. The next is on Saturday 24 October 2026.</p>
+
+<p class="sec">5.&nbsp;&nbsp;&nbsp;If a file is lost</p>
+<p class="clause">5.1&nbsp;&nbsp;&nbsp;Tell Sam the matter, the name of the file and when you last saw it.</p>
+<p class="clause">5.2&nbsp;&nbsp;&nbsp;Sam first looks in Healdan for the deleted document or an earlier version, which puts most losses right in a few minutes.</p>
+<p class="clause">5.3&nbsp;&nbsp;&nbsp;If it is not there, Sam restores the document from the newest nightly copy that has it, into a safe place, and checks that it opens.</p>
+<p class="clause">5.4&nbsp;&nbsp;&nbsp;Sam puts the document back in its matter, tells you, and notes what he did in the backup log.</p>
+
+<p class="sec">6.&nbsp;&nbsp;&nbsp;If the server fails</p>
+<p class="clause">6.1&nbsp;&nbsp;&nbsp;Tell Sam at once. Sam tells Helen, and rings Marlbridge Computer Services Ltd, whose warranty covers the server, on 01632 960610.</p>
+<p class="clause">6.2&nbsp;&nbsp;&nbsp;Until the server is back, keep working from email and your notes, and do not save client documents anywhere else.</p>
+<p class="clause">6.3&nbsp;&nbsp;&nbsp;When the server is repaired or replaced, Sam restores Healdan from the newest nightly copy and checks the restored matters before anyone logs in. At most the work since 23:00 the night before is lost.</p>
+<p class="clause">6.4&nbsp;&nbsp;&nbsp;If the office network storage has failed too, Sam restores from Marlvault&rsquo;s newest weekly copy, which can be up to a week old. Staff will then redo the lost work from email and notes. Marlvault&rsquo;s number is 01632 960622.</p>
+
+</body>
+</html>
