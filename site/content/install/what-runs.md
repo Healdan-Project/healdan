@@ -20,7 +20,8 @@ weight: 2
 - **It adds new default settings.** A setting that's in the image's defaults but missing from your
   `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
   except the release number and copyright years (`product.release` and `product.year`), which always come from the
-  image.
+  image, and an older image's default that the new image replaces (so far only `cachecontrol`), unless you changed
+  it yourself.
 - **The setup wizard is switched off.** `/setup` answers with HTTP 403, because `.env` configures the database.
 
 ## External Programs

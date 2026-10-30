@@ -18,6 +18,18 @@ public final class ConfigPlan {
      */
     public static final List<String> IMAGE_KEYS = List.of("product.release", "product.year");
 
+    /**
+     * Defaults earlier images shipped that this image's defaults replace, by key. A conf file still holding one of
+     * these exact values takes the image's default, so a fixed default reaches existing installs; any other value is
+     * the admin's and stays. Changing one of these defaults again adds the value it replaces here.
+     */
+    public static final Map<String, List<String>> REPLACED_DEFAULTS = Map.of("cachecontrol", List.of(
+            // Until 2026-10-30. GWT's *.nocache.js loaders fell under *.js, so after an upgrade a browser kept running
+            // the old GUI for up to ten minutes.
+            "*.ico:max-age=2592000;*.gif:max-age=2592000;*.jpg:max-age=2592000;*.png:max-age=2592000;"
+                    + "*.svg:max-age=2592000;*.css:max-age=2592000;*.js:max-age=600;*.jsp:max-age=0;"
+                    + "*:no-cache,no-store,must-revalidate"));
+
     private ConfigPlan() {
     }
 

@@ -3,6 +3,7 @@ import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -73,6 +74,31 @@ public class ConfigFileTest {
             Check.eq(shipped.getProperty(key), later.getProperty(key), key + " taken from the image");
         }
 
+        // GWT's loaders name the build's *.cache.js files, so a browser must check them on every load: their rule
+        // comes before *.js's, since the first match wins.
+        String cacheControl = shipped.getProperty("cachecontrol");
+        Check.isTrue(cacheControl.contains(";*.nocache.js:no-cache;")
+                && cacheControl.indexOf("*.nocache.js:") < cacheControl.indexOf("*.js:"),
+                "the shipped cachecontrol revalidates *.nocache.js ahead of *.js: " + cacheControl);
+
+        // A default an earlier image shipped is replaced by this image's; a value the admin set stays.
+        for (Map.Entry<String, List<String>> replaced : ConfigPlan.REPLACED_DEFAULTS.entrySet()) {
+            String key = replaced.getKey();
+            Check.isTrue(shipped.getProperty(key) != null, key + " is in the shipped defaults");
+            Check.isTrue(!replaced.getValue().contains(shipped.getProperty(key)),
+                    key + "'s shipped default isn't one it replaces");
+            for (String old : replaced.getValue()) {
+                set(conf, key, old);
+                DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+                Check.eq(shipped.getProperty(key), new ContextProperties(conf).getProperty(key),
+                        key + " old default replaced");
+            }
+        }
+        set(conf, "cachecontrol", "*:no-store");
+        DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+        Check.eq("*:no-store", new ContextProperties(conf).getProperty("cachecontrol"),
+                "admin-set cachecontrol preserved");
+
         // context.properties is written byte-per-char (Latin-1): anything it cannot hold must be refused, not
         // silently corrupted into a value that only fails later when Tomcat logs in.
         Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa€ss")), "non-Latin-1 password");
@@ -81,6 +107,12 @@ public class ConfigFileTest {
                 () -> apply(conf, Map.of("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL", "https://bücher.例え.jp")),
                 "non-Latin-1 public URL");
         Check.done("ConfigFileTest");
+    }
+
+    private static void set(File conf, String key, String value) throws java.io.IOException {
+        ContextProperties config = new ContextProperties(conf);
+        config.setProperty(key, value);
+        config.write();
     }
 
     private static void apply(File conf, Map<String, String> env) {
