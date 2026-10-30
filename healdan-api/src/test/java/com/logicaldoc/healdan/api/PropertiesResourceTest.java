@@ -497,6 +497,47 @@ public class PropertiesResourceTest extends ApiTestCase {
 		assertEquals("Docs", field(get(properties(d)).token(token).send(), CLASS).path("value").textValue());
 	}
 
+	@Test
+	public void testChangePastABackgroundWrite() throws Exception {
+		// The Office preview saves the document when its conversion ends, after the API read it to change it
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		String legacy = HealdanConstants.ATTR_LEGACYDOCNUM;
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
+			response = patch(properties(d)).token(token).json(values(legacy, "OLD-1")).send();
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("OLD-1", field(response, legacy).path("value").textValue());
+		assertEquals("OLD-1", stringValue(d, legacy));
+		assertEquals(List.of("1.0", "1.1"), versions(d));
+		assertEquals("1.1", DocumentDAO.get().findById(d.getId()).getVersion());
+	}
+
+	@Test
+	public void testChangePastABackgroundWriteAtTheFlush() throws Exception {
+		// The preview's save commits just before CE's UPDATE of the change, whose failure CE's DAO swallows: the change
+		// answered 200 with the new value, which was never stored, and CE kept a version of it
+		Document d = file("a.docx");
+		String token = signIn(clerk);
+		String legacy = HealdanConstants.ATTR_LEGACYDOCNUM;
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
+			response = patch(properties(d)).token(token).json(values(legacy, "OLD-1")).send();
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("OLD-1", field(response, legacy).path("value").textValue());
+		assertEquals("OLD-1", stringValue(d, legacy));
+		assertEquals(List.of("1.0", "1.1"), versions(d));
+		assertEquals("1.1", DocumentDAO.get().findById(d.getId()).getVersion());
+	}
+
 	private static void assertNoneEditable(ApiResponse response) {
 		assertEquals(response.toString(), 200, response.status());
 		for (JsonNode field : response.json().path("items"))
@@ -506,6 +547,12 @@ public class PropertiesResourceTest extends ApiTestCase {
 	private String stringValue(Document d, String name) {
 		return jdbc().queryForObject("select ld_stringvalue from ld_document_ext where ld_docid = ? and ld_name = ?",
 				String.class, d.getId(), name);
+	}
+
+	/** The document's versions that aren't deleted, oldest first */
+	private List<String> versions(Document d) {
+		return jdbc().queryForList("select ld_version from ld_version where ld_documentid = ? and ld_deleted = 0 order by ld_id",
+				String.class, d.getId());
 	}
 
 	private JsonNode assertRefused(Document d, String token, Map<String, Object> values, List<String> expected) {

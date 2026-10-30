@@ -2,6 +2,7 @@ package com.logicaldoc.healdan.api;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -301,6 +302,95 @@ public class CheckoutResourceTest extends ApiTestCase {
 		assertEquals(nothing.toString(), 200, nothing.status());
 		assertTrue(nothing.json().path("hold").isNull());
 		free.assertUnchanged();
+	}
+
+	@Test
+	public void testReleasePastABackgroundWrite() throws Exception {
+		// The Office preview saves the document when its conversion ends, between CE's read and write of the release
+		Document d = file();
+		String token = signIn(clerk);
+		assertEquals(200, post(path(d)).token(token).send().status());
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.conversion(d.getId()).start()) {
+			response = delete(path(d)).token(token).send();
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertTrue(response.json().path("hold").isNull());
+		assertEquals(DocumentStatus.UNLOCKED, DocumentDAO.get().findById(d.getId()).getStatus());
+		assertEquals(List.of("event.stored", "event.checkedout", "event.converted", "event.unlocked"), events(d));
+	}
+
+	@Test
+	public void testReleasePastABackgroundWriteAtTheFlush() throws Exception {
+		// The preview's save commits just before CE's UPDATE of the release, whose failure CE's DAO swallows: the
+		// release answered 200 with the hold still there
+		Document d = file();
+		String token = signIn(clerk);
+		assertEquals(200, post(path(d)).token(token).send().status());
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
+			response = delete(path(d)).token(token).send();
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertTrue(response.json().path("hold").isNull());
+		Document released = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.UNLOCKED, released.getStatus());
+		assertNull(released.getLockUserId());
+		assertEquals(List.of("event.stored", "event.checkedout", "event.converted", "event.unlocked"), events(d));
+	}
+
+	@Test
+	public void testAdminReleasePastABackgroundWriteAtTheFlush() throws Exception {
+		// An administrator's release also makes the document mutable again, and is lost with it
+		Document d = file();
+		DocumentManager.get().makeImmutable(d.getId(), fx.documentHistory(boss));
+		checkout(d, clerk);
+		String token = signIn(boss);
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite conversion = BackgroundWrite.atFlush(d.getId()).start()) {
+			response = delete(path(d)).token(token).send();
+			conversion.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertTrue(response.json().path("hold").isNull());
+		Document released = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.UNLOCKED, released.getStatus());
+		assertFalse(released.isImmutable());
+		assertEquals(boss.getId(), jdbc().queryForObject(
+				"select ld_userid from ld_history where ld_docid = ? and ld_event = 'event.unlocked'", Long.class,
+				d.getId()).longValue());
+	}
+
+	@Test
+	public void testReleaseOfAHoldTakenOverInTheMoment() throws Exception {
+		// At the flush of the clerk's release, the boss broke the clerk's check-out in the web page and took the
+		// document: the release isn't asked for again, and the answer shows who has the document
+		Document d = file();
+		String token = signIn(clerk);
+		assertEquals(200, post(path(d)).token(token).send().status());
+		jdbc().execute("SET DATABASE TRANSACTION CONTROL MVCC");
+		ApiResponse response;
+		try (BackgroundWrite webPage = BackgroundWrite.atFlush(d.getId(), DocumentEvent.CHECKEDOUT, document -> {
+			document.setLockUserId(boss.getId());
+			document.setLockUser(boss.getFullName());
+		}).start()) {
+			response = delete(path(d)).token(token).send();
+			webPage.assertWritten();
+		}
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(boss.getId(), response.json().path("hold").path("by").path("id").asLong());
+		Document taken = DocumentDAO.get().findById(d.getId());
+		assertEquals(DocumentStatus.CHECKEDOUT, taken.getStatus());
+		assertEquals(Long.valueOf(boss.getId()), taken.getLockUserId());
 	}
 
 	private Document file() throws Exception {
