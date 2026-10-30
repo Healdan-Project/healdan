@@ -24,7 +24,7 @@
 - **macOS packaging:** `codesign`, `notarytool`, `stapler` and `hdiutil`.
 - **Linux packaging (phase 2):** `dpkg-deb` in an `ubuntu:26.04` container.
 
-**Status:** the owner approved this plan on 2026-10-24, and chose subagent-driven execution. Tasks 1–20 were built on 2026-10-24 and 2026-10-25, in PR A [Healdan-Project/healdan#70](https://github.com/Healdan-Project/healdan/pull/70) (Tasks 1–8), PR B [#71](https://github.com/Healdan-Project/healdan/pull/71) (Task 9), PR C [#72](https://github.com/Healdan-Project/healdan/pull/72) (Tasks 10–14), PR D [#73](https://github.com/Healdan-Project/healdan/pull/73) (Tasks 15–19) and PR E [#74](https://github.com/Healdan-Project/healdan/pull/74) (Task 20). A final review of the whole branch then found a few problems; one fix wave, in PR D with its records in PR E, fixed them (the decision log's last rows). Task 21, the owner's acceptance of phase 1, is next. Phase 2 (Tasks 22–23) starts once the owner's semi-production server is running.
+**Status:** the owner approved this plan on 2026-10-24, and chose subagent-driven execution. Tasks 1–20 were built on 2026-10-24 and 2026-10-25, in PR A [Healdan-Project/healdan#70](https://github.com/Healdan-Project/healdan/pull/70) (Tasks 1–8), PR B [#71](https://github.com/Healdan-Project/healdan/pull/71) (Task 9), PR C [#72](https://github.com/Healdan-Project/healdan/pull/72) (Tasks 10–14), PR D [#73](https://github.com/Healdan-Project/healdan/pull/73) (Tasks 15–19) and PR E [#74](https://github.com/Healdan-Project/healdan/pull/74) (Task 20). A final review of the whole branch then found a few problems; one fix wave, in PR D with its records in PR E, fixed them (the decision log's last rows). Task 21, the owner's acceptance of phase 1, passed on 2026-10-29, and Healdan Helper 0.3.0 was released on 2026-10-30 ([Healdan-Project/healdan#75](https://github.com/Healdan-Project/healdan/issues/75)). Phase 2 (Tasks 22–23) is next: the owner's semi-production server is running, and its by-hand rows need an Ubuntu 26.04 desktop.
 
 **Spec:** [`docs/superpowers/specs/2026-10-24-m3-office-integration-design.md`](../specs/2026-10-24-m3-office-integration-design.md), approved by the owner on 2026-10-24. Every § below points into it.
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
@@ -1124,11 +1124,13 @@ Expected: PASS.
 
 ### Task 21: The owner's acceptance, phase 1
 
-- [ ] **Step 1: The owner installs the released `.dmg` on the Mac and runs spec §14.2 against their server over HTTPS**
+- [x] **Step 1: The owner installs the released `.dmg` on the Mac and runs spec §14.2 against their server over HTTPS**
 
 The steps are: install; Save; edit and save; Open in App and the footer; Open by `#`; two computers; offline and crash; a `.docx` and Comments; Calc and Impress.
 
-- [ ] **Step 2: Record the result in the roadmap and the spec, and list the punch list under Follow-ups**
+- [x] **Step 2: Record the result in the roadmap and the spec, and list the punch list under Follow-ups**
+
+Passed on 2026-10-29, with no punch-list items; the decision log's last row has the details.
 
 ---
 
@@ -1226,6 +1228,7 @@ Every call made while building, in order. "Where" is the task or review that rai
 | 2026-10-27 | Follow-up (final review M5) | a repeated `saveId` is answered `201` only while the version record its check-in made stands and its `fileVersion` is still the document's. `hd_hold_device.hd_lastsaveversionid` (V5) keeps that record's id beside `hd_lastsaveid`, taken from the check-in's own answer, not the document read again after it. Once newer content is stored, by any route, or the save's version is deleted, the repeat is `409 version-moved` with the document; a record from before V5 is too, with a detail saying the server can't tell | answered `201` whatever happened since, a late retry gave the helper the web page's newer content as its own, and its next save went over it. The file, not `version`, so a property change after the save still gets `201`, and the helper's `version-moved` handling never resends a stale repeat, as its `fileVersion` has moved. The version record, not the `fileVersion` alone (review of #92): once a version is deleted, CE numbers the next check-in as it was numbered, so other content can carry the save's `fileVersion`. Overwriting the id on every save, the follow-up's suggestion, missed the web page's check-ins, which never reach the API | a retry across the upgrade to V5, or after the save's version is deleted while a later version still shows its file, gets a needless `version-moved`, and its copy is kept for Save as New Document. |
 | 2026-10-29 | Before the release (#75) | the hardened runtime keeps only `allow-jit`; `allow-unsigned-executable-memory` and `disable-library-validation` go | spec §10: no more permissions than needed. A build signed with the Developer ID and only `allow-jit` started under the hardened runtime and loaded its own Avalonia and Skia libraries, with no refusal in the system log | a release candidate that fails to open a document, and the two entitlements back in the next. |
 | 2026-10-29 | Before the release (#75) | the six signing secrets live in a `helper-release` environment that only `helper-v*` tags may use; `package-mac` takes it only for a tag's run, so a run by hand on a branch builds unsigned instead of failing (owner) | repository secrets let any run of the workflow, on any branch, sign with the Developer ID | a run by hand on a tag still signs, as a tag's push does. |
+| 2026-10-29 | Task 21 (#75) | phase 1 is accepted (owner), and `helper-v0.3.0` is tagged on master on 2026-10-30 without running spec §14.2 again on the release | the walkthrough passed with no punch-list items before #105 merged. The signed, notarised `0.3.0-rc1`, built after #105 with only `allow-jit`, then passed its own checks on the Mac (it opened, saved and closed a document, posted notifications and registered its login item), and nothing under `clients/` changed between its commit and the tag's | a 0.3.1, if the release's entitlements break a step the walkthrough would have caught. |
 
 ### What the final review found in this plan
 
