@@ -2,7 +2,8 @@ namespace Healdan.Helper.Core.Tests.Cycle;
 
 /// <summary>
 /// A settle's clock (<see cref="Core.Cycle.CycleTimings.Clock"/>) that keeps real time until a test stops it. While it's
-/// stopped, no settle ends, however long the runner takes; the test can still move it on by hand.
+/// stopped, no settle ends, however long the runner takes; the test can still move it on by hand. Its time of day
+/// keeps step with it, so a ticket's ten minutes can pass at once.
 /// </summary>
 public sealed class PausableClock : TimeProvider
 {
@@ -14,6 +15,13 @@ public sealed class PausableClock : TimeProvider
     {
         lock (_lock)
             return (_stoppedAt ?? TimeProvider.System.GetTimestamp()) - _behind;
+    }
+
+    /// <summary>The real time of day, moved as this clock has been: stopped, or moved on by hand.</summary>
+    public override DateTimeOffset GetUtcNow()
+    {
+        var real = TimeProvider.System.GetTimestamp();
+        return TimeProvider.System.GetUtcNow() + GetElapsedTime(real, GetTimestamp());
     }
 
     public void Pause()

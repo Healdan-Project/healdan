@@ -18,6 +18,12 @@ public sealed class OfficeApps(IOfficeApp libreOffice, IOfficeApp? microsoftOffi
     /// <summary>LibreOffice, which anything unknown opens in.</summary>
     public IOfficeApp LibreOffice => libreOffice;
 
+    /// <summary>
+    /// Microsoft Office, whose windows Save to Healdan files from (<see cref="Office.OfficeFiling"/>); null where it can't
+    /// be installed.
+    /// </summary>
+    public IOfficeApp? MicrosoftOffice => microsoftOffice;
+
     /// <summary>Every app in the set, LibreOffice first.</summary>
     public IReadOnlyList<IOfficeApp> All { get; } = new[] { libreOffice, microsoftOffice, otherFiles }.OfType<IOfficeApp>().ToList();
 

@@ -336,13 +336,26 @@ public sealed class CopyCycle : IDisposable
     /// next write is a save, however soon it comes. Without this call (an older extension), the first write that
     /// settles is the starting point, and anything that differs from it later is a save.
     /// </summary>
-    public CopyState Adopted(string path)
+    public CopyState Adopted(string path) => Adopted(path, changedSinceFiling: false);
+
+    /// <summary>
+    /// The app has saved a new document's window as its copy (<see cref="AdoptNewAsync"/>). Unless
+    /// <paramref name="changedSinceFiling"/>, the file as it is now is the copy's starting point, as for <c>/v1/adopted</c>.
+    /// With it, the window's content changed between the bytes being filed and its save as the copy: someone typed while
+    /// the filing was in flight (M3.5 spec §5.5 step 8, Review Focus 1). The filed bytes then stay the starting point, and
+    /// the copy goes up as a save straight away, even when its write has settled meanwhile and been taken for the starting
+    /// point: an identical version at worst, never an edit folded into the copy unsent. A copy whose file isn't there yet,
+    /// or is being written, goes up once its write settles.
+    /// </summary>
+    public CopyState Adopted(string path, bool changedSinceFiling)
     {
         Session? s;
         lock (_gate)
             s = Find(path);
         if (s is null)
             return StateOf(path);
+        if (changedSinceFiling)
+            return AdoptedChanged(s);
         string hash;
         try
         {
@@ -364,6 +377,30 @@ public sealed class CopyCycle : IDisposable
         }
         if (adopted)
             s.Adopted.TrySetResult();
+        return StateOf(s.Path);
+    }
+
+    /// <summary><see cref="Adopted(string, bool)"/> for a window that changed while it was being filed: its copy is sent.</summary>
+    private CopyState AdoptedChanged(Session s)
+    {
+        var content = TryRead(s.Path);
+        lock (_gate)
+        {
+            var wasAdopting = s.Adopting;
+            // Ended even for a copy whose window has closed meanwhile, so the close's check-in sends what it wrote rather
+            // than taking it for the starting point.
+            s.Adopting = false;
+            if (content is { } c && !s.Closing && !s.Ended && Record(s.Path) is { } record && !SameHash(c.Hash, s.LastHash)
+                && !(wasAdopting && SameHash(c.Hash, record.ConfirmedHash))) // exactly the filed bytes: Healdan has them
+            {
+                var kind = s.NextKind;
+                s.NextKind = null;
+                Enqueue(s, new SaveJob { Content = c.Bytes, Hash = c.Hash, Kind = kind ?? Snapshot });
+            }
+        }
+        s.Adopted.TrySetResult();
+        if (content is null && File.Exists(s.Path))
+            _saves.Touch(s.Path); // being written: it settles into a save, as the filed bytes are its starting point
         return StateOf(s.Path);
     }
 

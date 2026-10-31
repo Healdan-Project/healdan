@@ -9,8 +9,9 @@ namespace Healdan.Helper.Core.Tests.Office;
 /// owner file it keeps beside it. The test closes the window by deleting that file (<see cref="Close"/>) or crashes the
 /// program, which leaves it. The operations the cycle uses after a save or a crash act on the files as the programs do,
 /// and are recorded: the rename (<see cref="RenameIfUnchangedAsync"/>), the look for a document by its path, Save As,
-/// Save, PowerPoint's close and reopen, and Word's doc ID. The rest are for the add-in's routes, so a call the test
-/// didn't expect fails.
+/// Save, PowerPoint's close and reopen, and Word's doc ID. Filing from Office asks for the front window
+/// (<see cref="Front"/>), the add-in's mark and a fingerprint, which answer what the test set. Anything else is for the
+/// add-in's other routes, so a call the test didn't expect fails.
 /// </summary>
 public sealed class FakeScripting : IOfficeScripting
 {
@@ -26,6 +27,11 @@ public sealed class FakeScripting : IOfficeScripting
     private readonly ConcurrentQueue<bool> _isOpenAnswers = new();
     private int _isOpenAsked;
     private readonly ConcurrentQueue<Exception> _saveAsFailures = new();
+    private readonly ConcurrentQueue<SaveAsResult> _saveAsAnswers = new();
+    private readonly ConcurrentQueue<bool> _markAnswers = new();
+    private readonly List<(OfficeProgram Program, string Mark)> _marksAsked = [];
+    private readonly List<(OfficeProgram Program, DocumentRef Doc)> _fingerprints = [];
+    private int _frontAsked;
     private readonly ConcurrentDictionary<string, bool> _running = new(StringComparer.Ordinal);
 
     /// <summary>Every open the cycle asked for, in order.</summary>
@@ -123,6 +129,47 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>The next Save As throws this, writing nothing.</summary>
     public void FailNextSaveAs(Exception e) => _saveAsFailures.Enqueue(e);
 
+    /// <summary>The next Saves As answer these, in order; after them, a Save As found its document by its path, unchanged.</summary>
+    public void AnswerSavesAs(params SaveAsResult[] answers)
+    {
+        foreach (var answer in answers)
+            _saveAsAnswers.Enqueue(answer);
+    }
+
+    /// <summary>Runs as a Save As begins, before anything is written: to see what the user had been told by then, say.</summary>
+    public Action? BeforeSaveAs { get; set; }
+
+    /// <summary>
+    /// Runs once a Save As under another name has written the file, before it answers, as the script answers only after
+    /// the program has saved: a slow answer, say, during which the cycle sees the write settle.
+    /// </summary>
+    public Func<string, Task>? AfterSaveAsWrite { get; set; }
+
+    /// <summary>The program's front window, which <see cref="FrontDocumentAsync"/> answers each time it's asked; none by default.</summary>
+    public Func<OfficeProgram, FrontDocument?> Front { get; set; } = _ => null;
+
+    /// <summary>How many times the front window was asked for.</summary>
+    public int FrontAsked => Volatile.Read(ref _frontAsked);
+
+    /// <summary>The next looks for the add-in's mark answer these, in order; after them, <see cref="MarksShown"/>.</summary>
+    public void AnswerMarks(params bool[] answers)
+    {
+        foreach (var answer in answers)
+            _markAnswers.Enqueue(answer);
+    }
+
+    /// <summary>Whether a look for the add-in's mark finds it, once the answers the test gave are used up. PowerPoint's never does.</summary>
+    public bool MarksShown { get; set; }
+
+    /// <summary>Every look for the add-in's mark, in order.</summary>
+    public IReadOnlyList<(OfficeProgram Program, string Mark)> MarksAsked => Copy(_marksAsked);
+
+    /// <summary>What <see cref="FingerprintAsync"/> answers: the window's content summarised, or null when it finds no document.</summary>
+    public string? Fingerprint { get; set; } = "fingerprint of the window";
+
+    /// <summary>Every fingerprint asked for, in order.</summary>
+    public IReadOnlyList<(OfficeProgram Program, DocumentRef Doc)> Fingerprints => Copy(_fingerprints);
+
     public Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
     {
         if (FailOpen)
@@ -158,7 +205,11 @@ public sealed class FakeScripting : IOfficeScripting
         File.SetLastWriteTimeUtc(owner, (before > DateTime.UtcNow ? before : DateTime.UtcNow).AddSeconds(1));
     }
 
-    public Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default) => throw Unexpected();
+    public Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _frontAsked);
+        return Task.FromResult(Front(p));
+    }
 
     /// <summary>Found by its path: the answers the test gave, then whether the program's owner file is beside it.</summary>
     public Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
@@ -171,9 +222,19 @@ public sealed class FakeScripting : IOfficeScripting
 
     public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) => throw Unexpected();
 
-    public Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default) => throw Unexpected();
+    public Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default)
+    {
+        lock (_lock)
+            _fingerprints.Add((p, doc));
+        return Task.FromResult(Fingerprint);
+    }
 
-    public Task<bool> HasMarkAsync(OfficeProgram p, string mark, CancellationToken ct = default) => throw Unexpected();
+    public Task<bool> HasMarkAsync(OfficeProgram p, string mark, CancellationToken ct = default)
+    {
+        lock (_lock)
+            _marksAsked.Add((p, mark));
+        return Task.FromResult(_markAnswers.TryDequeue(out var answer) ? answer : MarksShown);
+    }
 
     /// <summary>The document is already saved as the test left it, so nothing is written.</summary>
     public Task SaveAsync(OfficeProgram p, string path, CancellationToken ct = default)
@@ -213,13 +274,29 @@ public sealed class FakeScripting : IOfficeScripting
         return answer;
     }
 
-    /// <summary>Writes what the window holds (<see cref="WindowText"/>) to the new path, found by the path it was given.</summary>
+    /// <summary>
+    /// Writes what the window holds (<see cref="WindowText"/>) to the new path, and answers what the test set
+    /// (<see cref="AnswerSavesAs"/>), by default found by the path it was given. A document saved under another name, as
+    /// a new document is when it's filed, takes its owner file there, as the program does.
+    /// </summary>
     public async Task<SaveAsResult> SaveAsAsync(OfficeProgram p, DocumentRef doc, string newPath, string? fingerprint, CancellationToken ct = default)
     {
         lock (_lock)
             _savesAs.Add((p, doc, newPath, fingerprint));
+        BeforeSaveAs?.Invoke();
         if (_saveAsFailures.TryDequeue(out var failure))
             throw failure;
+        var answer = _saveAsAnswers.TryDequeue(out var queued) ? queued : new SaveAsResult("path", false);
+        if (doc.Path != newPath)
+        {
+            File.WriteAllText(newPath, WindowText);
+            File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
+            if (doc.Path is not null)
+                File.Delete(OwnerPath(p, doc.Path));
+            if (AfterSaveAsWrite is { } after)
+                await after(newPath);
+            return answer;
+        }
         if (SaveAsTakes > TimeSpan.Zero)
         {
             File.Delete(OwnerPath(p, newPath));
@@ -228,7 +305,7 @@ public sealed class FakeScripting : IOfficeScripting
         File.WriteAllText(newPath, WindowText);
         if (SaveAsTakes > TimeSpan.Zero)
             File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
-        return new SaveAsResult("path", false);
+        return answer;
     }
 
     /// <summary>PowerPoint closes the presentation, so its owner file goes, and opens it again <see cref="ReopenGap"/> later.</summary>

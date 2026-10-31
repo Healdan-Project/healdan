@@ -4,7 +4,8 @@ weight: 2
 ---
 
 A new document goes into Healdan the first time you save it, through the **Save to Healdan** window. It works the
-same in Writer, Calc, Impress and Draw.
+same in Writer, Calc, Impress and Draw. Word, Excel and PowerPoint open the same window from their Healdan tab: see
+[From Word, Excel and PowerPoint](#from-word-excel-and-powerpoint).
 
 ## Opening the Window
 
@@ -102,6 +103,38 @@ version: `Lease agreement #1235 v1.0`.
 - **It's still open, and checked out to you.** The window is now Healdan's local copy of it, and each save from now
   on goes to Healdan: see [Editing and Versions](../editing-and-versions/).
 - **It's filed in Healdan at once,** with its doc #, so others can find it, and it's in your Recent Documents.
+
+## From Word, Excel and PowerPoint
+
+In Word, Excel and PowerPoint, file a new document with **Save to Healdan** on the ribbon's **Healdan** tab. The
+same window opens, and works as above, apart from these:
+
+- **Only the app's own format.** The File Format pop-up offers Word Document (`.docx`), Excel Workbook (`.xlsx`) or
+  PowerPoint Presentation (`.pptx`), and nothing else. Office turns the Healdan tab off in a window holding an
+  OpenDocument file, and Excel and PowerPoint can't save one.
+- **The app's own Save stays its own.** **⌘S** on a document that isn't in Healdan yet saves it on your Mac, as
+  before. Use the Healdan tab to file it.
+- **Keep the document in front** until it's filed. The helper saves the window you pressed Save to Healdan in. If it
+  can't be sure which window that is, it files nothing and says so: click in the document, and press Save to Healdan
+  again.
+- **The window becomes Healdan's local copy,** and the title bar shows its doc # and version, as in LibreOffice:
+  `Budget forecast #1236 v1.0`. PowerPoint then closes the presentation and opens it again a moment later, so that
+  its own Save saves to Healdan from then on.
+- **Anything you type while it's filing** isn't lost: the helper sends it to Healdan as the next version, `v1.1`.
+- **Save as New Document,** on the same tab, files a Healdan document's window as a new document in the same way: see
+  [Editing and Versions](../editing-and-versions/#save-as-new-document).
+
+### The First Save in Each App
+
+The first time Word, Excel or PowerPoint saves into the helper's folder, it asks for access to it. A notice from the
+helper says what to do just before it asks:
+
+1. Click **Select…**. The folder chooser opens inside the helper's **Copies** folder, with **Grant Access** greyed
+   out.
+2. Go up one level, and select **Copies**.
+3. Click **Grant Access**.
+
+Each app asks once, and the helper tells you once for each app.
 
 ## Saving to Your Mac Instead
 
