@@ -22,8 +22,9 @@ using Healdan.Helper.Windows;
 namespace Healdan.Helper;
 
 /// <summary>
-/// Puts the helper together: the session (sign-in, copies, channel and links, in that order), the menu-bar icon,
-/// notifications and windows. Links arrive as Apple events (<see cref="ProtocolActivatedEventArgs"/>), started or not.
+/// Puts the helper together: the session (sign-in, copies, the channel, the Office add-in's port and links, in that
+/// order), the menu-bar icon, notifications and windows. Links arrive as Apple events
+/// (<see cref="ProtocolActivatedEventArgs"/>), started or not.
 /// </summary>
 public partial class App : Application
 {
@@ -75,12 +76,16 @@ public partial class App : Application
         var notifier = new Notifier(_log);
         var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
-        var session = new HelperSession(paths, Keychain(paths, device), device, OfficeAppSet.Create(paths), windows, notifier, _log);
+        // The certificate for the add-in's port, which Set Up Microsoft Office makes and has the Mac trust (M3.5 spec §5.13),
+        // and the session serves once it's trusted (§5.8). Only a Mac with Word, Excel or PowerPoint on it ever needs it.
+        var certificate = new AddinCertificate(paths, TimeProvider.System);
+        var trust = new MacCertificateTrust();
+        var mac = OperatingSystem.IsMacOS();
+        var session = new HelperSession(paths, Keychain(paths, device), device, OfficeAppSet.Create(paths), windows, notifier, _log,
+            trust: mac ? trust : null, certificate: mac ? certificate : null);
         _session = session;
         windows.Session = session;
-        // The certificate for the add-in's port, which Set Up Microsoft Office has the Mac trust (M3.5 spec §5.13). Only a Mac
-        // with Word, Excel or PowerPoint on it ever needs it.
-        windows.SetUp = new OfficeSetUp(paths, new AddinCertificate(paths, TimeProvider.System), new MacCertificateTrust(), () => InstalledApps.Detect());
+        windows.SetUp = new OfficeSetUp(paths, certificate, trust, () => InstalledApps.Detect());
         var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);
         windows.Extension = extension.Check;
         session.Changed += () =>

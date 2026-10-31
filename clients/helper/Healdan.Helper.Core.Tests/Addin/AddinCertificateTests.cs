@@ -111,7 +111,7 @@ public sealed class AddinCertificateTests : IDisposable
 
         Assert.Equal("CN=Healdan Helper (this Mac)", cert.Subject);
         using var server = Certificate().ForServer();
-        Assert.True(server.HasPrivateKey);
+        Assert.True(server!.HasPrivateKey);
     }
 
     [Fact]
@@ -125,13 +125,14 @@ public sealed class AddinCertificateTests : IDisposable
 
         Assert.NotEqual(first.Thumbprint, again.Thumbprint);
         using var server = Certificate().ForServer();
-        Assert.True(server.HasPrivateKey);
+        Assert.True(server!.HasPrivateKey);
     }
 
     [Fact]
     public async Task ServesTls()
     {
-        using var server = Certificate().ForServer();
+        Certificate().LoadOrCreate().Dispose(); // Set Up made it
+        using var server = Certificate().ForServer()!;
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         try
@@ -163,6 +164,32 @@ public sealed class AddinCertificateTests : IDisposable
         {
             listener.Stop();
         }
+    }
+
+    [Fact]
+    public void ForServerNeverMakesOrRenewsACertificate()
+    {
+        var certificate = Certificate();
+        Assert.Null(certificate.ForServer()); // none made yet, and asking makes none: that's Set Up's
+        Assert.False(File.Exists(Paths.AddinCertificate));
+        Assert.False(File.Exists(Paths.AddinKey));
+
+        using var made = certificate.LoadOrCreate();
+        using (var served = certificate.ForServer())
+        {
+            Assert.True(served!.HasPrivateKey);
+            Assert.Equal(made.Thumbprint, served.Thumbprint);
+        }
+
+        // 29 days left: Set Up Microsoft Office renews it, and until then the port serves the one the Mac trusts.
+        _clock.Advance(TimeSpan.FromDays(771));
+        using (var expiring = certificate.ForServer())
+            Assert.Equal(made.Thumbprint, expiring!.Thumbprint);
+
+        _clock.Advance(TimeSpan.FromDays(30)); // expired a day ago
+        Assert.Null(certificate.ForServer());
+        using var kept = X509Certificate2.CreateFromPem(File.ReadAllText(Paths.AddinCertificate));
+        Assert.Equal(made.Thumbprint, kept.Thumbprint); // not made again
     }
 
     [Fact]

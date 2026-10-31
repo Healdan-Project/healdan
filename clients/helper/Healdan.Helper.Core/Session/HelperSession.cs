@@ -1,4 +1,6 @@
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
+using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Copies;
@@ -15,11 +17,12 @@ namespace Healdan.Helper.Core.Session;
 /// <summary>
 /// The helper while it runs, signed in to one server (spec §5.1). Starting goes in a fixed order: the sign-in (the kept
 /// token, or the Sign In window), then the copies' resume, after another server's copies are set aside and this one's
-/// brought back (spec §5.4), which sweeps the downloads a stop left half done, and only then the channel and links, so
-/// no open runs before the sweep. It also turns the cycle's events into what the user is told (spec §5.1, §5.10):
-/// quiet when things work, a notice when something needs them, a window when it needs an answer. Every API client it
-/// makes reports a refused token, whichever call met it, so a <c>401</c> anywhere asks for the password again
-/// (spec §5.2). Nothing here logs a token, a password or a file's contents.
+/// brought back (spec §5.4), which sweeps the downloads a stop left half done, and only then the channel, the Office
+/// add-in's port and links, so no open runs before the sweep. It also turns the cycle's events into what the user is
+/// told (spec §5.1, §5.10): quiet when things work, a notice when something needs them, a window when it needs an
+/// answer. Every API client it makes reports a refused token, whichever call met it, so a <c>401</c> anywhere asks for
+/// the password again (spec §5.2). Nothing here logs a token, a password, a pairing code, an add-in's key or a file's
+/// contents.
 /// </summary>
 public sealed class HelperSession : ICycleEvents, IDisposable
 {
@@ -47,6 +50,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private readonly HelperLog _log;
     private readonly CycleTimings? _timings;
     private readonly TimeSpan _signOutFlush;
+    private readonly ICertificateTrust? _trust;
+    private readonly AddinCertificate? _certificate;
+    private readonly IReadOnlyList<int>? _addinPorts;
 
     /// <summary>Under every API client: tells <see cref="TokenRefused"/> of a 401 to a call that carried the token.</summary>
     private readonly RefusedTokenHandler _http;
@@ -67,6 +73,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private CopyCycle? _cycle;
 
     private ChannelServer? _channel;
+
+    /// <summary>The Office add-in's port, while it's open (M3.5 spec §5.8).</summary>
+    private AddinServer? _addin;
+
     private bool _signedIn;
     private bool _started;
     private bool _startFailed;
@@ -84,8 +94,17 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <param name="timings">The cycle's timings; the trial's by default.</param>
     /// <param name="signOutFlush">How long Sign Out waits for unsent saves before it gives up and keeps the sign-in; 30 s by default.</param>
     /// <param name="apps">The apps copies open in: LibreOffice, Microsoft Office where it can be installed, and the default app for files no office app edits.</param>
+    /// <param name="trust">
+    /// Whether the computer trusts the helper's certificate (macOS's, on a Mac); null where Microsoft Office isn't a Mac
+    /// app's, and then the Office add-in's port never opens.
+    /// </param>
+    /// <param name="certificate">
+    /// The helper's certificate for the add-in's port, which Set Up Microsoft Office makes; null as for <paramref name="trust"/>.
+    /// </param>
+    /// <param name="addinPorts">The ports the add-in's port tries: <see cref="AddinPorts.All"/> by default (tests pass free ones).</param>
     public HelperSession(HelperPaths paths, IKeychain keychain, DeviceIdentity device, OfficeApps apps, IWindows windows,
-        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null)
+        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null,
+        ICertificateTrust? trust = null, AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null)
     {
         _paths = paths;
         _keychain = keychain;
@@ -96,12 +115,33 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         _log = log;
         _timings = timings;
         _signOutFlush = signOutFlush ?? TimeSpan.FromSeconds(30);
+        (_trust, _certificate, _addinPorts) = (trust, certificate, addinPorts);
         _http = new RefusedTokenHandler(TokenRefused) { InnerHandler = http ?? new SocketsHttpHandler() };
         Links = new LinkHandler(windows, notifier, log);
+        Pairing = new Pairing(paths, windows, TimeProvider.System);
     }
 
     /// <summary>The links from Apple events and the channel. Links wait until the helper has started.</summary>
     public LinkHandler Links { get; }
+
+    /// <summary>
+    /// The Office add-in's pairings (M3.5 spec §5.9): the keys the add-in's port takes, kept across sign-ins, and the
+    /// pairing window's Cancel. Settings lists and forgets them here.
+    /// </summary>
+    public Pairing Pairing { get; }
+
+    /// <summary>
+    /// The port the Office add-in reaches the helper on, while it's open; null before the start, without Set Up, or with
+    /// every port taken.
+    /// </summary>
+    public int? AddinPort
+    {
+        get
+        {
+            lock (_gate)
+                return _addin?.Port;
+        }
+    }
 
     /// <summary>Something the menu shows changed: the sign-in, the documents open, the saves waiting. Raised on any thread.</summary>
     public event Action? Changed;
@@ -490,7 +530,10 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         RaiseChanged();
     }
 
-    /// <summary>Quit: stops the channel (removing <c>channel.json</c>) and the cycle. Copies and their records stay for the next start.</summary>
+    /// <summary>
+    /// Quit: stops the channel (removing <c>channel.json</c>), the Office add-in's port and the cycle. Copies and their
+    /// records stay for the next start, and the add-in's keys for the next run.
+    /// </summary>
     public void Dispose()
     {
         lock (_gate)
@@ -922,6 +965,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             _log.Error("The channel couldn't start", e);
             _notifier.Notify(Helper, "LibreOffice can't reach Healdan Helper, so its Save and Open buttons won't work. Quit and start the helper again.");
         }
+        OpenAddin(cycle);
         lock (_gate)
             _started = _cycle == cycle;
         _ = Links.Ready(api.Server, cycle);
@@ -974,19 +1018,110 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
     }
 
-    /// <summary>Stops the channel, links and the cycle; copies and records stay as they are.</summary>
+    /// <summary>
+    /// After Set Up Microsoft Office has the Mac trust the helper's certificate (M3.5 spec §5.13): opens the Office add-in's
+    /// port, or opens it again with the certificate Set Up made, so Word, Excel and PowerPoint reach the helper without a
+    /// restart. Nothing happens before the helper has started, or while Set Up still has something to do.
+    /// </summary>
+    public async Task EnsureAddinAsync()
+    {
+        await _lifecycle.WaitAsync();
+        try
+        {
+            CopyCycle? cycle;
+            lock (_gate)
+                cycle = _disposed ? null : _cycle;
+            if (cycle is not null)
+                OpenAddin(cycle);
+        }
+        finally
+        {
+            _lifecycle.Release();
+        }
+    }
+
+    /// <summary>
+    /// Under <see cref="_lifecycle"/>: opens the Office add-in's port (M3.5 spec §5.8) for <paramref name="cycle"/> once the
+    /// helper's certificate exists and Set Up Microsoft Office has nothing left to do: the Mac trusts it, and it has 30 days
+    /// or more to run. Until then the port stays closed, and the add-in's pane says to run Set Up. A port serving that
+    /// certificate already is left open; one serving an older one is opened again with the new one. Starting never makes a
+    /// certificate (<see cref="AddinCertificate.ForServer"/>), and a failure here never stops the helper starting.
+    /// </summary>
+    private void OpenAddin(CopyCycle cycle)
+    {
+        if (_trust is null || _certificate is null)
+            return; // not a Mac: Microsoft Office is a Mac app here
+        X509Certificate2? served;
+        try
+        {
+            if (_certificate.NeedsSetUp(_trust))
+            {
+                _log.Info("The Office add-in's port stays closed until Set Up Microsoft Office has the Mac trust the helper's certificate");
+                return;
+            }
+            served = _certificate.ForServer();
+        }
+        catch (Exception e)
+        {
+            _log.Error("The Office add-in's port stays closed: the helper's certificate couldn't be read", e);
+            return;
+        }
+        if (served is null)
+            return; // gone, or out of date, since Set Up was asked
+        AddinServer? old;
+        lock (_gate)
+            old = _addin;
+        if (old?.Thumbprint == served.Thumbprint)
+        {
+            served.Dispose();
+            return;
+        }
+        if (old is not null)
+        {
+            lock (_gate)
+                _addin = null;
+            old.Dispose();
+            _log.Info("The Office add-in's port opens again with the certificate Set Up Microsoft Office made");
+        }
+
+        var handler = new AddinHandler(Pairing, new OfficeFiling(cycle, _apps, _windows, _notifier, _paths, _log),
+            new ChannelHandler(cycle, Links, _windows, _notifier, _log, _paths), cycle, _apps, _log);
+        var server = new AddinServer(handler, () => Server, () => SignedIn, served, _log, _addinPorts);
+        if (!server.Start())
+        {
+            server.Dispose();
+            _notifier.Notify(Helper, "Word, Excel and PowerPoint can't reach Healdan Helper, as the ports it uses on this Mac are taken, "
+                + "perhaps by another user's Healdan Helper. Quit and start the helper again.");
+            return;
+        }
+        bool quit;
+        lock (_gate)
+        {
+            quit = _disposed || _cycle != cycle;
+            if (!quit)
+                _addin = server;
+        }
+        if (quit)
+            server.Dispose(); // quit, or stopped, meanwhile
+    }
+
+    /// <summary>Stops the channel, the Office add-in's port, links and the cycle; copies and records stay as they are.</summary>
     private void Stop(string? linkNotice)
     {
         Links.NotReady(linkNotice);
         ChannelServer? channel;
+        AddinServer? addin;
         CopyCycle? cycle;
         lock (_gate)
         {
-            (channel, cycle) = (_channel, _cycle ?? _resuming);
+            (channel, addin, cycle) = (_channel, _addin, _cycle ?? _resuming);
             (_channel, _cycle, _resuming, _signedIn, _started, _userName, _waiting) = (null, null, null, false, false, null, 0);
+            _addin = null;
             _crashed.Clear();
         }
         channel?.Stop();
+        addin?.Dispose();
+        Pairing.Cancel(); // nothing is left to finish it
         cycle?.Dispose();
         RaiseChanged();
     }

@@ -1,0 +1,20 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Healdan.Helper.Windows.PairingWindow"
+        Title="Pair with Healdan Helper"
+        Width="400" SizeToContent="Height"
+        CanResize="False" CanMinimize="False" CanMaximize="False"
+        WindowStartupLocation="CenterScreen">
+  <!-- Pairing (M3.5 spec §5.9): the code Word, Excel or PowerPoint's Healdan pane asks for, shown only here. It closes once
+       the app has paired, at Cancel, and when the code expires. -->
+  <StackPanel Margin="20,20,20,16">
+    <TextBlock x:Name="HeadlineText" Classes="headline" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
+    <TextBlock x:Name="CodeText" FontSize="40" FontWeight="SemiBold" FontFeatures="+tnum" LetterSpacing="4"
+               HorizontalAlignment="Center" Margin="0,14,0,10" />
+    <TextBlock x:Name="DetailText" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"
+               Foreground="{DynamicResource HdSecondaryBrush}" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,18,0,0">
+      <Button x:Name="CancelButton" Classes="footer" Content="Cancel" IsCancel="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

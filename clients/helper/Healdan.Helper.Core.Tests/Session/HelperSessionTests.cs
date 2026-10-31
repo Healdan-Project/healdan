@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Copies;
@@ -10,6 +11,7 @@ using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Core.Settings;
+using Healdan.Helper.Core.Tests.Addin;
 using Healdan.Helper.Core.Tests.Cycle;
 using Healdan.Helper.Core.Tests.Office;
 using Healdan.Helper.Core.Tests.Ui;
@@ -55,11 +57,12 @@ public sealed class HelperSessionTests : IDisposable
 
     private HelperPaths Paths => HelperPaths.For(_root);
 
-    private HelperSession Make(TimeSpan? signOutFlush = null, OfficeApps? apps = null)
+    private HelperSession Make(TimeSpan? signOutFlush = null, OfficeApps? apps = null, ICertificateTrust? trust = null,
+        AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null)
     {
         var device = new DeviceIdentity(FakeApi.HereDevice, FakeApi.HereName);
         var session = new HelperSession(Paths, _keychain, device, apps ?? TestApps.Of(_app), _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
-            signOutFlush);
+            signOutFlush, trust, certificate, addinPorts);
         _sessions.Add(session);
         return session;
     }
@@ -1255,5 +1258,111 @@ public sealed class HelperSessionTests : IDisposable
         Assert.False(session.HasCrashed(copy));
         Assert.Null(_server.Doc(5).Hold);
         Assert.Equal("saved just before the crash", _server.Doc(5).Content);
+    }
+
+    /// <summary>A port nothing listens on now.</summary>
+    private static int FreePort()
+    {
+        var probe = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        probe.Start();
+        try
+        {
+            return ((IPEndPoint)probe.LocalEndpoint).Port;
+        }
+        finally
+        {
+            probe.Stop();
+        }
+    }
+
+    /// <summary><c>GET /v1/hello</c> to the add-in's port, as the add-in's page on the server sends it, trusting only the helper's certificate.</summary>
+    private static async Task<HttpResponseMessage> HelloAsync(int port, string thumbprint)
+    {
+        using var http = new HttpClient(new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, cert, _, _) => cert?.Thumbprint == thumbprint,
+        }) { Timeout = TimeSpan.FromSeconds(30) };
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://127.0.0.1:{port}/v1/hello");
+        request.Headers.Add("Origin", Account);
+        return await http.SendAsync(request);
+    }
+
+    [Fact]
+    public async Task TheAddinsPortOpensOnceSetUpHasTheMacTrustTheCertificate()
+    {
+        SignedInBefore();
+        var trust = new FakeCertificateTrust();
+        var certificate = new AddinCertificate(Paths, TimeProvider.System);
+        var port = FreePort();
+        var session = Make(trust: trust, certificate: certificate, addinPorts: [port]);
+
+        await session.StartAsync();
+
+        Assert.True(session.Started);
+        Assert.Null(session.AddinPort); // no certificate: Set Up Microsoft Office hasn't run
+        Assert.False(File.Exists(Paths.AddinCertificate)); // and starting made none
+        Assert.True(Logged("Set Up Microsoft Office"));
+
+        // Made, but not trusted yet: still closed, as Office's web view would refuse it.
+        string thumbprint;
+        using (var made = certificate.LoadOrCreate())
+            thumbprint = made.Thumbprint;
+        await session.EnsureAddinAsync();
+        Assert.Null(session.AddinPort);
+
+        // Set Up has the Mac trust it: the port opens with no restart, and answers the server's own pages.
+        trust.Trusted.Add(thumbprint);
+        await session.EnsureAddinAsync();
+        Assert.Equal(port, session.AddinPort);
+        Assert.True(Logged($"127.0.0.1:{port}"));
+        using (var hello = await HelloAsync(port, thumbprint))
+        {
+            Assert.Equal(HttpStatusCode.OK, hello.StatusCode);
+            Assert.Equal(Account, (string?)JsonNode.Parse(await hello.Content.ReadAsStringAsync())!["server"]);
+        }
+        await session.EnsureAddinAsync(); // nothing to do: the same certificate, still open
+        Assert.Equal(port, session.AddinPort);
+
+        // Quitting closes it.
+        session.Dispose();
+        Assert.Null(session.AddinPort);
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => HelloAsync(port, thumbprint));
+    }
+
+    [Fact]
+    public async Task TheAddinsPortOpensAtTheStartWithATrustedCertificateAndClosesAtSignOut()
+    {
+        SignedInBefore();
+        var certificate = new AddinCertificate(Paths, TimeProvider.System);
+        string thumbprint;
+        using (var made = certificate.LoadOrCreate())
+            thumbprint = made.Thumbprint;
+        var port = FreePort();
+        var session = Make(trust: new FakeCertificateTrust { Trusted = { thumbprint } }, certificate: certificate, addinPorts: [port]);
+
+        await session.StartAsync();
+
+        Assert.Equal(port, session.AddinPort);
+        Assert.Equal(HttpStatusCode.OK, (await HelloAsync(port, thumbprint)).StatusCode);
+
+        await session.SignOutAsync();
+
+        Assert.True(Revoked());
+        Assert.Null(session.AddinPort);
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => HelloAsync(port, thumbprint));
+    }
+
+    [Fact]
+    public async Task WithoutAMacsTrustThereIsNoAddinsPort()
+    {
+        SignedInBefore();
+        var session = Make(); // off a Mac: no trust to ask
+
+        await session.StartAsync();
+
+        Assert.True(session.Started);
+        Assert.Null(session.AddinPort);
+        await session.EnsureAddinAsync();
+        Assert.Null(session.AddinPort);
     }
 }

@@ -9,8 +9,8 @@ namespace Healdan.Helper.Core.Addin;
 /// The certificate for the add-in's port (M3.5 spec §5.8, §5.13). Office's web view blocks a secure page's requests to
 /// <c>http://127.0.0.1</c>, so the port is HTTPS, with a certificate the Mac trusts: the helper's own, which the user
 /// trusts once (Set Up Microsoft Office). It is self-signed and good for <c>localhost</c> and <c>127.0.0.1</c> only, not a
-/// certificate authority, with its key in a file only the user can read. It is made when missing, and again once fewer
-/// than 30 of its 800 days are left, which needs trusting again.
+/// certificate authority, with its key in a file only the user can read. Set Up makes it when missing, and again once fewer
+/// than 30 of its 800 days are left, which needs trusting again; the port only ever serves the one there is.
 /// </summary>
 public sealed class AddinCertificate(HelperPaths paths, TimeProvider clock)
 {
@@ -49,14 +49,20 @@ public sealed class AddinCertificate(HelperPaths paths, TimeProvider clock)
     }
 
     /// <summary>
-    /// The certificate with its private key, for <see cref="System.Net.Security.SslStream"/>. On macOS the key has to be
-    /// imported again to be used for TLS, so the pair is exported as PKCS#12 and loaded from that. The caller disposes it.
+    /// The certificate with its private key, for the add-in's port (<see cref="System.Net.Security.SslStream"/>), while there
+    /// is one that hasn't expired; null otherwise. It never makes or renews one: that's Set Up Microsoft Office's
+    /// (<see cref="LoadOrCreate"/>), which has the Mac trust it, so the port never serves a certificate the user wasn't asked
+    /// to trust in place of one they were. On macOS the key has to be imported again to be used for TLS, so the pair is
+    /// exported as PKCS#12 and loaded from that. The caller disposes it.
     /// </summary>
-    public X509Certificate2 ForServer()
+    public X509Certificate2? ForServer()
     {
         lock (_gate)
         {
-            using var certificate = LoadOrCreate();
+            using var kept = TryLoad();
+            var now = clock.GetUtcNow();
+            if (kept is null || kept.NotAfter.ToUniversalTime() <= now || kept.NotBefore.ToUniversalTime() > now)
+                return null;
             using var pair = X509Certificate2.CreateFromPemFile(paths.AddinCertificate, paths.AddinKey);
             return X509CertificateLoader.LoadPkcs12(pair.Export(X509ContentType.Pkcs12), null);
         }

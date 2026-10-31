@@ -22,7 +22,7 @@ namespace Healdan.Helper.Windows;
 /// <para>A window that asks what the user started (Sign In, Sign Out on This Computer Only?, Save, Open, Properties,
 /// Checked Out on Another Computer) waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link
 /// brings it to the front. One the user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links
-/// back, and nor do About, its Open-Source Notices and Set Up Microsoft Office (<see cref="OpenWindows"/>).</para>
+/// back, and nor do About, its Open-Source Notices, Set Up Microsoft Office and the pairing code (<see cref="OpenWindows"/>).</para>
 /// <para>One of each window at a time: a second request for one that's open brings it to the front and is answered
 /// Cancel. The windows read Healdan through the session's API client, whose refused token asks for the sign-in again,
 /// and open documents through its cycle once they've closed, so the app never waits on a window for a download.
@@ -35,6 +35,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     private readonly Dictionary<string, CrashWindow> _crashShown = new(StringComparer.Ordinal);
     private Task<bool>? _signIn;
     private Task<bool>? _setUpOffice;
+    private PairingWindow? _pairing;
 
     /// <summary>The running helper, set once it's made (it needs these windows to be made first).</summary>
     public HelperSession? Session { get; set; }
@@ -223,6 +224,10 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         {
             _single.Remove(key);
             done.TrySetResult(window.Trusted);
+            // The add-in's port opens now that the Mac trusts the certificate, or opens again with a new one.
+            if (window.Trusted && Session is { } session)
+                _ = Task.Run(session.EnsureAddinAsync).ContinueWith(t => log.Error("The Office add-in's port couldn't open after Set Up", t.Exception),
+                    TaskContinuationOptions.OnlyOnFaulted);
         });
         if (!shown)
         {
@@ -231,6 +236,42 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         }
         log.Info("Set Up Microsoft Office window shown");
         return _setUpOffice = done.Task;
+    });
+
+    // --- Pairing ---------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The pairing code (M3.5 spec §5.9), the only place it shows. Nobody waits on it for a link, so it holds none back. A new
+    /// code replaces the window; the user's Cancel, Escape or close ends the pairing it shows.
+    /// </summary>
+    public void ShowPairingCode(string app, string code, DateTimeOffset expires) => Dispatcher.UIThread.Post(() =>
+    {
+        _pairing?.EndQuietly();
+        var window = new PairingWindow(app, code, expires);
+        _pairing = window;
+        var shown = Show(window, waits: false, () =>
+        {
+            if (_pairing == window)
+                _pairing = null;
+            if (window.Cancelled)
+            {
+                log.Info($"Pairing {app} was cancelled in its window");
+                Session?.Pairing.Cancel(window.Code);
+            }
+        });
+        if (!shown)
+        {
+            _pairing = null;
+            Session?.Pairing.Cancel(window.Code); // a code nobody can see is no use
+        }
+    });
+
+    /// <summary>The pairing is over: its window goes, if it's up, cancelling nothing.</summary>
+    public void ClosePairingCode() => Dispatcher.UIThread.Post(() =>
+    {
+        var window = _pairing;
+        _pairing = null;
+        window?.EndQuietly();
     });
 
     // --- Settings --------------------------------------------------------------------------------------------------

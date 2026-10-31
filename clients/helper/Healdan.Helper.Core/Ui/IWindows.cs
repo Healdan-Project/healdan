@@ -65,4 +65,15 @@ public interface IWindows
     /// user cancelled or that failed. Asks nothing a link waits on, so it holds none back.
     /// </summary>
     Task<bool> SetUpOfficeAsync();
+
+    /// <summary>
+    /// Pairing (M3.5 spec §5.9): <paramref name="app"/> (Word, Excel or PowerPoint) asked to pair, and the window shows
+    /// <paramref name="code"/> for the user to type in its Healdan pane. The window closes by itself at
+    /// <paramref name="expires"/>, and its Cancel ends the pairing. One at a time: a new code replaces the window, and asks
+    /// nothing a link waits on, so it holds none back.
+    /// </summary>
+    void ShowPairingCode(string app, string code, DateTimeOffset expires);
+
+    /// <summary>The pairing ended (paired, three wrong codes, expired or replaced): its window goes, if it's up.</summary>
+    void ClosePairingCode();
 }

@@ -15,11 +15,12 @@ person's computer, and **Healdan's LibreOffice extension**. They build apart fro
 |---|---|---|
 | The web page's Open in App | The helper | A `healdan://open/<doc #>?server=<host>` link, which macOS hands the app bundle as an Apple event, started or not |
 | The LibreOffice extension | The helper | The channel: HTTP on `127.0.0.1`, with a secret (below) |
+| The Office add-in in Word, Excel and PowerPoint | The helper | [The add-in's port](#the-add-ins-port): HTTPS on `127.0.0.1`, from the server's own pages, with a paired key |
 | A second helper | The running helper | The channel's `/v1/link`, for a link macOS gave another copy of the app (below) |
 | The helper | Healdan | The [API](../api/) under `/api/v1`, with a device token |
 
-The extension holds no token and calls no server. The helper does the work, and draws every window, once for every
-app.
+The extension and the add-in hold no token and call no server. The helper does the work, and draws every window, once
+for every app.
 
 ## The Helper
 
@@ -34,6 +35,7 @@ app.
     (`OfficeAfterSave`, `CopiesNotice`);
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
+  - `Addin/`: the Office add-in's port and its routes, pairing, and the certificate the port serves;
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
@@ -196,11 +198,13 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 | Settings | `<support>/settings.json` | the same |
 | Device id | `<support>/device.json`: a random UUID made once, not a secret | the same |
 | The channel | `<support>/channel.json`, mode 600: `{"port", "secret", "pid"}` | the same |
-| The add-in's certificate | `<support>/addin-cert.pem` and `addin-key.pem` (mode 600): the helper's own self-signed certificate for `localhost` and `127.0.0.1`, RSA 2048, valid 800 days and made again with fewer than 30 left (`AddinCertificate`). The user trusts it once, in their login keychain, with Set Up Microsoft Office (`OfficeSetUp`; `MacCertificateTrust` runs `security add-trusted-cert -r trustRoot -p ssl`) | none: Microsoft Office is a Mac app here, so nothing makes one |
+| The add-in's certificate | `<support>/addin-cert.pem` and `addin-key.pem` (mode 600): the helper's own self-signed certificate for `localhost` and `127.0.0.1`, RSA 2048, valid 800 days (`AddinCertificate`). Set Up Microsoft Office makes it, makes it again once fewer than 30 days are left, and has the user trust it, in their login keychain (`OfficeSetUp`; `MacCertificateTrust` runs `security add-trusted-cert -r trustRoot -p ssl`). The add-in's port only serves it, and never makes one | none: Microsoft Office is a Mac app here, so nothing makes one |
+| The add-in's keys | `<support>/addin-keys.json` (mode 600): `{"keys": [{"hash", "app", "paired"}]}`, each paired key's SHA-256 in hex, never the key (`AddinKeys`) | none, as above |
 | Logs | `~/Library/Logs/Healdan Helper/helper.log` and `extension.log` | `<support>/helper.log` and `extension.log` |
 
 The token is in the keychain, never in a file: service `Healdan Helper`, account the server's base URL
-(`https://host[:port]`). Nothing logs a token, a password, the channel's secret or a file's contents.
+(`https://host[:port]`). Nothing logs a token, a password, the channel's secret, a pairing code, an add-in's key or a
+file's contents.
 
 - **The item holds `{"device", "token"}`** (`KeptToken`): the token and the device id it was issued for, as the API
   doesn't say which device a token is. At start, `SignIn.TryResumeAsync` uses the token only when `device` is this
@@ -256,6 +260,96 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   deletes the temporary file afterwards, and only ever deletes one in `<support>/Temp/` or the system's temporary
   folder. Then the extension saves the window as the answer's `path` (`storeAsURL`) and calls `adopted`, both before
   the window takes input again.
+
+## The Add-in's Port
+
+The Healdan add-in in Word, Excel and PowerPoint calls the helper on a second listener beside the channel. Office's web
+view blocks a secure page's requests to `http://127.0.0.1`, so it's HTTPS, with the helper's own certificate. The code
+is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks), `AddinHandler` (the routes),
+`Pairing` and `AddinKeys`. The design is the M3.5 spec, `docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md`,
+§5.8, §5.9 and §9.
+
+- **The ports:** `127.0.0.1`, the first free of `47615`, `47616`, `47617` and `47618` (`AddinPorts`). The add-in
+  tries them in the same order, so another user of the Mac with a helper on the first doesn't stop this one. The
+  add-in's pages allow connections to these ports alone.
+- **When it's open:** once the helper has started, while Set Up Microsoft Office has nothing left to do: the
+  certificate exists, the Mac trusts it, and it has 30 days or more left. Set Up opens it, or opens it again with a
+  new certificate, without a restart (`HelperSession.EnsureAddinAsync`). Sign Out and Quit close it. The port serves
+  the certificate there is (`AddinCertificate.ForServer`), and never makes or renews one: that's Set Up's, which has
+  the Mac trust it.
+- **HTTP/1.1, one request per connection** (`Connection: close`): a request line, headers to an empty line, and a
+  `Content-Length` body of at most 150 MiB for `file` and 1 MiB for any other route. Anything else, such as a chunked
+  body, a second request, or a folded or doubled `Host`, is `400 bad-request`. Bodies are JSON, and errors are
+  `{"error": "<code>"}`, as the channel's are.
+
+### The Checks
+
+Each request passes these in order before any route runs. Review Focus 5 of the M3.5 plan: another user of the Mac,
+a web page in a browser, or a page from another Healdan is refused here.
+
+| Check | Refused with |
+|---|---|
+| `Host` is `127.0.0.1:<port>` or `localhost:<port>`, so a page whose name was pointed at `127.0.0.1` (DNS rebinding) is refused | `403 bad-host` |
+| `Origin` is the helper's server's: `https://host[:port]`, its address in `settings.json` without the path. No other page, and no other Healdan's, gets further | `403 bad-origin` |
+| `OPTIONS`, for any path, is a preflight: `204` with the CORS headers. It carries neither the protocol nor the key | |
+| `X-Healdan-Protocol: 1`, on every request but `GET /v1/hello` | `400 bad-request` without it; `426 update-healdan-helper` for a protocol the helper doesn't speak |
+| `X-Healdan-Key` is a key the helper gave, on every route but `hello` and the two pairing routes. A route that doesn't exist asks for one too, so a caller without a key learns nothing | `403 not-paired` |
+| The helper is signed in, on every keyed route but `ping` | `409 signed-out` |
+
+Every answer once `Origin` has passed, errors included, carries `Access-Control-Allow-Origin: <origin>`,
+`Vary: Origin`, `Access-Control-Allow-Headers: Content-Type, X-Healdan-Key, X-Healdan-Protocol`,
+`Access-Control-Allow-Methods: GET, POST`, `Access-Control-Allow-Private-Network: true` and
+`Access-Control-Max-Age: 600`. The private-network header answers Chromium's preflight, for Windows' WebView2 later:
+Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` gets no CORS headers.
+
+### The Routes
+
+| Route | Body | Answer |
+|---|---|---|
+| `GET /v1/hello` | none | `{"name": "Healdan Helper", "protocols": [1], "server": "<origin>"}`; no key |
+| `POST /v1/pair/start` | `{"app"}` | `{"pairingId"}`, and the helper's window shows the code; `403 too-many-tries` while pairing rests |
+| `POST /v1/pair/finish` | `{"pairingId", "code"}` | `{"key"}`; `403 wrong-code` with `"triesLeft"`, or `403 pairing-expired` |
+| `POST /v1/ping` | `{}` | `{"ok": true, "signedIn": bool}` |
+| `POST /v1/open-dialog` | `{"app"}` | as the channel's |
+| `POST /v1/save-new` | `{"app", "url", "asNew": bool}` | `{"action": "save" \| "local" \| "cancel", "folderId", "name", "format", "properties", "ticket"}`; `asNew` true is Save as New Document |
+| `POST /v1/file` | `{"ticket", "mark", "bytes"}` | the new copy's state; `bytes` is the document, in base64 |
+| `POST /v1/new-version` | `{"app", "url"}` | `{}` |
+| `POST /v1/properties` | `{"app", "url"}` | as the channel's |
+| `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
+
+- **The app** is the one the request's key was paired for. A body naming another is `400 bad-request`: a key drives
+  only its own app.
+- **Which document:** `url` is the add-in's `Office.context.document.url`, possibly empty, as a path or a `file://`
+  URL. The helper uses it only when it names one of its copies, and otherwise takes the app's front window
+  (`OfficeFiling.CopyForAsync`).
+- **`save-new` and `file`** are Save to Healdan from Office (`OfficeFiling`): `save-new` takes the front window as it
+  arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes.
+- **`new-version`** saves the document first when it has unsaved changes, and that save goes up as the version;
+  otherwise the file as it is goes up as one.
+- **The routes' own refusals** are `409`: `not-a-copy` for `new-version` on a window that isn't one of the helper's
+  copies, `wrong-window` when the front window isn't the one Save to Healdan was pressed in, and `no-ticket` for a
+  ticket used or expired. Any other failure is `500 internal-error`, and the helper has told the user why where it's
+  theirs to know.
+- **The add-in's routes and the channel's are separate lists:** the extension can't call these, nor the add-in the
+  channel's.
+
+### Pairing
+
+- **`pair/start`** takes `Word`, `Excel` or `PowerPoint`, nothing else, as the window shows it. The helper's pairing
+  window shows a six-digit code from `RandomNumberGenerator`, and the answer's `pairingId` isn't the code.
+- **`pair/finish`** with the code the user typed: the right one answers a key, 32 random bytes in base64url, which the
+  add-in keeps and sends as `X-Healdan-Key`. A wrong one is `403 wrong-code` with the tries left; after three, or two
+  minutes, or once a newer pairing has started, it's `403 pairing-expired`.
+- **One pairing at a time:** a new one replaces the window and ends the one before. The window's Cancel ends its own
+  pairing, and the window closes once the app has paired or the code has expired.
+- **Nine wrong codes in a row,** across pairings, and pairing rests for 10 minutes: `pair/start` answers
+  `403 too-many-tries` and shows nothing. Otherwise another user of the Mac could start pairing over and over, three
+  guesses at a time, faster than anyone types. A pairing that works starts the count again. Expiry and the rest go by
+  the system's monotonic timer, not the time of day.
+- **The keys:** `addin-keys.json` keeps each key's SHA-256 only, with its app and when it was paired. A request's key
+  is compared with each hash in fixed time, read from the file each time, so one Settings forgets stops working at
+  once. An app that pairs again gets a new key beside the old.
+- **The log** names the routes, apps and refusals, never a header's value, a code, a key or a body.
 
 ## The LibreOffice Extension
 
@@ -367,6 +461,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`
   in `CycleTimings.Clock`) between them. It stops it too while a write in place that must go up whole is made,
   since the write empties the file first.
+- **`AddinServerTests`** run a real add-in's port on ports the system says are free, with a client that trusts only
+  the test's certificate, and send what a web page, another program or another Healdan's page would.
+  `PairingTests` and `AddinHandlerTests` cover pairing and the routes.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.
 - **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke

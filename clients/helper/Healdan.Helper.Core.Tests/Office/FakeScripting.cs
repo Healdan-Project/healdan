@@ -32,6 +32,7 @@ public sealed class FakeScripting : IOfficeScripting
     private readonly List<(OfficeProgram Program, string Mark)> _marksAsked = [];
     private readonly List<(OfficeProgram Program, DocumentRef Doc)> _fingerprints = [];
     private int _frontAsked;
+    private readonly List<OfficeProgram> _frontPrograms = [];
     private readonly ConcurrentDictionary<string, bool> _running = new(StringComparer.Ordinal);
 
     /// <summary>Every open the cycle asked for, in order.</summary>
@@ -147,6 +148,15 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>How many times the front window was asked for.</summary>
     public int FrontAsked => Volatile.Read(ref _frontAsked);
 
+    /// <summary>The programs whose front window was asked for, in order.</summary>
+    public IReadOnlyList<OfficeProgram> FrontPrograms => Copy(_frontPrograms);
+
+    /// <summary>
+    /// Whether a document has unsaved changes, for Save as New Version (null: it isn't open). Unset, the question fails, as
+    /// a call the test didn't expect.
+    /// </summary>
+    public Func<OfficeProgram, string, bool?>? Unsaved { get; set; }
+
     /// <summary>The next looks for the add-in's mark answer these, in order; after them, <see cref="MarksShown"/>.</summary>
     public void AnswerMarks(params bool[] answers)
     {
@@ -207,6 +217,8 @@ public sealed class FakeScripting : IOfficeScripting
     public Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default)
     {
         Interlocked.Increment(ref _frontAsked);
+        lock (_lock)
+            _frontPrograms.Add(p);
         return Task.FromResult(Front(p));
     }
 
@@ -219,7 +231,8 @@ public sealed class FakeScripting : IOfficeScripting
         return Task.FromResult(!NeverListed && File.Exists(OwnerPath(p, path)));
     }
 
-    public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) => throw Unexpected();
+    public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) =>
+        Unsaved is { } unsaved ? Task.FromResult(unsaved(p, path)) : throw Unexpected();
 
     /// <summary>What the window holds now, summarised (<see cref="FingerprintOf"/>).</summary>
     public Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default)

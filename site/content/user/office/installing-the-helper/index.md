@@ -132,9 +132,35 @@ other things macOS asks for later. You do it once, however many of the three app
   key stays in the helper's folder (`addin-key.pem`, in `~/Library/Application Support/Healdan Helper/`), readable by you
   alone. macOS trusts it for secure connections only, in your login keychain, where Keychain Access lists it as
   "Healdan Helper (this Mac)".
-- **It lasts 800 days.** When fewer than 30 are left, the helper makes a new one, and **Set Up Microsoft Office…** comes
-  back in the menu for you to trust it. Without a trusted certificate, Word, Excel and PowerPoint can't reach the
-  helper.
+- **It lasts 800 days.** When fewer than 30 are left, **Set Up Microsoft Office…** comes back in the menu. Its
+  **Set Up** makes a new certificate and asks for your password to trust it: the helper never makes one by itself.
+  Until you've done that, Word, Excel and PowerPoint can't reach the helper after it next starts.
+- **Once Set Up is done,** Word, Excel and PowerPoint can reach the helper straight away, without restarting it.
+  Without a trusted certificate they can't, and the Healdan pane in each app says so.
+
+## Pairing Word, Excel and PowerPoint
+
+The first time you press a Healdan button in Word, Excel or PowerPoint, the app pairs with the helper, so that only
+your own add-in can use it.
+
+1. The Healdan pane opens in the app and asks for a code, and the helper shows a window: "Word wants to connect to
+   Healdan Helper", with a six-digit code in large digits.
+2. Type the code in the Healdan pane. The space in the middle doesn't matter.
+3. The helper's window closes, and the app is paired.
+
+- **Each app pairs once,** and stays paired when you quit it or restart your Mac. Word, Excel and PowerPoint keep
+  their own pairing, so each asks the first time you use Healdan in it.
+- **The code expires after two minutes,** and three wrong tries cancel it. Press the Healdan button again for a new
+  code. Only one code is shown at a time: a new one replaces the window. After nine wrong codes in a row, pairing
+  pauses for ten minutes.
+- **If you didn't press a Healdan button,** choose **Cancel**. The code shows only on your screen, so whoever asked
+  for it can't use it.
+- **If an app forgets its pairing,** as it does when Office's cache is cleared, the next Healdan button asks for a new
+  code.
+- **What the helper keeps:** only a fingerprint of each app's key, from which the key can't be worked out, in
+  `addin-keys.json` in the helper's folder, readable by you alone. The helper answers only Healdan's add-in, loaded from
+  your own Healdan server, and only once it's paired: a web page, another program, or another user of your Mac can't
+  use it.
 
 ## The Prompts to Expect
 
@@ -147,6 +173,7 @@ Each of these comes once.
 | After your first sign-in | macOS may say that Healdan Helper was added to your login items | Nothing: it lets the helper start when you sign in |
 | After your first sign-in | LibreOffice: install the extension Healdan? | **OK**, then restart LibreOffice |
 | After your first sign-in, with Word, Excel or PowerPoint installed | The helper's Set Up Microsoft Office window, and when you choose Set Up, macOS asking for your password to change your certificate trust settings | **Set Up**, then your password: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
+| The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan pane: see [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint) |
 | The first time the helper saves in each of Word, Excel and PowerPoint | macOS: allow Healdan Helper to control the app? | **Allow** |
 | The first time each of them saves into the helper's `Copies` folder | The app: grant access to the folder | **Select…**, up one level, `Copies`, **Grant Access** |
 | The first Open in App from each browser | The browser: allow this page to open Healdan Helper? | **Allow**. Ticking the box to remember it saves asking again |
