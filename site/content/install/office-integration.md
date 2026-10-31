@@ -97,12 +97,13 @@ Office loads them before anyone has signed in to anything.
 
 - **HTTPS at the address people use.** Office loads the add-in over HTTPS only, so Healdan needs a
   [reverse proxy](../reverse-proxy/) with a certificate the computers running Office trust. Set
-  `LOGICALDOC_PUBLIC_URL` to that address, as for the helper. Without it, Healdan builds the manifest's address from
-  the request: the host from its `Host` header, so the proxy must pass on the `Host` the browser sent, and `https`
-  from `X-Forwarded-Proto`, which Healdan believes only from the addresses in `LOGICALDOC_TRUSTED_PROXIES` (left
-  unset, the Docker networks the app is on; see [Reverse Proxy](../reverse-proxy/)). From any other address, the
-  request reads as plain `http://`, and the manifest answers `no-public-address`. Plain `http://` works only for
-  `localhost`, `127.0.0.1` and `[::1]`, for trying it on your own machine.
+  `LOGICALDOC_PUBLIC_URL` to that address, as for the helper. Without it (or with LogicalDOC's placeholder,
+  `http://server:port/`, still in `server.url`), Healdan builds the manifest's address from the request: the host from
+  its `Host` header, so the proxy must pass on the `Host` the browser sent, and `https` from `X-Forwarded-Proto`,
+  which Healdan believes only from the addresses in `LOGICALDOC_TRUSTED_PROXIES` (left unset, the Docker networks the
+  app is on; see [Reverse Proxy](../reverse-proxy/)). From any other address, the request reads as plain `http://`, and
+  the manifest answers `no-public-address`. Plain `http://` works only for `localhost`, `127.0.0.1` and `[::1]`, for
+  trying it on your own machine.
 - **The manifest** is at `https://healdan.example/api/addin/manifest.xml`, with your own address in place of
   `healdan.example`. Healdan makes it for each request, with your address in every link and as the add-in's one app
   domain, so the file you download points at your server. Open it in a browser to check the address, and upload

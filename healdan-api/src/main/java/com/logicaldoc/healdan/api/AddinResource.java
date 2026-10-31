@@ -39,6 +39,12 @@ public class AddinResource {
 	private static final String SERVER_URL = "server.url";
 
 	/**
+	 * LogicalDOC's default for the public address, which an install keeps
+	 * until LOGICALDOC_PUBLIC_URL sets it: no address at all
+	 */
+	private static final String PLACEHOLDER = "http://server:port";
+
+	/**
 	 * The scripts are the server's own and Office.js, which Office requires to
 	 * come from its network; the connections go to the Healdan Helper's ports
 	 * on this Mac (spec section 5.8) and to Microsoft's own services.
@@ -119,7 +125,7 @@ public class AddinResource {
 	 */
 	private static Address address(HttpServletRequest request) {
 		String configured = com.logicaldoc.util.spring.Context.get().getConfig().getProperty(SERVER_URL);
-		String candidate = configured != null && !configured.isBlank() ? configured.trim() : requested(request);
+		String candidate = isSet(configured) ? configured.trim() : requested(request);
 
 		Matcher matcher = ADDRESS.matcher(candidate);
 		if (matcher.matches()) {
@@ -134,6 +140,11 @@ public class AddinResource {
 				"Office loads add-ins over HTTPS, and Healdan doesn't know an HTTPS address for itself. Set "
 						+ "LOGICALDOC_PUBLIC_URL to the server's https:// address, such as https://healdan.example/, "
 						+ "and restart Healdan.");
+	}
+
+	private static boolean isSet(String configured) {
+		return configured != null && !configured.isBlank()
+				&& !PLACEHOLDER.equalsIgnoreCase(configured.trim().replaceAll("/+$", ""));
 	}
 
 	private static String requested(HttpServletRequest request) {
