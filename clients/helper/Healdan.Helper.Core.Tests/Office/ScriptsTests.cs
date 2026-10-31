@@ -167,16 +167,42 @@ public sealed partial class ScriptsTests
     [Fact]
     public void TheFindingIsTheSameInEveryScriptOfAProgram()
     {
-        // locate and isInFolder are copied into each script that finds a document, and must not drift apart.
+        // locate, findDocument, sharesItsName and isInFolder are copied into each script that finds a document, and
+        // must not drift apart.
         foreach (var program in new[] { "Word", "Excel", "PowerPoint" })
         {
-            foreach (var handler in new[] { "locate", "isInFolder" })
+            foreach (var handler in new[] { "locate", "findDocument", "sharesItsName", "isInFolder" })
             {
                 var handlers = Scripts().Where(s => s.Key.StartsWith(program + ".", StringComparison.Ordinal) && s.Value.Contains($"on {handler}(", StringComparison.Ordinal))
                     .ToDictionary(s => s.Key, s => Handler(s.Value, handler));
                 Assert.True(handlers.Count >= 2, $"{program} has too few scripts with {handler}");
                 Assert.Single(handlers.Values.Distinct());
             }
+        }
+    }
+
+    [Fact]
+    public void ADocumentWhoseNameIsSharedIsNeverTakenForTheCopy()
+    {
+        // The owner's by-hand run (2026-10-31): Word's scripting names a document by its name, so of two documents with
+        // one name it reaches only one, whichever path is asked for. locate refuses a shared name rather than guess,
+        // and IsOpen answers yes then, so a copy that may be open is never checked in from under its window (spec
+        // section 5.2).
+        foreach (var (name, text) in Scripts().Where(s => s.Value.Contains("on locate(", StringComparison.Ordinal)))
+        {
+            var locate = Handler(text, "locate");
+            Assert.True(locate.Contains("my findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)", StringComparison.Ordinal)
+                && locate.Contains("if my sharesItsName(item 1 of located) then return {missing value, \"ambiguous\"}", StringComparison.Ordinal),
+                $"{name} takes a document whose name another one has");
+            Assert.Contains("return seen > 1", Handler(text, "sharesItsName"));
+        }
+        var isOpen = Scripts().Where(s => s.Key.EndsWith(".IsOpen", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, isOpen.Count);
+        foreach (var (name, text) in isOpen)
+        {
+            var shared = text.IndexOf("if (item 2 of located) is \"ambiguous\" then return \"yes\"", StringComparison.Ordinal);
+            var missing = text.IndexOf("if (item 1 of located) is missing value then return \"no\"", StringComparison.Ordinal);
+            Assert.True(shared >= 0 && missing > shared, $"{name} takes a shared name for a closed document");
         }
     }
 
@@ -348,7 +374,7 @@ public sealed partial class ScriptsTests
         // documents of one name can be open at once (spec section 5.2).
         foreach (var (name, text) in Scripts().Where(s => s.Value.Contains("on locate(", StringComparison.Ordinal)))
         {
-            var locate = Handler(text, "locate");
+            var locate = Handler(text, "findDocument");
             var exact = locate.IndexOf("docPath is p then return", StringComparison.Ordinal);
             var twin = locate.IndexOf("docPath is pTwin then return", StringComparison.Ordinal);
             var byName = locate.IndexOf("(name of xd) is fname then", StringComparison.Ordinal);

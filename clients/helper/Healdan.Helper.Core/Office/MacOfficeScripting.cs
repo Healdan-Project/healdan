@@ -10,7 +10,10 @@ namespace Healdan.Helper.Core.Office;
 /// named <c>a"; do shell script "…</c> is only a name.
 /// <para>A document is found by its exact path first, in either spelling the app may report (<c>/tmp</c> or
 /// <c>/private/tmp</c>, spec §5.2), and only then by its file name, and only among the documents in the Copies folder:
-/// a copy set aside keeps its name beside <c>Copies</c>, so two documents of one name can be open at once.</para>
+/// a copy set aside keeps its name beside <c>Copies</c>, so two documents of one name can be open at once. The apps'
+/// scripting names a document by its name, though, so of two with one name Word reaches only one, whichever path is
+/// asked for: the scripts refuse a name another open document has, and <see cref="IsOpenAsync"/> answers yes for it,
+/// so a copy that may be open is never taken for closed.</para>
 /// </summary>
 /// <param name="runner">Runs <c>osascript</c> and <c>open</c>.</param>
 /// <param name="copiesFolder">

@@ -95,7 +95,11 @@ size the helper uses, the widths then match CoreText's.
   - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens
     the files it opens (`OfficePrograms`), and it opens them through `IOfficeScripting`, the one seam for everything
     the helper does to a document in Word, Excel and PowerPoint. Nothing above the seam knows how the programs are
-    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow.
+    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow. Its scripts find a
+    document by its exact path, then by its file name only in `Copies`, then by the add-in's mark or its window's
+    name. Word's scripting names a document by its name, so of two open documents with one name (a copy in `Copies`
+    and one set aside beside it) it reaches only one: the scripts refuse a name two open documents share, and
+    `IsOpen` answers yes for it, so neither is checked in from under its window.
   - A file no office app edits is the `Default` app's, read-only, as below.
 - **Other kinds of file** (not spec §5.11's, by the file's own extension) open read-only in the system's default app
   (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`). On
@@ -564,9 +568,11 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   test's step 5d runs them in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
 - **`Category=MacOffice`** tests drive the real Word, Excel and PowerPoint through `MacOfficeScripting`: they open,
-  change and close throwaway documents in a temporary folder, and the apps ask for Automation and Grant File Access
-  the first time. They skip unless `HEALDAN_MAC_OFFICE=1` is set. `EveryScriptCompiles` compiles every AppleScript
-  against the apps' dictionaries with `osacompile`, starts nothing, and runs on any Mac that has the three apps.
+  change and close throwaway documents, each test in its own folder inside `healdan-office-tests` in the temporary
+  folder, and the apps ask for Automation and Grant File Access the first time. Grant File Access opens in a test's own
+  folder: go up one level and grant `healdan-office-tests`, and the app asks no more, in that run or later ones. They
+  skip unless `HEALDAN_MAC_OFFICE=1` is set. `EveryScriptCompiles` compiles every AppleScript against the apps'
+  dictionaries with `osacompile`, starts nothing, and runs on any Mac that has the three apps.
 - **`NoticesTests`** fail when the packages `Healdan.Helper/THIRD-PARTY-NOTICES.txt` names differ from those the app
   restores (its `obj/project.assets.json`), ids and versions both. The file is About's Open-Source Notices, built
   into the app. A package added or moved needs its notice: its copyright and licence text, from the package or its

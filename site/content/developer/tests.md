@@ -82,7 +82,8 @@ and `node --test`, apart from Maven: see [Desktop Clients](../desktop-clients/#t
   later read `--test`'s arguments as file patterns. A change under `clients/office/` other than Markdown runs the
   server's tests and the image's too, because `healdan-api` packages the add-in's pages.
 - **By hand on a Mac,** the tests marked `MacKeychain` use the real keychain, and those marked `MacOffice` drive the
-  real Word, Excel and PowerPoint, which open on the screen and ask for Automation and Grant File Access. The
+  real Word, Excel and PowerPoint, which open on the screen and ask for Automation and Grant File Access (grant the
+  `healdan-office-tests` folder, one level up from where the prompt opens, and an app asks no more). The
   `MacOffice` tests skip unless `HEALDAN_MAC_OFFICE=1` is set, apart from `EveryScriptCompiles`, which starts nothing
   and runs without it wherever Word, Excel and PowerPoint are installed, as compiling reads their dictionaries. CI
   has neither, so they skip there.

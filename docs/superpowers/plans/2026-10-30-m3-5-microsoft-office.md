@@ -998,6 +998,7 @@ Every call made while building that the plan or the spec didn't settle, in order
 | 2026-10-31 | Final review | The HFS-path retry in `Word.Open`, `Word.Rename` and `Word.SaveAs` raises a cancel (-128), a timeout (-1712) or a refusal of Automation (-1743) as it came, and retries anything else | a bare `on error` waited up to another 300 seconds and asked for Grant File Access twice; the path error's own number is unconfirmed without Word, so the retry stays the default | the scripts |
 | 2026-10-31 | Final review | `AddinResourceTest` reads the served manifest as XML and checks every `resid` names a `bt:` resource; `maven-resources-plugin` is pinned at 3.5.0, the version the build resolved, as `logicaldoc-parent` manages none | a bad `resid` shows only once the manifest is uploaded; Maven warned of the missing version | `healdan-api` |
 | 2026-10-31 | Final review | `OsaRunner`'s comments say its errors can quote a value, and where they go | they promised errors never carried the arguments, but `osascript`'s error text can | `OsaRunner.cs` |
+| 2026-10-31 | Owner's by-hand run | Every script's finder refuses a document whose name another open document has, and `IsOpen` answers yes for it; the `MacOffice` tests work in one `healdan-office-tests` folder, a folder each | with two same-named documents open, Word's scripting reached only one, whichever path was asked for, so a rename could have saved the set-aside one into `Copies`; and each test's own temporary folder asked for Grant File Access again | spec §5.2 |
 
 ## Follow-ups
 
