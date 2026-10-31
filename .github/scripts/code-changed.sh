@@ -2,7 +2,9 @@
 # Writes two step outputs so the CI workflows can skip their build steps and still report the checks master's ruleset
 # requires.
 #   code=false    when a pull request changes only docs (docs/, the docs site in site/, and Markdown files outside
-#                 src/) or the desktop clients (clients/), none of which the Java build or the Docker image covers.
+#                 src/) or the desktop clients (clients/helper/, clients/libreoffice/ and clients/icons/), none of
+#                 which the Java build or the Docker image covers. clients/office/ is the exception: healdan-api
+#                 packages the Office add-in's pages and manifest into its jar, so a change there builds the server too.
 #   clients=true  when a pull request changes anything under clients/, the clients workflow itself, or the API
 #                 contract (healdan-api's openapi.yaml), which the helper's contract tests read.
 # Pushes, and pull requests that change anything else, get code=true; pushes always get clients=true. The docs site's
@@ -22,10 +24,10 @@ if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
   if grep -qE '^clients/|^\.github/workflows/clients\.yml$|^healdan-api/src/main/resources/healdan/api/openapi\.yaml$' <<<"$changed"; then
     clients=true
   fi
-  # The first grep -v finds a line that isn't docs or a client; an empty diff has one empty line, so it counts as code
-  # too. The second finds Markdown under a src/ directory outside clients/, which can be a test fixture
-  # (FormatConverterTest reads one).
-  if ! grep -qvE '^docs/|^site/|\.md$|^clients/' <<<"$changed" && ! grep -qE '(^|/)src/' <<<"$(grep -v '^clients/' <<<"$changed" || true)"; then
+  # The first grep -v finds a line that isn't docs or a client (clients/office/ isn't one: see above); an empty diff has
+  # one empty line, so it counts as code too. The second finds Markdown under a src/ directory outside clients/, which
+  # can be a test fixture (FormatConverterTest reads one).
+  if ! grep -qvE '^docs/|^site/|\.md$|^clients/(helper|libreoffice|icons)/' <<<"$changed" && ! grep -qE '(^|/)src/' <<<"$(grep -v '^clients/' <<<"$changed" || true)"; then
     code=false
     echo "Only docs and clients changed, so the Java build steps are skipped."
   fi

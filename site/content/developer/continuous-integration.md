@@ -57,9 +57,11 @@ The Docker build keeps its own copy, which the `maven:3.9` image both writes and
 ## What a Pull Request Runs
 
 `.github/scripts/code-changed.sh` lists the files a pull request changes and writes two answers. `code` is false
-when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and `clients/`. It
-gates the Java build's test shards and the Docker build steps. `clients` is true when the pull request changes
-anything under `clients/`, `clients.yml` itself, or the API contract,
+when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and the helper, the
+LibreOffice extension and the icons (`clients/helper/`, `clients/libreoffice/` and `clients/icons/`). A change under
+`clients/office/` counts as code as well as clients, because `healdan-api` packages the Office add-in's pages and
+manifest into its jar. `code` gates the Java build's test shards and the Docker build steps. `clients` is true when the
+pull request changes anything under `clients/`, `clients.yml` itself, or the API contract,
 `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It gates the client
 test jobs. A push always gets both true.
 
@@ -68,14 +70,15 @@ them all.
 
 | The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
 |---|---|---|---|
-| Only `clients/` | Skipped | Skipped | Run |
+| Only the helper, the extension or the icons in `clients/` | Skipped | Skipped | Run |
+| `clients/office/` | Run | Run | Run |
 | The API contract, `openapi.yaml` | Run | Run | Run |
 | Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped |
 | Only docs | Skipped | Skipped | Skipped |
-| Docs and `clients/` | Skipped | Skipped | Run |
+| Docs and the helper, extension or icons | Skipped | Skipped | Run |
 | The server and `clients/` | Run | Run | Run |
 
-Pushes to `master` that change only docs or `clients/` don't rebuild the image.
+Pushes to `master` that change only docs, the helper, the extension or the icons don't rebuild the image.
 
 ## The Clients Check
 
@@ -111,8 +114,9 @@ it through the helper's cycle with a fake LibreOffice.
 - `dotnet test` passes when no test ran, so the step passes only if its summary shows at least one passed test and
   none skipped.
 
-A pull request that changes only `clients/` doesn't build the image, so this test doesn't run on it. It runs on
-`master` after the merge, and on pull requests that change the server. That gap is accepted.
+A pull request that changes only the helper, the extension or the icons doesn't build the image, so this test
+doesn't run on it. It runs on `master` after the merge, and on pull requests that change the server. That gap is
+accepted.
 
 ## Things That Catch Upstream Syncs
 

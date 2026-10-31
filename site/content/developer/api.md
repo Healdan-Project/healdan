@@ -315,6 +315,14 @@ Office loads an add-in's pages over HTTPS, and a page loaded over HTTPS can't ca
 So an Office add-in needs Healdan behind a [reverse proxy](../../install/reverse-proxy/) that serves HTTPS, with a
 certificate the computer running Office trusts.
 
+## The Office Add-In's Files
+
+`/api/addin/` isn't part of the JSON API. It serves the Microsoft Office add-in's manifest, pages and icons, which
+Office loads with no sign-in, so nothing there takes a token or follows the API's conventions: no `/v1`, and
+`openapi.yaml` doesn't describe it. A missing file, or an address Office can't use, is still answered with a problem
+as everywhere under `/api`. [Office Integration](../../install/office-integration/#microsoft-office) says what
+the server needs for it.
+
 ## Healdan's Own Client
 
 The Healdan Helper, which brings Healdan into LibreOffice, is a client of this API, and uses most of what's above:
