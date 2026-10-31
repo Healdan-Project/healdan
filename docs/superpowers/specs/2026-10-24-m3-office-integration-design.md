@@ -289,7 +289,7 @@ Both the check-in and the release are refused if this computer no longer holds t
 2. The Save to Healdan window opens (§5.8).
 3. **The format (owner, 2026-10-24).** The window offers the app's own format first, selected, and the other family's format as the alternative:
    - from LibreOffice, `.odt`, `.ods` or `.odp`, with `.docx`, `.xlsx` or `.pptx` as the alternative (added after the build, 2026-10-29: from Draw, `.odg` alone, as Draw saves no Microsoft format, so the File Format pop-up has the one choice);
-   - from Word, Excel and PowerPoint (M3.5), the other way round.
+   - from Word, Excel and PowerPoint (M3.5), the other way round. (changed by M3.5's trial: the app's own format only, as Office turns its add-in off for OpenDocument files; the [M3.5 spec](2026-10-30-m3-5-microsoft-office-design.md) §5.5.)
 
    The choice is only offered here, because a document's format can't change later (§3.1).
 4. On Save, the app writes the document in the chosen format to a temporary file, and the helper files that file (`POST /documents`, `checkOut: true`). The server gives it its doc # and stamps it (§9.7).
