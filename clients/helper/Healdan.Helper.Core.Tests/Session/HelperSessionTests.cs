@@ -1221,6 +1221,40 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task SendAndCheckInIsRefusedWhileTheSaveBackLooksForWordsWindow()
+    {
+        // The final review's Minor 2: once Word has the crashed copy open again (its owner file written since the crash),
+        // the copy is its window's, even while the save-back is still looking for that window by its path. Checking it
+        // in then would delete it from under Word's recovered window.
+        var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true };
+        var office = new SeenLocks(new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        SignedInBefore();
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: office, appFor: _ => "Microsoft Office"));
+        await session.StartAsync();
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(scripting.Opened).Path;
+        await Wait.Until(() => office.LockSeen(path) && office.RunningSeen(path), "Word seen with the copy open");
+        scripting.SetRunning(OfficeProgram.Word, false);
+        await Wait.Until(() => !_windows.Crashes.IsEmpty, "the crash window");
+        var crashed = Assert.Single(_windows.Crashes);
+        scripting.Recover(OfficeProgram.Word, path);
+        await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back looking for Word's window");
+
+        session.SendAndCheckIn(crashed);
+
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the user told why");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(_server.Saves);
+        Assert.True(File.Exists(path));
+        Assert.NotNull(_server.Doc(5).Hold);
+
+        // Once Word lists it, the recovered work is saved back and sent, as before.
+        scripting.NeverListed = false;
+        await Wait.Until(() => _server.Saves.Count == 1, "the recovered work sent");
+        Assert.True(_server.Saves[0].KeepCheckedOut);
+    }
+
+    [Fact]
     public async Task ReopenAfterWordsRenameBringsUpTheRenamedCopy()
     {
         var (session, scripting, crashed) = await WordRecoveredAsync();

@@ -133,6 +133,12 @@ public sealed class CopyCycle : IDisposable
         /// <summary>When the owner file a crash left was last written, for the watch for the program to open it again (M3.5 spec §5.14).</summary>
         public DateTime? CrashWritten { get; set; }
 
+        /// <summary>
+        /// The crashed copy's program has it open again: its owner file was written since the crash (M3.5 spec §5.14), and
+        /// the save-back is looking for its window, or will look again.
+        /// </summary>
+        public bool Reopened { get; set; }
+
         public List<TaskCompletionSource<CopyState>> Waiters { get; } = [];
     }
 
@@ -473,6 +479,19 @@ public sealed class CopyCycle : IDisposable
     {
         lock (_gate)
             return Find(path) is { Crashed: true };
+    }
+
+    /// <summary>
+    /// Whether a crashed copy's program has it open again (M3.5 spec §5.14) while the cycle still counts it as crashed:
+    /// its owner file was written since the crash and is there now, and the save-back is looking for its window by its
+    /// path. Checked in then, the copy would be deleted from under that window.
+    /// </summary>
+    public bool IsOpenAgain(string path)
+    {
+        string? reopened;
+        lock (_gate)
+            reopened = Find(path) is { Crashed: true, Reopened: true } s ? s.Path : null;
+        return reopened is not null && AppOf(reopened).LockExists(reopened);
     }
 
     /// <summary>The copy's state; <paramref name="pending"/> null works it out, which reads the file.</summary>
@@ -907,7 +926,7 @@ public sealed class CopyCycle : IDisposable
                 s = new Session(path, n, readOnly, SendAsync, _timings, SetWaiting, SaveFailed);
                 _sessions[Name(path)] = s;
             }
-            (s.HoldBy, s.Adopting, s.Ended, s.Crashed, s.NextKind) = (holdBy, adopting, false, false, null);
+            (s.HoldBy, s.Adopting, s.Ended, s.Crashed, s.Reopened, s.NextKind) = (holdBy, adopting, false, false, false, null);
         }
         if (!readOnly)
             _saves.Watch(path);
@@ -1461,8 +1480,11 @@ public sealed class CopyCycle : IDisposable
         if (OfficeAfterSave.Driver(app, old) is not { } driver || !OfficePrograms.RenamesAfterSave(driver.Program))
             return;
         var newPath = Path.Combine(_store.Folder, CopyNames.FileName(record.DocumentName, record.DocNumber, record.FileVersion, false));
-        if (Name(newPath) == Name(old) || Path.Exists(newPath) || Record(newPath) is not null)
-            return; // the name it has already, or another copy's, which the program would save over
+        // The name it has already, or another copy's, which the program would save over; or the program's owner file is
+        // there without its document, as when it's saving there itself, and the old file mustn't go for a new one that
+        // may never come.
+        if (Name(newPath) == Name(old) || Path.Exists(newPath) || Record(newPath) is not null || app.LockExists(newPath))
+            return;
 
         var lockSeen = _closes.LockSeen(old);
         _saves.Unwatch(old); // the program's writes under either name are its own, not saves
@@ -1500,7 +1522,8 @@ public sealed class CopyCycle : IDisposable
             if (closing)
                 return; // its check-in, queued meanwhile, reads the renamed file
             _saves.Watch(newPath);
-            _closes.Watch(newPath, app, appSeenRunning: true);
+            // Its owner file there now means its going at the first look is a close, as after any pause in the watch.
+            _closes.Watch(newPath, app, appSeenRunning: true, lockSeen: app.LockExists(newPath));
             bool versionWaits;
             lock (_gate)
                 versionWaits = s.NextKind is not null;
@@ -1624,6 +1647,7 @@ public sealed class CopyCycle : IDisposable
             s = Find(path);
             if (s is null || !s.Crashed || s.Closing)
                 return;
+            s.Reopened = true; // from now on, the crash window's Send and Check In would delete it from under the window
         }
         _ = Task.Run(() => SaveBackAsync(s));
     }
@@ -1651,7 +1675,7 @@ public sealed class CopyCycle : IDisposable
                     return; // checked in meanwhile, from the crash window
                 if (saved)
                 {
-                    s.Crashed = false;
+                    (s.Crashed, s.Reopened) = (false, false);
                     _closes.Watch(s.Path, app, appSeenRunning: true, lockSeen: app.LockExists(s.Path));
                 }
             }
@@ -1706,7 +1730,7 @@ public sealed class CopyCycle : IDisposable
         {
             lock (_gate)
                 if (!s.Closing && Find(s.Path) == s)
-                    _closes.Watch(s.Path, app, appSeenRunning: true);
+                    _closes.Watch(s.Path, app, appSeenRunning: true, lockSeen: app.LockExists(s.Path));
         }
     }
 

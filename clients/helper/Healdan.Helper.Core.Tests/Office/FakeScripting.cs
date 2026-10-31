@@ -82,6 +82,9 @@ public sealed class FakeScripting : IOfficeScripting
     /// </summary>
     public TimeSpan RenameTakes { get; set; }
 
+    /// <summary>Runs as Word's doc ID is set after a rename, with the copy's path: the window closing just then, say.</summary>
+    public Action<string>? OnSetDocId { get; set; }
+
     /// <summary>How long PowerPoint's close and reopen leaves the presentation without its owner file.</summary>
     public TimeSpan ReopenGap { get; set; } = TimeSpan.FromSeconds(2);
 
@@ -357,6 +360,7 @@ public sealed class FakeScripting : IOfficeScripting
     {
         lock (_lock)
             _docIds.Add((path, docRef));
+        OnSetDocId?.Invoke(path);
         return Task.FromResult(HasDocId);
     }
 
