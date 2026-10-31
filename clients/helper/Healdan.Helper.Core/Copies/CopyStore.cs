@@ -158,8 +158,10 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// <summary>
     /// M3.5 spec §5.4: the app has saved the open copy under a new name itself (Word's and Excel's rename after a save),
     /// so the record follows the file there. <paramref name="record"/> is written beside <paramref name="newPath"/>,
-    /// with that file's name; then the old record goes, and the old file if it's still there, with the old name's owner
-    /// and lock files, which a crash may have left. The new file is the caller's to have checked: nothing here reads it.
+    /// with that file's name; then the old record goes, and the old name's owner and lock files, which a crash may have
+    /// left. The old file goes too if it's still there, but only once the new file is: the app's owner file alone at the
+    /// new name says it was saving there, not that it has, and the old file may be all there is of the copy. The new file
+    /// is the caller's to have checked: nothing here reads it.
     /// </summary>
     public void Moved(string oldPath, string newPath, CopyRecord record)
     {
@@ -170,7 +172,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         if (oldName == newName)
             return;
         File.Delete(RecordPath(oldPath));
-        File.Delete(System.IO.Path.Combine(paths.Copies, oldName));
+        if (File.Exists(newPath))
+            File.Delete(System.IO.Path.Combine(paths.Copies, oldName));
         File.Delete(System.IO.Path.Combine(paths.Copies, CopyNames.LibreOfficeLockName(oldName)));
         foreach (var owner in CopyNames.OfficeOwnerNames(oldName))
             File.Delete(System.IO.Path.Combine(paths.Copies, owner));

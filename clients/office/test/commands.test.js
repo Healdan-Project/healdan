@@ -63,6 +63,7 @@ function setup({
   const dialogs = [];
   const log = [];
   const intervals = [];
+  const escaped = []; // what Office's callback threw back at it
   let clock = 1000;
 
   const fetch = fakeFetch(answers, requests);
@@ -99,6 +100,22 @@ function setup({
           dialogs.push(entry);
           if (dialog === "throws") {
             throw new Error("DialogApi isn't there");
+          }
+          if (dialog === "handler-throws") {
+            // Office calls back later, as it does, with a dialog whose handlers can't be added.
+            const broken = {
+              addEventHandler() {
+                throw new Error("The dialog went away");
+              },
+            };
+            setImmediate(() => {
+              try {
+                callback({ status: "succeeded", value: broken });
+              } catch (error) {
+                escaped.push(error);
+              }
+            });
+            return;
           }
           if (dialog !== "succeeded") {
             callback({ status: "failed", error: { message: "Another dialog is open" } });
@@ -163,7 +180,7 @@ function setup({
     return pressing.completed();
   }
 
-  return { commands, begin, press, storage, requests, dialogs, log, intervals, tick: (ms) => (clock += ms) };
+  return { commands, begin, press, storage, requests, dialogs, log, intervals, escaped, tick: (ms) => (clock += ms) };
 }
 
 const SAVE = [200, { action: "save", folderId: 12, name: "Lease agreement", format: "docx", properties: {}, ticket: "ticket-1" }];
@@ -320,6 +337,16 @@ test("any event from the window ends the wait, once: Office reports a closed win
     await pressing.finished;
     assert.equal(pressing.completed(), 1, String(code));
   }
+});
+
+test("a window whose handlers can't be added ends the press, and once", async () => {
+  // Office calls displayDialogAsync's callback later, outside the call's try: a throw there must still end the press.
+  const { begin, log, escaped } = setup({ dialog: "handler-throws", closes: false, paired: false });
+  const pressing = begin("saveToHealdan");
+  await Promise.race([pressing.finished, new Promise((resolve) => setTimeout(resolve, 500))]);
+  assert.equal(pressing.completed(), 1);
+  assert.deepEqual(escaped, [], "nothing is thrown back at Office");
+  assert.match(log.join("\n"), /message window didn't open: The dialog went away/);
 });
 
 test("a window that won't open ends the press at once, and once", async () => {

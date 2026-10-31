@@ -1,6 +1,7 @@
 -- Word.SetDocId: sets the document property Healdan Doc ID, updates the footer fields showing it and, if the
--- document was saved, leaves it saved. Answers ok, no-property (the document has no such property; none is made),
--- or missing.
+-- document was saved and its text is the same as before, leaves it saved. Word takes keystrokes between the Apple
+-- events that update the fields, so a document typed in meanwhile is left with unsaved changes, and Word asks about
+-- them at close. Answers ok, no-property (the document has no such property; none is made), or missing.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,
 -- 5 the same with /private added or taken off, 6 mark, 7 window name; any may be empty),
 -- 8 the value
@@ -17,6 +18,7 @@ on run argv
             set located to my locate(p, pTwin, fname, copiesFolder, copiesTwin, "", "", false)
             set d to item 1 of located
             if d is missing value then return "missing"
+            set textBefore to my hdFingerprint(d)
             set wasSaved to saved of d
             try
                 set value of custom document property "Healdan Doc ID" of d to v
@@ -33,11 +35,26 @@ on run argv
                     end try
                 end repeat
             end repeat
-            if wasSaved then set saved of d to true
+            set untouched to my sameText(textBefore, my hdFingerprint(d))
+            if wasSaved and untouched then
+                set saved of d to true
+                if not my sameText(textBefore, my hdFingerprint(d)) then set saved of d to false
+            end if
             return "ok"
         end timeout
     end tell
 end run
+
+-- Finds the document (findDocument), but refuses one whose name another open document has (spec section
+-- 5.2): the apps' scripting names a document by its name, so of two documents with one name Word reached only
+-- one, whichever path was asked for (the owner's by-hand run, 2026-10-31). Answers {the document, how it
+-- was found}, {missing value, "ambiguous"} for a shared name, or {missing value, ""}.
+on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+    set located to my findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+    if (item 1 of located) is missing value then return located
+    if my sharesItsName(item 1 of located) then return {missing value, "ambiguous"}
+    return located
+end locate
 
 -- Finds the document, trying in this order (spec section 5.2: paths are compared resolved, or file names within Copies):
 --   1. its exact path, in either spelling (pTwin is the same path with /private added or taken off);
@@ -47,7 +64,7 @@ end run
 --   4. its window's name;
 --   5. if useFront, the front document.
 -- Answers {the document, how it was found}, or {missing value, ""}.
-on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+on findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
     tell application "Microsoft Word"
         if p is not "" then
             repeat with i from 1 to (count documents)
@@ -90,7 +107,22 @@ on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, use
         end if
         return {missing value, ""}
     end tell
-end locate
+end findDocument
+
+-- Whether another open document has this one's name. AppleScript compares text ignoring case, so a name told apart only
+-- by its case counts as shared too.
+on sharesItsName(d)
+    tell application "Microsoft Word"
+        set wanted to name of d
+        set seen to 0
+        repeat with i from 1 to (count documents)
+            try
+                if (name of document i) is wanted then set seen to seen + 1
+            end try
+        end repeat
+    end tell
+    return seen > 1
+end sharesItsName
 
 -- Is the file directly in the folder? Both are POSIX paths, and the folder has no closing slash.
 on isInFolder(docPath, folderPath)
@@ -100,3 +132,17 @@ on isInFolder(docPath, folderPath)
     if docPath does not start with folderPrefix then return false
     return (text ((length of folderPrefix) + 1) thru -1 of docPath) does not contain "/"
 end isInFolder
+
+-- The text that fingerprints a document: the same in every script that takes one.
+on hdFingerprint(d)
+    tell application "Microsoft Word"
+        return "#" & (content of text object of d)
+    end tell
+end hdFingerprint
+
+-- Whether two texts are the same, case and all: AppleScript ignores case unless told not to.
+on sameText(oneText, otherText)
+    considering case
+        return oneText is otherText
+    end considering
+end sameText

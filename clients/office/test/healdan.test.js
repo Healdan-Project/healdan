@@ -323,6 +323,26 @@ test("a call isn't repeated when the helper still answers but the call failed on
   assert.equal(asked, 1, "a request the helper may have taken isn't sent twice");
 });
 
+test("a file request that fails on the way is lost-result, as the helper may have filed it already", async () => {
+  // The final review's Minor 11: "isn't running" would invite filing it twice. It isn't sent again either.
+  let asked = 0;
+  const routes = {
+    file: () => {
+      asked += 1;
+      throw new TypeError("Load failed");
+    },
+  };
+  const { client, storage } = setup({ routes });
+  await failsWith(client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), "lost-result");
+  assert.equal(asked, 1, "a filing the helper may have taken isn't sent twice");
+  assert.equal(storage.getItem("healdan.port"), null, "the next press looks for the helper again");
+
+  // Nothing sent, as when no helper answers at all, is still unreachable.
+  const none = setup({ listening: [] });
+  await failsWith(none.client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), "unreachable");
+  assert.deepEqual(none.helper.requests.filter((r) => r.route === "file"), []);
+});
+
 test("an error answer becomes a HelperError with the helper's code and the pane's text", async () => {
   const cases = [
     [409, { error: "signed-out" }, "signed-out"],
@@ -688,7 +708,7 @@ test("saveToHealdan takes the mark off when filing fails, and says why", async (
   assert.deepEqual(result, { ok: false, code: "wrong-window", message: Healdan.messageFor("wrong-window") });
 });
 
-test("saveToHealdan takes the mark off when the helper can't be reached for the filing", async () => {
+test("saveToHealdan takes the mark off when the filing fails on the way, and says to check Healdan", async () => {
   const routes = {
     "save-new": SAVE,
     file: () => {
@@ -697,7 +717,7 @@ test("saveToHealdan takes the mark off when the helper can't be reached for the 
   };
   const { client, office, log } = setup({ routes });
   const result = await Healdan.saveToHealdan({ client, office });
-  assert.equal(result.code, "unreachable");
+  assert.deepEqual(result, { ok: false, code: "lost-result", message: Healdan.messageFor("lost-result") });
   assert.ok(log.at(-1).startsWith("removeMark "), `${log} ends by taking the mark off`);
 });
 

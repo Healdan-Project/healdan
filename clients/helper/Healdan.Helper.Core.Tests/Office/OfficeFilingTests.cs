@@ -119,9 +119,9 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
         var copy = CopyPath("Memo #100 v1.0.docx");
         Assert.Contains("filed 100 checkOut=True", Server.Calls);
         Assert.Equal(("Memo.docx", "the window's bytes"), (Server.Doc(100).Name, Server.Doc(100).Content));
-        var window = new DocumentRef(null, Mark, "Document1");
-        Assert.Equal([(OfficeProgram.Word, window)], Scripting.Fingerprints);
-        Assert.Equal([(OfficeProgram.Word, window, copy, Fingerprint)], Scripting.SavesAs);
+        // Fingerprinted as Save was clicked, before there was a mark, by the window save-new took.
+        Assert.Equal([(OfficeProgram.Word, new DocumentRef(null, null, "Document1"))], Scripting.Fingerprints);
+        Assert.Equal([(OfficeProgram.Word, new DocumentRef(null, Mark, "Document1"), copy, Fingerprint)], Scripting.SavesAs);
         Assert.Equal((true, 100L, "Memo #100 v1.0", "#100 v1.0", copy), (state.Known, state.DocNumber, state.Title, state.DocRef, state.Path));
         Assert.Equal(MicrosoftOfficeApp.AppName, Store.Find(copy)!.Value.Item2.App);
         Assert.Empty(Temporary); // the bytes' temporary file is gone
@@ -177,6 +177,32 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
 
         Assert.Equal("Memo #101 v1.0", third.Title);
         Assert.Equal(new DocumentRef(null, "hd-mark-3", "Document1"), Scripting.SavesAs[^1].Doc);
+    }
+
+    [Fact]
+    public async Task AWindowWithNoNameIsFiledOnlyByItsMark()
+    {
+        // The program gave no window name for a document never saved, so only the mark says which window it
+        // is. Without it, nothing is filed: the front window's name and path would match the ticket's as null and null,
+        // and Save As would find nothing once the document was filed.
+        Scripting.Front = _ => new FrontDocument(null, "", null);
+        Scripting.MarksShown = false;
+        var cycle = Cycle();
+        var filing = Filing(cycle, markWait: TimeSpan.FromMilliseconds(500));
+
+        var refused = await Assert.ThrowsAsync<OfficeRefusedException>(async () => await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("bytes")));
+
+        Assert.Equal("wrong-window", refused.Code);
+        Assert.DoesNotContain(Server.Calls, c => c.StartsWith("filed ", StringComparison.Ordinal));
+        Assert.Empty(Scripting.SavesAs);
+        Assert.Contains("Nothing was filed: Word didn't say which window", Notifier.All);
+        Assert.Empty(Temporary);
+
+        // The mark shown, it finds the window.
+        Scripting.MarksShown = true;
+        var state = await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("bytes"));
+        Assert.Equal("Memo #100 v1.0", state.Title);
+        Assert.Equal(new DocumentRef(null, Mark, null), Scripting.SavesAs.Single().Doc);
     }
 
     [Fact]
@@ -248,9 +274,60 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task AnEditAsTheAddinReadsTheBytesIsSent()
+    {
+        // Review Focus 1, and the final review's Important 1: the fingerprint is of the window as Save was clicked in the
+        // helper's Save window, before the add-in read the bytes, so a line typed while the bytes, the mark and the
+        // request were on their way is sent as a save, not taken for the copy's starting point and lost at close.
+        Scripting.WindowText = "the bytes";
+        var cycle = Cycle();
+        var filing = Filing(cycle);
+        var ticket = await TicketAsync(filing);
+        Scripting.WindowText = "the bytes, and a line typed as the add-in read them";
+
+        await filing.FileAsync(ticket, Mark, Bytes("the bytes"));
+
+        Assert.Equal(FakeScripting.FingerprintOf("the bytes"), Scripting.SavesAs.Single().Fingerprint);
+        await Wait.Until(() => Server.Doc(100).Content == "the bytes, and a line typed as the add-in read them", "the edit sent as a save");
+        var save = Assert.Single(Server.Saves);
+        Assert.Equal(("snapshot", "1.0"), (save.Kind, save.IfVersion));
+        Assert.Equal("1.1", Server.Doc(100).Version);
+        await RenamedTo(cycle, CopyPath("Memo #100 v1.1.docx"));
+        await Wait.Until(() => Scripting.DocIds.Count == 1, "the rename's last step");
+    }
+
+    [Fact]
+    public async Task AWindowNotFingerprintedAtSaveIsSent()
+    {
+        // Nothing to compare the window with, so nothing shows the copy holds only what was filed: it goes up, at worst
+        // as a version the same as the filed one.
+        Scripting.WindowText = "the window, as Word saves it";
+        Scripting.AnswerFingerprints((string?)null); // Word had no document to fingerprint as Save was clicked
+        var cycle = Cycle();
+        var filing = Filing(cycle);
+
+        await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("the window's bytes"));
+
+        Assert.Null(Scripting.SavesAs.Single().Fingerprint);
+        await Wait.Until(() => Server.Doc(100).Version == "1.1", "the copy sent as a save");
+        Assert.Equal("the window, as Word saves it", Server.Doc(100).Content);
+        await RenamedTo(cycle, CopyPath("Memo #100 v1.1.docx"));
+
+        // A fingerprint Word didn't answer is none either.
+        Scripting.FailNextFingerprint(new OfficeScriptException("Word didn't answer (fake)."));
+        _windows.Answer = SaveAnswer("Letter", "docx");
+
+        await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("the letter's bytes"));
+
+        await Wait.Until(() => Server.Doc(101).Version == "1.1", "the second copy sent as a save");
+        await RenamedTo(cycle, CopyPath("Letter #101 v1.1.docx"));
+        await Wait.Until(() => Scripting.DocIds.Count == 2, "the renames' last steps");
+    }
+
+    [Fact]
     public async Task AnEditDuringTheMarkWaitIsSent()
     {
-        // Review Focus 1: the fingerprint is of the window as the bytes arrive, before the helper waits for the mark, so a
+        // Review Focus 1: the fingerprint is of the window as Save was clicked, before the helper waits for the mark, so a
         // line typed during that wait is sent as a save too, not taken for the copy's starting point and lost at close.
         Scripting.WindowText = "the bytes";
         Scripting.MarksShown = false;

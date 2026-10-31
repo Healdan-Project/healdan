@@ -58,10 +58,10 @@ public sealed class HelperSessionTests : IDisposable
     private HelperPaths Paths => HelperPaths.For(_root);
 
     private HelperSession Make(TimeSpan? signOutFlush = null, OfficeApps? apps = null, ICertificateTrust? trust = null,
-        AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null)
+        AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null, CycleTimings? timings = null)
     {
         var device = new DeviceIdentity(FakeApi.HereDevice, FakeApi.HereName);
-        var session = new HelperSession(Paths, _keychain, device, apps ?? TestApps.Of(_app), _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
+        var session = new HelperSession(Paths, _keychain, device, apps ?? TestApps.Of(_app), _windows, _notifier, new HelperLog(Paths.Log), _http, timings ?? Fast,
             signOutFlush, trust, certificate, addinPorts);
         _sessions.Add(session);
         return session;
@@ -1218,6 +1218,95 @@ public sealed class HelperSessionTests : IDisposable
         Assert.True(File.Exists(crashed.Path));
         Assert.Equal([crashed.Path], session.OpenCopies().Select(c => c.Path));
         Assert.NotNull(_server.Doc(5).Hold);
+    }
+
+    /// <summary>
+    /// M3.5 spec §5.14: a session with Word, whose document 5 is open and has crashed, and Word not yet restoring its
+    /// window. Returns the crashed copy, as the crash window holds it, and its path.
+    /// </summary>
+    private async Task<(HelperSession Session, CopyState Crashed, string Path)> WordCrashedAsync(FakeScripting scripting, CycleTimings? timings = null)
+    {
+        var office = new SeenLocks(new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        SignedInBefore();
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: office, appFor: _ => "Microsoft Office"), timings: timings);
+        await session.StartAsync();
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(scripting.Opened).Path;
+        await Wait.Until(() => office.LockSeen(path) && office.RunningSeen(path), "Word seen with the copy open");
+        scripting.SetRunning(OfficeProgram.Word, false);
+        await Wait.Until(() => !_windows.Crashes.IsEmpty, "the crash window");
+        return (session, Assert.Single(_windows.Crashes), path);
+    }
+
+    [Fact]
+    public async Task SendAndCheckInIsRefusedWhileTheSaveBackLooksForWordsWindow()
+    {
+        // The final review's Minor 2: once Word has the crashed copy open again (its owner file written since the crash),
+        // the copy is its window's, even while the save-back is still looking for that window by its path. Checking it
+        // in then would delete it from under Word's recovered window.
+        var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true };
+        var (session, crashed, path) = await WordCrashedAsync(scripting);
+        scripting.Recover(OfficeProgram.Word, path);
+        await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back looking for Word's window");
+
+        session.SendAndCheckIn(crashed);
+
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the user told why");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(_server.Saves);
+        Assert.True(File.Exists(path));
+        Assert.NotNull(_server.Doc(5).Hold);
+
+        // Once Word lists it, the recovered work is saved back and sent, as before.
+        scripting.NeverListed = false;
+        await Wait.Until(() => _server.Saves.Count == 1, "the recovered work sent");
+        Assert.True(_server.Saves[0].KeepCheckedOut);
+    }
+
+    [Fact]
+    public async Task SendAndCheckInIsRefusedWhileTheSaveBackSavesWordsWindowAndItsOwnerFileIsGone()
+    {
+        // The final review's residuals: Word saving its window over the copy removes its owner file until the save is
+        // done, so the owner file alone can't say the copy is a window's. A Send and Check In clicked then would delete
+        // the copy from under the Save As.
+        var scripting = new FakeScripting { WindowText = "the work Word recovered", SaveAsTakes = TimeSpan.FromSeconds(1) };
+        var (session, crashed, path) = await WordCrashedAsync(scripting);
+        var owner = FakeScripting.OwnerPath(OfficeProgram.Word, path);
+        scripting.Recover(OfficeProgram.Word, path);
+        await Wait.Until(() => scripting.SavesAs.Count == 1 && !File.Exists(owner), "Word saving its window, its owner file gone");
+
+        session.SendAndCheckIn(crashed);
+
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the user told why");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.True(File.Exists(path));
+        Assert.NotNull(_server.Doc(5).Hold);
+
+        // The save finishes, and the recovered work is sent, as before.
+        await Wait.Until(() => _server.Saves.Count == 1, "the recovered work sent");
+        Assert.True(_server.Saves[0].KeepCheckedOut);
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+    }
+
+    [Fact]
+    public async Task SendAndCheckInIsntRefusedOnceTheSaveBackGivesUp()
+    {
+        // Word's recovered window was closed before the save-back found it, so the copy is nobody's window: once the
+        // save-back has given up, the crash window's Send and Check In must work, or the copy is stuck for good.
+        var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true };
+        var (session, crashed, path) = await WordCrashedAsync(scripting, Fast with { RecoveryWait = TimeSpan.FromSeconds(1) });
+        scripting.Recover(OfficeProgram.Word, path);
+        await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back looking for Word's window");
+        FakeScripting.Close(OfficeProgram.Word, path);
+        Assert.True(session.Cycle!.IsOpenAgain(path)); // still looking: the copy isn't free yet
+
+        await Wait.Until(() => !session.Cycle!.IsOpenAgain(path), "the save-back given up");
+        session.SendAndCheckIn(crashed);
+
+        await Wait.Until(() => !File.Exists(path), "the copy checked in and deleted");
+        Assert.Equal(1, _server.Count("DELETE /documents/5/checkout"));
+        Assert.DoesNotContain("open again", _notifier.All);
+        Assert.Empty(scripting.SavesAs);
     }
 
     [Fact]

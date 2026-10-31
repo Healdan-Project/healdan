@@ -154,6 +154,107 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task AnOwnerFileAtTheNewNameHoldsTheRename()
+    {
+        // The final review's Minor 1: Word's owner file at the next version's name, without its document, says Word may
+        // be saving there. The rename doesn't start, as when the name is taken, and the copy stays as it is.
+        var (cycle, path) = await OpenAsync();
+        var v11 = CopyPath("Lease agreement #5 v1.1.docx");
+        var stray = FakeScripting.OwnerPath(OfficeProgram.Word, v11);
+        File.WriteAllText(stray, "Word's");
+
+        Save(path, "first draft");
+        await Wait.Until(() => Events.LastTitle(path) == "Lease agreement #5 v1.1", "the save confirmed");
+        await LooksAsync(path); // looked after under its name again
+
+        Assert.Empty(Scripting.Renames);
+        Assert.Equal("first draft", File.ReadAllText(path));
+        Assert.False(File.Exists(v11));
+        Assert.Equal([path], cycle.OpenCopies().Select(c => c.Path));
+        Assert.Equal("1.1", Store.Find(path)!.Value.Item2.FileVersion);
+
+        // Gone, the next confirmed save renames it.
+        File.Delete(stray);
+        Save(path, "second draft");
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.2.docx"));
+        Assert.Equal([(OfficeProgram.Word, path, CopyPath("Lease agreement #5 v1.2.docx"))], Scripting.Renames);
+        Assert.Equal(["first draft", "second draft"], Server.Saves.Select(s => s.Content));
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task NoRenameWhileTheSameContentWaitsToGoUp()
+    {
+        // The rename's queued-save guard: A goes up, then the user saves B and A again before it's done, so a save of
+        // A waits behind it. The file holds what Healdan confirmed, but the waiting save's own confirmation renames it.
+        var (cycle, path) = await OpenAsync();
+        Server.HoldSaves();
+        Save(path, "A");
+        await Wait.Until(() => Server.SavesReceived == 1, "A on its way up");
+        Save(path, "B");
+        await Wait.Until(() => Queued(cycle, path, "B"), "B waiting behind A");
+        Save(path, "A");
+        await Wait.Until(() => Queued(cycle, path, "A"), "A again in B's place");
+
+        Server.OpenSaves();
+
+        var v12 = CopyPath("Lease agreement #5 v1.2.docx");
+        await RenamedTo(cycle, v12);
+        Assert.Equal([(OfficeProgram.Word, path, v12)], Scripting.Renames); // once, from the name it opened with
+        Assert.Equal(["A", "A"], Server.Saves.Select(s => s.Content));
+        Assert.False(File.Exists(CopyPath("Lease agreement #5 v1.1.docx")));
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task NoRenameWhileASaveAsNewVersionWaits()
+    {
+        // The rename's NextKind guard: Save as New Version while A goes up, before the version's save settles. The
+        // version's confirmation renames the copy, once, to the version's name. The settle's clock is stopped meanwhile,
+        // so the version is still only asked for when A's confirmation comes.
+        var clock = new PausableClock();
+        var (cycle, path) = await OpenAsync(timings: Fast with { Clock = clock });
+        Server.HoldSaves();
+        Save(path, "A");
+        await Wait.Until(() => Server.SavesReceived == 1, "A on its way up");
+        clock.Pause();
+        cycle.MarkNextVersion(path);
+
+        Server.OpenSaves();
+        await Wait.Until(() => Events.LastTitle(path) == "Lease agreement #5 v1.1", "A confirmed");
+        await Task.Delay(Quiet);
+        Assert.Empty(Scripting.Renames);
+
+        clock.Resume();
+        var v20 = CopyPath("Lease agreement #5 v2.0.docx");
+        await RenamedTo(cycle, v20);
+        Assert.Equal([(OfficeProgram.Word, path, v20)], Scripting.Renames);
+        Assert.Equal([("A", "snapshot"), ("A", "version")], Server.Saves.Select(s => (s.Content, s.Kind)));
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ACloseJustAfterARenameIsSeen()
+    {
+        // The final review's Minor 4: the renamed copy's owner file is there as the close watcher takes it on, so its
+        // going at the first look is a close, not something to wait for Word to quit over. Looks are slow here, so the
+        // window closes, as Word moves the footer on, before the first.
+        Scripting.OnSetDocId = path => FakeScripting.Close(OfficeProgram.Word, path);
+        var (cycle, path) = await OpenAsync(timings: Fast with { LockPoll = TimeSpan.FromMilliseconds(400) });
+        await WatchedAsync(path);
+        Save(path, "first draft");
+
+        var v11 = CopyPath("Lease agreement #5 v1.1.docx");
+        await Wait.Until(() => Scripting.DocIds.Count == 1, "the rename's last step, as the window closes");
+        Assert.Equal(v11, Scripting.DocIds[0].Path);
+        await Wait.Until(() => Server.Doc(5).Hold is null, "the renamed copy checked in");
+        await Wait.Until(() => !File.Exists(v11), "the renamed copy deleted");
+        Assert.Equal(1, Server.Count("DELETE /documents/5/checkout"));
+        Assert.Equal(["first draft"], Server.Saves.Select(s => s.Content));
+        Assert.Empty(cycle.OpenCopies());
+    }
+
+    [Fact]
     public async Task PowerPointNeverRenames()
     {
         Server.Add(9, "Deck.pptx", "slides");
@@ -347,6 +448,33 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
         FakeScripting.Close(OfficeProgram.Word, v12);
         await Wait.Until(() => !File.Exists(v12), "checked in");
         Assert.Null(Server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task ACloseJustAfterALateRenameIsFollowedIsSeen()
+    {
+        // The final review's residuals: a copy followed to its next name is watched with its owner file's state, as after
+        // any rename, so the window closing before the first look at the new name is a close. Otherwise the going of an
+        // owner file never seen would wait for Word to quit. Looks are slow here, so the window closes, as the followed
+        // copy's own rename finds it unsaved, before the first.
+        Scripting.FailNextRename(new OfficeScriptException("osascript didn't answer within 330 seconds."));
+        var (cycle, path) = await OpenAsync(timings: Fast with { LockPoll = TimeSpan.FromMilliseconds(600) });
+        await WatchedAsync(path);
+        Save(path, "first draft");
+        await Wait.Until(() => Log.Contains("didn't answer within 330 seconds"), "the failure logged");
+        await LooksAsync(path, 2); // watched under its old name again
+
+        var v11 = CopyPath("Lease agreement #5 v1.1.docx");
+        await Scripting.RenameIfUnchangedAsync(OfficeProgram.Word, path, v11);
+        Scripting.BeforeRename = from => { if (from == v11) FakeScripting.Close(OfficeProgram.Word, v11); };
+        Scripting.AnswerRenames(RenameResult.Unsaved);
+
+        await Wait.Until(() => Server.Saves.Count == 2, "the followed copy sent");
+        await Wait.Until(() => Server.Doc(5).Hold is null, "the followed copy checked in");
+        await Wait.Until(() => !File.Exists(v11), "the followed copy deleted");
+        Assert.Equal(1, Server.Count("DELETE /documents/5/checkout"));
+        Assert.StartsWith("first draft (as Lease agreement #5 v1.1.docx)", Server.Saves[1].Content);
+        Assert.Empty(cycle.OpenCopies());
     }
 
     [Fact]

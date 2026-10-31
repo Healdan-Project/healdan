@@ -508,6 +508,23 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
     }
 
     [Fact]
+    public async Task ALoneEscapedSurrogateIsABadRequest()
+    {
+        // The final review's Minor 6: valid UTF-8 and valid JSON, but a value no text can hold. Reachable without a key.
+        var server = Start();
+        var body = """{"app":"\ud800"}"""u8.ToArray();
+
+        var (statusLine, answer) = await Raw(server,
+            $"POST /v1/pair/start HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+            + $"Content-Type: application/json\r\nContent-Length: {body.Length}\r\n\r\n", body);
+
+        Assert.Equal("HTTP/1.1 400 Bad Request", statusLine);
+        Assert.Equal("""{"error":"bad-request"}""", answer);
+        Assert.DoesNotContain(" ERROR ", Log);
+        Assert.Empty(_windows.PairingCodes);
+    }
+
+    [Fact]
     public async Task ResultNeedsTheKeyAndTheProtocol()
     {
         var server = Start(hold: Hold);

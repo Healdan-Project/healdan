@@ -306,6 +306,7 @@
 				and AddinResource serves them at /api/addin/. The pages' own folder, web/, is the jar's addin/ itself -->
 			<plugin>
 				<artifactId>maven-resources-plugin</artifactId>
+				<version>3.5.0</version>
 				<executions>
 					<execution>
 						<id>copy-addin</id>

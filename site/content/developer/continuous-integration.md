@@ -10,7 +10,7 @@ weight: 4
 | Check | Workflow | What it does |
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`) and the helper's open-save-close cycle (its stack test) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
@@ -60,10 +60,10 @@ The Docker build keeps its own copy, which the `maven:3.9` image both writes and
 when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and the helper, the
 LibreOffice extension and the icons (`clients/helper/`, `clients/libreoffice/` and `clients/icons/`). A change under
 `clients/office/` counts as code as well as clients, because `healdan-api` packages the Office add-in's pages and
-manifest into its jar. `code` gates the Java build's test shards and the Docker build steps. `clients` is true when the
-pull request changes anything under `clients/`, `clients.yml` itself, or the API contract,
-`healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It gates the client
-test jobs. A push always gets both true.
+manifest into its jar. A Markdown file there is still docs. `code` gates the Java build's test shards and the Docker
+build steps. `clients` is true when the pull request changes anything under `clients/`, `clients.yml` itself, or the
+API contract, `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It
+gates the client test jobs. A push always gets both true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
 them all.
@@ -71,14 +71,16 @@ them all.
 | The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
 |---|---|---|---|
 | Only the helper, the extension or the icons in `clients/` | Skipped | Skipped | Run |
-| `clients/office/` | Run | Run | Run |
+| `clients/office/`, other than Markdown | Run | Run | Run |
 | The API contract, `openapi.yaml` | Run | Run | Run |
 | Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped |
 | Only docs | Skipped | Skipped | Skipped |
 | Docs and the helper, extension or icons | Skipped | Skipped | Run |
 | The server and `clients/` | Run | Run | Run |
 
-Pushes to `master` that change only docs, the helper, the extension or the icons don't rebuild the image.
+Pushes to `master` that change only docs or Markdown files don't rebuild the image (`paths-ignore` in `docker-image.yml`
+and `build-logicaldoc.yml`). A push always gets both answers true, so one that changes only the helper, the extension
+or the icons rebuilds it.
 
 ## The Clients Check
 
@@ -91,9 +93,10 @@ are:
 3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`,
    which also builds the extension's `.oxt` and checks that its parts agree.
 4. **`Office add-in (ubuntu-24.04)`** sets up Node 22 and runs `node --test 'clients/office/test/*.test.js'`, which
-   tests the add-in's logic, `clients/office/web/healdan.js`, with a fake `fetch`, storage and Office. Nothing is
-   installed. The pattern is quoted for Node to expand: Node 21 and later read `--test`'s arguments as file
-   patterns, so a folder fails.
+   tests the add-in's scripts in `clients/office/web/`: its logic (`healdan.js`), the ribbon's buttons
+   (`commands.js`), the Office.js glue (`office-glue.js`) and the pane (`taskpane.js`), with fakes for `fetch`,
+   storage, Office and the page. Nothing is installed. The pattern is quoted for Node to expand: Node 21 and later
+   read `--test`'s arguments as file patterns, so a folder fails.
 5. **`Clients`** is the check to require. It passes when the three test jobs passed, or when all three were skipped
    because nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 
@@ -104,15 +107,17 @@ request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#
 
 The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan stack and skip here, because
 `HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac. The ones marked
-`MacOffice` open Word, Excel and PowerPoint, so they run by hand on a Mac with Office, and skip without
-`HEALDAN_MAC_OFFICE=1`; CI has no Office, so they skip there too.
+`MacOffice` open Word, Excel and PowerPoint on the screen, so they run by hand on a Mac with Office, and skip without
+`HEALDAN_MAC_OFFICE=1`; CI has no Office, so they skip there too. One of them, `EveryScriptCompiles`, starts no
+app and needs no variable, but compiles the helper's AppleScripts against the apps' dictionaries, which only a Mac
+with Office has, so it too is for a Mac with Office.
 
 ### The Helper's Stack Test in the Image CI
 
-`docker/smoke-test.sh` has a step 5d, after the API's add-in flow, that runs the helper's stack test
-(`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to the smoke
-stack). It signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves and closes
-it through the helper's cycle with a fake LibreOffice.
+`docker/smoke-test.sh` has a step 5d, after M2's client flow through the API (step 5c), that runs the helper's
+stack test (`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to
+the smoke stack). It signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves and
+closes it through the helper's cycle with a fake LibreOffice.
 
 - It runs only when `SMOKE_HELPER_TEST=1`, which `docker-image.yml` sets. The workflow sets up the .NET SDK and
   builds the helper's tests first, so a build failure shows on its own. Run locally without the variable, the

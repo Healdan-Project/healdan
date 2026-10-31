@@ -374,6 +374,23 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void MovedKeepsTheOldFileUntilTheNewOneIsThere()
+    {
+        // The final review's Minor 1: an owner file at the new name says the app was saving there, not that it has. The
+        // record follows, but the old file may be all there is of the copy, so it stays.
+        var store = Store();
+        var (path, rec, _) = store.Create(Doc(1), false, "Microsoft Office");
+        File.WriteAllText(path, "saved as 2.1");
+        var renamed = Path.Combine(Paths.Copies, "Lease agreement #1 v2.2.docx");
+
+        store.Moved(path, renamed, rec with { FileVersion = "2.2" });
+
+        Assert.Equal(renamed, Assert.Single(store.All()).Path);
+        Assert.Null(store.Find(path));
+        Assert.Equal("saved as 2.1", File.ReadAllText(path));
+    }
+
+    [Fact]
     public void RenameKeepsReadOnlyMark()
     {
         var store = Store();

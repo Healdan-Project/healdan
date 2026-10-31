@@ -95,7 +95,11 @@ size the helper uses, the widths then match CoreText's.
   - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens
     the files it opens (`OfficePrograms`), and it opens them through `IOfficeScripting`, the one seam for everything
     the helper does to a document in Word, Excel and PowerPoint. Nothing above the seam knows how the programs are
-    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow.
+    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow. Its scripts find a
+    document by its exact path, then by its file name only in `Copies`, then by the add-in's mark or its window's
+    name. Word's scripting names a document by its name, so of two open documents with one name (a copy in `Copies`
+    and one set aside beside it) it reaches only one: the scripts refuse a name two open documents share, and
+    `IsOpen` answers yes for it, so neither is checked in from under its window.
   - A file no office app edits is the `Default` app's, read-only, as below.
 - **Other kinds of file** (not spec §5.11's, by the file's own extension) open read-only in the system's default app
   (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`). On
@@ -115,25 +119,30 @@ size the helper uses, the widths then match CoreText's.
   a restart there sends an identical version, and never loses a save.
 - **Closing:** the extension's `/v1/closed`, or the copy's app's lock file gone at two polls a second apart:
   LibreOffice's `.~lock.<copy>#`, or Microsoft Office's owner file, `~$` and the copy's name with its first two
-  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`; a short
-  name loses one for Word). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
+  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`, which
+  for Word also gives `~$` and the whole name, as a short name may have; copies' names are always long). Tidying up,
+  the helper deletes every form any of them may use, including Word's with only one character left out
+  (`CopyNames.OfficeOwnerNames`). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`;
+  then the copy is deleted.
   A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
 - **Renaming after a save (Word and Excel):** they take the window's title from the file name, so once a save is
   confirmed, `CopyCycle.RenameAfterSaveAsync` has the program save the copy under the confirmed version's name
   (`IOfficeScripting.RenameIfUnchangedAsync`), and the record (`CopyStore.Moved`), the session (`Rekey`) and both
   watchers follow it. It runs in the confirmed save's job, only when no newer save or Save as New Version waits, and
-  not while the copy has changed since its confirmation. The watchers let go of the old name first, so the program's
-  writes aren't saves and its owner file moving isn't a close. The renamed file's hash becomes the confirmed one, so
-  it isn't sent, unless an edit landed in it: the program saw one between its check and its save (`RenamedChanged`),
-  or the old file changed as the rename began, and then it goes up as the next save. With unsaved changes in the
-  window, or when the program can't be asked (logged), nothing moves, and the next confirmation tries again; but if
-  the new name's file or owner file is there all the same, as when the script gave up while the program went on, the
-  copy follows it and the file goes up. Then
-  Word's doc ID footer moves on (`SetDocIdAsync`), where the document has one. PowerPoint's copies keep their name.
-  Before a program's first save into `Copies`, `CopiesNotice` says how to grant it access, once per program
-  (`copiesAnnounced` in `settings.json`). A start that finds a renamed file the record didn't follow takes it as the
-  copy, and sends it, and so does a close: an old name's owner file that went because the program saved under the
-  next name, once the user granted access, say, isn't a close (`FollowedRename`).
+  not while the copy has changed since its confirmation, nor while the program's owner file is at the new name without
+  its file. The watchers let go of the old name first, so the program's writes aren't saves and its owner file moving
+  isn't a close; the close watcher takes on the new name knowing its owner file is there, so a close at its first look
+  counts. The old file goes only once the new file is there (`CopyStore.Moved`). The renamed file's hash becomes the
+  confirmed one, so it isn't sent, unless an edit landed in it: the program saw one between its check and its save
+  (`RenamedChanged`), or the old file changed as the rename began, and then it goes up as the next save. With unsaved
+  changes in the window, or when the program can't be asked (logged), nothing moves, and the next confirmation tries
+  again; but if the new name's file or owner file is there all the same, as when the script gave up while the program
+  went on, the copy follows it and the file goes up. Then Word's doc ID footer moves on (`SetDocIdAsync`), where the
+  document has one. PowerPoint's copies keep their name. Before a program's first save into `Copies`, `CopiesNotice`
+  says how to grant it access, once per program (`copiesAnnounced` in `settings.json`). A start that finds a renamed
+  file the record didn't follow takes it as the copy, and sends it, and so does a close: an old name's owner file that
+  went because the program saved under the next name, once the user granted access, say, isn't a close
+  (`FollowedRename`).
 - **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
   or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
   nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
@@ -143,10 +152,14 @@ size the helper uses, the widths then match CoreText's.
   over the copy (`SaveAsAsync`), and the folder watcher sends it. The copy stays crashed until that works, and is
   looked for again after a miss or a failure. Then the crash window closes itself (`IWindows.DismissCrashed`), and its
   Send and Check In and Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document
-  once it's renamed: a copy that's open again is brought up, never checked in. The crash window's Reopen leaves the
-  watch in place.
+  once it's renamed: a copy that's open again is brought up, never checked in. Send and Check In is refused from the
+  moment the owner file comes back, and while the save-back looks for the window or saves it, as Word takes its owner
+  file away during the save (`CopyCycle.IsOpenAgain`). Once the save-back has given up, it's refused only while the
+  owner file is there, so a window closed before it was found doesn't strand the copy. The crash window's Reopen
+  leaves the watch in place.
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
-  close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close.
+  close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,
+  and then takes it on again knowing whether the owner file is there.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
   `saveId` and the kind it went up as (the record's `sentKind`), and then, when newer content or a version was
@@ -311,7 +324,8 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
 - **Following a `202` and losing the answer:** once `call` has followed a `202`, whatever stops it learning the outcome
   (the `result` route refused, the helper signing out, the helper not answering twice) is `lost-result`, which says to
   check the document in Healdan before trying again, because a pending `file` may already have filed it. A route's own
-  errors are still its own.
+  errors are still its own. A `file` request that fails on the way, before any answer, is `lost-result` too, and isn't
+  sent again: the helper may have filed the document before the answer was lost.
 - **The server serves** only files named `[A-Za-z0-9-]+\.(html|js|css)` and `assets/*.png` from it, with a
   Content-Security-Policy on the pages that allows scripts from the server and `appsforoffice.microsoft.com` and
   connections to the server, Microsoft's services and the helper's four ports. No script, handler or style goes inline.
@@ -339,8 +353,8 @@ is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks)
   descriptors for a moment, is logged once for each kind, and the port goes on listening, as Kestrel's does.
 - **HTTP/1.1, one request per connection** (`Connection: close`): a request line, headers to an empty line, and a
   `Content-Length` body of at most 150 MiB for `file` and 1 MiB for any other route. Anything else, such as a chunked
-  body, a second request, a folded or doubled `Host`, or a body that isn't UTF-8, is `400 bad-request`. Bodies are JSON,
-  and errors are `{"error": "<code>"}`, as the channel's are.
+  body, a second request, a folded or doubled `Host`, a body that isn't UTF-8, or a value no text can hold (an escaped
+  lone surrogate), is `400 bad-request`. Bodies are JSON, and errors are `{"error": "<code>"}`, as the channel's are.
 
 ### The Checks
 
@@ -387,12 +401,16 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes. The document routes are made anew
   at each start (`AddinDocuments`), so a ticket from before a sign-out is `409 no-ticket` after it, whichever server the
   helper signs in to next.
+- **Nothing typed while filing is lost:** once the user clicks Save in the Save window, `save-new` fingerprints the
+  window it took, before the add-in reads the bytes, and the ticket keeps the fingerprint. `file` saves that window as
+  the copy, and `SaveAs` fingerprints it just before and just after its save. If either differs from the ticket's, or
+  there's no fingerprint to compare, the copy goes up as a save rather than being taken as its starting point.
 - **`new-version`** saves the document first when it has unsaved changes, and that save goes up as the version;
   otherwise the file as it is goes up as one.
 - **The routes' own refusals** are `409`: `not-a-copy` for `new-version` on a window that isn't one of the helper's
-  copies, `wrong-window` when the front window isn't the one Save to Healdan was pressed in, and `no-ticket` for a
-  ticket used or expired. Any other failure is `500 internal-error`, and the helper has told the user why where it's
-  theirs to know.
+  copies, `wrong-window` when the front window isn't the one Save to Healdan was pressed in, or when the add-in's mark
+  doesn't show and the app gave no window name to tell, and `no-ticket` for a ticket used or expired. Any other
+  failure is `500 internal-error`, and the helper has told the user why where it's theirs to know.
 - **Short requests:** the add-in calls the port with `fetch` from Office's web view, which is WebKit, and WebKit is
   likely to give up on a request that has had no answer for about a minute. `open-dialog`, `save-new` and `properties`
   wait while the helper's windows are up, and `file` can wait up to 300 s behind Word's Grant File Access, so a lost
@@ -550,9 +568,11 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   test's step 5d runs them in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
 - **`Category=MacOffice`** tests drive the real Word, Excel and PowerPoint through `MacOfficeScripting`: they open,
-  change and close throwaway documents in a temporary folder, and the apps ask for Automation and Grant File Access
-  the first time. They skip unless `HEALDAN_MAC_OFFICE=1` is set. `EveryScriptCompiles` compiles every AppleScript
-  against the apps' dictionaries with `osacompile`, starts nothing, and runs on any Mac that has the three apps.
+  change and close throwaway documents, each test in its own folder inside `healdan-office-tests` in the temporary
+  folder, and the apps ask for Automation and Grant File Access the first time. Grant File Access opens in a test's own
+  folder: go up one level and grant `healdan-office-tests`, and the app asks no more, in that run or later ones. They
+  skip unless `HEALDAN_MAC_OFFICE=1` is set. `EveryScriptCompiles` compiles every AppleScript against the apps'
+  dictionaries with `osacompile`, starts nothing, and runs on any Mac that has the three apps.
 - **`NoticesTests`** fail when the packages `Healdan.Helper/THIRD-PARTY-NOTICES.txt` names differ from those the app
   restores (its `obj/project.assets.json`), ids and versions both. The file is About's Open-Source Notices, built
   into the app. A package added or moved needs its notice: its copyright and licence text, from the package or its

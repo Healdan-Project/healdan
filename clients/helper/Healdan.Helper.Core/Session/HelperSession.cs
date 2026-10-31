@@ -517,7 +517,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// After a Crash's Send and Check In (spec §5.10): the kept copy's changes go up with the check-in, as when its
     /// window closes, and the copy goes once Healdan has them. A read-only copy is just let go. A copy whose app has it
     /// open again by now (M3.5 spec §5.14), found by its document if it has been renamed since, isn't checked in under
-    /// its open window: closing the window does that.
+    /// its open window: closing the window does that. That's so from the moment the app has its owner file back, while
+    /// the recovered window is still to be saved back.
     /// </summary>
     public void SendAndCheckIn(CopyState copy)
     {
@@ -526,7 +527,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return;
         lock (_gate)
             _crashed.Remove(copy.Path);
-        if (cycle.Current(copy) is { } current && !cycle.IsCrashed(current.Path))
+        if (cycle.Current(copy) is { } current && (!cycle.IsCrashed(current.Path) || cycle.IsOpenAgain(current.Path)))
         {
             _log.Info($"Not checking in {current.DocRef}: {cycle.AppOf(current.Path).Name} has it open again");
             _notifier.Notify(current.Title, "It's open again, so it wasn't checked in. Close its window to check it in.");

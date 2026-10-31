@@ -8,9 +8,11 @@ namespace Healdan.Helper.Core.Office;
 /// <paramref name="Id"/>. <paramref name="Window"/> is the program's front window as <c>save-new</c> arrived, before the
 /// helper's window opened, which is the one whose button was pressed; <paramref name="Replaces"/> the copy it was, for
 /// Save as New Document; <paramref name="Document"/> what the user chose in the window: folder, name and properties.
+/// <paramref name="Fingerprint"/> is the window's content as the user clicked Save, before the add-in read its bytes
+/// (<see cref="IOfficeScripting.FingerprintAsync"/>); null when the program gave none.
 /// </summary>
 public sealed record FilingTicket(string Id, OfficeProgram Program, FrontDocument Window, string? Replaces, DateTimeOffset Expires,
-    NewDocument Document);
+    NewDocument Document, string? Fingerprint);
 
 /// <summary>
 /// The tickets Save to Healdan's window has given and <c>/v1/file</c> hasn't used yet. Each is used once, and expires
@@ -26,10 +28,11 @@ public sealed class FilingTickets(TimeProvider? clock = null)
     private readonly Dictionary<string, FilingTicket> _tickets = new(StringComparer.Ordinal);
 
     /// <summary>A new ticket for the window, which expires after <see cref="Lifetime"/>. Expired tickets go meanwhile.</summary>
-    public FilingTicket Issue(OfficeProgram p, FrontDocument window, string? replaces, NewDocument document)
+    public FilingTicket Issue(OfficeProgram p, FrontDocument window, string? replaces, NewDocument document, string? fingerprint)
     {
         var now = _clock.GetUtcNow();
-        var ticket = new FilingTicket(Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)), p, window, replaces, now + Lifetime, document);
+        var ticket = new FilingTicket(Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)), p, window, replaces, now + Lifetime,
+            document, fingerprint);
         lock (_tickets)
         {
             foreach (var expired in _tickets.Values.Where(t => t.Expires <= now).Select(t => t.Id).ToList())

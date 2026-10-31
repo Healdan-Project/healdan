@@ -10,7 +10,10 @@ namespace Healdan.Helper.Core.Office;
 /// named <c>a"; do shell script "…</c> is only a name.
 /// <para>A document is found by its exact path first, in either spelling the app may report (<c>/tmp</c> or
 /// <c>/private/tmp</c>, spec §5.2), and only then by its file name, and only among the documents in the Copies folder:
-/// a copy set aside keeps its name beside <c>Copies</c>, so two documents of one name can be open at once.</para>
+/// a copy set aside keeps its name beside <c>Copies</c>, so two documents of one name can be open at once. The apps'
+/// scripting names a document by its name, though, so of two with one name Word reaches only one, whichever path is
+/// asked for: the scripts refuse a name another open document has, and <see cref="IsOpenAsync"/> answers yes for it,
+/// so a copy that may be open is never taken for closed.</para>
 /// </summary>
 /// <param name="runner">Runs <c>osascript</c> and <c>open</c>.</param>
 /// <param name="copiesFolder">
@@ -112,12 +115,16 @@ public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder =
         var answer = await RunAsync(p, "SaveAs", [.. Finder(doc.Path, doc.Mark, doc.WindowName), newPath, extension], ct);
         if (answer == "missing")
             throw new OfficeScriptException($"{OfficePrograms.CheckOutName(p)} has no document to save.");
-        var split = answer.IndexOf(Separator);
+        // How it was found; whether the content after the save, found by its new name, was the same as before it (same,
+        // changed, or lost when no document had the new name); then the content's text from before the save, last, as it
+        // may hold the separator.
+        var parts = answer.Split(Separator, 3);
         // Never the front window: the scripts don't fall back to it, which would save another document as the copy.
-        if (split < 0 || answer[..split] is not ("path" or "mark" or "window"))
+        if (parts.Length != 3 || parts[0] is not ("path" or "mark" or "window") || parts[1] is not ("same" or "changed" or "lost"))
             throw Unexpected(p, "SaveAs");
-        var changed = fingerprint is not null && !string.Equals(Hash(answer[(split + 1)..]), fingerprint, StringComparison.OrdinalIgnoreCase);
-        return new SaveAsResult(answer[..split], changed);
+        var changed = fingerprint is not null
+            && (parts[1] != "same" || !string.Equals(Hash(parts[2]), fingerprint, StringComparison.OrdinalIgnoreCase));
+        return new SaveAsResult(parts[0], changed);
     }
 
     public async Task ReopenAsync(OfficeProgram p, string path, CancellationToken ct = default)

@@ -203,9 +203,16 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
     {
         if (body[key] is JsonValue value)
         {
-            if (value.TryGetValue<JsonElement>(out var element) && element.ValueKind == JsonValueKind.String)
-                return element.TryGetBytesFromBase64(out var decoded) ? decoded : throw new FormatException($"{key} isn't base64.");
-            if (value.TryGetValue<string>(out var text))
+            try
+            {
+                if (value.TryGetValue<JsonElement>(out var element) && element.ValueKind == JsonValueKind.String)
+                    return element.TryGetBytesFromBase64(out var decoded) ? decoded : throw new FormatException($"{key} isn't base64.");
+            }
+            catch (InvalidOperationException e)
+            {
+                throw new FormatException($"{key} isn't text.", e);
+            }
+            if (TryText(value, out var text))
                 return Convert.FromBase64String(text);
         }
         throw new ArgumentException($"{key} is missing or isn't text.", key);
@@ -219,14 +226,31 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
     };
 
     private static string Text(JsonObject body, string key) =>
-        body[key] is JsonValue v && v.TryGetValue<string>(out var s) && s.Length > 0
+        body[key] is JsonValue v && TryText(v, out var s) && s.Length > 0
             ? s
             : throw new ArgumentException($"{key} is missing or isn't text.", key);
 
     private static string? Optional(JsonObject body, string key) => body[key] switch
     {
         null => null,
-        JsonValue v when v.TryGetValue<string>(out var s) => s.Length == 0 ? null : s,
+        JsonValue v when TryText(v, out var s) => s.Length == 0 ? null : s,
         _ => throw new ArgumentException($"{key} isn't text.", key),
     };
+
+    /// <summary>
+    /// A body value as text; false when it's another kind of value. A string no text can hold, as an escaped lone
+    /// surrogate (<c>"\ud800"</c>), which parses as JSON and fails only when it's read, is a request the route doesn't
+    /// take: <c>400 bad-request</c>, not a failure of the helper's.
+    /// </summary>
+    private static bool TryText(JsonValue value, out string text)
+    {
+        try
+        {
+            return value.TryGetValue(out text!);
+        }
+        catch (InvalidOperationException e)
+        {
+            throw new FormatException("A value in the request isn't text.", e);
+        }
+    }
 }

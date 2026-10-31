@@ -67,26 +67,32 @@
         };
         try {
           Office.context.ui.displayDialogAsync(address, { ...WINDOW, promptBeforeOpen: false }, (opened) => {
-            if (opened.status !== Office.AsyncResultStatus.Succeeded) {
-              failed(opened.error);
-              return;
-            }
-            const dialog = opened.value;
-            dialog.addEventHandler(Office.EventType.DialogMessageReceived, (arrived) => {
-              if (!arrived || (typeof arrived.origin === "string" && arrived.origin !== origin)) {
-                return; // only the page this one opened
-              }
-              const message = Healdan.readWindowMessage(arrived.message);
-              if (message === null) {
+            // Office calls this later, outside the try around the call: a throw here would leave the press unfinished,
+            // and the button busy until Office is restarted.
+            try {
+              if (opened.status !== Office.AsyncResultStatus.Succeeded) {
+                failed(opened.error);
                 return;
               }
-              if (message.kind === "ready" && note.detail) {
-                dialog.messageChild(Healdan.windowMessage({ kind: "detail", detail: note.detail }), { targetOrigin: origin });
-              } else if (message.kind === "paired" && message.app === app && client) {
-                client.adoptKey(message.key);
-              }
-            });
-            dialog.addEventHandler(Office.EventType.DialogEventReceived, () => resolve());
+              const dialog = opened.value;
+              dialog.addEventHandler(Office.EventType.DialogMessageReceived, (arrived) => {
+                if (!arrived || (typeof arrived.origin === "string" && arrived.origin !== origin)) {
+                  return; // only the page this one opened
+                }
+                const message = Healdan.readWindowMessage(arrived.message);
+                if (message === null) {
+                  return;
+                }
+                if (message.kind === "ready" && note.detail) {
+                  dialog.messageChild(Healdan.windowMessage({ kind: "detail", detail: note.detail }), { targetOrigin: origin });
+                } else if (message.kind === "paired" && message.app === app && client) {
+                  client.adoptKey(message.key);
+                }
+              });
+              dialog.addEventHandler(Office.EventType.DialogEventReceived, () => resolve());
+            } catch (error) {
+              failed(error);
+            }
           });
         } catch (error) {
           failed(error);
