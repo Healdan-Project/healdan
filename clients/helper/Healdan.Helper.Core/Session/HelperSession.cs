@@ -430,41 +430,46 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     /// <summary>
-    /// The menu's click on a document: brings its window up. A copy whose app went away is opened again, from the
-    /// kept copy, and watched again.
+    /// The menu's click on a document, or the crash window's Reopen: brings its window up. A copy whose app went away is
+    /// opened again, from the kept copy, and watched again. One whose app has it open again by now, as Word does after a
+    /// crash (M3.5 spec §5.14), is only brought up, under the name it has now, as Word and Excel rename their copies.
     /// </summary>
     public void Bring(CopyState copy)
     {
         var cycle = Cycle;
         if (cycle is null)
             return;
+        var current = cycle.Current(copy) ?? copy;
         bool crashed;
         lock (_gate)
-            crashed = _crashed.Remove(copy.Path);
+            crashed = _crashed.Remove(copy.Path) | _crashed.Remove(current.Path);
+        crashed &= cycle.IsCrashed(current.Path);
         _ = Task.Run(async () =>
         {
-            if (crashed && !copy.ReadOnly)
+            if (crashed && !current.ReadOnly)
             {
-                await cycle.OpenAsync(copy.DocNumber, false);
+                await cycle.OpenAsync(current.DocNumber, false);
                 RaiseChanged();
                 return;
             }
-            var app = cycle.AppOf(copy.Path); // the one that has it open
+            var app = cycle.AppOf(current.Path); // the one that has it open
             try
             {
-                app.Open(copy.Path);
+                app.Open(current.Path);
             }
             catch (Exception e) when (e is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or OfficeScriptException)
             {
-                _log.Warn($"Couldn't bring up {copy.DocRef}: {e.Message}");
-                _notifier.Notify(copy.Title, $"{app.Name} couldn't open it: {e.Message}");
+                _log.Warn($"Couldn't bring up {current.DocRef}: {e.Message}");
+                _notifier.Notify(current.Title, $"{app.Name} couldn't open it: {e.Message}");
             }
         });
     }
 
     /// <summary>
     /// After a Crash's Send and Check In (spec §5.10): the kept copy's changes go up with the check-in, as when its
-    /// window closes, and the copy goes once Healdan has them. A read-only copy is just let go.
+    /// window closes, and the copy goes once Healdan has them. A read-only copy is just let go. A copy whose app has it
+    /// open again by now (M3.5 spec §5.14), found by its document if it has been renamed since, isn't checked in under
+    /// its open window: closing the window does that.
     /// </summary>
     public void SendAndCheckIn(CopyState copy)
     {
@@ -473,6 +478,13 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return;
         lock (_gate)
             _crashed.Remove(copy.Path);
+        if (cycle.Current(copy) is { } current && !cycle.IsCrashed(current.Path))
+        {
+            _log.Info($"Not checking in {current.DocRef}: {cycle.AppOf(current.Path).Name} has it open again");
+            _notifier.Notify(current.Title, "It's open again, so it wasn't checked in. Close its window to check it in.");
+            RaiseChanged();
+            return;
+        }
         _log.Info($"Checking in {copy.DocRef} after it closed unexpectedly");
         _ = cycle.ClosedAsync(copy.Path);
         RaiseChanged();
@@ -1153,6 +1165,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     {
         lock (_gate)
             _crashed.Remove(path); // no longer "(closed unexpectedly)": the app has it open again
+        _log.Info($"{TitleOf(path)} is open again after it closed unexpectedly, and what was recovered is saved back");
+        _windows.DismissCrashed(path); // its Reopen and Send and Check In no longer apply
         RaiseChanged();
     }
 

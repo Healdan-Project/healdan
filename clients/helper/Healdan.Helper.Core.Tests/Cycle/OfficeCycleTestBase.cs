@@ -64,21 +64,22 @@ public abstract class OfficeCycleTestBase : IDisposable
     protected string CopyPath(string name) => Path.Combine(Paths.Copies, name);
 
     /// <summary>A cycle as the helper makes one, telling <see cref="Notifier"/> and logging to the helper's log.</summary>
-    protected CopyCycle Cycle()
+    protected CopyCycle Cycle(CycleTimings? timings = null)
     {
         var api = new HealdanApi(new Uri("https://healdan.test"), Server) { Token = "hd_test" };
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office,
             appFor: name => OfficePrograms.For(name) is null ? "LibreOffice" : MicrosoftOfficeApp.AppName);
         var office = new OfficeAfterSave(new CopiesNotice(Paths, Notifier), new HelperLog(Paths.Log));
-        var cycle = new CopyCycle(api, new CopyStore(Paths), apps, FakeApi.HereDevice, Events, Fast, office);
+        var cycle = new CopyCycle(api, new CopyStore(Paths), apps, FakeApi.HereDevice, Events, timings ?? Fast, office);
         _cycles.Add(cycle);
         return cycle;
     }
 
     /// <summary>Opens a document for editing in a new cycle, and returns the cycle and the copy it opened.</summary>
-    protected async Task<(CopyCycle Cycle, string Path)> OpenAsync(long docNumber = 5, string name = "Lease agreement #5 v1.0.docx")
+    protected async Task<(CopyCycle Cycle, string Path)> OpenAsync(long docNumber = 5, string name = "Lease agreement #5 v1.0.docx",
+        CycleTimings? timings = null)
     {
-        var cycle = Cycle();
+        var cycle = Cycle(timings);
         await cycle.OpenAsync(docNumber, false);
         Assert.Empty(Events.Errors);
         var path = CopyPath(name);

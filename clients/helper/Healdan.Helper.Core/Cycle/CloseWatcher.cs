@@ -10,7 +10,8 @@ namespace Healdan.Helper.Core.Cycle;
 /// <item>Every <see cref="CycleTimings.CrashPoll"/>: once the app has been seen running, its process gone with the
 /// copy's lock file still there is a crash. Gone without one is a close: a read-only copy may never get a lock file.</item>
 /// <item>A crashed copy the cycle watches with <see cref="WatchCrashed"/> (M3.5 spec §5.14): its lock file written
-/// again, or back after it went, means the app has the copy open again, as Word does with a recovered window.</item>
+/// since the crash, or back after it went, means the app may have the copy open again, as Word does with a recovered
+/// window.</item>
 /// </list>
 /// Each copy is watched with the app it was opened in (<see cref="IOfficeApp.LockExists"/>, and
 /// <see cref="IOfficeApp.IsRunningFor"/> for the process), as LibreOffice's lock file says nothing of a Word window.
@@ -50,8 +51,9 @@ internal sealed class CloseWatcher : IDisposable
     /// <param name="closed">Called once when a copy's window has closed; the copy is no longer watched.</param>
     /// <param name="crashed">Called once when the app went away with the copy open; the copy is no longer watched.</param>
     /// <param name="reopened">
-    /// Called once when a copy watched with <see cref="WatchCrashed"/> has its lock or owner file again; the copy is then
-    /// watched for its close as one the app has open.
+    /// Called once when a copy watched with <see cref="WatchCrashed"/> has its lock or owner file written again since the
+    /// crash; the copy is no longer watched, so the cycle can save it back without its watch getting in the way, and
+    /// watches it again after.
     /// </param>
     public CloseWatcher(CycleTimings timings, Action<string> closed, Action<string> crashed, Action<string>? reopened = null)
     {
@@ -76,13 +78,14 @@ internal sealed class CloseWatcher : IDisposable
 
     /// <summary>
     /// Watches a copy whose app went away with it open for the app to have it open again (M3.5 spec §5.14): its lock file
-    /// written again, or back after it went. Neither its close nor a crash is looked for meanwhile.
+    /// written since <paramref name="crashWritten"/>, when the crash left it (<see cref="IOfficeApp.LockWritten"/>), or
+    /// back after it went. Neither its close nor a crash is looked for meanwhile. Watched again with the same time after a
+    /// save back that failed, a lock file written since is found again at the next look.
     /// </summary>
-    public void WatchCrashed(string path, IOfficeApp app)
+    public void WatchCrashed(string path, IOfficeApp app, DateTime? crashWritten)
     {
-        var written = app.LockWritten(path);
         lock (_lock)
-            _entries[path] = new Entry(path, app, false, false) { Crashed = true, CrashWritten = written };
+            _entries[path] = new Entry(path, app, false, false) { Crashed = true, CrashWritten = crashWritten };
     }
 
     /// <summary>Whether the copy is watched and its lock file has been seen.</summary>
@@ -141,15 +144,12 @@ internal sealed class CloseWatcher : IDisposable
                     }
                 }
 
-                // Report only what is still watched: the cycle may have let a copy go meanwhile. A copy the app has open
-                // again is watched as any open copy from here on.
+                // Report only what is still watched: the cycle may have let a copy go meanwhile.
                 lock (_lock)
                 {
                     closed.RemoveAll(e => !Take(e));
                     crashed.RemoveAll(e => !Take(e));
                     reopened.RemoveAll(e => !Take(e));
-                    foreach (var entry in reopened)
-                        _entries[entry.Path] = new Entry(entry.Path, entry.App, appSeen: true, lockSeen: true);
                 }
                 foreach (var entry in closed)
                     _closed(entry.Path);

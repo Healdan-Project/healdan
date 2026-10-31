@@ -27,8 +27,9 @@ public interface ICycleEvents
     void Crashed(string path);
 
     /// <summary>
-    /// The app has the crashed copy open again by itself, as Word does with a recovered window (M3.5 spec §5.14): the
-    /// copy is looked after as before, and the window is being saved back over it.
+    /// The app has the crashed copy open again by itself, as Word does with a recovered window, and the helper has saved
+    /// that window back over the copy (M3.5 spec §5.14): the copy is looked after as before, and the crash window's
+    /// Reopen and Send and Check In no longer apply.
     /// </summary>
     void Reopened(string path)
     {

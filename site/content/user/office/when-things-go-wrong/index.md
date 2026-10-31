@@ -56,11 +56,12 @@ Word keeps more than that. When it starts again, it reopens the document by itse
 last save, as "… - Recovered". Its own Save would ask where to save it, as Word treats a recovered document as one
 that was never saved. You don't need to:
 
-- **The helper saves it back by itself,** over your local copy, as soon as Word has it open again, and sends it to
-  Healdan as your next save. The title moves on, and you carry on as before.
-- **Reopen,** in the crash window, starts Word, which brings the recovered document back, and the helper saves it in
-  the same way.
-- **Send and Check In** sends what you last saved, and checks the document in.
+- **The helper saves it back by itself,** over your local copy, once Word has it open again, and sends it to Healdan
+  as your next save. The crash window then goes by itself, the title moves on, and you carry on as before.
+- **Until then, Reopen,** in the crash window, starts Word, which brings the recovered document back, and the helper
+  saves it in the same way.
+- **Until then, Send and Check In** sends what you last saved, and checks the document in. Once the document is open
+  again, the helper doesn't check it in under its open window: close the window, and that checks it in.
 
 If Excel or PowerPoint brings a document back by itself in the same way, the helper saves it back too.
 

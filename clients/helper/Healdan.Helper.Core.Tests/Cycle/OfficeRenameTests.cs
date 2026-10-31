@@ -297,6 +297,59 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task ARenameThatFailedButHappenedIsFollowed()
+    {
+        // The script gave up (Grant File Access left open past its limit, say), but Word saved under the new name.
+        Scripting.FailNextRename(new OfficeScriptException("osascript didn't answer within 330 seconds."), afterRenaming: true);
+        Scripting.KeepsOldOwnerFile = true; // so no close follows it: the rename's own look after the failure must
+        var (cycle, path) = await OpenAsync();
+        await WatchedAsync(path);
+
+        Save(path, "first draft");
+
+        // The renamed file is the copy: nothing says what Healdan has of it, so it goes up, and its window isn't
+        // taken for closed.
+        var v12 = CopyPath("Lease agreement #5 v1.2.docx");
+        await RenamedTo(cycle, v12);
+        Assert.Equal("first draft", Server.Saves[0].Content);
+        Assert.StartsWith("first draft (as Lease agreement #5 v1.1.docx)", Server.Saves[1].Content);
+        Assert.All(Server.Saves, save => Assert.True(save.KeepCheckedOut));
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+        Assert.False(File.Exists(path));
+        Assert.Null(Store.Find(path));
+        Assert.False(File.Exists(FakeScripting.OwnerPath(OfficeProgram.Word, path)));
+    }
+
+    [Fact]
+    public async Task ARenameWordCarriesOutLaterIsFollowed()
+    {
+        // The script gave up and nothing was renamed yet; the user grants access later, and Word carries the Save As
+        // out then. Its owner file leaves the old name, which isn't the window closing.
+        Scripting.FailNextRename(new OfficeScriptException("osascript didn't answer within 330 seconds."));
+        var (cycle, path) = await OpenAsync();
+        Save(path, "first draft");
+        await Wait.Until(() => Log.Contains("didn't answer within 330 seconds"), "the failure logged");
+        await LooksAsync(path); // watched under its old name again
+
+        var v11 = CopyPath("Lease agreement #5 v1.1.docx");
+        await Scripting.RenameIfUnchangedAsync(OfficeProgram.Word, path, v11);
+
+        var v12 = CopyPath("Lease agreement #5 v1.2.docx");
+        await RenamedTo(cycle, v12);
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+        Assert.All(Server.Saves, save => Assert.True(save.KeepCheckedOut));
+        Assert.StartsWith("first draft (as Lease agreement #5 v1.1.docx)", Server.Saves[1].Content);
+        Assert.Equal(FakeApi.Here("Word"), Server.Doc(5).Hold);
+        Assert.False(File.Exists(path));
+
+        // Its close is still a close.
+        await LooksAsync(v12);
+        FakeScripting.Close(OfficeProgram.Word, v12);
+        await Wait.Until(() => !File.Exists(v12), "checked in");
+        Assert.Null(Server.Doc(5).Hold);
+    }
+
+    [Fact]
     public async Task TheFirstRenameIsAnnounced()
     {
         Server.Add(8, "Fees.xlsx", "sheet");

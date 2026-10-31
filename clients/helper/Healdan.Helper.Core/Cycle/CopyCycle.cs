@@ -130,6 +130,9 @@ public sealed class CopyCycle : IDisposable
 
         public bool Crashed { get; set; }
 
+        /// <summary>When the owner file a crash left was last written, for the watch for the program to open it again (M3.5 spec §5.14).</summary>
+        public DateTime? CrashWritten { get; set; }
+
         public List<TaskCompletionSource<CopyState>> Waiters { get; } = [];
     }
 
@@ -413,6 +416,27 @@ public sealed class CopyCycle : IDisposable
 
     /// <summary>The copy's state for the channel, or an unknown one.</summary>
     public CopyState StateOf(string path) => StateOf(path, pending: null);
+
+    /// <summary>
+    /// The copy the cycle looks after for <paramref name="copy"/> now: at its path, or, once Word or Excel has renamed it
+    /// (M3.5 spec §5.4), the open copy of the same document; null when there's neither. A window or a menu built before a
+    /// rename holds the old path, which no file has any more.
+    /// </summary>
+    public CopyState? Current(CopyState copy)
+    {
+        Session? s;
+        lock (_gate)
+            s = Find(copy.Path)
+                ?? _sessions.Values.FirstOrDefault(x => x.DocNumber == copy.DocNumber && x.ReadOnly == copy.ReadOnly && !x.Closing);
+        return s is not null && StateOf(s.Path, pending: false) is { Known: true } state ? state : null;
+    }
+
+    /// <summary>Whether the app went away with the copy open, and the cycle is still waiting for it to be reopened or checked in.</summary>
+    public bool IsCrashed(string path)
+    {
+        lock (_gate)
+            return Find(path) is { Crashed: true };
+    }
 
     /// <summary>The copy's state; <paramref name="pending"/> null works it out, which reads the file.</summary>
     private CopyState StateOf(string path, bool? pending)
@@ -1194,6 +1218,8 @@ public sealed class CopyCycle : IDisposable
     /// </param>
     private void Close(string path, string? recorded = null)
     {
+        if (FollowedRename(path))
+            return; // not closed: Word or Excel saved it under its next name
         Session? s;
         SaveJob? waiting;
         string kind;
@@ -1410,7 +1436,12 @@ public sealed class CopyCycle : IDisposable
             if (!SameHash(HashOrNull(old), record.ConfirmedHash))
                 return; // saved again since the confirmation: that save goes up, and its confirmation renames the copy
             var result = await _office.RenameAsync(driver.Scripting, driver.Program, old, newPath);
-            if (result is not (RenameResult.Renamed or RenameResult.RenamedChanged) || !File.Exists(newPath))
+            var there = File.Exists(newPath) || app.LockExists(newPath);
+            // A call that gave up (a Grant File Access prompt left open past its limit, say) or failed may still have
+            // been carried out: the copy follows the program, and what it saved goes up, as nothing says what it is.
+            if (result is not (RenameResult.Renamed or RenameResult.RenamedChanged) && there)
+                result = RenameResult.RenamedChanged;
+            if (result is not (RenameResult.Renamed or RenameResult.RenamedChanged) || !there)
                 return;
             // Word's Save As leaves the file it saved from as it was, so that file changed means a save landed as the
             // rename began, and the renamed file holds it.
@@ -1450,7 +1481,10 @@ public sealed class CopyCycle : IDisposable
         }
         finally
         {
-            if (!moved && !IsClosing(s))
+            bool stays;
+            lock (_gate)
+                stays = !moved && !s.Closing && s.Path == old; // a rename carried out late may have moved it (FollowedRename)
+            if (stays)
             {
                 _saves.Watch(old);
                 _saves.Touch(old); // a save written while it wasn't watched still goes up
@@ -1488,10 +1522,42 @@ public sealed class CopyCycle : IDisposable
             || !OfficePrograms.RenamesAfterSave(driver.Program))
             return null;
         var renamed = Path.Combine(_store.Folder, CopyNames.FileName(record.DocumentName, record.DocNumber, record.FileVersion, false));
-        if (Name(renamed) == Name(path) || !File.Exists(renamed) || Record(renamed) is not null || app.LockExists(path))
+        if (Name(renamed) == Name(path) || !(File.Exists(renamed) || app.LockExists(renamed)) || Record(renamed) is not null
+            || app.LockExists(path))
             return null;
         _store.Moved(path, renamed, record);
         return Record(renamed) is { } moved ? (renamed, moved) : null;
+    }
+
+    /// <summary>
+    /// Before a close is acted on: the old name's owner file went because the program saved the copy under its next name
+    /// (<see cref="UnfinishedRename"/>), as Word does with a rename whose script gave up, once the user grants access, not
+    /// because the window closed. The copy follows it there, and the file goes up, rather than being checked in while
+    /// the program has its window open. False when that isn't so, and the close goes on.
+    /// </summary>
+    private bool FollowedRename(string path)
+    {
+        Session? s;
+        lock (_gate)
+            s = Find(path);
+        if (s is null || s.ReadOnly || IsClosing(s) || Record(s.Path) is not { } record)
+            return false;
+        var app = _apps.Of(record);
+        string old, renamed;
+        lock (_gate)
+        {
+            old = s.Path;
+            if (s.Closing || s.Ended || Find(old) != s || UnfinishedRename(old, record, app) is not { } moved)
+                return false;
+            renamed = moved.Path;
+            Rekey(s, renamed);
+        }
+        _saves.Unwatch(old);
+        _closes.Unwatch(old);
+        _saves.Watch(renamed);
+        _saves.Touch(renamed);
+        _closes.Watch(renamed, app, appSeenRunning: true);
+        return true;
     }
 
     /// <summary>
@@ -1500,16 +1566,18 @@ public sealed class CopyCycle : IDisposable
     private void WatchForRecovery(Session s)
     {
         var app = AppOf(s.Path);
-        if (!s.ReadOnly && OfficeAfterSave.Driver(app, s.Path) is not null)
-            _closes.WatchCrashed(s.Path, app);
+        if (s.ReadOnly || OfficeAfterSave.Driver(app, s.Path) is null)
+            return;
+        lock (_gate)
+            s.CrashWritten = app.LockWritten(s.Path);
+        _closes.WatchCrashed(s.Path, app, s.CrashWritten);
     }
 
     /// <summary>
-    /// M3.5 spec §5.14, Review Focus 4: the program has a crashed copy open again by itself, as Word restores a
-    /// "Recovered" window at the copy's own path, whose Save opens Save As. The copy is looked after as an open one again,
-    /// and the window is saved back over it, so the folder watcher sends what was recovered. PowerPoint is then closed
-    /// and opened again, as after any save under a name through the seam, so its own Save saves in place. If the save
-    /// back fails, it's logged, and the crash window's Reopen and Send and Check In are the user's way on.
+    /// M3.5 spec §5.14, Review Focus 4: the program may have a crashed copy open again by itself, as Word restores a
+    /// "Recovered" window at the copy's own path, whose Save opens Save As. The close watcher has let go of the copy, so
+    /// the window's owner file coming and going while it's saved isn't read as anything, and the window is saved back
+    /// over the copy (<see cref="SaveBackAsync"/>).
     /// </summary>
     private void OnReopened(string path)
     {
@@ -1519,16 +1587,53 @@ public sealed class CopyCycle : IDisposable
             s = Find(path);
             if (s is null || !s.Crashed || s.Closing)
                 return;
-            s.Crashed = false;
         }
-        Raise(ev => ev.Reopened(s.Path));
-        if (OfficeAfterSave.Driver(AppOf(s.Path), s.Path) is not { } driver)
+        _ = Task.Run(() => SaveBackAsync(s));
+    }
+
+    /// <summary>
+    /// Saves a crashed copy's restored window back over it, once the program lists it by its path, so it's never another
+    /// window (<see cref="OfficeAfterSave.SaveRecoveredAsync"/>), and the folder watcher sends what was recovered. Only
+    /// then is the copy looked after as an open one again (<see cref="ICycleEvents.Reopened"/>), and PowerPoint closed and
+    /// opened again, as after any save under a name through the seam, so its own Save saves in place. Until then the copy
+    /// stays crashed, the crash window's Reopen and Send and Check In stand, and a failure is tried again once the close
+    /// watcher looks again.
+    /// </summary>
+    private async Task SaveBackAsync(Session s)
+    {
+        var app = AppOf(s.Path);
+        if (OfficeAfterSave.Driver(app, s.Path) is not { } driver)
             return;
-        _ = Task.Run(async () =>
+        try
         {
-            if (await _office.SaveRecoveredAsync(driver.Scripting, driver.Program, s.Path) && driver.Program == OfficeProgram.PowerPoint)
-                await ReopenOfficeAsync(s.Path);
-        });
+            var saved = await _office.SaveRecoveredAsync(driver.Scripting, driver.Program, s.Path, _timings.RecoveryWait,
+                _timings.CrashPoll, () => IsClosing(s), _stop.Token);
+            lock (_gate)
+            {
+                if (s.Closing || !s.Crashed || Find(s.Path) != s)
+                    return; // checked in meanwhile, from the crash window
+                if (saved)
+                {
+                    s.Crashed = false;
+                    _closes.Watch(s.Path, app, appSeenRunning: true, lockSeen: app.LockExists(s.Path));
+                }
+            }
+            if (saved)
+            {
+                Raise(ev => ev.Reopened(s.Path));
+                if (driver.Program == OfficeProgram.PowerPoint)
+                    await ReopenOfficeAsync(s.Path);
+                return;
+            }
+            await Task.Delay(_timings.CrashPoll, _stop.Token);
+            lock (_gate)
+                if (s.Crashed && !s.Closing && Find(s.Path) == s)
+                    _closes.WatchCrashed(s.Path, app, s.CrashWritten);
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+            // Shutting down: the next start finds the crash again.
+        }
     }
 
     /// <summary>

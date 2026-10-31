@@ -1173,6 +1173,68 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Contains("local copies", _notifier.All);
     }
 
+    /// <summary>
+    /// M3.5 spec §5.14: a session with Word, whose document 5 is open and has crashed, and then Word restores its window
+    /// at the copy's path and the helper saves it back. Returns the crashed copy, as the crash window holds it.
+    /// </summary>
+    private async Task<(HelperSession Session, FakeScripting Scripting, CopyState Crashed)> WordRecoveredAsync(params RenameResult[] renames)
+    {
+        var scripting = new FakeScripting { WindowText = "the work Word recovered" };
+        scripting.AnswerRenames(renames);
+        var office = new SeenLocks(new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        SignedInBefore();
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: office, appFor: _ => "Microsoft Office"));
+        await session.StartAsync();
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(scripting.Opened).Path;
+        await Wait.Until(() => office.LockSeen(path) && office.RunningSeen(path), "Word seen with the copy open");
+        scripting.SetRunning(OfficeProgram.Word, false);
+        await Wait.Until(() => !_windows.Crashes.IsEmpty, "the crash window");
+        var crashed = Assert.Single(_windows.Crashes);
+
+        scripting.Recover(OfficeProgram.Word, path);
+
+        await Wait.Until(() => _windows.Dismissed.Contains(path), "the crash window dismissed");
+        await Wait.Until(() => _server.Saves.Count == 1, "the recovered work sent");
+        Assert.False(session.HasCrashed(crashed));
+        return (session, scripting, crashed);
+    }
+
+    [Fact]
+    public async Task SendAndCheckInIsRefusedOnceWordHasTheCopyAgain()
+    {
+        // The rename waits on unsaved changes, so the copy is still where it crashed, and Word has its window open.
+        var (session, _, crashed) = await WordRecoveredAsync(RenameResult.Unsaved);
+        await Wait.Until(() => session.Cycle!.Unsent() == 0, "the save back done with");
+
+        session.SendAndCheckIn(crashed); // a crash window's button, clicked just as it went
+
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the user told why");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.All(_server.Saves, save => Assert.True(save.KeepCheckedOut));
+        Assert.True(File.Exists(crashed.Path));
+        Assert.Equal([crashed.Path], session.OpenCopies().Select(c => c.Path));
+        Assert.NotNull(_server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task ReopenAfterWordsRenameBringsUpTheRenamedCopy()
+    {
+        var (session, scripting, crashed) = await WordRecoveredAsync();
+        var renamed = Path.Combine(Paths.Copies, "Lease agreement #5 v1.1.docx");
+        await Wait.Until(() => session.OpenCopies().Any(c => c.Path == renamed), "renamed after the save");
+
+        session.Bring(crashed); // the crash window's Reopen, or the menu, holding the copy's old path
+        session.SendAndCheckIn(crashed);
+
+        await Wait.Until(() => scripting.Opened.Count == 2, "brought up in Word");
+        Assert.Equal((OfficeProgram.Word, renamed), scripting.Opened[^1]);
+        Assert.Empty(_app.Opened); // never handed to LibreOffice as a copy it doesn't know
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the check-in refused");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.True(File.Exists(renamed));
+    }
+
     [Fact]
     public async Task SendAndCheckInAfterACrashChecksTheKeptCopyIn()
     {

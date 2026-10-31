@@ -7,9 +7,10 @@ namespace Healdan.Helper.Core.Tests.Office;
 /// Word, Excel and PowerPoint as the cycle sees them through <see cref="IOfficeScripting"/>: opening a copy starts the
 /// program (<see cref="IsRunning"/>, which is what a process check would say) and, for a copy it can write, makes the
 /// owner file it keeps beside it. The test closes the window by deleting that file (<see cref="Close"/>) or crashes the
-/// program, which leaves it. The operations the cycle uses after a save act on the files as the programs do, and are
-/// recorded: the rename (<see cref="RenameIfUnchangedAsync"/>), Save As, Save, PowerPoint's close and reopen, and Word's
-/// doc ID. The rest are for the add-in's routes, so a call the test didn't expect fails.
+/// program, which leaves it. The operations the cycle uses after a save or a crash act on the files as the programs do,
+/// and are recorded: the rename (<see cref="RenameIfUnchangedAsync"/>), the look for a document by its path, Save As,
+/// Save, PowerPoint's close and reopen, and Word's doc ID. The rest are for the add-in's routes, so a call the test
+/// didn't expect fails.
 /// </summary>
 public sealed class FakeScripting : IOfficeScripting
 {
@@ -21,7 +22,9 @@ public sealed class FakeScripting : IOfficeScripting
     private readonly List<(OfficeProgram Program, string Path)> _reopens = [];
     private readonly List<(string Path, string DocRef)> _docIds = [];
     private readonly ConcurrentQueue<RenameResult> _renameAnswers = new();
-    private readonly ConcurrentQueue<Exception> _renameFailures = new();
+    private readonly ConcurrentQueue<(Exception Error, bool AfterRenaming)> _renameFailures = new();
+    private readonly ConcurrentQueue<bool> _isOpenAnswers = new();
+    private int _isOpenAsked;
     private readonly ConcurrentQueue<Exception> _saveAsFailures = new();
     private readonly ConcurrentDictionary<string, bool> _running = new(StringComparer.Ordinal);
 
@@ -92,8 +95,30 @@ public sealed class FakeScripting : IOfficeScripting
             _renameAnswers.Enqueue(answer);
     }
 
-    /// <summary>The next rename throws this, as when Word is busy or a dialog is up.</summary>
-    public void FailNextRename(Exception e) => _renameFailures.Enqueue(e);
+    /// <summary>
+    /// The next rename throws this, as when Word is busy or a dialog is up. With <paramref name="afterRenaming"/>, the
+    /// program renames the copy all the same, as Word carries out a Save As whose script gave up waiting.
+    /// </summary>
+    public void FailNextRename(Exception e, bool afterRenaming = false) => _renameFailures.Enqueue((e, afterRenaming));
+
+    /// <summary>The next looks for a document by its path answer these, in order; after them, whether its owner file is there.</summary>
+    public void AnswerIsOpen(params bool[] answers)
+    {
+        foreach (var answer in answers)
+            _isOpenAnswers.Enqueue(answer);
+    }
+
+    /// <summary>When set, no document is ever found by its path, as when the program lists a restored window under another name.</summary>
+    public bool NeverListed { get; set; }
+
+    /// <summary>How many times the cycle looked for a document by its path.</summary>
+    public int IsOpenAsked => Volatile.Read(ref _isOpenAsked);
+
+    /// <summary>
+    /// How long a Save As takes. Meanwhile the document's owner file is gone, as when Word saves a window over its own
+    /// file and writes its owner file again.
+    /// </summary>
+    public TimeSpan SaveAsTakes { get; set; }
 
     /// <summary>The next Save As throws this, writing nothing.</summary>
     public void FailNextSaveAs(Exception e) => _saveAsFailures.Enqueue(e);
@@ -135,7 +160,14 @@ public sealed class FakeScripting : IOfficeScripting
 
     public Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default) => throw Unexpected();
 
-    public Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default) => throw Unexpected();
+    /// <summary>Found by its path: the answers the test gave, then whether the program's owner file is beside it.</summary>
+    public Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
+    {
+        Interlocked.Increment(ref _isOpenAsked);
+        if (_isOpenAnswers.TryDequeue(out var answer))
+            return Task.FromResult(answer);
+        return Task.FromResult(!NeverListed && File.Exists(OwnerPath(p, path)));
+    }
 
     public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) => throw Unexpected();
 
@@ -163,9 +195,11 @@ public sealed class FakeScripting : IOfficeScripting
         lock (_lock)
             _renames.Add((p, path, newPath));
         BeforeRename?.Invoke(path);
-        if (_renameFailures.TryDequeue(out var failure))
-            throw failure;
-        var answer = _renameAnswers.TryDequeue(out var queued) ? queued : RenameResult.Renamed;
+        var failure = _renameFailures.TryDequeue(out var queuedFailure) ? queuedFailure : default;
+        if (failure.Error is not null && !failure.AfterRenaming)
+            throw failure.Error;
+        var answer = failure.Error is not null ? RenameResult.Renamed
+            : _renameAnswers.TryDequeue(out var queued) ? queued : RenameResult.Renamed;
         if (answer is RenameResult.Missing or RenameResult.Unsaved)
             return answer;
         var text = File.ReadAllText(path) + (answer == RenameResult.RenamedChanged ? GapEdit : "");
@@ -174,18 +208,27 @@ public sealed class FakeScripting : IOfficeScripting
         if (!KeepsOldOwnerFile)
             File.Delete(OwnerPath(p, path));
         await Task.Delay(RenameTakes, ct);
+        if (failure.Error is not null)
+            throw failure.Error;
         return answer;
     }
 
     /// <summary>Writes what the window holds (<see cref="WindowText"/>) to the new path, found by the path it was given.</summary>
-    public Task<SaveAsResult> SaveAsAsync(OfficeProgram p, DocumentRef doc, string newPath, string? fingerprint, CancellationToken ct = default)
+    public async Task<SaveAsResult> SaveAsAsync(OfficeProgram p, DocumentRef doc, string newPath, string? fingerprint, CancellationToken ct = default)
     {
         lock (_lock)
             _savesAs.Add((p, doc, newPath, fingerprint));
         if (_saveAsFailures.TryDequeue(out var failure))
             throw failure;
+        if (SaveAsTakes > TimeSpan.Zero)
+        {
+            File.Delete(OwnerPath(p, newPath));
+            await Task.Delay(SaveAsTakes, ct);
+        }
         File.WriteAllText(newPath, WindowText);
-        return Task.FromResult(new SaveAsResult("path", false));
+        if (SaveAsTakes > TimeSpan.Zero)
+            File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
+        return new SaveAsResult("path", false);
     }
 
     /// <summary>PowerPoint closes the presentation, so its owner file goes, and opens it again <see cref="ReopenGap"/> later.</summary>

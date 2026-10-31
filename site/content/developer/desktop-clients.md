@@ -116,17 +116,25 @@ size the helper uses, the widths then match CoreText's.
   writes aren't saves and its owner file moving isn't a close. The renamed file's hash becomes the confirmed one, so
   it isn't sent, unless an edit landed in it: the program saw one between its check and its save (`RenamedChanged`),
   or the old file changed as the rename began, and then it goes up as the next save. With unsaved changes in the
-  window, or when the program can't be asked (logged), nothing moves, and the next confirmation tries again. Then
+  window, or when the program can't be asked (logged), nothing moves, and the next confirmation tries again; but if
+  the new name's file or owner file is there all the same, as when the script gave up while the program went on, the
+  copy follows it and the file goes up. Then
   Word's doc ID footer moves on (`SetDocIdAsync`), where the document has one. PowerPoint's copies keep their name.
   Before a program's first save into `Copies`, `CopiesNotice` says how to grant it access, once per program
   (`copiesAnnounced` in `settings.json`). A start that finds a renamed file the record didn't follow takes it as the
-  copy, and sends it.
+  copy, and sends it, and so does a close: an old name's owner file that went because the program saved under the
+  next name, once the user granted access, say, isn't a close (`FollowedRename`).
 - **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
   or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
   nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
   (`CloseWatcher.WatchCrashed`): once its owner file is written again, as when Word restores its "Recovered" window
-  at the copy's path, the helper saves that window over the copy (`SaveAsAsync`) and the folder watcher sends it.
-  The crash window's Reopen leaves that watch in place.
+  at the copy's path, the close watcher lets go of it, and the helper looks for the copy by its path
+  (`IsOpenAsync`, which never takes the front window) for up to 30 seconds. Only once it's found is the window saved
+  over the copy (`SaveAsAsync`), and the folder watcher sends it. The copy stays crashed until that works, and is
+  looked for again after a miss or a failure. Then the crash window closes itself (`IWindows.DismissCrashed`), and its
+  Send and Check In and Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document
+  once it's renamed: a copy that's open again is brought up, never checked in. The crash window's Reopen leaves the
+  watch in place.
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and

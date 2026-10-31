@@ -103,24 +103,84 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
     }
 
     [Fact]
-    public async Task AFailedSaveBackLeavesTheCrashWindowsWayOut()
+    public async Task AFailedSaveBackIsTriedAgain()
     {
+        // Word busy, or a dialog in the way: the copy stays crashed, and the next look tries again.
         var (cycle, path) = await OpenAsync();
         await CrashAsync(path);
         Scripting.FailNextSaveAs(new OfficeScriptException("Word has no document to save."));
+        Scripting.WindowText = "the work Word recovered";
 
         Scripting.Recover(OfficeProgram.Word, path);
 
         await Wait.Until(() => Log.Contains("Word has no document to save."), "the failure logged");
-        Assert.Empty(Server.Saves);
-        Assert.Equal("downloaded", File.ReadAllText(path));
-        Assert.Equal([path], cycle.OpenCopies().Select(c => c.Path));
+        await Wait.Until(() => Scripting.SavesAs.Count == 2, "the save back tried again");
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal(["the work Word recovered"], Server.Saves.Select(s => s.Content));
+        Assert.Equal([path], Events.Reopens); // only once it worked
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
         Assert.Empty(Events.Errors);
+    }
 
-        // Send and Check In, from the crash window, still checks it in.
-        await cycle.ClosedAsync(path);
-        await Wait.Until(() => !File.Exists(path), "checked in");
-        Assert.Null(Server.Doc(5).Hold);
+    [Fact]
+    public async Task TheSaveBackWaitsUntilWordListsTheCopy()
+    {
+        // Word writes its owner file as it opens the document, which its scripting may not list yet: the front window
+        // would be saved over the copy in its place.
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Scripting.AnswerIsOpen(false, false);
+        Scripting.WindowText = "the work Word recovered";
+
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        Assert.Equal(3, Scripting.IsOpenAsked); // twice not yet, then found by its path
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal(["the work Word recovered"], Server.Saves.Select(s => s.Content));
+    }
+
+    [Fact]
+    public async Task ACopyWordDoesntListIsNeverSavedOver()
+    {
+        var timings = Fast with { RecoveryWait = TimeSpan.FromMilliseconds(400) };
+        var (cycle, path) = await OpenAsync(timings: timings);
+        await CrashAsync(path);
+        Scripting.NeverListed = true;
+
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        // No Save As at all, which would take Word's front window; the copy stays crashed, and is looked for again.
+        await Wait.Until(() => Log.Contains("didn't find"), "the look given up, and logged");
+        var asked = Scripting.IsOpenAsked;
+        await Wait.Until(() => Scripting.IsOpenAsked > asked, "looked for again");
+        Assert.Empty(Scripting.SavesAs);
+        Assert.Empty(Events.Reopens);
+        Assert.Empty(Server.Saves);
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+
+        // Once Word lists it, it's saved back.
+        Scripting.NeverListed = false;
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal([path], Events.Reopens);
+    }
+
+    [Fact]
+    public async Task TheCloseWatcherLetsGoDuringTheSaveBack()
+    {
+        // Word saving its window over its own file writes its owner file again, which is gone meanwhile.
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Scripting.SaveAsTakes = Fast.LockPoll * 12;
+
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Single(Scripting.SavesAs);
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+        Assert.Single(Server.Saves);
+        Assert.True(Server.Saves[0].KeepCheckedOut);
     }
 
     [Fact]
