@@ -11,6 +11,16 @@
  * here, and Pair finishes it (pair/finish). Pressing Pair with no pairing under way, after a code expired or ran out of
  * tries, asks for a new code instead.
  *
+ * A window talks to the button that opened it (healdan.js, windowMessage; commands.js is the other end). It says it is
+ * "ready", and is sent what Office said about a failure, which isn't in its address because the server logs addresses.
+ * And once it has paired it hands the button the key, as the two may not share localStorage.
+ *
+ * A window a button opened on the web (no-office-on-the-web) says so and asks the helper nothing: a web page doesn't
+ * probe loopback ports. The same goes for the pane on the web.
+ *
+ * The status and the busy line are live regions, which a screen reader announces each time they are written, so they are
+ * written only when what they say changes.
+ *
  * The status is checked every few seconds, one check at a time and the next only after the last has answered, so a slow
  * helper (it can be busy with a window of its own) is waited for, not piled on. Only hello and ping are asked: state
  * would have the helper drive Word by AppleScript at every check. While a button's flow is waiting on the helper, the
@@ -35,6 +45,23 @@
   const OFFICE_WAIT = 3000;
 
   const HOSTS = ["Word", "Excel", "PowerPoint"];
+
+  /** The code of the message a button shows when it is pressed on the web. */
+  const WEB_CODE = "no-office-on-the-web";
+
+  /** Sets an element's text, but only if it changes: a live region is announced each time it's written. */
+  function put(element, text) {
+    if (element.textContent !== text) {
+      element.textContent = text;
+    }
+  }
+
+  /** The same for an element's classes. */
+  function putClass(element, className) {
+    if (element.className !== className) {
+      element.className = className;
+    }
+  }
 
   // --- What the pane says ----------------------------------------------------------------------------------------------
 
@@ -107,6 +134,48 @@
     });
   }
 
+  /**
+   * The window's line to the button that opened it, or null where there is none (Office.js didn't come ready in time, or
+   * this isn't a dialog). Messages are strings, and are accepted only from this page's own origin.
+   * @returns {Promise<{send: Function, onMessage: Function}|null>} send(text) says it to the button; onMessage(listener)
+   *   hears the button's, resolving once it listens
+   */
+  async function dialogChannel(env) {
+    await officeInfo(env);
+    const Office = env.Office;
+    const ui = Office && Office.context && Office.context.ui;
+    if (!ui || typeof ui.messageParent !== "function" || typeof ui.addHandlerAsync !== "function") {
+      return null;
+    }
+    const origin = env.location.origin;
+    return {
+      send(text) {
+        try {
+          ui.messageParent(text, { targetOrigin: origin });
+        } catch (error) {
+          // A button that isn't there has nothing to hear it: the window still works alone.
+        }
+      },
+      onMessage(listener) {
+        return new Promise((resolve) => {
+          try {
+            ui.addHandlerAsync(
+              Office.EventType.DialogParentMessageReceived,
+              (arrived) => {
+                if (arrived && (typeof arrived.origin !== "string" || arrived.origin === origin)) {
+                  listener(arrived.message);
+                }
+              },
+              () => resolve(),
+            );
+          } catch (error) {
+            resolve();
+          }
+        });
+      },
+    };
+  }
+
   // --- The page ----------------------------------------------------------------------------------------------------------
 
   /**
@@ -117,6 +186,7 @@
    * @param {object} [env.Office] Office.js's global
    * @param {{search: string}} env.location
    * @param {Function} env.createClient (host) => a helper client
+   * @param {Function} [env.openChannel] () => a promise of the window's line to the button that opened it, or null
    * @param {Function} env.now milliseconds
    * @param {Function} env.setTimeout
    * @param {Function} env.clearTimeout
@@ -148,25 +218,32 @@
     const storage = Healdan.storage();
     const link = Healdan.readMessageLink(env.location.search);
 
-    // Which app: the window's address says (Office may not, in a window of its own), and otherwise Office does.
+    // A window a button opened on the web says so in its address, and then there is nothing to ask Office or the helper.
+    // Otherwise the address names the app (Office may not say, in a window of its own), and if it doesn't, Office does.
+    const webWindow = link !== null && link.code === WEB_CODE;
     let app = link && link.app;
-    let onTheWeb = false;
-    if (!app) {
+    let onTheWeb = webWindow;
+    if (!webWindow && !app) {
       const info = await officeInfo(env);
       app = info && HOSTS.includes(info.host) ? info.host : undefined;
       onTheWeb = Boolean(info && env.Office && env.Office.PlatformType && info.platform === env.Office.PlatformType.OfficeOnline);
     }
 
     function show(element, shown) {
-      element.hidden = !shown;
+      if (element.hidden === shown) {
+        element.hidden = !shown;
+      }
     }
 
     // --- The message, or the last one
 
+    // What Office said, sent by the button after the window says it is ready. Never in the address.
+    let detail;
+
     function showMessage(note, title, when) {
-      els.messageTitle.textContent = title;
-      els.message.textContent = noteText(Healdan, note, app);
-      els.messageWhen.textContent = when ? `Given ${when}.` : "";
+      put(els.messageTitle, title);
+      put(els.message, noteText(Healdan, note, app));
+      put(els.messageWhen, when ? `Given ${when}.` : "");
       show(els.messageWhen, Boolean(when));
       show(els.messageSection, true);
     }
@@ -181,23 +258,50 @@
     }
 
     if (onTheWeb) {
-      els.web.textContent = Healdan.messageFor("no-office-on-the-web");
-      show(els.web, true);
+      if (!webWindow) {
+        put(els.web, Healdan.messageFor(WEB_CODE)); // the window's message says it already
+        show(els.web, true);
+      }
       show(els.statusSection, false);
       els.main.setAttribute("aria-busy", "false");
+      if (webWindow) {
+        els.message.focus();
+      }
       return { stop() {} };
     }
     if (!app) {
-      els.web.textContent = "This page is the Healdan add-in's pane. It works inside Word, Excel and PowerPoint.";
+      put(els.web, "This page is the Healdan add-in's pane. It works inside Word, Excel and PowerPoint.");
       show(els.web, true);
       show(els.statusSection, false);
       els.main.setAttribute("aria-busy", "false");
       return { stop() {} };
     }
 
-    els.pairingApp.textContent = app;
+    put(els.pairingApp, app);
     const client = env.createClient(app);
     let stopped = false;
+
+    // The line to the button that opened this window, if it was a button that did: it hears the button's detail of what
+    // Office said, and says "ready" once it can hear it. Without one the window still shows its message and pairs.
+    const channelReady =
+      link !== null && typeof env.openChannel === "function"
+        ? Promise.resolve(env.openChannel()).catch(() => null)
+        : Promise.resolve(null);
+    channelReady
+      .then(async (channel) => {
+        if (channel === null) {
+          return;
+        }
+        await channel.onMessage((text) => {
+          const message = Healdan.readWindowMessage(text);
+          if (message !== null && message.kind === "detail") {
+            detail = message.detail;
+            put(els.message, noteText(Healdan, { ...link, detail }, app));
+          }
+        });
+        channel.send(Healdan.windowMessage({ kind: "ready" }));
+      })
+      .catch(() => {});
 
     // --- What is being waited for
 
@@ -223,7 +327,7 @@
 
     function renderBusy() {
       const busy = Healdan.busyNow(storage, env.now());
-      els.busy.textContent = busy === null ? "" : busyText(busy);
+      put(els.busy, busy === null ? "" : busyText(busy));
       show(els.busySection, busy !== null);
     }
 
@@ -243,30 +347,30 @@
 
     function renderStatus() {
       const status = statusFor(Healdan, state);
-      els.status.textContent = status.text;
-      els.status.className = `status ${status.kind}`;
+      put(els.status, status.text);
+      putClass(els.status, `status ${status.kind}`);
       show(els.pairing, state.paired === false && !state.error);
     }
 
     function setProblem(text) {
-      els.problem.textContent = text;
+      put(els.problem, text);
     }
 
     async function startPairing() {
       setProblem("");
-      els.help.textContent = "Asking Healdan Helper for a code…";
+      put(els.help, "Asking Healdan Helper for a code…");
       try {
         pairingId = await waiting(
           () => client.pairStart(),
           () => {
-            els.help.textContent = "Healdan Helper is taking a while to answer…";
+            put(els.help, "Healdan Helper is taking a while to answer…");
           },
         );
-        els.help.textContent = "Healdan Helper is showing a six-digit code in a window on your Mac. Type it here, then choose Pair.";
+        put(els.help, "Healdan Helper is showing a six-digit code in a window on your Mac. Type it here, then choose Pair.");
         els.code.focus();
       } catch (error) {
         pairingId = null;
-        els.help.textContent = "Choose Pair to ask Healdan Helper for a code.";
+        put(els.help, "Choose Pair to ask Healdan Helper for a code.");
         setProblem(failureText(Healdan, error));
       }
     }
@@ -283,7 +387,7 @@
         setProblem(failureText(Healdan, error));
         if (error.code === "pairing-expired" || (error.code === "wrong-code" && error.triesLeft === 0)) {
           pairingId = null;
-          els.help.textContent = "Choose Pair to ask Healdan Helper for a new code.";
+          put(els.help, "Choose Pair to ask Healdan Helper for a new code.");
         }
         els.code.select();
         return;
@@ -291,13 +395,21 @@
       pairingId = null;
       pairingStarted = false;
       els.code.value = "";
-      els.done.textContent =
+      put(
+        els.done,
         link !== null
           ? `${app} is paired with Healdan Helper. Close this window, then press the button again.`
-          : `${app} is paired with Healdan Helper. Its Healdan buttons will work now.`;
+          : `${app} is paired with Healdan Helper. Its Healdan buttons will work now.`,
+      );
       show(els.done, true);
       state = { app, checked: true, paired: true };
       renderStatus();
+      // The button that opened this window keeps the key as well, as this page's storage may not be its own.
+      const channel = await channelReady;
+      const key = client.currentKey();
+      if (channel !== null && key !== null) {
+        channel.send(Healdan.windowMessage({ kind: "paired", app, key }));
+      }
       await check();
     }
 
@@ -379,7 +491,7 @@
     };
   }
 
-  const api = { statusFor, busyText, whenText, noteText, failureText, start, POLL, SLOW, BUSY_LOOK };
+  const api = { statusFor, busyText, whenText, noteText, failureText, dialogChannel, start, POLL, SLOW, BUSY_LOOK };
 
   if (root.document && typeof root.document.getElementById === "function" && root.document.getElementById("pairing")) {
     start({
@@ -388,6 +500,13 @@
       Office: root.Office,
       location: root.location,
       createClient: (host) => root.Healdan.createHelperClient({ host }),
+      openChannel: () =>
+        dialogChannel({
+          Office: root.Office,
+          location: root.location,
+          setTimeout: (...args) => root.setTimeout(...args),
+          clearTimeout: (...args) => root.clearTimeout(...args),
+        }),
       now: () => Date.now(),
       setTimeout: (...args) => root.setTimeout(...args),
       clearTimeout: (...args) => root.clearTimeout(...args),

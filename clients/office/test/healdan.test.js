@@ -961,17 +961,16 @@ test("a message's link carries its code and the app, and reads back", () => {
   assert.equal(Healdan.messageLink({ code: "not-paired", app: "Word" }), "taskpane.html?message=not-paired&app=Word");
   assert.deepEqual(Healdan.readMessageLink("?message=not-paired&app=Word"), { code: "not-paired", app: "Word" });
   assert.deepEqual(Healdan.readMessageLink("message=lost-result"), { code: "lost-result" });
+});
 
-  // Whatever the detail holds comes back as it was, and is cut short.
-  const link = Healdan.messageLink({ code: "office-error", app: "Excel", detail: "Can't read & write <b>" });
-  assert.equal(link, "taskpane.html?message=office-error&app=Excel&detail=Can%27t+read+%26+write+%3Cb%3E");
-  assert.deepEqual(Healdan.readMessageLink(link.slice(link.indexOf("?"))), {
-    code: "office-error",
-    app: "Excel",
-    detail: "Can't read & write <b>",
-  });
-  const long = Healdan.readMessageLink(`?message=office-error&detail=${"x".repeat(1000)}`);
-  assert.equal(long.detail.length, 200);
+test("a message's link never carries what Office said: the page is fetched from the server, so its address is logged", () => {
+  // Office's text can hold a file name. It goes to the window in a message (windowMessage), not in the address.
+  const note = { code: "office-error", app: "Excel", detail: "Can't save Lease agreement - Draft.xlsx" };
+  const link = Healdan.messageLink(note);
+  assert.equal(link, "taskpane.html?message=office-error&app=Excel");
+  assert.ok(!/detail|Lease|xlsx/i.test(link));
+  // And an address that carries one anyway, an old link or a made-up one, is not read for it.
+  assert.deepEqual(Healdan.readMessageLink("?message=office-error&app=Excel&detail=Lease+agreement"), { code: "office-error", app: "Excel" });
 });
 
 test("a message's link is read only when it is one", () => {
@@ -982,6 +981,89 @@ test("a message's link is read only when it is one", () => {
   assert.deepEqual(Healdan.readMessageLink("?message=not-paired&app=Outlook"), { code: "not-paired" });
   // A code nobody knows is still a message: messageFor words it.
   assert.deepEqual(Healdan.readMessageLink("?message=something-new"), { code: "something-new" });
+});
+
+// --- What the window and the button tell each other -------------------------------------------------------------------
+//
+// The window is opened by the button's code, with Office.context.ui.displayDialogAsync, and talks to it with
+// messageParent (to the button) and messageChild (to the window). Only strings travel, so they are JSON.
+
+test("the window's messages are JSON of three kinds, and read back whole", () => {
+  assert.equal(Healdan.windowMessage({ kind: "ready" }), '{"healdan":"ready"}');
+  assert.deepEqual(Healdan.readWindowMessage(Healdan.windowMessage({ kind: "ready" })), { kind: "ready" });
+
+  const paired = Healdan.windowMessage({ kind: "paired", app: "Word", key: KEY });
+  assert.deepEqual(JSON.parse(paired), { healdan: "paired", app: "Word", key: KEY });
+  assert.deepEqual(Healdan.readWindowMessage(paired), { kind: "paired", app: "Word", key: KEY });
+
+  const detail = Healdan.windowMessage({ kind: "detail", detail: "Can't save Lease agreement - Draft.xlsx" });
+  assert.deepEqual(Healdan.readWindowMessage(detail), { kind: "detail", detail: "Can't save Lease agreement - Draft.xlsx" });
+  assert.equal(Healdan.readWindowMessage(Healdan.windowMessage({ kind: "detail", detail: "x".repeat(1000) })).detail.length, 200);
+});
+
+test("a message that isn't one of the window's is not read, and nothing in it is trusted", () => {
+  const junk = [
+    undefined,
+    null,
+    "",
+    "ready",
+    "not json",
+    "null",
+    "[]",
+    "7",
+    '{"healdan":"dance"}',
+    '{"kind":"ready"}',
+    '{"healdan":"paired","app":"Outlook","key":"' + KEY + '"}',
+    '{"healdan":"paired","app":"Word"}',
+    '{"healdan":"paired","app":"Word","key":""}',
+    '{"healdan":"paired","app":"Word","key":7}',
+    '{"healdan":"paired","app":"Word","key":"short"}',
+    '{"healdan":"paired","app":"Word","key":"has spaces and <b>marks</b> in it ........"}',
+    '{"healdan":"paired","app":"Word","key":"' + "k".repeat(300) + '"}',
+    '{"healdan":"detail"}',
+    '{"healdan":"detail","detail":7}',
+    '{"healdan":"detail","detail":""}',
+  ];
+  for (const text of junk) {
+    assert.equal(Healdan.readWindowMessage(text), null, String(text));
+  }
+  assert.throws(() => Healdan.windowMessage({ kind: "dance" }), /kind/);
+});
+
+test("a client gives the key it holds and takes one handed to it, for the button when the window paired", async () => {
+  const { client, storage } = setup({ paired: false });
+  assert.equal(client.currentKey(), null);
+  assert.equal(client.adoptKey(KEY), true);
+  assert.equal(storage.getItem("healdan.key.Word"), KEY);
+  assert.equal(client.paired(), true);
+  assert.equal(client.currentKey(), KEY);
+
+  // Only a key as the helper makes them (32 random bytes in base64url): not anything a message happens to hold.
+  for (const odd of ["", "short", "has spaces", 7, null, undefined, "k".repeat(300)]) {
+    const fresh = setup({ paired: false });
+    assert.equal(fresh.client.adoptKey(odd), false, String(odd));
+    assert.equal(fresh.client.paired(), false, String(odd));
+  }
+
+  // Storage that won't keep it says so, and nothing is left half done.
+  const refusing = Healdan.createHelperClient({
+    fetch: async () => {
+      throw new TypeError("Load failed");
+    },
+    storage: { getItem: () => null, setItem: () => { throw new Error("QuotaExceeded"); }, removeItem: () => {} },
+    origin: SERVER,
+    host: "Word",
+  });
+  assert.equal(refusing.adoptKey(KEY), false);
+  assert.equal(refusing.currentKey(), null);
+
+  // The key pairing gave is the one it hands on.
+  const pairing = setup({
+    paired: false,
+    routes: { "pair/start": [200, { pairingId: "p-1" }], "pair/finish": [200, { key: KEY }] },
+  });
+  await pairing.client.pairFinish(await pairing.client.pairStart(), "123456");
+  assert.equal(pairing.client.currentKey(), KEY);
 });
 
 test("noteOf says what the window should show for a flow's result", () => {

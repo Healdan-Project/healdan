@@ -3,13 +3,18 @@
  *
  * Each button in the Healdan tab runs one of these functions in commands.html, a page with nothing on it. It runs its
  * flow (healdan.js) over the Office.js glue (office-glue.js), and if the flow has something to tell, opens a window for
- * it: taskpane.html?message=<code>, through Office.context.ui.displayDialogAsync. The manifest declares no shared
- * runtime, so Office.addin.showAsTaskpane isn't there to open the pane with, and a dialog is. The first press in an app
- * is such a message ("not-paired"), and the window it opens is where the app pairs.
+ * it: taskpane.html?message=<code>&app=<app>, through Office.context.ui.displayDialogAsync. The manifest declares no
+ * shared runtime, so Office.addin.showAsTaskpane isn't there to open the pane with, and a dialog is. The first press in
+ * an app is such a message ("not-paired"), and the window it opens is where the app pairs.
+ *
+ * The window and this page talk by messages (healdan.js, windowMessage): the window says it is ready, and is sent what
+ * Office said about a failure, which isn't in the address because the server logs addresses; and when it pairs, it hands
+ * back the key, which this page keeps as well, as the two may not share storage.
  *
  * The function names are the manifest's (manifest.template.xml's <FunctionName>s). Each is defined on the global object,
- * and again with Office.actions.associate once Office is ready, as the trial did. Each calls event.completed() once, when
- * its flow has finished and its window, if any, is open, whatever happened.
+ * and again with Office.actions.associate once Office is ready, as the trial did. Each calls event.completed() once,
+ * whatever happened: when its flow has finished and, if it opened a window, the window has closed, so that this page is
+ * still there to hear it.
  *
  * While a flow runs, a note in localStorage says so, refreshed every few seconds, so the pane can show that Healdan
  * Helper is working on it: a flow waits for as long as a window of the helper's stays open.
@@ -41,30 +46,57 @@
   function createCommands(env) {
     const { Healdan, Office } = env;
 
-    /** Opens the message window. Resolves to whether it opened; Office says no when another dialog is already open. */
-    function openWindow(note) {
+    /**
+     * Opens the message window, and resolves once it has closed (or at once, if it won't open: Office says no when another
+     * dialog is already open). The button waits for that, so that its page is still there to hear the window:
+     *   - when the window says it is ready, it is sent what Office said about a failure, if there is anything, which
+     *     isn't in the window's address because the server logs addresses;
+     *   - when the window says it paired, the key it was given is kept here too, as the window may not share storage
+     *     with this page.
+     * Office reports the window's closing, by the user or in error, as a DialogEventReceived.
+     */
+    function showWindow(note, client, app) {
       return new Promise((resolve) => {
         const address = new URL(Healdan.messageLink(note), env.location.href).href;
-        try {
-          Office.context.ui.displayDialogAsync(address, { ...WINDOW, promptBeforeOpen: false }, (opened) => {
-            const ok = opened.status === Office.AsyncResultStatus.Succeeded;
-            if (!ok && env.console) {
-              env.console.warn(`Healdan: the message window didn't open: ${opened.error && opened.error.message}`);
-            }
-            resolve(ok);
-          });
-        } catch (error) {
+        const origin = new URL(env.location.href).origin;
+        const failed = (error) => {
           if (env.console) {
             env.console.warn(`Healdan: the message window didn't open: ${error && error.message}`);
           }
-          resolve(false);
+          resolve();
+        };
+        try {
+          Office.context.ui.displayDialogAsync(address, { ...WINDOW, promptBeforeOpen: false }, (opened) => {
+            if (opened.status !== Office.AsyncResultStatus.Succeeded) {
+              failed(opened.error);
+              return;
+            }
+            const dialog = opened.value;
+            dialog.addEventHandler(Office.EventType.DialogMessageReceived, (arrived) => {
+              if (!arrived || (typeof arrived.origin === "string" && arrived.origin !== origin)) {
+                return; // only the page this one opened
+              }
+              const message = Healdan.readWindowMessage(arrived.message);
+              if (message === null) {
+                return;
+              }
+              if (message.kind === "ready" && note.detail) {
+                dialog.messageChild(Healdan.windowMessage({ kind: "detail", detail: note.detail }), { targetOrigin: origin });
+              } else if (message.kind === "paired" && message.app === app && client) {
+                client.adoptKey(message.key);
+              }
+            });
+            dialog.addEventHandler(Office.EventType.DialogEventReceived, () => resolve());
+          });
+        } catch (error) {
+          failed(error);
         }
       });
     }
 
-    async function show(note) {
+    async function show(note, client, app) {
       Healdan.noteMessage(Healdan.storage(), note, env.now());
-      await openWindow(note);
+      await showWindow(note, client, app);
     }
 
     /** Marks the flow busy, and again every beat. Returns what ends it. */
@@ -81,10 +113,11 @@
     function press(flow) {
       return async function (event) {
         let app;
+        let client = null;
         try {
           const office = env.makeOffice();
           app = office.host;
-          const client = Healdan.createHelperClient({ host: app });
+          client = Healdan.createHelperClient({ host: app });
           const end = beginBusy(flow, app);
           let result;
           try {
@@ -94,12 +127,12 @@
           }
           const note = Healdan.noteOf(result, app);
           if (note !== null) {
-            await show(note);
+            await show(note, client, app);
           }
         } catch (error) {
           // The flows resolve whatever happens in them; this is the glue or the page failing.
           try {
-            await show({ code: "office-error", app, detail: error && error.message });
+            await show({ code: "office-error", app, detail: error && error.message }, client, app);
           } catch (again) {
             // Nothing left to tell it with.
           }

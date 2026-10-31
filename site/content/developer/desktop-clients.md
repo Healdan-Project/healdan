@@ -285,19 +285,29 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
   isn't taken for Microsoft's `office.js`.
 - **`web/commands.html` and `commands.js`** are the ribbon's buttons. Office loads the page without showing it, and
   runs the function a button names (`saveToHealdan` and the rest, the manifest's names). Each is defined on `window` and
-  with `Office.actions.associate` once Office is ready, runs its flow, and calls `event.completed()` once, after the
-  flow has finished and any window is open.
+  with `Office.actions.associate` once Office is ready, runs its flow, and calls `event.completed()` once, whatever
+  happens: after the flow has finished and, if it opened a window, after the window has closed (Office reports that as
+  a `DialogEventReceived`), so that the button's page is still there to hear the window.
 - **`web/taskpane.html`, `taskpane.js` and `healdan.css`** are the pane and the message window, in the helper's look.
   The manifest declares no shared runtime, so a button can't open the pane. A button with something to tell opens
   `taskpane.html?message=<code>&app=<app>` through `Office.context.ui.displayDialogAsync` instead, and the page shows
   the text `messageFor` has for the code, plus the field for the pairing code when the app isn't paired. Nothing in the
-  address is trusted: the code must look like a code, and the text goes in as text.
-- **The pane and the buttons share the app's `localStorage`:** the key (`healdan.key.<app>`), the helper's port
-  (`healdan.port`), the last message (`healdan.last`), and a note for each flow still running (`healdan.busy.<flow>`),
-  which the running flow refreshes every five seconds and the pane stops believing after fifteen. A flow waits as long
-  as a window of the helper's stays open, and the pane says so.
+  address is trusted: the code must look like a code, and the text goes in as text. On the web
+  (`message=no-office-on-the-web`) the window says so and asks the helper nothing: a web page doesn't probe loopback
+  ports.
+- **The window and the button talk by messages** (`windowMessage` in `healdan.js`; strings, so JSON, between
+  `messageParent` and `messageChild`, accepted only from the page's own origin). The window says `ready` once it can hear
+  the button. What Office said about a failure, which can hold a file name, goes to the window as a `detail` message
+  then and never in its address, as the server logs addresses. And once the window has paired, it hands the button the
+  `paired` key, which the button keeps in its own storage too, as the two pages may not share it.
+- **The pane and the buttons share the app's `localStorage`,** as the trial found for the pane and the ribbon: the key
+  (`healdan.key.<app>`), the helper's port (`healdan.port`), the last message (`healdan.last`), and a note for each
+  flow still running (`healdan.busy.<flow>`), which the running flow refreshes every five seconds and the pane stops
+  believing after fifteen. A flow waits as long as a window of the helper's stays open, and the pane says so. The
+  message window isn't counted on to share it, hence the key handed over in a message.
 - **The pane checks the helper** with `hello` and `ping` only, one check at a time and the next five seconds after the
-  last has answered. It never asks `state`, which would have the helper drive Word by AppleScript at every check.
+  last has answered. It never asks `state`, which would have the helper drive Word by AppleScript at every check. The
+  status and the busy line are live regions, so they are written only when what they say changes.
 - **Following a `202` and losing the answer:** once `call` has followed a `202`, whatever stops it learning the outcome
   (the `result` route refused, the helper signing out, the helper not answering twice) is `lost-result`, which says to
   check the document in Healdan before trying again, because a pending `file` may already have filed it. A route's own
@@ -568,12 +578,14 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   - `office-glue.test.js` covers `web/office-glue.js` against a fake Office.js that logs what it's asked: the slices
     and their base64, the mark in Word and Excel and none in PowerPoint, and Insert Doc ID's property and field.
   - `commands.test.js` covers `web/commands.js`: the function names against the manifest's, `event.completed()` once
-    however a press ends, the message window's address, and the busy note.
+    however a press ends and not before the message window closes, the window's address, the detail sent to it and the
+    key taken from it, and the busy note.
   - `taskpane.test.js` covers `web/taskpane.js` on a fake page made from the real `taskpane.html`: pairing, the status,
     a slow helper, and the messages. They also fail on an inline script or an id the script asks for and the page
     lacks.
   - What Office.js and Office's web view really do is checked by hand, with the owner, in Word, Excel and PowerPoint:
-    the Content-Security-Policy against Office.js, the message window, and the ribbon. `AddinResourceTest` checks that
+    the Content-Security-Policy against Office.js, the message window and its two-way messages with the button, and the
+    ribbon. `AddinResourceTest` checks that
     the server serves every file the pages load.
 
 The windows' look, focus, notifications and LibreOffice's own screens are checked by hand: each pull request that

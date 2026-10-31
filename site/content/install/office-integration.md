@@ -114,6 +114,9 @@ Office loads them before anyone has signed in to anything.
   anything. If a reverse proxy or a firewall asks for a login before Healdan, let that path through. The pages carry a
   Content-Security-Policy that lets them run scripts from your server and from Microsoft's Office.js, and connect only
   to your server, Microsoft's services and the helper on the same Mac: a policy of the proxy's own must not narrow it.
+- **Nothing private is in the pages' addresses.** A message window the add-in opens is `taskpane.html` with only the
+  message's code and the app in its address, so your access log shows that, and not what Office said about a failure or
+  the name of a file.
 - **The steps for deploying the manifest** from the Microsoft 365 admin centre are under
   [Deploying the Add-in](#deploying-the-add-in).
 

@@ -30,11 +30,14 @@ function fakePage() {
   for (const [, attributes] of HTML.matchAll(/<[a-z0-9]+\s([^>]*\bid="[^"]+"[^>]*)>/g)) {
     const id = /\bid="([^"]+)"/.exec(attributes)[1];
     const listeners = {};
-    elements.set(id, {
+    let text = "";
+    let className = /\bclass="([^"]*)"/.exec(attributes)?.[1] ?? "";
+    const element = {
       id,
       hidden: /\bhidden\b/.test(attributes.replace(/"[^"]*"/g, '""')),
-      textContent: "",
-      className: /\bclass="([^"]*)"/.exec(attributes)?.[1] ?? "",
+      // A screen reader announces a live region each time it is written, even with the text it had, so writes are counted.
+      textWrites: 0,
+      classWrites: 0,
       value: "",
       attributes: {},
       selected: false,
@@ -57,7 +60,24 @@ function fakePage() {
       select() {
         this.selected = true;
       },
+    };
+    Object.defineProperty(element, "textContent", {
+      enumerable: true,
+      get: () => text,
+      set(value) {
+        text = String(value);
+        element.textWrites += 1;
+      },
     });
+    Object.defineProperty(element, "className", {
+      enumerable: true,
+      get: () => className,
+      set(value) {
+        className = String(value);
+        element.classWrites += 1;
+      },
+    });
+    elements.set(id, element);
   }
   page.getElementById = (id) => {
     if (!elements.has(id)) {
@@ -120,6 +140,21 @@ function memoryStorage(initial = {}) {
   };
 }
 
+/** The window's line to the button that opened it: what it sent, and a way to be sent something. */
+function fakeChannel() {
+  const sent = [];
+  let handler = null;
+  return {
+    sent,
+    send: (text) => sent.push(text),
+    onMessage: async (listener) => {
+      handler = listener;
+    },
+    deliver: (text) => handler(text),
+    listening: () => handler !== null,
+  };
+}
+
 /**
  * The pane on a fake page. `routes` are the helper's, each [status, body], a function of the request, or a promise of
  * one; the helper listens as hello answers unless `listening` is false.
@@ -133,6 +168,7 @@ async function open({
   office = { host: "Word", platform: "Mac" },
   officeLate = false,
   stored = {},
+  channel = null,
 } = {}) {
   const page = fakePage();
   const clock = fakeClock();
@@ -166,6 +202,7 @@ async function open({
     Office,
     location: { search },
     createClient: (hostName) => Healdan.createHelperClient({ host: hostName, fetch, storage, origin: SERVER }),
+    openChannel: () => Promise.resolve(channel),
     now: clock.now,
     setTimeout: clock.setTimeout,
     clearTimeout: clock.clearTimeout,
@@ -385,16 +422,146 @@ test("pairing paused after too many wrong codes is told, and nothing is sent to 
   assert.equal(calls().length, 1);
 });
 
-test("a message that needs the app's name or Office's words gets them from the address", async () => {
+test("a message that needs the app's name gets it from the address", async () => {
   const local = await open({ search: "?message=local-save&app=PowerPoint", host: "PowerPoint", paired: true });
   assert.equal(local.el("message").textContent, "Use PowerPoint's own Save As to save it on this computer.");
+  assert.equal(local.page.focused, local.el("message"), "a message is read out");
+});
 
-  const failed = await open({ search: "?message=office-error&app=Word&detail=The+footer+can%27t+be+changed", paired: true });
-  assert.equal(failed.el("message").textContent, Healdan.messageFor("office-error", { detail: "The footer can't be changed" }));
-  assert.equal(failed.page.focused, failed.el("message"), "a message is read out");
-  // What the address holds is shown as text, never as markup.
-  const markup = await open({ search: "?message=office-error&app=Word&detail=%3Cimg+src%3Dx+onerror%3Dalert(1)%3E", paired: true });
-  assert.match(markup.el("message").textContent, /<img src=x onerror=alert\(1\)>/);
+// --- The button's messages to the window --------------------------------------------------------------------------------
+
+test("the window tells the button it is ready, then shows what Office said when the button sends it", async () => {
+  const channel = fakeChannel();
+  const { el, page } = await open({ search: "?message=office-error&app=Word", paired: true, channel });
+
+  // The address held none of it, so until the button answers the message says what it can.
+  assert.equal(el("message").textContent, Healdan.messageFor("office-error"));
+  assert.deepEqual(channel.sent.map(Healdan.readWindowMessage), [{ kind: "ready" }], "ready, once, after it can hear the button");
+  assert.equal(channel.listening(), true);
+
+  channel.deliver(Healdan.windowMessage({ kind: "detail", detail: "The footer can't be changed" }));
+  assert.equal(el("message").textContent, Healdan.messageFor("office-error", { detail: "The footer can't be changed" }));
+  assert.equal(page.focused, el("message"));
+
+  // Shown as text, never as markup; and anything that isn't the button's detail is let go.
+  channel.deliver(Healdan.windowMessage({ kind: "detail", detail: "<img src=x onerror=alert(1)>" }));
+  assert.match(el("message").textContent, /<img src=x onerror=alert\(1\)>/);
+  const before = el("message").textContent;
+  channel.deliver("not a message");
+  channel.deliver(Healdan.windowMessage({ kind: "ready" }));
+  channel.deliver(Healdan.windowMessage({ kind: "paired", app: "Word", key: KEY }));
+  assert.equal(el("message").textContent, before);
+});
+
+test("the line to the button is Office's messageParent and its parent-message event, for this page's origin only", async () => {
+  const clock = fakeClock();
+  const calls = [];
+  let registered = null;
+  const Office = {
+    onReady: () => Promise.resolve({ host: "Word", platform: "Mac" }),
+    EventType: { DialogParentMessageReceived: "dialogParentMessageReceived" },
+    context: {
+      ui: {
+        messageParent: (text, options) => calls.push(["messageParent", text, options]),
+        addHandlerAsync: (type, handler, done) => {
+          registered = { type, handler };
+          done({ status: "succeeded" });
+        },
+      },
+    },
+  };
+  const channel = await Pane.dialogChannel({
+    Office,
+    location: { origin: SERVER },
+    setTimeout: clock.setTimeout,
+    clearTimeout: clock.clearTimeout,
+  });
+
+  channel.send("hello");
+  assert.deepEqual(calls, [["messageParent", "hello", { targetOrigin: SERVER }]]);
+
+  const heard = [];
+  await channel.onMessage((text) => heard.push(text));
+  assert.equal(registered.type, "dialogParentMessageReceived");
+  registered.handler({ message: "from the button", origin: SERVER });
+  registered.handler({ message: "no origin said" });
+  registered.handler({ message: "from another page", origin: "https://evil.example" });
+  registered.handler(undefined);
+  assert.deepEqual(heard, ["from the button", "no origin said"]);
+});
+
+test("there is no line to the button where Office has no messageParent, and a send that throws is let go", async () => {
+  const clock = fakeClock();
+  const env = (ui) => ({
+    Office: { onReady: () => Promise.resolve({ host: "Word" }), context: { ui } },
+    location: { origin: SERVER },
+    setTimeout: clock.setTimeout,
+    clearTimeout: clock.clearTimeout,
+  });
+  assert.equal(await Pane.dialogChannel(env({})), null);
+  assert.equal(await Pane.dialogChannel(env(undefined)), null);
+  assert.equal(await Pane.dialogChannel({ ...env({}), Office: undefined }), null);
+
+  const throwing = await Pane.dialogChannel(
+    env({
+      messageParent: () => {
+        throw new Error("not in a dialog");
+      },
+      addHandlerAsync: () => {
+        throw new Error("not in a dialog");
+      },
+    }),
+  );
+  assert.doesNotThrow(() => throwing.send("x"));
+  await throwing.onMessage(() => {}); // resolves, though nothing can be heard
+});
+
+test("a window with no line to the button still shows its message and pairs", async () => {
+  const { el } = await open({
+    search: "?message=not-paired&app=Word",
+    routes: { "pair/start": [200, { pairingId: "p-1" }], "pair/finish": [200, { key: KEY }] },
+    channel: null,
+  });
+  el("code").value = "123456";
+  el("pairing").submit();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(el("done").hidden, false);
+});
+
+test("the pane itself, opened by Office and not by a button, has no button to talk to", async () => {
+  const channel = fakeChannel();
+  await open({ paired: true, channel });
+  assert.deepEqual(channel.sent, []);
+  assert.equal(channel.listening(), false);
+});
+
+test("a window that paired hands the key to the button, which keeps it too", async () => {
+  const channel = fakeChannel();
+  const { el, clock } = await open({
+    search: "?message=not-paired&app=Word",
+    routes: { "pair/start": [200, { pairingId: "p-1" }], "pair/finish": [200, { key: KEY }] },
+    channel,
+  });
+  assert.deepEqual(channel.sent.map(Healdan.readWindowMessage), [{ kind: "ready" }]);
+
+  el("code").value = "123456";
+  el("pairing").submit();
+  await clock.advance(0);
+
+  assert.deepEqual(channel.sent.map(Healdan.readWindowMessage), [{ kind: "ready" }, { kind: "paired", app: "Word", key: KEY }]);
+});
+
+test("a window that did not pair hands the button no key", async () => {
+  const channel = fakeChannel();
+  const { el, clock } = await open({
+    search: "?message=not-paired&app=Word",
+    routes: { "pair/start": [200, { pairingId: "p-1" }], "pair/finish": [403, { error: "wrong-code", triesLeft: 2 }] },
+    channel,
+  });
+  el("code").value = "000000";
+  el("pairing").submit();
+  await clock.advance(0);
+  assert.equal(channel.sent.map(Healdan.readWindowMessage).filter((m) => m.kind === "paired").length, 0);
 });
 
 test("a window for a message with no app in its address asks Office which app it is", async () => {
@@ -476,6 +643,62 @@ test("the pane checks again every five seconds, and asks for one code only", asy
   await clock.advance(Pane.POLL);
   assert.equal(calls().filter((r) => r.route === "pair/start").length, 1, "an unpaired app's code is asked for once");
   assert.equal(clock.pending() > 0, true);
+});
+
+// --- Live regions ---------------------------------------------------------------------------------------------------------
+//
+// #status and #busy-text are live regions, which a screen reader announces each time they are written, even with the text
+// they had. So the pane writes them only when what they say changes.
+
+test("the status is not written again while it says the same, however often the helper is checked", async () => {
+  const { el, clock, calls } = await open({ paired: true });
+  const text = el("status").textWrites;
+  const classes = el("status").classWrites;
+  assert.ok(text >= 1 && el("status").textContent === "Healdan Helper is running, and Word is paired with it.");
+
+  for (let i = 0; i < 4; i += 1) {
+    await clock.advance(Pane.POLL);
+  }
+  assert.ok(calls().filter((r) => r.route === "ping").length >= 4, "it was checked again and again");
+  assert.equal(el("status").textWrites, text);
+  assert.equal(el("status").classWrites, classes);
+});
+
+test("the status is written when what it says changes, once", async () => {
+  let signedIn = true;
+  const { el, clock } = await open({ paired: true, routes: { ping: () => [200, { ok: true, signedIn }] } });
+  const before = el("status").textWrites;
+  signedIn = false;
+  await clock.advance(Pane.POLL);
+  assert.equal(el("status").textContent, Healdan.messageFor("signed-out"));
+  assert.equal(el("status").textWrites, before + 1);
+  await clock.advance(Pane.POLL);
+  await clock.advance(Pane.POLL);
+  assert.equal(el("status").textWrites, before + 1);
+});
+
+test("the busy line is not written again while it says the same, by the timer or by another page's change", async () => {
+  const { el, clock, storage, storageListeners } = await open({ paired: true });
+  Healdan.markBusy(storage, "saveToHealdan", "Word", clock.now());
+  storageListeners.forEach((listener) => listener());
+  const writes = el("busy-text").textWrites;
+  assert.match(el("busy-text").textContent, /working on Save to Healdan/);
+
+  for (let i = 0; i < 3; i += 1) {
+    Healdan.markBusy(storage, "saveToHealdan", "Word", clock.now()); // the running flow's heartbeat
+    storageListeners.forEach((listener) => listener());
+    await clock.advance(Pane.BUSY_LOOK);
+  }
+  assert.equal(el("busy-text").textWrites, writes);
+
+  // When the flow ends it is cleared once, and not written again while it stays clear.
+  Healdan.clearBusy(storage, "saveToHealdan");
+  await clock.advance(Pane.BUSY_LOOK);
+  const cleared = el("busy-text").textWrites;
+  assert.equal(el("busy-text").textContent, "");
+  await clock.advance(Pane.BUSY_LOOK);
+  await clock.advance(Pane.BUSY_LOOK);
+  assert.equal(el("busy-text").textWrites, cleared);
 });
 
 // --- Waiting ---------------------------------------------------------------------------------------------------------
@@ -571,6 +794,36 @@ test("on the web, the pane says the buttons work in the desktop apps, and asks t
   assert.equal(el("status-section").hidden, true);
   assert.equal(el("pairing").hidden, true);
   assert.deepEqual(requests, []);
+});
+
+test("the window a button opens on the web says so, and asks the helper nothing, not even for its status", async () => {
+  const channel = fakeChannel();
+  const { el, requests, page } = await open({
+    search: "?message=no-office-on-the-web&app=Word",
+    paired: true,
+    channel,
+    // Office would say the platform too, but the address already names the app, so it is not asked.
+    office: { host: "Word", platform: "OfficeOnline" },
+  });
+  assert.equal(el("message-section").hidden, false);
+  assert.equal(el("message").textContent, Healdan.messageFor("no-office-on-the-web"));
+  assert.match(el("message").textContent, /Healdan's buttons work in the desktop apps/);
+  assert.equal(page.focused, el("message"));
+
+  // No contradicting status line, no field to pair, no second copy of the same words, and no request to the helper.
+  assert.equal(el("status-section").hidden, true);
+  assert.equal(el("status").textWrites, 0, "the status line was never written");
+  assert.equal(el("pairing").hidden, true);
+  assert.equal(el("web").hidden, true);
+  assert.deepEqual(requests, [], "a web page does not probe the helper's loopback ports");
+  assert.equal(el("main").attributes["aria-busy"], "false");
+});
+
+test("the same window opened with an app Office does not name still asks nothing on the web", async () => {
+  const { requests, el } = await open({ search: "?message=no-office-on-the-web", office: { host: "Excel", platform: "OfficeOnline" } });
+  assert.deepEqual(requests, []);
+  assert.equal(el("status-section").hidden, true);
+  assert.equal(el("pairing").hidden, true);
 });
 
 test("opened in a browser, outside Word, Excel and PowerPoint, the page says what it is for", async () => {

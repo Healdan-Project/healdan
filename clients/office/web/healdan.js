@@ -11,8 +11,9 @@
  *   - createHelperClient: a client for the helper's HTTPS port on 127.0.0.1 (fetch and storage are passed in), which
  *     follows a route the helper is still running (202) through result, so each request stays short
  *   - messageFor, HelperError: the pane's texts, one table, for every code the helper or the add-in can answer with
- *   - messageLink, readMessageLink, noteOf, noteMessage, lastMessage, markBusy, clearBusy, busyNow: what the ribbon's
- *     buttons tell the pane, which are pages of their own (the message window's address, and notes in localStorage)
+ *   - messageLink, readMessageLink, windowMessage, readWindowMessage, noteOf, noteMessage, lastMessage, markBusy,
+ *     clearBusy, busyNow: what the ribbon's buttons and the pane tell each other, which are pages of their own (the
+ *     message window's address, its messages to and from the button, and notes in localStorage)
  *   - six flows, one for each button: saveToHealdan, saveAsNewDocument, saveAsNewVersion, properties,
  *     openFromHealdan and insertDocId. Each takes { client, office } and resolves, never rejects, to one of:
  *
@@ -35,6 +36,9 @@
 
   /** The helper's ports, tried in this order (AddinPorts.All in the helper, and the server's Content-Security-Policy). */
   const PORTS = [47615, 47616, 47617, 47618];
+
+  /** A key as the helper makes them: 32 random bytes in base64url, which is 43 characters; more room is left for later. */
+  const KEY_FORM = /^[A-Za-z0-9_-]{20,128}$/;
 
   /** The protocol this add-in speaks. The helper refuses one it doesn't, and says to update it. */
   const PROTOCOL = 1;
@@ -418,6 +422,20 @@
 
       /** Whether a key for this app is kept. */
       paired: () => read(keyName) !== null,
+
+      /**
+       * The key kept for this app, or null. The message window hands it to the button that opened it (see
+       * windowMessage), as the two may not share storage.
+       */
+      currentKey: () => read(keyName),
+
+      /**
+       * Keeps a key the message window paired with. Only one of the shape the helper makes them is taken.
+       * @returns {boolean} whether it was kept
+       */
+      adoptKey(key) {
+        return typeof key === "string" && KEY_FORM.test(key) && write(keyName, key);
+      },
     };
   }
 
@@ -592,8 +610,10 @@
   // --- What the buttons tell the pane ---------------------------------------------------------------------------------
   //
   // A ribbon button's code runs in a page with nothing on it, so a message is shown in a window of its own: taskpane.html,
-  // with the message in its address. That page and the pane are one origin in one app, so they share its localStorage,
-  // which holds two notes for the pane: the last message, and the flows still running.
+  // with the message's code and the app in its address, and nothing else: the page is fetched from the server, so its
+  // address is in the server's logs, and what Office says about a failure can hold a file name. That text goes to the
+  // window in a message (windowMessage). The pane and the buttons are one origin in one app, so they share its
+  // localStorage, which holds two notes for the pane: the last message, and the flows still running.
 
   const MESSAGE_PAGE = "taskpane.html";
 
@@ -653,16 +673,13 @@
     return note;
   }
 
-  /** The address of the window that shows a message: taskpane.html?message=<code>&app=<app>&detail=<what Office said>. */
+  /** The address of the window that shows a message: taskpane.html?message=<code>&app=<app>. Never what Office said. */
   function messageLink(note) {
     const query = new URLSearchParams();
     query.set("message", note.code);
     const picked = pickNote(note);
     if (picked.app) {
       query.set("app", picked.app);
-    }
-    if (picked.detail) {
-      query.set("detail", picked.detail);
     }
     return `${MESSAGE_PAGE}?${query}`;
   }
@@ -674,7 +691,54 @@
     if (code === null || !CODE_FORM.test(code)) {
       return null;
     }
-    return pickNote({ code, app: query.get("app"), detail: query.get("detail") });
+    return pickNote({ code, app: query.get("app") }); // an address that carries a detail is not read for it
+  }
+
+  /**
+   * A message between the message window and the button that opened it, as Office carries them (only strings): the
+   * window says it is "ready" once it can hear the button; the button answers with the "detail" of what Office said, for
+   * the message that needs it; and the window hands the button the "key" it "paired" with, as it can't count on sharing
+   * storage with the button's page.
+   * @param {{kind: "ready"} | {kind: "detail", detail: string} | {kind: "paired", app: string, key: string}} message
+   */
+  function windowMessage(message) {
+    switch (message.kind) {
+      case "ready":
+        return JSON.stringify({ healdan: "ready" });
+      case "detail":
+        return JSON.stringify({ healdan: "detail", detail: message.detail });
+      case "paired":
+        return JSON.stringify({ healdan: "paired", app: message.app, key: message.key });
+      default:
+        throw new TypeError(`A window message has no kind ${message.kind}.`);
+    }
+  }
+
+  /** What a window message says, as { kind, … }, or null when it is not one. Nothing in it is trusted. */
+  function readWindowMessage(text) {
+    let value;
+    try {
+      value = typeof text === "string" ? JSON.parse(text) : null;
+    } catch (error) {
+      return null;
+    }
+    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    switch (value.healdan) {
+      case "ready":
+        return { kind: "ready" };
+      case "detail":
+        return typeof value.detail === "string" && value.detail !== ""
+          ? { kind: "detail", detail: value.detail.slice(0, DETAIL_LIMIT) }
+          : null;
+      case "paired":
+        return HOSTS.includes(value.app) && typeof value.key === "string" && KEY_FORM.test(value.key)
+          ? { kind: "paired", app: value.app, key: value.key }
+          : null;
+      default:
+        return null;
+    }
   }
 
   /**
@@ -751,6 +815,8 @@
     BUSY_STALE,
     messageLink,
     readMessageLink,
+    windowMessage,
+    readWindowMessage,
     noteOf,
     noteMessage,
     lastMessage,
