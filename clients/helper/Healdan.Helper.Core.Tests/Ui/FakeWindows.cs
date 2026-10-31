@@ -53,6 +53,11 @@ public sealed class FakeWindows : IWindows
 
     public void Crashed(CopyState copy) => Crashes.Enqueue(copy);
 
+    /// <summary>The copies whose After a Crash window the helper took down, as their app has them open again.</summary>
+    public ConcurrentQueue<string> Dismissed { get; } = new();
+
+    public void DismissCrashed(string path) => Dismissed.Enqueue(path);
+
     /// <summary>How many times a dropped link brought the waiting window up.</summary>
     public int Brought => Volatile.Read(ref _brought);
 

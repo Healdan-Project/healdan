@@ -33,7 +33,7 @@ public sealed class LinkHandlerTests : IDisposable
         _server.Add(5, "Lease agreement.docx", "downloaded");
         var paths = HelperPaths.For(_root);
         var api = new HealdanApi(Server, _server) { Token = "hd_test" };
-        _cycle = new CopyCycle(api, new CopyStore(paths), _app, FakeApi.HereDevice, _events, Fast);
+        _cycle = new CopyCycle(api, new CopyStore(paths), TestApps.Of(_app), FakeApi.HereDevice, _events, Fast);
         _links = new LinkHandler(_windows, _notifier, new HelperLog(paths.Log));
     }
 
@@ -85,8 +85,8 @@ public sealed class LinkHandlerTests : IDisposable
         // Spec 5.11's kinds; anything else a matter holds opens only from the Open window (the final review's C2).
         _server.Add(7, "Run me.command", "#!/bin/sh");
         var opener = new FakeOpener();
-        using var cycle = new CopyCycle(new HealdanApi(Server, _server) { Token = "hd_test" }, new CopyStore(HelperPaths.For(_root)), _app,
-            FakeApi.HereDevice, _events, Fast, opener);
+        using var cycle = new CopyCycle(new HealdanApi(Server, _server) { Token = "hd_test" }, new CopyStore(HelperPaths.For(_root)),
+            TestApps.Of(_app, opener), FakeApi.HereDevice, _events, Fast);
         await _links.Ready(Server, cycle);
 
         await _links.Handle("healdan://open/7?server=healdan.test");

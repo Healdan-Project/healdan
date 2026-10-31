@@ -12,7 +12,7 @@ namespace Healdan.Helper.Core.Cycle;
 /// </summary>
 public sealed class DefaultApp : IOfficeApp
 {
-    /// <summary>What a copy's record names as its app; <see cref="Settings.HelperSettings.AppFor"/> says it too.</summary>
+    /// <summary>What a copy's record names as its app; <see cref="Settings.AppChooser"/> says it too.</summary>
     public const string AppName = "Default";
 
     /// <summary>The kinds of file the default app is never handed, by extension: apps, installers, scripts and the like.</summary>

@@ -109,7 +109,7 @@ The owner hears about these when this plan is handed over. Task 11 folds them in
 
 - **Running Maven:** as M3's plan. `mvn -B -ntp -pl healdan-core install -DskipTests`, then `mvn -B -ntp -pl healdan-api test -Dtest=<Class>`.
 - **Running the helper's tests:** `dotnet test clients/helper/Healdan.Helper.sln`; one class with `--filter "FullyQualifiedName~<Class>"`.
-- **By-hand tests on a Mac with Office:** `dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"`. They open, change and close throwaway documents in a temporary folder; quit Office's apps first, and expect Automation and Grant File Access prompts the first time.
+- **By-hand tests on a Mac with Office:** `HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"` (without the variable they skip, apart from `EveryScriptCompiles`, which starts nothing). They open, change and close throwaway documents in a temporary folder; quit Office's apps first, and expect Automation and Grant File Access prompts the first time.
 - **Running the add-in's tests:** `node --test clients/office/test/`.
 - **Commits:** one per task, in the repo's style: an imperative subject, a body that says why, and the `Co-Authored-By` trailer.
 - **Docs ship in the task that changes the behaviour** (CLAUDE.md). Screenshots are of the demo firm (CLAUDE.md, "The demo overlay").
@@ -386,7 +386,7 @@ Expected: PASS on macOS and Linux.
 - `ExcelRoundTrip` and `PowerPointRoundTrip`: the same where it applies; PowerPoint's `ReopenAsync` leaves it saved and open.
 - `ANameThatWouldBreakAScript`: a document named `a"; do shell script "touch /tmp/pwned.docx` survives every operation, and `/tmp/pwned` never appears.
 
-Run: `dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"` (record the result in the PR).
+Run: `HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"` (record the result in the PR).
 
 - [ ] **Step 6: Commit** — "Drive Word, Excel and PowerPoint through one scripting seam"
 
@@ -478,7 +478,7 @@ Expected: FAIL to compile.
 - `CloseWatcher.Watch(string path, IOfficeApp app, bool appSeenRunning = false)`: each entry keeps its app, the lock check uses it, and the crash check calls `app.IsRunningFor(path)`.
 - `CopyStore.Delete` and `IsOpen` use `CopyNames.OfficeOwnerNames` (Word's two forms and `~$` + name) instead of `WordOwnerNames`.
 - `HelperSession` takes `OfficeApps` instead of `app` and `otherFiles`. Its `_app` uses (Bring, AppRunning, the messages) take the copy's app, and "is an app running" becomes "is any app running" for `SettleCopies` and `OpenToSetAside`, with the message naming the app that is.
-- `App.axaml.cs:76` builds `new OfficeApps(new LibreOfficeApp(), new MicrosoftOfficeApp(new MacOfficeScripting(new OsaRunner()), ProcessRunning), new DefaultApp(), chooser.For)` on macOS, and without Microsoft Office on Linux. `InstalledApps` checks the bundles; `systemDefaultApp` is Task 8's `DefaultApps.For` (until then, `_ => null`).
+- `App.axaml.cs:76` builds `new OfficeApps(new LibreOfficeApp(), new MicrosoftOfficeApp(new MacOfficeScripting(new OsaRunner(), paths.Copies), ProcessRunning), new DefaultApp(), chooser.For)` on macOS, and without Microsoft Office on Linux. `InstalledApps` checks the bundles; `systemDefaultApp` is Task 8's `DefaultApps.For` (until then, `_ => null`).
 - `SettingsWindow.axaml.cs:38` shows `chooser.For` instead of `AppFor`; `HelperSettings.AppFor` goes.
 
 - [ ] **Step 4: Run the helper's tests**

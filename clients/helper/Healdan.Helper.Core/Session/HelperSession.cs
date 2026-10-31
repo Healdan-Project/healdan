@@ -5,6 +5,7 @@ using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Ui;
@@ -40,8 +41,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private readonly HelperPaths _paths;
     private readonly IKeychain _keychain;
     private readonly DeviceIdentity _device;
-    private readonly IOfficeApp _app;
-    private readonly IOfficeApp? _otherFiles;
+    private readonly OfficeApps _apps;
     private readonly IWindows _windows;
     private readonly INotifier _notifier;
     private readonly HelperLog _log;
@@ -83,16 +83,14 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <param name="http">The HTTP handler under every API client; the system's by default (tests pass a fake server).</param>
     /// <param name="timings">The cycle's timings; the trial's by default.</param>
     /// <param name="signOutFlush">How long Sign Out waits for unsent saves before it gives up and keeps the sign-in; 30 s by default.</param>
-    /// <param name="otherFiles">The app for files no office app edits (<see cref="DefaultApp"/>); without one, everything opens in <paramref name="app"/>.</param>
-    public HelperSession(HelperPaths paths, IKeychain keychain, DeviceIdentity device, IOfficeApp app, IWindows windows,
-        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null,
-        IOfficeApp? otherFiles = null)
+    /// <param name="apps">The apps copies open in: LibreOffice, Microsoft Office where it can be installed, and the default app for files no office app edits.</param>
+    public HelperSession(HelperPaths paths, IKeychain keychain, DeviceIdentity device, OfficeApps apps, IWindows windows,
+        INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null)
     {
-        _otherFiles = otherFiles;
         _paths = paths;
         _keychain = keychain;
         _device = device;
-        _app = app;
+        _apps = apps;
         _windows = windows;
         _notifier = notifier;
         _log = log;
@@ -258,7 +256,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
                 _notifier.Notify(copy.Title, "Your changes to it aren't in Healdan yet: use Save as New Document to file them.");
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException
-                                           or System.ComponentModel.Win32Exception)
+                                           or System.ComponentModel.Win32Exception or OfficeScriptException)
             {
                 _log.Warn($"Couldn't open the kept copy of {copy.DocRef}: {e.Message}");
                 _notifier.Notify(copy.Title, $"It couldn't be opened: {e.Message}");
@@ -432,40 +430,46 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     }
 
     /// <summary>
-    /// The menu's click on a document: brings its window up. A copy whose app went away is opened again, from the
-    /// kept copy, and watched again.
+    /// The menu's click on a document, or the crash window's Reopen: brings its window up. A copy whose app went away is
+    /// opened again, from the kept copy, and watched again. One whose app has it open again by now, as Word does after a
+    /// crash (M3.5 spec §5.14), is only brought up, under the name it has now, as Word and Excel rename their copies.
     /// </summary>
     public void Bring(CopyState copy)
     {
         var cycle = Cycle;
         if (cycle is null)
             return;
+        var current = cycle.Current(copy) ?? copy;
         bool crashed;
         lock (_gate)
-            crashed = _crashed.Remove(copy.Path);
+            crashed = _crashed.Remove(copy.Path) | _crashed.Remove(current.Path);
+        crashed &= cycle.IsCrashed(current.Path);
         _ = Task.Run(async () =>
         {
-            if (crashed && !copy.ReadOnly)
+            if (crashed && !current.ReadOnly)
             {
-                await cycle.OpenAsync(copy.DocNumber, false);
+                await cycle.OpenAsync(current.DocNumber, false);
                 RaiseChanged();
                 return;
             }
+            var app = cycle.AppOf(current.Path); // the one that has it open
             try
             {
-                _app.Open(copy.Path);
+                app.Open(current.Path);
             }
-            catch (Exception e) when (e is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+            catch (Exception e) when (e is IOException or InvalidOperationException or System.ComponentModel.Win32Exception or OfficeScriptException)
             {
-                _log.Warn($"Couldn't bring up {copy.DocRef}: {e.Message}");
-                _notifier.Notify(copy.Title, $"{_app.Name} couldn't open it: {e.Message}");
+                _log.Warn($"Couldn't bring up {current.DocRef}: {e.Message}");
+                _notifier.Notify(current.Title, $"{app.Name} couldn't open it: {e.Message}");
             }
         });
     }
 
     /// <summary>
     /// After a Crash's Send and Check In (spec §5.10): the kept copy's changes go up with the check-in, as when its
-    /// window closes, and the copy goes once Healdan has them. A read-only copy is just let go.
+    /// window closes, and the copy goes once Healdan has them. A read-only copy is just let go. A copy whose app has it
+    /// open again by now (M3.5 spec §5.14), found by its document if it has been renamed since, isn't checked in under
+    /// its open window: closing the window does that.
     /// </summary>
     public void SendAndCheckIn(CopyState copy)
     {
@@ -474,6 +478,13 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return;
         lock (_gate)
             _crashed.Remove(copy.Path);
+        if (cycle.Current(copy) is { } current && !cycle.IsCrashed(current.Path))
+        {
+            _log.Info($"Not checking in {current.DocRef}: {cycle.AppOf(current.Path).Name} has it open again");
+            _notifier.Notify(current.Title, "It's open again, so it wasn't checked in. Close its window to check it in.");
+            RaiseChanged();
+            return;
+        }
         _log.Info($"Checking in {copy.DocRef} after it closed unexpectedly");
         _ = cycle.ClosedAsync(copy.Path);
         RaiseChanged();
@@ -692,26 +703,34 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             return null;
         }
-        if (open.Count == 0 || !AppRunning())
+        if (open.Count == 0 || RunningApp() is not { } running)
             return null;
         var to = HealdanLink.HostAndPort(server);
-        _log.Info($"Not signing in to {to}: copies it would set aside are open in {_app.Name} ({open.Count})");
+        _log.Info($"Not signing in to {to}: copies it would set aside are open in {running.Name} ({open.Count})");
         var others = open.Count switch { 1 => "", 2 => " and 1 other document", _ => $" and {open.Count - 1} other documents" };
-        return $"Close {open[0].Title}{others} in {_app.Name} first. Healdan Helper moves the copies from {open[0].Server} out of "
+        return $"Close {open[0].Title}{others} in {running.Name} first. Healdan Helper moves the copies from {open[0].Server} out of "
             + $"the way before it signs in to {to}, and {(open.Count == 1 ? "that one is" : "those are")} open.";
     }
 
-    /// <summary>When the process list can't be read, the app counts as running, so no open copy is moved from under it.</summary>
-    private bool AppRunning()
+    /// <summary>
+    /// An app that is running, or null when none is. When an app's process list can't be read, it counts as running, so no
+    /// open copy is moved from under it.
+    /// </summary>
+    private IOfficeApp? RunningApp()
     {
-        try
+        foreach (var app in _apps.All)
         {
-            return _app.IsRunning();
+            try
+            {
+                if (app.IsRunning())
+                    return app;
+            }
+            catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+            {
+                return app;
+            }
         }
-        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
-        {
-            return true;
-        }
+        return null;
     }
 
     /// <summary>Tells the user where each server's copies went, and that they come back (spec §5.4).</summary>
@@ -836,7 +855,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             var store = new CopyStore(_paths, Address(api.Server));
             SettleCopies(store, api.Server);
-            cycle = new CopyCycle(api, store, _app, _device.Id, this, _timings, _otherFiles);
+            cycle = new CopyCycle(api, store, _apps, _device.Id, this, _timings,
+                new OfficeAfterSave(new CopiesNotice(_paths, _notifier), _log));
             lock (_gate)
                 _resuming = cycle; // its events name copies by their title
             await cycle.ResumeAsync();
@@ -919,11 +939,12 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     {
         var address = Address(server);
         var name = HealdanLink.HostAndPort(server);
-        var open = AppRunning() ? store.OpenToSetAside(address, address) : [];
+        var running = RunningApp();
+        var open = running is not null ? store.OpenToSetAside(address, address) : [];
         foreach (var copy in open)
         {
-            _log.Warn($"The copy from {copy.Server} named {copy.FileName} stays in Copies: it's open in {_app.Name}");
-            _notifier.Notify(copy.Title, $"It's a copy from {copy.Server}, open in {_app.Name}, so it stays in Healdan Helper's "
+            _log.Warn($"The copy from {copy.Server} named {copy.FileName} stays in Copies: it's open in {running!.Name}");
+            _notifier.Notify(copy.Title, $"It's a copy from {copy.Server}, open in {running.Name}, so it stays in Healdan Helper's "
                 + $"Copies folder until you close it. Healdan Helper won't send it to {name}, and sets it aside the next time it starts.");
         }
         TellSetAside(store.SetAside(address, address, [.. open.Select(c => c.FileName)]), name);
@@ -1137,6 +1158,15 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             _crashed.Add(copy.Path);
         _log.Warn($"{copy.Title} closed unexpectedly; its copy and check-out are kept");
         _windows.Crashed(copy);
+        RaiseChanged();
+    }
+
+    void ICycleEvents.Reopened(string path)
+    {
+        lock (_gate)
+            _crashed.Remove(path); // no longer "(closed unexpectedly)": the app has it open again
+        _log.Info($"{TitleOf(path)} is open again after it closed unexpectedly, and what was recovered is saved back");
+        _windows.DismissCrashed(path); // its Reopen and Send and Check In no longer apply
         RaiseChanged();
     }
 

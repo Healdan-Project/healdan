@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Office;
 
 namespace Healdan.Helper.Core.Ui;
 
@@ -18,6 +19,25 @@ public static class WindowAnswers
         ["properties"] = properties.DeepClone(),
         ["tempPath"] = tempPath
     };
+
+    /// <summary>
+    /// The formats Save to Healdan's window offers from Word, Excel or PowerPoint: the program's own only, without its dot
+    /// (M3.5 spec §5.5 step 1). Office turns the add-in off in a window holding an OpenDocument file, so a document saved
+    /// as one would lose its Healdan tab, and Excel and PowerPoint for Mac can't save one at all.
+    /// </summary>
+    public static JsonArray OfficeFormats(OfficeProgram p) => new() { OfficePrograms.OwnFormat(p).TrimStart('.') };
+
+    /// <summary>
+    /// Save to Healdan's Save, from Word, Excel or PowerPoint: the window's answer (<see cref="Save"/>) with the ticket that
+    /// <c>/v1/file</c> names the window by in place of the temporary file, as the add-in sends the document's bytes itself.
+    /// </summary>
+    public static JsonObject Ticketed(JsonObject answer, string ticket)
+    {
+        var ticketed = (JsonObject)answer.DeepClone();
+        ticketed.Remove("tempPath");
+        ticketed["ticket"] = ticket;
+        return ticketed;
+    }
 
     /// <summary>"Save to local computer" or "Open from local computer": the app's own box, at once.</summary>
     public static JsonObject Local() => Action("local");

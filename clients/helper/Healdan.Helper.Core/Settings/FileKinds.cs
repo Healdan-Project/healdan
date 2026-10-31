@@ -1,13 +1,13 @@
 namespace Healdan.Helper.Core.Settings;
 
-/// <summary>Spec §5.11's kinds. In M3 every kind opens in LibreOffice; other files open read-only in the system's default app.</summary>
+/// <summary>Spec §5.11's kinds. Each opens in LibreOffice or Microsoft Office (<see cref="AppChooser"/>); other files open read-only in the system's default app.</summary>
 public static class FileKinds
 {
-    public static readonly FileKind Documents = new("Documents", [".doc", ".docx", ".docm", ".dotx", ".dotm", ".rtf", ".odt", ".ott"]);
+    public static readonly FileKind Documents = new("Documents", [".doc", ".docx", ".docm", ".dotx", ".dotm", ".rtf", ".odt", ".ott"], "docx");
 
-    public static readonly FileKind Spreadsheets = new("Spreadsheets", [".xls", ".xlsx", ".xlsm", ".ods"]);
+    public static readonly FileKind Spreadsheets = new("Spreadsheets", [".xls", ".xlsx", ".xlsm", ".ods"], "xlsx");
 
-    public static readonly FileKind Presentations = new("Presentations", [".ppt", ".pptx", ".pptm", ".odp"]);
+    public static readonly FileKind Presentations = new("Presentations", [".ppt", ".pptx", ".pptm", ".odp"], "pptx");
 
     /// <summary>Draw's own format only: Draw opens Visio and Publisher files but can't save them.</summary>
     public static readonly FileKind Drawings = new("Drawings", [".odg"]);

@@ -2,7 +2,7 @@ using Healdan.Helper.Core.Settings;
 
 namespace Healdan.Helper.Core.Tests.Settings;
 
-/// <summary>Settings' "which app opens each kind" (spec §5.11): the four kinds, all LibreOffice in M3.</summary>
+/// <summary>Settings' "which app opens each kind" (spec §5.11): the four kinds, LibreOffice until the user or the system says otherwise.</summary>
 public class FileKindsTests
 {
     [Fact]
@@ -17,15 +17,24 @@ public class FileKindsTests
     }
 
     [Fact]
-    public void EveryKindOpensInLibreOfficeAndAnythingElseInTheDefaultApp()
+    public void EveryKindOpensInLibreOfficeAndAnythingElseInTheDefaultAppWithNoChoiceMade()
     {
-        var settings = new HelperSettings();
+        var chooser = new AppChooser(new HelperSettings(), new InstalledApps(true, true, true, true), _ => null);
         foreach (var extension in FileKinds.All.SelectMany(k => k.Extensions))
-            Assert.Equal("LibreOffice", settings.AppFor(extension));
-        Assert.Equal("LibreOffice", settings.AppFor("DOCX"));
-        Assert.Equal("Default", settings.AppFor(".pdf"));
+            Assert.Equal("LibreOffice", chooser.For("a" + extension));
+        Assert.Equal("LibreOffice", chooser.For("a.DOCX"));
+        Assert.Equal("Default", chooser.For("a.pdf"));
         Assert.Equal(FileKinds.Documents, FileKinds.Of("Lease.DOCX"));
         Assert.Null(FileKinds.Of("Signed NDA.pdf"));
+    }
+
+    [Fact]
+    public void EachKindsMainFormatIsWhatTheSystemsDefaultIsAskedAbout()
+    {
+        Assert.Equal("docx", FileKinds.Documents.MainFormat);
+        Assert.Equal("xlsx", FileKinds.Spreadsheets.MainFormat);
+        Assert.Equal("pptx", FileKinds.Presentations.MainFormat);
+        Assert.Null(FileKinds.Drawings.MainFormat); // Office doesn't open them
     }
 
     [Fact]

@@ -19,6 +19,8 @@ namespace Healdan.Helper.Core.Copies;
 /// <param name="FileName">
 /// The copy's own file name. It's the name the copy was opened with, and stays while the app has it open, however far
 /// <paramref name="FileVersion"/> moves on (R19): renaming an open file would break the app's save path and lock file.
+/// Word and Excel are the exception: after a confirmed save, the app itself saves the copy under the new version's name
+/// (M3.5 spec §5.4), and the record follows it (<see cref="CopyStore.Moved"/>).
 /// </param>
 /// <param name="PendingHash">
 /// SHA-256 (hex) of the bytes <paramref name="LastSaveId"/> was sent with while its answer isn't known, else null. A

@@ -28,7 +28,10 @@ app.
 - **`Healdan.Helper.Core`** has no windows and no Avalonia, so the tests drive all of it:
   - `Api/`: the API client, written by hand against `openapi.yaml`;
   - `Copies/`: the local copies and the record beside each;
-  - `Cycle/`: the open-save-close cycle;
+  - `Cycle/`: the open-save-close cycle, and the apps it opens copies in;
+  - `Office/`: Word, Excel and PowerPoint: which program opens a file, `MicrosoftOfficeApp`, `IOfficeScripting`
+    with its macOS implementation, and what the cycle asks of the programs after a save or a crash
+    (`OfficeAfterSave`, `CopiesNotice`);
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
@@ -67,10 +70,23 @@ size the helper uses, the widths then match CoreText's.
 
 ### The Cycle
 
-- **Opening:** `GET /documents/{n}`; a check-out with `{"app": "LibreOffice"}` when the user can edit it, else a
-  read-only copy; the download into `Copies/`, through a temporary file; then LibreOffice. If the open fails after
-  the check-out, the check-out is released, unless this computer already had a copy. One open of a document runs at
-  a time: a second while one is under way, such as a double-clicked Open in App, is dropped.
+- **Opening:** `GET /documents/{n}`; a check-out with the app's name (`{"app": "LibreOffice"}`, or `Word`, `Excel` or
+  `PowerPoint`) when the user can edit it, else a read-only copy; the download into `Copies/`, through a temporary
+  file; then the file's app. If the open fails after the check-out, the check-out is released, unless this computer
+  already had a copy. One open of a document runs at a time: a second while one is under way, such as a
+  double-clicked Open in App, is dropped.
+- **The app is chosen for each file** when its copy is made, and kept in the copy's record (`App`: `LibreOffice`,
+  `Microsoft Office` or `Default`). `AppChooser` makes the choice: the user's for the file's kind (`kinds` in
+  `settings.json`), else the system's default app for the kind's main format when that is Word, Excel or PowerPoint,
+  else LibreOffice; an OpenDocument file is LibreOffice's whatever the choice; and only an installed app
+  (`InstalledApps`) is chosen. `OfficeApps` holds the set the cycle works with, and everything after the open (the
+  reopen of a kept copy, the lock check, the crash check, the resume, Bring to the Front) goes by the record's app,
+  whatever Settings say by then.
+  - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens
+    the files it opens (`OfficePrograms`), and it opens them through `IOfficeScripting`, the one seam for everything
+    the helper does to a document in Word, Excel and PowerPoint. Nothing above the seam knows how the programs are
+    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow.
+  - A file no office app edits is the `Default` app's, read-only, as below.
 - **Other kinds of file** (not spec §5.11's, by the file's own extension) open read-only in the system's default app
   (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`). On
   macOS the copy gets `com.apple.quarantine` (`Platform/Quarantine.cs`), so Gatekeeper checks it, and
@@ -87,10 +103,40 @@ size the helper uses, the widths then match CoreText's.
   file's. A restart in between sends the copy unless it's those bytes. Nothing tells the adoption from a save made
   while the helper was down, and the adoption differs from the filed file by the doc ID the extension sets first. So
   a restart there sends an identical version, and never loses a save.
-- **Closing:** the extension's `/v1/closed`, or LibreOffice's lock file, `.~lock.<copy>#`, gone at two polls a second
-  apart. Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
+- **Closing:** the extension's `/v1/closed`, or the copy's app's lock file gone at two polls a second apart:
+  LibreOffice's `.~lock.<copy>#`, or Microsoft Office's owner file, `~$` and the copy's name with its first two
+  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`; a short
+  name loses one for Word). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
   A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
-- **A crash:** while a copy is open, the helper checks every 5 seconds that `soffice` is running.
+- **Renaming after a save (Word and Excel):** they take the window's title from the file name, so once a save is
+  confirmed, `CopyCycle.RenameAfterSaveAsync` has the program save the copy under the confirmed version's name
+  (`IOfficeScripting.RenameIfUnchangedAsync`), and the record (`CopyStore.Moved`), the session (`Rekey`) and both
+  watchers follow it. It runs in the confirmed save's job, only when no newer save or Save as New Version waits, and
+  not while the copy has changed since its confirmation. The watchers let go of the old name first, so the program's
+  writes aren't saves and its owner file moving isn't a close. The renamed file's hash becomes the confirmed one, so
+  it isn't sent, unless an edit landed in it: the program saw one between its check and its save (`RenamedChanged`),
+  or the old file changed as the rename began, and then it goes up as the next save. With unsaved changes in the
+  window, or when the program can't be asked (logged), nothing moves, and the next confirmation tries again; but if
+  the new name's file or owner file is there all the same, as when the script gave up while the program went on, the
+  copy follows it and the file goes up. Then
+  Word's doc ID footer moves on (`SetDocIdAsync`), where the document has one. PowerPoint's copies keep their name.
+  Before a program's first save into `Copies`, `CopiesNotice` says how to grant it access, once per program
+  (`copiesAnnounced` in `settings.json`). A start that finds a renamed file the record didn't follow takes it as the
+  copy, and sends it, and so does a close: an old name's owner file that went because the program saved under the
+  next name, once the user granted access, say, isn't a close (`FollowedRename`).
+- **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
+  or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
+  nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
+  (`CloseWatcher.WatchCrashed`): once its owner file is written again, as when Word restores its "Recovered" window
+  at the copy's path, the close watcher lets go of it, and the helper looks for the copy by its path
+  (`IsOpenAsync`, which never takes the front window) for up to 30 seconds. Only once it's found is the window saved
+  over the copy (`SaveAsAsync`), and the folder watcher sends it. The copy stays crashed until that works, and is
+  looked for again after a miss or a failure. Then the crash window closes itself (`IWindows.DismissCrashed`), and its
+  Send and Check In and Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document
+  once it's renamed: a copy that's open again is brought up, never checked in. The crash window's Reopen leaves the
+  watch in place.
+- **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
+  close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
   `saveId` and the kind it went up as (the record's `sentKind`), and then, when newer content or a version was
@@ -112,8 +158,9 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   copy. `/`, `:`, `\` and control characters in the name become `-`.
 - **At most 241 bytes** in UTF-8, so the record beside it, `.<copy's name>.healdan.json`, fits in 255 bytes, and so
   does LibreOffice's lock file.
-- **A copy keeps the name it was opened with** while it's open. The record holds its file name and the version it
-  holds, and the title comes from the record.
+- **A copy keeps the name it was opened with** while it's open, except in Word and Excel, which save it under each
+  confirmed version's name (above). The record holds its file name and the version it holds, and the title comes
+  from the record.
 - **A copy with unconfirmed changes is never deleted** by the helper, and `CopyStore.Create` never deletes anything.
   Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
   under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
@@ -129,7 +176,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   copies waiting (`CopyStore.Aside`).
 - **No open copy is moved from under its window.** A sign-in to another server is refused, before the helper signs
   in and again just before the move, while anything it would set aside has its lock or owner file beside it in
-  `Copies/` and the app is running (`CopyStore.OpenToSetAside`, `IOfficeApp.IsRunning`); the window would otherwise
+  `Copies/` and an app is running (`CopyStore.OpenToSetAside`, `IOfficeApp.IsRunning`); the window would otherwise
   save a file with no record to the old path. A lock file with the app not running is a crash's, and doesn't count.
   A start leaves such a copy in `Copies/` (`SetAside`'s `leave`) until a later start. A read-only copy has no lock
   file, so it moves.
@@ -310,7 +357,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 ## Tests
 
 - **The helper's core** has tests for each part, the cycle's failure cases included, against a fake server
-  (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`).
+  (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`). A fake `IOfficeScripting`
+  (`FakeScripting`) stands in for Word, Excel and PowerPoint, with their owner files, and renames, saves and reopens
+  copies as they do. `OfficeRenameTests` and `OfficeCrashTests` run the cycle over it.
 - **The cycle's tests wait for what they need,** not for a fixed time, so a slow runner can't change what they see.
   `Wait.Until` polls for it (a confirmation, a save reaching `FakeApi`, or one queued, through the internal
   `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`
@@ -321,6 +370,10 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke
   test's step 5d runs them in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
+- **`Category=MacOffice`** tests drive the real Word, Excel and PowerPoint through `MacOfficeScripting`: they open,
+  change and close throwaway documents in a temporary folder, and the apps ask for Automation and Grant File Access
+  the first time. They skip unless `HEALDAN_MAC_OFFICE=1` is set. `EveryScriptCompiles` compiles every AppleScript
+  against the apps' dictionaries with `osacompile`, starts nothing, and runs on any Mac that has the three apps.
 - **`NoticesTests`** fail when the packages `Healdan.Helper/THIRD-PARTY-NOTICES.txt` names differ from those the app
   restores (its `obj/project.assets.json`), ids and versions both. The file is About's Open-Source Notices, built
   into the app. A package added or moved needs its notice: its copyright and licence text, from the package or its
@@ -350,9 +403,10 @@ the steps and the secrets.
 
 - **The bundle** is `com.healdan.helper`: one self-contained file for Apple silicon, with `healdan.oxt` in
   `Contents/Resources`. It registers `healdan:` and stays out of the Dock.
-- **The hardened runtime** has one exception, `allow-jit`, for .NET's JIT
-  (`clients/helper/packaging/mac/entitlements.plist`). The bundle's native libraries are signed with the helper's
-  own Developer ID, so library validation accepts them.
+- **The hardened runtime** has two exceptions (`clients/helper/packaging/mac/entitlements.plist`): `allow-jit`, for
+  .NET's JIT, and `automation.apple-events`, which lets the helper drive Word, Excel and PowerPoint with AppleScript.
+  `Info.plist`'s `NSAppleEventsUsageDescription` is what macOS's Automation prompt says. The bundle's native libraries
+  are signed with the helper's own Developer ID, so library validation accepts them.
 - **The icon,** `AppIcon.icns`, is Healdan's mark from the docs site's `site/static/favicon.svg` on macOS's rounded
   square. `clients/helper/packaging/mac/make-icon.swift` draws it each time `package.sh` runs, so changing the
   favicon changes the helper's icon too. About's mark is the same shapes in XAML, as Avalonia doesn't read SVG, and

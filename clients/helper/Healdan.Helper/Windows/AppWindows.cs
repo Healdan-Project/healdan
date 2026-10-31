@@ -31,7 +31,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
 {
     private readonly OpenWindows _open = new();
     private readonly Dictionary<string, Window> _single = [];
-    private readonly HashSet<string> _crashShown = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CrashWindow> _crashShown = new(StringComparer.Ordinal);
     private Task<bool>? _signIn;
 
     /// <summary>The running helper, set once it's made (it needs these windows to be made first).</summary>
@@ -163,9 +163,10 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     /// <summary>Nobody asked for it, and it may sit behind the browser: it holds no links back.</summary>
     public void Crashed(CopyState copy) => Dispatcher.UIThread.Post(() =>
     {
-        if (!_crashShown.Add(copy.Path))
+        if (_crashShown.ContainsKey(copy.Path))
             return; // its window is up already
         var window = new CrashWindow(copy);
+        _crashShown[copy.Path] = window;
         var shown = Show(window, waits: false, () =>
         {
             _crashShown.Remove(copy.Path);
@@ -186,6 +187,13 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         }
     });
 
+    /// <summary>The app has the copy open again (M3.5 spec §5.14): its After a Crash window closes as if closed by hand, choosing nothing.</summary>
+    public void DismissCrashed(string path) => Dispatcher.UIThread.Post(() =>
+    {
+        if (_crashShown.TryGetValue(path, out var window))
+            window.Close();
+    });
+
     // --- Settings --------------------------------------------------------------------------------------------------
 
     /// <summary>The menu's Settings…; one window at a time.</summary>
@@ -194,7 +202,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Summary(), Extension);
+        var window = new SettingsWindow(server, Session?.SignedIn == true, OfficeAppSet.Chooser(paths), LoginItem.Summary(), Extension);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");
