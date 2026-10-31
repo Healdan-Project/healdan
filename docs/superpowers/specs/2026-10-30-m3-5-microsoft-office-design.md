@@ -2,7 +2,7 @@
 
 - **Milestone:** M3.5 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-10-30
-- **Status:** design agreed with the owner on 2026-10-30. The trial (§8) ran the same day, on the owner's Mac, and its results are in §8.5. It changed the design in places, each marked "changed by the trial", and the owner decided three questions it raised (§15). Approved by the owner on 2026-10-30, after the trial. The implementation plan is next.
+- **Status:** design agreed with the owner on 2026-10-30. The trial (§8) ran the same day, on the owner's Mac, and its results are in §8.5. It changed the design in places, each marked "changed by the trial", and the owner decided three questions it raised (§15). Approved by the owner on 2026-10-30, after the trial. Implementation plan: [`docs/superpowers/plans/2026-10-30-m3-5-microsoft-office.md`](../plans/2026-10-30-m3-5-microsoft-office.md), approved the same day for subagent-driven building; its "Spec corrections and calls" section lists where it departs from this spec.
 - **Inputs:**
   - the roadmap's M3 and M3.5 entries, and its glossary;
   - the [M3 spec](2026-10-24-m3-office-integration-design.md), above all §3.1, §5, §7, §10 and the trial's results in §12.5, and the M3 plan's follow-ups "For phase 2 and M3.5" ([plan](../plans/2026-10-24-m3-office-integration.md));
