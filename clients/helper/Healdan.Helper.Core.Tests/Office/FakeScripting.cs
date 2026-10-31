@@ -10,8 +10,9 @@ namespace Healdan.Helper.Core.Tests.Office;
 /// program, which leaves it. The operations the cycle uses after a save or a crash act on the files as the programs do,
 /// and are recorded: the rename (<see cref="RenameIfUnchangedAsync"/>), the look for a document by its path, Save As,
 /// Save, PowerPoint's close and reopen, and Word's doc ID. Filing from Office asks for the front window
-/// (<see cref="Front"/>), the add-in's mark and a fingerprint, which answer what the test set. Anything else is for the
-/// add-in's other routes, so a call the test didn't expect fails.
+/// (<see cref="Front"/>), the add-in's mark, which answer what the test set, and a fingerprint of what the window holds
+/// (<see cref="WindowText"/>), which Save As compares, as the scripts do. Anything else is for the add-in's other
+/// routes, so a call the test didn't expect fails.
 /// </summary>
 public sealed class FakeScripting : IOfficeScripting
 {
@@ -27,7 +28,6 @@ public sealed class FakeScripting : IOfficeScripting
     private readonly ConcurrentQueue<bool> _isOpenAnswers = new();
     private int _isOpenAsked;
     private readonly ConcurrentQueue<Exception> _saveAsFailures = new();
-    private readonly ConcurrentQueue<SaveAsResult> _saveAsAnswers = new();
     private readonly ConcurrentQueue<bool> _markAnswers = new();
     private readonly List<(OfficeProgram Program, string Mark)> _marksAsked = [];
     private readonly List<(OfficeProgram Program, DocumentRef Doc)> _fingerprints = [];
@@ -129,14 +129,10 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>The next Save As throws this, writing nothing.</summary>
     public void FailNextSaveAs(Exception e) => _saveAsFailures.Enqueue(e);
 
-    /// <summary>The next Saves As answer these, in order; after them, a Save As found its document by its path, unchanged.</summary>
-    public void AnswerSavesAs(params SaveAsResult[] answers)
-    {
-        foreach (var answer in answers)
-            _saveAsAnswers.Enqueue(answer);
-    }
-
-    /// <summary>Runs as a Save As begins, before anything is written: to see what the user had been told by then, say.</summary>
+    /// <summary>
+    /// Runs as a Save As begins, before the program reads the window: to see what the user had been told by then, or to
+    /// type into the window, say.
+    /// </summary>
     public Action? BeforeSaveAs { get; set; }
 
     /// <summary>
@@ -161,11 +157,14 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>Whether a look for the add-in's mark finds it, once the answers the test gave are used up. PowerPoint's never does.</summary>
     public bool MarksShown { get; set; }
 
+    /// <summary>Runs at each look for the add-in's mark, before it answers: a line typed meanwhile, say.</summary>
+    public Action? OnMarkLook { get; set; }
+
     /// <summary>Every look for the add-in's mark, in order.</summary>
     public IReadOnlyList<(OfficeProgram Program, string Mark)> MarksAsked => Copy(_marksAsked);
 
-    /// <summary>What <see cref="FingerprintAsync"/> answers: the window's content summarised, or null when it finds no document.</summary>
-    public string? Fingerprint { get; set; } = "fingerprint of the window";
+    /// <summary>What <see cref="FingerprintAsync"/> answers for a window holding <paramref name="windowText"/>.</summary>
+    public static string FingerprintOf(string windowText) => "fingerprint of: " + windowText;
 
     /// <summary>Every fingerprint asked for, in order.</summary>
     public IReadOnlyList<(OfficeProgram Program, DocumentRef Doc)> Fingerprints => Copy(_fingerprints);
@@ -222,17 +221,19 @@ public sealed class FakeScripting : IOfficeScripting
 
     public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) => throw Unexpected();
 
+    /// <summary>What the window holds now, summarised (<see cref="FingerprintOf"/>).</summary>
     public Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default)
     {
         lock (_lock)
             _fingerprints.Add((p, doc));
-        return Task.FromResult(Fingerprint);
+        return Task.FromResult<string?>(FingerprintOf(WindowText));
     }
 
     public Task<bool> HasMarkAsync(OfficeProgram p, string mark, CancellationToken ct = default)
     {
         lock (_lock)
             _marksAsked.Add((p, mark));
+        OnMarkLook?.Invoke();
         return Task.FromResult(_markAnswers.TryDequeue(out var answer) ? answer : MarksShown);
     }
 
@@ -275,9 +276,10 @@ public sealed class FakeScripting : IOfficeScripting
     }
 
     /// <summary>
-    /// Writes what the window holds (<see cref="WindowText"/>) to the new path, and answers what the test set
-    /// (<see cref="AnswerSavesAs"/>), by default found by the path it was given. A document saved under another name, as
-    /// a new document is when it's filed, takes its owner file there, as the program does.
+    /// Writes what the window holds (<see cref="WindowText"/>) to the new path. It answers how the document was found, by
+    /// the first of the path, the mark (when <see cref="MarksShown"/>) and the window's name it was given, never the front
+    /// window, and whether the window changed since <paramref name="fingerprint"/>. A document saved under another name,
+    /// as a new document is when it's filed, takes its owner file there, as the program does.
     /// </summary>
     public async Task<SaveAsResult> SaveAsAsync(OfficeProgram p, DocumentRef doc, string newPath, string? fingerprint, CancellationToken ct = default)
     {
@@ -286,7 +288,8 @@ public sealed class FakeScripting : IOfficeScripting
         BeforeSaveAs?.Invoke();
         if (_saveAsFailures.TryDequeue(out var failure))
             throw failure;
-        var answer = _saveAsAnswers.TryDequeue(out var queued) ? queued : new SaveAsResult("path", false);
+        var foundBy = doc.Path is not null ? "path" : doc.Mark is not null && MarksShown ? "mark" : "window";
+        var answer = new SaveAsResult(foundBy, fingerprint is not null && fingerprint != FingerprintOf(WindowText));
         if (doc.Path != newPath)
         {
             File.WriteAllText(newPath, WindowText);

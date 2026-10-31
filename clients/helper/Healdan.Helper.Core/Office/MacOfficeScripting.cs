@@ -113,7 +113,8 @@ public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder =
         if (answer == "missing")
             throw new OfficeScriptException($"{OfficePrograms.CheckOutName(p)} has no document to save.");
         var split = answer.IndexOf(Separator);
-        if (split < 0)
+        // Never the front window: the scripts don't fall back to it, which would save another document as the copy.
+        if (split < 0 || answer[..split] is not ("path" or "mark" or "window"))
             throw Unexpected(p, "SaveAs");
         var changed = fingerprint is not null && !string.Equals(Hash(answer[(split + 1)..]), fingerprint, StringComparison.OrdinalIgnoreCase);
         return new SaveAsResult(answer[..split], changed);

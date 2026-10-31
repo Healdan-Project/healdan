@@ -9,8 +9,8 @@ namespace Healdan.Helper.Core.Office;
 public sealed record FrontDocument(string? Path, string Name, string? WindowName);
 
 /// <summary>
-/// How to find a document: by its path, else by the add-in's mark, else by its window's name, and failing those, where
-/// an operation allows it, the front window.
+/// How to find a document: by its path, else by the add-in's mark, else by its window's name. Failing those, a fingerprint
+/// takes the front window, while Save As finds nothing: it never saves another document under a copy's name.
 /// </summary>
 public sealed record DocumentRef(string? Path, string? Mark, string? WindowName);
 
@@ -32,7 +32,7 @@ public enum RenameResult
 
 /// <summary>
 /// What <see cref="IOfficeScripting.SaveAsAsync"/> did. <paramref name="FoundBy"/> is how the document was found:
-/// <c>path</c>, <c>mark</c>, <c>window</c> or <c>front</c>. <paramref name="Changed"/> is whether its content differed from the fingerprint
+/// <c>path</c>, <c>mark</c> or <c>window</c>, never the front window. <paramref name="Changed"/> is whether its content differed from the fingerprint
 /// the caller gave, as the save began; false when the caller gave none.
 /// </summary>
 public sealed record SaveAsResult(string FoundBy, bool Changed);
@@ -73,7 +73,8 @@ public interface IOfficeScripting
 
     /// <summary>
     /// A summary of the document's content, to tell whether an edit landed between two moments: the SHA-256, in hex, of
-    /// the text the program's script gives. Null when no document was found.
+    /// the text the program's script gives. The front document's when the one given isn't found, as a wrong guess only
+    /// makes a later Save As say it changed; null when no document is open.
     /// </summary>
     Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default);
 
@@ -94,9 +95,10 @@ public interface IOfficeScripting
     /// <summary>
     /// Saves a document under a new path, kept off Open Recent where the program allows, and says how it found the
     /// document and whether its content differs from <paramref name="fingerprint"/> (a value <see cref="FingerprintAsync"/> gave).
-    /// The new path's extension picks the file format.
+    /// The new path's extension picks the file format. It never takes the front window for the document given (Review
+    /// Focus 2): another document saved under the new path would become that copy.
     /// </summary>
-    /// <exception cref="OfficeScriptException">No document was found, not even a front one.</exception>
+    /// <exception cref="OfficeScriptException">The document wasn't found by anything it was given.</exception>
     Task<SaveAsResult> SaveAsAsync(OfficeProgram p, DocumentRef doc, string newPath, string? fingerprint, CancellationToken ct = default);
 
     /// <summary>

@@ -29,7 +29,8 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
 
     private const string Mark = "hd-mark-1";
 
-    private const string Fingerprint = "fingerprint of the window";
+    /// <summary>The fingerprint of the window as the tests leave it.</summary>
+    private static readonly string Fingerprint = FakeScripting.FingerprintOf("the window as it is");
 
     private readonly FakeWindows _windows = new();
     private readonly PausableClock _clock = new();
@@ -167,7 +168,6 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
         Assert.Equal("wrong-window", refused.Code);
         Assert.Single(Server.Calls, c => c.StartsWith("filed ", StringComparison.Ordinal));
         Assert.Single(Scripting.SavesAs);
-        Assert.Single(Scripting.Fingerprints);
         Assert.Contains("Nothing was filed: Word has another document in front now.", Notifier.All);
         Assert.Empty(Temporary);
 
@@ -212,8 +212,8 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
     public async Task AnEditWhileFilingIsSent()
     {
         // Review Focus 1: a line typed after the add-in read the bytes and before the window was saved as the copy.
-        Scripting.AnswerSavesAs(new SaveAsResult("mark", Changed: true));
-        Scripting.WindowText = "the bytes, and a line typed while filing";
+        Scripting.WindowText = "the bytes";
+        Scripting.BeforeSaveAs = () => Scripting.WindowText = "the bytes, and a line typed while filing";
         var cycle = Cycle();
         var filing = Filing(cycle);
 
@@ -233,8 +233,8 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
     {
         // As above, but the program answered slowly, so the cycle saw the write settle, and took it for the starting
         // point, before the answer said the window had changed.
-        Scripting.AnswerSavesAs(new SaveAsResult("mark", Changed: true));
-        Scripting.WindowText = "the bytes, and a line typed while filing";
+        Scripting.WindowText = "the bytes";
+        Scripting.BeforeSaveAs = () => Scripting.WindowText = "the bytes, and a line typed while filing";
         Scripting.AfterSaveAsWrite = path => Wait.Until(() => !Store.HasUnconfirmedChanges(path), "the write taken as the starting point");
         var cycle = Cycle();
         var filing = Filing(cycle);
@@ -242,6 +242,27 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
         await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("the bytes"));
 
         await Wait.Until(() => Server.Doc(100).Content == "the bytes, and a line typed while filing", "the copy sent as a save");
+        Assert.Equal("1.1", Server.Doc(100).Version);
+        await RenamedTo(cycle, CopyPath("Memo #100 v1.1.docx"));
+        await Wait.Until(() => Scripting.DocIds.Count == 1, "the rename's last step");
+    }
+
+    [Fact]
+    public async Task AnEditDuringTheMarkWaitIsSent()
+    {
+        // Review Focus 1: the fingerprint is of the window as the bytes arrive, before the helper waits for the mark, so a
+        // line typed during that wait is sent as a save too, not taken for the copy's starting point and lost at close.
+        Scripting.WindowText = "the bytes";
+        Scripting.MarksShown = false;
+        Scripting.AnswerMarks(false, true);
+        Scripting.OnMarkLook = () => Scripting.WindowText = "the bytes, and a line typed while the mark was looked for";
+        var cycle = Cycle();
+        var filing = Filing(cycle);
+
+        await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("the bytes"));
+
+        Assert.Equal(FakeScripting.FingerprintOf("the bytes"), Scripting.SavesAs.Single().Fingerprint);
+        await Wait.Until(() => Server.Doc(100).Content == "the bytes, and a line typed while the mark was looked for", "the edit sent as a save");
         Assert.Equal("1.1", Server.Doc(100).Version);
         await RenamedTo(cycle, CopyPath("Memo #100 v1.1.docx"));
         await Wait.Until(() => Scripting.DocIds.Count == 1, "the rename's last step");

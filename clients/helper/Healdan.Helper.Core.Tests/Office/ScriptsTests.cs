@@ -206,6 +206,18 @@ public sealed partial class ScriptsTests
     }
 
     [Fact]
+    public void SaveAsNeverTakesTheFrontWindow()
+    {
+        // Review Focus 2: Save As saving the front document under a copy's name would make another document that copy,
+        // and send its content up as the copy's. It finds the document it was given, or answers missing.
+        var savesAs = Scripts().Where(s => s.Key.EndsWith(".SaveAs", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, savesAs.Count);
+        foreach (var (name, text) in savesAs)
+            Assert.True(text.Contains("my locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, false)", StringComparison.Ordinal),
+                $"{name} falls back to the front window");
+    }
+
+    [Fact]
     public void AFileNameOnlyFindsADocumentInTheCopiesFolder()
     {
         // The exact path, in either spelling, is tried over every document before any file name is; and a file name

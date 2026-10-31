@@ -262,14 +262,14 @@ public sealed class MacOfficeScriptingTests
         _runner.Answer = "mark" + Separator + "#hello";
         var same = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(null, "mark-1", "Book1"), "/c/a.XLSX", before);
 
-        _runner.Answer = "front" + Separator + "#hello, and more";
-        var edited = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(null, null, null), "/c/a.xlsx", before);
+        _runner.Answer = "path" + Separator + "#hello, and more";
+        var edited = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef("/c/b.xlsx", null, null), "/c/a.xlsx", before);
 
         _runner.Answer = "window" + Separator + "#anything";
         var noBaseline = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(null, null, "Book1"), "/c/a.xlsx", null);
 
         Assert.Equal(new SaveAsResult("mark", false), same);
-        Assert.Equal(new SaveAsResult("front", true), edited);
+        Assert.Equal(new SaveAsResult("path", true), edited);
         Assert.Equal(new SaveAsResult("window", false), noBaseline); // nothing to compare with
         Assert.Equal(["", "", "", "", "", "mark-1", "Book1", "/c/a.XLSX", "xlsx"], _runner.Calls[0].Args);
     }
@@ -280,6 +280,16 @@ public sealed class MacOfficeScriptingTests
         var fingerprint = await _scripting.FingerprintAsync(OfficeProgram.Excel, new DocumentRef("/c/a.xlsx", null, null));
         _runner.Calls.Clear();
         return fingerprint!;
+    }
+
+    [Fact]
+    public async Task SaveAsNeverAnswersTheFrontWindow()
+    {
+        // Review Focus 2: the scripts never take the front window (ScriptsTests.SaveAsNeverTakesTheFrontWindow); an
+        // answer saying they did is one the helper doesn't know, never a document to take for the copy.
+        _runner.Answer = "front" + Separator + "#another document";
+
+        await Assert.ThrowsAsync<OfficeScriptException>(() => _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(null, "mark-1", "Document1"), "/c/b.docx", null));
     }
 
     [Fact]

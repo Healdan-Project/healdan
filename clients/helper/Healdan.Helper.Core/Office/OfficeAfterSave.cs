@@ -106,9 +106,9 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
         notice?.BeforeFirstSave(p);
         try
         {
-            var result = await scripting.SaveAsAsync(p, new DocumentRef(path, null, null), path, null);
-            if (result.FoundBy != "path")
-                log?.Warn($"{name} saved its {result.FoundBy} window over {file}, not finding the copy's own");
+            // Found by its path, or not at all: Save As never takes the front window, so no other window is saved over the
+            // copy. Not found, it throws, and the copy stays crashed to be looked for again.
+            await scripting.SaveAsAsync(p, new DocumentRef(path, null, null), path, null);
             lock (_missed)
                 _missed.Remove(path);
             return true;

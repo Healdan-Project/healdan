@@ -1,6 +1,7 @@
 -- PowerPoint.SaveAs: saves a presentation under a new path, kept off Open Recent where PowerPoint allows.
--- Looks for the presentation as locate does, ending at the front one. Answers how it was found (path, mark, window or front),
--- character id 31, and the content's fingerprint text from just before the save; or missing.
+-- Looks for the presentation as locate does, but never takes the front one, which would save another presentation as the copy.
+-- Answers how it was found (path, mark or window), character id 31, and the content's fingerprint text from just
+-- before the save; or missing.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,
 -- 5 the same with /private added or taken off, 6 mark, 7 window name; any may be empty),
 -- 8 the new POSIX path, 9 the new extension (no dot)
@@ -18,7 +19,7 @@ on run argv
     set sep to my separator()
     tell application "Microsoft PowerPoint"
         with timeout of 300 seconds
-            set located to my locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, true)
+            set located to my locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, false)
             set d to item 1 of located
             if d is missing value then return "missing"
             set howFound to item 2 of located
