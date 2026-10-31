@@ -3,8 +3,8 @@ title: Editing and Versions
 weight: 4
 ---
 
-While a Healdan document is open in LibreOffice, it's checked out to you, and the window is the helper's local copy
-of it. You edit and save as usual, and the helper sends each save to Healdan.
+While a Healdan document is open in LibreOffice, Word, Excel or PowerPoint, it's checked out to you, and the window is
+the helper's local copy of it. You edit and save as usual, and the helper sends each save to Healdan.
 
 ## The Title Bar
 
@@ -20,8 +20,9 @@ Word, Excel and PowerPoint take the title from the name of the file they have op
   [doc ID footer](../doc-id-footer/) moves on with it.
 - **While there are changes you haven't saved,** the title waits, as renaming would save them too, as a version you
   didn't ask for. It catches up at your next save, going straight to that save's version: from `v2.1` to `v2.3`, say.
-- **In PowerPoint,** the title stays at the version the presentation was opened as. Your saves still reach Healdan,
-  and the helper's menu shows the version Healdan has.
+- **In PowerPoint,** the title stays at the version the presentation was opened as. After the helper renames a
+  presentation that PowerPoint has open, PowerPoint's **⌘S** asks where to save it, so the helper doesn't. Your saves
+  still reach Healdan, and the helper's menu shows the version Healdan has.
 - **The first time** Word or Excel saves into the helper's folder, it asks for access to it, and a notice from the
   helper says what to do: click **Select…**, go up one level, select **Copies**, and click **Grant Access**. Each app
   asks once.
@@ -46,8 +47,8 @@ Saving never renames the document in Healdan, whatever the copy's file is called
 
 ## Save as New Version
 
-Choose **Healdan › Save as New Version**, or **Save as New Version** on the Healdan toolbar, to start the document's
-next version: `v2.2` becomes `v3.0`.
+Choose **Healdan › Save as New Version**, or **Save as New Version** on the Healdan toolbar (the Healdan tab, in Word,
+Excel and PowerPoint), to start the document's next version: `v2.2` becomes `v3.0`.
 
 - Unsaved changes are saved first, and that save becomes the new version.
 - With no unsaved changes, the document as it stands becomes the new version.
@@ -58,7 +59,8 @@ next version: `v2.2` becomes `v3.0`.
 ## Save as New Document
 
 Choose **Healdan › Save as New Document…**, or **File › Save As** on a Healdan document, to file what's in the window
-as a new document with its own doc #. The Save as New Document window is the Save to Healdan window (see
+as a new document with its own doc #. In Word, Excel and PowerPoint, press **Save as New Document** on the Healdan
+tab: their own Save As stays Office's own. The Save as New Document window is the Save to Healdan window (see
 [Saving to Healdan](../saving-to-healdan/)), filled in from the original:
 
 - it starts in the original's folder, with its properties;
@@ -76,8 +78,8 @@ Choose where it goes, change what you need to, and save. Then:
 
 ## Properties
 
-Choose **Healdan › Properties…**, or **Properties** on the Healdan toolbar, to see or change the document's
-properties without leaving LibreOffice. They're the properties of the Ext. Properties tab in the web page.
+Choose **Healdan › Properties…**, or **Properties** on the Healdan toolbar (the Healdan tab, in Word, Excel and
+PowerPoint), to see or change the document's properties without leaving the app. They're the properties of the Ext. Properties tab in the web page.
 
 ![The Properties window for #32: a header with the document's icon, Subscription Agreement – Draft.docx, and #32 · v2.0, then Client / Matter 1003.1 – Series A Investment from the matter, with the client Kestrel Software Ltd under it, Author Helen Ashcombe, Typist Chris Doyle, Class Agreements, Subclass Draft, Comments and Legacy doc #, with Cancel and Save](properties.png)
 

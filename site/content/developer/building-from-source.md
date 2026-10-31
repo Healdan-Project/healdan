@@ -69,6 +69,10 @@ describes how they work.
   `clients/libreoffice/tests`. You need Python 3 and nothing else: the tests use the standard library only.
   `build.sh` packages the extension as `clients/libreoffice/healdan.oxt`, which the tests also build and check.
   The same sources give the same bytes; `SOURCE_DATE_EPOCH`, when set, is the time every entry carries.
+- **The Office add-in** is plain JavaScript, in `clients/office`. Its logic is one file with no Office and no page in it,
+  `clients/office/web/healdan.js`, and its tests are Node's built-in runner, in `clients/office/test`. You need Node 22
+  or later and nothing else: there is no `package.json` and nothing to install. Keep the pattern quoted, as Node 21 and
+  later read `--test`'s arguments as file patterns, and a folder fails.
 
 ```bash
 dotnet test clients/helper/Healdan.Helper.sln                                  # the helper's tests
@@ -76,6 +80,7 @@ dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain"  #
 HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"  # the real Word, Excel and PowerPoint, on a Mac with Office
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=Stack"        # needs HEALDAN_STACK_URL
 python3 -m unittest discover -s clients/libreoffice/tests -v                   # the extension's tests
+node --test 'clients/office/test/*.test.js'                                  # the add-in's tests
 clients/libreoffice/build.sh                                                   # the extension's healdan.oxt
 clients/helper/packaging/mac/package.sh 1.2.3                                  # the macOS app and disk image, on a Mac
 ```

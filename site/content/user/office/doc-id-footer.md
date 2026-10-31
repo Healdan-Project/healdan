@@ -3,12 +3,14 @@ title: The Doc ID Footer
 weight: 5
 ---
 
-A Writer document can carry its doc ID in its footer, `#1234 v2.1`, so that every printout and PDF says which
+A Writer or Word document can carry its doc ID in its footer, `#1234 v2.1`, so that every printout and PDF says which
 document and version it is. It reads the same as the title bar and the search box.
 
 ## Inserting It
 
-In Writer, choose **Healdan › Insert Doc ID**, or **Insert Doc ID** on the Healdan toolbar.
+### In Writer
+
+Choose **Healdan › Insert Doc ID**, or **Insert Doc ID** on the Healdan toolbar.
 
 - **A field goes into the footer** of the page style the cursor is in, at its end. If that page style has no footer,
   one is turned on, and if it has separate left, right or first-page footers, each gets the field.
@@ -18,10 +20,24 @@ In Writer, choose **Healdan › Insert Doc ID**, or **Insert Doc ID** on the Hea
 
 Then save, as for any other change.
 
+### In Word
+
+Press **Insert Doc ID** on the **Healdan** tab.
+
+- **A field goes into the footer** of the document's first section, at the end of its primary footer: the one every
+  page shows, apart from a first page or odd and even pages you've set up to differ. The field shows the
+  document property named next.
+- **The document gets a property,** `Healdan Doc ID`, which the field shows. You can see it in **File › Properties ›
+  Custom**.
+- **Choosing it again** adds no second field. It updates the one the footer has.
+
+Then save, as for any other change. The first press of any Healdan button in Word pairs it with the helper: see
+[Pairing Word, Excel and PowerPoint](../installing-the-helper/#pairing-word-excel-and-powerpoint).
+
 ## What It Shows
 
 - **The doc # and version of your copy,** such as `#1234 v2.1`. After each save that reaches Healdan, the footer
-  moves on with the title bar, without LibreOffice thinking the document has changed.
+  moves on with the title bar, without LibreOffice or Word thinking the document has changed.
 - **On a document that isn't in Healdan yet,** the field is empty, and a notice says so. It fills in when you save to
   Healdan, with the new doc #.
 - **After Save as New Document,** the new document's own number.
@@ -39,9 +55,11 @@ and in whatever app.
 
 ## Removing It
 
-Delete the field from the footer, then delete the `Healdan Doc ID` property in **File › Properties › Custom
-Properties**, and save. Without the property, Healdan stores the file as it is.
+Delete the field from the footer, then delete the `Healdan Doc ID` property, in **File › Properties › Custom
+Properties** in LibreOffice and **File › Properties › Custom** in Word, and save. Without the property, Healdan
+stores the file as it is.
 
-## Only in Writer
+## Only in Writer and Word
 
-Calc, Impress and Draw have no Insert Doc ID. Their documents still show the doc # and version in the title bar.
+Calc, Impress, Draw, Excel and PowerPoint have no Insert Doc ID. Their documents still show the doc # and version in
+the title bar.

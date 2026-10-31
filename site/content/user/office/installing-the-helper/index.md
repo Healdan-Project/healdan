@@ -4,13 +4,14 @@ linkTitle: Installing the Helper
 weight: 1
 ---
 
-The Healdan Helper runs in your Mac's menu bar, and adds Healdan's menu and toolbar to LibreOffice. Install it on
-each Mac you work on.
+The Healdan Helper runs in your Mac's menu bar. It adds Healdan's menu and toolbar to LibreOffice, and does the work
+for the Healdan tab in Word, Excel and PowerPoint. Install it on each Mac you work on.
 
 ## Before You Start
 
-- **LibreOffice 26.2 or later,** in the Applications folder, yours or the Mac's. Install it first: without it, the
-  helper can't open anything, and says so.
+- **LibreOffice 26.2 or later, or Word, Excel or PowerPoint,** in the Applications folder, yours or the Mac's.
+  Install them first: with neither, the helper can't open anything, and says so. Word, Excel and PowerPoint need the
+  Healdan tab as well: see [The Healdan Tab](#the-healdan-tab).
 - **Your Healdan server's address,** such as `https://docs.example.org`: the web page's address, without anything
   after the server's name.
 - **Your Healdan username and password,** the ones you use in the web page.
@@ -105,6 +106,23 @@ mistaken for LibreOffice's own Save and Open.
   the extension is in, the helper reminds you each time it starts.
 - **After you install a new version of the helper,** LibreOffice may ask again, if it brings a newer extension.
 
+## The Healdan Tab
+
+Word, Excel and PowerPoint show a **Healdan** tab on the ribbon, once your administrator has deployed Healdan's add-in
+to you. You don't install anything for it: look for the tab beside the ribbon's others.
+
+- **The buttons** are Save to Healdan, Open from Healdan, Save as New Version, Save as New Document, Properties and,
+  in Word, Insert Doc ID. They are LibreOffice's Healdan commands, with the same names and the same windows. The
+  helper opens those windows, and does the work.
+- **If the tab isn't there,** your administrator may not have deployed the add-in to you yet: Microsoft can take hours
+  to deliver it. You need to be signed in to Office with your organisation's Microsoft 365 account. See
+  [The Healdan Tab Is Missing](../when-things-go-wrong/#the-healdan-tab-is-missing).
+- **A Healdan window** opens over the document when a button has something to tell you, such as that the app isn't
+  paired yet or that the helper isn't running. Close it when you've read it: Office lets an add-in show one window at
+  a time, so close it before you press another Healdan button.
+- **The app's own commands** (Open, Save, Save As) are never taken over. See
+  [In Word, Excel and PowerPoint](../#in-word-excel-and-powerpoint).
+
 ## Setting Up Microsoft Office
 
 Word, Excel and PowerPoint reach Healdan Helper on your Mac through a secure connection, which they use only once your
@@ -137,23 +155,24 @@ other things macOS asks for later. You do it once, however many of the three app
   Until then the old one keeps working; once it has run out, Word, Excel and PowerPoint can't reach the helper until
   you set up again.
 - **Once Set Up is done,** Word, Excel and PowerPoint can reach the helper straight away, without restarting it,
-  whether you're signed in or not. Signed out, the Healdan pane says so. Without a trusted certificate they can't reach
-  it, and the pane says that instead.
+  whether you're signed in or not. Signed out, the Healdan window says so. Without a trusted certificate they can't
+  reach it, and the window says that instead.
 
 ## Pairing Word, Excel and PowerPoint
 
 The first time you press a Healdan button in Word, Excel or PowerPoint, the app pairs with the helper, so that only
 your own add-in can use it.
 
-1. The Healdan pane opens in the app and asks for a code, and the helper shows a window: "Word wants to connect to
-   Healdan Helper", with a six-digit code in large digits.
-2. Type the code in the Healdan pane. The space in the middle doesn't matter.
-3. The helper's window closes, and the app is paired.
+1. A Healdan window opens in the app and says it isn't paired yet, and the helper shows a window of its own: "Word
+   wants to connect to Healdan Helper", with a six-digit code in large digits.
+2. Type the code in the field in the Healdan window, and choose **Pair**. The space in the middle doesn't matter.
+3. The helper's window closes, and the app is paired. The Healdan window says to close it and press the button
+   again.
 
 - **Each app pairs once,** and stays paired when you quit it or restart your Mac. Word, Excel and PowerPoint keep
   their own pairing, so each asks the first time you use Healdan in it.
-- **The code expires after two minutes,** and three wrong tries cancel it. Press the Healdan button again for a new
-  code. Only one code is shown at a time: a new one replaces the window. After nine wrong codes in a row, pairing
+- **The code expires after two minutes,** and three wrong tries cancel it. Choose **Pair** again for a new code, or
+  press the Healdan button again. Only one code is shown at a time: a new one replaces the window. After nine wrong codes in a row, pairing
   pauses for ten minutes.
 - **If you didn't press a Healdan button,** choose **Cancel**. The code shows only on your screen, so whoever asked
   for it can't use it.
@@ -175,7 +194,7 @@ Each of these comes once.
 | After your first sign-in | macOS may say that Healdan Helper was added to your login items | Nothing: it lets the helper start when you sign in |
 | After your first sign-in | LibreOffice: install the extension Healdan? | **OK**, then restart LibreOffice |
 | After your first sign-in, with Word, Excel or PowerPoint installed | The helper's Set Up Microsoft Office window, and when you choose Set Up, macOS asking for your password to change your certificate trust settings | **Set Up**, then your password: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
-| The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan pane: see [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint) |
+| The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan window: see [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint) |
 | The first time the helper saves in each of Word, Excel and PowerPoint | macOS: allow Healdan Helper to control the app? | **Allow** |
 | The first time each of them saves into the helper's `Copies` folder | The app: grant access to the folder | **Select…**, up one level, `Copies`, **Grant Access** |
 | The first Open in App from each browser | The browser: allow this page to open Healdan Helper? | **Allow**. Ticking the box to remember it saves asking again |

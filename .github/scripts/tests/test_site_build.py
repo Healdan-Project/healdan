@@ -388,7 +388,7 @@ class SiteBuild(unittest.TestCase):
 
     # M3
 
-    OFFICE_PAGES = {"": "Working in LibreOffice", "installing-the-helper/": "Installing the Healdan Helper",
+    OFFICE_PAGES = {"": "Working in Office Apps", "installing-the-helper/": "Installing the Healdan Helper",
                     "saving-to-healdan/": "Saving to Healdan", "opening-documents/": "Opening Documents",
                     "editing-and-versions/": "Editing and Versions", "doc-id-footer/": "The Doc ID Footer",
                     "when-things-go-wrong/": "When Things Go Wrong"}

@@ -10,6 +10,7 @@ using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Tests.Cycle;
 using Healdan.Helper.Core.Tests.Ui;
+using Healdan.Helper.Core.Ui;
 
 namespace Healdan.Helper.Core.Tests.Addin;
 
@@ -30,10 +31,14 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         "Access-Control-Allow-Private-Network", "Access-Control-Max-Age",
     ];
 
+    /// <summary>A hold time for the tests of slow routes: long enough for a quick route to answer within it on a slow runner.</summary>
+    private static readonly TimeSpan Hold = TimeSpan.FromMilliseconds(300);
+
     private readonly FakeWindows _windows = new();
     private readonly List<AddinServer> _servers = [];
     private readonly List<IDisposable> _held = [];
     private volatile bool _signedIn = true;
+    private volatile AddinDocuments? _documents; // the session's, which a sign-out and sign-in replace
     private string _thumbprint = "";
     private HttpClient? _http;
 
@@ -70,23 +75,23 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
 
     /// <summary>
     /// The server as the helper starts it, signed in to <see cref="Origin"/>, on <paramref name="ports"/> (a free one by
-    /// default); <paramref name="accept"/> stands in for the listener's accept.
+    /// default); <paramref name="accept"/> stands in for the listener's accept. Its routes answer <c>202</c> after
+    /// <paramref name="hold"/>, 20 s by default.
     /// </summary>
-    private AddinServer Start(IReadOnlyList<int>? ports = null, Func<TcpListener, CancellationToken, ValueTask<TcpClient>>? accept = null)
+    private AddinServer Start(IReadOnlyList<int>? ports = null, Func<TcpListener, CancellationToken, ValueTask<TcpClient>>? accept = null,
+        TimeSpan? hold = null)
     {
         var certificate = new AddinCertificate(Paths, TimeProvider.System);
         certificate.LoadOrCreate().Dispose();
         var served = certificate.ForServer() ?? throw new InvalidOperationException("no certificate to serve");
         _thumbprint = served.Thumbprint;
-        var cycle = Cycle();
         var log = new HelperLog(Paths.Log);
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office);
-        var documents = new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
-            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths));
-        var handler = new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => documents, apps, log);
+        _documents = Documents();
+        var handler = new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => _documents, apps, log);
         var server = accept is null
-            ? new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()])
-            : new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()])
+            ? new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()], hold)
+            : new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()], hold)
             {
                 AcceptClient = accept,
                 DescriptorPause = TimeSpan.FromMilliseconds(50),
@@ -207,12 +212,19 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
 
     private AddinHandler Handler()
     {
+        var documents = Documents();
+        return new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => documents,
+            TestApps.Of(LibreOffice, microsoftOffice: Office), new HelperLog(Paths.Log));
+    }
+
+    /// <summary>A session's document routes, as the helper makes them at each sign-in: a new cycle, filing and windows.</summary>
+    private AddinDocuments Documents()
+    {
         var cycle = Cycle();
         var log = new HelperLog(Paths.Log);
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office);
-        var documents = new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
+        return new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
             new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths));
-        return new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => documents, apps, log);
     }
 
     private System.Security.Cryptography.X509Certificates.X509Certificate2 NewCertificate()
@@ -387,7 +399,7 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         Scripting.Front = _ => new FrontDocument(null, "", "Document1");
         _signedIn = false;
 
-        foreach (var route in new[] { "open-dialog", "save-new", "file", "new-version", "properties", "state" })
+        foreach (var route in new[] { "open-dialog", "save-new", "file", "new-version", "properties", "state", "result" })
             IsError(HttpStatusCode.Conflict, "signed-out", await Post(server, route, new JsonObject { ["app"] = "Word", ["url"] = "" }, key));
         var ping = await Post(server, "ping", key: key);
         Assert.Equal((HttpStatusCode.OK, """{"ok":true,"signedIn":false}"""), (ping.Status, ping.Body!.ToJsonString()));
@@ -493,5 +505,132 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         Assert.Equal("""{"error":"bad-request"}""", answer);
         Assert.DoesNotContain(" ERROR ", Log);
         Assert.Empty(_windows.PairingCodes);
+    }
+
+    [Fact]
+    public async Task ResultNeedsTheKeyAndTheProtocol()
+    {
+        var server = Start(hold: Hold);
+        var key = await PairAsync(server);
+        var user = new TaskCompletionSource();
+        _windows.Answering = () => user.Task;
+        var id = (string)(await Post(server, "open-dialog", new JsonObject { ["app"] = "Word" }, key)).Body!["pending"]!;
+        var asking = new JsonObject { ["id"] = id };
+
+        // Nothing about a pending id gets past the checks: no key, a key the helper never gave, or no protocol.
+        IsError(HttpStatusCode.Forbidden, "not-paired", await Post(server, "result", asking));
+        IsError(HttpStatusCode.Forbidden, "not-paired", await Post(server, "result", asking, key: "a-key-nobody-was-given"));
+        IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "result", asking, key, protocol: null));
+        IsError(HttpStatusCode.UpgradeRequired, "update-healdan-helper", await Post(server, "result", asking, key, protocol: "2"));
+        IsError(HttpStatusCode.MethodNotAllowed, "method-not-allowed", await Send(Request(server, HttpMethod.Get, "result", key: key)));
+        IsError(HttpStatusCode.Forbidden, "bad-origin", await Post(server, "result", asking, key, origin: "https://evil.example"));
+
+        // Another pairing's key, Excel's here, is no-result, and doesn't use the outcome up.
+        var excel = await PairAsync(server, "Excel");
+        IsError(HttpStatusCode.NotFound, "no-result", await Post(server, "result", asking, excel));
+
+        // A body without an id is a bad request; an id the helper never gave is no-result.
+        IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "result", new JsonObject(), key));
+        IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "result", new JsonObject { ["id"] = 7 }, key));
+        var surrogate = """{"id":"\ud800"}"""u8.ToArray(); // an escaped lone surrogate, which no text holds
+        var (statusLine, _) = await Raw(server,
+            $"POST /v1/result HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+            + $"X-Healdan-Key: {key}\r\nContent-Type: application/json\r\nContent-Length: {surrogate.Length}\r\n\r\n", surrogate);
+        Assert.Equal("HTTP/1.1 400 Bad Request", statusLine);
+        IsError(HttpStatusCode.NotFound, "no-result", await Post(server, "result", new JsonObject { ["id"] = "nobody's" }, key));
+
+        // None of that touched it: Word's key collects it.
+        _windows.Answer = WindowAnswers.Opened();
+        user.SetResult();
+        var opened = await Post(server, "result", asking, key);
+        Assert.Equal((HttpStatusCode.OK, """{"action":"opened"}"""), (opened.Status, opened.Body!.ToJsonString()));
+    }
+
+    [Fact]
+    public async Task ASlowSaveNewIsCollectedThroughResult()
+    {
+        var server = Start(hold: Hold);
+        var key = await PairAsync(server);
+        Scripting.Front = _ => new FrontDocument(null, "", "Document1");
+        Scripting.MarksShown = true;
+        _windows.Answer = WindowAnswers.Save(9, "Memo", "docx", new JsonObject { ["Client"] = "1" }, WindowAnswers.TempPath(Paths, "docx"));
+        var user = new TaskCompletionSource();
+        _windows.Answering = () => user.Task;
+
+        // The Save window is still up after the hold time: the request answers 202, and the window stays.
+        var started = await Post(server, "save-new", new JsonObject { ["app"] = "Word", ["url"] = "", ["asNew"] = false }, key);
+
+        Assert.Equal(HttpStatusCode.Accepted, started.Status);
+        var id = (string)started.Body!["pending"]!;
+        Assert.Matches("^[A-Za-z0-9_-]{22}$", id);
+        Assert.True(HasCors(started.Response));
+        Assert.Single(_windows.Asked);
+
+        var again = await Post(server, "result", new JsonObject { ["id"] = id }, key);
+        Assert.Equal((HttpStatusCode.Accepted, $$"""{"pending":"{{id}}"}"""), (again.Status, again.Body!.ToJsonString()));
+
+        // The user saves: the next result answers what save-new would have.
+        user.SetResult();
+        var saved = await Post(server, "result", new JsonObject { ["id"] = id }, key);
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+        Assert.Equal(["action", "folderId", "name", "format", "properties", "ticket"], saved.Body!.AsObject().Select(p => p.Key));
+        IsError(HttpStatusCode.NotFound, "no-result", await Post(server, "result", new JsonObject { ["id"] = id }, key));
+
+        // The ticket it collected files the document, as one answered at once does.
+        var file = await Call(server, "file", new JsonObject
+        {
+            ["ticket"] = (string)saved.Body!["ticket"]!,
+            ["mark"] = "hd-mark-1",
+            ["bytes"] = Convert.ToBase64String(Encoding.UTF8.GetBytes("the window's bytes")),
+        }, key);
+        Assert.Equal(HttpStatusCode.OK, file.Status);
+        Assert.Equal("#100 v1.0", (string?)file.Body!["docRef"]);
+        Assert.Equal("the window's bytes", Server.Doc(100).Content);
+
+        // The log says save-new was pending, and never its id.
+        Assert.Contains("/v1/save-new", Log);
+        Assert.DoesNotContain(id, Log);
+    }
+
+    [Fact]
+    public async Task APendingSaveKeepsItsCycleThroughASignOut()
+    {
+        var server = Start(hold: Hold);
+        var key = await PairAsync(server);
+        Scripting.Front = _ => new FrontDocument(null, "", "Document1");
+        _windows.Answer = WindowAnswers.Save(9, "Memo", "docx", new JsonObject { ["Client"] = "1" }, WindowAnswers.TempPath(Paths, "docx"));
+        var user = new TaskCompletionSource();
+        _windows.Answering = () => user.Task;
+        var started = await Post(server, "save-new", new JsonObject { ["app"] = "Word", ["url"] = "", ["asNew"] = false }, key);
+        var asking = new JsonObject { ["id"] = (string)started.Body!["pending"]! };
+
+        // The helper signs out while the Save window is up: result is refused like any document route, and the outcome waits.
+        (_signedIn, _documents) = (false, null);
+        IsError(HttpStatusCode.Conflict, "signed-out", await Post(server, "result", asking, key));
+
+        // It signs in again, with a new cycle, and then the user saves.
+        (_documents, _signedIn) = (Documents(), true);
+        user.SetResult();
+        var saved = await Post(server, "result", asking, key);
+        Assert.Equal(HttpStatusCode.OK, saved.Status);
+
+        // The ticket is the old session's, which the new one doesn't know: nothing is filed across a sign-out.
+        IsError(HttpStatusCode.Conflict, "no-ticket", await Call(server, "file", new JsonObject
+        {
+            ["ticket"] = (string)saved.Body!["ticket"]!,
+            ["mark"] = null,
+            ["bytes"] = "AAAA",
+        }, key));
+        Assert.DoesNotContain(Server.Calls, c => c.StartsWith("filed ", StringComparison.Ordinal));
+    }
+
+    /// <summary>A keyed request as the add-in's <c>call</c> makes it: a <c>202</c> is followed through <c>result</c> to the outcome.</summary>
+    private async Task<(HttpStatusCode Status, JsonNode? Body, HttpResponseMessage Response)> Call(AddinServer server, string route,
+        JsonObject body, string key)
+    {
+        var answer = await Post(server, route, body, key);
+        while (answer.Status == HttpStatusCode.Accepted)
+            answer = await Post(server, "result", new JsonObject { ["id"] = (string?)answer.Body!["pending"] }, key);
+        return answer;
     }
 }

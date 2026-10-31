@@ -3,9 +3,10 @@ title: Office Integration
 weight: 5
 ---
 
-People can save to and open from Healdan inside LibreOffice, through the **Healdan Helper**: a small app on each
-person's Mac, with an extension it adds to LibreOffice. This page is for whoever runs the server. The User Guide's
-[Working in LibreOffice](../../user/office/) is for the people using it.
+People can save to and open from Healdan inside LibreOffice, Word, Excel and PowerPoint, through the **Healdan
+Helper**: a small app on each person's Mac, with an extension it adds to LibreOffice and, for the Microsoft apps, an
+add-in you deploy once from Microsoft 365 (see [Microsoft Office](#microsoft-office)). This page is for whoever runs the
+server. The User Guide's [Working in Office Apps](../../user/office/) is for the people using it.
 
 ## What the Server Needs
 
@@ -22,7 +23,8 @@ person's Mac, with an extension it adds to LibreOffice. This page is for whoever
 
 ## What People Need
 
-- A Mac with Apple silicon and macOS 26 or later, with LibreOffice 26.2 or later installed first.
+- A Mac with Apple silicon and macOS 26 or later, with LibreOffice 26.2 or later, Word, Excel or PowerPoint, or
+  several of them, installed first.
 - The helper's disk image, `Healdan-Helper-<version>.dmg`. Healdan's releases are on
   [GitHub](https://github.com/Healdan-Project/healdan/releases), each under a `helper-v<version>` tag, signed and
   notarised. Tell people where to get it, and which version.
@@ -108,3 +110,51 @@ Office loads them before anyone has signed in to anything.
 - **Uploads and upgrades.** The manifest's add-in ID never changes, and its version changes only when the manifest
   itself does, which is what makes Microsoft 365 take a new one. The pages change with Healdan: an upgrade updates
   them for everyone, and needs no new upload unless the manifest changed too.
+- **No sign-in in front of the pages.** Office on each Mac loads `/api/addin/` before anyone has signed in to
+  anything. If a reverse proxy or a firewall asks for a login before Healdan, let that path through. The pages carry a
+  Content-Security-Policy that lets them run scripts from your server and from Microsoft's Office.js, and connect only
+  to your server, Microsoft's services and the helper on the same Mac: a policy of the proxy's own must not narrow it.
+- **Nothing private is in the pages' addresses.** A message window the add-in opens is `taskpane.html` with only the
+  message's code and the app in its address, so your access log shows that, and not what Office said about a failure or
+  the name of a file.
+- **The steps for deploying the manifest** from the Microsoft 365 admin centre are under
+  [Deploying the Add-in](#deploying-the-add-in).
+
+### Deploying the Add-in
+
+You deploy the add-in once, from the Microsoft 365 admin centre, and Microsoft puts a **Healdan** tab in Word, Excel
+and PowerPoint for the people you choose. You need to be a Microsoft 365 administrator who can deploy apps.
+
+1. **Download the manifest.** Open `https://<server>/api/addin/manifest.xml` in a browser, with your server's address
+   for `<server>`, and save the file it shows. Open it in a text editor to check that your server's address is in its
+   links. If the address is wrong, or the page answers `no-public-address`, see the bullets above.
+2. **Sign in to the admin centre** at [admin.microsoft.com](https://admin.microsoft.com), and go to **Settings**,
+   then **Integrated apps**.
+3. **Choose Upload custom apps.** For the app type, choose **Office Add-in**, and upload the manifest file you
+   downloaded.
+4. **Choose who gets it:** everyone, specific users or groups, or just you. To try it first, give it to yourself or to
+   one group, and widen it later.
+5. **Accept the permissions it lists,** if the admin centre shows them (the add-in reads and changes the document it's
+   in, which is what saving and the doc ID footer need), and **finish** the deployment.
+
+- **It can take hours to appear.** Microsoft delivers the add-in to each person's apps in its own time; in Healdan's
+  own trial, the tab appeared in Word, Excel and PowerPoint about 35 minutes after the upload, and stayed through
+  restarts. People need to be signed in to Office with the Microsoft 365 account of your organisation.
+- **A stand-in icon** may show for the add-in in the admin centre's list, as Microsoft's servers can't fetch icons
+  from your server. Nothing is wrong.
+- **Each Mac still needs its own setup,** which the User Guide's
+  [Installing the Healdan Helper](../../user/office/installing-the-helper/) takes people through: the helper, with
+  Set Up Microsoft Office done once (it makes a certificate for the add-in's connection and has the Mac trust it), then
+  the first press of a Healdan button in each app, which pairs it with the helper by a code.
+- **A new manifest needs Update add-in.** When an upgrade brings a new manifest, its `<Version>` is higher. Download
+  it again from the same address, go to **Settings › Integrated apps**, select Healdan, and choose **Update add-in**
+  to upload the new file. The pages themselves come from your server and change when it does.
+
+### What Each Mac Needs for the Add-in
+
+- **Healdan Helper,** signed in to this server, with a version that has Microsoft Office support, and Set Up Microsoft
+  Office done. The add-in calls the helper at `https://127.0.0.1:47615` on the same Mac, or on `47616`, `47617` or
+  `47618` if another person's helper on that Mac already has the first. Nothing leaves the Mac, so there's no firewall
+  rule to make, and the helper answers only pages from your own server, once paired.
+- **Word, Excel or PowerPoint for Mac** from Microsoft 365, a current version: the add-in was tried with 16.114.
+  Word for the web isn't supported: the buttons there say so. See [Known Limitations](../known-limitations/).

@@ -24,8 +24,10 @@ namespace Healdan.Helper.Core.Addin;
 /// (<see cref="Pairing.AppFor"/>), but for <c>hello</c> and pairing itself; and the helper is signed in, but for
 /// <c>ping</c>, which says whether it is. Review Focus 5: another user of the Mac has no key, and a web page has neither
 /// the origin nor the key.</para>
-/// <para>It does transport and those checks; the routes are <see cref="AddinHandler"/>'s. Its log names routes and
-/// refusals, never a header's value, a key, a code or a body.</para>
+/// <para>It does transport and those checks; the routes are <see cref="AddinHandler"/>'s. Every request is short
+/// (<see cref="PendingResults"/>): a keyed route still running after the hold time answers <c>202 {"pending": id}</c>, and
+/// <c>result</c>, a keyed route like the others, answers its outcome later. Its log names routes and refusals, never a
+/// header's value, a key, a code, a pending id or a body.</para>
 /// <para>It runs for the helper's lifetime, signed in or not, so the add-in's pane can say which (spec §6.3). Nothing from
 /// outside stops it: a connection that fails before it's taken, or the process running out of file descriptors for a
 /// moment, is logged once and the port goes on listening. When Set Up renews the certificate, the running port serves the
@@ -37,8 +39,12 @@ namespace Healdan.Helper.Core.Addin;
 /// The helper's certificate, with its key (<see cref="AddinCertificate.ForServer"/>), which <see cref="Dispose"/> disposes.
 /// </param>
 /// <param name="ports">The ports to try, in order: <see cref="AddinPorts.All"/> by default.</param>
+/// <param name="hold">
+/// How long a keyed route runs, and <c>result</c> waits, before answering <c>202</c>: <see cref="PendingResults.DefaultHold"/>
+/// by default; tests pass milliseconds.
+/// </param>
 public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bool> signedIn, X509Certificate2 certificate, HelperLog log,
-    IReadOnlyList<int>? ports = null) : IDisposable
+    IReadOnlyList<int>? ports = null, TimeSpan? hold = null) : IDisposable
 {
     /// <summary>The largest body taken: Save to Healdan's document, in base64 (plan: the add-in's port).</summary>
     public const long MaxBodyBytes = 150L * 1024 * 1024;
@@ -49,7 +55,7 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
     /// <summary>The request line and headers together.</summary>
     private const int MaxHeadBytes = 16 * 1024;
 
-    /// <summary>How long a client has to finish TLS and send its whole request; a route then takes as long as its window.</summary>
+    /// <summary>How long a client has to finish TLS and send its whole request; a route then answers within the hold time.</summary>
     private static readonly TimeSpan ReadTimeout = TimeSpan.FromSeconds(60);
 
     /// <summary>How long the server reads on after answering, so the client gets the answer rather than a reset.</summary>
@@ -66,11 +72,14 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
     private static readonly HashSet<string> PairingRoutes = ["pair/start", "pair/finish"];
 
     /// <summary>The routes that need a paired key. They're the add-in's own, apart from the extension's channel's.</summary>
-    private static readonly HashSet<string> KeyedRoutes = ["ping", "open-dialog", "save-new", "file", "new-version", "properties", "state"];
+    private static readonly HashSet<string> KeyedRoutes = ["ping", "open-dialog", "save-new", "file", "new-version", "properties", "state", "result"];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly object _gate = new();
+
+    /// <summary>The outcomes of keyed routes that ran past the hold time, until <c>result</c> collects them.</summary>
+    private readonly PendingResults _pending = new(hold ?? PendingResults.DefaultHold, TimeProvider.System);
 
     /// <summary>The certificates it served before Set Up renewed them, kept until it's disposed, as a handshake may still be using one.</summary>
     private readonly List<X509Certificate2> _retired = [];
@@ -362,8 +371,49 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
         if (body is null)
             return Answer.Error(400, "bad-request");
 
-        var answer = await handler.HandleAsync(route, app, body);
+        var answer = app is null
+            ? await handler.HandleAsync(route, app, body) // pairing: no key to keep an outcome for, and nothing waits on the user
+            : await KeyedAsync(route, app, request.Key!, body);
         return new Answer(answer.Status, answer.Body);
+    }
+
+    /// <summary>
+    /// A keyed route, which answers <c>202</c> if it's still running after the hold time (<see cref="PendingResults"/>), or
+    /// <c>result</c>, which collects what one of them kept, for the key that started it.
+    /// </summary>
+    private async Task<AddinAnswer> KeyedAsync(string route, string app, string key, JsonObject body)
+    {
+        if (route == "result")
+        {
+            if (IdOf(body) is not { } id)
+                return AddinAnswer.Error(400, "bad-request");
+            var outcome = await _pending.ResultAsync(key, id);
+            if (outcome.Status == 404)
+                log.Warn("The add-in asked for an answer the helper doesn't have (no-result): it was collected, expired, or isn't its key's");
+            return outcome;
+        }
+        var answer = await _pending.RunAsync(route, key, () => handler.HandleAsync(route, app, body));
+        if (answer.Status == 202)
+            log.Info($"/v1/{route} from the add-in is still running: it answered 202, and the add-in collects its answer from /v1/result");
+        else if (answer.Status == 429)
+            log.Warn($"Refused /v1/{route} from the add-in (too-many-pending): {PendingResults.MaxPerKey} answers wait for its key already");
+        return answer;
+    }
+
+    /// <summary>
+    /// <c>result</c>'s <c>id</c>, or null when the body has none that's text. An escaped lone surrogate can't be read as text,
+    /// so it's none, rather than an error that ends the connection unanswered.
+    /// </summary>
+    private static string? IdOf(JsonObject body)
+    {
+        try
+        {
+            return body["id"] is JsonValue value && value.TryGetValue<string>(out var id) && id.Length > 0 ? id : null;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <summary>A refusal before any route ran, logged without the request's values.</summary>
@@ -410,6 +460,7 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
         private static string Reason(int status) => status switch
         {
             200 => "OK",
+            202 => "Accepted",
             204 => "No Content",
             400 => "Bad Request",
             403 => "Forbidden",
@@ -418,6 +469,7 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
             409 => "Conflict",
             413 => "Content Too Large",
             426 => "Upgrade Required",
+            429 => "Too Many Requests",
             _ => "Internal Server Error",
         };
     }

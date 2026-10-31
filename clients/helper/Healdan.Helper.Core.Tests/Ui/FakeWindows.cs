@@ -117,9 +117,13 @@ public sealed class FakeWindows : IWindows
 
     public void BringWaiting() => Interlocked.Increment(ref _brought);
 
-    private Task<JsonObject> Ask(string route, JsonObject request)
+    /// <summary>What the user does before the Open, Save or Properties window answers: by default nothing, so it answers at once.</summary>
+    public Func<Task> Answering { get; set; } = () => Task.CompletedTask;
+
+    private async Task<JsonObject> Ask(string route, JsonObject request)
     {
         Asked.Enqueue((route, request));
-        return Task.FromResult((JsonObject)Answer.DeepClone());
+        await Answering();
+        return (JsonObject)Answer.DeepClone();
     }
 }
