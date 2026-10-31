@@ -505,6 +505,11 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **The extension's tests** cover `healdan_logic.py` (the notices' headlines and details included) with fakes for
   LibreOffice, and build the `.oxt` and check that its files agree: the toolbar, the images and the notice. A real
   LibreOffice isn't part of them.
+- **The add-in's tests** (`clients/office/test/healdan.test.js`, Node's built-in runner) cover
+  `clients/office/web/healdan.js`: finding the helper's port, the calls with the protocol and the key, pairing, each
+  button's flow in Word, Excel and PowerPoint, and the pane's texts. A fake `fetch` plays the helper's port and a
+  fake `office` object the Office.js glue, so neither Office nor a page is part of them. They also fail when the
+  ports differ from the helper's `AddinPorts` or the server's Content-Security-Policy.
 
 The windows' look, focus, notifications and LibreOffice's own screens are checked by hand: each pull request that
 changes them lists its checks for the owner.

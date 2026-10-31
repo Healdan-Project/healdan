@@ -110,7 +110,7 @@ The owner hears about these when this plan is handed over. Task 11 folds them in
 - **Running Maven:** as M3's plan. `mvn -B -ntp -pl healdan-core install -DskipTests`, then `mvn -B -ntp -pl healdan-api test -Dtest=<Class>`.
 - **Running the helper's tests:** `dotnet test clients/helper/Healdan.Helper.sln`; one class with `--filter "FullyQualifiedName~<Class>"`.
 - **By-hand tests on a Mac with Office:** `HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"` (without the variable they skip, apart from `EveryScriptCompiles`, which starts nothing). They open, change and close throwaway documents in a temporary folder; quit Office's apps first, and expect Automation and Grant File Access prompts the first time.
-- **Running the add-in's tests:** `node --test clients/office/test/`.
+- **Running the add-in's tests:** `node --test 'clients/office/test/*.test.js'`, with the pattern quoted: Node 21 and later read `--test`'s arguments as file patterns, so a folder (`node --test clients/office/test/`) fails as a file that isn't a test.
 - **Commits:** one per task, in the repo's style: an imperative subject, a body that says why, and the `Co-Authored-By` trailer.
 - **Docs ship in the task that changes the behaviour** (CLAUDE.md). Screenshots are of the demo firm (CLAUDE.md, "The demo overlay").
 
@@ -838,7 +838,7 @@ The ports are `[47615, 47616, 47617, 47618]`; the key is stored as `healdan.key.
 
 - [ ] **Step 2: Run them to see them fail**
 
-Run: `node --test clients/office/test/`
+Run: `node --test 'clients/office/test/*.test.js'`
 Expected: FAIL.
 
 - [ ] **Step 3: Write `healdan.js`**
@@ -847,9 +847,9 @@ A classic script: `(function (root) { … root.Healdan = api; if (typeof module 
 
 - [ ] **Step 4: CI**
 
-`clients.yml` gains `addin`, named "Office add-in (ubuntu-24.04)": `if: needs.changes.outputs.clients == 'true'`, 10 minutes, checkout, `actions/setup-node@v5` with Node 22, `node --test clients/office/test/`. `Clients` gains it in `needs` and in its pass rule (succeeded, or skipped with `CLIENTS=false`).
+`clients.yml` gains `addin`, named "Office add-in (ubuntu-24.04)": `if: needs.changes.outputs.clients == 'true'`, 10 minutes, checkout, `actions/setup-node@v5` with Node 22, `node --test 'clients/office/test/*.test.js'`. `Clients` gains it in `needs` and in its pass rule (succeeded, or skipped with `CLIENTS=false`).
 
-Run: `node --test clients/office/test/`
+Run: `node --test 'clients/office/test/*.test.js'`
 Expected: PASS.
 
 - [ ] **Step 5: Commit** — "Write the Office add-in's logic, tested under Node"
@@ -900,7 +900,7 @@ Upload the manifest from a local stack's `/api/addin/manifest.xml` (with its add
 
 - [ ] **Step 4: Run the checks, then commit** — "Add the Office add-in's pages, and document deploying it"
 
-Run: `node --test clients/office/test/`, `mvn -B -ntp -pl healdan-api test -Dtest=AddinResourceTest`, and the docs site's checks (`python3 -m unittest discover -s .github/scripts/tests`, `hugo --source site --panicOnWarning`, `python3 .github/scripts/check-site-sources.py`, `python3 .github/scripts/check-site-links.py`).
+Run: `node --test 'clients/office/test/*.test.js'`, `mvn -B -ntp -pl healdan-api test -Dtest=AddinResourceTest`, and the docs site's checks (`python3 -m unittest discover -s .github/scripts/tests`, `hugo --source site --panicOnWarning`, `python3 .github/scripts/check-site-sources.py`, `python3 .github/scripts/check-site-links.py`).
 Expected: PASS.
 
 ---
@@ -908,7 +908,7 @@ Expected: PASS.
 ### Task 11: Records
 
 **Files:**
-- Modify: `CLAUDE.md` (:37–52 the commands: `node --test clients/office/test/`, `--filter "Category=MacOffice"`; :69–75 `code-changed.sh` and `Clients`; :164–172 the clients: the add-in, `IOfficeScripting`, the add-in's port and its certificate, M3.5's spec)
+- Modify: `CLAUDE.md` (:37–52 the commands: `node --test 'clients/office/test/*.test.js'`, `--filter "Category=MacOffice"`; :69–75 `code-changed.sh` and `Clients`; :164–172 the clients: the add-in, `IOfficeScripting`, the add-in's port and its certificate, M3.5's spec)
 - Modify: `docs/reference/logicaldoc-ce-capability-map.md` (§5.1: Microsoft Office through the add-in and the helper)
 - Modify: `docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md` (this plan's corrections, marked "changed in the build"; the status line), `docs/ROADMAP.md` (M3.5's row and section: built, acceptance next)
 - Modify: `site/content/developer/continuous-integration.md`, `tests.md` (the add-in job; `code-changed.sh`'s `clients/office/`; the `MacOffice` tests)
