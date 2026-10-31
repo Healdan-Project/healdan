@@ -8,8 +8,16 @@ namespace Healdan.Helper.Core.Office;
 /// (M3.5 spec §5.2). Each operation has a script per program in <c>Office/Scripts</c>, embedded as fixed text. Nothing is
 /// ever built into a script: every path, name and mark goes in as an argument and is read as <c>argv</c>, so a document
 /// named <c>a"; do shell script "…</c> is only a name.
+/// <para>A document is found by its exact path first, in either spelling the app may report (<c>/tmp</c> or
+/// <c>/private/tmp</c>, spec §5.2), and only then by its file name, and only among the documents in the Copies folder:
+/// a copy set aside keeps its name beside <c>Copies</c>, so two documents of one name can be open at once.</para>
 /// </summary>
-public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
+/// <param name="runner">Runs <c>osascript</c> and <c>open</c>.</param>
+/// <param name="copiesFolder">
+/// The folder the helper keeps its copies in (<see cref="HelperPaths.Copies"/>). Without it a document is found by its
+/// exact path only.
+/// </param>
+public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder = null) : IOfficeScripting
 {
     private const string ResourcePrefix = "Healdan.Helper.Core.Office.Scripts.";
 
@@ -26,6 +34,11 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
     private static readonly TimeSpan LongTimeout = TimeSpan.FromSeconds(330);
 
     private static readonly Dictionary<string, string> Texts = [];
+
+    /// <summary>The Copies folder and its other spelling, without a closing slash; both empty when there is none.</summary>
+    private readonly (string Folder, string Twin) _copies = copiesFolder is { Length: > 0 }
+        ? (copiesFolder.TrimEnd('/'), TwinOf(copiesFolder.TrimEnd('/')))
+        : ("", "");
 
     public async Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
     {
@@ -51,10 +64,10 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
     }
 
     public async Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default) =>
-        YesOrNo(p, "IsOpen", await RunAsync(p, "IsOpen", ByPath(path), ct));
+        YesOrNo(p, "IsOpen", await RunAsync(p, "IsOpen", Finder(path), ct));
 
     public async Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) =>
-        await RunAsync(p, "HasUnsavedChanges", ByPath(path), ct) switch
+        await RunAsync(p, "HasUnsavedChanges", Finder(path), ct) switch
         {
             "missing" => null,
             "unsaved" => true,
@@ -64,16 +77,16 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
 
     public async Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default)
     {
-        var answer = await RunAsync(p, "Fingerprint", Finders(doc), ct);
+        var answer = await RunAsync(p, "Fingerprint", Finder(doc.Path, doc.Mark, doc.WindowName), ct);
         return answer.Length == 0 ? null : Hash(answer);
     }
 
     public async Task<bool> HasMarkAsync(OfficeProgram p, string mark, CancellationToken ct = default) =>
-        mark.Length > 0 && YesOrNo(p, "HasMark", await RunAsync(p, "HasMark", [mark], ct));
+        mark.Length > 0 && YesOrNo(p, "HasMark", await RunAsync(p, "HasMark", Finder(null, mark, null), ct));
 
     public async Task SaveAsync(OfficeProgram p, string path, CancellationToken ct = default)
     {
-        if (await RunAsync(p, "Save", ByPath(path), ct) != "saved")
+        if (await RunAsync(p, "Save", Finder(path), ct) != "saved")
             throw new OfficeScriptException($"{OfficePrograms.CheckOutName(p)} doesn't have the document open, so it wasn't saved.");
     }
 
@@ -83,7 +96,7 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
             throw new NotSupportedException($"{OfficePrograms.CheckOutName(p)} copies keep the name they were opened with.");
         var extension = FormatOf(p, newPath);
         // renamed-but-lost: the file was written but no document carries the new name; the cycle finds the copy by that name.
-        return await RunAsync(p, "Rename", [.. ByPath(path), newPath, Path.GetFileName(newPath), extension], ct) switch
+        return await RunAsync(p, "Rename", [.. Finder(path), newPath, Path.GetFileName(newPath), extension], ct) switch
         {
             "missing" => RenameResult.Missing,
             "unsaved" => RenameResult.Unsaved,
@@ -96,7 +109,7 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
     public async Task<SaveAsResult> SaveAsAsync(OfficeProgram p, DocumentRef doc, string newPath, string? fingerprint, CancellationToken ct = default)
     {
         var extension = FormatOf(p, newPath);
-        var answer = await RunAsync(p, "SaveAs", [.. Finders(doc), newPath, extension], ct);
+        var answer = await RunAsync(p, "SaveAs", [.. Finder(doc.Path, doc.Mark, doc.WindowName), newPath, extension], ct);
         if (answer == "missing")
             throw new OfficeScriptException($"{OfficePrograms.CheckOutName(p)} has no document to save.");
         var split = answer.IndexOf(Separator);
@@ -110,7 +123,7 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
     {
         if (p != OfficeProgram.PowerPoint)
             throw new NotSupportedException($"{OfficePrograms.CheckOutName(p)} documents don't need to be opened again after a save.");
-        switch (await RunAsync(p, "Reopen", ByPath(path), ct))
+        switch (await RunAsync(p, "Reopen", Finder(path), ct))
         {
             case "reopened":
                 return;
@@ -124,7 +137,7 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
     }
 
     public async Task<bool> SetDocIdAsync(string path, string docRef, CancellationToken ct = default) =>
-        await RunAsync(OfficeProgram.Word, "SetDocId", [.. ByPath(path), docRef], ct) switch
+        await RunAsync(OfficeProgram.Word, "SetDocId", [.. Finder(path), docRef], ct) switch
         {
             "ok" => true,
             "no-property" or "missing" => false,
@@ -154,12 +167,36 @@ public sealed class MacOfficeScripting(IOsaRunner runner) : IOfficeScripting
         return runner.RunAsync(script, args, timeout, ct);
     }
 
-    /// <summary>A document found by its path: the path as given, and its file name, which an app that reports another spelling of the path still matches.</summary>
-    private static string[] ByPath(string path) => [path, Path.GetFileName(path)];
+    /// <summary>A document found by its path alone.</summary>
+    private string[] Finder(string path) => Finder(path, null, null);
 
-    /// <summary>The ways to find a document, in the order the scripts try them: path, file name, mark, window name.</summary>
-    private static string[] Finders(DocumentRef doc) =>
-        [doc.Path ?? "", doc.Path is null ? "" : Path.GetFileName(doc.Path), doc.Mark ?? "", doc.WindowName ?? ""];
+    /// <summary>
+    /// The seven values every script that finds a document starts with: the path, its other spelling (<c>/tmp</c> and
+    /// <c>/private/tmp</c>), the file name, the Copies folder, its other spelling, the add-in's mark and the window's
+    /// name. Any may be empty.
+    /// </summary>
+    private string[] Finder(string? path, string? mark, string? windowName)
+    {
+        var own = path ?? "";
+        return [own, TwinOf(own), Path.GetFileName(own), _copies.Folder, _copies.Twin, mark ?? "", windowName ?? ""];
+    }
+
+    /// <summary>
+    /// The other spelling of a path an app may report: <c>/tmp</c>, <c>/var</c> and <c>/etc</c> are links to
+    /// <c>/private/…</c>, and Word reports a document's path as it was opened. Empty for any other path.
+    /// </summary>
+    internal static string TwinOf(string path)
+    {
+        foreach (var root in (ReadOnlySpan<string>)["/tmp", "/var", "/etc"])
+        {
+            if (path == root || path.StartsWith(root + "/", StringComparison.Ordinal))
+                return "/private" + path;
+            var real = "/private" + root;
+            if (path == real || path.StartsWith(real + "/", StringComparison.Ordinal))
+                return path["/private".Length..];
+        }
+        return "";
+    }
 
     /// <summary>The extension a document is saved under, which picks the file format; one the program doesn't save is refused.</summary>
     private static string FormatOf(OfficeProgram p, string newPath)

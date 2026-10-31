@@ -21,11 +21,17 @@ public sealed class MacOfficeTests : IAsyncLifetime
     private const string Marker = "/tmp/healdan-pwned";
 
     private readonly string _folder = Directory.CreateTempSubdirectory("healdan-office-").FullName;
+    private readonly string _copies;
     private readonly OsaRunner _osa = new();
     private readonly MacOfficeScripting _scripting;
     private readonly List<(OfficeProgram Program, string FileName)> _opened = [];
 
-    public MacOfficeTests() => _scripting = new MacOfficeScripting(_osa);
+    public MacOfficeTests()
+    {
+        // The helper's Copies folder, as the scripts are told of it: a file name finds a document only in here.
+        _copies = Directory.CreateDirectory(Path.Combine(_folder, "Copies")).FullName;
+        _scripting = new MacOfficeScripting(_osa, _copies);
+    }
 
     public Task InitializeAsync() => Task.CompletedTask;
 
@@ -65,6 +71,7 @@ public sealed class MacOfficeTests : IAsyncLifetime
             scripts[$"Fixtures.{program}.Close"] = Fixtures.For(program).Close;
             scripts[$"Fixtures.{program}.Recents"] = Fixtures.For(program).Recents;
         }
+        scripts["Fixtures.Word.EditAt"] = Fixtures.WordEditAt;
         scripts["Fixtures.Word.InsertDocId"] = Fixtures.WordInsertDocId;
         scripts["Fixtures.Word.Footer"] = Fixtures.WordFooter;
         scripts["Fixtures.Word.Mark"] = Fixtures.WordMark;
@@ -292,6 +299,60 @@ public sealed class MacOfficeTests : IAsyncLifetime
         }
     }
 
+    [MacOfficeFact]
+    public async Task TwoDocumentsWithTheSameNameInDifferentFolders()
+    {
+        // A copy set aside keeps its name beside Copies, so Word can have two documents of one name open (spec section 5.2).
+        // Each path must find its own document, and a file name must find nothing outside Copies.
+        const OfficeProgram word = OfficeProgram.Word;
+        var aside = Path.Combine(Directory.CreateDirectory(Path.Combine(_folder, "Aside")).FullName, "same.docx");
+        var inCopies = Path.Combine(_copies, "same.docx");
+        var solo = Path.Combine(_folder, "Aside", "solo.docx");
+        var renamed = Path.Combine(_copies, "renamed.docx");
+        _opened.Add((word, "same.docx"));
+        _opened.Add((word, "solo.docx"));
+        _opened.Add((word, "renamed.docx"));
+
+        await NewSavedWordDocument(aside, "The copy set aside.");
+        await NewSavedWordDocument(inCopies, "The copy in Copies.");
+        await NewSavedWordDocument(solo, "Only beside Copies.");
+
+        // Each path finds its own document, whichever was opened last.
+        var asideText = await _scripting.FingerprintAsync(word, new DocumentRef(aside, null, null));
+        var copiesText = await _scripting.FingerprintAsync(word, new DocumentRef(inCopies, null, null));
+        Assert.NotNull(asideText);
+        Assert.NotNull(copiesText);
+        Assert.NotEqual(asideText, copiesText);
+        Assert.True(await _scripting.IsOpenAsync(word, aside));
+        Assert.True(await _scripting.IsOpenAsync(word, inCopies));
+
+        // Changing the one beside Copies leaves the one in Copies saved, and Save, Rename and the doc ID act on the right one.
+        await _osa.RunAsync(Fixtures.WordEditAt, [aside, "Edited beside Copies."], Patient, default);
+        Assert.True(await _scripting.HasUnsavedChangesAsync(word, aside));
+        Assert.False(await _scripting.HasUnsavedChangesAsync(word, inCopies));
+        Assert.Equal(RenameResult.Renamed, await _scripting.RenameIfUnchangedAsync(word, inCopies, renamed));
+        Assert.True(File.Exists(renamed));
+        Assert.True(await _scripting.HasUnsavedChangesAsync(word, aside)); // not saved by the rename
+        Assert.Equal(copiesText, await _scripting.FingerprintAsync(word, new DocumentRef(renamed, null, null))); // the Copies document's content
+        Assert.False(await _scripting.SetDocIdAsync(aside, "#1 v1.1")); // neither has the property, and neither is touched
+        await _scripting.SaveAsync(word, aside);
+        Assert.False(await _scripting.HasUnsavedChangesAsync(word, aside));
+
+        // A file name alone finds a document in Copies, and not one beside it.
+        Assert.True(await _scripting.IsOpenAsync(word, Path.Combine(_folder, "Elsewhere", "renamed.docx")));
+        Assert.False(await _scripting.IsOpenAsync(word, Path.Combine(_folder, "Elsewhere", "solo.docx")));
+        Assert.Null(await _scripting.HasUnsavedChangesAsync(word, Path.Combine(_folder, "Elsewhere", "solo.docx")));
+    }
+
+    private async Task NewSavedWordDocument(string path, string text)
+    {
+        await _osa.RunAsync(Fixtures.Word.New, [text], Patient, default);
+        var front = await _scripting.FrontDocumentAsync(OfficeProgram.Word);
+        Assert.NotNull(front);
+        await _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(front.Path, null, front.WindowName), path, null);
+        Assert.True(File.Exists(path));
+    }
+
     /// <summary>The same file, though an app says <c>/tmp</c> where the system says <c>/private/tmp</c> (spec §5.2).</summary>
     private static bool SamePath(string expected, string? reported) =>
         reported is not null && Strip(expected) == Strip(reported);
@@ -480,6 +541,22 @@ internal sealed record Fixtures(string New, string Edit, string Close, string Re
                 return ""
             end run
             """");
+
+    /// <summary>Changes the text of the document at a path, so it has unsaved changes (arguments: POSIX path, text).</summary>
+    public static string WordEditAt { get; } = """"
+        on run argv
+            set p to item 1 of argv
+            tell application "Microsoft Word"
+                with timeout of 120 seconds
+                    repeat with i from 1 to (count documents)
+                        set xd to document i
+                        if (posix full name of xd) is p then set content of text object of xd to item 2 of argv
+                    end repeat
+                    return "edited"
+                end timeout
+            end tell
+        end run
+        """";
 
     /// <summary>Adds the custom document property <c>Healdan Doc ID</c> and a footer field that shows it (arguments: file name, value).</summary>
     public static string WordInsertDocId { get; } = """"

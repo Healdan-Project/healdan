@@ -99,7 +99,9 @@ Two more jobs package the macOS helper. They run only for a `helper-v*` tag or a
 request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#releasing-the-macos-helper)).
 
 The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan stack and skip here, because
-`HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac.
+`HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac. The ones marked
+`MacOffice` open Word, Excel and PowerPoint, so they run by hand on a Mac with Office, and skip without
+`HEALDAN_MAC_OFFICE=1`; CI has no Office, so they skip there too.
 
 ### The Helper's Stack Test in the Image CI
 

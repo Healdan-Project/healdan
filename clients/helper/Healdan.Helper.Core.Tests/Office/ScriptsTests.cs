@@ -166,12 +166,61 @@ public sealed partial class ScriptsTests
     [Fact]
     public void TheFindingIsTheSameInEveryScriptOfAProgram()
     {
+        // locate and isInFolder are copied into each script that finds a document, and must not drift apart.
         foreach (var program in new[] { "Word", "Excel", "PowerPoint" })
         {
-            var handlers = Scripts().Where(s => s.Key.StartsWith(program + ".", StringComparison.Ordinal) && s.Value.Contains("on locate(", StringComparison.Ordinal))
-                .ToDictionary(s => s.Key, s => Handler(s.Value, "locate"));
-            Assert.True(handlers.Count >= 2);
-            Assert.Single(handlers.Values.Distinct());
+            foreach (var handler in new[] { "locate", "isInFolder" })
+            {
+                var handlers = Scripts().Where(s => s.Key.StartsWith(program + ".", StringComparison.Ordinal) && s.Value.Contains($"on {handler}(", StringComparison.Ordinal))
+                    .ToDictionary(s => s.Key, s => Handler(s.Value, handler));
+                Assert.True(handlers.Count >= 2, $"{program} has too few scripts with {handler}");
+                Assert.Single(handlers.Values.Distinct());
+            }
+        }
+    }
+
+    [Fact]
+    public void EveryScriptThatFindsADocumentIsGivenTheSameFinder()
+    {
+        // Arguments 1 to 5 are the same in every one, so MacOfficeScripting builds them once (spec section 5.2).
+        string[] reads =
+        [
+            "set p to item 1 of argv", "set pTwin to item 2 of argv", "set fname to item 3 of argv",
+            "set copiesFolder to item 4 of argv", "set copiesTwin to item 5 of argv",
+        ];
+        var finding = Scripts().Where(s => s.Value.Contains("my locate(", StringComparison.Ordinal)).ToList();
+        Assert.Equal(22, finding.Count); // all but the three FrontDocuments and Word.Open
+
+        foreach (var (name, text) in finding)
+        {
+            if (name.EndsWith(".HasMark", StringComparison.Ordinal))
+            {
+                Assert.Contains("set wantedMark to item 6 of argv", text);
+                Assert.Contains("my locate(\"\", \"\", \"\", \"\", \"\", wantedMark, \"\", false)", text);
+                continue;
+            }
+            foreach (var read in reads)
+                Assert.True(text.Contains(read, StringComparison.Ordinal), $"{name} doesn't read: {read}");
+            Assert.Matches(@"my locate\(p, pTwin, fname, copiesFolder, copiesTwin, (""""|wantedMark), (""""|windowName), (false|true)\)", text);
+        }
+    }
+
+    [Fact]
+    public void AFileNameOnlyFindsADocumentInTheCopiesFolder()
+    {
+        // The exact path, in either spelling, is tried over every document before any file name is; and a file name
+        // finds only a document whose own folder is Copies. A copy set aside keeps its name beside Copies, so two
+        // documents of one name can be open at once (spec section 5.2).
+        foreach (var (name, text) in Scripts().Where(s => s.Value.Contains("on locate(", StringComparison.Ordinal)))
+        {
+            var locate = Handler(text, "locate");
+            var exact = locate.IndexOf("docPath is p then return", StringComparison.Ordinal);
+            var twin = locate.IndexOf("docPath is pTwin then return", StringComparison.Ordinal);
+            var byName = locate.IndexOf("(name of xd) is fname then", StringComparison.Ordinal);
+            var inCopies = locate.IndexOf("my isInFolder(docPath, copiesFolder) or my isInFolder(docPath, copiesTwin)", StringComparison.Ordinal);
+            Assert.True(exact >= 0 && twin > exact && byName > twin && inCopies > byName, $"{name}: the exact path must come before the file name, which must be checked against Copies");
+            Assert.Single(Regex.Matches(locate, @"is fname")); // the file name is used nowhere else
+            Assert.True(locate.IndexOf("then return {xd, \"path\"}", byName, StringComparison.Ordinal) > inCopies, $"{name}: the file name returns without the Copies check");
         }
     }
 

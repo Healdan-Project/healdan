@@ -45,6 +45,7 @@ mvn -pl healdan-core -DskipTests install                  # healdan-core with it
 mvn -pl healdan-api test -Dtest=FolderResourceTest        # the API's tests, or one class of them
 dotnet test clients/helper/Healdan.Helper.sln             # the desktop helper's tests (.NET 10 SDK; global.json pins it)
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain" # the real macOS keychain, by hand on a Mac
+HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice" # the real Word, Excel and PowerPoint, by hand on a Mac with Office (they open windows)
 python3 -m unittest discover -s clients/libreoffice/tests -v # the LibreOffice extension's tests (standard library only)
 clients/libreoffice/build.sh                              # the LibreOffice extension, packaged as clients/libreoffice/healdan.oxt (reproducible)
 dotnet run --project clients/helper/tools/IconRender      # the extension's toolbar images and icon, from the helper's icons (by hand, on a Mac)

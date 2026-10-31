@@ -63,7 +63,7 @@ public sealed class MacOfficeScriptingTests
         await _scripting.RenameIfUnchangedAsync(OfficeProgram.Word, "/c/Lease #1 v1.0.docm", "/c/Lease #1 v1.1.DOCM");
 
         var call = Assert.Single(_runner.Calls);
-        Assert.Equal(["/c/Lease #1 v1.0.docm", "Lease #1 v1.0.docm", "/c/Lease #1 v1.1.DOCM", "Lease #1 v1.1.DOCM", "docm"], call.Args);
+        Assert.Equal(["/c/Lease #1 v1.0.docm", "", "Lease #1 v1.0.docm", "", "", "", "", "/c/Lease #1 v1.1.DOCM", "Lease #1 v1.1.DOCM", "docm"], call.Args);
     }
 
     [Fact]
@@ -142,8 +142,8 @@ public sealed class MacOfficeScriptingTests
         await _scripting.FingerprintAsync(OfficeProgram.Excel, new DocumentRef("/c/a.xlsx", "mark-1", "Book1"));
         await _scripting.FingerprintAsync(OfficeProgram.Excel, new DocumentRef(null, null, null));
 
-        Assert.Equal(["/c/a.xlsx", "a.xlsx", "mark-1", "Book1"], _runner.Calls[0].Args);
-        Assert.Equal(["", "", "", ""], _runner.Calls[1].Args);
+        Assert.Equal(["/c/a.xlsx", "", "a.xlsx", "", "", "mark-1", "Book1"], _runner.Calls[0].Args);
+        Assert.Equal(["", "", "", "", "", "", ""], _runner.Calls[1].Args);
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public sealed class MacOfficeScriptingTests
         _runner.Answer = answer;
 
         Assert.Equal(expected, await _scripting.SetDocIdAsync("/c/Lease #1 v1.0.docx", "#1 v1.1"));
-        Assert.Equal(["/c/Lease #1 v1.0.docx", "Lease #1 v1.0.docx", "#1 v1.1"], _runner.Calls.Single().Args);
+        Assert.Equal(["/c/Lease #1 v1.0.docx", "", "Lease #1 v1.0.docx", "", "", "", "", "#1 v1.1"], _runner.Calls.Single().Args);
     }
 
     [Fact]
@@ -271,7 +271,7 @@ public sealed class MacOfficeScriptingTests
         Assert.Equal(new SaveAsResult("mark", false), same);
         Assert.Equal(new SaveAsResult("front", true), edited);
         Assert.Equal(new SaveAsResult("window", false), noBaseline); // nothing to compare with
-        Assert.Equal(["", "", "mark-1", "Book1", "/c/a.XLSX", "xlsx"], _runner.Calls[0].Args);
+        Assert.Equal(["", "", "", "", "", "mark-1", "Book1", "/c/a.XLSX", "xlsx"], _runner.Calls[0].Args);
     }
 
     private async Task<string> FingerprintOf(string text)
@@ -308,7 +308,7 @@ public sealed class MacOfficeScriptingTests
 
         _runner.Answer = "reopened";
         await _scripting.ReopenAsync(OfficeProgram.PowerPoint, "/c/Deck #4 v1.0.pptx");
-        Assert.Equal(["/c/Deck #4 v1.0.pptx", "Deck #4 v1.0.pptx"], Assert.Single(_runner.Calls).Args);
+        Assert.Equal(["/c/Deck #4 v1.0.pptx", "", "Deck #4 v1.0.pptx", "", "", "", ""], Assert.Single(_runner.Calls).Args);
     }
 
     [Theory]
@@ -355,6 +355,80 @@ public sealed class MacOfficeScriptingTests
         Assert.Equal(7, _runner.Calls.Count);
         Assert.All(_runner.Calls, c => Assert.Contains($"application \"{app}\"", c.Script));
         Assert.Equal(7, _runner.Calls.Select(c => c.Script).Distinct().Count());
+    }
+
+    [Theory]
+    [InlineData("/tmp/a.docx", "/private/tmp/a.docx")]
+    [InlineData("/private/tmp/a.docx", "/tmp/a.docx")]
+    [InlineData("/var/folders/ab/cd/T/Lease #1 v1.0.docx", "/private/var/folders/ab/cd/T/Lease #1 v1.0.docx")]
+    [InlineData("/private/var/folders/ab/cd/T/Lease #1 v1.0.docx", "/var/folders/ab/cd/T/Lease #1 v1.0.docx")]
+    [InlineData("/etc/a.docx", "/private/etc/a.docx")]
+    [InlineData("/private/etc/a.docx", "/etc/a.docx")]
+    [InlineData("/Users/me/Library/Application Support/Healdan Helper/Copies/a.docx", "")]
+    [InlineData("/Volumes/tmp/a.docx", "")]
+    [InlineData("/tmpfiles/a.docx", "")]
+    [InlineData("/private/other/a.docx", "")]
+    public async Task APathIsPassedInBothSpellings(string path, string twin)
+    {
+        _runner.Answer = "yes";
+
+        await _scripting.IsOpenAsync(OfficeProgram.Word, path);
+        _runner.Answer = "saved";
+        await _scripting.HasUnsavedChangesAsync(OfficeProgram.Word, path);
+
+        Assert.All(_runner.Calls, call =>
+        {
+            Assert.Equal(path, call.Args[0]);
+            Assert.Equal(twin, call.Args[1]);
+            Assert.DoesNotContain(path, call.Script); // only as arguments
+        });
+        Assert.Equal(2, _runner.Calls.Count);
+    }
+
+    [Theory]
+    [InlineData("/Users/me/Library/Application Support/Healdan Helper/Copies", "/Users/me/Library/Application Support/Healdan Helper/Copies", "")]
+    [InlineData("/Users/me/Healdan Helper/Copies/", "/Users/me/Healdan Helper/Copies", "")]
+    [InlineData("/var/folders/ab/cd/T/healdan/Copies", "/var/folders/ab/cd/T/healdan/Copies", "/private/var/folders/ab/cd/T/healdan/Copies")]
+    [InlineData("/private/tmp/healdan/Copies", "/private/tmp/healdan/Copies", "/tmp/healdan/Copies")]
+    [InlineData("", "", "")]
+    [InlineData(null, "", "")]
+    public async Task TheCopiesFolderIsPassedToEveryScriptThatFindsADocument(string? copies, string folder, string twin)
+    {
+        var scripting = new MacOfficeScripting(_runner, copies);
+        var path = "/Users/me/Copies/a.xlsx";
+        _runner.Answer = "yes";
+        await scripting.IsOpenAsync(OfficeProgram.Excel, path);
+        await scripting.HasMarkAsync(OfficeProgram.Excel, "mark-1");
+        _runner.Answer = "saved";
+        await scripting.HasUnsavedChangesAsync(OfficeProgram.Excel, path);
+        await scripting.SaveAsync(OfficeProgram.Excel, path);
+        _runner.Answer = "#text";
+        await scripting.FingerprintAsync(OfficeProgram.Excel, new DocumentRef(path, null, null));
+        _runner.Answer = "renamed";
+        await scripting.RenameIfUnchangedAsync(OfficeProgram.Excel, path, "/Users/me/Copies/b.xlsx");
+        _runner.Answer = "path" + Separator + "#text";
+        await scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(path, null, null), "/Users/me/Copies/b.xlsx", null);
+
+        Assert.Equal(7, _runner.Calls.Count);
+        Assert.All(_runner.Calls, call =>
+        {
+            Assert.Equal(folder, call.Args[3]);
+            Assert.Equal(twin, call.Args[4]);
+            if (folder.Length > 0)
+                Assert.DoesNotContain(folder, call.Script); // only as an argument
+        });
+    }
+
+    [Fact]
+    public async Task TheFindersCarryTheMarkAndTheWindowAfterTheFolders()
+    {
+        var scripting = new MacOfficeScripting(_runner, "/tmp/Copies");
+        _runner.Answer = "#text";
+
+        await scripting.FingerprintAsync(OfficeProgram.Word, new DocumentRef("/tmp/Copies/a.docx", "mark-1", "Document1"));
+
+        Assert.Equal(["/tmp/Copies/a.docx", "/private/tmp/Copies/a.docx", "a.docx", "/tmp/Copies", "/private/tmp/Copies", "mark-1", "Document1"],
+            Assert.Single(_runner.Calls).Args);
     }
 
     [Fact]

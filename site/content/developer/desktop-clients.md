@@ -321,6 +321,10 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke
   test's step 5d runs them in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
+- **`Category=MacOffice`** tests drive the real Word, Excel and PowerPoint through `MacOfficeScripting`: they open,
+  change and close throwaway documents in a temporary folder, and the apps ask for Automation and Grant File Access
+  the first time. They skip unless `HEALDAN_MAC_OFFICE=1` is set. `EveryScriptCompiles` compiles every AppleScript
+  against the apps' dictionaries with `osacompile`, starts nothing, and runs on any Mac that has the three apps.
 - **`NoticesTests`** fail when the packages `Healdan.Helper/THIRD-PARTY-NOTICES.txt` names differ from those the app
   restores (its `obj/project.assets.json`), ids and versions both. The file is About's Open-Source Notices, built
   into the app. A package added or moved needs its notice: its copyright and licence text, from the package or its
