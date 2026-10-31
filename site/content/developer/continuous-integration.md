@@ -10,7 +10,7 @@ weight: 4
 | Check | Workflow | What it does |
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`) and the helper's open-save-close cycle (its stack test) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
@@ -114,10 +114,10 @@ with Office has, so it too is for a Mac with Office.
 
 ### The Helper's Stack Test in the Image CI
 
-`docker/smoke-test.sh` has a step 5d, after the API's add-in flow, that runs the helper's stack test
-(`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to the smoke
-stack). It signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves and closes
-it through the helper's cycle with a fake LibreOffice.
+`docker/smoke-test.sh` has a step 5d, after M2's client flow through the API (step 5c), that runs the helper's
+stack test (`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to
+the smoke stack). It signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves and
+closes it through the helper's cycle with a fake LibreOffice.
 
 - It runs only when `SMOKE_HELPER_TEST=1`, which `docker-image.yml` sets. The workflow sets up the .NET SDK and
   builds the helper's tests first, so a build failure shows on its own. Run locally without the variable, the

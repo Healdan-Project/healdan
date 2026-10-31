@@ -1014,6 +1014,7 @@ Filled in as the build found them, and left open once Tasks 1 to 11 and the fina
 
 **Lost work and reachability, left after the final review**
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
+- A ⌘S written after Save As but before `Adopted`'s `HashOf` is taken as the copy's starting point and never sent (tens of milliseconds, as above). SaveAs's fingerprint after the save is taken inside the script, so it can't see a save after the script returns; the same modification-date check would close it.
 - Word relaunched within one crash poll (5 seconds) of a Force Quit never registers as a crash, so its recovered window isn't saved back, and its Save opens Save As. Not silent, but the walkthrough's crash row may meet it (spec §12.3 checks it). Treating a change in the program's process identity, its process id or start time, as a crash would catch it. A restored window open before the helper starts is treated as open and never saved back (pre-existing).
 - `CopyCycleTests.PartialWriteNotSent` (M3's) failed once in a full run, then passed six times: possibly flaky.
 - A Settings change mid-flight re-records a copy's app when `CopyStore.Create` runs again, so a read-only or ended copy still open in Word could move its close watch to LibreOffice. Narrow.
@@ -1025,6 +1026,7 @@ Filled in as the build found them, and left open once Tasks 1 to 11 and the fina
 - `CloseWatcher` treats a null `LockWritten` as a reopen; the save-back's retry has no end while an owner file stays, at about seven `osascript` launches per 36 seconds.
 - `MicrosoftOfficeApp.IsRunningFor` passes macOS process names, and `InstalledApps` checks macOS bundle paths, in the core; a Windows port would translate them. `CopiesNotice`'s text is macOS-specific, called above the seam.
 - Detection is by bundle identifier but launch is by name (`open -a LibreOffice`), and LaunchServices may answer for an app in the Trash. The system default can't be recorded as an explicit choice without switching away and back.
+- `EveryScriptCompiles` carries the `MacOffice` category and needs Office's dictionaries, so CI never compiles the scripts. They're compiled by hand (`osacompile -o /dev/null`) or at the owner's session.
 
 **The add-in's port**
 - No cap on connections at once; one 60-second window for TLS and the head; the body buffer is allocated at its declared length up front; refusals are logged without a rate limit, so a page in Safari can push history out of the 2 MiB log.
