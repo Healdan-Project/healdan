@@ -24,12 +24,12 @@ public sealed class SetUpOfficeWindowTests : IDisposable
     public void Dispose() => Directory.Delete(_root, true);
 
     /// <summary>Makes the window and shows it on the UI thread, runs <paramref name="test"/> there, and closes it.</summary>
-    private Task Run(Func<SetUpOfficeWindow, Task> test) => Headless.RunAsync(async () =>
+    private Task Run(Func<SetUpOfficeWindow, Task> test, Action? trusted = null) => Headless.RunAsync(async () =>
     {
         var paths = HelperPaths.For(_root);
         var setUp = new OfficeSetUp(
             paths, new AddinCertificate(paths, TimeProvider.System), _mac, () => new InstalledApps(true, Word: true, Excel: true, PowerPoint: true), macOS: true);
-        var window = new SetUpOfficeWindow(setUp, new HelperLog(paths.Log));
+        var window = new SetUpOfficeWindow(setUp, new HelperLog(paths.Log), trusted);
         window.Show();
         try
         {
@@ -96,6 +96,24 @@ public sealed class SetUpOfficeWindowTests : IDisposable
     });
 
     [MacFact]
+    public Task TrustingCallsBackAtOnceWithTheWindowStillOpen()
+    {
+        // The owner's walkthrough (2026-10-31): the add-in's port opened only once the window closed, and it was left open
+        // on Done while Word tried to reach the helper.
+        var calls = 0;
+        return Run(async window =>
+        {
+            Click(Find<Button>(window, "SetUpButton"));
+            await Until(() => window.Trusted);
+
+            Assert.Equal(1, calls);
+            Assert.True(window.IsVisible);
+            Click(Find<Button>(window, "SetUpButton")); // Done
+            Assert.Equal(1, calls);
+        }, trusted: () => calls++);
+    }
+
+    [MacFact]
     public Task ACancelledPasswordPromptSaysSoAndCanBeTriedAgain() => Run(async window =>
     {
         _mac.OnTrust = _ => Task.FromResult(false);
@@ -129,15 +147,20 @@ public sealed class SetUpOfficeWindowTests : IDisposable
     });
 
     [MacFact]
-    public Task NotNowAsksNothingAndLeavesItForTheMenu() => Run(window =>
+    public Task NotNowAsksNothingAndLeavesItForTheMenu()
     {
-        Click(Find<Button>(window, "NotNowButton"));
+        var calls = 0;
+        return Run(window =>
+        {
+            Click(Find<Button>(window, "NotNowButton"));
 
-        Assert.False(window.IsVisible);
-        Assert.False(window.Trusted);
-        Assert.Empty(_mac.Trusting);
-        return Task.CompletedTask;
-    });
+            Assert.False(window.IsVisible);
+            Assert.False(window.Trusted);
+            Assert.Empty(_mac.Trusting);
+            Assert.Equal(0, calls);
+            return Task.CompletedTask;
+        }, trusted: () => calls++);
+    }
 
     [MacFact]
     public Task ClosingWhileMacOSAsksStopsTheAsk() => Run(async window =>

@@ -16,15 +16,22 @@ public partial class SetUpOfficeWindow : Window
 {
     private readonly OfficeSetUp? _setUp;
     private readonly HelperLog? _log;
+    private readonly Action? _trusted;
     private CancellationTokenSource? _running;
     private bool _closed;
 
     /// <summary>For the XAML loader; the helper always opens it with its Set Up.</summary>
     public SetUpOfficeWindow() => InitializeComponent();
 
-    internal SetUpOfficeWindow(OfficeSetUp setUp, HelperLog log) : this()
+    /// <param name="setUp">Its Set Up.</param>
+    /// <param name="log">The helper's log.</param>
+    /// <param name="trusted">
+    /// Runs the moment the Mac trusts the certificate, with the window still open on Done: the user may leave it there and
+    /// go to Word (the owner's walkthrough, 2026-10-31).
+    /// </param>
+    internal SetUpOfficeWindow(OfficeSetUp setUp, HelperLog log, Action? trusted = null) : this()
     {
-        (_setUp, _log) = (setUp, log);
+        (_setUp, _log, _trusted) = (setUp, log, trusted);
         SetUpButton.Click += OnSetUp;
         NotNowButton.Click += (_, _) => Close();
         Closed += (_, _) =>
@@ -72,6 +79,7 @@ public partial class SetUpOfficeWindow : Window
         if (result.Trusted)
         {
             Trusted = true;
+            _trusted?.Invoke();
             DoneMark.IsVisible = true;
             NotNowButton.IsVisible = false;
             SetUpButton.Content = "Done";

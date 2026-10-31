@@ -344,8 +344,8 @@ is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks)
 - **When it's open:** from the helper's start to its quit, signed in or not, while the certificate exists, hasn't
   expired and the Mac trusts it. That includes its last 30 days, when Set Up Microsoft Office offers to renew it: a
   working certificate never takes the add-in down. Signed out, it stays open, so the pane can say so: the document
-  routes answer `409 signed-out`, and pairing still works. Set Up opens it without a restart
-  (`HelperSession.EnsureAddin`); when Set Up renews the certificate, the open port serves the new one from the next
+  routes answer `409 signed-out`, and pairing still works. Set Up opens it without a restart, the moment the Mac
+  trusts the certificate, with its window still open (`HelperSession.EnsureAddin`); when Set Up renews the certificate, the open port serves the new one from the next
   connection on, on the same port (`AddinServer.UseCertificate`), rather than closing and opening again. The port serves
   the certificate there is (`AddinCertificate.ForServer`), and never makes or renews one: that's Set Up's, which has
   the Mac trust it.
