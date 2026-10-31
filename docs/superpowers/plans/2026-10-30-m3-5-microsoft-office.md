@@ -985,6 +985,7 @@ Every call made while building that the plan or the spec didn't settle, in order
 | 2026-10-31 | Task 10 review | Pairing happens in a `displayDialogAsync` window, which hands the key to the button with `messageParent`; the button's press isn't completed until the dialog closes | the documented way for a dialog to talk to a function command; the key doesn't depend on shared storage | spec §5.9 |
 | 2026-10-31 | Task 10 review | Office's error text goes from the button to the window with `messageChild`, never in the window's address | the server's access log could hold file names | spec §6.2 |
 | 2026-10-31 | Final review | Filing's fingerprint is taken in `save-new`, once the Save window answers Save, by the window `save-new` took, and the ticket keeps it; `file` takes none. `SaveAs` fingerprints after its save too, finding the window by its new name, and a null fingerprint, from the ticket or after the save, counts as changed | taken as the bytes arrived, the fingerprint already held a line typed while the add-in read them, set its mark and sent them, so the copy was taken as the starting point and the line lost at close | spec §5.5 |
+| 2026-10-31 | Final review | `Word.SetDocId` fingerprints the text before it sets the property and after the fields are updated, and marks the document saved only if it was and the text is the same, compared case and all | Word takes keystrokes between the fields' Apple events; marked saved, a line typed then closed without a prompt and was lost | spec §5.7 |
 | 2026-10-31 | Final review | A rename doesn't start while the program's owner file is at the new name without its document, and `CopyStore.Moved` deletes the old file only once the new one is there | an owner file alone there let the record follow a file that didn't exist yet, and delete the copy's only file | spec §5.4 |
 | 2026-10-31 | Final review | The crash window's Send and Check In is refused from `OnReopened` on, while the owner file is there (`CopyCycle.IsOpenAgain`), not only once the save-back worked | until the save-back found the window, checking in deleted the copy from under Word's recovered window | spec §5.14 |
 | 2026-10-31 | Final review | After a rename, and after PowerPoint's reopen, the close watcher takes on the copy with `lockSeen` set when its owner file is there | watched as never seen, a window closed before the first look wasn't a close until the program quit, which could leave the check-out stuck for days | spec §5.4 |
@@ -996,11 +997,10 @@ Every call made while building that the plan or the spec didn't settle, in order
 | 2026-10-31 | Final review | The HFS-path retry in `Word.Open`, `Word.Rename` and `Word.SaveAs` raises a cancel (-128), a timeout (-1712) or a refusal of Automation (-1743) as it came, and retries anything else | a bare `on error` waited up to another 300 seconds and asked for Grant File Access twice; the path error's own number is unconfirmed without Word, so the retry stays the default | the scripts |
 | 2026-10-31 | Final review | `AddinResourceTest` reads the served manifest as XML and checks every `resid` names a `bt:` resource; `maven-resources-plugin` is pinned at 3.5.0, the version the build resolved, as `logicaldoc-parent` manages none | a bad `resid` shows only once the manifest is uploaded; Maven warned of the missing version | `healdan-api` |
 | 2026-10-31 | Final review | `OsaRunner`'s comments say its errors can quote a value, and where they go | they promised errors never carried the arguments, but `osascript`'s error text can | `OsaRunner.cs` |
-| 2026-10-31 | Final review | `Word.SetDocId` fingerprints the text before it sets the property and after the fields are updated, and marks the document saved only if it was and the text is the same, compared case and all | Word takes keystrokes between the fields' Apple events; marked saved, a line typed then closed without a prompt and was lost | spec §5.7 |
 
 ## Follow-ups
 
-Filled in as the build found them; left open when Tasks 1 to 11 were built. None is a known failure. The reviews' style points are left out.
+Filled in as the build found them, and left open once Tasks 1 to 11 and the final review's fixes were done. Some are faults in narrow cases, and each says so; the rest need the owner's Mac to settle, or are for later. The reviews' style points are left out.
 
 **For the owner's session** (spec §12.3 has the checks themselves)
 - `state` may ask Office for its front window by AppleScript and so block behind a Grant File Access dialog. It is read-only, and the window polls `ping`, but a button's `state` call can wait (`AddinHandler.cs`).
@@ -1011,9 +1011,9 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 - The `check` icon's path data was written by hand in the release's format, not copied from Tabler 3.50.0; diff it against the real file.
 - Docs: the Install page names "a helper version with Microsoft Office support" with no number, and Task 12 should say 0.4.0; `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
 
-**Lost work and reachability, for the final review**
+**Lost work and reachability, left after the final review**
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
-- Word relaunched within one crash poll (5 seconds) of a Force Quit never registers as a crash, so its recovered window isn't saved back. A restored window open before the helper starts is treated as open and never saved back (pre-existing).
+- Word relaunched within one crash poll (5 seconds) of a Force Quit never registers as a crash, so its recovered window isn't saved back, and its Save opens Save As. Not silent, but the walkthrough's crash row may meet it (spec §12.3 checks it). Treating a change in the program's process identity, its process id or start time, as a crash would catch it. A restored window open before the helper starts is treated as open and never saved back (pre-existing).
 - `CopyCycleTests.PartialWriteNotSent` (M3's) failed once in a full run, then passed six times: possibly flaky.
 - A Settings change mid-flight re-records a copy's app when `CopyStore.Create` runs again, so a read-only or ended copy still open in Word could move its close watch to LibreOffice. Narrow.
 
@@ -1027,6 +1027,8 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 
 **The add-in's port**
 - No cap on connections at once; one 60-second window for TLS and the head; the body buffer is allocated at its declared length up front; refusals are logged without a rate limit, so a page in Safari can push history out of the 2 MiB log.
+- `pair/start` isn't throttled. Any local process (`Host` and `Origin` can be forged) or a page on the server's own origin can open the pairing window again and again; the rest after nine wrong codes counts guesses only. Limit starts, to one every few seconds, say.
+- A key can name another program's copy by `url`: `KnownCopy` checks only that the copy is in `Copies`, so Word's key can mark an Excel copy's next version. Same user, low impact; check the copy's program against the key's.
 - An app pairing again leaves its old key valid until Forget. A slow request from one server's page across a sign-out and a sign-in to another can run on the other's cycle (60 seconds at most).
 - A running port keeps serving a certificate past its expiry, and says "stays closed" in its log while open. `Dispose` disposes the certificate during handshakes. Signed in but not yet started also answers `signed-out`, while `ping` says `signedIn: true`.
 - A `file://` address with a literal `%` in a name Office didn't escape would be decoded wrongly; the front window still decides then.
@@ -1034,6 +1036,4 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 
 **Server and docs**
 - The blank `server.url` branch is untested, and the manifest varies by `Host` with no `Cache-Control: no-cache`.
-- The Install pages omit that the proxy must pass `Host`, and that `X-Forwarded-Proto` is believed only from `LOGICALDOC_TRUSTED_PROXIES`.
-- When Things Go Wrong's message table omits `too-large`, `too-many-pending`, `no-ticket`, `mark-left`, `storage-failed`, `internal-error` and `bad-request`. Known Limitations should mention the remembered-port case under two people on one Mac.
-- A Markdown file under `clients/office/` stays docs for `code-changed.sh`, which the Developer Guide and CLAUDE.md now say.
+- Known Limitations should mention the remembered-port case under two people on one Mac, once the owner's session has checked the two-people bullet itself (spec §12.3).

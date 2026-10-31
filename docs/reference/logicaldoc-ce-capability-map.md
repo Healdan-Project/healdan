@@ -311,7 +311,7 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 - Nothing refers to WOPI.
 - **Microsoft Office (M3.5).** CE had nothing: no add-in code in the repository, no `ldedit:` handler (above) and no WOPI. Healdan adds a web add-in for Word, Excel and PowerPoint for Mac (`clients/office/`, Office.js, deployed from the Microsoft 365 admin centre) and teaches the helper a second app. No upstream file changes.
   - **The server** only serves the add-in: `healdan-api`'s `AddinResource` gives the pages and a manifest made with the server's own address at `/api/addin/`, public, and not part of the JSON API (so `openapi.yaml` leaves it out).
-  - **The helper** does the work. It drives Word, Excel and PowerPoint through AppleScript behind `IOfficeScripting`, renames the open copy after each save so the title bar moves on, files a new document from the add-in's bytes, and serves the add-in over HTTPS on loopback with a certificate of its own, which Set Up Microsoft Office asks macOS to trust. Each app pairs once by a code the helper shows. See the M3.5 spec.
+  - **The helper** does the work. It drives Word, Excel and PowerPoint through AppleScript behind `IOfficeScripting`, renames the open copy after each save in Word and Excel so the title bar moves on (PowerPoint's copies keep their name), files a new document from the add-in's bytes, and serves the add-in over HTTPS on loopback with a certificate of its own, which Set Up Microsoft Office asks macOS to trust. Each app pairs once by a code the helper shows. See the M3.5 spec.
 - The usable server endpoints were SOAP/REST checkout, checkin, lock, unlock, getContent, upload and create. Healdan's own API (§4.1) has replaced them for Healdan's clients.
 
 ### 5.2 Email

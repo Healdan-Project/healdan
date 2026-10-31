@@ -403,7 +403,7 @@ What's left open is in the plan's follow-ups.
 - **Save As never takes the wrong window.** It never falls back to the front window, whoever calls it. Filing fingerprints the document before anything else, and a crashed copy's recovered window is saved back only once Word lists it by the copy's path.
 - **A rename is never taken for a close.** The copy's session is re-keyed, the close watcher lets go first, and a rename Word finishes late is followed, not checked in.
 - **The add-in's port lives as long as the helper,** signed in or not, and keeps every request short: a route over 20 seconds answers `202`, and the add-in collects its outcome through `result`.
-- **The certificate** is trusted by Security.framework's TLS evaluation, which sees what .NET's chain check can't, and only Set Up renews it.
+- **The certificate** is checked by Security.framework's TLS evaluation, which sees what .NET's chain check can't, and only Set Up renews it.
 - **Pairing happens in a window the button opens,** which hands the key back to the button; nine wrong codes in a row pause it for 10 minutes.
 - **Settings find the apps through LaunchServices** as well as the usual folders.
 

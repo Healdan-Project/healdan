@@ -115,8 +115,11 @@ size the helper uses, the widths then match CoreText's.
   a restart there sends an identical version, and never loses a save.
 - **Closing:** the extension's `/v1/closed`, or the copy's app's lock file gone at two polls a second apart:
   LibreOffice's `.~lock.<copy>#`, or Microsoft Office's owner file, `~$` and the copy's name with its first two
-  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`; a short
-  name loses one for Word). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
+  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`, which
+  for Word also gives `~$` and the whole name, as a short name may have; copies' names are always long). Tidying up,
+  the helper deletes every form any of them may use, including Word's with only one character left out
+  (`CopyNames.OfficeOwnerNames`). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`;
+  then the copy is deleted.
   A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
 - **Renaming after a save (Word and Excel):** they take the window's title from the file name, so once a save is
   confirmed, `CopyCycle.RenameAfterSaveAsync` has the program save the copy under the confirmed version's name

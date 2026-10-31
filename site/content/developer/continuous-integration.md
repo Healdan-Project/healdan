@@ -60,10 +60,10 @@ The Docker build keeps its own copy, which the `maven:3.9` image both writes and
 when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and the helper, the
 LibreOffice extension and the icons (`clients/helper/`, `clients/libreoffice/` and `clients/icons/`). A change under
 `clients/office/` counts as code as well as clients, because `healdan-api` packages the Office add-in's pages and
-manifest into its jar. A Markdown file there is still docs. `code` gates the Java build's test shards and the Docker build steps. `clients` is true when the
-pull request changes anything under `clients/`, `clients.yml` itself, or the API contract,
-`healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It gates the client
-test jobs. A push always gets both true.
+manifest into its jar. A Markdown file there is still docs. `code` gates the Java build's test shards and the Docker
+build steps. `clients` is true when the pull request changes anything under `clients/`, `clients.yml` itself, or the
+API contract, `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It
+gates the client test jobs. A push always gets both true.
 
 Every workflow still reports its required checks when its steps are skipped, so `master`'s ruleset can require
 them all.
@@ -93,9 +93,10 @@ are:
 3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`,
    which also builds the extension's `.oxt` and checks that its parts agree.
 4. **`Office add-in (ubuntu-24.04)`** sets up Node 22 and runs `node --test 'clients/office/test/*.test.js'`, which
-   tests the add-in's logic, `clients/office/web/healdan.js`, with a fake `fetch`, storage and Office. Nothing is
-   installed. The pattern is quoted for Node to expand: Node 21 and later read `--test`'s arguments as file
-   patterns, so a folder fails.
+   tests the add-in's scripts in `clients/office/web/`: its logic (`healdan.js`), the ribbon's buttons
+   (`commands.js`), the Office.js glue (`office-glue.js`) and the pane (`taskpane.js`), with fakes for `fetch`,
+   storage, Office and the page. Nothing is installed. The pattern is quoted for Node to expand: Node 21 and later
+   read `--test`'s arguments as file patterns, so a folder fails.
 5. **`Clients`** is the check to require. It passes when the three test jobs passed, or when all three were skipped
    because nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 

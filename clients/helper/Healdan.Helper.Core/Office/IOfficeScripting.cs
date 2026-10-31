@@ -58,8 +58,9 @@ public sealed class OfficeScriptException : Exception
 public interface IOfficeScripting
 {
     /// <summary>
-    /// Opens a file in its program, kept off Open Recent where the program allows (Word and Excel; PowerPoint has no
-    /// control), or brings its window to the front if it is open already.
+    /// Opens a file in its program, or brings its window to the front if it is open already. Word's own open keeps the
+    /// file off Open Recent; Excel and PowerPoint have no open that does, so they're handed the file as for a double
+    /// click, and it may go on the list (spec §5.12).
     /// </summary>
     Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default);
 

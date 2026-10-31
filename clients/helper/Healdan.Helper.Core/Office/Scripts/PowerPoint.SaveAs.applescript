@@ -1,6 +1,7 @@
 -- PowerPoint.SaveAs: saves a presentation under a new path, kept off Open Recent where PowerPoint allows.
 -- Looks for the presentation as locate does, but never takes the front one, which would save another presentation as the copy.
--- Fingerprints the content just before the save and again after it, finding the presentation by its new name, as Rename does.
+-- Fingerprints the content just before the save and again after it, finding the presentation by its new name, as
+-- Word's and Excel's Rename do.
 -- Answers how it was found (path, mark or window), character id 31, same, changed (its content changed during the save)
 -- or lost (no presentation has the new name), character id 31, and the content's fingerprint text from just before the
 -- save; or missing.

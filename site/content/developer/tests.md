@@ -51,7 +51,7 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
 | `docker/tests/test-fulltext.sh` | full-text search: a `.docx` and an `.eml` are indexed and found by their words |
 | `docker/tests/test-previews.sh` | Office and drawing previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
-| `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: an Office add-in's flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
+| `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
 | `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the GUI's loaders sent with `Cache-Control: no-cache` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, the API's add-in flow (`test-api.sh`, step 5c), the helper's open-save-close cycle (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
 
 ### When a Smoke Check Fails
@@ -83,7 +83,9 @@ and `node --test`, apart from Maven: see [Desktop Clients](../desktop-clients/#t
   server's tests and the image's too, because `healdan-api` packages the add-in's pages.
 - **By hand on a Mac,** the tests marked `MacKeychain` use the real keychain, and those marked `MacOffice` drive the
   real Word, Excel and PowerPoint, which open on the screen and ask for Automation and Grant File Access. The
-  `MacOffice` tests skip unless `HEALDAN_MAC_OFFICE=1` is set. CI has neither, so they skip there.
+  `MacOffice` tests skip unless `HEALDAN_MAC_OFFICE=1` is set, apart from `EveryScriptCompiles`, which starts nothing
+  and runs without it wherever Word, Excel and PowerPoint are installed, as compiling reads their dictionaries. CI
+  has neither, so they skip there.
 - **Against a stack,** the tests marked `Stack` need `HEALDAN_STACK_URL`; `docker/smoke-test.sh` runs them.
 
 ## Script and Docs Site Tests
