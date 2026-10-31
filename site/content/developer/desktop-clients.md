@@ -328,6 +328,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/new-version` | `{"app", "url"}` | `{}` |
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
+| `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
 
 - **The app** is the one the request's key was paired for. A body naming another is `400 bad-request`: a key drives
   only its own app.
@@ -344,6 +345,20 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   copies, `wrong-window` when the front window isn't the one Save to Healdan was pressed in, and `no-ticket` for a
   ticket used or expired. Any other failure is `500 internal-error`, and the helper has told the user why where it's
   theirs to know.
+- **Short requests:** the add-in calls the port with `fetch` from Office's web view, which is WebKit, and WebKit is
+  likely to give up on a request that has had no answer for about a minute. `open-dialog`, `save-new` and `properties`
+  wait while the helper's windows are up, and `file` can wait up to 300 s behind Word's Grant File Access, so a lost
+  answer would lose a ticket, or the state of a copy just filed. So any keyed route but `ping` and `state` that hasn't
+  finished after 20 s answers `202 {"pending": "<id>"}` and goes on (`PendingResults`). The add-in then asks
+  `result`, which waits up to 20 s again, until the outcome comes: the status and body the route would have answered,
+  an error included. An outcome belongs to the key that started it, is answered once, and is kept for 10 minutes
+  after its route finishes. A key can have 64 outcomes waiting at most; the next route answers
+  `429 too-many-pending` and doesn't run. `result` passes the same checks as any keyed route, so while the helper is
+  signed out it's `409 signed-out`, and the outcome waits; a route that went pending keeps the session it started in,
+  so a ticket it answers after a sign-out is still that session's, and `no-ticket` in the next.
+- **The add-in follows a `202` itself,** in `call`, so a button's flow sees only the route's own answer. When `result`
+  answers `no-result` after that, the pane says the answer was lost (`lost-result`) and asks the user to check the
+  document in Healdan before trying again. The log names a route that went pending, never its id.
 - **The add-in's routes and the channel's are separate lists:** the extension can't call these, nor the add-in the
   channel's.
 
@@ -478,7 +493,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   since the write empties the file first.
 - **`AddinServerTests`** run a real add-in's port on ports the system says are free, with a client that trusts only
   the test's certificate, and send what a web page, another program or another Healdan's page would.
-  `PairingTests` and `AddinHandlerTests` cover pairing and the routes.
+  `PairingTests` and `AddinHandlerTests` cover pairing and the routes, and `PendingResultsTests` a route that answers
+  `202` and is collected through `result`. Those run with a hold time of milliseconds, and a slow route waits on a gate
+  the test opens rather than for a fixed time.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.
 - **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke
@@ -506,8 +523,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   LibreOffice, and build the `.oxt` and check that its files agree: the toolbar, the images and the notice. A real
   LibreOffice isn't part of them.
 - **The add-in's tests** (`clients/office/test/healdan.test.js`, Node's built-in runner) cover
-  `clients/office/web/healdan.js`: finding the helper's port, the calls with the protocol and the key, pairing, each
-  button's flow in Word, Excel and PowerPoint, and the pane's texts. A fake `fetch` plays the helper's port and a
+  `clients/office/web/healdan.js`: finding the helper's port, the calls with the protocol and the key, following a
+  `202` through `result`, pairing, each button's flow in Word, Excel and PowerPoint, and the pane's texts. A fake `fetch` plays the helper's port and a
   fake `office` object the Office.js glue, so neither Office nor a page is part of them. They also fail when the
   ports differ from the helper's `AddinPorts` or the server's Content-Security-Policy.
 

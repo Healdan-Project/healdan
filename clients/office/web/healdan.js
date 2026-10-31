@@ -8,7 +8,8 @@
  * It is a classic script: no import, no npm. It sets `Healdan` on the global object, and `module.exports` under Node.
  *
  * What it holds:
- *   - createHelperClient: a client for the helper's HTTPS port on 127.0.0.1 (fetch and storage are passed in)
+ *   - createHelperClient: a client for the helper's HTTPS port on 127.0.0.1 (fetch and storage are passed in), which
+ *     follows a route the helper is still running (202) through result, so each request stays short
  *   - messageFor, HelperError: the pane's texts, one table, for every code the helper or the add-in can answer with
  *   - six flows, one for each button: saveToHealdan, saveAsNewDocument, saveAsNewVersion, properties,
  *     openFromHealdan and insertDocId. Each takes { client, office } and resolves, never rejects, to one of:
@@ -44,6 +45,13 @@
   /** How long a probe of one port waits for hello, in milliseconds. */
   const PROBE_TIMEOUT = 3000;
 
+  /**
+   * The helper's answer for a keyed route still running after its hold time (20 s), {"pending": id}: the add-in asks
+   * result for the id, each request short again, until the route's own answer comes. WebKit is likely to give up on a
+   * request that has had no answer for about a minute, and the helper's windows wait for the user.
+   */
+  const PENDING = 202;
+
   // --- The pane's texts --------------------------------------------------------------------------------------------
 
   /**
@@ -53,7 +61,7 @@
   const MESSAGES = {
     // The helper can't be reached.
     "unreachable":
-      "Healdan Helper isn't running, or Microsoft Office isn't set up in it. Start Healdan Helper, and choose Set Up Microsoft Office in its menu.",
+      "Healdan Helper isn't running, or Microsoft Office isn't set up in it. If it is running, check it is signed in to this Healdan, and set up Microsoft Office from its menu if it offers to.",
     "no-office-on-the-web":
       "Healdan's buttons work in the desktop apps only: Word, Excel and PowerPoint on your Mac. They can't reach Healdan Helper from a web browser.",
 
@@ -77,6 +85,7 @@
     "pairing-expired": "That code has expired, or was cancelled. Press the button again for a new one.",
     "too-many-tries": "Too many wrong codes were typed, so pairing is paused for 10 minutes. Try again after that.",
     "too-large": "This document is too large for the add-in to send to Healdan Helper.",
+    "too-many-pending": "Healdan Helper is still busy with this app's earlier requests. Wait for them to finish, then try again.",
     "bad-request": "Healdan Helper didn't understand the add-in. If it keeps happening, update Healdan Helper.",
     "internal-error": "Healdan Helper hit a problem. Its log has the details.",
 
@@ -84,6 +93,7 @@
     "code-format": "The code is six digits, as shown in Healdan Helper's window.",
     "storage-failed": "Microsoft Office wouldn't let the add-in keep its pairing, so this app can't be paired.",
     "unexpected-answer": "Healdan Helper answered with something the add-in didn't expect. Update Healdan Helper if it keeps happening.",
+    "lost-result": "Healdan Helper finished, but its answer was lost. Check the document in Healdan before trying again.",
     "office-error": (d) =>
       `Microsoft Office didn't do what the add-in asked${d.detail ? ` (${d.detail})` : ""}. Try again.`,
     "read-only-version": "This is a read-only copy, so it can't be saved as a new version. Use Save as New Document instead.",
@@ -133,6 +143,15 @@
     return String(origin).replace(/\/+$/, "").toLowerCase();
   }
 
+  /** The page's localStorage, or null where WebKit blocks storage and reading it throws a SecurityError. */
+  function pageStorage() {
+    try {
+      return root.localStorage || null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   /**
    * A client for the helper's port. It finds the port, keeps the key the helper gave in `storage` as
    * "healdan.key.<host>" and the port as "healdan.port", and sends every request with the protocol and the key.
@@ -150,12 +169,13 @@
       throw new TypeError(`The add-in runs in Word, Excel or PowerPoint, not ${host}.`);
     }
     const doFetch = options.fetch || ((...args) => root.fetch(...args));
-    const storage = options.storage || root.localStorage;
+    const storage = options.storage || pageStorage();
     const origin = options.origin === undefined ? root.location && root.location.origin : options.origin;
     const probeTimeout = options.probeTimeout || PROBE_TIMEOUT;
     const keyName = KEY_PREFIX + host;
 
-    // Storage can refuse (a private window, cleared site data): then nothing is remembered, and nothing is paired.
+    // Storage can refuse (a private window, cleared site data), or be missing altogether (null, where WebKit blocks it):
+    // then nothing is remembered, and nothing is paired.
     function read(name) {
       try {
         const value = storage.getItem(name);
@@ -244,14 +264,17 @@
       return doFetch(helperUrl(port, route), { method: "POST", headers, body: JSON.stringify(body || {}) });
     }
 
-    /** The answer's JSON when it's a success; otherwise throws the HelperError for the helper's {"error": code}. */
-    async function answerOf(response, keyed) {
-      let body = null;
+    /** The answer's JSON, or null when it isn't JSON. */
+    async function jsonOf(response) {
       try {
-        body = await response.json();
+        return await response.json();
       } catch (error) {
-        // Not JSON: the status alone says it went wrong.
+        return null; // the status alone says what happened
       }
+    }
+
+    /** The answer's JSON when it's a success; otherwise throws the HelperError for the helper's {"error": code}. */
+    function answerOf(response, body, keyed) {
       if (response.ok) {
         return body !== null && typeof body === "object" ? body : {};
       }
@@ -262,31 +285,63 @@
       throw new HelperError(code, { status: response.status, triesLeft: body ? body.triesLeft : undefined });
     }
 
-    async function post(route, body, keyed) {
+    /**
+     * Sends one request and resolves to the helper's response. `repeatable` is for a request that can be sent twice
+     * without doing anything twice (asking result): one that failed on the way is sent again where the helper answers.
+     */
+    async function request(route, body, keyed, repeatable) {
       const key = keyed ? read(keyName) : null;
       if (keyed && key === null) {
         throw new HelperError("not-paired");
       }
       const port = rememberedPort() === null ? await find() : rememberedPort();
-      let response;
       try {
-        response = await send(port, route, body, key);
+        return await send(port, route, body, key);
       } catch (error) {
         // The helper may have been restarted onto another port: look again. It's repeated there only if it moved, as a
-        // helper that still answers where it was may have taken the request already (a ticket is good once).
+        // helper that still answers where it was may have taken the request already (a ticket is good once), unless
+        // it's repeatable: result answers an outcome once, so asking again gets it, or no-result if it was lost.
         erase(PORT_NAME);
         const moved = await find();
-        if (moved === port) {
+        if (moved === port && !repeatable) {
           throw new HelperError("unreachable");
         }
         try {
-          response = await send(moved, route, body, key);
+          return await send(moved, route, body, key);
         } catch (again) {
           erase(PORT_NAME);
           throw new HelperError("unreachable");
         }
       }
-      return answerOf(response, keyed);
+    }
+
+    async function post(route, body, keyed) {
+      const response = await request(route, body, keyed, false);
+      return answerOf(response, await jsonOf(response), keyed);
+    }
+
+    /**
+     * A keyed POST to /v1/<route>. A route the helper is still running after its hold time answers 202 {"pending": id}:
+     * then result is asked for that id, again while it's still running, and its outcome is answered or thrown as the
+     * route's own answer would have been. An outcome the helper no longer has, once it was pending, is lost-result.
+     */
+    async function call(route, body) {
+      let response = await request(route, body, true, false);
+      let answer = await jsonOf(response);
+      let followed = false;
+      while (response.status === PENDING) {
+        const id = answer && answer.pending;
+        if (typeof id !== "string" || id === "") {
+          throw new HelperError("unexpected-answer");
+        }
+        response = await request("result", { id }, true, true);
+        answer = await jsonOf(response);
+        followed = true;
+      }
+      if (followed && response.status === 404 && answer && answer.error === "no-result") {
+        throw new HelperError("lost-result");
+      }
+      return answerOf(response, answer, true);
     }
 
     return {
@@ -294,10 +349,11 @@
       find,
 
       /**
-       * A keyed POST to /v1/<route>, answering the helper's JSON.
+       * A keyed POST to /v1/<route>, answering the helper's JSON. A route still running after the helper's hold time is
+       * followed through result to its outcome, so the caller sees only the route's own answer.
        * @throws {HelperError} with .code and .message for the pane
        */
-      call: (route, body) => post(route, body, true),
+      call,
 
       /** Starts pairing: the helper shows a six-digit code in its window. Resolves to the pairing's id. */
       async pairStart() {

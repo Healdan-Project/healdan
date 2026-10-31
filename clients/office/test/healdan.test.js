@@ -133,6 +133,17 @@ function setup({ host = "Word", paired = true, listening, routes, hanging, offic
   return { log, helper, storage, client, office };
 }
 
+/** A route that answers each of `answers` in turn, and the last one from then on. */
+function inTurn(...answers) {
+  let next = 0;
+  return () => answers[Math.min(next++, answers.length - 1)];
+}
+
+/** The helper's answer for a route still running after its hold time. */
+function pending(id = "id-1") {
+  return [202, { pending: id }];
+}
+
 const SAVE = [200, { action: "save", folderId: 12, name: "Lease agreement", format: "docx", properties: {}, ticket: "ticket-1" }];
 const FILED = [200, { known: true, docNumber: 1234, docRef: "#1234 v1.0", readOnly: false }];
 const IN_HEALDAN = [200, { known: true, docNumber: 1234, docRef: "#1234 v1.2", readOnly: false }];
@@ -334,6 +345,111 @@ test("an error answer becomes a HelperError with the helper's code and the pane'
   }
 });
 
+// --- Pending answers: a route still running after the helper's hold time answers 202, and result answers it later ----
+
+test("call follows a pending answer to its outcome", async () => {
+  const routes = { "save-new": pending(), result: inTurn(pending(), SAVE) };
+  const { client, helper } = setup({ routes });
+
+  assert.deepEqual(await client.call("save-new", { app: "Word", url: "", asNew: false }), SAVE[1]);
+
+  const calls = helper.calls();
+  assert.deepEqual(calls.map((c) => c.route), ["save-new", "result", "result"]);
+  for (const result of calls.slice(1)) {
+    assert.equal(result.method, "POST");
+    assert.deepEqual(result.body, { id: "id-1" });
+    assert.equal(result.headers["X-Healdan-Key"], KEY);
+    assert.equal(result.headers["X-Healdan-Protocol"], "1");
+  }
+
+  // A 202 that names no id isn't taken for an answer.
+  for (const body of [{}, { pending: "" }, { pending: 7 }, undefined]) {
+    const odd = setup({ routes: { "save-new": [202, body] } });
+    await failsWith(odd.client.call("save-new", {}), "unexpected-answer");
+    assert.deepEqual(odd.helper.calls().map((c) => c.route), ["save-new"]);
+  }
+});
+
+test("call throws the outcome's error", async () => {
+  const { client } = setup({ routes: { file: pending(), result: inTurn(pending(), [409, { error: "wrong-window" }]) } });
+  await assert.rejects(client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), (error) => {
+    assert.ok(error instanceof Healdan.HelperError);
+    assert.equal(error.code, "wrong-window");
+    assert.equal(error.status, 409);
+    assert.equal(error.message, Healdan.messageFor("wrong-window"));
+    return true;
+  });
+
+  // What result itself is refused with is thrown as from any call: a key the helper forgot meanwhile is dropped.
+  const forgotten = setup({ routes: { "open-dialog": pending(), result: [403, { error: "not-paired" }] } });
+  await failsWith(forgotten.client.call("open-dialog", { app: "Word" }), "not-paired");
+  assert.equal(forgotten.client.paired(), false);
+  const signedOut = setup({ routes: { "open-dialog": pending(), result: [409, { error: "signed-out" }] } });
+  await failsWith(signedOut.client.call("open-dialog", { app: "Word" }), "signed-out");
+});
+
+test("call reports lost-result when the helper no longer has it", async () => {
+  const { client } = setup({ routes: { "save-new": pending(), result: inTurn(pending(), [404, { error: "no-result" }]) } });
+  await failsWith(client.call("save-new", {}), "lost-result");
+  assert.equal(
+    Healdan.messageFor("lost-result"),
+    "Healdan Helper finished, but its answer was lost. Check the document in Healdan before trying again.",
+  );
+
+  // The helper quit and started again, on the next port, while the route ran: the new one has no such answer.
+  const listening = [47615];
+  const routes = {
+    "save-new": pending(),
+    result: ({ port }) => {
+      if (port === 47615) {
+        listening.splice(0, 1, 47616);
+        throw new TypeError("Load failed");
+      }
+      return [404, { error: "no-result" }];
+    },
+  };
+  const restarted = setup({ listening, routes });
+  restarted.storage.setItem("healdan.port", "47615");
+  await failsWith(restarted.client.call("save-new", {}), "lost-result");
+  assert.deepEqual(restarted.helper.requests.map((r) => `${r.route}@${r.port}`), [
+    "save-new@47615",
+    "result@47615",
+    "hello@47615",
+    "hello@47616",
+    "result@47616",
+  ]);
+});
+
+test("call asks for a pending answer again when asking failed on the way, as asking twice can't do anything twice", async () => {
+  let failed = false;
+  const routes = {
+    "save-new": pending(),
+    result: () => {
+      if (!failed) {
+        failed = true;
+        throw new TypeError("Load failed");
+      }
+      return SAVE;
+    },
+  };
+  const { client, helper, storage } = setup({ routes });
+  storage.setItem("healdan.port", "47615");
+  assert.deepEqual(await client.call("save-new", {}), SAVE[1]);
+  assert.deepEqual(helper.requests.map((r) => `${r.route}@${r.port}`), ["save-new@47615", "result@47615", "hello@47615", "result@47615"]);
+
+  // But only once: a helper that keeps failing is unreachable.
+  const broken = setup({
+    routes: {
+      "save-new": pending(),
+      result: () => {
+        throw new TypeError("Load failed");
+      },
+    },
+  });
+  await failsWith(broken.client.call("save-new", {}), "unreachable");
+  assert.equal(broken.helper.calls().filter((c) => c.route === "result").length, 2);
+});
+
 test("a key the helper doesn't know is dropped, so the next press pairs again", async () => {
   const { client, storage, helper, office } = setup({ routes: { "open-dialog": [403, { error: "not-paired" }] } });
   assert.ok(client.paired());
@@ -465,6 +581,27 @@ test("storage that won't keep the key, or won't be read, is told, not trusted", 
   assert.equal(await client.find(), 47615, "and finding the helper goes on without remembering the port");
 });
 
+test("a page where WebKit blocks storage, so reading localStorage itself throws, behaves as unpaired", async () => {
+  const source = fs.readFileSync(path.join(__dirname, "..", "web", "healdan.js"), "utf8");
+  const page = vm.createContext({});
+  vm.runInContext(
+    "Object.defineProperty(globalThis, 'localStorage', { get() { throw new Error('SecurityError'); } });",
+    page,
+  );
+  vm.runInContext(source, page);
+  const helper = fakeHelper({ routes: { "pair/finish": [200, { key: KEY }] } });
+
+  let client;
+  assert.doesNotThrow(() => {
+    client = page.Healdan.createHelperClient({ fetch: helper.fetch, origin: SERVER, host: "Word" });
+  });
+  assert.equal(client.paired(), false);
+  assert.equal(await client.find(), 47615, "it finds the helper, without remembering the port");
+  await assert.rejects(client.pairFinish("p-1", "123456"), (error) => error.code === "storage-failed");
+  const result = await page.Healdan.saveToHealdan({ client, office: fakeOffice() }); // an object of the page's, so its fields
+  assert.deepEqual(Object.entries(result), [["needsPairing", true]]);
+});
+
 test("a client needs one of Office's three apps", () => {
   assert.throws(() => Healdan.createHelperClient({ fetch: async () => {}, storage: memoryStorage(), origin: SERVER, host: "Outlook" }), TypeError);
   assert.throws(() => Healdan.createHelperClient({ fetch: async () => {}, storage: memoryStorage(), origin: SERVER }), TypeError);
@@ -516,6 +653,25 @@ test("saveToHealdan takes the mark off when the helper can't be reached for the 
   const result = await Healdan.saveToHealdan({ client, office });
   assert.equal(result.code, "unreachable");
   assert.ok(log.at(-1).startsWith("removeMark "), `${log} ends by taking the mark off`);
+});
+
+test("saveToHealdan still removes the mark when the file call ends in a pending error", async () => {
+  const routes = { "save-new": SAVE, file: pending(), result: inTurn(pending(), [409, { error: "wrong-window" }]) };
+  const { client, office, log } = setup({ routes });
+  const result = await Healdan.saveToHealdan({ client, office });
+  const [id] = office.marks;
+  assert.deepEqual(log, ["save-new", "readBytes", `setMark ${id}`, "file", "result", "result", `removeMark ${id}`]);
+  assert.deepEqual(result, { ok: false, code: "wrong-window", message: Healdan.messageFor("wrong-window") });
+
+  // And when the answer was lost: the pane says to check the document in Healdan.
+  const lost = setup({ routes: { "save-new": SAVE, file: pending(), result: [404, { error: "no-result" }] } });
+  const lostResult = await Healdan.saveToHealdan({ client: lost.client, office: lost.office });
+  assert.ok(lost.log.at(-1).startsWith("removeMark "), `${lost.log} ends by taking the mark off`);
+  assert.deepEqual(lostResult, { ok: false, code: "lost-result", message: Healdan.messageFor("lost-result") });
+
+  // A filing collected through result is the same as one answered at once.
+  const slow = setup({ routes: { "save-new": pending("id-2"), file: pending(), result: ({ body }) => (body.id === "id-2" ? SAVE : FILED) } });
+  assert.deepEqual(await Healdan.saveToHealdan({ client: slow.client, office: slow.office }), { ok: true, docRef: "#1234 v1.0" });
 });
 
 test("saveToHealdan on cancel does nothing else", async () => {
@@ -761,16 +917,28 @@ const HELPER_CODES = [
   "pairing-expired",
   "too-many-tries",
   "too-large",
+  "too-many-pending",
   "bad-request",
   "internal-error",
+  // "no-result" answers only result, which call turns into the add-in's own lost-result.
 ];
 
 test("messages: every code the helper answers has a text of its own", () => {
   const seen = new Map();
-  for (const code of [...HELPER_CODES, "unreachable", "no-office-on-the-web", "code-format", "storage-failed", "unexpected-answer", "office-error"]) {
+  for (const code of [
+    ...HELPER_CODES,
+    "unreachable",
+    "no-office-on-the-web",
+    "code-format",
+    "storage-failed",
+    "unexpected-answer",
+    "office-error",
+    "lost-result",
+  ]) {
     const message = Healdan.messageFor(code, { triesLeft: 2 });
     assert.equal(typeof message, "string", code);
     assert.ok(message.length > 20, `${code} has a real message`);
+    assert.ok(!/doesn't know/.test(message), `${code} has a text of its own, not the one for a code nobody knows`);
     assert.ok(!seen.has(message), `${code} and ${seen.get(message)} say the same`);
     seen.set(message, code);
     assert.ok(message.endsWith("."), `${code}: ${message}`);
@@ -779,7 +947,10 @@ test("messages: every code the helper answers has a text of its own", () => {
 });
 
 test("messages: the ones the pane shows most", () => {
-  assert.match(Healdan.messageFor("unreachable"), /^Healdan Helper isn't running, or Microsoft Office isn't set up in it\./);
+  assert.equal(
+    Healdan.messageFor("unreachable"),
+    "Healdan Helper isn't running, or Microsoft Office isn't set up in it. If it is running, check it is signed in to this Healdan, and set up Microsoft Office from its menu if it offers to.",
+  );
   assert.match(Healdan.messageFor("signed-out"), /^Healdan Helper is signed out, or still starting up\./);
   assert.match(Healdan.messageFor("not-paired"), /pair/i);
   assert.match(Healdan.messageFor("update-healdan-helper"), /Update Healdan Helper/);

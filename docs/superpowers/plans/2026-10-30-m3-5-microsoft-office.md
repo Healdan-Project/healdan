@@ -66,7 +66,7 @@ Every task's requirements include these.
 - **Copies, records, timings and the extension's channel** are M3's (M3 plan, Global Constraints), unchanged.
 - **CI time.** State in each PR how many seconds it adds to `build`, the `Tests` jobs and `Clients`.
 
-**The add-in's routes** (Tasks 7, 9):
+**The add-in's routes** (Tasks 7, 9, 9b):
 
 | Route | Body | Answer |
 |---|---|---|
@@ -80,6 +80,9 @@ Every task's requirements include these.
 | `POST /v1/new-version` | `{"app", "url"}` | `{}` |
 | `POST /v1/properties` | `{"app", "url"}` | as the extension's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
+| `POST /v1/result` | `{"id"}` | the pending route's outcome, its status and body as that route would have answered; `202 {"pending": "<id>"}` again while it runs; `404 no-result` for an id unknown, expired, already answered, or started with another key (added in the build, Task 9b) |
+
+**Short requests** (added in the build, Task 9b): Office's web view is WebKit, which is likely to give up on a request that has had no answer for about 60 seconds, while `open-dialog`, `save-new` and `properties` wait for the user and `file` can wait 300 s behind Grant File Access. So any keyed route except `ping`, `state` and `result` itself that hasn't finished after the hold time (20 s, a constructor parameter) answers `202 Accepted` with `{"pending": "<id>"}` (16 random bytes, base64url), and keeps running; its outcome, success or error, is kept under that id. `result` (keyed, `X-Healdan-Protocol: 1`, through every check as any keyed route) waits up to the hold time for it. Each outcome is answered once, belongs to the key that started it, and is kept for 10 minutes after its route finishes. At most 64 ids wait per key; more answer `429 too-many-pending` without starting the route. The add-in's `call` follows a `202` through `result`; a `no-result` while following is the add-in's `lost-result`.
 
 `url` is the add-in's `Office.context.document.url`, possibly empty. A `ticket` is a one-time id the helper makes at `save-new` for the window it took (Task 5); it expires after 10 minutes. Without the helper signed in, keyed routes answer `409 signed-out`; for a document that isn't a copy where one is needed, `409 not-a-copy`; for a front window carrying another document's mark, `409 wrong-window`; for a used or expired ticket, `409 no-ticket`.
 
