@@ -105,6 +105,65 @@ mistaken for LibreOffice's own Save and Open.
   the extension is in, the helper reminds you each time it starts.
 - **After you install a new version of the helper,** LibreOffice may ask again, if it brings a newer extension.
 
+## Setting Up Microsoft Office
+
+Word, Excel and PowerPoint reach Healdan Helper on your Mac through a secure connection, which they use only once your
+Mac trusts a certificate the helper makes for itself. **Set Up Microsoft Office** does that, and tells you about the two
+other things macOS asks for later. You do it once, however many of the three apps you use.
+
+- **When it opens:** the first time the helper starts with Word, Excel or PowerPoint installed on your Mac, once you've
+  signed in. If you choose **Not Now**, it doesn't open again by itself: choose **Set Up Microsoft Office…** in the
+  helper's menu when you're ready. That item is in the menu only while Set Up has something to do, and goes once it's
+  done.
+- **The window** has three rows:
+
+  | Row | What it means |
+  |---|---|
+  | **Trust Healdan Helper's certificate** | macOS asks for your password once. Word, Excel and PowerPoint use the certificate to reach Healdan Helper on this Mac. **Set Up** does this one |
+  | **Allow Healdan Helper to control each app** | The first time the helper saves a document in Word, Excel or PowerPoint, macOS asks whether it may. Choose **Allow**. Each app asks for itself |
+  | **Grant each app the Copies folder** | The first time an app saves into Healdan Helper's `Copies` folder, it asks for access. Click **Select…**, go up one level, select `Copies`, and click **Grant Access**. The chooser opens inside `Copies`, where Grant Access is greyed out, which is why you go up first |
+
+- **Set Up** asks macOS to trust the certificate. macOS asks for your password (or Touch ID), and a tick shows in the
+  window when it's done. If you cancel the password prompt, or macOS refuses, a line under the rows says so, and you can
+  choose **Set Up** again. The other two rows aren't done by Set Up: macOS asks for them when each app first needs them,
+  and the window only tells you what to expect.
+- **The certificate** is the helper's own, made on your Mac, and good for the addresses `localhost` and `127.0.0.1`
+  only, which are your own Mac's. It isn't a certificate authority, so it can't vouch for any website, and its private
+  key stays in the helper's folder (`addin-key.pem`, in `~/Library/Application Support/Healdan Helper/`), readable by you
+  alone. macOS trusts it for secure connections only, in your login keychain, where Keychain Access lists it as
+  "Healdan Helper (this Mac)".
+- **It lasts 800 days.** When fewer than 30 are left, **Set Up Microsoft Office…** comes back in the menu. Its
+  **Set Up** makes a new certificate and asks for your password to trust it: the helper never makes one by itself.
+  Until then the old one keeps working; once it has run out, Word, Excel and PowerPoint can't reach the helper until
+  you set up again.
+- **Once Set Up is done,** Word, Excel and PowerPoint can reach the helper straight away, without restarting it,
+  whether you're signed in or not. Signed out, the Healdan pane says so. Without a trusted certificate they can't reach
+  it, and the pane says that instead.
+
+## Pairing Word, Excel and PowerPoint
+
+The first time you press a Healdan button in Word, Excel or PowerPoint, the app pairs with the helper, so that only
+your own add-in can use it.
+
+1. The Healdan pane opens in the app and asks for a code, and the helper shows a window: "Word wants to connect to
+   Healdan Helper", with a six-digit code in large digits.
+2. Type the code in the Healdan pane. The space in the middle doesn't matter.
+3. The helper's window closes, and the app is paired.
+
+- **Each app pairs once,** and stays paired when you quit it or restart your Mac. Word, Excel and PowerPoint keep
+  their own pairing, so each asks the first time you use Healdan in it.
+- **The code expires after two minutes,** and three wrong tries cancel it. Press the Healdan button again for a new
+  code. Only one code is shown at a time: a new one replaces the window. After nine wrong codes in a row, pairing
+  pauses for ten minutes.
+- **If you didn't press a Healdan button,** choose **Cancel**. The code shows only on your screen, so whoever asked
+  for it can't use it.
+- **If an app forgets its pairing,** as it does when Office's cache is cleared, the next Healdan button asks for a new
+  code.
+- **What the helper keeps:** only a fingerprint of each app's key, from which the key can't be worked out, in
+  `addin-keys.json` in the helper's folder, readable by you alone. The helper answers only Healdan's add-in, loaded from
+  your own Healdan server, and only once it's paired: a web page, another program, or another user of your Mac can't
+  use it.
+
 ## The Prompts to Expect
 
 Each of these comes once.
@@ -115,9 +174,14 @@ Each of these comes once.
 | The first time the helper starts | macOS: allow notifications from Healdan Helper? | **Allow**. Without them, the helper's latest notice shows in its menu instead |
 | After your first sign-in | macOS may say that Healdan Helper was added to your login items | Nothing: it lets the helper start when you sign in |
 | After your first sign-in | LibreOffice: install the extension Healdan? | **OK**, then restart LibreOffice |
+| After your first sign-in, with Word, Excel or PowerPoint installed | The helper's Set Up Microsoft Office window, and when you choose Set Up, macOS asking for your password to change your certificate trust settings | **Set Up**, then your password: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
+| The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan pane: see [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint) |
+| The first time the helper saves in each of Word, Excel and PowerPoint | macOS: allow Healdan Helper to control the app? | **Allow** |
+| The first time each of them saves into the helper's `Copies` folder | The app: grant access to the folder | **Select…**, up one level, `Copies`, **Grant Access** |
 | The first Open in App from each browser | The browser: allow this page to open Healdan Helper? | **Allow**. Ticking the box to remember it saves asking again |
 
-The helper doesn't ask for your keychain password: it reads its own sign-in without one.
+Apart from the password macOS asks for when you set up Microsoft Office, none of these asks for your Mac's password. The
+helper doesn't ask for your keychain password: it reads its own sign-in without one.
 
 ## The Helper's Menu
 
@@ -134,6 +198,7 @@ Click Healdan's icon in the menu bar.
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
 | Open Healdan in Browser | Healdan's web page, on the helper's server, in your usual browser. It works when the helper is signed out too: the web page has its own sign-in |
 | Install the LibreOffice Extension… | Only while the extension isn't installed, or an older version is |
+| Set Up Microsoft Office… | Only while Word, Excel or PowerPoint is installed and the helper's certificate isn't trusted yet, or is nearly out of date: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
 | Settings… | See [Settings](#settings) |
 | Sign Out, or Sign In… | See [Signing Out](#signing-out) |
 | About Healdan Helper | The helper's version, and the server's: see [About Healdan Helper](#about-healdan-helper) |
@@ -143,7 +208,7 @@ Click Healdan's icon in the menu bar.
 
 ![The Healdan Helper Settings window below its Server group: Open Each Kind of File In, with Documents, Spreadsheets, Presentations and Drawings, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version, 0.3.0, installed on 29 October 2026](settings.png)
 
-Settings has three groups:
+Settings has four groups (three while your Mac has no Word, Excel or PowerPoint and no app is paired):
 
 - **Server:** the server the helper is signed in to, as you'd type it to sign in, such as `healdan.example`. To use
   another, sign out, then sign in with its address. Before you do, close your documents, and check the menu shows no
@@ -154,8 +219,27 @@ Settings has three groups:
   to the new server, where the same doc # can be a different document. They come back, with any saves still to send,
   when you sign in to the old server again. Meanwhile the menu shows how many are waiting.
 - **Open Each Kind of File In:** a row each for documents, spreadsheets, presentations and drawings, with the file
-  extensions it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app
+  extensions it covers, and the app that opens them. Other files, such as PDFs, open read-only in your Mac's usual app
   for them.
+  - **A pop-up** offers LibreOffice and Microsoft Office, whichever are installed. Microsoft Office is offered for
+    documents when Word is installed, for spreadsheets when Excel is, and for presentations when PowerPoint is. Choose
+    one, and it's kept straight away. It applies to the documents you open from then on: one you have open already
+    stays in the app it opened in, until you close it.
+  - **Until you choose,** a kind opens in Microsoft Office when your Mac's app for its usual file type (`.docx` for
+    documents, `.xlsx` for spreadsheets, `.pptx` for presentations) is Word, Excel or PowerPoint, and in LibreOffice
+    when it isn't. So on a Mac that opens `.docx` files in Word, new documents open in Word without your changing
+    anything.
+  - **With one app to offer,** the row shows it with no pop-up. Drawings are always LibreOffice's, as Microsoft Office
+    doesn't open them.
+  - **OpenDocument files** (`.odt`, `.ott`, `.ods`, `.odp` and `.odg` drawings) always open in LibreOffice, whatever
+    you choose, while it's installed. Your choice is for Microsoft's file types, such as `.docx`, `.xls` and `.pptx`.
+- **Microsoft Office:** shown while Word, Excel or PowerPoint is installed on your Mac, or an app is still paired.
+  - **Set Up:** shown while one of them is installed. **Done** once your Mac trusts the helper's certificate. While it
+    doesn't, or the certificate is nearly out of date, it says **Needed**, and **Set Up…** opens the Set Up Microsoft
+    Office window: see [Setting Up Microsoft Office](#setting-up-microsoft-office).
+  - **Paired Apps:** each of Word, Excel and PowerPoint that has paired with the helper, and the date it last paired,
+    or **None**. **Forget** makes the helper forget an app: it asks for a new code the next time you press a Healdan
+    button in it. See [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint).
 - **This Computer:**
   - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
     To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it isn't on, a line

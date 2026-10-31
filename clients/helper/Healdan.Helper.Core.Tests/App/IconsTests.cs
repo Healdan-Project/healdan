@@ -18,10 +18,10 @@ public sealed class IconsTests
 
     private static readonly string[] SpecNames =
     [
-        "alert-triangle", "briefcase", "building", "chevron-left", "chevron-right", "chevron-up", "clock", "device-floppy",
-        "eye", "file", "file-plus", "file-spreadsheet", "file-text", "file-type-pdf", "folder", "folder-open", "folder-plus",
-        "hash", "history", "list-details", "lock", "photo", "power", "presentation", "puzzle", "search", "selector", "server",
-        "star", "triangle-square-circle", "versions"
+        "alert-triangle", "briefcase", "building", "check", "chevron-left", "chevron-right", "chevron-up", "clock",
+        "device-floppy", "eye", "file", "file-plus", "file-spreadsheet", "file-text", "file-type-pdf", "folder", "folder-open",
+        "folder-plus", "hash", "history", "list-details", "lock", "photo", "power", "presentation", "puzzle", "search",
+        "selector", "server", "star", "triangle-square-circle", "versions"
     ];
 
     [Fact]

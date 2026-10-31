@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Healdan.Helper.Core;
+using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Forms;
@@ -21,7 +22,7 @@ namespace Healdan.Helper.Windows;
 /// <para>A window that asks what the user started (Sign In, Sign Out on This Computer Only?, Save, Open, Properties,
 /// Checked Out on Another Computer) waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link
 /// brings it to the front. One the user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links
-/// back, and nor do About and its Open-Source Notices (<see cref="OpenWindows"/>).</para>
+/// back, and nor do About, its Open-Source Notices, Set Up Microsoft Office and the pairing code (<see cref="OpenWindows"/>).</para>
 /// <para>One of each window at a time: a second request for one that's open brings it to the front and is answered
 /// Cancel. The windows read Healdan through the session's API client, whose refused token asks for the sign-in again,
 /// and open documents through its cycle once they've closed, so the app never waits on a window for a download.
@@ -33,12 +34,17 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     private readonly Dictionary<string, Window> _single = [];
     private readonly Dictionary<string, CrashWindow> _crashShown = new(StringComparer.Ordinal);
     private Task<bool>? _signIn;
+    private Task<bool>? _setUpOffice;
+    private PairingWindow? _pairing;
 
     /// <summary>The running helper, set once it's made (it needs these windows to be made first).</summary>
     public HelperSession? Session { get; set; }
 
     /// <summary>The LibreOffice extension's check, for Settings; set with <see cref="Session"/>.</summary>
     public ExtensionCheck? Extension { get; set; }
+
+    /// <summary>What Set Up Microsoft Office does (M3.5 spec §5.13), for its window and the menu; set with <see cref="Session"/>.</summary>
+    public OfficeSetUp? SetUp { get; set; }
 
     public bool Waiting => _open.Waiting;
 
@@ -194,15 +200,93 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             window.Close();
     });
 
+    // --- Set Up Microsoft Office -----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Set Up Microsoft Office (M3.5 spec §5.13), from the first start or the menu. The user started it or it was offered,
+    /// and nothing waits on its answer, so it holds no links back, as Settings doesn't. One at a time: asked again, the open
+    /// window comes to the front and the answer is the same.
+    /// </summary>
+    public Task<bool> SetUpOfficeAsync() => OnUi(() =>
+    {
+        const string key = "set-up-office";
+        if (_setUpOffice is { IsCompleted: false } open)
+        {
+            Bring(key);
+            return open;
+        }
+        if (SetUp is not { } setUp)
+            return Task.FromResult(false);
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var window = new SetUpOfficeWindow(setUp, log);
+        _single[key] = window;
+        var shown = Show(window, waits: false, () =>
+        {
+            _single.Remove(key);
+            done.TrySetResult(window.Trusted);
+            // The add-in's port opens now that the Mac trusts the certificate, or serves the one Set Up renewed.
+            if (window.Trusted && Session is { } session)
+                _ = Task.Run(session.EnsureAddin).ContinueWith(t => log.Error("The Office add-in's port couldn't open after Set Up", t.Exception),
+                    TaskContinuationOptions.OnlyOnFaulted);
+        });
+        if (!shown)
+        {
+            _single.Remove(key);
+            return Task.FromResult(false);
+        }
+        log.Info("Set Up Microsoft Office window shown");
+        return _setUpOffice = done.Task;
+    });
+
+    // --- Pairing ---------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The pairing code (M3.5 spec §5.9), the only place it shows. Nobody waits on it for a link, so it holds none back. A new
+    /// code replaces the window; the user's Cancel, Escape or close ends the pairing it shows.
+    /// </summary>
+    public void ShowPairingCode(string app, string code, DateTimeOffset expires) => Dispatcher.UIThread.Post(() =>
+    {
+        _pairing?.EndQuietly();
+        var window = new PairingWindow(app, code, expires);
+        _pairing = window;
+        var shown = Show(window, waits: false, () =>
+        {
+            if (_pairing == window)
+                _pairing = null;
+            if (window.Cancelled)
+            {
+                log.Info($"Pairing {app} was cancelled in its window");
+                Session?.Pairing.Cancel(window.Code);
+            }
+        });
+        if (!shown)
+        {
+            _pairing = null;
+            Session?.Pairing.Cancel(window.Code); // a code nobody can see is no use
+        }
+    });
+
+    /// <summary>The pairing is over: its window goes, if it's up, cancelling nothing.</summary>
+    public void ClosePairingCode() => Dispatcher.UIThread.Post(() =>
+    {
+        var window = _pairing;
+        _pairing = null;
+        window?.EndQuietly();
+    });
+
     // --- Settings --------------------------------------------------------------------------------------------------
 
-    /// <summary>The menu's Settings…; one window at a time.</summary>
+    /// <summary>
+    /// The menu's Settings…; one window at a time. Its Microsoft Office group opens Set Up Microsoft Office and lists and
+    /// forgets the paired apps (M3.5 spec §5.10).
+    /// </summary>
     public void ShowSettings() => Dispatcher.UIThread.Post(() =>
     {
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var window = new SettingsWindow(server, Session?.SignedIn == true, OfficeAppSet.Chooser(paths), LoginItem.Summary(), Extension);
+        var office = new OfficeSettings(SetUp, SetUpOfficeAsync, () => Session?.Pairing.Paired() ?? [], app => Session?.Pairing.Forget(app));
+        var window = new SettingsWindow(server, Session?.SignedIn == true, paths, OfficeAppSet.Chooser(paths), LoginItem.Summary(), Extension, office, log);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

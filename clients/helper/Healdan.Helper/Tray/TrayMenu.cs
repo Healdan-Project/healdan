@@ -17,7 +17,8 @@ namespace Healdan.Helper.Tray;
 /// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), a line for each server with copies
 /// waiting (spec §5.4: set aside), Open from Healdan (once the helper has started), Open Healdan in Browser (once
 /// there's a server, signed in or not: #87), Install the LibreOffice Extension while it isn't installed (spec §5.12,
-/// R22), Settings, Sign In or Sign Out, About (#89) and Quit. When native notifications can't be shown, the last notice
+/// R22), Set Up Microsoft Office while Word, Excel or PowerPoint is installed and the certificate isn't trusted (M3.5 spec
+/// §5.13), Settings, Sign In or Sign Out, About (#89) and Quit. When native notifications can't be shown, the last notice
 /// is the menu's status line. The menu is rebuilt when it opens and whenever the session changes.
 /// </summary>
 internal sealed class TrayMenu : IDisposable
@@ -128,6 +129,8 @@ internal sealed class TrayMenu : IDisposable
         items.Add(browse);
         if (missing)
             items.Add(Item(ExtensionCheck.MenuItem, InstallExtension));
+        if (SetUpNeeded())
+            items.Add(Item("Set Up Microsoft Office…", () => Run(_windows.SetUpOfficeAsync)));
         items.Add(Item("Settings…", _windows.ShowSettings));
         items.Add(_session.SignedIn
             ? Item("Sign Out", () => Run(_session.SignOutAsync))
@@ -160,6 +163,23 @@ internal sealed class TrayMenu : IDisposable
             Program.Log.Error("Install the LibreOffice Extension failed", e);
         }
     });
+
+    /// <summary>
+    /// Whether the menu offers Set Up Microsoft Office. Read when the menu is built, so it goes once the Mac trusts the
+    /// certificate; a failure to read it only leaves the item out, as the menu must still build.
+    /// </summary>
+    private bool SetUpNeeded()
+    {
+        try
+        {
+            return _windows.SetUp is { Needed: true };
+        }
+        catch (Exception e)
+        {
+            Program.Log.Error("Whether Set Up Microsoft Office is needed couldn't be told", e);
+            return false;
+        }
+    }
 
     private string Who()
     {

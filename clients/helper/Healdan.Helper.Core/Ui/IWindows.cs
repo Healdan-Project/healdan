@@ -58,4 +58,22 @@ public interface IWindows
     /// a Crash window goes, if it's up, as neither Reopen nor Send and Check In applies any more.
     /// </summary>
     void DismissCrashed(string path);
+
+    /// <summary>
+    /// Set Up Microsoft Office (M3.5 spec §5.13): says what the helper is about to ask for and why, and its Set Up has the
+    /// Mac trust the helper's certificate. True once the certificate is trusted; false for Not Now, a close, or a Set Up the
+    /// user cancelled or that failed. Asks nothing a link waits on, so it holds none back.
+    /// </summary>
+    Task<bool> SetUpOfficeAsync();
+
+    /// <summary>
+    /// Pairing (M3.5 spec §5.9): <paramref name="app"/> (Word, Excel or PowerPoint) asked to pair, and the window shows
+    /// <paramref name="code"/> for the user to type in its Healdan pane. The window closes by itself at
+    /// <paramref name="expires"/>, and its Cancel ends the pairing. One at a time: a new code replaces the window, and asks
+    /// nothing a link waits on, so it holds none back.
+    /// </summary>
+    void ShowPairingCode(string app, string code, DateTimeOffset expires);
+
+    /// <summary>The pairing ended (paired, three wrong codes, expired or replaced): its window goes, if it's up.</summary>
+    void ClosePairingCode();
 }

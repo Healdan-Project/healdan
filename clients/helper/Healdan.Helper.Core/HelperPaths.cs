@@ -30,6 +30,20 @@ public sealed class HelperPaths
 
     public string Channel => Path.Combine(Support, "channel.json");
 
+    /// <summary>
+    /// The certificate the add-in's port serves (M3.5 spec §5.13): the helper's own, PEM, which the user trusts once.
+    /// </summary>
+    public string AddinCertificate => Path.Combine(Support, "addin-cert.pem");
+
+    /// <summary>The certificate's private key, PEM, which only the user can read (<see cref="Addin.AddinCertificate"/>).</summary>
+    public string AddinKey => Path.Combine(Support, "addin-key.pem");
+
+    /// <summary>
+    /// The paired add-ins' keys (M3.5 spec §5.9), each kept only as its hash, with its app and when it was paired; only the
+    /// user can read it (<see cref="Addin.AddinKeys"/>).
+    /// </summary>
+    public string AddinKeys => Path.Combine(Support, "addin-keys.json");
+
     public string Log { get; }
 
     /// <summary>

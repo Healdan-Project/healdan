@@ -26,6 +26,13 @@ public sealed class HelperSettings
     public bool LoginItemRegistered { get; set; }
 
     /// <summary>
+    /// The helper has offered Set Up Microsoft Office (M3.5 spec §5.13), which it does once, at the first start that finds
+    /// Word, Excel or PowerPoint installed and the certificate not yet trusted. After that it is in the menu and Settings,
+    /// not shown again unasked.
+    /// </summary>
+    public bool OfficeSetUpOffered { get; set; }
+
+    /// <summary>
     /// The app the user chose for each kind of file (<see cref="FileKinds"/>, by its label): <c>LibreOffice</c> or
     /// <c>Microsoft Office</c>. Null, or a kind left out, is the default (<see cref="AppChooser"/>).
     /// </summary>

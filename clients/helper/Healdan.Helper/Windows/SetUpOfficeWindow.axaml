@@ -1,0 +1,59 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:Healdan.Helper.Windows"
+        x:Class="Healdan.Helper.Windows.SetUpOfficeWindow"
+        Title="Set Up Microsoft Office"
+        Width="460" SizeToContent="Height"
+        CanResize="False" CanMinimize="False" CanMaximize="False"
+        Background="{DynamicResource HdGroupedBrush}"
+        WindowStartupLocation="CenterScreen">
+  <!-- Set Up Microsoft Office (M3.5 spec §5.13): what Healdan Helper is about to ask for, and why. Set Up does the first,
+       trusting the certificate, which asks for the user's password; macOS asks for the other two when each app first needs
+       them. Grouped rows as Settings', each an icon, a title and a muted note. -->
+  <StackPanel Margin="20,16,20,16">
+    <TextBlock Text="Set Up Microsoft Office" Classes="headline" Margin="4,0,4,0" />
+    <TextBlock Classes="footnote" Margin="4,5,4,0"
+               Text="Healdan Helper needs three things from you, each once. Set Up does the first now. macOS asks for the other two when each app first needs them." />
+    <Border Classes="group" Margin="0,12,0,0">
+      <StackPanel>
+        <Grid Classes="row" ColumnDefinitions="Auto,*,Auto" Margin="10,8">
+          <local:IconView Data="{StaticResource Icon.lock}" Classes="folder" Margin="0,2,10,0" VerticalAlignment="Top" />
+          <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+            <TextBlock Text="Trust Healdan Helper's certificate" />
+            <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap"
+                       Text="macOS asks for your password once. Word, Excel and PowerPoint use it to reach Healdan Helper on this Mac." />
+          </StackPanel>
+          <StackPanel x:Name="DoneMark" Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="10,0,0,0" VerticalAlignment="Top" IsVisible="False">
+            <local:IconView Data="{StaticResource Icon.check}" Foreground="{DynamicResource HdOnBrush}" AutomationProperties.Name="Done" />
+            <TextBlock Text="Done" Foreground="{DynamicResource HdSecondaryBrush}" />
+          </StackPanel>
+        </Grid>
+        <Border Classes="divided">
+          <Grid Classes="row" ColumnDefinitions="Auto,*" Margin="10,8">
+            <local:IconView Data="{StaticResource Icon.puzzle}" Classes="folder" Margin="0,2,10,0" VerticalAlignment="Top" />
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+              <TextBlock Text="Allow Healdan Helper to control each app" />
+              <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap"
+                         Text="The first time it saves a document in Word, Excel or PowerPoint, macOS asks. Choose Allow." />
+            </StackPanel>
+          </Grid>
+        </Border>
+        <Border Classes="divided">
+          <Grid Classes="row" ColumnDefinitions="Auto,*" Margin="10,8">
+            <local:IconView Data="{StaticResource Icon.folder}" Classes="folder" Margin="0,2,10,0" VerticalAlignment="Top" />
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+              <TextBlock Text="Grant each app the Copies folder" />
+              <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap"
+                         Text="The first time an app saves into Healdan Helper's Copies folder, it asks. Click Select…, go up one level, select Copies, and click Grant Access." />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </StackPanel>
+    </Border>
+    <TextBlock x:Name="ProblemText" Classes="problem" Margin="4,8,4,0" IsVisible="False" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
+      <Button x:Name="NotNowButton" Classes="footer" Content="Not Now" IsCancel="True" />
+      <Button x:Name="SetUpButton" Classes="footer accent" Content="Set Up" IsDefault="True" />
+    </StackPanel>
+  </StackPanel>
+</Window>

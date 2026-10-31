@@ -18,23 +18,33 @@ public sealed record InstalledApps(bool LibreOffice, bool Word, bool Excel, bool
     public bool MicrosoftOffice => Word || Excel || PowerPoint;
 
     /// <summary>Looks on this computer, as the helper looks for LibreOffice and the Office programs on macOS.</summary>
-    public static InstalledApps Detect() =>
-        Detect(OperatingSystem.IsMacOS(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Directory.Exists);
+    /// <param name="bundleFound">
+    /// Whether LaunchServices finds an app by its bundle identifier (<see cref="AppBundles"/>), wherever it is installed;
+    /// null on a computer that has none. Only macOS asks it.
+    /// </param>
+    public static InstalledApps Detect(Func<string, bool>? bundleFound = null) =>
+        Detect(OperatingSystem.IsMacOS(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Directory.Exists, bundleFound);
 
     /// <summary>
-    /// On macOS: the app bundles. LibreOffice.app is in <c>/Applications</c> or the user's own <c>~/Applications</c>, and
-    /// Microsoft's programs are in <c>/Applications</c> (<see cref="OfficePrograms.BundlePath"/>). Elsewhere Microsoft
-    /// Office is never installed, and LibreOffice counts as installed: nothing here can tell, and it has always been
-    /// taken to be (a missing one fails when it is opened).
+    /// On macOS: the app bundles in the usual places, else what LaunchServices finds. LibreOffice.app is in
+    /// <c>/Applications</c> or the user's own <c>~/Applications</c>, and Microsoft's programs are in <c>/Applications</c>
+    /// (<see cref="OfficePrograms.BundlePath"/>). An app anywhere else counts as well, as it did when M3 opened LibreOffice
+    /// with <c>open -a</c>, which LaunchServices resolves. LaunchServices is asked only about an app the folders didn't
+    /// show. Elsewhere Microsoft Office is never installed, and LibreOffice counts as installed: nothing here can tell, and
+    /// it has always been taken to be (a missing one fails when it is opened).
     /// </summary>
-    internal static InstalledApps Detect(bool macOS, string home, Func<string, bool> directoryExists)
+    internal static InstalledApps Detect(bool macOS, string home, Func<string, bool> directoryExists, Func<string, bool>? bundleFound = null)
     {
         if (!macOS)
             return new InstalledApps(LibreOffice: true, Word: false, Excel: false, PowerPoint: false);
+        bool Found(string identifier) => bundleFound is not null && bundleFound(identifier);
         return new InstalledApps(
-            LibreOffice: directoryExists("/Applications/LibreOffice.app") || directoryExists(Path.Combine(home, "Applications", "LibreOffice.app")),
-            Word: directoryExists(OfficePrograms.BundlePath(OfficeProgram.Word)),
-            Excel: directoryExists(OfficePrograms.BundlePath(OfficeProgram.Excel)),
-            PowerPoint: directoryExists(OfficePrograms.BundlePath(OfficeProgram.PowerPoint)));
+            LibreOffice: directoryExists("/Applications/LibreOffice.app") || directoryExists(Path.Combine(home, "Applications", "LibreOffice.app"))
+                || Found(AppBundles.LibreOffice),
+            Word: Microsoft(OfficeProgram.Word),
+            Excel: Microsoft(OfficeProgram.Excel),
+            PowerPoint: Microsoft(OfficeProgram.PowerPoint));
+
+        bool Microsoft(OfficeProgram p) => directoryExists(OfficePrograms.BundlePath(p)) || Found(AppBundles.Of(p));
     }
 }

@@ -9,10 +9,12 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Healdan.Helper.Core;
+using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Session;
+using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Platform;
 using Healdan.Helper.Tray;
 using Healdan.Helper.Windows;
@@ -20,8 +22,9 @@ using Healdan.Helper.Windows;
 namespace Healdan.Helper;
 
 /// <summary>
-/// Puts the helper together: the session (sign-in, copies, channel and links, in that order), the menu-bar icon,
-/// notifications and windows. Links arrive as Apple events (<see cref="ProtocolActivatedEventArgs"/>), started or not.
+/// Puts the helper together: the session (sign-in, copies, the channel, the Office add-in's port and links, in that
+/// order), the menu-bar icon, notifications and windows. Links arrive as Apple events
+/// (<see cref="ProtocolActivatedEventArgs"/>), started or not.
 /// </summary>
 public partial class App : Application
 {
@@ -73,15 +76,22 @@ public partial class App : Application
         var notifier = new Notifier(_log);
         var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
-        var session = new HelperSession(paths, Keychain(paths, device), device, OfficeAppSet.Create(paths), windows, notifier, _log);
+        // The certificate for the add-in's port, which Set Up Microsoft Office makes and has the Mac trust (M3.5 spec §5.13),
+        // and the session serves once it's trusted (§5.8). Only a Mac with Word, Excel or PowerPoint on it ever needs it.
+        var certificate = new AddinCertificate(paths, TimeProvider.System);
+        var trust = new MacCertificateTrust();
+        var mac = OperatingSystem.IsMacOS();
+        var session = new HelperSession(paths, Keychain(paths, device), device, OfficeAppSet.Create(paths), windows, notifier, _log,
+            trust: mac ? trust : null, certificate: mac ? certificate : null);
         _session = session;
         windows.Session = session;
+        windows.SetUp = new OfficeSetUp(paths, certificate, trust, OfficeAppSet.Installed);
         var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);
         windows.Extension = extension.Check;
         session.Changed += () =>
         {
             if (session.Started)
-                AfterFirstStart(extension);
+                AfterFirstStart(extension, windows);
         };
 
         // Subscribed before the run loop starts, so the link that started the helper isn't missed; the session holds
@@ -114,10 +124,12 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Once per run, after the first start that signed in: start at sign-in (macOS's login item) and the LibreOffice
-    /// extension's install or update (spec §5.12). Both run off the UI thread, and a failure is only logged.
+    /// Once per run, after the first start that signed in: start at sign-in (macOS's login item), the LibreOffice
+    /// extension's install or update (spec §5.12), and, the first time ever that Word, Excel or PowerPoint is installed and
+    /// the helper's certificate isn't trusted, the offer of Set Up Microsoft Office (M3.5 spec §5.13). All run off the UI
+    /// thread, and a failure is only logged.
     /// </summary>
-    private void AfterFirstStart(ExtensionInstaller extension)
+    private void AfterFirstStart(ExtensionInstaller extension, AppWindows windows)
     {
         if (Interlocked.Exchange(ref _afterStart, 1) == 1)
             return;
@@ -142,6 +154,18 @@ public partial class App : Application
             catch (Exception e)
             {
                 _log.Error("The LibreOffice extension check failed", e);
+            }
+            try
+            {
+                if (windows.SetUp is { } setUp && setUp.TakeFirstOffer())
+                {
+                    _log.Info("Offering Set Up Microsoft Office");
+                    _log.Info($"Set Up Microsoft Office: {(await windows.SetUpOfficeAsync() ? "trusted" : "left for later")}");
+                }
+            }
+            catch (Exception e)
+            {
+                _log.Error("Offering Set Up Microsoft Office failed", e);
             }
         });
     }
