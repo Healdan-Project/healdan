@@ -69,8 +69,8 @@ lines from around a failure are easy to find.
 
 ## Desktop Client Tests
 
-The helper's and the LibreOffice extension's tests run with `dotnet test` and Python's `unittest`, apart from
-Maven: see [Desktop Clients](../desktop-clients/#tests) for what they cover, and
+The helper's, the LibreOffice extension's and the Office add-in's tests run with `dotnet test`, Python's `unittest`
+and `node --test`, apart from Maven: see [Desktop Clients](../desktop-clients/#tests) for what they cover, and
 [Building from Source](../building-from-source/#the-desktop-clients) for the commands.
 
 ## Script and Docs Site Tests

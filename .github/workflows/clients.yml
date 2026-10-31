@@ -1,7 +1,8 @@
 name: Clients
 
-# Builds and tests the desktop clients in clients/: the helper (.NET) on Ubuntu and macOS, and the LibreOffice extension's
-# Python tests on Ubuntu. A helper-v* tag, or a run by hand, also packages the macOS helper (spec §5.12).
+# Builds and tests the desktop clients in clients/: the helper (.NET) on Ubuntu and macOS, the LibreOffice extension's
+# Python tests on Ubuntu, and the Office add-in's Node tests on Ubuntu. A helper-v* tag, or a run by hand, also packages
+# the macOS helper (spec §5.12).
 #
 # No paths filter: the Clients check should be required, so every pull request runs the workflow and the test jobs skip
 # themselves when code-changed.sh says the clients didn't change: nothing under clients/, this workflow or the API
@@ -86,12 +87,33 @@ jobs:
       - name: Test the extension
         run: python3 -m unittest discover -s clients/libreoffice/tests -v
 
+  addin:
+    name: Office add-in (ubuntu-24.04)
+    needs: changes
+    if: needs.changes.outputs.clients == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # Node's own test runner: the add-in's logic has no dependencies, so nothing is installed. The pattern is quoted
+      # for Node to expand, as Node 21 and later read --test's arguments as file patterns, not folders.
+      - name: Test the add-in
+        run: node --test 'clients/office/test/*.test.js'
+
   # The check to require in master's ruleset. It passes when the test jobs passed, or when they were skipped because
   # the clients didn't change (nothing under clients/, this workflow or the API contract). It runs even when the run is
   # cancelled, and then fails, so a cancelled run can't count as a pass.
   clients:
     name: Clients
-    needs: [ changes, helper, extension ]
+    needs: [ changes, helper, extension, addin ]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -100,14 +122,15 @@ jobs:
           CHANGES: ${{ needs.changes.result }}
           HELPER: ${{ needs.helper.result }}
           EXTENSION: ${{ needs.extension.result }}
+          ADDIN: ${{ needs.addin.result }}
           CLIENTS: ${{ needs.changes.outputs.clients }}
         run: |
-          echo "changes: $CHANGES, helper: $HELPER, extension: $EXTENSION, clients changed: $CLIENTS"
+          echo "changes: $CHANGES, helper: $HELPER, extension: $EXTENSION, add-in: $ADDIN, clients changed: $CLIENTS"
           if [ "$CHANGES" = success ]; then
-            if [ "$HELPER" = success ] && [ "$EXTENSION" = success ]; then
+            if [ "$HELPER" = success ] && [ "$EXTENSION" = success ] && [ "$ADDIN" = success ]; then
               exit 0
             fi
-            if [ "$HELPER" = skipped ] && [ "$EXTENSION" = skipped ] && [ "$CLIENTS" = false ]; then
+            if [ "$HELPER" = skipped ] && [ "$EXTENSION" = skipped ] && [ "$ADDIN" = skipped ] && [ "$CLIENTS" = false ]; then
               exit 0
             fi
           fi

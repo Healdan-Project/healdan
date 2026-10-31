@@ -11,7 +11,7 @@ weight: 4
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, the API's add-in flow and the helper's open-save-close cycle (its stack test) included |
-| `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, and the LibreOffice extension's Python tests on Ubuntu (see below) |
+| `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
 ## How `build` Runs
@@ -82,7 +82,7 @@ Pushes to `master` that change only docs, the helper, the extension or the icons
 
 ## The Clients Check
 
-`clients.yml` has no paths filter, so every pull request runs it and the check can be required. Its four check jobs
+`clients.yml` has no paths filter, so every pull request runs it and the check can be required. Its five check jobs
 are:
 
 1. **`changes`** runs `code-changed.sh`.
@@ -90,8 +90,12 @@ are:
    the .NET SDK that `clients/helper/global.json` pins.
 3. **`LibreOffice extension (ubuntu-24.04)`** runs `python3 -m unittest discover -s clients/libreoffice/tests -v`,
    which also builds the extension's `.oxt` and checks that its parts agree.
-4. **`Clients`** is the check to require. It passes when both test jobs passed, or when both were skipped because
-   nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
+4. **`Office add-in (ubuntu-24.04)`** sets up Node 22 and runs `node --test 'clients/office/test/*.test.js'`, which
+   tests the add-in's logic, `clients/office/web/healdan.js`, with a fake `fetch`, storage and Office. Nothing is
+   installed. The pattern is quoted for Node to expand: Node 21 and later read `--test`'s arguments as file
+   patterns, so a folder fails.
+5. **`Clients`** is the check to require. It passes when the three test jobs passed, or when all three were skipped
+   because nothing under `clients/`, nor the API contract, changed. A cancelled run fails it.
 
 `Clients` is one of `master`'s required checks.
 

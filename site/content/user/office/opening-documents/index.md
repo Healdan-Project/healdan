@@ -3,18 +3,19 @@ title: Opening Documents
 weight: 3
 ---
 
-You can open a Healdan document in LibreOffice from the web page, or from inside LibreOffice. Either way, a document
-you can edit opens checked out to you, and one you can't opens as a read-only copy.
+You can open a Healdan document in LibreOffice, Word, Excel or PowerPoint from the web page, or from inside the app.
+Either way, a document you can edit opens checked out to you, and one you can't opens as a read-only copy.
 
 ## From the Web Page: Open in App
 
 Select one document, then choose **Open in App** on the toolbar, or right-click it and choose **Open in App**. The
-document opens in LibreOffice, and the helper's menu lists it.
+document opens in the app you've chosen for its kind in the helper's Settings (see
+[Opening in Word, Excel and PowerPoint](#opening-in-word-excel-and-powerpoint)), and the helper's menu lists it.
 
-- **It's on** for one document at a time, of a kind LibreOffice edits: `.doc`, `.docx`, `.docm`, `.dotx`, `.dotm`,
-  `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm`, `.odp` and `.odg`. You need
-  permission to download it. The helper opens only these kinds from the web page: a link to any other file is
-  refused, with a notice (see [Other Kinds of File](#other-kinds-of-file)).
+- **It's on** for one document at a time, of a kind LibreOffice or Microsoft Office edits: `.doc`, `.docx`, `.docm`,
+  `.dotx`, `.dotm`, `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm`, `.odp` and
+  `.odg`. You need permission to download it. The helper opens only these kinds from the web page: a link to any
+  other file is refused, with a notice (see [Other Kinds of File](#other-kinds-of-file)).
 - **It's on while the document is checked out** too, so you can reopen your own, and others get a read-only copy.
 - **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
   remember, if there is one.
@@ -60,6 +61,29 @@ At the bottom:
   ticked for you. Choosing another document goes back to its current version.
 - **Open from Local Computer…** shows LibreOffice's own Open box, for a file on your Mac.
 
+## Opening in Word, Excel and PowerPoint
+
+Which app opens a Healdan document depends on its kind of file, and you choose it in the helper's **Settings**, under
+**Open Each Kind of File In**: see [Settings](../installing-the-helper/#settings). Until you choose, documents open in
+Word, spreadsheets in Excel and presentations in PowerPoint when your Mac already opens `.docx`, `.xlsx` and `.pptx`
+files in them, and in LibreOffice when it doesn't.
+
+- **From the web page,** Open in App opens the copy in that app. A `.docx` opens in Word, a `.xlsx` in Excel and a
+  `.pptx` in PowerPoint, if you chose them.
+- **From inside the app,** choose **Open from Healdan** on the **Healdan** tab. It shows the same window as above,
+  where you can search for `#1234`. **Word's own Open** and **File › Open** stay Office's own, and show files on your
+  Mac.
+- **OpenDocument files** (`.odt`, `.ods`, `.odp` and `.odg` drawings) open in LibreOffice, whatever you've chosen,
+  while it's installed. Office turns the Healdan tab off in a window holding one.
+- **The first time** the helper opens a copy in an app, macOS asks whether Healdan Helper may control it, and the
+  first time the app saves into the helper's `Copies` folder it asks for access to it: see
+  [The Prompts to Expect](../installing-the-helper/#the-prompts-to-expect).
+- **The title bar** reads `Lease agreement #1234 v2.1`, as in LibreOffice. A copy open in Word or Excel takes each
+  saved version's name as the title moves on; one in PowerPoint keeps the version it opened as. See
+  [Editing and Versions](../editing-and-versions/#in-word-excel-and-powerpoint).
+- **A read-only copy** opens with "(read-only)" at the end of its title, and a notice says why, as for LibreOffice:
+  see [Read-Only Copies](#read-only-copies). To file your changes, use **Save as New Document** on the Healdan tab.
+
 ## What Happens When It Opens
 
 If you can edit the document and nobody else has it checked out, the helper checks it out to you on this Mac,
@@ -78,7 +102,7 @@ A document opens as a read-only copy when:
 - you ticked Open Read-Only, or chose an older version.
 
 Its title ends in "(read-only)", and a notice says why, such as "Opened read-only: Jamie Clarke has it checked out."
-LibreOffice opens it read-only. Nothing you do to it reaches the document: saving it shows Save as New Document
+The app opens it read-only. Nothing you do to it reaches the document: saving it shows Save as New Document
 instead, which files your changes as a new document (see
 [Editing and Versions](../editing-and-versions/#save-as-new-document)). The copy is deleted when you close it.
 

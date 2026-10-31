@@ -3,12 +3,52 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Healdan</title>
+  <link rel="stylesheet" href="healdan.css">
 </head>
 <body>
-  <!-- A placeholder until the add-in's pane is written (M3.5, Task 10). The server's Content-Security-Policy
-       allows scripts from the server and Office.js's address only, so no script goes inline. -->
-  <h1>Healdan</h1>
-  <p>This pane isn't ready yet.</p>
+  <!-- The add-in's pane (M3.5 spec section 6): Healdan Helper's status, the last message and the field for the pairing
+       code. A button that has something to tell opens this page as a window, with the message in its address. The server's
+       Content-Security-Policy allows scripts from the server and Office.js's address only, so none is inline. -->
+  <header class="brand">
+    <img src="assets/healdan-32.png" alt="" width="24" height="24">
+    <h1>Healdan</h1>
+  </header>
+
+  <main id="main" aria-busy="true">
+    <p id="web" class="notice" role="status" hidden></p>
+
+    <section id="message-section" aria-labelledby="message-title" hidden>
+      <h2 id="message-title">Message</h2>
+      <p id="message" class="message" tabindex="-1"></p>
+      <p id="message-when" class="when" hidden></p>
+    </section>
+
+    <section id="busy-section" aria-label="In progress" hidden>
+      <p class="waiting"><span class="spinner" aria-hidden="true"></span><span id="busy-text" role="status"></span></p>
+    </section>
+
+    <section id="status-section" aria-labelledby="status-title">
+      <h2 id="status-title">Healdan Helper</h2>
+      <p id="status" class="status waiting" role="status">Checking Healdan Helper…</p>
+      <p id="done" class="status ok" role="status" hidden></p>
+    </section>
+
+    <form id="pairing" aria-labelledby="pairing-title" novalidate hidden>
+      <h2 id="pairing-title">Pair <span id="pairing-app">this app</span> with Healdan Helper</h2>
+      <p id="pairing-help" class="help">Healdan Helper shows a six-digit code in a window on your Mac. Type it here, then choose Pair.</p>
+      <div class="field">
+        <label for="code">Code</label>
+        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="7" aria-describedby="pairing-help pairing-problem">
+        <button id="pair" type="submit">Pair</button>
+      </div>
+      <p id="pairing-problem" class="form-problem" role="alert"></p>
+    </form>
+  </main>
+
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="healdan.js"></script>
+  <script src="taskpane.js"></script>
 </body>
 </html>

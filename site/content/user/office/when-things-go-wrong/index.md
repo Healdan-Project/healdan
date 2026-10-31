@@ -25,12 +25,63 @@ Opening a document needs Healdan, so that has to wait.
 You quit it, or haven't signed in since your Mac started.
 
 - **LibreOffice's Open and Save** show LibreOffice's own boxes, with a notice that the helper isn't running.
+- **In Word, Excel and PowerPoint,** a Healdan button opens a Healdan window that says so (see
+  [What the Healdan Window Says](#what-the-healdan-window-says)). Office's own Open and Save work as ever, and a save
+  on a Healdan document goes to the copy on your Mac, as below.
 - **A save on a Healdan document** is still kept on your Mac, and goes to Healdan once the helper is running again.
   The title bar then moves on to your last save, however long the helper was away.
 - **The notice goes by itself** once LibreOffice hears from the helper again, such as when your kept save reaches
   Healdan, or when you next use a Healdan command.
 
 Start **Healdan Helper** from your Applications folder.
+
+## What the Healdan Window Says
+
+When a button on the Healdan tab can't do what you asked, or has something to tell you, a small Healdan window opens
+over the document with the reason. Close it when you've read it. It's the same for Word, Excel and PowerPoint.
+
+| It says | What to do |
+|---|---|
+| This app isn't paired with Healdan Helper yet | Type the code the helper shows, and choose **Pair**: see [Pairing Again](#pairing-again) |
+| Healdan Helper isn't running, or Microsoft Office isn't set up in it | Start **Healdan Helper** from your Applications folder, and sign in. If its menu offers **Set Up Microsoft Office…**, choose it: see [Setting Up Microsoft Office](../installing-the-helper/#setting-up-microsoft-office) |
+| Healdan Helper is signed out, or still starting up | Choose **Sign In…** in the helper's menu, or wait a moment, then press the button again |
+| Healdan Helper works with a different Healdan server than this one | The helper is signed in to another server than the one that deployed the add-in. Sign it in to this server: see [Settings](../installing-the-helper/#settings) |
+| This add-in needs a newer Healdan Helper | Install the newer disk image over the old one, as your administrator tells you |
+| Healdan Helper finished, but its answer was lost | Check the document in Healdan, by its doc # or its matter, before pressing the button again: it may already have been filed |
+| Healdan Helper couldn't find the document you pressed that in | Click in the document, then press the button again |
+| This document isn't open from Healdan, so there's no version to add to | Use **Save to Healdan** to file it first |
+| This is a read-only copy, so it can't be saved as a new version | Use **Save as New Document** instead |
+| Microsoft Office didn't do what the add-in asked | Try again. If it keeps happening, tell your administrator what the brackets say |
+| Use Word's own Save As to save it on this computer, or Use Word's own Open to open a file on this computer | You chose **Save to Local Computer** or **Open from Local Computer** in the helper's window: use the app's own Save As or Open for that. It names Excel or PowerPoint when you're in them |
+| Healdan's buttons work in the desktop apps only | You're in Word, Excel or PowerPoint on the web. Use the desktop apps on your Mac |
+
+## The Healdan Tab Is Missing
+
+- **It hasn't arrived yet.** Microsoft delivers an add-in to each person's apps in its own time, which can be hours
+  after your administrator deployed it. Check again later.
+- **You aren't signed in to Office** with your organisation's Microsoft 365 account. The add-in comes with that account.
+- **Your administrator didn't give it to you.** They can add you in Microsoft 365's admin centre: see
+  [Deploying the Add-in](../../../install/office-integration/#deploying-the-add-in).
+- **The tab is greyed out** in a window holding an OpenDocument file, such as `.odt`. Office turns Healdan's add-in off
+  for those. Open the document in LibreOffice, where the Healdan menu works for it.
+
+## A Button Seems to Do Nothing
+
+The helper may have a window open that you can't see, such as Save to Healdan, Open from Healdan or Properties, behind
+your other windows. The button waits for as long as that window is open. Look for it behind the app, or in Mission
+Control, and finish or cancel it. Word, Excel and PowerPoint may also be showing a prompt for access to the helper's `Copies`
+folder: see [The First Save in Each App](../saving-to-healdan/#the-first-save-in-each-app).
+
+## Pairing Again
+
+An app asks for a new code when it has lost its pairing: Office's cache was cleared, or you chose **Forget** for the
+app in the helper's Settings. Press a Healdan button, and type the code as the first time: see
+[Pairing Word, Excel and PowerPoint](../installing-the-helper/#pairing-word-excel-and-powerpoint).
+
+- **Wrong codes are counted.** Three wrong tries cancel a code, and nine wrong codes in a row make the helper stop
+  showing codes for ten minutes.
+- **Another person's helper on the same Mac** may answer instead of yours: see
+  [Known Limitations](../../../install/known-limitations/).
 
 ## LibreOffice or Your Mac Crashes
 
