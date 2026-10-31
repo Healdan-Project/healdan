@@ -40,7 +40,7 @@ public sealed class ChannelHandlerTests : IDisposable
         var paths = HelperPaths.For(_root);
         var log = new HelperLog(paths.Log);
         var api = new HealdanApi(Server, _server) { Token = "hd_test" };
-        _cycle = new CopyCycle(api, new CopyStore(paths), _app, FakeApi.HereDevice, _events, Fast with { Clock = _clock });
+        _cycle = new CopyCycle(api, new CopyStore(paths), TestApps.Of(_app), FakeApi.HereDevice, _events, Fast with { Clock = _clock });
         var links = new LinkHandler(_windows, _notifier, log);
         links.Ready(Server, _cycle).Wait();
         _handler = new ChannelHandler(_cycle, links, _windows, _notifier, log, paths, savedWait: TimeSpan.FromSeconds(10));

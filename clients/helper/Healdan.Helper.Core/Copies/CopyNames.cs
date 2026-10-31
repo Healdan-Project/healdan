@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Healdan.Helper.Core.Office;
 
 namespace Healdan.Helper.Core.Copies;
 
@@ -41,18 +42,24 @@ public static class CopyNames
     internal static string LibreOfficeLockName(string copyFileName) => $".~lock.{copyFileName}#";
 
     /// <summary>
-    /// Word's owner file for a copy: <c>~$</c> replaces the first two characters of a long name and the first one
-    /// of a short one, so both candidates are given. Each is a name only this copy can have, as the doc # is in it.
+    /// Every owner file Word, Excel or PowerPoint may keep for a copy, each once. Word's <c>~$</c> replaces the first two
+    /// characters of a long name and the first one of a short one, so both candidates are given, as M3 did; Excel and
+    /// PowerPoint put <c>~$</c> before the whole name (<see cref="OfficePrograms.OwnerNames"/>). Each is a name only this
+    /// copy can have, as the doc # is in it.
     /// </summary>
-    internal static IEnumerable<string> WordOwnerNames(string copyFileName)
+    internal static IEnumerable<string> OfficeOwnerNames(string copyFileName)
     {
+        var names = new List<string>();
         var elements = TextElements(copyFileName);
         for (var drop = 1; drop <= 2 && drop < elements.Count; drop++)
-            yield return "~$" + string.Concat(elements.Skip(drop));
+            names.Add("~$" + string.Concat(elements.Skip(drop)));
+        foreach (var program in Enum.GetValues<OfficeProgram>())
+            names.AddRange(OfficePrograms.OwnerNames(program, copyFileName));
+        return names.Distinct(StringComparer.Ordinal);
     }
 
     /// <summary>
-    /// Whether a file in the folder is an app's own: LibreOffice's lock file or Word's owner file. The app deletes it by
+    /// Whether a file in the folder is an app's own: LibreOffice's lock file or an owner file of Word, Excel or PowerPoint. The app deletes it by
     /// the path it opened, so a copy set aside leaves it where it is (spec §5.4).
     /// </summary>
     internal static bool IsAppFile(string fileName) =>

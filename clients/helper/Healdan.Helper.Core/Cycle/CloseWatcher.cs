@@ -10,12 +10,16 @@ namespace Healdan.Helper.Core.Cycle;
 /// <item>Every <see cref="CycleTimings.CrashPoll"/>: once the app has been seen running, its process gone with the
 /// copy's lock file still there is a crash. Gone without one is a close: a read-only copy may never get a lock file.</item>
 /// </list>
+/// Each copy is watched with the app it was opened in (<see cref="IOfficeApp.LockExists"/>, and
+/// <see cref="IOfficeApp.IsRunningFor"/> for the process), as LibreOffice's lock file says nothing of a Word window.
 /// </summary>
 internal sealed class CloseWatcher : IDisposable
 {
-    private sealed class Entry(string path, bool appSeen)
+    private sealed class Entry(string path, IOfficeApp app, bool appSeen)
     {
         public string Path { get; } = path;
+
+        public IOfficeApp App { get; } = app;
 
         public bool LockSeen { get; set; }
 
@@ -26,7 +30,6 @@ internal sealed class CloseWatcher : IDisposable
 
     private readonly object _lock = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-    private readonly IOfficeApp _app;
     private readonly CycleTimings _timings;
     private readonly Action<string> _closed;
     private readonly Action<string> _crashed;
@@ -34,20 +37,20 @@ internal sealed class CloseWatcher : IDisposable
 
     /// <param name="closed">Called once when a copy's window has closed; the copy is no longer watched.</param>
     /// <param name="crashed">Called once when the app went away with the copy open; the copy is no longer watched.</param>
-    public CloseWatcher(IOfficeApp app, CycleTimings timings, Action<string> closed, Action<string> crashed)
+    public CloseWatcher(CycleTimings timings, Action<string> closed, Action<string> crashed)
     {
-        _app = app;
         _timings = timings;
         _closed = closed;
         _crashed = crashed;
         _ = Task.Run(() => RunAsync(_stop.Token));
     }
 
+    /// <param name="app">The app the copy was opened in, which says whether its window is open and whether it is running.</param>
     /// <param name="appSeenRunning">True when the app is known to be running with the copy open, as after a restart.</param>
-    public void Watch(string path, bool appSeenRunning = false)
+    public void Watch(string path, IOfficeApp app, bool appSeenRunning = false)
     {
         lock (_lock)
-            _entries[path] = new Entry(path, appSeenRunning);
+            _entries[path] = new Entry(path, app, appSeenRunning);
     }
 
     public void Unwatch(string path)
@@ -73,7 +76,7 @@ internal sealed class CloseWatcher : IDisposable
                 var crashed = new List<Entry>();
                 foreach (var entry in entries)
                 {
-                    if (_app.LockExists(entry.Path))
+                    if (entry.App.LockExists(entry.Path))
                         (entry.LockSeen, entry.Gone) = (true, 0);
                     else if (entry.LockSeen && ++entry.Gone >= 2)
                         closed.Add(entry);
@@ -82,13 +85,12 @@ internal sealed class CloseWatcher : IDisposable
                 if (Stopwatch.GetElapsedTime(lastCrashCheck) >= _timings.CrashPoll)
                 {
                     lastCrashCheck = Stopwatch.GetTimestamp();
-                    var running = IsRunning();
                     foreach (var entry in entries.Except(closed))
                     {
-                        if (running)
+                        if (IsRunning(entry))
                             entry.AppSeen = true;
                         else if (entry.AppSeen)
-                            (_app.LockExists(entry.Path) ? crashed : closed).Add(entry);
+                            (entry.App.LockExists(entry.Path) ? crashed : closed).Add(entry);
                     }
                 }
 
@@ -120,11 +122,11 @@ internal sealed class CloseWatcher : IDisposable
     }
 
     /// <summary>When the process list can't be read, the app counts as running: a false crash would worry the user.</summary>
-    private bool IsRunning()
+    private static bool IsRunning(Entry entry)
     {
         try
         {
-            return _app.IsRunning();
+            return entry.App.IsRunningFor(entry.Path);
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {

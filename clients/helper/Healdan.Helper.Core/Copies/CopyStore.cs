@@ -164,7 +164,7 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         File.Delete(path);
         File.Delete(RecordPath(path));
         File.Delete(System.IO.Path.Combine(paths.Copies, CopyNames.LibreOfficeLockName(name)));
-        foreach (var owner in CopyNames.WordOwnerNames(name))
+        foreach (var owner in CopyNames.OfficeOwnerNames(name))
             File.Delete(System.IO.Path.Combine(paths.Copies, owner));
         lock (_hashes)
             _hashes.Remove(name);
@@ -514,10 +514,10 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             ? Directory.EnumerateDirectories(paths.Support, AsidePrefix + "*").Order(StringComparer.Ordinal).ToList()
             : [];
 
-    /// <summary>Whether an app's lock or owner file beside the copy says the app has it open there.</summary>
+    /// <summary>Whether an app's lock or owner file beside the copy says the app has it open there: LibreOffice's, or Word's, Excel's or PowerPoint's.</summary>
     private static bool IsOpen(string folder, string name) =>
         File.Exists(System.IO.Path.Combine(folder, CopyNames.LibreOfficeLockName(name)))
-        || CopyNames.WordOwnerNames(name).Any(owner => File.Exists(System.IO.Path.Combine(folder, owner)));
+        || CopyNames.OfficeOwnerNames(name).Any(owner => File.Exists(System.IO.Path.Combine(folder, owner)));
 
     /// <summary>Creates the folders private from the start, rather than narrowing them after.</summary>
     internal void EnsureFolders()

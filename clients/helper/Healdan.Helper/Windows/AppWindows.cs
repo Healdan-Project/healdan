@@ -194,7 +194,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var window = new SettingsWindow(server, Session?.SignedIn == true, HelperSettings.Load(paths), LoginItem.Summary(), Extension);
+        var window = new SettingsWindow(server, Session?.SignedIn == true, OfficeAppSet.Chooser(paths), LoginItem.Summary(), Extension);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

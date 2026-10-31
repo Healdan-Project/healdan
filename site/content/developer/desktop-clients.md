@@ -28,7 +28,9 @@ app.
 - **`Healdan.Helper.Core`** has no windows and no Avalonia, so the tests drive all of it:
   - `Api/`: the API client, written by hand against `openapi.yaml`;
   - `Copies/`: the local copies and the record beside each;
-  - `Cycle/`: the open-save-close cycle;
+  - `Cycle/`: the open-save-close cycle, and the apps it opens copies in;
+  - `Office/`: Word, Excel and PowerPoint: which program opens a file, `MicrosoftOfficeApp`, and `IOfficeScripting`
+    with its macOS implementation;
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
@@ -67,10 +69,23 @@ size the helper uses, the widths then match CoreText's.
 
 ### The Cycle
 
-- **Opening:** `GET /documents/{n}`; a check-out with `{"app": "LibreOffice"}` when the user can edit it, else a
-  read-only copy; the download into `Copies/`, through a temporary file; then LibreOffice. If the open fails after
-  the check-out, the check-out is released, unless this computer already had a copy. One open of a document runs at
-  a time: a second while one is under way, such as a double-clicked Open in App, is dropped.
+- **Opening:** `GET /documents/{n}`; a check-out with the app's name (`{"app": "LibreOffice"}`, or `Word`, `Excel` or
+  `PowerPoint`) when the user can edit it, else a read-only copy; the download into `Copies/`, through a temporary
+  file; then the file's app. If the open fails after the check-out, the check-out is released, unless this computer
+  already had a copy. One open of a document runs at a time: a second while one is under way, such as a
+  double-clicked Open in App, is dropped.
+- **The app is chosen for each file** when its copy is made, and kept in the copy's record (`App`: `LibreOffice`,
+  `Microsoft Office` or `Default`). `AppChooser` makes the choice: the user's for the file's kind (`kinds` in
+  `settings.json`), else the system's default app for the kind's main format when that is Word, Excel or PowerPoint,
+  else LibreOffice; an OpenDocument file is LibreOffice's whatever the choice; and only an installed app
+  (`InstalledApps`) is chosen. `OfficeApps` holds the set the cycle works with, and everything after the open (the
+  reopen of a kept copy, the lock check, the crash check, the resume, Bring to the Front) goes by the record's app,
+  whatever Settings say by then.
+  - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens
+    the files it opens (`OfficePrograms`), and it opens them through `IOfficeScripting`, the one seam for everything
+    the helper does to a document in Word, Excel and PowerPoint. Nothing above the seam knows how the programs are
+    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow.
+  - A file no office app edits is the `Default` app's, read-only, as below.
 - **Other kinds of file** (not spec §5.11's, by the file's own extension) open read-only in the system's default app
   (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`). On
   macOS the copy gets `com.apple.quarantine` (`Platform/Quarantine.cs`), so Gatekeeper checks it, and
@@ -87,10 +102,14 @@ size the helper uses, the widths then match CoreText's.
   file's. A restart in between sends the copy unless it's those bytes. Nothing tells the adoption from a save made
   while the helper was down, and the adoption differs from the filed file by the doc ID the extension sets first. So
   a restart there sends an identical version, and never loses a save.
-- **Closing:** the extension's `/v1/closed`, or LibreOffice's lock file, `.~lock.<copy>#`, gone at two polls a second
-  apart. Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
+- **Closing:** the extension's `/v1/closed`, or the copy's app's lock file gone at two polls a second apart:
+  LibreOffice's `.~lock.<copy>#`, or Microsoft Office's owner file, `~$` and the copy's name with its first two
+  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`; a short
+  name loses one for Word). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
   A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
-- **A crash:** while a copy is open, the helper checks every 5 seconds that `soffice` is running.
+- **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
+  or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
+  nothing of a copy another has).
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
   `saveId` and the kind it went up as (the record's `sentKind`), and then, when newer content or a version was
@@ -129,7 +148,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   copies waiting (`CopyStore.Aside`).
 - **No open copy is moved from under its window.** A sign-in to another server is refused, before the helper signs
   in and again just before the move, while anything it would set aside has its lock or owner file beside it in
-  `Copies/` and the app is running (`CopyStore.OpenToSetAside`, `IOfficeApp.IsRunning`); the window would otherwise
+  `Copies/` and an app is running (`CopyStore.OpenToSetAside`, `IOfficeApp.IsRunning`); the window would otherwise
   save a file with no record to the old path. A lock file with the app not running is a crash's, and doesn't count.
   A start leaves such a copy in `Copies/` (`SetAside`'s `leave`) until a later start. A read-only copy has no lock
   file, so it moves.
@@ -310,7 +329,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 ## Tests
 
 - **The helper's core** has tests for each part, the cycle's failure cases included, against a fake server
-  (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`).
+  (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`). A fake `IOfficeScripting`
+  (`FakeScripting`) stands in for Word, Excel and PowerPoint, with their owner files.
 - **The cycle's tests wait for what they need,** not for a fixed time, so a slow runner can't change what they see.
   `Wait.Until` polls for it (a confirmation, a save reaching `FakeApi`, or one queued, through the internal
   `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`

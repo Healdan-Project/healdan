@@ -12,7 +12,10 @@ public sealed class LibreOfficeApp : IOfficeApp
 {
     private static readonly TimeSpan OpenTimeout = TimeSpan.FromSeconds(10);
 
-    public string Name => "LibreOffice";
+    /// <summary>What a copy's record names as its app.</summary>
+    public const string AppName = "LibreOffice";
+
+    public string Name => AppName;
 
     public void Open(string path)
     {

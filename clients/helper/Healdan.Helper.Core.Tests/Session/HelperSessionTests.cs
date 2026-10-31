@@ -6,10 +6,12 @@ using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Tests.Cycle;
+using Healdan.Helper.Core.Tests.Office;
 using Healdan.Helper.Core.Tests.Ui;
 using Healdan.Helper.Core.Ui;
 
@@ -53,10 +55,10 @@ public sealed class HelperSessionTests : IDisposable
 
     private HelperPaths Paths => HelperPaths.For(_root);
 
-    private HelperSession Make(TimeSpan? signOutFlush = null)
+    private HelperSession Make(TimeSpan? signOutFlush = null, OfficeApps? apps = null)
     {
         var device = new DeviceIdentity(FakeApi.HereDevice, FakeApi.HereName);
-        var session = new HelperSession(Paths, _keychain, device, _app, _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
+        var session = new HelperSession(Paths, _keychain, device, apps ?? TestApps.Of(_app), _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
             signOutFlush);
         _sessions.Add(session);
         return session;
@@ -963,6 +965,48 @@ public sealed class HelperSessionTests : IDisposable
 
         Assert.StartsWith("Close Lease agreement #5 v2.1 and 2 other documents in LibreOffice first.", refusal);
         Assert.EndsWith("and those are open.", refusal);
+    }
+
+    [Fact]
+    public async Task ASignInToAnotherServerIsRefusedWhileACopyIsOpenInMicrosoftOffice()
+    {
+        SignedInBefore();
+        _keychain.Items.Clear();
+        var (path, _, _) = new CopyStore(Paths, Account).Create(View(5), false, "Microsoft Office");
+        File.WriteAllText(path, "document 5");
+        var scripting = new FakeScripting();
+        File.WriteAllText(FakeScripting.OwnerPath(OfficeProgram.Word, path), "open in Word");
+        scripting.SetRunning(OfficeProgram.Word, true); // LibreOffice isn't running: it's another app that is
+        var apps = TestApps.Of(_app, microsoftOffice: new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInAsync("https://second.test", "robert", Password);
+            return false;
+        };
+
+        await Make(apps: apps).StartAsync();
+
+        Assert.StartsWith("Close Lease agreement #5 v2.1 in Microsoft Office first.", refusal);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task AnotherServersCopyOpenInMicrosoftOfficeStaysInCopiesAtAStart()
+    {
+        var (path, _, _) = new CopyStore(Paths, "https://second.test").Create(View(5), false, "Microsoft Office");
+        File.WriteAllText(path, "second.test's document 5");
+        var scripting = new FakeScripting();
+        File.WriteAllText(FakeScripting.OwnerPath(OfficeProgram.Word, path), "open in Word");
+        scripting.SetRunning(OfficeProgram.Word, true);
+        SignedInBefore();
+
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: new MicrosoftOfficeApp(scripting, scripting.IsRunning)));
+        await session.StartAsync();
+        await Wait.Until(() => session.Started, "started");
+
+        Assert.True(File.Exists(path)); // not moved from under its window
+        Assert.Contains("open in Microsoft Office, so it stays in Healdan Helper's Copies folder until you close it", _notifier.All);
     }
 
     [Fact]

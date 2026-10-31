@@ -26,8 +26,7 @@ public sealed class CopyCycle : IDisposable
 
     private readonly HealdanApi _api;
     private readonly CopyStore _store;
-    private readonly IOfficeApp _app;
-    private readonly IOfficeApp? _other;
+    private readonly OfficeApps _apps;
     private readonly string _deviceId;
     private readonly ICycleEvents _events;
     private readonly CycleTimings _timings;
@@ -49,23 +48,22 @@ public sealed class CopyCycle : IDisposable
     /// computer's. Names aren't compared, as two computers can share one.
     /// </param>
     /// <param name="timings">The trial's timings by default (<see cref="CycleTimings.Default"/>).</param>
-    /// <param name="otherFiles">
-    /// The app for files no office app edits (spec §5.11, <see cref="FileKinds"/>), such as <see cref="DefaultApp"/>:
-    /// they open read-only there, never checked out. Without one, every file opens in <paramref name="app"/>.
+    /// <param name="apps">
+    /// The apps a copy opens in: a new copy in the one the chooser names for its file, an existing one in the one its record
+    /// names. A file no office app edits (spec §5.11, <see cref="FileKinds"/>) opens read-only in the set's
+    /// <see cref="DefaultApp"/>, never checked out; without one, every file opens in an office app.
     /// </param>
-    public CopyCycle(HealdanApi api, CopyStore store, IOfficeApp app, string deviceId, ICycleEvents events, CycleTimings? timings = null,
-        IOfficeApp? otherFiles = null)
+    public CopyCycle(HealdanApi api, CopyStore store, OfficeApps apps, string deviceId, ICycleEvents events, CycleTimings? timings = null)
     {
         _api = api;
         _store = store;
-        _app = app;
-        _other = otherFiles;
+        _apps = apps;
         _deviceId = deviceId;
         _events = events;
         _timings = timings ?? CycleTimings.Default;
         store.EnsureFolders();
         _saves = new SaveWatcher(store.Folder, _timings, path => Guard(() => OnSettled(path)));
-        _closes = new CloseWatcher(app, _timings, path => Guard(() => Close(path)), path => Guard(() => OnCrashed(path)));
+        _closes = new CloseWatcher(_timings, path => Guard(() => Close(path)), path => Guard(() => OnCrashed(path)));
     }
 
     /// <summary>An open copy: its save queue and what the cycle knows about it beyond its record.</summary>
@@ -144,11 +142,16 @@ public sealed class CopyCycle : IDisposable
     /// is released without saving to it, and the original copy is deleted once the app has adopted the new file: its
     /// content went into the new document. A failed filing throws, so the caller can fall back to the app's own save.
     /// </summary>
-    public async Task<CopyState> AdoptNewAsync(string tempPath, NewDocument request, string? replaces)
+    /// <param name="app">
+    /// The app whose window the new document is saved from, which the copy's record names and the close watcher asks.
+    /// LibreOffice by default, as the extension's route is: Settings choose the app for a copy the helper opens, and
+    /// say nothing of a window the user already has.
+    /// </param>
+    public async Task<CopyState> AdoptNewAsync(string tempPath, NewDocument request, string? replaces, IOfficeApp? app = null)
     {
         var filed = await File.ReadAllBytesAsync(tempPath, _stop.Token); // read once: hashed here and sent as it is
         var doc = await _api.FileAsync(filed, Path.GetFileName(tempPath), request with { CheckOut = true }, _stop.Token);
-        var (path, _, _) = _store.Create(doc, false, _app.Name);
+        var (path, _, _) = _store.Create(doc, false, (app ?? _apps.LibreOffice).Name);
         Update(path, r => r with
         {
             CheckedOutHere = true,
@@ -238,17 +241,17 @@ public sealed class CopyCycle : IDisposable
                 // Tried again at the next start.
             }
         }
-        var running = SafeIsRunning();
         foreach (var (path, record) in _store.All())
         {
             lock (_gate)
                 if (Find(path) is not null)
                     continue;
+            var app = _apps.Of(record); // each copy with the app that has it
             if (!File.Exists(path))
             {
                 // A download or adoption that never finished: nothing to send or lose. Release a check-out it took,
                 // as a failed open does, and drop the record.
-                if (record.CheckedOutHere && !record.ReadOnly && !_app.LockExists(path))
+                if (record.CheckedOutHere && !record.ReadOnly && !app.LockExists(path))
                 {
                     Begin(path, record.DocNumber, false, null, watchClose: false);
                     Close(path);
@@ -258,7 +261,7 @@ public sealed class CopyCycle : IDisposable
                 continue;
             }
             var unconfirmed = _store.HasUnconfirmedChanges(path);
-            if (_other is not null && record.App == _other.Name && record.ReadOnly)
+            if (_apps.IsOtherFiles(app) && record.ReadOnly)
             {
                 // Opened in the default app, which keeps no lock file, so nothing says when it closed; its bytes
                 // are Healdan's, so the copy goes now (spec §5.11). One that changed is kept, as any read-only copy is.
@@ -270,7 +273,7 @@ public sealed class CopyCycle : IDisposable
             {
                 if (unconfirmed)
                     continue; // not a copy the helper sends, nor one it may delete
-                if (!running)
+                if (!SafeIsRunning(app, path))
                     _store.Delete(path);
                 else
                     Begin(path, record.DocNumber, true, null, appSeenRunning: true);
@@ -280,12 +283,13 @@ public sealed class CopyCycle : IDisposable
             {
                 if (unconfirmed)
                     Raise(ev => ev.CheckoutEnded(path));
-                else if (!_app.LockExists(path))
+                else if (!app.LockExists(path))
                     _store.Delete(path);
                 continue;
             }
 
-            var locked = _app.LockExists(path);
+            var running = SafeIsRunning(app, path);
+            var locked = app.LockExists(path);
             var s = Begin(path, record.DocNumber, false, null, appSeenRunning: running, watchClose: !locked || running);
             if (!locked)
             {
@@ -370,15 +374,14 @@ public sealed class CopyCycle : IDisposable
     {
         if (Record(path) is not { } record || !File.Exists(path))
             throw new FileNotFoundException("That copy isn't on this computer any more.");
-        if (_other is not null && record.App == _other.Name)
+        var app = _apps.Of(record);
+        if (_apps.IsOtherFiles(app))
         {
             if (DefaultApp.Refuses(path))
                 throw new IOException(Refused(record.DocumentName, path));
             Quarantine.Mark(path);
-            _other.Open(path);
         }
-        else
-            _app.Open(path);
+        app.Open(path);
     }
 
     /// <summary>
@@ -562,19 +565,17 @@ public sealed class CopyCycle : IDisposable
 
         var hadCopy = _store.All().Any(c => c.Record.DocNumber == n && c.Record.CheckedOutHere);
         var doc = await _api.DocumentAsync(n, ct);
-        if (FileKinds.OfFile(doc.Name) is null)
+        var app = _apps.For(doc.Name);
+        if (link && FileKinds.OfFile(doc.Name) is null)
         {
-            if (link)
-            {
-                Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations and "
-                    + "drawings. Open it from the web page, or from Open from Healdan."));
-                return;
-            }
-            if (_other is not null)
-            {
-                await OpenOtherAsync(doc, version, ct);
-                return;
-            }
+            Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations and "
+                + "drawings. Open it from the web page, or from Open from Healdan."));
+            return;
+        }
+        if (_apps.IsOtherFiles(app))
+        {
+            await OpenOtherAsync(doc, version, app, ct);
+            return;
         }
         var checkedOut = false;
         var holdBy = doc.Hold?.By?.Name;
@@ -584,7 +585,7 @@ public sealed class CopyCycle : IDisposable
             {
                 try
                 {
-                    doc = await _api.CheckOutAsync(n, _app.Name, move, ct);
+                    doc = await _api.CheckOutAsync(n, app.CheckOutName(doc.Name), move, ct);
                     checkedOut = true;
                 }
                 catch (ApiException e) when (e.Code == "held-elsewhere")
@@ -612,7 +613,7 @@ public sealed class CopyCycle : IDisposable
         bool fresh;
         try
         {
-            (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, _app.Name, ct);
+            (path, fresh, readOnly) = await PrepareCopyAsync(doc, readOnly, version, checkedOut, app.Name, ct);
         }
         catch (Exception e)
         {
@@ -627,7 +628,7 @@ public sealed class CopyCycle : IDisposable
         var session = Begin(path, n, readOnly, readOnly ? holdBy : null);
         try
         {
-            _app.Open(path);
+            AppOf(path, app).Open(path); // a copy this computer kept is still the app's that opened it
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -732,7 +733,7 @@ public sealed class CopyCycle : IDisposable
     /// have put it there (final review C2), a kind that can run a program is never downloaded or handed over
     /// (<see cref="DefaultApp.Refuses"/>), and the copy carries macOS's quarantine, so Gatekeeper checks it.
     /// </summary>
-    private async Task OpenOtherAsync(DocumentView doc, string? version, CancellationToken ct)
+    private async Task OpenOtherAsync(DocumentView doc, string? version, IOfficeApp other, CancellationToken ct)
     {
         var name = CopyNames.FileName(doc.Name, doc.DocNumber, version ?? doc.FileVersion, readOnly: true);
         if (DefaultApp.Refuses(name))
@@ -740,13 +741,13 @@ public sealed class CopyCycle : IDisposable
             Raise(ev => ev.Error(Refused(doc.Name, name)));
             return;
         }
-        var (path, fresh, _) = await PrepareCopyAsync(doc, readOnly: true, version, checkedOut: false, _other!.Name, ct);
+        var (path, fresh, _) = await PrepareCopyAsync(doc, readOnly: true, version, checkedOut: false, other.Name, ct);
         try
         {
             if (DefaultApp.Refuses(path))
                 throw new IOException(Refused(doc.Name, path)); // a copy kept from before, under another name
             Quarantine.Mark(path);
-            _other.Open(path);
+            other.Open(path);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -769,13 +770,13 @@ public sealed class CopyCycle : IDisposable
             if (!closing && live.Crashed)
             {
                 live.Crashed = false;
-                _closes.Watch(live.Path);
+                _closes.Watch(live.Path, AppOf(live.Path));
             }
         }
         if (closing)
             Raise(ev => ev.Error($"#{live.DocNumber} is still being checked in. Open it again once that's done."));
         else
-            _app.Open(live.Path);
+            AppOf(live.Path).Open(live.Path);
     }
 
     /// <summary>
@@ -827,7 +828,7 @@ public sealed class CopyCycle : IDisposable
         if (!readOnly)
             _saves.Watch(path);
         if (watchClose)
-            _closes.Watch(path, appSeenRunning);
+            _closes.Watch(path, AppOf(path), appSeenRunning);
         return s;
     }
 
@@ -1410,11 +1411,18 @@ public sealed class CopyCycle : IDisposable
     /// <summary>The hold is this computer's check-out. A hold with no device can't be told from someone else's, so it isn't.</summary>
     private bool HoldIsHere(HoldView? hold) => hold is { Kind: "checkout", Device: { } device } && device.Id == _deviceId;
 
-    private bool SafeIsRunning()
+    /// <summary>The app that has a copy open, by its record. LibreOffice for a copy with none.</summary>
+    public IOfficeApp AppOf(string path) => AppOf(path, _apps.LibreOffice);
+
+    /// <summary>The app a copy was opened in, by its record: <paramref name="fallback"/> when it has none.</summary>
+    private IOfficeApp AppOf(string path, IOfficeApp fallback) =>
+        Record(path) is { } record ? _apps.Of(record) : fallback;
+
+    private static bool SafeIsRunning(IOfficeApp app, string path)
     {
         try
         {
-            return _app.IsRunning();
+            return app.IsRunningFor(path);
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {

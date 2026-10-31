@@ -3,7 +3,7 @@ namespace Healdan.Helper.Core.Cycle;
 /// <summary>The app a copy opens in, as far as the cycle needs it: open a file, and tell whether it's still there.</summary>
 public interface IOfficeApp
 {
-    /// <summary>What the check-out names (<c>hold.device.app</c>), such as <c>LibreOffice</c>.</summary>
+    /// <summary>What a copy's record names as its app, such as <c>LibreOffice</c> or <c>Microsoft Office</c>.</summary>
     string Name { get; }
 
     /// <summary>Opens the copy, or brings its window to the front if it's open already.</summary>
@@ -14,4 +14,16 @@ public interface IOfficeApp
 
     /// <summary>Whether the app holds its lock file on the copy, which it keeps while the copy's window is open.</summary>
     bool LockExists(string path);
+
+    /// <summary>
+    /// What the check-out names (<c>hold.device.app</c>) for a file opened in this app, such as <c>Word</c>: the app's own
+    /// <see cref="Name"/> unless it is several programs, as Microsoft Office is.
+    /// </summary>
+    string CheckOutName(string fileName) => Name;
+
+    /// <summary>
+    /// Whether the process that has this copy open is running: the crash check asks it of each copy, as one app may be
+    /// several programs (Word running says nothing of an Excel copy). The app's <see cref="IsRunning"/> unless it knows better.
+    /// </summary>
+    bool IsRunningFor(string path) => IsRunning();
 }
