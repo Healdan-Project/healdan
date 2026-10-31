@@ -95,8 +95,9 @@ Office loads them before anyone has signed in to anything.
 
 - **HTTPS at the address people use.** Office loads the add-in over HTTPS only, so Healdan needs a
   [reverse proxy](../reverse-proxy/) with a certificate the computers running Office trust. Set
-  `LOGICALDOC_PUBLIC_URL` to that address, as for the helper. Without it, Healdan uses the address the request came
-  to, as the proxy forwards it in `X-Forwarded-Proto`. Plain `http://` works only for `localhost`, `127.0.0.1` and
+  `LOGICALDOC_PUBLIC_URL` to that address, as for the helper. Without it (or with LogicalDOC's placeholder,
+  `http://server:port/`, still in `server.url`), Healdan uses the address the request came to, as the proxy forwards
+  it in `X-Forwarded-Proto`. Plain `http://` works only for `localhost`, `127.0.0.1` and
   `[::1]`, for trying it on your own machine.
 - **The manifest** is at `https://healdan.example/api/addin/manifest.xml`, with your own address in place of
   `healdan.example`. Healdan makes it for each request, with your address in every link and as the add-in's one app

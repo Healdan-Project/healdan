@@ -113,6 +113,19 @@ public class AddinResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testLogicalDOCsPlaceholderIsNoPublicAddress() {
+		// An image's settings keep LogicalDOC's default until LOGICALDOC_PUBLIC_URL is set
+		Context.get().getConfig().setProperty(SERVER_URL, "http://server:port/");
+
+		ApiResponse local = get("/api/addin/manifest.xml").server("http", "127.0.0.1", 8080).send();
+		assertEquals(local.toString(), 200, local.status());
+		assertTrue(local.text(), local.text().contains("<AppDomain>http://127.0.0.1:8080</AppDomain>"));
+
+		String behindTheProxy = get("/api/addin/manifest.xml").server("https", "healdan.example", 443).send().text();
+		assertTrue(behindTheProxy, behindTheProxy.contains("<AppDomain>https://healdan.example</AppDomain>"));
+	}
+
+	@Test
 	public void testManifestRefusesPlainHttpElsewhere() {
 		Context.get().getConfig().remove(SERVER_URL);
 
