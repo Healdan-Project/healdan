@@ -73,6 +73,7 @@ describes how they work.
 ```bash
 dotnet test clients/helper/Healdan.Helper.sln                                  # the helper's tests
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacKeychain"  # the real macOS keychain, on a Mac
+HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"  # the real Word, Excel and PowerPoint, on a Mac with Office
 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=Stack"        # needs HEALDAN_STACK_URL
 python3 -m unittest discover -s clients/libreoffice/tests -v                   # the extension's tests
 clients/libreoffice/build.sh                                                   # the extension's healdan.oxt
@@ -87,6 +88,9 @@ stops it.
 Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_URL`, the stack's base URL, such as
 `http://localhost:8080`. Start a throwaway stack with the smoke fixture overlay first (see
 [Tests](../tests/)). Tests marked `MacKeychain` touch your real keychain, so they run only when you ask for them.
+Tests marked `MacOffice` open Word, Excel and PowerPoint on your screen, and the apps ask for Automation and Grant File
+Access the first time, so they run by hand on a Mac with Office, and are skipped unless `HEALDAN_MAC_OFFICE=1` is set.
+The one that only compiles the AppleScript (`EveryScriptCompiles`) starts nothing and needs no variable.
 
 ## Good to Know
 

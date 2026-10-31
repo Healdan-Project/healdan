@@ -7,4 +7,8 @@
     <!-- For the cycle's test-only seams: a copy's queued save, and a settle clock the tests can stop. -->
     <InternalsVisibleTo Include="Healdan.Helper.Core.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The AppleScript that drives Word, Excel and PowerPoint (spec §5.2): fixed text, one file per operation and program. -->
+    <EmbeddedResource Include="Office/Scripts/*.applescript" />
+  </ItemGroup>
 </Project>

@@ -5,7 +5,8 @@
   builds (1.2.3 from helper-v1.2.3-rc1). LSUIElement keeps the helper out of the Dock and Cmd+Tab; CFBundleURLTypes
   makes it the healdan: links' app; the bundle identifier is what notifications, the keychain's access rules and
   the login item know the helper by, so it never changes. CFBundleIconFile is the AppIcon.icns package.sh draws with
-  make-icon.swift.
+  make-icon.swift. NSAppleEventsUsageDescription is what macOS's Automation prompt says when the helper first drives
+  Word, Excel or PowerPoint (M3.5 spec §5.11); entitlements.plist lets the signed app send the events.
 -->
 <plist version="1.0">
 <dict>
@@ -48,6 +49,8 @@
   <string>26.0</string>
   <key>LSUIElement</key>
   <true/>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Healdan Helper saves, renames and checks your documents in Word, Excel and PowerPoint so they stay in step with Healdan.</string>
   <key>NSHighResolutionCapable</key>
   <true/>
   <key>NSHumanReadableCopyright</key>

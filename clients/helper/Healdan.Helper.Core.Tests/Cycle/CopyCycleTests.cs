@@ -4,6 +4,9 @@ using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
+using Healdan.Helper.Core.Office;
+using Healdan.Helper.Core.Settings;
+using Healdan.Helper.Core.Tests.Office;
 
 namespace Healdan.Helper.Core.Tests.Cycle;
 
@@ -25,9 +28,15 @@ public sealed class CopyCycleTests : IDisposable
     private readonly FakeApp _app = new();
     private readonly RecordingEvents _events = new();
     private readonly FakeOpener _opener = new();
+    private readonly FakeScripting _scripting = new();
+    private readonly SeenLocks _office;
     private readonly List<CopyCycle> _cycles = [];
 
-    public CopyCycleTests() => _server.Add(5, "Lease agreement.docx", "downloaded");
+    public CopyCycleTests()
+    {
+        _server.Add(5, "Lease agreement.docx", "downloaded");
+        _office = new SeenLocks(new MicrosoftOfficeApp(_scripting, _scripting.IsRunning));
+    }
 
     public void Dispose()
     {
@@ -41,12 +50,27 @@ public sealed class CopyCycleTests : IDisposable
 
     private CopyStore Store => new(Paths);
 
-    private CopyCycle Cycle(CycleTimings? timings = null, IOfficeApp? otherFiles = null)
+    /// <param name="appFor">Which app a new copy opens in, by its file name; LibreOffice for what an office app opens, by default.</param>
+    private CopyCycle Cycle(CycleTimings? timings = null, IOfficeApp? otherFiles = null, Func<string, string>? appFor = null)
     {
         var api = new HealdanApi(new Uri("https://healdan.test"), _server) { Token = "hd_test" };
-        var cycle = new CopyCycle(api, new CopyStore(Paths), _app, FakeApi.HereDevice, _events, timings ?? Fast, otherFiles);
+        var apps = TestApps.Of(_app, otherFiles, _office, appFor);
+        var cycle = new CopyCycle(api, new CopyStore(Paths), apps, FakeApi.HereDevice, _events, timings ?? Fast);
         _cycles.Add(cycle);
         return cycle;
+    }
+
+    /// <summary>
+    /// What Settings can make of it: Microsoft Office for its own formats and the older ones, and LibreOffice for OpenDocument
+    /// files whatever the choice, with every app installed.
+    /// </summary>
+    private static string MicrosoftOfficeForItsFormats(string fileName)
+    {
+        var settings = new HelperSettings
+        {
+            Kinds = FileKinds.All.ToDictionary(k => k.Label, _ => "Microsoft Office")
+        };
+        return new AppChooser(settings, new InstalledApps(true, true, true, true), _ => null).For(fileName);
     }
 
     private async Task<(CopyCycle Cycle, string Path)> OpenAsync(long docNumber = 5, CycleTimings? timings = null)
@@ -1650,5 +1674,259 @@ public sealed class CopyCycleTests : IDisposable
 
         Assert.False(File.Exists(path)); // read-only and Healdan's own bytes: nothing is lost
         Assert.Empty(CopiesFolder()); // its record went with it
+    }
+
+    // --- Microsoft Office as a second app (M3.5) -------------------------------------------------------------------
+
+    [Fact]
+    public async Task ADocxForOfficeOpensInWordAndChecksOutAsWord()
+    {
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+
+        await cycle.OpenAsync(5, false);
+
+        var path = CopyPath("Lease agreement #5 v1.0.docx");
+        Assert.Equal([(OfficeProgram.Word, path)], _scripting.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Equal("downloaded", File.ReadAllText(path));
+        Assert.Equal(FakeApi.Here("Word"), _server.Doc(5).Hold);
+        var record = Store.Find(path)!.Value.Item2;
+        Assert.Equal("Microsoft Office", record.App);
+        Assert.True(record.CheckedOutHere);
+        Assert.Equal(new CopyState(true, 5, "Lease agreement #5 v1.0", "#5 v1.0", false, path, null), cycle.StateOf(path));
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
+    public async Task ExcelAndPowerPointCheckOutByTheirOwnNames()
+    {
+        _server.Add(8, "Fees.xlsx", "sheet");
+        _server.Add(9, "Deck.pptx", "slides");
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+
+        await cycle.OpenAsync(8, false);
+        await cycle.OpenAsync(9, false);
+
+        Assert.Equal(
+            [(OfficeProgram.Excel, CopyPath("Fees #8 v1.0.xlsx")), (OfficeProgram.PowerPoint, CopyPath("Deck #9 v1.0.pptx"))],
+            _scripting.Opened);
+        Assert.Equal(FakeApi.Here("Excel"), _server.Doc(8).Hold);
+        Assert.Equal(FakeApi.Here("PowerPoint"), _server.Doc(9).Hold);
+        Assert.All(Store.All(), c => Assert.Equal("Microsoft Office", c.Record.App));
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
+    public async Task AnOdtStillOpensInLibreOffice()
+    {
+        _server.Add(6, "Notes.odt", "notes");
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+
+        await cycle.OpenAsync(6, false);
+        await cycle.OpenAsync(5, false);
+
+        var odt = CopyPath("Notes #6 v1.0.odt");
+        Assert.Equal([odt], _app.Opened);
+        Assert.Equal([(OfficeProgram.Word, CopyPath("Lease agreement #5 v1.0.docx"))], _scripting.Opened);
+        Assert.Equal(FakeApi.Here("LibreOffice"), _server.Doc(6).Hold);
+        Assert.Equal("LibreOffice", Store.Find(odt)!.Value.Item2.App);
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
+    public async Task APdfStillOpensReadOnlyInTheDefaultApp()
+    {
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener, appFor: MicrosoftOfficeForItsFormats);
+
+        await cycle.OpenAsync(7, false);
+
+        Assert.Equal([CopyPath("Signed NDA #7 v1.0 (read-only).pdf")], _opener.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Empty(_scripting.Opened);
+        Assert.Equal(0, _server.Count("POST /documents/7/checkout"));
+    }
+
+    [Fact]
+    public async Task OfficesCloseIsItsOwnerFileGoing()
+    {
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        await cycle.OpenAsync(5, false);
+        var path = CopyPath("Lease agreement #5 v1.0.docx");
+        Assert.True(File.Exists(FakeScripting.OwnerPath(OfficeProgram.Word, path)));
+        Assert.False(File.Exists(FakeApp.LockPath(path))); // LibreOffice's lock file isn't what says Word's window is open
+        await Wait.Until(() => _office.LockSeen(path), "the owner file seen");
+
+        FakeScripting.Close(OfficeProgram.Word, path);
+
+        await Wait.Until(() => !File.Exists(path), "the copy checked in and deleted");
+        Assert.Null(_server.Doc(5).Hold);
+        Assert.Equal(1, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(Store.All());
+        Assert.Empty(cycle.OpenCopies());
+        Assert.Empty(_events.Errors);
+    }
+
+    [Fact]
+    public async Task AnOwnerFileThatsStillThereIsNotAClose()
+    {
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        await cycle.OpenAsync(5, false);
+        var path = CopyPath("Lease agreement #5 v1.0.docx");
+        await Task.Delay(Quiet);
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.Equal(path, Assert.Single(cycle.OpenCopies()).Path);
+    }
+
+    [Fact]
+    public async Task OfficeSavesCountLikeAnyOthers()
+    {
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        await cycle.OpenAsync(5, false);
+        var path = CopyPath("Lease agreement #5 v1.0.docx");
+
+        FakeApp.Write(path, "saved in Word");
+
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v1.1", "the save");
+        Assert.Equal("saved in Word", _server.Doc(5).Content);
+        Assert.Equal(FakeApi.Here("Word"), _server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task AWordCrashIsWordGoneWithTheOwnerFileLeft()
+    {
+        _app.Running = true; // LibreOffice is open on another document of the user's, which says nothing of Word
+        _scripting.SetRunning(OfficeProgram.PowerPoint, true); // and neither does another program of Office's
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        await cycle.OpenAsync(5, false);
+        var path = CopyPath("Lease agreement #5 v1.0.docx");
+        await Task.Delay(Fast.CrashPoll * 3); // the crash check has seen Word running
+        Assert.Empty(_events.Crashes);
+        Assert.True(_scripting.IsRunning("Microsoft Word"));
+
+        _scripting.SetRunning(OfficeProgram.Word, false);
+
+        await Wait.Until(() => _events.Crashes.Contains(path), "Crashed");
+        Assert.True(File.Exists(path));
+        Assert.True(File.Exists(FakeScripting.OwnerPath(OfficeProgram.Word, path)));
+        Assert.Equal(FakeApi.Here("Word"), _server.Doc(5).Hold);
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.NotNull(Store.Find(path));
+
+        // Reopening a kept copy opens it where it was opened, whatever Settings say now.
+        cycle.Dispose();
+        var restarted = Cycle(); // LibreOffice for everything
+        await restarted.ResumeAsync();
+        await restarted.OpenAsync(5, false);
+        Assert.Equal([(OfficeProgram.Word, path), (OfficeProgram.Word, path)], _scripting.Opened);
+        Assert.Empty(_app.Opened);
+        Assert.Equal(1, _server.Count("GET /documents/5/content"));
+    }
+
+    [Fact]
+    public async Task AWordWindowThatClosedWithTheProgramGoneIsAClose()
+    {
+        // A read-only copy gets no owner file, so the program going away is all that says it closed.
+        _server.Change(5, d => d.Hold = FakeApi.OtherPerson());
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        await cycle.OpenAsync(5, false);
+        var path = CopyPath("Lease agreement #5 v1.0 (read-only).docx");
+        Assert.False(File.Exists(FakeScripting.OwnerPath(OfficeProgram.Word, path)));
+        await Task.Delay(Fast.CrashPoll * 3);
+
+        _scripting.SetRunning(OfficeProgram.Word, false);
+
+        await Wait.Until(() => !File.Exists(path), "the read-only copy deleted");
+        Assert.Empty(_events.Crashes);
+    }
+
+    [Fact]
+    public async Task ResumeUsesEachRecordsApp()
+    {
+        _server.Add(6, "Fees.xlsx", "sheet");
+        var first = Cycle(appFor: name => name.EndsWith(".xlsx") ? "Microsoft Office" : "LibreOffice");
+        await first.OpenAsync(5, false);
+        await first.OpenAsync(6, false);
+        var (docx, xlsx) = (CopyPath("Lease agreement #5 v1.0.docx"), CopyPath("Fees #6 v1.0.xlsx"));
+        Assert.Equal([docx], _app.Opened);
+        Assert.Equal([(OfficeProgram.Excel, xlsx)], _scripting.Opened);
+        first.Dispose(); // the helper stops; both windows stay open, each with its app's own lock file
+
+        // Settings now say the opposite, and the records still say who has each copy.
+        var second = Cycle(appFor: name => name.EndsWith(".xlsx") ? "LibreOffice" : "Microsoft Office");
+        await second.ResumeAsync();
+
+        Assert.Equal(new[] { docx, xlsx }.Order(), second.OpenCopies().Select(c => c.Path).Order());
+        Assert.Empty(_events.Crashes); // each app is running, and each lock file is where its own app looks
+        Assert.True(File.Exists(docx) && File.Exists(xlsx));
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout") + _server.Count("DELETE /documents/6/checkout"));
+        Assert.False(_office.WasAskedAbout(docx)); // LibreOffice's copy was never put to Microsoft Office
+        Assert.True(_office.WasAskedAbout(xlsx));
+
+        // Each window closes the way its own app closes it, once this cycle's watcher has seen the lock files: the first
+        // cycle's sightings don't count, so give it a few polls.
+        await Task.Delay(Fast.LockPoll * 8);
+        FakeApp.Close(docx);
+        FakeScripting.Close(OfficeProgram.Excel, xlsx);
+        await Wait.Until(() => !File.Exists(docx) && !File.Exists(xlsx), "both checked in");
+        Assert.Null(_server.Doc(5).Hold);
+        Assert.Null(_server.Doc(6).Hold);
+    }
+
+    [Fact]
+    public async Task ResumeFindsAnAppsCrashByItsOwnProcess()
+    {
+        _server.Add(6, "Fees.xlsx", "sheet");
+        var first = Cycle(appFor: name => name.EndsWith(".xlsx") ? "Microsoft Office" : "LibreOffice");
+        await first.OpenAsync(5, false);
+        await first.OpenAsync(6, false);
+        var (docx, xlsx) = (CopyPath("Lease agreement #5 v1.0.docx"), CopyPath("Fees #6 v1.0.xlsx"));
+        first.Dispose();
+
+        _scripting.SetRunning(OfficeProgram.Excel, false); // Excel went; LibreOffice is still up
+        var second = Cycle();
+        await second.ResumeAsync();
+
+        Assert.Equal([xlsx], _events.Crashes);
+        Assert.Equal(new[] { docx, xlsx }.Order(), second.OpenCopies().Select(c => c.Path).Order());
+    }
+
+    [Fact]
+    public async Task AKeptCopyOpensInTheAppItWasOpenedIn()
+    {
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        await cycle.OpenAsync(5, false);
+        var path = CopyPath("Lease agreement #5 v1.0.docx");
+        _server.Change(5, d => d.Hold = null); // the web page released it
+        FakeApp.Write(path, "my edits");
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+        await Wait.Until(() => _office.LockSeen(path), "the owner file seen");
+        FakeScripting.Close(OfficeProgram.Word, path);
+        await Wait.Until(() => cycle.KeptCopies().Count == 1, "listed");
+        Assert.Same(_office, cycle.AppOf(path));
+        Assert.Same(_app, cycle.AppOf(CopyPath("Nothing here #1 v1.0.docx"))); // no record: LibreOffice, as before Microsoft Office
+
+        cycle.OpenKept(path);
+
+        Assert.Equal([(OfficeProgram.Word, path), (OfficeProgram.Word, path)], _scripting.Opened);
+        Assert.Empty(_app.Opened);
+    }
+
+    [Fact]
+    public async Task AnAdoptedCopyIsLibreOfficesUnlessTheCallerSaysOtherwise()
+    {
+        // The extension's route files a window LibreOffice has open, whatever Settings choose for the kind.
+        var cycle = Cycle(appFor: MicrosoftOfficeForItsFormats);
+        var temp = Path.Combine(_root, "new.docx");
+        File.WriteAllText(temp, "filed");
+
+        var viaLibreOffice = await cycle.AdoptNewAsync(temp, new NewDocument(9, "Letter.docx", new JsonObject(), false), null);
+        Assert.Equal("LibreOffice", Store.Find(viaLibreOffice.Path)!.Value.Item2.App);
+
+        File.WriteAllText(temp, "filed again");
+        var viaWord = await cycle.AdoptNewAsync(temp, new NewDocument(9, "Memo.docx", new JsonObject(), false), null, _office);
+        Assert.Equal("Microsoft Office", Store.Find(viaWord.Path)!.Value.Item2.App);
     }
 }

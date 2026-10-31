@@ -290,9 +290,11 @@ public sealed class SignInTests : IDisposable
         s.Save(paths);
         var again = HelperSettings.Load(paths);
         Assert.Equal(Account, again.Server);
-        Assert.Equal("LibreOffice", again.AppFor(".docx"));
-        Assert.Equal("LibreOffice", again.AppFor("XLSX"));
-        Assert.Equal("LibreOffice", again.AppFor(".odp"));
-        Assert.Equal("Default", again.AppFor(".pdf"));
+        Assert.Null(again.Kinds);
+        var chooser = new AppChooser(again, new InstalledApps(true, true, true, true), _ => null);
+        Assert.Equal("LibreOffice", chooser.For("a.docx"));
+        Assert.Equal("LibreOffice", chooser.For("a.XLSX"));
+        Assert.Equal("LibreOffice", chooser.For("a.odp"));
+        Assert.Equal("Default", chooser.For("a.pdf"));
     }
 }

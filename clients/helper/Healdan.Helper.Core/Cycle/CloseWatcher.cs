@@ -9,45 +9,90 @@ namespace Healdan.Helper.Core.Cycle;
 /// row means the window closed. One never seen doesn't count, as the app may not have opened the file yet.</item>
 /// <item>Every <see cref="CycleTimings.CrashPoll"/>: once the app has been seen running, its process gone with the
 /// copy's lock file still there is a crash. Gone without one is a close: a read-only copy may never get a lock file.</item>
+/// <item>A crashed copy the cycle watches with <see cref="WatchCrashed"/> (M3.5 spec §5.14): its lock file written
+/// since the crash, or back after it went, means the app may have the copy open again, as Word does with a recovered
+/// window.</item>
 /// </list>
+/// Each copy is watched with the app it was opened in (<see cref="IOfficeApp.LockExists"/>, and
+/// <see cref="IOfficeApp.IsRunningFor"/> for the process), as LibreOffice's lock file says nothing of a Word window.
 /// </summary>
 internal sealed class CloseWatcher : IDisposable
 {
-    private sealed class Entry(string path, bool appSeen)
+    private sealed class Entry(string path, IOfficeApp app, bool appSeen, bool lockSeen)
     {
         public string Path { get; } = path;
 
-        public bool LockSeen { get; set; }
+        public IOfficeApp App { get; } = app;
+
+        public bool LockSeen { get; set; } = lockSeen;
 
         public int Gone { get; set; }
 
         public bool AppSeen { get; set; } = appSeen;
+
+        /// <summary>The app went away with the copy open: only the lock file being written again is looked for.</summary>
+        public bool Crashed { get; init; }
+
+        /// <summary>When the lock file the crash left was last written (<see cref="IOfficeApp.LockWritten"/>).</summary>
+        public DateTime? CrashWritten { get; init; }
+
+        /// <summary>The lock file the crash left has gone since, so its coming back is the app's.</summary>
+        public bool LockGoneSinceCrash { get; set; }
     }
 
     private readonly object _lock = new();
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
-    private readonly IOfficeApp _app;
     private readonly CycleTimings _timings;
     private readonly Action<string> _closed;
     private readonly Action<string> _crashed;
+    private readonly Action<string>? _reopened;
     private readonly CancellationTokenSource _stop = new();
 
     /// <param name="closed">Called once when a copy's window has closed; the copy is no longer watched.</param>
     /// <param name="crashed">Called once when the app went away with the copy open; the copy is no longer watched.</param>
-    public CloseWatcher(IOfficeApp app, CycleTimings timings, Action<string> closed, Action<string> crashed)
+    /// <param name="reopened">
+    /// Called once when a copy watched with <see cref="WatchCrashed"/> has its lock or owner file written again since the
+    /// crash; the copy is no longer watched, so the cycle can save it back without its watch getting in the way, and
+    /// watches it again after.
+    /// </param>
+    public CloseWatcher(CycleTimings timings, Action<string> closed, Action<string> crashed, Action<string>? reopened = null)
     {
-        _app = app;
         _timings = timings;
         _closed = closed;
         _crashed = crashed;
+        _reopened = reopened;
         _ = Task.Run(() => RunAsync(_stop.Token));
     }
 
+    /// <param name="app">The app the copy was opened in, which says whether its window is open and whether it is running.</param>
     /// <param name="appSeenRunning">True when the app is known to be running with the copy open, as after a restart.</param>
-    public void Watch(string path, bool appSeenRunning = false)
+    /// <param name="lockSeen">
+    /// True when the copy's lock file is known to have been there, so its going is a close from the first look, as for a
+    /// copy watched again after a pause.
+    /// </param>
+    public void Watch(string path, IOfficeApp app, bool appSeenRunning = false, bool lockSeen = false)
     {
         lock (_lock)
-            _entries[path] = new Entry(path, appSeenRunning);
+            _entries[path] = new Entry(path, app, appSeenRunning, lockSeen);
+    }
+
+    /// <summary>
+    /// Watches a copy whose app went away with it open for the app to have it open again (M3.5 spec §5.14): its lock file
+    /// written since <paramref name="crashWritten"/>, when the crash left it (<see cref="IOfficeApp.LockWritten"/>), or
+    /// back after it went. Neither its close nor a crash is looked for meanwhile. Watched again with the same time after a
+    /// save back that failed, a lock file written since is found again at the next look.
+    /// </summary>
+    public void WatchCrashed(string path, IOfficeApp app, DateTime? crashWritten)
+    {
+        lock (_lock)
+            _entries[path] = new Entry(path, app, false, false) { Crashed = true, CrashWritten = crashWritten };
+    }
+
+    /// <summary>Whether the copy is watched and its lock file has been seen.</summary>
+    public bool LockSeen(string path)
+    {
+        lock (_lock)
+            return _entries.TryGetValue(path, out var entry) && entry.LockSeen;
     }
 
     public void Unwatch(string path)
@@ -71,9 +116,17 @@ internal sealed class CloseWatcher : IDisposable
                     entries = [.. _entries.Values];
                 var closed = new List<Entry>();
                 var crashed = new List<Entry>();
+                var reopened = new List<Entry>();
                 foreach (var entry in entries)
                 {
-                    if (_app.LockExists(entry.Path))
+                    if (entry.Crashed)
+                    {
+                        if (!entry.App.LockExists(entry.Path))
+                            entry.LockGoneSinceCrash = true;
+                        else if (entry.LockGoneSinceCrash || entry.App.LockWritten(entry.Path) != entry.CrashWritten)
+                            reopened.Add(entry);
+                    }
+                    else if (entry.App.LockExists(entry.Path))
                         (entry.LockSeen, entry.Gone) = (true, 0);
                     else if (entry.LockSeen && ++entry.Gone >= 2)
                         closed.Add(entry);
@@ -82,13 +135,12 @@ internal sealed class CloseWatcher : IDisposable
                 if (Stopwatch.GetElapsedTime(lastCrashCheck) >= _timings.CrashPoll)
                 {
                     lastCrashCheck = Stopwatch.GetTimestamp();
-                    var running = IsRunning();
-                    foreach (var entry in entries.Except(closed))
+                    foreach (var entry in entries.Except(closed).Where(e => !e.Crashed))
                     {
-                        if (running)
+                        if (IsRunning(entry))
                             entry.AppSeen = true;
                         else if (entry.AppSeen)
-                            (_app.LockExists(entry.Path) ? crashed : closed).Add(entry);
+                            (entry.App.LockExists(entry.Path) ? crashed : closed).Add(entry);
                     }
                 }
 
@@ -97,11 +149,14 @@ internal sealed class CloseWatcher : IDisposable
                 {
                     closed.RemoveAll(e => !Take(e));
                     crashed.RemoveAll(e => !Take(e));
+                    reopened.RemoveAll(e => !Take(e));
                 }
                 foreach (var entry in closed)
                     _closed(entry.Path);
                 foreach (var entry in crashed)
                     _crashed(entry.Path);
+                foreach (var entry in reopened)
+                    _reopened?.Invoke(entry.Path);
             }
         }
         catch (OperationCanceledException)
@@ -120,11 +175,11 @@ internal sealed class CloseWatcher : IDisposable
     }
 
     /// <summary>When the process list can't be read, the app counts as running: a false crash would worry the user.</summary>
-    private bool IsRunning()
+    private static bool IsRunning(Entry entry)
     {
         try
         {
-            return _app.IsRunning();
+            return entry.App.IsRunningFor(entry.Path);
         }
         catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception or IOException or UnauthorizedAccessException or PlatformNotSupportedException)
         {

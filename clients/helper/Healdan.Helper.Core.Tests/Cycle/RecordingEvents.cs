@@ -17,6 +17,8 @@ public sealed class RecordingEvents : ICycleEvents
 
     public ConcurrentQueue<string> Crashes { get; } = new();
 
+    public ConcurrentQueue<string> Reopens { get; } = new();
+
     public ConcurrentQueue<int> Waits { get; } = new();
 
     public ConcurrentQueue<string> Errors { get; } = new();
@@ -41,6 +43,8 @@ public sealed class RecordingEvents : ICycleEvents
     public void CheckoutEnded(string path) => Ended.Enqueue(path);
 
     public void Crashed(string path) => Crashes.Enqueue(path);
+
+    public void Reopened(string path) => Reopens.Enqueue(path);
 
     public void Waiting(int pending) => Waits.Enqueue(pending);
 

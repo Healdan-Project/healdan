@@ -43,7 +43,7 @@ public sealed class StackCycleTests : IDisposable
 
             var events = new RecordingEvents();
             var app = new FakeApp();
-            using (var cycle = new CopyCycle(api, new CopyStore(HelperPaths.For(_root)), app, deviceId, events, Timings))
+            using (var cycle = new CopyCycle(api, new CopyStore(HelperPaths.For(_root)), TestApps.Of(app), deviceId, events, Timings))
             {
                 await cycle.OpenAsync(filed.DocNumber, false);
                 Assert.Empty(events.Errors);

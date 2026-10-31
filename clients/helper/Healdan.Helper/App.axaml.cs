@@ -73,7 +73,7 @@ public partial class App : Application
         var notifier = new Notifier(_log);
         var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
-        var session = new HelperSession(paths, Keychain(paths, device), device, new LibreOfficeApp(), windows, notifier, _log, otherFiles: new DefaultApp());
+        var session = new HelperSession(paths, Keychain(paths, device), device, OfficeAppSet.Create(paths), windows, notifier, _log);
         _session = session;
         windows.Session = session;
         var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);

@@ -52,4 +52,10 @@ public interface IWindows
 
     /// <summary>The app went away with the copy open (spec §5.8, §5.10). The window offers Reopen and Send and Check In.</summary>
     void Crashed(CopyState copy);
+
+    /// <summary>
+    /// The crashed copy's app has it open again, and the helper has saved what it recovered (M3.5 spec §5.14): its After
+    /// a Crash window goes, if it's up, as neither Reopen nor Send and Check In applies any more.
+    /// </summary>
+    void DismissCrashed(string path);
 }

@@ -11,6 +11,21 @@ of it. You edit and save as usual, and the helper sends each save to Healdan.
 The title bar shows the document's name, doc # and version: `Lease agreement #1234 v2.1`. The version is the one
 your copy holds, so it moves on with each save that reaches Healdan. A read-only copy's title ends in "(read-only)".
 
+### In Word, Excel and PowerPoint
+
+Word, Excel and PowerPoint take the title from the name of the file they have open, which is the helper's local copy.
+
+- **In Word and Excel,** once Healdan has your save, the helper saves the window again under the new version's name,
+  without a prompt, so the title moves on with each save, as in LibreOffice. In Word, a
+  [doc ID footer](../doc-id-footer/) moves on with it.
+- **While there are changes you haven't saved,** the title waits, as renaming would save them too, as a version you
+  didn't ask for. It catches up at your next save, going straight to that save's version: from `v2.1` to `v2.3`, say.
+- **In PowerPoint,** the title stays at the version the presentation was opened as. Your saves still reach Healdan,
+  and the helper's menu shows the version Healdan has.
+- **The first time** Word or Excel saves into the helper's folder, it asks for access to it, and a notice from the
+  helper says what to do: click **Select…**, go up one level, select **Copies**, and click **Grant Access**. Each app
+  asks once.
+
 The title's form is also the doc ID: type `#1234 v2.1` into any search box to find that version. See
 [Versions](../../documents/versions/) for how versions and snapshots are numbered.
 
@@ -81,12 +96,16 @@ Healdan, and **Don't Save** leaves Healdan at your last save.
   is simply released.
 - **Then it deletes the local copy,** once Healdan has confirmed it, and the document leaves the helper's menu.
 - **LibreOffice's Recent Documents** doesn't list Healdan's copies. To reopen a document, open it from Healdan.
+- **Word's Open Recent** doesn't list them either. Excel's and PowerPoint's list each document you open from Healdan,
+  though not the names Excel's copies take as you save. An entry for a copy that's gone can't be opened, and the helper
+  can't remove it: open the document from Healdan instead.
 
 ## The Local Copies
 
 The helper keeps the copies in `~/Library/Application Support/Healdan Helper/Copies/`, named after the title, such as
-`Lease agreement #1234 v2.1.docx`. A copy keeps the name it was opened with while it's open, even as the title moves
-on. Leave the folder to the helper: opening, moving or renaming a copy yourself would cut it off from Healdan.
+`Lease agreement #1234 v2.1.docx`. A copy open in LibreOffice or PowerPoint keeps the name it was opened with while
+it's open, even as the title moves on; one open in Word or Excel takes each saved version's name. Leave the folder to
+the helper: opening, moving or renaming a copy yourself would cut it off from Healdan.
 
 A copy with changes Healdan hasn't confirmed is never deleted, even after a crash or a refused save. Once its window
 has closed, the helper's menu lists it under **Not Yet in Healdan** until you file it. See

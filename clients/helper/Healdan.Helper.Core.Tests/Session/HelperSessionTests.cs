@@ -6,10 +6,12 @@ using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Session;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Tests.Cycle;
+using Healdan.Helper.Core.Tests.Office;
 using Healdan.Helper.Core.Tests.Ui;
 using Healdan.Helper.Core.Ui;
 
@@ -53,10 +55,10 @@ public sealed class HelperSessionTests : IDisposable
 
     private HelperPaths Paths => HelperPaths.For(_root);
 
-    private HelperSession Make(TimeSpan? signOutFlush = null)
+    private HelperSession Make(TimeSpan? signOutFlush = null, OfficeApps? apps = null)
     {
         var device = new DeviceIdentity(FakeApi.HereDevice, FakeApi.HereName);
-        var session = new HelperSession(Paths, _keychain, device, _app, _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
+        var session = new HelperSession(Paths, _keychain, device, apps ?? TestApps.Of(_app), _windows, _notifier, new HelperLog(Paths.Log), _http, Fast,
             signOutFlush);
         _sessions.Add(session);
         return session;
@@ -289,6 +291,35 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Equal(1, _server.Count("POST /documents/5/checkout"));
         await Wait.Until(() => _notifier.All.Contains("aren't in Healdan yet"), "how to file it");
         Assert.Contains("Save as New Document", _notifier.All);
+    }
+
+    [Fact]
+    public async Task AKeptOfficeCopyThatCantBeOpenedFromTheMenuTellsTheUser()
+    {
+        // Declining macOS's "control Microsoft Word" prompt, for one, makes the scripting fail: OfficeScriptException.
+        var scripting = new FakeScripting();
+        var office = new SeenLocks(new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        SignedInBefore();
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: office, appFor: _ => "Microsoft Office"));
+        await session.StartAsync();
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(scripting.Opened).Path;
+        await Wait.Until(() => office.LockSeen(path), "the close watcher sees the owner file");
+        _server.Change(5, d => d.Hold = FakeApi.OtherDevice());
+        FakeApp.Write(path, "an edit that can't go up");
+        await Wait.Until(() => _notifier.All.Contains("can't be saved to Healdan any more"), "the notice");
+        FakeScripting.Close(OfficeProgram.Word, path);
+        await Wait.Until(() => session.OpenCopies().Count == 0, "the window's close done");
+        var kept = Assert.Single(session.KeptCopies());
+        scripting.FailOpen = true;
+
+        session.OpenKept(kept);
+
+        var timeout = TimeSpan.FromSeconds(5); // so a click that does nothing fails soon
+        await Wait.Until(() => _notifier.All.Contains("It couldn't be opened:"), "the user told", timeout);
+        await Wait.Until(() => Logged("Couldn't open the kept copy of #5 v1.0"), "the log line", timeout);
+        Assert.Contains("Word didn't answer", _notifier.All);
+        Assert.Single(scripting.Opened); // only the first open
     }
 
     [Fact]
@@ -966,6 +997,48 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task ASignInToAnotherServerIsRefusedWhileACopyIsOpenInMicrosoftOffice()
+    {
+        SignedInBefore();
+        _keychain.Items.Clear();
+        var (path, _, _) = new CopyStore(Paths, Account).Create(View(5), false, "Microsoft Office");
+        File.WriteAllText(path, "document 5");
+        var scripting = new FakeScripting();
+        File.WriteAllText(FakeScripting.OwnerPath(OfficeProgram.Word, path), "open in Word");
+        scripting.SetRunning(OfficeProgram.Word, true); // LibreOffice isn't running: it's another app that is
+        var apps = TestApps.Of(_app, microsoftOffice: new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInAsync("https://second.test", "robert", Password);
+            return false;
+        };
+
+        await Make(apps: apps).StartAsync();
+
+        Assert.StartsWith("Close Lease agreement #5 v2.1 in Microsoft Office first.", refusal);
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task AnotherServersCopyOpenInMicrosoftOfficeStaysInCopiesAtAStart()
+    {
+        var (path, _, _) = new CopyStore(Paths, "https://second.test").Create(View(5), false, "Microsoft Office");
+        File.WriteAllText(path, "second.test's document 5");
+        var scripting = new FakeScripting();
+        File.WriteAllText(FakeScripting.OwnerPath(OfficeProgram.Word, path), "open in Word");
+        scripting.SetRunning(OfficeProgram.Word, true);
+        SignedInBefore();
+
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: new MicrosoftOfficeApp(scripting, scripting.IsRunning)));
+        await session.StartAsync();
+        await Wait.Until(() => session.Started, "started");
+
+        Assert.True(File.Exists(path)); // not moved from under its window
+        Assert.Contains("open in Microsoft Office, so it stays in Healdan Helper's Copies folder until you close it", _notifier.All);
+    }
+
+    [Fact]
     public async Task ASignInToAnotherServerGoesOnPastALockFileTheAppLeftWhenItCrashed()
     {
         SignedInBefore();
@@ -1098,6 +1171,68 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Empty(session.OpenCopies());
         Assert.False(File.Exists(Paths.Channel));
         Assert.Contains("local copies", _notifier.All);
+    }
+
+    /// <summary>
+    /// M3.5 spec §5.14: a session with Word, whose document 5 is open and has crashed, and then Word restores its window
+    /// at the copy's path and the helper saves it back. Returns the crashed copy, as the crash window holds it.
+    /// </summary>
+    private async Task<(HelperSession Session, FakeScripting Scripting, CopyState Crashed)> WordRecoveredAsync(params RenameResult[] renames)
+    {
+        var scripting = new FakeScripting { WindowText = "the work Word recovered" };
+        scripting.AnswerRenames(renames);
+        var office = new SeenLocks(new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        SignedInBefore();
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: office, appFor: _ => "Microsoft Office"));
+        await session.StartAsync();
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(scripting.Opened).Path;
+        await Wait.Until(() => office.LockSeen(path) && office.RunningSeen(path), "Word seen with the copy open");
+        scripting.SetRunning(OfficeProgram.Word, false);
+        await Wait.Until(() => !_windows.Crashes.IsEmpty, "the crash window");
+        var crashed = Assert.Single(_windows.Crashes);
+
+        scripting.Recover(OfficeProgram.Word, path);
+
+        await Wait.Until(() => _windows.Dismissed.Contains(path), "the crash window dismissed");
+        await Wait.Until(() => _server.Saves.Count == 1, "the recovered work sent");
+        Assert.False(session.HasCrashed(crashed));
+        return (session, scripting, crashed);
+    }
+
+    [Fact]
+    public async Task SendAndCheckInIsRefusedOnceWordHasTheCopyAgain()
+    {
+        // The rename waits on unsaved changes, so the copy is still where it crashed, and Word has its window open.
+        var (session, _, crashed) = await WordRecoveredAsync(RenameResult.Unsaved);
+        await Wait.Until(() => session.Cycle!.Unsent() == 0, "the save back done with");
+
+        session.SendAndCheckIn(crashed); // a crash window's button, clicked just as it went
+
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the user told why");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.All(_server.Saves, save => Assert.True(save.KeepCheckedOut));
+        Assert.True(File.Exists(crashed.Path));
+        Assert.Equal([crashed.Path], session.OpenCopies().Select(c => c.Path));
+        Assert.NotNull(_server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task ReopenAfterWordsRenameBringsUpTheRenamedCopy()
+    {
+        var (session, scripting, crashed) = await WordRecoveredAsync();
+        var renamed = Path.Combine(Paths.Copies, "Lease agreement #5 v1.1.docx");
+        await Wait.Until(() => session.OpenCopies().Any(c => c.Path == renamed), "renamed after the save");
+
+        session.Bring(crashed); // the crash window's Reopen, or the menu, holding the copy's old path
+        session.SendAndCheckIn(crashed);
+
+        await Wait.Until(() => scripting.Opened.Count == 2, "brought up in Word");
+        Assert.Equal((OfficeProgram.Word, renamed), scripting.Opened[^1]);
+        Assert.Empty(_app.Opened); // never handed to LibreOffice as a copy it doesn't know
+        await Wait.Until(() => _notifier.All.Contains("open again"), "the check-in refused");
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.True(File.Exists(renamed));
     }
 
     [Fact]

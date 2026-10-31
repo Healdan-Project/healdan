@@ -25,6 +25,29 @@ public sealed class HelperSettings
     /// </summary>
     public bool LoginItemRegistered { get; set; }
 
+    /// <summary>
+    /// The app the user chose for each kind of file (<see cref="FileKinds"/>, by its label): <c>LibreOffice</c> or
+    /// <c>Microsoft Office</c>. Null, or a kind left out, is the default (<see cref="AppChooser"/>).
+    /// </summary>
+    public Dictionary<string, string>? Kinds { get; set; }
+
+    /// <summary>
+    /// The programs (<c>Word</c>, <c>Excel</c>, <c>PowerPoint</c>) the helper has told, before their first save into
+    /// Copies, how to give them access to it (<see cref="Office.CopiesNotice"/>). Null in a file from before it was kept.
+    /// </summary>
+    public List<string>? CopiesAnnounced { get; set; }
+
+    /// <summary>
+    /// The app chosen for the kind with this label, or null when none was, or when the settings name one that isn't an
+    /// app the helper opens copies in (an older or edited file): that is no choice.
+    /// </summary>
+    public string? ChosenApp(string kindLabel)
+    {
+        if (Kinds is null || !Kinds.TryGetValue(kindLabel, out var app))
+            return null;
+        return app is Cycle.LibreOfficeApp.AppName or Office.MicrosoftOfficeApp.AppName ? app : null;
+    }
+
     /// <summary>Loads the settings, changes them and saves them, with no other <see cref="Update"/> in between.</summary>
     public static void Update(HelperPaths paths, Action<HelperSettings> change)
     {
@@ -35,9 +58,6 @@ public sealed class HelperSettings
             settings.Save(paths);
         }
     }
-
-    /// <summary>"LibreOffice" for every kind in §5.11 (<see cref="FileKinds"/>) in M3, otherwise "Default" (the system's default app, read-only).</summary>
-    public string AppFor(string extension) => FileKinds.Of(extension) is null ? Cycle.DefaultApp.AppName : "LibreOffice";
 
     /// <summary>The saved settings, or empty ones when there are none or the file can't be read.</summary>
     public static HelperSettings Load(HelperPaths paths)

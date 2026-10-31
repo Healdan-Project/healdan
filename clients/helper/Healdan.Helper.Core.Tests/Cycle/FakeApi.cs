@@ -62,6 +62,7 @@ public sealed class FakeApi : HttpMessageHandler
     private TaskCompletionSource? _downloadGate;
     private FakeHold? _cannedVersionMovedHold;
     private bool _refuseNextSave;
+    private bool _refuseNextFiling;
     private bool _breakNextSave;
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
@@ -160,6 +161,13 @@ public sealed class FakeApi : HttpMessageHandler
     {
         lock (_lock)
             _refuseNextSave = true;
+    }
+
+    /// <summary>Refuses the next filing (<c>POST /documents</c>), as a folder the user can't add to does: nothing is filed.</summary>
+    public void RefuseNextFiling()
+    {
+        lock (_lock)
+            _refuseNextFiling = true;
     }
 
     /// <summary>The next save throws what no request should, so the cycle meets a failure it doesn't expect.</summary>
@@ -370,6 +378,11 @@ public sealed class FakeApi : HttpMessageHandler
         var (json, file) = await ReadFormAsync(request, "document", ct);
         lock (_lock)
         {
+            if (_refuseNextFiling)
+            {
+                _refuseNextFiling = false;
+                return Problem(403, "forbidden", "You can't add documents to this folder.");
+            }
             var doc = new FakeDoc { Number = _nextNumber++, Name = (string)json["name"]! };
             doc.Files["1.0"] = file;
             if ((bool?)json["checkOut"] == true)

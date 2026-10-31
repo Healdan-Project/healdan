@@ -29,6 +29,9 @@ public sealed record CycleTimings(
     /// </summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
+    /// <summary>How long the save back after a crash looks for the restored window by its path (M3.5 spec §5.14).</summary>
+    public TimeSpan RecoveryWait { get; init; } = TimeSpan.FromSeconds(30);
+
     /// <summary>The wait before retry number <paramref name="attempt"/> (from 0).</summary>
     public TimeSpan RetryDelay(int attempt) =>
         RetryDelays.Count == 0 ? TimeSpan.FromSeconds(1) : RetryDelays[Math.Min(attempt, RetryDelays.Count - 1)];

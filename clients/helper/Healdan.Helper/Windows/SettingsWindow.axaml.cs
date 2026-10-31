@@ -13,7 +13,7 @@ namespace Healdan.Helper.Windows;
 /// <summary>
 /// Settings (spec §5.8, §5.11, §5.12; polish spec §6.5): the server the helper signs in to, and the app that opens each
 /// kind of file, as grouped rows. One server per helper (spec §5.1), so the address changes only by signing out and in
-/// again. In M3 every kind opens in LibreOffice, so the choice is shown, as plain text, but fixed. Below them: whether
+/// again. The app that opens each kind is shown, as plain text, as the chooser answers now. Below them: whether
 /// the helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
 /// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does, and while
 /// an older version is, Update…, which does the same (changed in the build).
@@ -26,7 +26,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow() => InitializeComponent();
 
     /// <param name="extension">The extension's check, which Install… (or Update…) runs; null when the build has none.</param>
-    internal SettingsWindow(string? server, bool signedIn, HelperSettings settings, LoginItemSummary login, ExtensionCheck? extension) : this()
+    internal SettingsWindow(string? server, bool signedIn, AppChooser chooser, LoginItemSummary login, ExtensionCheck? extension) : this()
     {
         // As Sign In takes it: https:// left out, as Sign In adds it, and http:// or a path kept.
         ServerValue.Text = server is null ? "Not Set Yet"
@@ -35,7 +35,7 @@ public partial class SettingsWindow : Window
             ? "To use another server, sign out from the Healdan Helper menu, then sign in with its address."
             : "Sign in from the Healdan Helper menu to choose the server.";
         for (var i = 0; i < FileKinds.All.Count; i++)
-            KindsGroup.Children.Add(KindRow(FileKinds.All[i], settings.AppFor(FileKinds.All[i].Extensions[0]), divided: i > 0));
+            KindsGroup.Children.Add(KindRow(FileKinds.All[i], chooser.For("a" + FileKinds.All[i].Extensions[0]), divided: i > 0));
 
         LoginValue.Text = login.Value;
         LoginDot.Bind(Shape.FillProperty, LoginDot.GetResourceObservable(login.On ? "HdOnBrush" : "HdOffBrush"));
@@ -78,7 +78,7 @@ public partial class SettingsWindow : Window
         ToolTip.SetTip(ExtensionRow, extension.Tip);
     }
 
-    /// <summary>A kind of file, its extensions under it, and the app that opens it as plain text: no disabled pop-up.</summary>
+    /// <summary>A kind of file, its extensions under it, and the app that opens it as plain text: no pop-up yet.</summary>
     private static Control KindRow(FileKind kind, string app, bool divided)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Classes = { "row" } };

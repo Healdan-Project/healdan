@@ -6,6 +6,25 @@ namespace Healdan.Helper.Core.Tests.Copies;
 public class CopyNamesTests
 {
     [Fact]
+    public void OfficeOwnerNamesAreEveryOneAnyProgramMayKeep()
+    {
+        // Word drops the first two characters of a long name and the first one of a short one, and Excel and PowerPoint
+        // keep the whole name; each is a name only a copy can have, as its doc # is in it.
+        Assert.Equal(
+            new[] { "~$ase agreement #1234 v2.1.docx", "~$ease agreement #1234 v2.1.docx", "~$Lease agreement #1234 v2.1.docx" }.Order(StringComparer.Ordinal),
+            CopyNames.OfficeOwnerNames("Lease agreement #1234 v2.1.docx").Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { "~$b", "~$ab" }.Order(StringComparer.Ordinal), CopyNames.OfficeOwnerNames("ab").Order(StringComparer.Ordinal));
+        Assert.Equal(["~$a"], CopyNames.OfficeOwnerNames("a"));
+        // Each name once, however many programs would give it.
+        var names = CopyNames.OfficeOwnerNames("Deck #4 v1.0.pptx").ToList();
+        Assert.Equal(names.Distinct(), names);
+    }
+
+    [Fact]
+    public void OfficeOwnerNamesCutWholeCharacters() =>
+        Assert.Contains("~$Lease.docx", CopyNames.OfficeOwnerNames("📎aLease.docx"));
+
+    [Fact]
     public void PlainName() =>
         Assert.Equal("Lease agreement #1234 v2.1.docx", CopyNames.FileName("Lease agreement.docx", 1234, "2.1", false));
 

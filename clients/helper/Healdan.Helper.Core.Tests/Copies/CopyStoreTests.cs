@@ -121,6 +121,20 @@ public class CopyStoreTests : IDisposable
         Assert.False(File.Exists(owner));
     }
 
+    [Theory]
+    [InlineData("Fees.xlsx", "Excel")]
+    [InlineData("Deck.pptx", "PowerPoint")]
+    public void DeleteRemovesExcelAndPowerPointOwnerFilesToo(string name, string app)
+    {
+        var store = Store();
+        var (a, _, _) = store.Create(Doc(1, name), false, "Microsoft Office");
+        File.WriteAllText(a, "a");
+        var owner = Path.Combine(Paths.Copies, "~$" + Path.GetFileName(a)); // the whole name, as Excel and PowerPoint keep it
+        File.WriteAllText(owner, app);
+        store.Delete(a);
+        Assert.False(File.Exists(owner));
+    }
+
     [Fact]
     public void UnconfirmedChanges()
     {
@@ -324,6 +338,42 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void MovedTakesTheRecordToTheFileTheAppWrote()
+    {
+        // M3.5 spec §5.4: Word saved the open copy under its new name; the record follows, and the old name goes.
+        var store = Store();
+        var (path, rec, _) = store.Create(Doc(1), false, "Microsoft Office");
+        File.WriteAllText(path, "saved as 2.1");
+        var owners = CopyNames.OfficeOwnerNames(Path.GetFileName(path)).ToList();
+        foreach (var owner in owners)
+            File.WriteAllText(Path.Combine(Paths.Copies, owner), "Word's");
+        var renamed = Path.Combine(Paths.Copies, "Lease agreement #1 v2.2.docx");
+        File.WriteAllText(renamed, "saved as 2.2");
+        var newOwner = Path.Combine(Paths.Copies, "~$ase agreement #1 v2.2.docx");
+        File.WriteAllText(newOwner, "Word's");
+
+        store.Moved(path, renamed, rec with { FileVersion = "2.2", ConfirmedHash = Hash(renamed), CheckedOutHere = true });
+
+        var single = Assert.Single(store.All());
+        Assert.Equal(renamed, single.Path);
+        Assert.Equal(("Lease agreement #1 v2.2.docx", "2.2", A, true),
+            (single.Record.FileName, single.Record.FileVersion, single.Record.Server, single.Record.CheckedOutHere));
+        Assert.False(store.HasUnconfirmedChanges(renamed));
+        Assert.Null(store.Find(path));
+        Assert.False(File.Exists(path));
+        Assert.All(owners, owner => Assert.False(File.Exists(Path.Combine(Paths.Copies, owner)), owner));
+        Assert.True(File.Exists(newOwner)); // the renamed window's own
+        Assert.Equal("saved as 2.2", File.ReadAllText(renamed));
+
+        // The old file may be gone already.
+        var again = Path.Combine(Paths.Copies, "Lease agreement #1 v2.3.docx");
+        File.WriteAllText(again, "saved as 2.3");
+        File.Delete(renamed);
+        store.Moved(renamed, again, single.Record with { FileVersion = "2.3" });
+        Assert.Equal(again, Assert.Single(store.All()).Path);
+    }
+
+    [Fact]
     public void RenameKeepsReadOnlyMark()
     {
         var store = Store();
@@ -502,6 +552,22 @@ public class CopyStoreTests : IDisposable
         Assert.All(new[] { a, closed, b, old, stray }, path => Assert.True(File.Exists(path), path)); // nothing moves
         // At a start, only a copy naming another server would move.
         Assert.Equal([new OpenCopy("Stays #3 v2.1", Path.GetFileName(b), "localhost:8080")], Store(A).OpenToSetAside(A, A));
+    }
+
+    [Fact]
+    public void OpenToSetAsideSeesExcelsAndPowerPointsOwnerFilesToo()
+    {
+        var sheet = Write(A, 1, "Fees.xlsx");
+        var deck = Write(A, 2, "Deck.pptx");
+        var closed = Write(A, 3, "Closed.xlsx");
+        // Excel and PowerPoint keep their owner file under ~$ and the whole name, where Word drops the name's first two characters.
+        File.WriteAllText(Path.Combine(Paths.Copies, "~$" + Path.GetFileName(sheet)), "open in Excel");
+        File.WriteAllText(Path.Combine(Paths.Copies, "~$" + Path.GetFileName(deck)), "open in PowerPoint");
+
+        var open = Store(B).OpenToSetAside(B, A);
+
+        Assert.Equal([Path.GetFileName(deck), Path.GetFileName(sheet)], open.Select(c => c.FileName)); // in name order
+        Assert.True(File.Exists(closed));
     }
 
     [Fact]
