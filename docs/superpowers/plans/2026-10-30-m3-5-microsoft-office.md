@@ -105,7 +105,7 @@ The owner hears about these when this plan is handed over. Task 11 folded them i
 3. **The add-in's port is an `SslStream` server on a `TcpListener`,** not `HttpListener`, which can't be handed a certificate in code.
 4. **`save-new` gives a `ticket`.** The helper takes the front window when `save-new` arrives, before its Save window opens (spec §5.5 step 2), and `file` names it by the ticket.
 5. **Excel and PowerPoint open copies with `open -a`.** Their dictionaries have no `open` that keeps a file off Open Recent; Word's own `open` does.
-6. **Two people signed in to one Mac at once:** only the first one's helper can take the add-in's ports, and the other's add-in reaches the wrong helper and can't pair. Known Limitations says so.
+6. **Two people signed in to one Mac at once:** (corrected in the build) each helper takes the first free port, so the second person's helper opens the next one, and the add-in skips a helper whose `hello` names another server. Pairing fails only when both helpers are signed in to the same server: the second person's add-in then reaches the first person's helper, whose window shows the code. Known Limitations says so. (As first written: "only the first one's helper can take the add-in's ports, and the other's add-in reaches the wrong helper and can't pair.")
 7. **The add-in's pages are classic scripts,** as in the trial, with the logic in one file that also loads under Node for its tests, not ES modules.
 
 ## Conventions
