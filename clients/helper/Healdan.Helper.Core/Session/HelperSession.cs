@@ -256,7 +256,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
                 _notifier.Notify(copy.Title, "Your changes to it aren't in Healdan yet: use Save as New Document to file them.");
             }
             catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException
-                                           or System.ComponentModel.Win32Exception)
+                                           or System.ComponentModel.Win32Exception or OfficeScriptException)
             {
                 _log.Warn($"Couldn't open the kept copy of {copy.DocRef}: {e.Message}");
                 _notifier.Notify(copy.Title, $"It couldn't be opened: {e.Message}");

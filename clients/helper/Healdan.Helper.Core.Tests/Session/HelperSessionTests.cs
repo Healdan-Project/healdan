@@ -294,6 +294,35 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task AKeptOfficeCopyThatCantBeOpenedFromTheMenuTellsTheUser()
+    {
+        // Declining macOS's "control Microsoft Word" prompt, for one, makes the scripting fail: OfficeScriptException.
+        var scripting = new FakeScripting();
+        var office = new SeenLocks(new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+        SignedInBefore();
+        var session = Make(apps: TestApps.Of(_app, microsoftOffice: office, appFor: _ => "Microsoft Office"));
+        await session.StartAsync();
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        var path = Assert.Single(scripting.Opened).Path;
+        await Wait.Until(() => office.LockSeen(path), "the close watcher sees the owner file");
+        _server.Change(5, d => d.Hold = FakeApi.OtherDevice());
+        FakeApp.Write(path, "an edit that can't go up");
+        await Wait.Until(() => _notifier.All.Contains("can't be saved to Healdan any more"), "the notice");
+        FakeScripting.Close(OfficeProgram.Word, path);
+        await Wait.Until(() => session.OpenCopies().Count == 0, "the window's close done");
+        var kept = Assert.Single(session.KeptCopies());
+        scripting.FailOpen = true;
+
+        session.OpenKept(kept);
+
+        var timeout = TimeSpan.FromSeconds(5); // so a click that does nothing fails soon
+        await Wait.Until(() => _notifier.All.Contains("It couldn't be opened:"), "the user told", timeout);
+        await Wait.Until(() => Logged("Couldn't open the kept copy of #5 v1.0"), "the log line", timeout);
+        Assert.Contains("Word didn't answer", _notifier.All);
+        Assert.Single(scripting.Opened); // only the first open
+    }
+
+    [Fact]
     public async Task ARefusedTokenAsksForTheSignInAgain()
     {
         SignedInBefore();
