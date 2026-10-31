@@ -315,7 +315,8 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
 - **Following a `202` and losing the answer:** once `call` has followed a `202`, whatever stops it learning the outcome
   (the `result` route refused, the helper signing out, the helper not answering twice) is `lost-result`, which says to
   check the document in Healdan before trying again, because a pending `file` may already have filed it. A route's own
-  errors are still its own.
+  errors are still its own. A `file` request that fails on the way, before any answer, is `lost-result` too, and isn't
+  sent again: the helper may have filed the document before the answer was lost.
 - **The server serves** only files named `[A-Za-z0-9-]+\.(html|js|css)` and `assets/*.png` from it, with a
   Content-Security-Policy on the pages that allows scripts from the server and `appsforoffice.microsoft.com` and
   connections to the server, Microsoft's services and the helper's four ports. No script, handler or style goes inline.
@@ -343,8 +344,8 @@ is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks)
   descriptors for a moment, is logged once for each kind, and the port goes on listening, as Kestrel's does.
 - **HTTP/1.1, one request per connection** (`Connection: close`): a request line, headers to an empty line, and a
   `Content-Length` body of at most 150 MiB for `file` and 1 MiB for any other route. Anything else, such as a chunked
-  body, a second request, a folded or doubled `Host`, or a body that isn't UTF-8, is `400 bad-request`. Bodies are JSON,
-  and errors are `{"error": "<code>"}`, as the channel's are.
+  body, a second request, a folded or doubled `Host`, a body that isn't UTF-8, or a value no text can hold (an escaped
+  lone surrogate), is `400 bad-request`. Bodies are JSON, and errors are `{"error": "<code>"}`, as the channel's are.
 
 ### The Checks
 
@@ -398,9 +399,9 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 - **`new-version`** saves the document first when it has unsaved changes, and that save goes up as the version;
   otherwise the file as it is goes up as one.
 - **The routes' own refusals** are `409`: `not-a-copy` for `new-version` on a window that isn't one of the helper's
-  copies, `wrong-window` when the front window isn't the one Save to Healdan was pressed in, and `no-ticket` for a
-  ticket used or expired. Any other failure is `500 internal-error`, and the helper has told the user why where it's
-  theirs to know.
+  copies, `wrong-window` when the front window isn't the one Save to Healdan was pressed in, or when the add-in's mark
+  doesn't show and the app gave no window name to tell, and `no-ticket` for a ticket used or expired. Any other
+  failure is `500 internal-error`, and the helper has told the user why where it's theirs to know.
 - **Short requests:** the add-in calls the port with `fetch` from Office's web view, which is WebKit, and WebKit is
   likely to give up on a request that has had no answer for about a minute. `open-dialog`, `save-new` and `properties`
   wait while the helper's windows are up, and `file` can wait up to 300 s behind Word's Grant File Access, so a lost

@@ -273,6 +273,30 @@ public sealed partial class ScriptsTests
         }
     }
 
+    [Fact]
+    public void TheHfsPathRetryPassesOnCancelsTimeoutsAndRefusals()
+    {
+        // The final review's Minor 13: where Word turns down a POSIX path, the open or save is tried again with an HFS one.
+        // A cancel (-128), a timeout (-1712) or a refusal of Automation (-1743) is raised as it came instead: tried
+        // again, it would wait up to another 300 seconds and ask for Grant File Access twice. Anything else is tried again,
+        // as the path error's own number is unconfirmed without Word.
+        var retrying = Scripts().Where(s => s.Value.Split('\n').Any(IsHfsRetry)).Select(s => s.Key).Order().ToList();
+        Assert.Equal(["Word.Open", "Word.Rename", "Word.SaveAs"], retrying);
+        foreach (var name in retrying)
+        {
+            var lines = Scripts()[name].Split('\n').Select(l => l.Trim()).Where(l => !l.StartsWith("--", StringComparison.Ordinal)).ToList();
+            foreach (var at in Enumerable.Range(0, lines.Count).Where(i => IsHfsRetry(lines[i])))
+            {
+                Assert.Equal("on error errText number errNum", lines[at - 2]);
+                Assert.Equal("if errNum is in {-128, -1712, -1743} then error errText number errNum", lines[at - 1]);
+            }
+        }
+        Assert.DoesNotContain(Scripts().Values, text => Regex.IsMatch(text, @"on error\s*\n\s*[^\n]*\(POSIX file \w+\) as text"));
+    }
+
+    /// <summary>A line that opens or saves again with the HFS form of a POSIX path.</summary>
+    private static bool IsHfsRetry(string line) => line.Contains("(POSIX file ", StringComparison.Ordinal) && line.Contains(") as text)", StringComparison.Ordinal);
+
     /// <summary>Each line is in the script, after the one before it.</summary>
     private static void InOrder(string name, string script, params string[] lines)
     {

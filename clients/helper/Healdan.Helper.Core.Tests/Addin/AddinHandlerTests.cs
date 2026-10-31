@@ -206,6 +206,29 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task AValueNoTextCanHoldIsABadRequest()
+    {
+        // The final review's Minor 6: an escaped lone surrogate parses as JSON, and only reading it as text fails.
+        var (cycle, _) = await OpenAsync();
+        var handler = Handler(cycle);
+
+        foreach (var (route, body) in new[]
+        {
+            ("pair/start", """{"app":"\ud800"}"""),
+            ("state", """{"app":"Word","url":"\ud800"}"""),
+            ("file", """{"ticket":"\ud800","mark":null,"bytes":"UEsDBA=="}"""),
+            ("file", """{"ticket":"a-ticket","mark":"\udc00","bytes":"UEsDBA=="}"""),
+            ("file", """{"ticket":"a-ticket","mark":null,"bytes":"\ud800"}"""),
+        })
+        {
+            var answer = await handler.HandleAsync(route, route == "pair/start" ? null : "Word", JsonNode.Parse(body)!.AsObject());
+            Assert.Equal((400, """{"error":"bad-request"}"""), (answer.Status, answer.Body.ToJsonString()));
+        }
+        Assert.DoesNotContain(" ERROR ", Log);
+        Assert.Equal(0, Scripting.FrontAsked);
+    }
+
+    [Fact]
     public void AFileUrlIsALocalPath()
     {
         Assert.Equal("/Users/someone/Copies/Lease agreement #5 v1.1.docx",

@@ -29,7 +29,9 @@ on run argv
             set textBefore to my hdFingerprint(d)
             try
                 my saveInFormat(d, newPath, newExt)
-            on error
+            on error errText number errNum
+                -- A cancel, a timeout or a refusal of Automation isn't Word turning the path down: it goes as it came.
+                if errNum is in {-128, -1712, -1743} then error errText number errNum
                 my saveInFormat(d, ((POSIX file newPath) as text), newExt)
             end try
             set d2 to missing value

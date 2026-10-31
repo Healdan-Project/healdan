@@ -312,8 +312,10 @@
     /**
      * Sends one request and resolves to the helper's response. `repeatable` is for a request that can be sent twice
      * without doing anything twice (asking result): one that failed on the way is sent again where the helper answers.
+     * `doneIfSent` is for one the helper may have carried out though its answer never came (file, which files the
+     * document): one that failed on the way is lost-result, and isn't sent again.
      */
-    async function request(route, body, keyed, repeatable) {
+    async function request(route, body, keyed, repeatable, doneIfSent) {
       const key = keyed ? read(keyName) : null;
       if (keyed && key === null) {
         throw new HelperError("not-paired");
@@ -326,6 +328,9 @@
         // helper that still answers where it was may have taken the request already (a ticket is good once), unless
         // it's repeatable: result answers an outcome once, so asking again gets it, or no-result if it was lost.
         erase(PORT_NAME);
+        if (doneIfSent) {
+          throw new HelperError("lost-result");
+        }
         const moved = await find();
         if (moved === port && !repeatable) {
           throw new HelperError("unreachable");
@@ -361,10 +366,11 @@
      * From the first 202 on, the route may have done what it was asked (a pending file may have filed the document),
      * and the add-in can't tell: "try again" could do it twice. So whatever stops it learning the outcome, as result
      * being refused, the helper signing out, or the helper not answering twice, is lost-result, which says to check the
-     * document in Healdan. The route's own error answers are still its own.
+     * document in Healdan. The route's own error answers are still its own. A file request that failed on the way is
+     * lost-result too, as the helper may have filed the document before its answer was lost.
      */
     async function call(route, body) {
-      const first = await request(route, body, true, false);
+      const first = await request(route, body, true, false, route === "file");
       const firstAnswer = await jsonOf(first);
       if (first.status !== PENDING) {
         return answerOf(first, firstAnswer, true);

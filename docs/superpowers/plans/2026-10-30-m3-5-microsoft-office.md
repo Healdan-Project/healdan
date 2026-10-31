@@ -989,6 +989,13 @@ Every call made while building that the plan or the spec didn't settle, in order
 | 2026-10-31 | Final review | The crash window's Send and Check In is refused from `OnReopened` on, while the owner file is there (`CopyCycle.IsOpenAgain`), not only once the save-back worked | until the save-back found the window, checking in deleted the copy from under Word's recovered window | spec §5.14 |
 | 2026-10-31 | Final review | After a rename, and after PowerPoint's reopen, the close watcher takes on the copy with `lockSeen` set when its owner file is there | watched as never seen, a window closed before the first look wasn't a close until the program quit, which could leave the check-out stuck for days | spec §5.4 |
 | 2026-10-31 | Final review | Tests pin the rename's queued-save and Save as New Version guards | nothing failed with either guard removed | `OfficeRenameTests` |
+| 2026-10-31 | Final review | A body value no text can hold (an escaped lone surrogate) is `400 bad-request` on every route, not `500` | reachable without a key through `pair/start`, it logged a stack trace | spec §5.8 |
+| 2026-10-31 | Final review | `commands.js` guards the body of `displayDialogAsync`'s callback, so `event.completed()` is always called | Office calls it outside the call's `try`, and a throw left the button busy until Office restarted | spec §6.1 |
+| 2026-10-31 | Final review | A `file` request that fails on the way is `lost-result`, and isn't sent again; other routes keep `unreachable` | the helper may have filed the document, and "isn't running" invited filing it twice | spec §5.8 |
+| 2026-10-31 | Final review | With no mark shown and no window name from `save-new`, `file` is refused `409 wrong-window` before anything is filed | an empty name matched an empty name, and `SaveAs` then found nothing to save after the filing | spec §5.5 |
+| 2026-10-31 | Final review | The HFS-path retry in `Word.Open`, `Word.Rename` and `Word.SaveAs` raises a cancel (-128), a timeout (-1712) or a refusal of Automation (-1743) as it came, and retries anything else | a bare `on error` waited up to another 300 seconds and asked for Grant File Access twice; the path error's own number is unconfirmed without Word, so the retry stays the default | the scripts |
+| 2026-10-31 | Final review | `AddinResourceTest` reads the served manifest as XML and checks every `resid` names a `bt:` resource; `maven-resources-plugin` is pinned at 3.5.0, the version the build resolved, as `logicaldoc-parent` manages none | a bad `resid` shows only once the manifest is uploaded; Maven warned of the missing version | `healdan-api` |
+| 2026-10-31 | Final review | `OsaRunner`'s comments say its errors can quote a value, and where they go | they promised errors never carried the arguments, but `osascript`'s error text can | `OsaRunner.cs` |
 | 2026-10-31 | Final review | `Word.SetDocId` fingerprints the text before it sets the property and after the fields are updated, and marks the document saved only if it was and the text is the same, compared case and all | Word takes keystrokes between the fields' Apple events; marked saved, a line typed then closed without a prompt and was lost | spec §5.7 |
 
 ## Follow-ups
@@ -997,7 +1004,6 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 
 **For the owner's session** (spec §12.3 has the checks themselves)
 - `state` may ask Office for its front window by AppleScript and so block behind a Grant File Access dialog. It is read-only, and the window polls `ping`, but a button's `state` call can wait (`AddinHandler.cs`).
-- `commands.js`'s `displayDialogAsync` callback is unguarded: a throw there leaves `event.completed()` uncalled and the button busy. Wrap it, calling the failure path.
 - There is no fallback timer if Office never raises `DialogEventReceived` after the user closes the window.
 - An origin in another form (a port, a trailing slash) drops the paired message silently, and the manifest declares no DialogApi 1.2 requirement.
 - Accessibility: a `display:none` live region may not announce when it is shown; `aria-busy` is on all of `<main>` for up to 12 seconds; focus moves from the message to the code field at once; the message and the status repeat each other.
@@ -1008,15 +1014,12 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 **Lost work and reachability, for the final review**
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
 - Word relaunched within one crash poll (5 seconds) of a Force Quit never registers as a crash, so its recovered window isn't saved back. A restored window open before the helper starts is treated as open and never saved back (pre-existing).
-- A body with an escaped lone surrogate (`{"app":"\ud800"}`) passes UTF-8 validation and JSON parsing, then throws in `TryGetValue<string>` and answers `500` with a stack trace in the log, without a key (`AddinHandler.cs`). `result` maps it to `400`; the other routes should.
 - `CopyCycleTests.PartialWriteNotSent` (M3's) failed once in a full run, then passed six times: possibly flaky.
 - A Settings change mid-flight re-records a copy's app when `CopyStore.Create` runs again, so a read-only or ended copy still open in Word could move its close watch to LibreOffice. Narrow.
 
 **The scripts and the seam**
-- `OsaRunner` promises its errors never carry arguments, but `osascript`'s stderr can echo values.
-- The HFS-path retry's bare `on error` also catches a timeout or a refusal, and retries for up to another 300 seconds, asking Grant File Access twice (`Word.Open`, `Word.Rename`, `Word.SaveAs`).
 - `PowerPoint.Reopen` reopens the argument path, not the located presentation's own full name; reachable through the `Copies` name fallback. `MacOfficeScripting`'s `copiesFolder` is optional, so a caller that forgets it loses the name fallback silently.
-- Window-name matching is the last step: a new document reusing a closed window's name, such as "Document1", during an upload could be saved as the copy. With neither a mark nor a window name, the window check passes on null equals null, and `SaveAs` then answers missing after filing.
+- Window-name matching is the last step: a new document reusing a closed window's name, such as "Document1", during an upload could be saved as the copy.
 - A failed `SaveAs` after Save as New Document leaves the original Closing with its watchers off. Save-new's refusals (no document open; a mismatched `url`) throw without a notice, where spec §5.5 step 4 says "with a notice".
 - `CloseWatcher` treats a null `LockWritten` as a reopen; the save-back's retry has no end while an owner file stays, at about seven `osascript` launches per 36 seconds.
 - `MicrosoftOfficeApp.IsRunningFor` passes macOS process names, and `InstalledApps` checks macOS bundle paths, in the core; a Windows port would translate them. `CopiesNotice`'s text is macOS-specific, called above the seam.
@@ -1030,7 +1033,7 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 - An idempotent call (`ping`, `state`) isn't retried when the helper comes back on the same port. The remembered port skips `hello`, and `not-paired` from any port drops the key, which is within the two-people limitation; a failed `setItem` after pairing leaves a key the helper keeps.
 
 **Server and docs**
-- No test parses the served manifest as XML or checks that every `resid` has a `bt:*` id. `maven-resources-plugin` is unpinned in `healdan-api/pom.xml`. The blank `server.url` branch is untested, and the manifest varies by `Host` with no `Cache-Control: no-cache`.
+- The blank `server.url` branch is untested, and the manifest varies by `Host` with no `Cache-Control: no-cache`.
 - The Install pages omit that the proxy must pass `Host`, and that `X-Forwarded-Proto` is believed only from `LOGICALDOC_TRUSTED_PROXIES`.
 - When Things Go Wrong's message table omits `too-large`, `too-many-pending`, `no-ticket`, `mark-left`, `storage-failed`, `internal-error` and `bad-request`. Known Limitations should mention the remembered-port case under two people on one Mac.
 - A Markdown file under `clients/office/` stays docs for `code-changed.sh`, which the Developer Guide and CLAUDE.md now say.

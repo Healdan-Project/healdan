@@ -180,6 +180,32 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task AWindowWithNoNameIsFiledOnlyByItsMark()
+    {
+        // The program gave no window name for a document never saved, so only the mark says which window it
+        // is. Without it, nothing is filed: the front window's name and path would match the ticket's as null and null,
+        // and Save As would find nothing once the document was filed.
+        Scripting.Front = _ => new FrontDocument(null, "", null);
+        Scripting.MarksShown = false;
+        var cycle = Cycle();
+        var filing = Filing(cycle, markWait: TimeSpan.FromMilliseconds(500));
+
+        var refused = await Assert.ThrowsAsync<OfficeRefusedException>(async () => await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("bytes")));
+
+        Assert.Equal("wrong-window", refused.Code);
+        Assert.DoesNotContain(Server.Calls, c => c.StartsWith("filed ", StringComparison.Ordinal));
+        Assert.Empty(Scripting.SavesAs);
+        Assert.Contains("Nothing was filed: Word didn't say which window", Notifier.All);
+        Assert.Empty(Temporary);
+
+        // The mark shown, it finds the window.
+        Scripting.MarksShown = true;
+        var state = await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("bytes"));
+        Assert.Equal("Memo #100 v1.0", state.Title);
+        Assert.Equal(new DocumentRef(null, Mark, null), Scripting.SavesAs.Single().Doc);
+    }
+
+    [Fact]
     public async Task PowerPointWithoutAMarkUsesTheTicketsWindow()
     {
         Scripting.MarksShown = false; // PowerPoint never showed the mark to AppleScript (spec §8.5)

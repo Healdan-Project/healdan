@@ -207,7 +207,8 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
     /// Review Focus 2: why the ticket's window isn't there to save, for the user; null when it is. The add-in's mark says
     /// it is where the program shows it, looked for every <see cref="MarkPoll"/> for up to <see cref="MarkWait"/>;
     /// otherwise the program's front window must still be the one taken at <c>save-new</c>, by its path and its window's
-    /// name. PowerPoint never showed the mark (spec §8.5), so it isn't waited for there: the window's name decides.
+    /// name. PowerPoint never showed the mark (spec §8.5), so it isn't waited for there: the window's name decides. Without
+    /// the mark or a window's name, nothing says which window it is, so nothing is filed.
     /// </summary>
     private async Task<string?> NotTheWindowAsync(IOfficeScripting scripting, FilingTicket t, string? mark, string app)
     {
@@ -230,6 +231,11 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
                 await Task.Delay(MarkPoll);
             }
         }
+        // A name null at save-new and now would match, though nothing said which window either was, and Save As would then
+        // find nothing to save once the document was filed.
+        if (t.Window.WindowName is null)
+            return $"Nothing was filed: {app} didn't say which window Save to Healdan was pressed in. Click in the document, "
+                + "and press Save to Healdan again.";
         var front = await scripting.FrontDocumentAsync(t.Program);
         if (front is null)
             return $"Nothing was filed: {app} has no document open now.";

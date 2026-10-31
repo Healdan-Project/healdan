@@ -10,7 +10,10 @@ public interface IOsaRunner
     /// Runs an AppleScript with <c>/usr/bin/osascript -</c>: the script on standard input, <paramref name="args"/> after
     /// the dash, where the script reads them as <c>argv</c>. Answers what the script returned, without its closing newline.
     /// </summary>
-    /// <exception cref="OfficeScriptException">The script failed or didn't answer within <paramref name="timeout"/>.</exception>
+    /// <exception cref="OfficeScriptException">
+    /// The script failed or didn't answer within <paramref name="timeout"/>. A failure's message is <c>osascript</c>'s
+    /// error text, which can quote one of <paramref name="args"/>: it's for the helper's log and the user, on this Mac.
+    /// </exception>
     Task<string> RunAsync(string script, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken ct);
 
     /// <summary>Runs a program and waits for it to exit, such as <c>/usr/bin/open -a "Microsoft Excel" path</c>.</summary>
