@@ -302,6 +302,34 @@
 					</execution>
 				</executions>
 			</plugin>
+			<!-- The Office add-in's manifest template and pages (clients/office/) go into this jar under healdan/api/addin/,
+				and AddinResource serves them at /api/addin/. The pages' own folder, web/, is the jar's addin/ itself -->
+			<plugin>
+				<artifactId>maven-resources-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>copy-addin</id>
+						<phase>generate-resources</phase>
+						<goals>
+							<goal>copy-resources</goal>
+						</goals>
+						<configuration>
+							<outputDirectory>${project.build.outputDirectory}/healdan/api/addin</outputDirectory>
+							<resources>
+								<resource>
+									<directory>${project.basedir}/../clients/office</directory>
+									<includes>
+										<include>manifest.template.xml</include>
+									</includes>
+								</resource>
+								<resource>
+									<directory>${project.basedir}/../clients/office/web</directory>
+								</resource>
+							</resources>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
 			<plugin>
 				<artifactId>maven-assembly-plugin</artifactId>
 				<configuration>

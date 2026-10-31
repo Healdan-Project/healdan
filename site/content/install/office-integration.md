@@ -85,3 +85,27 @@ by the words in it.
   API, Healdan updates that property and the fields showing it to the stored version's doc ID. The rest of the
   content stays as it was, though the parts Healdan rewrites may change form, and a signed file loses its signature:
   see [Known Limitations](../known-limitations/). Files without the property are stored as they arrive.
+
+## Microsoft Office
+
+Word, Excel and PowerPoint get their Healdan tab from a web add-in that Microsoft 365 loads from your server. Healdan
+serves the add-in's pages, icons and manifest itself, at `/api/addin/` under your install's address, so there's
+nothing to install on the server and nothing to switch on. They're the same for everyone and need no sign-in, as
+Office loads them before anyone has signed in to anything.
+
+- **HTTPS at the address people use.** Office loads the add-in over HTTPS only, so Healdan needs a
+  [reverse proxy](../reverse-proxy/) with a certificate the computers running Office trust. Set
+  `LOGICALDOC_PUBLIC_URL` to that address, as for the helper. Without it, Healdan uses the address the request came
+  to, as the proxy forwards it in `X-Forwarded-Proto`. Plain `http://` works only for `localhost`, `127.0.0.1` and
+  `[::1]`, for trying it on your own machine.
+- **The manifest** is at `https://healdan.example/api/addin/manifest.xml`, with your own address in place of
+  `healdan.example`. Healdan makes it for each request, with your address in every link and as the add-in's one app
+  domain, so the file you download points at your server. Open it in a browser to check the address, and upload
+  that file to Microsoft 365.
+- **When Healdan doesn't know an HTTPS address,** the manifest's address answers `409` with the code
+  `no-public-address`, and a message that says to set `LOGICALDOC_PUBLIC_URL` to the server's `https://` address.
+  Put it in `.env`, then restart Healdan: [Configuration](../configuration/) has the setting.
+- **Uploads and upgrades.** The manifest's add-in ID never changes, and its version changes only when the manifest
+  itself does, which is what makes Microsoft 365 take a new one. The pages change with Healdan: an upgrade updates
+  them for everyone, and needs no new upload unless the manifest changed too.
+- **The admin centre's steps** for deploying the manifest are on this page too, as part of this section.

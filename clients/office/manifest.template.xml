@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The Healdan add-in's manifest for Word, Excel and PowerPoint. healdan-api's AddinResource serves it at
+  /api/addin/manifest.xml, replacing the two placeholders in double braces with the server's address, so each firm
+  uploads a manifest that points at itself. BASE is that address and /api/addin; ORIGIN is the address alone.
+  (Keep the placeholders out of this comment: an address with two hyphens in a row can't go in one.)
+
+  The Id never changes. Raise Version in any change to this file, or the admin centre keeps the old manifest.
+-->
+<OfficeApp
+  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+  <Id>7b0f3a52-8d1e-4c4b-9a6e-2f5d0c8e4a91</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>Healdan</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Healdan"/>
+  <Description DefaultValue="Save to and open from Healdan in Word, Excel and PowerPoint."/>
+  <IconUrl DefaultValue="{{BASE}}/assets/healdan-32.png"/>
+  <HighResolutionIconUrl DefaultValue="{{BASE}}/assets/healdan-64.png"/>
+  <SupportUrl DefaultValue="https://docs.healdan.com/user/office/"/>
+  <AppDomains>
+    <AppDomain>{{ORIGIN}}</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Document"/>
+    <Host Name="Workbook"/>
+    <Host Name="Presentation"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="{{BASE}}/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <FunctionFile resid="Commands.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="Healdan.Tab">
+              <Group id="Healdan.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Mark.Icon16"/>
+                  <bt:Image size="32" resid="Mark.Icon32"/>
+                  <bt:Image size="80" resid="Mark.Icon80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Healdan.SaveToHealdan">
+                  <Label resid="SaveToHealdan.Label"/>
+                  <Supertip>
+                    <Title resid="SaveToHealdan.Label"/>
+                    <Description resid="SaveToHealdan.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveToHealdan.Icon16"/>
+                    <bt:Image size="32" resid="SaveToHealdan.Icon32"/>
+                    <bt:Image size="80" resid="SaveToHealdan.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveToHealdan</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.OpenFromHealdan">
+                  <Label resid="OpenFromHealdan.Label"/>
+                  <Supertip>
+                    <Title resid="OpenFromHealdan.Label"/>
+                    <Description resid="OpenFromHealdan.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="OpenFromHealdan.Icon16"/>
+                    <bt:Image size="32" resid="OpenFromHealdan.Icon32"/>
+                    <bt:Image size="80" resid="OpenFromHealdan.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>openFromHealdan</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.SaveAsNewVersion">
+                  <Label resid="SaveAsNewVersion.Label"/>
+                  <Supertip>
+                    <Title resid="SaveAsNewVersion.Label"/>
+                    <Description resid="SaveAsNewVersion.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveAsNewVersion.Icon16"/>
+                    <bt:Image size="32" resid="SaveAsNewVersion.Icon32"/>
+                    <bt:Image size="80" resid="SaveAsNewVersion.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveAsNewVersion</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.SaveAsNewDocument">
+                  <Label resid="SaveAsNewDocument.Label"/>
+                  <Supertip>
+                    <Title resid="SaveAsNewDocument.Label"/>
+                    <Description resid="SaveAsNewDocument.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveAsNewDocument.Icon16"/>
+                    <bt:Image size="32" resid="SaveAsNewDocument.Icon32"/>
+                    <bt:Image size="80" resid="SaveAsNewDocument.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveAsNewDocument</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.Properties">
+                  <Label resid="Properties.Label"/>
+                  <Supertip>
+                    <Title resid="Properties.Label"/>
+                    <Description resid="Properties.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Properties.Icon16"/>
+                    <bt:Image size="32" resid="Properties.Icon32"/>
+                    <bt:Image size="80" resid="Properties.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>properties</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.InsertDocId">
+                  <Label resid="InsertDocId.Label"/>
+                  <Supertip>
+                    <Title resid="InsertDocId.Label"/>
+                    <Description resid="InsertDocId.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="InsertDocId.Icon16"/>
+                    <bt:Image size="32" resid="InsertDocId.Icon32"/>
+                    <bt:Image size="80" resid="InsertDocId.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>insertDocId</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+              <Label resid="Tab.Label"/>
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+      <Host xsi:type="Workbook">
+        <DesktopFormFactor>
+          <FunctionFile resid="Commands.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="Healdan.Tab">
+              <Group id="Healdan.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Mark.Icon16"/>
+                  <bt:Image size="32" resid="Mark.Icon32"/>
+                  <bt:Image size="80" resid="Mark.Icon80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Healdan.SaveToHealdan">
+                  <Label resid="SaveToHealdan.Label"/>
+                  <Supertip>
+                    <Title resid="SaveToHealdan.Label"/>
+                    <Description resid="SaveToHealdan.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveToHealdan.Icon16"/>
+                    <bt:Image size="32" resid="SaveToHealdan.Icon32"/>
+                    <bt:Image size="80" resid="SaveToHealdan.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveToHealdan</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.OpenFromHealdan">
+                  <Label resid="OpenFromHealdan.Label"/>
+                  <Supertip>
+                    <Title resid="OpenFromHealdan.Label"/>
+                    <Description resid="OpenFromHealdan.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="OpenFromHealdan.Icon16"/>
+                    <bt:Image size="32" resid="OpenFromHealdan.Icon32"/>
+                    <bt:Image size="80" resid="OpenFromHealdan.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>openFromHealdan</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.SaveAsNewVersion">
+                  <Label resid="SaveAsNewVersion.Label"/>
+                  <Supertip>
+                    <Title resid="SaveAsNewVersion.Label"/>
+                    <Description resid="SaveAsNewVersion.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveAsNewVersion.Icon16"/>
+                    <bt:Image size="32" resid="SaveAsNewVersion.Icon32"/>
+                    <bt:Image size="80" resid="SaveAsNewVersion.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveAsNewVersion</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.SaveAsNewDocument">
+                  <Label resid="SaveAsNewDocument.Label"/>
+                  <Supertip>
+                    <Title resid="SaveAsNewDocument.Label"/>
+                    <Description resid="SaveAsNewDocument.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveAsNewDocument.Icon16"/>
+                    <bt:Image size="32" resid="SaveAsNewDocument.Icon32"/>
+                    <bt:Image size="80" resid="SaveAsNewDocument.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveAsNewDocument</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.Properties">
+                  <Label resid="Properties.Label"/>
+                  <Supertip>
+                    <Title resid="Properties.Label"/>
+                    <Description resid="Properties.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Properties.Icon16"/>
+                    <bt:Image size="32" resid="Properties.Icon32"/>
+                    <bt:Image size="80" resid="Properties.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>properties</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+              <Label resid="Tab.Label"/>
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <FunctionFile resid="Commands.Url"/>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="Healdan.Tab">
+              <Group id="Healdan.Group">
+                <Label resid="Group.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Mark.Icon16"/>
+                  <bt:Image size="32" resid="Mark.Icon32"/>
+                  <bt:Image size="80" resid="Mark.Icon80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Healdan.SaveToHealdan">
+                  <Label resid="SaveToHealdan.Label"/>
+                  <Supertip>
+                    <Title resid="SaveToHealdan.Label"/>
+                    <Description resid="SaveToHealdan.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveToHealdan.Icon16"/>
+                    <bt:Image size="32" resid="SaveToHealdan.Icon32"/>
+                    <bt:Image size="80" resid="SaveToHealdan.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveToHealdan</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.OpenFromHealdan">
+                  <Label resid="OpenFromHealdan.Label"/>
+                  <Supertip>
+                    <Title resid="OpenFromHealdan.Label"/>
+                    <Description resid="OpenFromHealdan.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="OpenFromHealdan.Icon16"/>
+                    <bt:Image size="32" resid="OpenFromHealdan.Icon32"/>
+                    <bt:Image size="80" resid="OpenFromHealdan.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>openFromHealdan</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.SaveAsNewVersion">
+                  <Label resid="SaveAsNewVersion.Label"/>
+                  <Supertip>
+                    <Title resid="SaveAsNewVersion.Label"/>
+                    <Description resid="SaveAsNewVersion.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveAsNewVersion.Icon16"/>
+                    <bt:Image size="32" resid="SaveAsNewVersion.Icon32"/>
+                    <bt:Image size="80" resid="SaveAsNewVersion.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveAsNewVersion</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.SaveAsNewDocument">
+                  <Label resid="SaveAsNewDocument.Label"/>
+                  <Supertip>
+                    <Title resid="SaveAsNewDocument.Label"/>
+                    <Description resid="SaveAsNewDocument.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="SaveAsNewDocument.Icon16"/>
+                    <bt:Image size="32" resid="SaveAsNewDocument.Icon32"/>
+                    <bt:Image size="80" resid="SaveAsNewDocument.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>saveAsNewDocument</FunctionName>
+                  </Action>
+                </Control>
+                <Control xsi:type="Button" id="Healdan.Properties">
+                  <Label resid="Properties.Label"/>
+                  <Supertip>
+                    <Title resid="Properties.Label"/>
+                    <Description resid="Properties.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Properties.Icon16"/>
+                    <bt:Image size="32" resid="Properties.Icon32"/>
+                    <bt:Image size="80" resid="Properties.Icon80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>properties</FunctionName>
+                  </Action>
+                </Control>
+              </Group>
+              <Label resid="Tab.Label"/>
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Mark.Icon16" DefaultValue="{{BASE}}/assets/healdan-16.png"/>
+        <bt:Image id="Mark.Icon32" DefaultValue="{{BASE}}/assets/healdan-32.png"/>
+        <bt:Image id="Mark.Icon80" DefaultValue="{{BASE}}/assets/healdan-80.png"/>
+        <bt:Image id="SaveToHealdan.Icon16" DefaultValue="{{BASE}}/assets/save-to-healdan-16.png"/>
+        <bt:Image id="SaveToHealdan.Icon32" DefaultValue="{{BASE}}/assets/save-to-healdan-32.png"/>
+        <bt:Image id="SaveToHealdan.Icon80" DefaultValue="{{BASE}}/assets/save-to-healdan-80.png"/>
+        <bt:Image id="OpenFromHealdan.Icon16" DefaultValue="{{BASE}}/assets/open-from-healdan-16.png"/>
+        <bt:Image id="OpenFromHealdan.Icon32" DefaultValue="{{BASE}}/assets/open-from-healdan-32.png"/>
+        <bt:Image id="OpenFromHealdan.Icon80" DefaultValue="{{BASE}}/assets/open-from-healdan-80.png"/>
+        <bt:Image id="SaveAsNewVersion.Icon16" DefaultValue="{{BASE}}/assets/save-as-new-version-16.png"/>
+        <bt:Image id="SaveAsNewVersion.Icon32" DefaultValue="{{BASE}}/assets/save-as-new-version-32.png"/>
+        <bt:Image id="SaveAsNewVersion.Icon80" DefaultValue="{{BASE}}/assets/save-as-new-version-80.png"/>
+        <bt:Image id="SaveAsNewDocument.Icon16" DefaultValue="{{BASE}}/assets/save-as-new-document-16.png"/>
+        <bt:Image id="SaveAsNewDocument.Icon32" DefaultValue="{{BASE}}/assets/save-as-new-document-32.png"/>
+        <bt:Image id="SaveAsNewDocument.Icon80" DefaultValue="{{BASE}}/assets/save-as-new-document-80.png"/>
+        <bt:Image id="Properties.Icon16" DefaultValue="{{BASE}}/assets/properties-16.png"/>
+        <bt:Image id="Properties.Icon32" DefaultValue="{{BASE}}/assets/properties-32.png"/>
+        <bt:Image id="Properties.Icon80" DefaultValue="{{BASE}}/assets/properties-80.png"/>
+        <bt:Image id="InsertDocId.Icon16" DefaultValue="{{BASE}}/assets/insert-doc-id-16.png"/>
+        <bt:Image id="InsertDocId.Icon32" DefaultValue="{{BASE}}/assets/insert-doc-id-32.png"/>
+        <bt:Image id="InsertDocId.Icon80" DefaultValue="{{BASE}}/assets/insert-doc-id-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Commands.Url" DefaultValue="{{BASE}}/commands.html"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Tab.Label" DefaultValue="Healdan"/>
+        <bt:String id="Group.Label" DefaultValue="Healdan"/>
+        <bt:String id="SaveToHealdan.Label" DefaultValue="Save to Healdan"/>
+        <bt:String id="OpenFromHealdan.Label" DefaultValue="Open from Healdan"/>
+        <bt:String id="SaveAsNewVersion.Label" DefaultValue="Save as New Version"/>
+        <bt:String id="SaveAsNewDocument.Label" DefaultValue="Save as New Document"/>
+        <bt:String id="Properties.Label" DefaultValue="Properties"/>
+        <bt:String id="InsertDocId.Label" DefaultValue="Insert Doc ID"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="SaveToHealdan.Tip" DefaultValue="Files this document in Healdan, or saves your changes as a new version."/>
+        <bt:String id="OpenFromHealdan.Tip" DefaultValue="Opens a document from Healdan, checking it out to you."/>
+        <bt:String id="SaveAsNewVersion.Tip" DefaultValue="Saves this document to Healdan as a new version, whatever its state."/>
+        <bt:String id="SaveAsNewDocument.Tip" DefaultValue="Files a copy of this document in Healdan as a new document."/>
+        <bt:String id="Properties.Tip" DefaultValue="Shows and changes this document's properties in Healdan."/>
+        <bt:String id="InsertDocId.Tip" DefaultValue="Puts this document's Healdan doc ID in the footer, kept up to date on each save."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>

@@ -45,7 +45,8 @@ public final class Contract {
 	 * @param response what the server answered
 	 */
 	public static void check(String method, String path, ApiResponse response) {
-		if (path.equals("/api/docs") || path.startsWith("/api/docs/"))
+		// The docs page and the Office add-in's files are web pages, which openapi.yaml doesn't describe
+		if (path.equals("/api/docs") || path.startsWith("/api/docs/") || path.startsWith("/api/addin/"))
 			return;
 
 		// JAX-RS answers HEAD wherever it answers GET, with the GET's headers and no body
