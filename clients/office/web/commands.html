@@ -5,7 +5,12 @@
   <title>Healdan</title>
 </head>
 <body>
-  <!-- A placeholder until the ribbon's commands are written (M3.5, Task 10). The server's Content-Security-Policy
-       allows scripts from the server and Office.js's address only, so no script goes inline. -->
+  <!-- The ribbon's buttons (M3.5 spec section 6): Office loads this page without showing it, and runs the function a
+       button names (saveToHealdan and the rest, in commands.js). Microsoft's script first, then Healdan's. The server's
+       Content-Security-Policy allows scripts from the server and Office.js's address only, so none is inline. -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="healdan.js"></script>
+  <script src="office-glue.js"></script>
+  <script src="commands.js"></script>
 </body>
 </html>

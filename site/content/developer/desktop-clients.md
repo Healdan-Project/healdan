@@ -268,6 +268,44 @@ server, a Save as New Version still to go, or a write that hasn't settled.
   folder. Then the extension saves the window as the answer's `path` (`storeAsURL`) and calls `adopted`, both before
   the window takes input again.
 
+## The Add-in
+
+`clients/office/` is Healdan's add-in for Word, Excel and PowerPoint: a web add-in with an XML manifest, in plain
+JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar, and `AddinResource` serves it at
+`/api/addin/`: see [The Add-in's Port](#the-add-ins-port) for the helper's end. Its design is the M3.5 spec, §6 and §7.
+
+- **`manifest.template.xml`** has the add-in's fixed ID, the Healdan tab and its six buttons (five in Excel and
+  PowerPoint, which have no Insert Doc ID), and two placeholders `AddinResource` fills in with the server's address. Raise
+  its `Version` in any change to it, or the admin centre keeps the old one.
+- **`web/healdan.js`** is the logic, with no Office and no page: the helper client, the six flows, the pane's texts, and
+  what the ribbon's code tells the pane. Everything else calls it as `Healdan`.
+- **`web/office-glue.js`** is the `office` object the flows take, made of the Office.js calls the M3.5 trial proved:
+  `getFileAsync` in 4 MiB slices for the document's bytes, custom properties for the mark (`HealdanMark`; Word and Excel,
+  none in PowerPoint), and in Word a `DocProperty` field in the primary footer for Insert Doc ID. It's named so that it
+  isn't taken for Microsoft's `office.js`.
+- **`web/commands.html` and `commands.js`** are the ribbon's buttons. Office loads the page without showing it, and
+  runs the function a button names (`saveToHealdan` and the rest, the manifest's names). Each is defined on `window` and
+  with `Office.actions.associate` once Office is ready, runs its flow, and calls `event.completed()` once, after the
+  flow has finished and any window is open.
+- **`web/taskpane.html`, `taskpane.js` and `healdan.css`** are the pane and the message window, in the helper's look.
+  The manifest declares no shared runtime, so a button can't open the pane. A button with something to tell opens
+  `taskpane.html?message=<code>&app=<app>` through `Office.context.ui.displayDialogAsync` instead, and the page shows
+  the text `messageFor` has for the code, plus the field for the pairing code when the app isn't paired. Nothing in the
+  address is trusted: the code must look like a code, and the text goes in as text.
+- **The pane and the buttons share the app's `localStorage`:** the key (`healdan.key.<app>`), the helper's port
+  (`healdan.port`), the last message (`healdan.last`), and a note for each flow still running (`healdan.busy.<flow>`),
+  which the running flow refreshes every five seconds and the pane stops believing after fifteen. A flow waits as long
+  as a window of the helper's stays open, and the pane says so.
+- **The pane checks the helper** with `hello` and `ping` only, one check at a time and the next five seconds after the
+  last has answered. It never asks `state`, which would have the helper drive Word by AppleScript at every check.
+- **Following a `202` and losing the answer:** once `call` has followed a `202`, whatever stops it learning the outcome
+  (the `result` route refused, the helper signing out, the helper not answering twice) is `lost-result`, which says to
+  check the document in Healdan before trying again, because a pending `file` may already have filed it. A route's own
+  errors are still its own.
+- **The server serves** only files named `[A-Za-z0-9-]+\.(html|js|css)` and `assets/*.png` from it, with a
+  Content-Security-Policy on the pages that allows scripts from the server and `appsforoffice.microsoft.com` and
+  connections to the server, Microsoft's services and the helper's four ports. No script, handler or style goes inline.
+
 ## The Add-in's Port
 
 The Healdan add-in in Word, Excel and PowerPoint calls the helper on a second listener beside the channel. Office's web
@@ -522,11 +560,21 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **The extension's tests** cover `healdan_logic.py` (the notices' headlines and details included) with fakes for
   LibreOffice, and build the `.oxt` and check that its files agree: the toolbar, the images and the notice. A real
   LibreOffice isn't part of them.
-- **The add-in's tests** (`clients/office/test/healdan.test.js`, Node's built-in runner) cover
-  `clients/office/web/healdan.js`: finding the helper's port, the calls with the protocol and the key, following a
-  `202` through `result`, pairing, each button's flow in Word, Excel and PowerPoint, and the pane's texts. A fake `fetch` plays the helper's port and a
-  fake `office` object the Office.js glue, so neither Office nor a page is part of them. They also fail when the
-  ports differ from the helper's `AddinPorts` or the server's Content-Security-Policy.
+- **The add-in's tests** (`clients/office/test/*.test.js`, Node's built-in runner) run without Office:
+  - `healdan.test.js` covers `web/healdan.js`: finding the helper's port, the calls with the protocol and the key,
+    following a `202` through `result`, pairing, each button's flow in Word, Excel and PowerPoint, the pane's texts, and
+    what the buttons tell the pane. A fake `fetch` plays the helper's port and a fake `office` object the glue. They
+    also fail when the ports differ from the helper's `AddinPorts` or the server's Content-Security-Policy.
+  - `office-glue.test.js` covers `web/office-glue.js` against a fake Office.js that logs what it's asked: the slices
+    and their base64, the mark in Word and Excel and none in PowerPoint, and Insert Doc ID's property and field.
+  - `commands.test.js` covers `web/commands.js`: the function names against the manifest's, `event.completed()` once
+    however a press ends, the message window's address, and the busy note.
+  - `taskpane.test.js` covers `web/taskpane.js` on a fake page made from the real `taskpane.html`: pairing, the status,
+    a slow helper, and the messages. They also fail on an inline script or an id the script asks for and the page
+    lacks.
+  - What Office.js and Office's web view really do is checked by hand, with the owner, in Word, Excel and PowerPoint:
+    the Content-Security-Policy against Office.js, the message window, and the ribbon. `AddinResourceTest` checks that
+    the server serves every file the pages load.
 
 The windows' look, focus, notifications and LibreOffice's own screens are checked by hand: each pull request that
 changes them lists its checks for the owner.

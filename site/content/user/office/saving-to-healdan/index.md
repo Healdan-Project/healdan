@@ -109,6 +109,10 @@ version: `Lease agreement #1235 v1.0`.
 In Word, Excel and PowerPoint, file a new document with **Save to Healdan** on the ribbon's **Healdan** tab. The
 same window opens, and works as above, apart from these:
 
+- **The first press pairs the app** with the helper, and files nothing: see
+  [Pairing Word, Excel and PowerPoint](../installing-the-helper/#pairing-word-excel-and-powerpoint). Press the button
+  again once the Healdan window says it's paired.
+
 - **Only the app's own format.** The File Format pop-up offers Word Document (`.docx`), Excel Workbook (`.xlsx`) or
   PowerPoint Presentation (`.pptx`), and nothing else. Office turns the Healdan tab off in a window holding an
   OpenDocument file, and Excel and PowerPoint can't save one.

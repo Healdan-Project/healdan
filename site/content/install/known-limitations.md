@@ -14,14 +14,31 @@ weight: 10
   API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
   change. Sessions already open in the web page or with a key stay open until an administrator kills them. See
   [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
-- **LibreOffice on macOS only.** The [Healdan Helper](../office-integration/), which brings Healdan into LibreOffice,
-  runs on Macs with Apple silicon. The helper for Ubuntu comes next, and Microsoft Office, on the Mac, after that.
-  Windows comes later.
+- **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
+  Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
+  helper for Ubuntu comes next. Windows comes later.
+- **Office's own Save, Save As and Open aren't taken over.** LibreOffice's are, but Word, Excel and PowerPoint keep
+  theirs, and Healdan's buttons are on the Healdan tab. **⌘S** on a document that isn't in Healdan yet saves it on the
+  Mac, as before; use Save to Healdan to file it.
+- **Word for the web isn't supported.** The Healdan tab's buttons need the helper on the Mac, which a web browser
+  can't reach, so they say they work in the desktop apps only.
+- **OpenDocument files open in LibreOffice.** A Word, Excel or PowerPoint window that holds an OpenDocument file
+  (`.odt`, `.ods`, `.odp`) has its Healdan tab turned off by Office, and Excel and PowerPoint for Mac can't save in
+  those formats. So the helper opens OpenDocument files in LibreOffice whichever app a kind of file is set to, while
+  LibreOffice is installed, and a document filed from Word, Excel or PowerPoint is filed in the app's own format.
+- **Each Office app asks for permission once.** Word, Excel and PowerPoint each ask macOS to let Healdan Helper control
+  them, and ask for access to the helper's `Copies` folder, where the folder chooser opens inside `Copies` with
+  Grant Access greyed out, so the person goes up one level and selects `Copies`. See
+  [Installing the Healdan Helper](../../user/office/installing-the-helper/#the-prompts-to-expect).
+- **Open Recent keeps entries for old copies.** The helper keeps what it can off Open Recent: Word's lists none of
+  the copies, and Excel's lists a workbook as it was opened but not the names it takes as you save. PowerPoint offers no
+  control, so it lists each presentation opened. An entry for a copy that's gone can't be removed by the helper, and
+  choosing it fails: Word says "user does not have access privileges". Open the document from Healdan instead.
 - **The extension is installed by a click.** On macOS, LibreOffice's command-line installer can't install Healdan's
   extension, so the helper opens it in LibreOffice for the person to accept: the first time, and whenever a new
   version of the helper brings a newer extension.
-- **The doc ID footer is Writer's only.** Calc, Impress and Draw show the doc # and version in the title bar, but have
-  no footer field.
+- **The doc ID footer is Writer's and Word's only.** Calc, Impress, Draw, Excel and PowerPoint show the doc # and
+  version in the title bar, but have no footer field.
 - **Stamping removes a signature.** A Word or LibreOffice file with a digital signature that carries
   `Healdan Doc ID` loses its signature when a save through the helper or the API stamps it, as the stamp changes
   the signed content. The parts Healdan rewrites can also change form, such as the order of attributes, though not
@@ -36,10 +53,13 @@ weight: 10
   the warning names the app.
 - **The title moves on only while there are no unsaved changes.** In Word and Excel, the title bar follows the
   version Healdan holds after each save. If the document has changes you haven't saved, the helper waits: the title
-  moves on at your next save, and may jump over a version. PowerPoint's title stays at the version the presentation
-  opened as, as LibreOffice's does, and the helper's menu shows the version Healdan has.
+  moves on at your next save, and may jump over a version. PowerPoint's title doesn't move on: it stays at the version
+  the presentation opened as, because renaming it would make its own Save ask where to save. LibreOffice's copy keeps
+  its file name too, but its title bar moves on. In PowerPoint the helper's menu shows the version Healdan has.
 - **Two people signed in to one Mac at once.** The Office add-in finds the helper by trying a few ports on the Mac in
-  order, and uses the first that answers. When two people each have a helper running, the second person's Word, Excel
-  and PowerPoint reach the first person's helper, which shows its pairing code on the first person's screen, so the
-  second person can't pair. Their LibreOffice extension and the web page are unaffected. Microsoft Office works for the
-  second person once the first has quit their helper or signed out of the Mac.
+  order, and uses the first that answers from a helper signed in to the same server. When two people each have a helper
+  running, signed in to the same server, the second person's Word, Excel and PowerPoint may reach the first person's
+  helper, which shows its pairing code on the first person's screen, so the second person can't pair, and an app
+  already paired with their own helper may be asked to pair again. Their LibreOffice extension and the web page are
+  unaffected. Microsoft Office works for the second person once the first has quit their helper or signed out of the
+  Mac.

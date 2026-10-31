@@ -70,5 +70,5 @@ works only in the web services.
 ## WebDAV and Office Apps
 
 LogicalDOC's WebDAV can't lock a file the way Word, LibreOffice and macOS's Finder expect. Expect them to open
-documents read-only, or to fail to save. To edit documents in LibreOffice, use the
+documents read-only, or to fail to save. To edit documents in LibreOffice, Word, Excel or PowerPoint on a Mac, use the
 [Healdan Helper](../../../user/office/).

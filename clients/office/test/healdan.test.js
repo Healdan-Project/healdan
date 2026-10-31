@@ -380,12 +380,58 @@ test("call throws the outcome's error", async () => {
     return true;
   });
 
-  // What result itself is refused with is thrown as from any call: a key the helper forgot meanwhile is dropped.
+  // The other answers of a route that went pending are its own, whatever they are.
+  for (const [status, code] of [[409, "no-ticket"], [409, "not-a-copy"], [500, "internal-error"], [400, "bad-request"]]) {
+    const { client } = setup({ routes: { file: pending(), result: inTurn(pending(), [status, { error: code }]) } });
+    await failsWith(client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), code);
+  }
+});
+
+test("call reports lost-result when result itself is refused or fails, once a route went pending", async () => {
+  // The route may have finished what it was asked (a pending file may have filed the document), so "try again" would
+  // risk doing it twice: whatever stops the add-in learning the outcome is lost-result, not the code's own text.
+  const refusals = [
+    [403, "not-paired"],
+    [409, "signed-out"],
+    [403, "bad-origin"],
+    [403, "bad-host"],
+    [426, "update-healdan-helper"],
+  ];
+  for (const [status, code] of refusals) {
+    const { client, helper } = setup({ routes: { file: pending(), result: inTurn(pending(), [status, { error: code }]) } });
+    await failsWith(client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), "lost-result");
+    assert.equal(helper.calls().filter((c) => c.route === "result").length, 2, code);
+  }
+
+  // A key the helper forgot meanwhile is still dropped, so the next press pairs again, but this one says what it says.
   const forgotten = setup({ routes: { "open-dialog": pending(), result: [403, { error: "not-paired" }] } });
-  await failsWith(forgotten.client.call("open-dialog", { app: "Word" }), "not-paired");
+  await failsWith(forgotten.client.call("open-dialog", { app: "Word" }), "lost-result");
   assert.equal(forgotten.client.paired(), false);
-  const signedOut = setup({ routes: { "open-dialog": pending(), result: [409, { error: "signed-out" }] } });
-  await failsWith(signedOut.client.call("open-dialog", { app: "Word" }), "signed-out");
+
+  // The same through a button's flow: it is a result the pane shows, not a request to pair.
+  const flow = setup({ routes: { "save-new": pending(), result: [403, { error: "not-paired" }] } });
+  assert.deepEqual(await Healdan.saveToHealdan({ client: flow.client, office: flow.office }), {
+    ok: false,
+    code: "lost-result",
+    message: Healdan.messageFor("lost-result"),
+  });
+
+  // Nor is it left as "unreachable" when the helper stops answering, or answers something odd, while it is followed.
+  const gone = setup({
+    routes: {
+      file: pending(),
+      result: () => {
+        throw new TypeError("Load failed");
+      },
+    },
+  });
+  await failsWith(gone.client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), "lost-result");
+  const odd = setup({ routes: { file: pending(), result: inTurn(pending(), [202, {}]) } });
+  await failsWith(odd.client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), "lost-result");
+
+  // A route that never went pending keeps its own words: nothing could have been done twice.
+  const direct = setup({ routes: { file: [403, { error: "not-paired" }] } });
+  await failsWith(direct.client.call("file", { ticket: "ticket-1", mark: null, bytes: "" }), "not-paired");
 });
 
 test("call reports lost-result when the helper no longer has it", async () => {
@@ -437,7 +483,7 @@ test("call asks for a pending answer again when asking failed on the way, as ask
   assert.deepEqual(await client.call("save-new", {}), SAVE[1]);
   assert.deepEqual(helper.requests.map((r) => `${r.route}@${r.port}`), ["save-new@47615", "result@47615", "hello@47615", "result@47615"]);
 
-  // But only once: a helper that keeps failing is unreachable.
+  // But only once: a helper that keeps failing has lost the answer, as far as the add-in can tell.
   const broken = setup({
     routes: {
       "save-new": pending(),
@@ -446,7 +492,7 @@ test("call asks for a pending answer again when asking failed on the way, as ask
       },
     },
   });
-  await failsWith(broken.client.call("save-new", {}), "unreachable");
+  await failsWith(broken.client.call("save-new", {}), "lost-result");
   assert.equal(broken.helper.calls().filter((c) => c.route === "result").length, 2);
 });
 
@@ -689,6 +735,8 @@ test("saveToHealdan on local says to use the app's own Save As", async () => {
     const result = await Healdan.saveToHealdan({ client, office });
     assert.equal(result.ok, true);
     assert.equal(result.local, true);
+    assert.equal(result.code, "local-save", "the code lets the pane say it again, for this app");
+    assert.equal(result.message, Healdan.messageFor("local-save", { host }));
     assert.match(result.message, new RegExp(`${host}'s own Save As`));
     assert.deepEqual(log, ["save-new"], "no bytes are read for a document kept on this computer");
   }
@@ -736,7 +784,7 @@ test("saveToHealdan says when the mark couldn't be taken off a filed document", 
   const failures = { removeMark: new Error("nope") };
   const { client, office } = setup({ routes: { "save-new": SAVE, file: FILED }, officeOptions: { failures } });
   const result = await Healdan.saveToHealdan({ client, office });
-  assert.deepEqual(result, { ok: true, docRef: "#1234 v1.0", message: Healdan.messageFor("mark-left") });
+  assert.deepEqual(result, { ok: true, docRef: "#1234 v1.0", code: "mark-left", message: Healdan.messageFor("mark-left") });
 
   // A filing that failed is told as that, and the mark that stayed isn't the news.
   const failed = setup({ routes: { "save-new": SAVE, file: [409, { error: "no-ticket" }] }, officeOptions: { failures } });
@@ -848,6 +896,8 @@ test("openFromHealdan on local says to use the app's own Open", async () => {
   const result = await Healdan.openFromHealdan({ client, office });
   assert.equal(result.ok, true);
   assert.equal(result.local, true);
+  assert.equal(result.code, "local-open");
+  assert.equal(result.message, Healdan.messageFor("local-open", { host: "Excel" }));
   assert.match(result.message, /Excel's own Open/);
 });
 
@@ -877,7 +927,7 @@ test("insertDocId on a document that isn't in Healdan inserts an empty field, an
   const { client, office, log } = setup({ routes: { state: NOT_IN_HEALDAN } });
   const result = await Healdan.insertDocId({ client, office });
   assert.deepEqual(log, ["state", 'insertDocId ""']);
-  assert.deepEqual(result, { ok: true, message: Healdan.messageFor("not-filed-doc-id") });
+  assert.deepEqual(result, { ok: true, code: "not-filed-doc-id", message: Healdan.messageFor("not-filed-doc-id") });
   assert.match(result.message, /once it's saved to Healdan/);
 });
 
@@ -899,6 +949,132 @@ test("on the web the buttons say they work in the desktop apps only, and ask not
     assert.deepEqual(result, { ok: false, code: "no-office-on-the-web", message: Healdan.messageFor("no-office-on-the-web") }, name);
     assert.equal(helper.requests.length, 0, name);
     assert.deepEqual(log, [], name);
+  }
+});
+
+// --- What the buttons tell the pane -----------------------------------------------------------------------------------
+//
+// The ribbon's code runs without a page of its own, so it shows a message in a window (taskpane.html?message=<code>), and
+// leaves notes in the app's localStorage, which the pane reads: the last message, and the flows still running.
+
+test("a message's link carries its code and the app, and reads back", () => {
+  assert.equal(Healdan.messageLink({ code: "not-paired", app: "Word" }), "taskpane.html?message=not-paired&app=Word");
+  assert.deepEqual(Healdan.readMessageLink("?message=not-paired&app=Word"), { code: "not-paired", app: "Word" });
+  assert.deepEqual(Healdan.readMessageLink("message=lost-result"), { code: "lost-result" });
+
+  // Whatever the detail holds comes back as it was, and is cut short.
+  const link = Healdan.messageLink({ code: "office-error", app: "Excel", detail: "Can't read & write <b>" });
+  assert.equal(link, "taskpane.html?message=office-error&app=Excel&detail=Can%27t+read+%26+write+%3Cb%3E");
+  assert.deepEqual(Healdan.readMessageLink(link.slice(link.indexOf("?"))), {
+    code: "office-error",
+    app: "Excel",
+    detail: "Can't read & write <b>",
+  });
+  const long = Healdan.readMessageLink(`?message=office-error&detail=${"x".repeat(1000)}`);
+  assert.equal(long.detail.length, 200);
+});
+
+test("a message's link is read only when it is one", () => {
+  for (const search of ["", "?", "?app=Word", "?message=", "?message=Not%20Paired", "?message=%3Cscript%3E", "?message=" + "a".repeat(60)]) {
+    assert.equal(Healdan.readMessageLink(search), null, search);
+  }
+  // An app that isn't one of Office's three is left out, not trusted.
+  assert.deepEqual(Healdan.readMessageLink("?message=not-paired&app=Outlook"), { code: "not-paired" });
+  // A code nobody knows is still a message: messageFor words it.
+  assert.deepEqual(Healdan.readMessageLink("?message=something-new"), { code: "something-new" });
+});
+
+test("noteOf says what the window should show for a flow's result", () => {
+  assert.deepEqual(Healdan.noteOf({ needsPairing: true }, "Word"), { code: "not-paired", app: "Word" });
+  assert.deepEqual(Healdan.noteOf({ ok: false, code: "lost-result", message: "…" }, "Excel"), { code: "lost-result", app: "Excel" });
+  assert.deepEqual(Healdan.noteOf({ ok: false, code: "office-error", message: "…", detail: "no footer" }, "Word"), {
+    code: "office-error",
+    app: "Word",
+    detail: "no footer",
+  });
+  assert.deepEqual(Healdan.noteOf({ ok: true, local: true, code: "local-save", message: "…" }, "PowerPoint"), {
+    code: "local-save",
+    app: "PowerPoint",
+  });
+  assert.deepEqual(Healdan.noteOf({ ok: true, docRef: "#1 v1.0", code: "mark-left", message: "…" }, "Word"), { code: "mark-left", app: "Word" });
+  // Success, and the user's own Cancel, say nothing.
+  assert.equal(Healdan.noteOf({ ok: true }, "Word"), null);
+  assert.equal(Healdan.noteOf({ ok: true, docRef: "#1 v1.0" }, "Word"), null);
+  assert.equal(Healdan.noteOf({ ok: true, cancelled: true }, "Word"), null);
+});
+
+test("a failure from Office keeps what Office said, for the window", async () => {
+  const { client, office } = setup({
+    routes: { state: IN_HEALDAN },
+    officeOptions: { failures: { insertDocId: new Error("The footer can't be changed") } },
+  });
+  const result = await Healdan.insertDocId({ client, office });
+  assert.equal(result.code, "office-error");
+  assert.equal(result.detail, "The footer can't be changed");
+  assert.equal(Healdan.messageFor("office-error", { detail: result.detail }), result.message);
+});
+
+test("the last message is kept for the pane, and read back when it is whole", () => {
+  const storage = memoryStorage();
+  assert.equal(Healdan.lastMessage(storage), null);
+  Healdan.noteMessage(storage, { code: "signed-out", app: "Word" }, 1000);
+  assert.deepEqual(Healdan.lastMessage(storage), { code: "signed-out", app: "Word", at: 1000 });
+  Healdan.noteMessage(storage, { code: "office-error", app: "Excel", detail: "no footer" }, 2000);
+  assert.deepEqual(Healdan.lastMessage(storage), { code: "office-error", app: "Excel", detail: "no footer", at: 2000 });
+
+  // Anything else in that place is not a message.
+  for (const junk of ["", "not json", "null", "[]", '{"code": 7, "at": 1}', '{"code": "x y", "at": 1}', '{"code": "fine"}', '{"code": "fine", "at": "soon"}']) {
+    storage.setItem("healdan.last", junk);
+    assert.equal(Healdan.lastMessage(storage), null, junk);
+  }
+  // Storage that refuses, or isn't there, remembers nothing and says nothing.
+  const refusing = { getItem: () => { throw new Error("SecurityError"); }, setItem: () => { throw new Error("SecurityError"); }, removeItem: () => {} };
+  assert.doesNotThrow(() => Healdan.noteMessage(refusing, { code: "signed-out", app: "Word" }, 1));
+  assert.equal(Healdan.lastMessage(refusing), null);
+  assert.doesNotThrow(() => Healdan.noteMessage(null, { code: "signed-out", app: "Word" }, 1));
+  assert.equal(Healdan.lastMessage(null), null);
+});
+
+test("a flow still running is marked busy while it runs, and the mark goes stale if its page is gone", () => {
+  const storage = memoryStorage();
+  assert.equal(Healdan.busyNow(storage, 0), null);
+
+  Healdan.markBusy(storage, "saveToHealdan", "Word", 1000);
+  assert.deepEqual(Healdan.busyNow(storage, 1000), { flow: "saveToHealdan", label: "Save to Healdan", app: "Word" });
+  Healdan.markBusy(storage, "saveToHealdan", "Word", 1000 + Healdan.BUSY_BEAT); // the heartbeat
+  assert.equal(Healdan.busyNow(storage, 1000 + 2 * Healdan.BUSY_BEAT).flow, "saveToHealdan");
+
+  // A page that was closed or crashed stops the heartbeat, and the pane stops waiting for it.
+  assert.equal(Healdan.busyNow(storage, 1000 + Healdan.BUSY_BEAT + Healdan.BUSY_STALE + 1), null);
+
+  // Two at once: the newer shows, and one ending doesn't end the other.
+  Healdan.markBusy(storage, "saveToHealdan", "Word", 5000);
+  Healdan.markBusy(storage, "openFromHealdan", "Word", 6000);
+  assert.equal(Healdan.busyNow(storage, 6000).flow, "openFromHealdan");
+  Healdan.clearBusy(storage, "openFromHealdan");
+  assert.equal(Healdan.busyNow(storage, 6000).flow, "saveToHealdan");
+  Healdan.clearBusy(storage, "saveToHealdan");
+  assert.equal(Healdan.busyNow(storage, 6000), null);
+
+  // A flow nobody knows isn't marked, and nothing here throws without storage.
+  Healdan.markBusy(storage, "dance", "Word", 1);
+  assert.equal(Healdan.busyNow(storage, 1), null);
+  assert.doesNotThrow(() => Healdan.markBusy(null, "saveToHealdan", "Word", 1));
+  assert.equal(Healdan.busyNow(null, 1), null);
+  assert.doesNotThrow(() => Healdan.clearBusy(null, "saveToHealdan"));
+});
+
+test("every button has a name for the pane to say", () => {
+  assert.deepEqual(Healdan.FLOW_LABELS, {
+    saveToHealdan: "Save to Healdan",
+    openFromHealdan: "Open from Healdan",
+    saveAsNewVersion: "Save as New Version",
+    saveAsNewDocument: "Save as New Document",
+    properties: "Properties",
+    insertDocId: "Insert Doc ID",
+  });
+  for (const name of FLOWS) {
+    assert.equal(typeof Healdan.FLOW_LABELS[name], "string", name);
   }
 });
 

@@ -1,0 +1,275 @@
+/*
+ * The add-in's pane and message window, in the look of Healdan Helper's windows (clients/helper/Healdan.Helper/Windows/
+ * HelperStyles.axaml, "the helper's look"): a Mac's controls in Healdan's colours, 13 px text, 6 px corners, the accent
+ * blue for the one button. The tokens are the helper's, light and dark, and the page follows the Mac's appearance.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --window: #ffffff;
+  --group: #ffffff;
+  --grouped: #f2f2f4;
+  --line: #e5e5ea;
+  --text: #1d1d1f;
+  --secondary: #6e6e73;
+  --accent: #0c69c0;
+  --accent-hover: #0b5fae;
+  --accent-pressed: #0a5499;
+  --on-accent: #ffffff;
+  --field: #ffffff;
+  --field-line: #c7c7cc;
+  --ok: #28a745;
+  --problem: #c42b1c;
+  --focus-ring: 0 0 0 3px rgba(34, 162, 224, 0.4);
+
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --window: #1e1e1e;
+    --group: #2a2a2c;
+    --grouped: #1e1e1e;
+    --line: #38383a;
+    --text: #f2f2f7;
+    --secondary: #aeaeb2;
+    --accent: #1a74c4;
+    --accent-hover: #1f7bcc;
+    --accent-pressed: #2383d6;
+    --field: #2c2c2e;
+    --field-line: #48484a;
+    --ok: #30d158;
+    --problem: #ff6961;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--window);
+}
+
+body {
+  margin: 0;
+  padding: 16px 20px 20px;
+  background: var(--window);
+  color: var(--text);
+  font: 13px/1.4 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+main {
+  max-width: 420px;
+}
+
+/* The header: Healdan's mark and name. */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.brand img {
+  display: block;
+  flex: none;
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+p {
+  margin: 0 0 8px;
+}
+
+section,
+form {
+  margin: 0 0 16px;
+}
+
+/* A message: the helper's group look. It takes focus when a window opens for it, so it is read out. */
+.message {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--group);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+
+.message:focus {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.when {
+  margin: 4px 0 0;
+  color: var(--secondary);
+  font-size: 11px;
+}
+
+.notice {
+  padding: 10px 12px;
+  background: var(--group);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+/* Status lines: a dot says how it is, and the words always say it too. */
+.status {
+  position: relative;
+  margin: 0 0 6px;
+  padding-left: 16px;
+}
+
+.status::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--secondary);
+}
+
+.status.ok::before {
+  background: var(--ok);
+}
+
+.status.problem::before {
+  background: var(--problem);
+}
+
+.status.waiting::before {
+  background: transparent;
+  border: 2px solid var(--secondary);
+  border-top-color: transparent;
+  animation: spin 0.9s linear infinite;
+}
+
+/* Something is being waited for: the ring turns. */
+.waiting {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+}
+
+.spinner {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 0.3em;
+  border: 2px solid var(--secondary);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status.waiting::before,
+  .spinner {
+    animation: none;
+  }
+}
+
+/* Pairing. */
+.help {
+  color: var(--secondary);
+}
+
+.field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+label {
+  font-weight: 600;
+}
+
+input {
+  width: 9em;
+  min-height: 28px;
+  padding: 2px 8px;
+  background: var(--field);
+  color: var(--text);
+  border: 1px solid var(--field-line);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+button {
+  min-height: 22px;
+  padding: 2px 14px;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  font: inherit;
+  cursor: default;
+}
+
+button:hover {
+  background: var(--accent-hover);
+}
+
+button:active {
+  background: var(--accent-pressed);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+button:disabled {
+  opacity: 0.5;
+}
+
+/* What went wrong with the code the user typed. */
+.form-problem {
+  margin: 8px 0 0;
+  color: var(--problem);
+  font-size: 12px;
+}
+
+.form-problem:empty {
+  display: none;
+}

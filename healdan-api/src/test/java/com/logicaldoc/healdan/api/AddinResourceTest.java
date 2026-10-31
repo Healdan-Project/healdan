@@ -163,6 +163,39 @@ public class AddinResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testScriptsAndStyles() {
+		for (String file : new String[] { "healdan.js", "office-glue.js", "taskpane.js", "commands.js", "healdan.css" }) {
+			ApiResponse response = get("/api/addin/" + file).send();
+
+			assertEquals(file + " " + response, 200, response.status());
+			assertEquals(file, file.endsWith(".css") ? "text/css; charset=UTF-8" : "text/javascript; charset=UTF-8",
+					contentType(response));
+			assertEquals(file, "nosniff", response.header("X-Content-Type-Options"));
+			assertTrue(file, response.text().length() > 100);
+		}
+	}
+
+	@Test
+	public void testEverythingThePagesLoadIsServed() {
+		int count = 0;
+		for (String page : new String[] { "taskpane.html", "commands.html" }) {
+			String html = get("/api/addin/" + page).send().text();
+			Matcher references = Pattern.compile("(?:src|href)=\"([^\"]+)\"").matcher(html);
+			while (references.find()) {
+				String reference = references.group(1);
+				// Office.js is Microsoft's, and the Content-Security-Policy allows its address
+				if (reference.startsWith("https://appsforoffice.microsoft.com/"))
+					continue;
+				assertFalse(page + " " + reference, reference.contains("://") || reference.startsWith("/"));
+				assertEquals(page + " " + reference, 200, get("/api/addin/" + reference).send().status());
+				count++;
+			}
+		}
+		// The pane: a stylesheet, the mark and two scripts; the commands: three scripts
+		assertTrue("references: " + count, count >= 7);
+	}
+
+	@Test
 	public void testIcons() {
 		for (String icon : new String[] { "save-to-healdan-32.png", "healdan-64.png", "insert-doc-id-80.png",
 				"properties-16.png" }) {
