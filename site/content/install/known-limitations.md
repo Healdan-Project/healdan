@@ -34,3 +34,12 @@ weight: 10
 - **A new document's check-out has no app.** For a document filed from LibreOffice and still open, another of the
   person's computers warns that it's "checked out to you on Office PC", without "(LibreOffice)". Once it's opened again,
   the warning names the app.
+- **The title moves on only while there are no unsaved changes.** In Word and Excel, the title bar follows the
+  version Healdan holds after each save. If the document has changes you haven't saved, the helper waits: the title
+  moves on at your next save, and may jump over a version. PowerPoint's title stays at the version the presentation
+  opened as, as LibreOffice's does, and the helper's menu shows the version Healdan has.
+- **Two people signed in to one Mac at once.** The Office add-in finds the helper by trying a few ports on the Mac in
+  order, and uses the first that answers. When two people each have a helper running, the second person's Word, Excel
+  and PowerPoint reach the first person's helper, which shows its pairing code on the first person's screen, so the
+  second person can't pair. Their LibreOffice extension and the web page are unaffected. Microsoft Office works for the
+  second person once the first has quit their helper or signed out of the Mac.

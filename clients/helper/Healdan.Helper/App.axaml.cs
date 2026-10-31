@@ -85,7 +85,7 @@ public partial class App : Application
             trust: mac ? trust : null, certificate: mac ? certificate : null);
         _session = session;
         windows.Session = session;
-        windows.SetUp = new OfficeSetUp(paths, certificate, trust, () => InstalledApps.Detect());
+        windows.SetUp = new OfficeSetUp(paths, certificate, trust, OfficeAppSet.Installed);
         var extension = new ExtensionInstaller(_log, notifier, paths, version ?? "0.0.0", () => windows.Waiting);
         windows.Extension = extension.Check;
         session.Changed += () =>

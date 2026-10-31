@@ -82,7 +82,14 @@ size the helper uses, the widths then match CoreText's.
   `Microsoft Office` or `Default`). `AppChooser` makes the choice: the user's for the file's kind (`kinds` in
   `settings.json`), else the system's default app for the kind's main format when that is Word, Excel or PowerPoint,
   else LibreOffice; an OpenDocument file is LibreOffice's whatever the choice; and only an installed app
-  (`InstalledApps`) is chosen. `OfficeApps` holds the set the cycle works with, and everything after the open (the
+  (`InstalledApps`) is chosen. On macOS the system's default is what LaunchServices would open a file of that extension
+  with (`DefaultApps.For`: `UTType typeWithFilenameExtension:`, then `NSWorkspace URLForApplicationToOpenContentType:`),
+  named by its bundle identifier (`AppBundles`: `com.microsoft.Word`, `Excel` and `Powerpoint`, `org.libreoffice.script`).
+  An app is installed when it is in `/Applications` (LibreOffice also in `~/Applications`) or when `NSWorkspace
+  URLForApplicationWithBundleIdentifier:` finds it, as `open -a` does. `Platform/LaunchServices.cs` makes both calls,
+  and its lookups stop at a nil answer, since Foundation raises an Objective-C exception for a nil argument. Settings
+  (`SettingsWindow`) offer `AppChooser.Offered` for each kind and write the user's pick to `kinds`; its Microsoft Office
+  group lists `Pairing.Paired()` with Forget and starts Set Up. `OfficeApps` holds the set the cycle works with, and everything after the open (the
   reopen of a kept copy, the lock check, the crash check, the resume, Bring to the Front) goes by the record's app,
   whatever Settings say by then.
   - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens

@@ -276,13 +276,17 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
 
     // --- Settings --------------------------------------------------------------------------------------------------
 
-    /// <summary>The menu's Settings…; one window at a time.</summary>
+    /// <summary>
+    /// The menu's Settings…; one window at a time. Its Microsoft Office group opens Set Up Microsoft Office and lists and
+    /// forgets the paired apps (M3.5 spec §5.10).
+    /// </summary>
     public void ShowSettings() => Dispatcher.UIThread.Post(() =>
     {
         if (Bring("settings"))
             return;
         var server = Session?.Server is { } s ? s.GetLeftPart(UriPartial.Path).TrimEnd('/') : HelperSettings.Load(paths).Server;
-        var window = new SettingsWindow(server, Session?.SignedIn == true, OfficeAppSet.Chooser(paths), LoginItem.Summary(), Extension);
+        var office = new OfficeSettings(SetUp, SetUpOfficeAsync, () => Session?.Pairing.Paired() ?? [], app => Session?.Pairing.Forget(app));
+        var window = new SettingsWindow(server, Session?.SignedIn == true, paths, OfficeAppSet.Chooser(paths), LoginItem.Summary(), Extension, office, log);
         _single["settings"] = window;
         if (!Show(window, waits: false, () => _single.Remove("settings")))
             _single.Remove("settings");

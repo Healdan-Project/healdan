@@ -1,9 +1,14 @@
+using System.Globalization;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Threading;
+using Healdan.Helper.Core;
+using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Browse;
+using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Platform;
@@ -11,10 +16,13 @@ using Healdan.Helper.Platform;
 namespace Healdan.Helper.Windows;
 
 /// <summary>
-/// Settings (spec §5.8, §5.11, §5.12; polish spec §6.5): the server the helper signs in to, and the app that opens each
-/// kind of file, as grouped rows. One server per helper (spec §5.1), so the address changes only by signing out and in
-/// again. The app that opens each kind is shown, as plain text, as the chooser answers now. Below them: whether
-/// the helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
+/// Settings (spec §5.8, §5.11, §5.12; polish spec §6.5; M3.5 spec §5.10): the server the helper signs in to, and the app that
+/// opens each kind of file, as grouped rows. One server per helper (spec §5.1), so the address changes only by signing out and
+/// in again. Each kind has a pop-up of the installed apps (LibreOffice, Microsoft Office) showing the chooser's answer now, and
+/// choosing one writes it to <see cref="HelperSettings.Kinds"/>; a kind with one app to offer, Drawings always, shows it as
+/// text. Below them, while Word, Excel or PowerPoint is installed or an app is paired, the Microsoft Office group: Set Up
+/// (its status, and Set Up… while it's needed) and the paired apps, each with when it paired and Forget. Then whether the
+/// helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
 /// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does, and while
 /// an older version is, Update…, which does the same (changed in the build).
 /// </summary>
@@ -22,12 +30,20 @@ public partial class SettingsWindow : Window
 {
     private const string Https = "https://";
 
+    private readonly HelperPaths? _paths;
+    private readonly OfficeSettings? _office;
+    private readonly HelperLog? _log;
+
     /// <summary>For the XAML loader; the helper always opens it with the settings.</summary>
     public SettingsWindow() => InitializeComponent();
 
+    /// <param name="paths">Where a kind's choice is kept (<see cref="HelperSettings"/>).</param>
     /// <param name="extension">The extension's check, which Install… (or Update…) runs; null when the build has none.</param>
-    internal SettingsWindow(string? server, bool signedIn, AppChooser chooser, LoginItemSummary login, ExtensionCheck? extension) : this()
+    /// <param name="office">Microsoft Office's Set Up and paired apps.</param>
+    internal SettingsWindow(string? server, bool signedIn, HelperPaths paths, AppChooser chooser, LoginItemSummary login, ExtensionCheck? extension,
+        OfficeSettings office, HelperLog? log = null) : this()
     {
+        (_paths, _office, _log) = (paths, office, log);
         // As Sign In takes it: https:// left out, as Sign In adds it, and http:// or a path kept.
         ServerValue.Text = server is null ? "Not Set Yet"
             : server.StartsWith(Https, StringComparison.OrdinalIgnoreCase) ? server[Https.Length..] : server;
@@ -35,7 +51,9 @@ public partial class SettingsWindow : Window
             ? "To use another server, sign out from the Healdan Helper menu, then sign in with its address."
             : "Sign in from the Healdan Helper menu to choose the server.";
         for (var i = 0; i < FileKinds.All.Count; i++)
-            KindsGroup.Children.Add(KindRow(FileKinds.All[i], chooser.For("a" + FileKinds.All[i].Extensions[0]), divided: i > 0));
+            KindsGroup.Children.Add(KindRow(FileKinds.All[i], chooser, divided: i > 0));
+        SetUpButton.Click += OnSetUp;
+        ShowOffice();
 
         LoginValue.Text = login.Value;
         LoginDot.Bind(Shape.FillProperty, LoginDot.GetResourceObservable(login.On ? "HdOnBrush" : "HdOffBrush"));
@@ -78,8 +96,11 @@ public partial class SettingsWindow : Window
         ToolTip.SetTip(ExtensionRow, extension.Tip);
     }
 
-    /// <summary>A kind of file, its extensions under it, and the app that opens it as plain text: no pop-up yet.</summary>
-    private static Control KindRow(FileKind kind, string app, bool divided)
+    /// <summary>
+    /// A kind of file, its extensions under it, and the app that opens it: a pop-up of the installed apps when there are two
+    /// to choose between, else the one as text (Drawings, or a Mac with only one of the apps).
+    /// </summary>
+    private Control KindRow(FileKind kind, AppChooser chooser, bool divided)
     {
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Classes = { "row" } };
         var icon = Icons.View(FileIcons.For(kind));
@@ -89,13 +110,142 @@ public partial class SettingsWindow : Window
         var name = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         name.Children.Add(new TextBlock { Text = kind.Label });
         name.Children.Add(new TextBlock { Text = string.Join(" ", kind.Extensions), Classes = { "muted" }, FontSize = 11 });
-        var value = new TextBlock { Text = app, VerticalAlignment = VerticalAlignment.Center };
-        value.Bind(TextBlock.ForegroundProperty, value.GetResourceObservable("HdSecondaryBrush")); // follows a theme switch
+        var app = chooser.ForKind(kind);
+        Control value;
+        if (chooser.Offered(kind) is { Count: > 1 } offered)
+        {
+            var box = new ComboBox { ItemsSource = offered, SelectedItem = app, MinWidth = 150, VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetName(box, $"{kind.Label} Open In");
+            var saved = app; // what a failed write goes back to
+            box.SelectionChanged += (_, _) =>
+            {
+                if (box.SelectedItem is string chosen && chosen != saved)
+                    saved = Choose(kind, chosen) ? chosen : saved;
+                if (box.SelectedItem as string != saved)
+                    box.SelectedItem = saved;
+            };
+            value = box;
+        }
+        else
+        {
+            var text = new TextBlock { Text = app, VerticalAlignment = VerticalAlignment.Center };
+            text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("HdSecondaryBrush")); // follows a theme switch
+            value = text;
+        }
         Grid.SetColumn(name, 1);
         Grid.SetColumn(value, 2);
         grid.Children.Add(icon);
         grid.Children.Add(name);
         grid.Children.Add(value);
         return divided ? new Border { Classes = { "divided" }, Child = grid } : grid;
+    }
+
+    /// <summary>Keeps the user's choice for the kind, with the others as they were. False when it couldn't be written.</summary>
+    private bool Choose(FileKind kind, string app)
+    {
+        try
+        {
+            HelperSettings.Update(_paths!, s => (s.Kinds ??= [])[kind.Label] = app);
+            _log?.Info($"Settings: {kind.Label} open in {app}");
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            _log?.Error($"Settings couldn't keep {app} for {kind.Label}", e);
+            return false;
+        }
+    }
+
+    // --- Microsoft Office ------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Microsoft Office's group (M3.5 spec §5.10): Set Up while Word, Excel or PowerPoint is installed, and the apps paired.
+    /// Left out when neither. Read when the window opens and after Set Up or a Forget: a failure to read Set Up's state only
+    /// leaves its row out, as Settings must still open.
+    /// </summary>
+    private void ShowOffice()
+    {
+        var office = _office!;
+        bool applies, needed;
+        try
+        {
+            (applies, needed) = (office.SetUp?.Applies == true, office.SetUp?.Needed == true);
+        }
+        catch (Exception e)
+        {
+            _log?.Error("Whether Set Up Microsoft Office is needed couldn't be told", e);
+            (applies, needed) = (false, false);
+        }
+        IReadOnlyList<PairedApp> paired;
+        try
+        {
+            paired = office.Paired();
+        }
+        catch (Exception e)
+        {
+            _log?.Error("The paired apps couldn't be listed", e);
+            paired = [];
+        }
+
+        SetUpRow.IsVisible = applies;
+        PairedSection.Classes.Set("divided", applies); // the line between the two rows, when there are two
+        SetUpValue.Text = needed ? "Needed" : "Done";
+        SetUpDot.Bind(Shape.FillProperty, SetUpDot.GetResourceObservable(needed ? "HdOffBrush" : "HdOnBrush"));
+        SetUpButton.IsVisible = needed;
+
+        PairedNone.IsVisible = paired.Count == 0;
+        PairedList.Children.Clear();
+        foreach (var app in paired)
+            PairedList.Children.Add(PairedRow(app));
+
+        OfficeGroup.IsVisible = OfficeHeader.IsVisible = applies || paired.Count > 0;
+    }
+
+    /// <summary>One paired app under Paired Apps: its name, when it paired, and Forget.</summary>
+    private Control PairedRow(PairedApp paired)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Classes = { "row" } };
+        var name = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(24, 0, 0, 0) }; // under the title, not its icon
+        name.Children.Add(new TextBlock { Text = paired.App });
+        name.Children.Add(new TextBlock
+        {
+            Text = "Paired on " + paired.Paired.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture),
+            Classes = { "muted" },
+            FontSize = 11
+        });
+        var forget = new Button { Content = "Forget", VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetName(forget, "Forget " + paired.App);
+        forget.Click += (_, _) =>
+        {
+            try
+            {
+                _office!.Forget(paired.App);
+                _log?.Info($"Settings: forgot {paired.App}'s pairing");
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                _log?.Error($"Settings couldn't forget {paired.App}'s pairing", e); // it stays on the list below
+            }
+            ShowOffice();
+        };
+        Grid.SetColumn(forget, 1);
+        grid.Children.Add(name);
+        grid.Children.Add(forget);
+        return new Border { Classes = { "divided" }, Child = grid };
+    }
+
+    private async void OnSetUp(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        SetUpButton.IsEnabled = false;
+        try
+        {
+            await _office!.RunSetUp();
+        }
+        catch (Exception ex)
+        {
+            _log?.Error("Set Up Microsoft Office failed from Settings", ex);
+        }
+        SetUpButton.IsEnabled = true;
+        ShowOffice(); // Done, if the Mac trusts the certificate now
     }
 }

@@ -208,7 +208,7 @@ Click Healdan's icon in the menu bar.
 
 ![The Healdan Helper Settings window below its Server group: Open Each Kind of File In, with Documents, Spreadsheets, Presentations and Drawings, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version, 0.3.0, installed on 29 October 2026](settings.png)
 
-Settings has three groups:
+Settings has four groups (three while your Mac has no Word, Excel or PowerPoint and no app is paired):
 
 - **Server:** the server the helper is signed in to, as you'd type it to sign in, such as `healdan.example`. To use
   another, sign out, then sign in with its address. Before you do, close your documents, and check the menu shows no
@@ -219,8 +219,27 @@ Settings has three groups:
   to the new server, where the same doc # can be a different document. They come back, with any saves still to send,
   when you sign in to the old server again. Meanwhile the menu shows how many are waiting.
 - **Open Each Kind of File In:** a row each for documents, spreadsheets, presentations and drawings, with the file
-  extensions it covers. They open in LibreOffice. Other files, such as PDFs, open read-only in your Mac's usual app
+  extensions it covers, and the app that opens them. Other files, such as PDFs, open read-only in your Mac's usual app
   for them.
+  - **A pop-up** offers LibreOffice and Microsoft Office, whichever are installed. Microsoft Office is offered for
+    documents when Word is installed, for spreadsheets when Excel is, and for presentations when PowerPoint is. Choose
+    one, and it's kept straight away. It applies to the documents you open from then on: one you have open already
+    stays in the app it opened in, until you close it.
+  - **Until you choose,** a kind opens in Microsoft Office when your Mac's app for its usual file type (`.docx` for
+    documents, `.xlsx` for spreadsheets, `.pptx` for presentations) is Word, Excel or PowerPoint, and in LibreOffice
+    when it isn't. So on a Mac that opens `.docx` files in Word, new documents open in Word without your changing
+    anything.
+  - **With one app to offer,** the row shows it with no pop-up. Drawings are always LibreOffice's, as Microsoft Office
+    doesn't open them.
+  - **OpenDocument files** (`.odt`, `.ott`, `.ods`, `.odp` and `.odg` drawings) always open in LibreOffice, whatever
+    you choose, while it's installed. Your choice is for Microsoft's file types, such as `.docx`, `.xls` and `.pptx`.
+- **Microsoft Office:** shown while Word, Excel or PowerPoint is installed on your Mac, or an app is still paired.
+  - **Set Up:** shown while one of them is installed. **Done** once your Mac trusts the helper's certificate. While it
+    doesn't, or the certificate is nearly out of date, it says **Needed**, and **Set Up…** opens the Set Up Microsoft
+    Office window: see [Setting Up Microsoft Office](#setting-up-microsoft-office).
+  - **Paired Apps:** each of Word, Excel and PowerPoint that has paired with the helper, and the date it last paired,
+    or **None**. **Forget** makes the helper forget an app: it asks for a new code the next time you press a Healdan
+    button in it. See [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint).
 - **This Computer:**
   - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
     To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it isn't on, a line
