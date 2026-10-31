@@ -245,32 +245,63 @@ public sealed partial class ScriptsTests
     public void SetDocIdLeavesADocumentTypedInMeanwhileUnsaved()
     {
         // The final review's Important 2: Word takes keystrokes between the Apple events that update the footer's fields.
-        // SetDocId reads saved and fingerprints the text before it changes anything, fingerprints it again once the
-        // fields are done, and marks the document saved only if it was and the text is the same, case and all. A
-        // keystroke meanwhile leaves it unsaved, so Word asks about it at close.
+        // SetDocId fingerprints the text before it reads saved (a key between the two leaves wasSaved false), changes the
+        // property and the fields, fingerprints again, and marks the document saved only if it was and the text is the
+        // same, case and all. It then fingerprints once more and takes the mark back if a key came in between. A
+        // keystroke meanwhile leaves the document unsaved, so Word asks about it at close.
         var text = Scripts()["Word.SetDocId"];
         InOrder("Word.SetDocId", text,
-            "set wasSaved to saved of d",
             "set textBefore to my hdFingerprint(d)",
+            "set wasSaved to saved of d",
             "set value of custom document property \"Healdan Doc ID\" of d to v",
             "update field",
             "set untouched to my sameText(textBefore, my hdFingerprint(d))",
-            "if wasSaved and untouched then set saved of d to true");
-        Assert.Single(Regex.Matches(text, "set saved of d"));
+            "if wasSaved and untouched then",
+            "set saved of d to true",
+            "if not my sameText(textBefore, my hdFingerprint(d)) then set saved of d to false",
+            "end if");
+        Assert.Equal(2, Regex.Matches(text, "set saved of d").Count);
+        Assert.Single(Regex.Matches(text, "set saved of d to true"));
         Assert.Contains("considering case", Handler(text, "sameText"));
+    }
+
+    [Fact]
+    public void RenameFingerprintsBeforeItReadsSavedAndComparesCaseAndAll()
+    {
+        // The final review's residuals: a key between reading saved and fingerprinting would be taken into both
+        // fingerprints and confirmed, so Rename fingerprints first and then refuses a document that isn't saved. After the
+        // save it compares through sameText, as Save As does, so a letter changed in its case counts as an edit.
+        var renames = Scripts().Where(s => s.Key.EndsWith(".Rename", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["Excel.Rename", "Word.Rename"], renames.Select(r => r.Key).Order().ToArray());
+        foreach (var (name, text) in renames)
+        {
+            InOrder(name, text,
+                "set fpBefore to my hdFingerprint(d)",
+                "if (saved of d) is false then return \"unsaved\"",
+                "my saveInFormat(d, newPath, newExt)",
+                "(name of xd) is newName then set d2 to xd",
+                "if my sameText(fpBefore, my hdFingerprint(d2)) then return \"renamed\"");
+            Assert.DoesNotContain("fpBefore is", text);
+            Assert.Contains("considering case", Handler(text, "sameText"));
+        }
     }
 
     [Fact]
     public void TheComparingIsTheSameInEveryScript()
     {
-        // sameText and fileNameOf are copied into each script that uses them, and must not drift apart.
+        // sameText and fileNameOf are copied into each script that uses them, and must not drift apart. Every script that
+        // compares through sameText has the handler (it wouldn't compile otherwise), and these are the ones that do.
+        string[] comparing = ["Excel.Rename", "Excel.SaveAs", "PowerPoint.SaveAs", "Word.Rename", "Word.SaveAs", "Word.SetDocId"];
         foreach (var handler in new[] { "sameText", "fileNameOf" })
         {
             var handlers = Scripts().Where(s => s.Value.Contains($"on {handler}(", StringComparison.Ordinal))
                 .ToDictionary(s => s.Key, s => Handler(s.Value, handler));
             Assert.True(handlers.Count >= 3, $"too few scripts with {handler}");
             Assert.Single(handlers.Values.Distinct());
+            if (handler == "sameText")
+                Assert.Equal(comparing, handlers.Keys.Order().ToArray());
         }
+        Assert.Equal(comparing, Scripts().Where(s => s.Value.Contains("my sameText(", StringComparison.Ordinal)).Select(s => s.Key).Order().ToArray());
     }
 
     [Fact]

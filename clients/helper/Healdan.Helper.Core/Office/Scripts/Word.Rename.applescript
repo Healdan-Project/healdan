@@ -18,8 +18,8 @@ on run argv
             set located to my locate(p, pTwin, fname, copiesFolder, copiesTwin, "", "", false)
             set d to item 1 of located
             if d is missing value then return "missing"
-            if (saved of d) is false then return "unsaved"
             set fpBefore to my hdFingerprint(d)
+            if (saved of d) is false then return "unsaved"
             try
                 my saveInFormat(d, newPath, newExt)
             on error errText number errNum
@@ -35,7 +35,7 @@ on run argv
                 end try
             end repeat
             if d2 is missing value then return "renamed-but-lost"
-            if fpBefore is (my hdFingerprint(d2)) then return "renamed"
+            if my sameText(fpBefore, my hdFingerprint(d2)) then return "renamed"
             return "renamed-changed"
         end timeout
     end tell
@@ -128,3 +128,10 @@ on saveInFormat(d, target, newExt)
         end if
     end tell
 end saveInFormat
+
+-- Whether two texts are the same, case and all: AppleScript ignores case unless told not to.
+on sameText(oneText, otherText)
+    considering case
+        return oneText is otherText
+    end considering
+end sameText

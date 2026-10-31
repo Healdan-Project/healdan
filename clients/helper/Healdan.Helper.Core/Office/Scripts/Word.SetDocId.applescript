@@ -18,8 +18,8 @@ on run argv
             set located to my locate(p, pTwin, fname, copiesFolder, copiesTwin, "", "", false)
             set d to item 1 of located
             if d is missing value then return "missing"
-            set wasSaved to saved of d
             set textBefore to my hdFingerprint(d)
+            set wasSaved to saved of d
             try
                 set value of custom document property "Healdan Doc ID" of d to v
             on error
@@ -36,7 +36,10 @@ on run argv
                 end repeat
             end repeat
             set untouched to my sameText(textBefore, my hdFingerprint(d))
-            if wasSaved and untouched then set saved of d to true
+            if wasSaved and untouched then
+                set saved of d to true
+                if not my sameText(textBefore, my hdFingerprint(d)) then set saved of d to false
+            end if
             return "ok"
         end timeout
     end tell

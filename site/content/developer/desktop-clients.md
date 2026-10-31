@@ -149,8 +149,10 @@ size the helper uses, the widths then match CoreText's.
   looked for again after a miss or a failure. Then the crash window closes itself (`IWindows.DismissCrashed`), and its
   Send and Check In and Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document
   once it's renamed: a copy that's open again is brought up, never checked in. Send and Check In is refused from the
-  moment the owner file comes back, while the save-back still looks (`CopyCycle.IsOpenAgain`), unless the owner file
-  has gone again. The crash window's Reopen leaves the watch in place.
+  moment the owner file comes back, and while the save-back looks for the window or saves it, as Word takes its owner
+  file away during the save (`CopyCycle.IsOpenAgain`). Once the save-back has given up, it's refused only while the
+  owner file is there, so a window closed before it was found doesn't strand the copy. The crash window's Reopen
+  leaves the watch in place.
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,
   and then takes it on again knowing whether the owner file is there.

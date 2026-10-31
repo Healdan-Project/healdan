@@ -451,6 +451,33 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task ACloseJustAfterALateRenameIsFollowedIsSeen()
+    {
+        // The final review's residuals: a copy followed to its next name is watched with its owner file's state, as after
+        // any rename, so the window closing before the first look at the new name is a close. Otherwise the going of an
+        // owner file never seen would wait for Word to quit. Looks are slow here, so the window closes, as the followed
+        // copy's own rename finds it unsaved, before the first.
+        Scripting.FailNextRename(new OfficeScriptException("osascript didn't answer within 330 seconds."));
+        var (cycle, path) = await OpenAsync(timings: Fast with { LockPoll = TimeSpan.FromMilliseconds(600) });
+        await WatchedAsync(path);
+        Save(path, "first draft");
+        await Wait.Until(() => Log.Contains("didn't answer within 330 seconds"), "the failure logged");
+        await LooksAsync(path, 2); // watched under its old name again
+
+        var v11 = CopyPath("Lease agreement #5 v1.1.docx");
+        await Scripting.RenameIfUnchangedAsync(OfficeProgram.Word, path, v11);
+        Scripting.BeforeRename = from => { if (from == v11) FakeScripting.Close(OfficeProgram.Word, v11); };
+        Scripting.AnswerRenames(RenameResult.Unsaved);
+
+        await Wait.Until(() => Server.Saves.Count == 2, "the followed copy sent");
+        await Wait.Until(() => Server.Doc(5).Hold is null, "the followed copy checked in");
+        await Wait.Until(() => !File.Exists(v11), "the followed copy deleted");
+        Assert.Equal(1, Server.Count("DELETE /documents/5/checkout"));
+        Assert.StartsWith("first draft (as Lease agreement #5 v1.1.docx)", Server.Saves[1].Content);
+        Assert.Empty(cycle.OpenCopies());
+    }
+
+    [Fact]
     public async Task TheFirstRenameIsAnnounced()
     {
         Server.Add(8, "Fees.xlsx", "sheet");
