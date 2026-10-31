@@ -130,6 +130,7 @@ Set through Fluent's resources where it has them, and through styles in `HelperS
 | Alerts | `alert-triangle` (the badge) |
 | Settings | `server`, `file-text`, `file-spreadsheet`, `presentation`, `triangle-square-circle`, `power`, `puzzle` |
 | LibreOffice | `device-floppy`, `folder-open`, `versions`, `file-plus`, `list-details`, `hash` |
+| Set Up Microsoft Office (added by the M3.5 plan) | `lock` (the certificate), `puzzle` (Automation), `folder` (Copies), `check` (done) |
 
 ## 5. Window shells
 

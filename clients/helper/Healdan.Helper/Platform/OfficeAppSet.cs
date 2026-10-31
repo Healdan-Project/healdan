@@ -14,11 +14,16 @@ namespace Healdan.Helper.Platform;
 internal static class OfficeAppSet
 {
     /// <summary>
-    /// What the chooser says now: the settings and the installed apps are read at each call, so a change in Settings or a
-    /// newly installed app takes effect with the next copy opened, and Settings show the same answer.
+    /// Which of the apps are installed now: in the usual folders, else wherever LaunchServices finds them, as
+    /// <c>open -a</c> does. Read at each call, so an app installed later counts.
     /// </summary>
-    public static AppChooser Chooser(HelperPaths paths) =>
-        new(HelperSettings.Load(paths), InstalledApps.Detect(), _ => null); // the system's default app: DefaultApps.For, when it exists
+    public static InstalledApps Installed() => InstalledApps.Detect(LaunchServices.IsInstalled);
+
+    /// <summary>
+    /// What the chooser says now: the settings, the installed apps and the system's default apps are read at each call, so a
+    /// change in Settings or a newly installed app takes effect with the next copy opened, and Settings show the same answer.
+    /// </summary>
+    public static AppChooser Chooser(HelperPaths paths) => new(HelperSettings.Load(paths), Installed(), DefaultApps.For);
 
     public static OfficeApps Create(HelperPaths paths)
     {

@@ -58,6 +58,58 @@ public sealed class FakeWindows : IWindows
 
     public void DismissCrashed(string path) => Dismissed.Enqueue(path);
 
+    /// <summary>What Set Up Microsoft Office answers: by default the user chooses Not Now.</summary>
+    public Func<Task<bool>> OnSetUpOffice { get; set; } = () => Task.FromResult(false);
+
+    /// <summary>How many times Set Up Microsoft Office was shown.</summary>
+    public int SetUpOffices => Volatile.Read(ref _setUpOffices);
+
+    private int _setUpOffices;
+
+    public Task<bool> SetUpOfficeAsync()
+    {
+        Interlocked.Increment(ref _setUpOffices);
+        return OnSetUpOffice();
+    }
+
+    /// <summary>Every pairing code shown, in order, with the app it was for and when it expires.</summary>
+    public ConcurrentQueue<(string App, string Code, DateTimeOffset Expires)> PairingCodes { get; } = new();
+
+    /// <summary>The code the pairing window shows now; null while none is up.</summary>
+    public string? ShownCode
+    {
+        get
+        {
+            lock (_pairingLock)
+                return _shownCode;
+        }
+    }
+
+    /// <summary>How many times the helper took the pairing window down.</summary>
+    public int PairingClosed => Volatile.Read(ref _pairingClosed);
+
+    private readonly object _pairingLock = new();
+    private string? _shownCode;
+    private int _pairingClosed;
+
+    public void ShowPairingCode(string app, string code, DateTimeOffset expires)
+    {
+        lock (_pairingLock)
+        {
+            PairingCodes.Enqueue((app, code, expires));
+            _shownCode = code;
+        }
+    }
+
+    public void ClosePairingCode()
+    {
+        lock (_pairingLock)
+        {
+            _shownCode = null;
+            _pairingClosed++;
+        }
+    }
+
     /// <summary>How many times a dropped link brought the waiting window up.</summary>
     public int Brought => Volatile.Read(ref _brought);
 

@@ -24,4 +24,13 @@ public class ServerAddressTests
     [InlineData("https://healdan.example/dms", "healdan.example")]
     [InlineData("not an address", "not an address")]
     public void ANameIsTheHostAndAnyPort(string address, string name) => Assert.Equal(name, ServerAddress.Name(address));
+
+    [Theory]
+    [InlineData("https://healdan.example", "https://healdan.example")]
+    [InlineData("https://healdan.example/dms/", "https://healdan.example")]
+    [InlineData("https://Healdan.Example:443/", "https://healdan.example")]
+    [InlineData("https://healdan.example:8443/dms", "https://healdan.example:8443")]
+    [InlineData("http://localhost:8080", "http://localhost:8080")]
+    public void AnOriginIsTheSchemeHostAndPortAsABrowserSendsIt(string address, string origin) =>
+        Assert.Equal(origin, ServerAddress.Origin(new Uri(address)));
 }

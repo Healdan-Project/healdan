@@ -5,6 +5,7 @@
   <StreamGeometry x:Key="Icon.alert-triangle">M12 9v4 M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0 M12 16h.01</StreamGeometry>
   <StreamGeometry x:Key="Icon.briefcase">M3 9a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2l0 -9 M8 7v-2a2 2 0 0 1 2 -2h4a2 2 0 0 1 2 2v2 M12 12l0 .01 M3 13a20 20 0 0 0 18 0</StreamGeometry>
   <StreamGeometry x:Key="Icon.building">M3 21l18 0 M9 8l1 0 M9 12l1 0 M9 16l1 0 M14 8l1 0 M14 12l1 0 M14 16l1 0 M5 21v-16a2 2 0 0 1 2 -2h10a2 2 0 0 1 2 2v16</StreamGeometry>
+  <StreamGeometry x:Key="Icon.check">M5 12l5 5l10 -10</StreamGeometry>
   <StreamGeometry x:Key="Icon.chevron-left">M15 6l-6 6l6 6</StreamGeometry>
   <StreamGeometry x:Key="Icon.chevron-right">M9 6l6 6l-6 6</StreamGeometry>
   <StreamGeometry x:Key="Icon.chevron-up">M6 15l6 -6l6 6</StreamGeometry>

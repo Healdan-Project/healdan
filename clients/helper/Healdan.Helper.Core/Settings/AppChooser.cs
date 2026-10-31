@@ -37,6 +37,27 @@ public sealed class AppChooser(HelperSettings settings, InstalledApps installed,
         return first ?? second ?? DefaultApp.AppName;
     }
 
+    /// <summary>
+    /// The app a new copy of a file of this kind opens in, as <see cref="For"/> says for the kind's first extension: what
+    /// Settings show for the kind.
+    /// </summary>
+    public string ForKind(FileKind kind) => For("a" + kind.Extensions[0]);
+
+    /// <summary>
+    /// The apps Settings offer for a kind, in the order LibreOffice, Microsoft Office: only those installed, and Microsoft
+    /// Office only for a kind its programs open (not Drawings). Empty when neither is. <see cref="ForKind"/> is one of
+    /// them whenever there are any.
+    /// </summary>
+    public IReadOnlyList<string> Offered(FileKind kind)
+    {
+        var apps = new List<string>(2);
+        if (installed.LibreOffice)
+            apps.Add(LibreOfficeApp.AppName);
+        if (kind.MainFormat is { } format && MicrosoftOfficeApp.ProgramFor("a." + format) is { } program && installed.Has(program))
+            apps.Add(MicrosoftOfficeApp.AppName);
+        return apps;
+    }
+
     /// <summary>Microsoft Office when it is what the system opens the kind's main format with; null otherwise, and for a kind Office doesn't open.</summary>
     private string? SystemsChoice(FileKind kind) =>
         kind.MainFormat is { } format && systemDefaultApp(format) == MicrosoftOfficeApp.AppName ? MicrosoftOfficeApp.AppName : null;

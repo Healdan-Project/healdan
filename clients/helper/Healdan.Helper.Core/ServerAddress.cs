@@ -19,4 +19,11 @@ public static class ServerAddress
     /// it; the address itself when it isn't one.
     /// </summary>
     public static string Name(string address) => Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri.Authority : address;
+
+    /// <summary>
+    /// The server's origin, as a browser sends it in <c>Origin</c> from the server's pages: the scheme, the host in lower
+    /// case and any port that isn't the scheme's own, without the path, such as <c>https://healdan.example</c>. The add-in's
+    /// port answers pages from it alone (M3.5 spec §5.8).
+    /// </summary>
+    public static string Origin(Uri server) => server.GetComponents(UriComponents.SchemeAndServer, UriFormat.UriEscaped).ToLowerInvariant();
 }

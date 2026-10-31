@@ -24,6 +24,19 @@ public sealed class HelperSettingsTests : IDisposable
     }
 
     [Fact]
+    public void TheOfferOfSetUpMicrosoftOfficeIsRemembered()
+    {
+        Assert.False(HelperSettings.Load(Paths).OfficeSetUpOffered); // nothing saved yet
+
+        HelperSettings.Update(Paths, s => s.OfficeSetUpOffered = true);
+
+        Assert.True(HelperSettings.Load(Paths).OfficeSetUpOffered);
+        Directory.CreateDirectory(Paths.Support);
+        File.WriteAllText(Paths.Settings, """{ "server": "https://healdan.example" }"""); // a file from before it was kept
+        Assert.False(HelperSettings.Load(Paths).OfficeSetUpOffered);
+    }
+
+    [Fact]
     public void AnOlderSettingsFileHasNoKinds()
     {
         Directory.CreateDirectory(Paths.Support);

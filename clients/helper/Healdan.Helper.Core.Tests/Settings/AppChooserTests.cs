@@ -128,4 +128,53 @@ public sealed class AppChooserTests
         Assert.Equal("LibreOffice", Chooser(Choosing("Documents", "Pages")).For("a.docx"));
         Assert.Equal("Microsoft Office", Chooser(Choosing("Documents", "Pages"), systemDefault: _ => "Microsoft Office").For("a.docx"));
     }
+
+    [Fact]
+    public void TheSystemDefaultComesFromDefaultApps()
+    {
+        // What LaunchServices says opens each extension, by its bundle identifier: DefaultApps.For names the app by it.
+        var opens = new Dictionary<string, string> { ["docx"] = "com.microsoft.Word", ["xlsx"] = "com.apple.iWork.Numbers", ["pptx"] = "org.libreoffice.script" };
+        string? SystemDefault(string extension) => AppBundles.NameOf(opens.GetValueOrDefault(extension));
+
+        var chooser = Chooser(systemDefault: SystemDefault);
+        Assert.Equal("Microsoft Office", chooser.For("a.docx")); // a fresh install: no choice yet
+        Assert.Equal("LibreOffice", chooser.For("a.xlsx")); // Numbers is neither
+        Assert.Equal("LibreOffice", chooser.For("a.pptx"));
+        Assert.Equal("LibreOffice", chooser.For("a.odg"));
+
+        opens["docx"] = "com.apple.iWork.Pages"; // the Mac's default for .docx changes
+        Assert.Equal("LibreOffice", chooser.For("a.docx"));
+        Assert.Equal("Microsoft Office", Chooser(Choosing("Documents", "Microsoft Office"), systemDefault: SystemDefault).For("a.docx")); // a choice wins
+    }
+
+    [Fact]
+    public void SettingsOfferOnlyWhatsInstalledForEachKind()
+    {
+        var chooser = Chooser();
+        Assert.Equal(["LibreOffice", "Microsoft Office"], chooser.Offered(FileKinds.Documents));
+        Assert.Equal(["LibreOffice", "Microsoft Office"], chooser.Offered(FileKinds.Spreadsheets));
+        Assert.Equal(["LibreOffice", "Microsoft Office"], chooser.Offered(FileKinds.Presentations));
+        Assert.Equal(["LibreOffice"], chooser.Offered(FileKinds.Drawings)); // Office doesn't open them
+
+        var noWord = Chooser(installed: Everything with { Word = false });
+        Assert.Equal(["LibreOffice"], noWord.Offered(FileKinds.Documents)); // each kind's program on its own
+        Assert.Equal(["LibreOffice", "Microsoft Office"], noWord.Offered(FileKinds.Spreadsheets));
+
+        var noLibreOffice = Chooser(installed: Everything with { LibreOffice = false });
+        Assert.Equal(["Microsoft Office"], noLibreOffice.Offered(FileKinds.Documents));
+        Assert.Empty(noLibreOffice.Offered(FileKinds.Drawings));
+
+        Assert.Empty(Chooser(installed: new InstalledApps(false, false, false, false)).Offered(FileKinds.Documents));
+    }
+
+    [Fact]
+    public void ForKindIsWhatTheKindsFilesOpenIn()
+    {
+        var chooser = Chooser(Choosing("Spreadsheets", "Microsoft Office"), systemDefault: _ => null);
+
+        Assert.Equal("LibreOffice", chooser.ForKind(FileKinds.Documents));
+        Assert.Equal("Microsoft Office", chooser.ForKind(FileKinds.Spreadsheets));
+        Assert.Equal("LibreOffice", chooser.ForKind(FileKinds.Drawings));
+        Assert.Equal("Default", Chooser(installed: new InstalledApps(false, false, false, false)).ForKind(FileKinds.Documents));
+    }
 }
