@@ -5,7 +5,9 @@ namespace Healdan.Helper.Core.Office;
 
 /// <summary>
 /// The real <see cref="IOsaRunner"/>. The script goes to <c>osascript</c> on standard input and every value after the
-/// dash, so no value is ever part of a script's text. Failures carry the program's own error text and never the arguments.
+/// dash, so no value is ever part of a script's text. A failure carries the program's own error text, which can quote a
+/// value it was given, such as a document's name or path. The callers log it in the helper's own log and may show it in
+/// a notice, on this Mac; the add-in and Healdan only ever get an error code.
 /// </summary>
 public sealed class OsaRunner : IOsaRunner
 {

@@ -49,9 +49,18 @@ over the document with the reason. Close it when you've read it. It's the same f
 | This add-in needs a newer Healdan Helper | Install the newer disk image over the old one, as your administrator tells you |
 | Healdan Helper finished, but its answer was lost | Check the document in Healdan, by its doc # or its matter, before pressing the button again: it may already have been filed |
 | Healdan Helper couldn't find the document you pressed that in | Click in the document, then press the button again |
+| Healdan Helper no longer has that save | It was used, or took too long. Press **Save to Healdan** again |
+| The document is filed, but the add-in couldn't take its hidden mark out of the document | Nothing: it does no harm |
+| This document is too large for the add-in to send to Healdan Helper | Save it on your Mac with the app's own Save As, and upload it in the Healdan web page instead |
+| Healdan Helper is still busy with this app's earlier requests | Finish or cancel any Healdan window that's open, wait a moment, then press the button again |
 | This document isn't open from Healdan, so there's no version to add to | Use **Save to Healdan** to file it first |
 | This is a read-only copy, so it can't be saved as a new version | Use **Save as New Document** instead |
 | Microsoft Office didn't do what the add-in asked | Try again. If it keeps happening, tell your administrator what the brackets say |
+| Microsoft Office wouldn't let the add-in keep its pairing | Quit the app, open it again, and pair again. If it keeps happening, tell your administrator |
+| This document gets its doc ID once it's saved to Healdan | Nothing: the footer shows the doc ID from the time you use **Save to Healdan** |
+| Healdan Helper didn't understand the add-in, or answered with something the add-in didn't expect | Update Healdan Helper, as your administrator tells you, if it keeps happening |
+| Healdan Helper hit a problem | Its log has the details: see [Asking for Help](#asking-for-help) |
+| Healdan Helper turned the request away, because it didn't come from this computer | Tell your administrator: something between Office and the helper changed the request |
 | Use Word's own Save As to save it on this computer, or Use Word's own Open to open a file on this computer | You chose **Save to Local Computer** or **Open from Local Computer** in the helper's window: use the app's own Save As or Open for that. It names Excel or PowerPoint when you're in them |
 | Healdan's buttons work in the desktop apps only | You're in Word, Excel or PowerPoint on the web. Use the desktop apps on your Mac |
 
@@ -111,8 +120,9 @@ that was never saved. You don't need to:
   as your next save. The crash window then goes by itself, the title moves on, and you carry on as before.
 - **Until then, Reopen,** in the crash window, starts Word, which brings the recovered document back, and the helper
   saves it in the same way.
-- **Until then, Send and Check In** sends what you last saved, and checks the document in. Once the document is open
-  again, the helper doesn't check it in under its open window: close the window, and that checks it in.
+- **Before Word has it open again, Send and Check In** sends what you last saved, and checks the document in. From
+  the moment Word has it open again, even before the helper has saved it back, Send and Check In doesn't check it in
+  under its open window, and says so: close the window, and that checks it in.
 
 If Excel or PowerPoint brings a document back by itself in the same way, the helper saves it back too.
 

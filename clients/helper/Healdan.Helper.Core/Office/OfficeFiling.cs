@@ -20,10 +20,10 @@ namespace Healdan.Helper.Core.Office;
 /// <para>Review Focus 2: only the window the request came from is saved, or nothing is filed. Where the program shows
 /// the add-in's mark (Word and Excel, within about a third of a second in the trial), the mark finds the window; where it
 /// doesn't, or not in time, the program's front window must still be the one taken.</para>
-/// <para>Review Focus 1: a fingerprint of the window's content is taken as the bytes arrive, before anything else, and
-/// checked as the window is saved as the copy, so an edit typed meanwhile is sent as a save, never folded silently into
-/// the copy's starting point. Save As never takes the front window instead of the one it's given (spec §5.2), so it never
-/// saves another document as the new copy.</para>
+/// <para>Review Focus 1: a fingerprint of the window's content is taken as the user clicks Save in the helper's Save window,
+/// before the add-in reads the bytes, and checked as the window is saved as the copy, both before and after that save, so
+/// an edit typed meanwhile is sent as a save, never folded silently into the copy's starting point. Save As never takes
+/// the front window instead of the one it's given (spec §5.2), so it never saves another document as the new copy.</para>
 /// Nothing here knows which platform drives the programs: that's <see cref="IOfficeScripting"/>'s.
 /// </summary>
 /// <param name="clock">The tickets' clock: the real one by default.</param>
@@ -46,9 +46,10 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
     /// <summary>
     /// <c>/v1/save-new</c> from the add-in: takes the program's front window first, then shows Save to Healdan's window
     /// offering the program's own format only, named after the window, or for Save as New Document
-    /// (<paramref name="asNew"/>) after the document the window's copy is of. On Save, the answer carries a ticket for
-    /// <see cref="FileAsync"/> in place of a temporary file; anything else is answered as the window gave it. Save as New
-    /// Document from a window that isn't a copy is Save to Healdan.
+    /// (<paramref name="asNew"/>) after the document the window's copy is of. On Save, the window taken is fingerprinted at
+    /// once, before the add-in reads its bytes, and the answer carries a ticket for <see cref="FileAsync"/> in place of a
+    /// temporary file; anything else is answered as the window gave it. Save as New Document from a window that isn't a
+    /// copy is Save to Healdan.
     /// </summary>
     /// <param name="url">The add-in's <c>Office.context.document.url</c>, possibly empty. A copy it names must be the window's.</param>
     /// <exception cref="OfficeRefusedException">
@@ -82,18 +83,38 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
         var answer = await windows.SaveNewAsync(request);
         if (answer["action"] is not JsonValue action || !action.TryGetValue<string>(out var chosen) || chosen != "save")
             return answer;
+        // Taken first (spec §5.5 step 3), before the add-in reads the bytes: a line typed from here on, even while the
+        // bytes are on their way, differs from it when the window is saved as the copy, so it's sent (step 8).
+        var fingerprint = await FingerprintAsync(p, window, app);
         var properties = answer["properties"] is JsonObject given ? (JsonObject)given.DeepClone() : new JsonObject();
         var document = new NewDocument(FolderId(answer), FileName(p, Text(answer, "name")), properties, true);
-        return WindowAnswers.Ticketed(answer, _tickets.Issue(p, window, original?.Path, document).Id);
+        return WindowAnswers.Ticketed(answer, _tickets.Issue(p, window, original?.Path, document, fingerprint).Id);
+    }
+
+    /// <summary>
+    /// The window's fingerprint as Save is clicked, found by its path, else its window's name; null when the program gave
+    /// none or didn't answer, which counts as changed when the window is saved as the copy, so the copy is sent.
+    /// </summary>
+    private async Task<string?> FingerprintAsync(OfficeProgram p, FrontDocument window, string app)
+    {
+        try
+        {
+            return await Scripting().FingerprintAsync(p, new DocumentRef(window.Path, null, window.WindowName));
+        }
+        catch (OfficeScriptException e)
+        {
+            log.Warn($"{app} didn't fingerprint the window being saved to Healdan, so its copy is sent once filed: {e.Message}");
+            return null;
+        }
     }
 
     /// <summary>
     /// <c>/v1/file</c> from the add-in: files <paramref name="bytes"/>, the document as the add-in read it, as the new
     /// document the ticket's window chose, checked out here, then saves the ticket's window as its copy. That save is the
-    /// copy's starting point, unless the window changed since the bytes arrived, when it goes up as a save. PowerPoint
-    /// is then closed and opened again, so its own Save saves in place (spec §5.5 step 7). The bytes go through a
-    /// temporary file in the helper's Temp folder, deleted whatever happens. A failed filing is told to the user and
-    /// thrown, with the window left as it was, so the add-in takes its mark off.
+    /// copy's starting point, unless the window changed since Save was clicked, or the ticket has no fingerprint to tell,
+    /// when it goes up as a save. PowerPoint is then closed and opened again, so its own Save saves in place (spec §5.5
+    /// step 7). The bytes go through a temporary file in the helper's Temp folder, deleted whatever happens. A failed
+    /// filing is told to the user and thrown, with the window left as it was, so the add-in takes its mark off.
     /// </summary>
     /// <param name="mark">The id the add-in set in the document's custom properties after reading its bytes; null when it set none.</param>
     /// <exception cref="OfficeRefusedException">
@@ -111,19 +132,12 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
         var doc = new DocumentRef(t.Window.Path, mark, t.Window.WindowName);
         var tempPath = WindowAnswers.TempPath(paths, OfficePrograms.OwnFormat(p));
         CopyState state;
-        string fingerprint;
         try
         {
             try
             {
-                // Taken first, as the bytes arrive (spec §5.5 step 3), and checked by the save as the copy (step 8): a line
-                // typed from here on, even while the mark is waited for, is sent. Before the mark shows, the window's name
-                // finds the window, and a fingerprint of another document only makes the copy go up as a save.
-                fingerprint = await scripting.FingerprintAsync(p, doc)
-                    ?? throw Refused(app, $"Nothing was filed: {app} has no document open now.");
-                if (!await IsTheWindowAsync(scripting, t, mark))
-                    throw Refused(app, $"Nothing was filed: {app} has another document in front now. Click in the one you were "
-                        + "saving, and press Save to Healdan again.");
+                if (await NotTheWindowAsync(scripting, t, mark, app) is { } notice)
+                    throw Refused(app, notice);
                 await WriteTemporaryAsync(tempPath, bytes);
                 state = await cycle.AdoptNewAsync(tempPath, t.Document, t.Replaces, apps.MicrosoftOffice);
             }
@@ -150,8 +164,11 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
         try
         {
             // Found by its path, the mark or its window's name, never as the front window: a window closed while the bytes
-            // went up is missing, and that's a failure below, not another document saved as the copy.
-            changed = (await scripting.SaveAsAsync(p, doc, state.Path, fingerprint)).Changed;
+            // went up is missing, and that's a failure below, not another document saved as the copy. The fingerprint taken
+            // as Save was clicked is checked against the window before and after the save (step 8); with none to check
+            // against, nothing shows the copy holds only what was filed, so it goes up.
+            var saved = await scripting.SaveAsAsync(p, doc, state.Path, t.Fingerprint);
+            changed = t.Fingerprint is null || saved.Changed;
         }
         catch (Exception e) when (File.Exists(state.Path) || apps.MicrosoftOffice?.LockExists(state.Path) == true)
         {
@@ -187,12 +204,13 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
         KnownCopy(url)?.Path ?? KnownCopy((await Scripting().FrontDocumentAsync(p))?.Path)?.Path;
 
     /// <summary>
-    /// Review Focus 2: whether the ticket's window is still there to save. The add-in's mark says so where the program
-    /// shows it, looked for every <see cref="MarkPoll"/> for up to <see cref="MarkWait"/>; otherwise the program's front
-    /// window must still be the one taken at <c>save-new</c>, by its path and its window's name. PowerPoint never showed the
-    /// mark (spec §8.5), so it isn't waited for there: the window's name decides.
+    /// Review Focus 2: why the ticket's window isn't there to save, for the user; null when it is. The add-in's mark says
+    /// it is where the program shows it, looked for every <see cref="MarkPoll"/> for up to <see cref="MarkWait"/>;
+    /// otherwise the program's front window must still be the one taken at <c>save-new</c>, by its path and its window's
+    /// name. PowerPoint never showed the mark (spec §8.5), so it isn't waited for there: the window's name decides. Without
+    /// the mark or a window's name, nothing says which window it is, so nothing is filed.
     /// </summary>
-    private async Task<bool> IsTheWindowAsync(IOfficeScripting scripting, FilingTicket t, string? mark)
+    private async Task<string?> NotTheWindowAsync(IOfficeScripting scripting, FilingTicket t, string? mark, string app)
     {
         if (mark is not null && t.Program != OfficeProgram.PowerPoint)
         {
@@ -202,7 +220,7 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
                 try
                 {
                     if (await scripting.HasMarkAsync(t.Program, mark))
-                        return true;
+                        return null;
                 }
                 catch (OfficeScriptException)
                 {
@@ -213,8 +231,18 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
                 await Task.Delay(MarkPoll);
             }
         }
+        // A name null at save-new and now would match, though nothing said which window either was, and Save As would then
+        // find nothing to save once the document was filed.
+        if (t.Window.WindowName is null)
+            return $"Nothing was filed: {app} didn't say which window Save to Healdan was pressed in. Click in the document, "
+                + "and press Save to Healdan again.";
         var front = await scripting.FrontDocumentAsync(t.Program);
-        return front is not null && front.WindowName == t.Window.WindowName && SamePath(front.Path, t.Window.Path);
+        if (front is null)
+            return $"Nothing was filed: {app} has no document open now.";
+        return front.WindowName == t.Window.WindowName && SamePath(front.Path, t.Window.Path)
+            ? null
+            : $"Nothing was filed: {app} has another document in front now. Click in the one you were saving, and press Save "
+                + "to Healdan again.";
     }
 
     /// <summary>A refusal of the window, told to the user: nothing has been filed.</summary>

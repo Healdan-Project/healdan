@@ -184,6 +184,24 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task ACloseJustAfterPowerPointsReopenIsSeen()
+    {
+        // The final review's Minor 4: the presentation's owner file is back as the close watcher takes it on again, so
+        // its going at the first look is a close. Looks are slow here, so the window closes before the first.
+        Server.Add(9, "Deck.pptx", "slides");
+        Scripting.ReopenGap = TimeSpan.FromMilliseconds(100);
+        var (cycle, path) = await OpenAsync(9, "Deck #9 v1.0.pptx", Fast with { LockPoll = TimeSpan.FromMilliseconds(400) });
+        await WatchedAsync(path);
+
+        await cycle.ReopenOfficeAsync(path);
+        FakeScripting.Close(OfficeProgram.PowerPoint, path);
+
+        await Wait.Until(() => !File.Exists(path), "checked in and deleted");
+        Assert.Null(Server.Doc(9).Hold);
+        Assert.Equal(1, Server.Count("DELETE /documents/9/checkout"));
+    }
+
+    [Fact]
     public async Task PowerPointsReopenIsntAClose()
     {
         // Review Focus 3: the presentation's owner file goes for 2 s while PowerPoint closes it and opens it again.

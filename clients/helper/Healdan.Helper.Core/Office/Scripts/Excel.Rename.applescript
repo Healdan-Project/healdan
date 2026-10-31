@@ -18,8 +18,8 @@ on run argv
             set located to my locate(p, pTwin, fname, copiesFolder, copiesTwin, "", "", false)
             set d to item 1 of located
             if d is missing value then return "missing"
-            if (saved of d) is false then return "unsaved"
             set fpBefore to my hdFingerprint(d)
+            if (saved of d) is false then return "unsaved"
             my saveInFormat(d, newPath, newExt)
             set d2 to missing value
             repeat with i from 1 to (count workbooks)
@@ -29,11 +29,22 @@ on run argv
                 end try
             end repeat
             if d2 is missing value then return "renamed-but-lost"
-            if fpBefore is (my hdFingerprint(d2)) then return "renamed"
+            if my sameText(fpBefore, my hdFingerprint(d2)) then return "renamed"
             return "renamed-changed"
         end timeout
     end tell
 end run
+
+-- Finds the workbook (findDocument), but refuses one whose name another open workbook has (spec section
+-- 5.2): the apps' scripting names a workbook by its name, so of two workbooks with one name Word reached only
+-- one, whichever path was asked for (the owner's by-hand run, 2026-10-31). Answers {the workbook, how it
+-- was found}, {missing value, "ambiguous"} for a shared name, or {missing value, ""}.
+on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+    set located to my findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+    if (item 1 of located) is missing value then return located
+    if my sharesItsName(item 1 of located) then return {missing value, "ambiguous"}
+    return located
+end locate
 
 -- Finds the workbook, trying in this order (spec section 5.2: paths are compared resolved, or file names within Copies):
 --   1. its exact path, in either spelling (pTwin is the same path with /private added or taken off);
@@ -43,7 +54,7 @@ end run
 --   4. its window's name;
 --   5. if useFront, the front workbook.
 -- Answers {the workbook, how it was found}, or {missing value, ""}.
-on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+on findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
     tell application "Microsoft Excel"
         if p is not "" then
             repeat with i from 1 to (count workbooks)
@@ -87,7 +98,22 @@ on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, use
         end if
         return {missing value, ""}
     end tell
-end locate
+end findDocument
+
+-- Whether another open workbook has this one's name. AppleScript compares text ignoring case, so a name told apart only
+-- by its case counts as shared too.
+on sharesItsName(d)
+    tell application "Microsoft Excel"
+        set wanted to name of d
+        set seen to 0
+        repeat with i from 1 to (count workbooks)
+            try
+                if (name of workbook i) is wanted then set seen to seen + 1
+            end try
+        end repeat
+    end tell
+    return seen > 1
+end sharesItsName
 
 -- Is the file directly in the folder? Both are POSIX paths, and the folder has no closing slash.
 on isInFolder(docPath, folderPath)
@@ -141,3 +167,10 @@ on saveInFormat(d, target, newExt)
         end if
     end tell
 end saveInFormat
+
+-- Whether two texts are the same, case and all: AppleScript ignores case unless told not to.
+on sameText(oneText, otherText)
+    considering case
+        return oneText is otherText
+    end considering
+end sameText

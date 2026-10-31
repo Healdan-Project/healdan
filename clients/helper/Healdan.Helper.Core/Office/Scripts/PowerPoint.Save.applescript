@@ -19,6 +19,17 @@ on run argv
     end tell
 end run
 
+-- Finds the presentation (findDocument), but refuses one whose name another open presentation has (spec section
+-- 5.2): the apps' scripting names a presentation by its name, so of two presentations with one name Word reached only
+-- one, whichever path was asked for (the owner's by-hand run, 2026-10-31). Answers {the presentation, how it
+-- was found}, {missing value, "ambiguous"} for a shared name, or {missing value, ""}.
+on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+    set located to my findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+    if (item 1 of located) is missing value then return located
+    if my sharesItsName(item 1 of located) then return {missing value, "ambiguous"}
+    return located
+end locate
+
 -- Finds the presentation, trying in this order (spec section 5.2: paths are compared resolved, or file names within Copies):
 --   1. its exact path, in either spelling (pTwin is the same path with /private added or taken off);
 --   2. its file name, but only for a presentation that is in the Copies folder (copiesFolder or copiesTwin), so a
@@ -27,7 +38,7 @@ end run
 --   4. its window's name;
 --   5. if useFront, the front presentation.
 -- Answers {the presentation, how it was found}, or {missing value, ""}.
-on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
+on findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)
     tell application "Microsoft PowerPoint"
         if p is not "" then
             repeat with i from 1 to (count presentations)
@@ -71,7 +82,22 @@ on locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, use
         end if
         return {missing value, ""}
     end tell
-end locate
+end findDocument
+
+-- Whether another open presentation has this one's name. AppleScript compares text ignoring case, so a name told apart only
+-- by its case counts as shared too.
+on sharesItsName(d)
+    tell application "Microsoft PowerPoint"
+        set wanted to name of d
+        set seen to 0
+        repeat with i from 1 to (count presentations)
+            try
+                if (name of presentation i) is wanted then set seen to seen + 1
+            end try
+        end repeat
+    end tell
+    return seen > 1
+end sharesItsName
 
 -- Is the file directly in the folder? Both are POSIX paths, and the folder has no closing slash.
 on isInFolder(docPath, folderPath)

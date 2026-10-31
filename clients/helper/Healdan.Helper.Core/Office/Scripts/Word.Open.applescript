@@ -7,7 +7,9 @@ on run argv
             activate
             try
                 open file name p add to recent files false revert false
-            on error
+            on error errText number errNum
+                -- A cancel, a timeout or a refusal of Automation isn't Word turning the path down: it goes as it came.
+                if errNum is in {-128, -1712, -1743} then error errText number errNum
                 open file name ((POSIX file p) as text) add to recent files false revert false
             end try
             return "ok"

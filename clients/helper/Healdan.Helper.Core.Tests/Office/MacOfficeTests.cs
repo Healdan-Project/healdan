@@ -7,8 +7,10 @@ namespace Healdan.Helper.Core.Tests.Office;
 /// <see cref="MacOfficeScripting"/> against the real Word, Excel and PowerPoint (spec §12.1), run by hand on a Mac that
 /// has them: <c>HEALDAN_MAC_OFFICE=1 dotnet test clients/helper/Healdan.Helper.sln --filter "Category=MacOffice"</c>.
 /// <para>These tests open windows in the three apps on the screen of whoever runs them, and each app may ask for
-/// Automation (once, naming the process that drives it) and for Grant File Access (once, for the folder the files are
-/// in). The apps' own prompts have to be answered, so the tests are skipped without the variable: a plain
+/// Automation (once, naming the process that drives it) and for Grant File Access. Each test works in a folder of its
+/// own inside <c>healdan-office-tests</c>, in the user's temporary folder: granted that folder, one level up from where
+/// the prompt opens, an app asks no more in this run or later ones. The apps' own prompts have to be answered, so the
+/// tests are skipped without the variable: a plain
 /// <c>dotnet test</c> never starts Office. Only <see cref="EveryScriptCompiles"/> runs on any Mac that has the apps,
 /// as compiling reads their dictionaries and starts nothing.</para>
 /// </summary>
@@ -20,7 +22,11 @@ public sealed class MacOfficeTests : IAsyncLifetime
     /// <summary>The marker a script built from the document's name would create, if the name ran as AppleScript.</summary>
     private const string Marker = "/tmp/healdan-pwned";
 
-    private readonly string _folder = Directory.CreateTempSubdirectory("healdan-office-").FullName;
+    /// <summary>Where each test's own folder is made, the same every run, so an app's grant of it lasts.</summary>
+    private static readonly string Shared = Path.Combine(Path.GetTempPath(), "healdan-office-tests");
+
+    private readonly string _folder =
+        Directory.CreateDirectory(Path.Combine(Shared, Guid.NewGuid().ToString("N")[..8])).FullName;
     private readonly string _copies;
     private readonly OsaRunner _osa = new();
     private readonly MacOfficeScripting _scripting;
@@ -71,7 +77,6 @@ public sealed class MacOfficeTests : IAsyncLifetime
             scripts[$"Fixtures.{program}.Close"] = Fixtures.For(program).Close;
             scripts[$"Fixtures.{program}.Recents"] = Fixtures.For(program).Recents;
         }
-        scripts["Fixtures.Word.EditAt"] = Fixtures.WordEditAt;
         scripts["Fixtures.Word.InsertDocId"] = Fixtures.WordInsertDocId;
         scripts["Fixtures.Word.Footer"] = Fixtures.WordFooter;
         scripts["Fixtures.Word.Mark"] = Fixtures.WordMark;
@@ -302,8 +307,11 @@ public sealed class MacOfficeTests : IAsyncLifetime
     [MacOfficeFact]
     public async Task TwoDocumentsWithTheSameNameInDifferentFolders()
     {
-        // A copy set aside keeps its name beside Copies, so Word can have two documents of one name open (spec section 5.2).
-        // Each path must find its own document, and a file name must find nothing outside Copies.
+        // A copy set aside keeps its name beside Copies, so Word can have two documents of one name open (spec section
+        // 5.2). Word's scripting names a document by its name, so of the two it reaches only one, whichever path is
+        // asked for (the owner's by-hand run, 2026-10-31). Neither is taken for the copy then: both read as open, so
+        // neither is checked in from under its window, and nothing is fingerprinted, renamed or saved. With one open
+        // again, its path finds it, and a file name finds nothing outside Copies.
         const OfficeProgram word = OfficeProgram.Word;
         var aside = Path.Combine(Directory.CreateDirectory(Path.Combine(_folder, "Aside")).FullName, "same.docx");
         var inCopies = Path.Combine(_copies, "same.docx");
@@ -317,26 +325,26 @@ public sealed class MacOfficeTests : IAsyncLifetime
         await NewSavedWordDocument(inCopies, "The copy in Copies.");
         await NewSavedWordDocument(solo, "Only beside Copies.");
 
-        // Each path finds its own document, whichever was opened last.
-        var asideText = await _scripting.FingerprintAsync(word, new DocumentRef(aside, null, null));
-        var copiesText = await _scripting.FingerprintAsync(word, new DocumentRef(inCopies, null, null));
-        Assert.NotNull(asideText);
-        Assert.NotNull(copiesText);
-        Assert.NotEqual(asideText, copiesText);
+        // Two of one name open: neither path is taken for either document.
+        Assert.Null(await _scripting.FingerprintAsync(word, new DocumentRef(aside, null, null)));
+        Assert.Null(await _scripting.FingerprintAsync(word, new DocumentRef(inCopies, null, null)));
         Assert.True(await _scripting.IsOpenAsync(word, aside));
         Assert.True(await _scripting.IsOpenAsync(word, inCopies));
+        Assert.Null(await _scripting.HasUnsavedChangesAsync(word, inCopies));
+        Assert.Equal(RenameResult.Missing, await _scripting.RenameIfUnchangedAsync(word, inCopies, renamed));
+        Assert.False(File.Exists(renamed));
+        Assert.False(await _scripting.SetDocIdAsync(inCopies, "#1 v1.1"));
 
-        // Changing the one beside Copies leaves the one in Copies saved, and Save, Rename and the doc ID act on the right one.
-        await _osa.RunAsync(Fixtures.WordEditAt, [aside, "Edited beside Copies."], Patient, default);
-        Assert.True(await _scripting.HasUnsavedChangesAsync(word, aside));
-        Assert.False(await _scripting.HasUnsavedChangesAsync(word, inCopies));
+        // With only the one in Copies open, its path finds it, and Rename saves its content under the new name.
+        await _osa.RunAsync(Fixtures.Word.Close, ["same.docx"], Patient, default);
+        Assert.False(await _scripting.IsOpenAsync(word, aside));
+        await _scripting.OpenAsync(word, inCopies);
+        Assert.True(await _scripting.IsOpenAsync(word, inCopies));
+        var copiesText = await _scripting.FingerprintAsync(word, new DocumentRef(inCopies, null, null));
+        Assert.NotNull(copiesText);
         Assert.Equal(RenameResult.Renamed, await _scripting.RenameIfUnchangedAsync(word, inCopies, renamed));
         Assert.True(File.Exists(renamed));
-        Assert.True(await _scripting.HasUnsavedChangesAsync(word, aside)); // not saved by the rename
-        Assert.Equal(copiesText, await _scripting.FingerprintAsync(word, new DocumentRef(renamed, null, null))); // the Copies document's content
-        Assert.False(await _scripting.SetDocIdAsync(aside, "#1 v1.1")); // neither has the property, and neither is touched
-        await _scripting.SaveAsync(word, aside);
-        Assert.False(await _scripting.HasUnsavedChangesAsync(word, aside));
+        Assert.Equal(copiesText, await _scripting.FingerprintAsync(word, new DocumentRef(renamed, null, null)));
 
         // A file name alone finds a document in Copies, and not one beside it.
         Assert.True(await _scripting.IsOpenAsync(word, Path.Combine(_folder, "Elsewhere", "renamed.docx")));
@@ -541,22 +549,6 @@ internal sealed record Fixtures(string New, string Edit, string Close, string Re
                 return ""
             end run
             """");
-
-    /// <summary>Changes the text of the document at a path, so it has unsaved changes (arguments: POSIX path, text).</summary>
-    public static string WordEditAt { get; } = """"
-        on run argv
-            set p to item 1 of argv
-            tell application "Microsoft Word"
-                with timeout of 120 seconds
-                    repeat with i from 1 to (count documents)
-                        set xd to document i
-                        if (posix full name of xd) is p then set content of text object of xd to item 2 of argv
-                    end repeat
-                    return "edited"
-                end timeout
-            end tell
-        end run
-        """";
 
     /// <summary>Adds the custom document property <c>Healdan Doc ID</c> and a footer field that shows it (arguments: file name, value).</summary>
     public static string WordInsertDocId { get; } = """"

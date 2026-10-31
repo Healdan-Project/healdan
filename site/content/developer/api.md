@@ -334,7 +334,7 @@ describes it, and its tests fail when it calls a route or reads a field the desc
 
 - **A stack to try it on.** A throwaway stack with the smoke overlay has a matter to file into: see
   [Running a Development Stack](../development-stack/#a-matter-to-upload-into). Open `/api/docs/` on it.
-- **A worked example.** `docker/tests/test-api.sh` runs an Office add-in's whole flow with `curl`: sign in, find a
+- **A worked example.** `docker/tests/test-api.sh` runs a client's whole flow with `curl`: sign in, find a
   matter, file a `.docx`, check it out, save twice, download two of its versions, check that LogicalDOC's services
   refuse the token, and sign out. It also covers M3's additions: searching inside a folder, creating a folder,
   favorites, a stamped `.docx`, a second device, moving a check-out, `ifVersion` and `saveId`, and the

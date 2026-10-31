@@ -5,12 +5,20 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import javax.xml.parsers.DocumentBuilderFactory;
+
 import org.junit.Before;
 import org.junit.Test;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
@@ -50,6 +58,43 @@ public class AddinResourceTest extends ApiTestCase {
 		assertFalse(manifest, manifest.contains("{{"));
 		assertTrue(manifest, manifest.contains("<Id>7b0f3a52-8d1e-4c4b-9a6e-2f5d0c8e4a91</Id>"));
 		assertEquals("nosniff", response.header("X-Content-Type-Options"));
+	}
+
+	@Test
+	public void testEveryResidNamesAResource() throws Exception {
+		// Office refuses a manifest whose resid names no resource, and only says so once it's uploaded, so the served
+		// manifest is read as XML here: every resid is the id of a bt:Image, bt:Url or bt:String in its Resources.
+		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+		factory.setNamespaceAware(true);
+		factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+		Document manifest = factory.newDocumentBuilder()
+				.parse(new ByteArrayInputStream(get("/api/addin/manifest.xml").send().body()));
+
+		String basicTypes = "http://schemas.microsoft.com/office/officeappbasictypes/1.0";
+		Map<String, String> resources = new HashMap<>();
+		for (String kind : new String[] { "Image", "Url", "String" }) {
+			NodeList found = manifest.getElementsByTagNameNS(basicTypes, kind);
+			for (int i = 0; i < found.getLength(); i++) {
+				Element resource = (Element) found.item(i);
+				if (resource.hasAttribute("id"))
+					assertNull("two resources are " + resource.getAttribute("id"),
+							resources.put(resource.getAttribute("id"), kind));
+			}
+		}
+
+		NodeList all = manifest.getElementsByTagName("*");
+		int resids = 0;
+		for (int i = 0; i < all.getLength(); i++) {
+			Element element = (Element) all.item(i);
+			if (!element.hasAttribute("resid"))
+				continue;
+			String resid = element.getAttribute("resid");
+			assertTrue(element.getTagName() + " names " + resid + ", which no bt: resource is",
+					resources.containsKey(resid));
+			resids++;
+		}
+		// Each app's group, its buttons' labels, tips and icons, and the function file
+		assertTrue("resids: " + resids, resids > 100);
 	}
 
 	@Test

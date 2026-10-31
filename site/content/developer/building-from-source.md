@@ -95,6 +95,8 @@ Tests marked `Stack` run against a live Healdan and skip without `HEALDAN_STACK_
 [Tests](../tests/)). Tests marked `MacKeychain` touch your real keychain, so they run only when you ask for them.
 Tests marked `MacOffice` open Word, Excel and PowerPoint on your screen, and the apps ask for Automation and Grant File
 Access the first time, so they run by hand on a Mac with Office, and are skipped unless `HEALDAN_MAC_OFFICE=1` is set.
+When Grant File Access asks, go up one level from the folder it opens in and grant `healdan-office-tests`, which
+holds every test's folder, so the app doesn't ask again.
 The one that only compiles the AppleScript (`EveryScriptCompiles`) starts nothing and needs no variable.
 
 ## Good to Know

@@ -153,7 +153,8 @@ public sealed partial class ScriptsTests
     [Fact]
     public void TheFingerprintIsTheSameInEveryScriptOfAProgram()
     {
-        // Fingerprint, SaveAs and Rename each carry their own copy of the handler, and their texts have to be comparable.
+        // Fingerprint, SaveAs, Rename and Word's SetDocId each carry their own copy of the handler, and their texts have to
+        // be comparable.
         foreach (var program in new[] { "Word", "Excel", "PowerPoint" })
         {
             var handlers = Scripts().Where(s => s.Key.StartsWith(program + ".", StringComparison.Ordinal) && s.Value.Contains("on hdFingerprint(", StringComparison.Ordinal))
@@ -166,16 +167,42 @@ public sealed partial class ScriptsTests
     [Fact]
     public void TheFindingIsTheSameInEveryScriptOfAProgram()
     {
-        // locate and isInFolder are copied into each script that finds a document, and must not drift apart.
+        // locate, findDocument, sharesItsName and isInFolder are copied into each script that finds a document, and
+        // must not drift apart.
         foreach (var program in new[] { "Word", "Excel", "PowerPoint" })
         {
-            foreach (var handler in new[] { "locate", "isInFolder" })
+            foreach (var handler in new[] { "locate", "findDocument", "sharesItsName", "isInFolder" })
             {
                 var handlers = Scripts().Where(s => s.Key.StartsWith(program + ".", StringComparison.Ordinal) && s.Value.Contains($"on {handler}(", StringComparison.Ordinal))
                     .ToDictionary(s => s.Key, s => Handler(s.Value, handler));
                 Assert.True(handlers.Count >= 2, $"{program} has too few scripts with {handler}");
                 Assert.Single(handlers.Values.Distinct());
             }
+        }
+    }
+
+    [Fact]
+    public void ADocumentWhoseNameIsSharedIsNeverTakenForTheCopy()
+    {
+        // The owner's by-hand run (2026-10-31): Word's scripting names a document by its name, so of two documents with
+        // one name it reaches only one, whichever path is asked for. locate refuses a shared name rather than guess,
+        // and IsOpen answers yes then, so a copy that may be open is never checked in from under its window (spec
+        // section 5.2).
+        foreach (var (name, text) in Scripts().Where(s => s.Value.Contains("on locate(", StringComparison.Ordinal)))
+        {
+            var locate = Handler(text, "locate");
+            Assert.True(locate.Contains("my findDocument(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, useFront)", StringComparison.Ordinal)
+                && locate.Contains("if my sharesItsName(item 1 of located) then return {missing value, \"ambiguous\"}", StringComparison.Ordinal),
+                $"{name} takes a document whose name another one has");
+            Assert.Contains("return seen > 1", Handler(text, "sharesItsName"));
+        }
+        var isOpen = Scripts().Where(s => s.Key.EndsWith(".IsOpen", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, isOpen.Count);
+        foreach (var (name, text) in isOpen)
+        {
+            var shared = text.IndexOf("if (item 2 of located) is \"ambiguous\" then return \"yes\"", StringComparison.Ordinal);
+            var missing = text.IndexOf("if (item 1 of located) is missing value then return \"no\"", StringComparison.Ordinal);
+            Assert.True(shared >= 0 && missing > shared, $"{name} takes a shared name for a closed document");
         }
     }
 
@@ -218,6 +245,128 @@ public sealed partial class ScriptsTests
     }
 
     [Fact]
+    public void SaveAsFingerprintsBeforeAndAfterTheSave()
+    {
+        // The final review's Minor 5: as Rename does, Save As fingerprints the content again after the save, finding the
+        // document by its new name, and compares the two case and all (in a handler of its own, as Word's dictionary
+        // takes "case"), so a line typed while the program saved counts as a change. The text from before the save goes
+        // last, as it may hold the separator.
+        var savesAs = Scripts().Where(s => s.Key.EndsWith(".SaveAs", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, savesAs.Count);
+        foreach (var (name, text) in savesAs)
+        {
+            InOrder(name, text,
+                "set newName to my fileNameOf(newPath)",
+                "set textBefore to my hdFingerprint(d)",
+                "my saveInFormat(d, newPath, newExt)",
+                "(name of xd) is newName then set d2 to xd",
+                "set sameAfter to \"lost\"",
+                "if my sameText(textBefore, my hdFingerprint(d2)) then",
+                "return howFound & sep & sameAfter & sep & textBefore");
+            Assert.Contains("considering case", Handler(text, "sameText"));
+        }
+    }
+
+    [Fact]
+    public void SetDocIdLeavesADocumentTypedInMeanwhileUnsaved()
+    {
+        // The final review's Important 2: Word takes keystrokes between the Apple events that update the footer's fields.
+        // SetDocId fingerprints the text before it reads saved (a key between the two leaves wasSaved false), changes the
+        // property and the fields, fingerprints again, and marks the document saved only if it was and the text is the
+        // same, case and all. It then fingerprints once more and takes the mark back if a key came in between. A
+        // keystroke meanwhile leaves the document unsaved, so Word asks about it at close.
+        var text = Scripts()["Word.SetDocId"];
+        InOrder("Word.SetDocId", text,
+            "set textBefore to my hdFingerprint(d)",
+            "set wasSaved to saved of d",
+            "set value of custom document property \"Healdan Doc ID\" of d to v",
+            "update field",
+            "set untouched to my sameText(textBefore, my hdFingerprint(d))",
+            "if wasSaved and untouched then",
+            "set saved of d to true",
+            "if not my sameText(textBefore, my hdFingerprint(d)) then set saved of d to false",
+            "end if");
+        Assert.Equal(2, Regex.Matches(text, "set saved of d").Count);
+        Assert.Single(Regex.Matches(text, "set saved of d to true"));
+        Assert.Contains("considering case", Handler(text, "sameText"));
+    }
+
+    [Fact]
+    public void RenameFingerprintsBeforeItReadsSavedAndComparesCaseAndAll()
+    {
+        // The final review's residuals: a key between reading saved and fingerprinting would be taken into both
+        // fingerprints and confirmed, so Rename fingerprints first and then refuses a document that isn't saved. After the
+        // save it compares through sameText, as Save As does, so a letter changed in its case counts as an edit.
+        var renames = Scripts().Where(s => s.Key.EndsWith(".Rename", StringComparison.Ordinal)).ToList();
+        Assert.Equal(["Excel.Rename", "Word.Rename"], renames.Select(r => r.Key).Order().ToArray());
+        foreach (var (name, text) in renames)
+        {
+            InOrder(name, text,
+                "set fpBefore to my hdFingerprint(d)",
+                "if (saved of d) is false then return \"unsaved\"",
+                "my saveInFormat(d, newPath, newExt)",
+                "(name of xd) is newName then set d2 to xd",
+                "if my sameText(fpBefore, my hdFingerprint(d2)) then return \"renamed\"");
+            Assert.DoesNotContain("fpBefore is", text);
+            Assert.Contains("considering case", Handler(text, "sameText"));
+        }
+    }
+
+    [Fact]
+    public void TheComparingIsTheSameInEveryScript()
+    {
+        // sameText and fileNameOf are copied into each script that uses them, and must not drift apart. Every script that
+        // compares through sameText has the handler (it wouldn't compile otherwise), and these are the ones that do.
+        string[] comparing = ["Excel.Rename", "Excel.SaveAs", "PowerPoint.SaveAs", "Word.Rename", "Word.SaveAs", "Word.SetDocId"];
+        foreach (var handler in new[] { "sameText", "fileNameOf" })
+        {
+            var handlers = Scripts().Where(s => s.Value.Contains($"on {handler}(", StringComparison.Ordinal))
+                .ToDictionary(s => s.Key, s => Handler(s.Value, handler));
+            Assert.True(handlers.Count >= 3, $"too few scripts with {handler}");
+            Assert.Single(handlers.Values.Distinct());
+            if (handler == "sameText")
+                Assert.Equal(comparing, handlers.Keys.Order().ToArray());
+        }
+        Assert.Equal(comparing, Scripts().Where(s => s.Value.Contains("my sameText(", StringComparison.Ordinal)).Select(s => s.Key).Order().ToArray());
+    }
+
+    [Fact]
+    public void TheHfsPathRetryPassesOnCancelsTimeoutsAndRefusals()
+    {
+        // The final review's Minor 13: where Word turns down a POSIX path, the open or save is tried again with an HFS one.
+        // A cancel (-128), a timeout (-1712) or a refusal of Automation (-1743) is raised as it came instead: tried
+        // again, it would wait up to another 300 seconds and ask for Grant File Access twice. Anything else is tried again,
+        // as the path error's own number is unconfirmed without Word.
+        var retrying = Scripts().Where(s => s.Value.Split('\n').Any(IsHfsRetry)).Select(s => s.Key).Order().ToList();
+        Assert.Equal(["Word.Open", "Word.Rename", "Word.SaveAs"], retrying);
+        foreach (var name in retrying)
+        {
+            var lines = Scripts()[name].Split('\n').Select(l => l.Trim()).Where(l => !l.StartsWith("--", StringComparison.Ordinal)).ToList();
+            foreach (var at in Enumerable.Range(0, lines.Count).Where(i => IsHfsRetry(lines[i])))
+            {
+                Assert.Equal("on error errText number errNum", lines[at - 2]);
+                Assert.Equal("if errNum is in {-128, -1712, -1743} then error errText number errNum", lines[at - 1]);
+            }
+        }
+        Assert.DoesNotContain(Scripts().Values, text => Regex.IsMatch(text, @"on error\s*\n\s*[^\n]*\(POSIX file \w+\) as text"));
+    }
+
+    /// <summary>A line that opens or saves again with the HFS form of a POSIX path.</summary>
+    private static bool IsHfsRetry(string line) => line.Contains("(POSIX file ", StringComparison.Ordinal) && line.Contains(") as text)", StringComparison.Ordinal);
+
+    /// <summary>Each line is in the script, after the one before it.</summary>
+    private static void InOrder(string name, string script, params string[] lines)
+    {
+        var from = 0;
+        foreach (var line in lines)
+        {
+            var at = script.IndexOf(line, from, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"{name} doesn't have, after what comes before it: {line}");
+            from = at + line.Length;
+        }
+    }
+
+    [Fact]
     public void AFileNameOnlyFindsADocumentInTheCopiesFolder()
     {
         // The exact path, in either spelling, is tried over every document before any file name is; and a file name
@@ -225,7 +374,7 @@ public sealed partial class ScriptsTests
         // documents of one name can be open at once (spec section 5.2).
         foreach (var (name, text) in Scripts().Where(s => s.Value.Contains("on locate(", StringComparison.Ordinal)))
         {
-            var locate = Handler(text, "locate");
+            var locate = Handler(text, "findDocument");
             var exact = locate.IndexOf("docPath is p then return", StringComparison.Ordinal);
             var twin = locate.IndexOf("docPath is pTwin then return", StringComparison.Ordinal);
             var byName = locate.IndexOf("(name of xd) is fname then", StringComparison.Ordinal);
