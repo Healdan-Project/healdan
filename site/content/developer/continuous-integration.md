@@ -60,7 +60,7 @@ The Docker build keeps its own copy, which the `maven:3.9` image both writes and
 when the pull request changes only docs (`docs/`, `site/`, and Markdown outside a `src/` folder) and the helper, the
 LibreOffice extension and the icons (`clients/helper/`, `clients/libreoffice/` and `clients/icons/`). A change under
 `clients/office/` counts as code as well as clients, because `healdan-api` packages the Office add-in's pages and
-manifest into its jar. `code` gates the Java build's test shards and the Docker build steps. `clients` is true when the
+manifest into its jar. A Markdown file there is still docs. `code` gates the Java build's test shards and the Docker build steps. `clients` is true when the
 pull request changes anything under `clients/`, `clients.yml` itself, or the API contract,
 `healdan-api/src/main/resources/healdan/api/openapi.yaml`, which the helper's contract tests read. It gates the client
 test jobs. A push always gets both true.
@@ -71,14 +71,16 @@ them all.
 | The pull request changes | `build` shards | Docker `Test` jobs | Client test jobs |
 |---|---|---|---|
 | Only the helper, the extension or the icons in `clients/` | Skipped | Skipped | Run |
-| `clients/office/` | Run | Run | Run |
+| `clients/office/`, other than Markdown | Run | Run | Run |
 | The API contract, `openapi.yaml` | Run | Run | Run |
 | Only the server, or anything else outside `clients/` and the docs | Run | Run | Skipped |
 | Only docs | Skipped | Skipped | Skipped |
 | Docs and the helper, extension or icons | Skipped | Skipped | Run |
 | The server and `clients/` | Run | Run | Run |
 
-Pushes to `master` that change only docs, the helper, the extension or the icons don't rebuild the image.
+Pushes to `master` that change only docs or Markdown files don't rebuild the image (`paths-ignore` in `docker-image.yml`
+and `build-logicaldoc.yml`). A push always gets both answers true, so one that changes only the helper, the extension
+or the icons rebuilds it.
 
 ## The Clients Check
 
@@ -104,8 +106,10 @@ request, and `Clients` doesn't wait for them (see [Releasing the macOS Helper](#
 
 The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan stack and skip here, because
 `HEALDAN_STACK_URL` isn't set. The ones marked `MacKeychain` touch the real macOS keychain, so they run by hand on a Mac. The ones marked
-`MacOffice` open Word, Excel and PowerPoint, so they run by hand on a Mac with Office, and skip without
-`HEALDAN_MAC_OFFICE=1`; CI has no Office, so they skip there too.
+`MacOffice` open Word, Excel and PowerPoint on the screen, so they run by hand on a Mac with Office, and skip without
+`HEALDAN_MAC_OFFICE=1`; CI has no Office, so they skip there too. One of them, `EveryScriptCompiles`, starts no
+app and needs no variable, but compiles the helper's AppleScripts against the apps' dictionaries, which only a Mac
+with Office has, so it too is for a Mac with Office.
 
 ### The Helper's Stack Test in the Image CI
 

@@ -19,7 +19,7 @@
 - **Helper:** .NET 10 and Avalonia 12.1.4, as M3; `System.Net.Security.SslStream` and `System.Security.Cryptography.X509Certificates` for the add-in's port; `osascript` for AppleScript. No new NuGet packages.
 - **Add-in:** Office.js from `https://appsforoffice.microsoft.com/lib/1/hosted/office.js`; plain JavaScript in classic scripts, no npm dependencies; Node's built-in test runner (`node --test`).
 
-**Status:** the owner approved this plan on 2026-10-30, and chose subagent-driven execution.
+**Status:** the owner approved this plan on 2026-10-30, and chose subagent-driven execution. **Built** on 2026-10-30 and 2026-10-31, on one branch: Tasks 1 to 11, and a Task 9b the build added (short requests to the add-in's port); Tasks 1 to 10 and 9b were each reviewed against the spec before the next began. The spec carries the plan's corrections and the build's rulings, marked "changed in the build"; the decision log lists them, and the follow-ups what the build left open. **Next:** the pull requests A to E, cut from the branch's commits, and Task 12, with the owner's by-hand checks (spec §12.3). Nothing built has yet run against Office itself.
 
 **Spec:** [`docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md`](../specs/2026-10-30-m3-5-microsoft-office-design.md), approved by the owner on 2026-10-30 after the trial. Every § below points into it.
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
@@ -98,7 +98,7 @@ These are the inputs most likely to hurt a person using M3.5 that no task's main
 
 ## Spec corrections and calls this plan makes
 
-The owner hears about these when this plan is handed over. Task 11 folds them into the spec.
+The owner hears about these when this plan is handed over. Task 11 folded them into the spec, each marked "changed in the build" in its section.
 
 1. **The manifest's template lives in `clients/office/`,** with the add-in's pages; `healdan-api` fills it in. (Spec §10 names it under both.)
 2. **`SetDocId` only updates a `Healdan Doc ID` that's already there.** The trial's script created the property when it was missing, which would make the server stamp every document saved from Word, not only those with Insert Doc ID.
@@ -934,9 +934,100 @@ Not code. In order:
 
 ## Decision log
 
+Every call made while building that the plan or the spec didn't settle, in order. "When" is the task or review that raised it; "Where" is the spec section or file it changed. Tasks 1 to 4 ran on 2026-10-30, and the rest on 2026-10-31 (the commits' dates).
+
 | Date | When | Decision | Why | Where |
 |---|---|---|---|---|
+| 2026-10-30 | Pre-flight (P1) | Task 5 passes `window.WindowName`, a string, as `DocumentRef`'s third field | the plan's `window` was the whole `FrontDocument`, and the interface takes the window's name | spec §5.2 |
+| 2026-10-30 | Pre-flight (P2) | `HelperSession` takes an `ICertificateTrust` as a constructor parameter, and `App.axaml.cs` passes `MacCertificateTrust` | the core can't reference the app's `Platform/` folder | spec §10 |
+| 2026-10-30 | Pre-flight (P3) | Task 2's by-hand `MacOffice` tests are written and compiled but not run by the implementer | they open Word, Excel and PowerPoint on the owner's screen and may prompt | spec §12.3 |
+| 2026-10-30 | Pre-flight (P4) | The by-hand checks that need the owner (Set Up's password prompt, the signed package, Office against an HTTPS server) move to one owner session after Task 10 | implementers did everything else in those steps; the cost is finding later whatever they would have caught, notably whether the Content Security Policy blocks Office.js | spec §12.3 |
+| 2026-10-30 | Pre-flight (P5) | All tasks are built on one branch; the plan's pull requests A to E are cut from its commits at the end, and nothing is pushed without the owner's go-ahead | pushing is outside the worktree | spec §10 |
+| 2026-10-30 | Pre-flight (P6) | Docs text ships in each task; the screenshots (the Healdan tab, the Healdan window, pairing, Set Up, Settings) wait for the owner's session | as M3's did | spec §11.3 |
+| 2026-10-30 | Task 1 review | The Content Security Policy keeps `https://*.microsoft.com`, `*.office.com` and `*.office.net` in `connect-src` beside the helper's ports | Office.js is Microsoft's script and reaches Microsoft's services from our page; spec §7 said only the helper's ports | spec §7 |
+| 2026-10-30 | Task 2 review | `locate` tries the exact path first, over every document, in the spellings C# passes (the path, and its `/private` twin); a file-name match comes next and only for a document in `Copies`, which the helper passes in | the first draft let a name match beat an exact path, in any folder | spec §5.2 |
+| 2026-10-30 | Task 2 review | `Word.SetDocId` reads `saved` before it sets the property | the plan's script read it after, and so lost the document's state | `SetDocId` script |
+| 2026-10-30 | Task 2 review | The by-hand command is `HEALDAN_MAC_OFFICE=1 dotnet test … --filter "Category=MacOffice"`, and CLAUDE.md, the Developer Guide and this plan say so | without the variable a plain `dotnet test` on a Mac with Office would open its apps; `EveryScriptCompiles` needs none | spec §5.2, CLAUDE.md |
+| 2026-10-30 | Task 3 | `CopyNames.OfficeOwnerNames` is the union of M3's Word forms and every program's `OfficePrograms.OwnerNames` | a superset never misses Word's owner file | spec §5.2 |
+| 2026-10-30 | Task 3 | `CopyCycle.AdoptNewAsync` takes an optional app and records LibreOffice by default; `OfficeFiling` passes Microsoft Office | its other caller is the extension's `file` route, whose window LibreOffice holds | spec §5.5 |
+| 2026-10-30 | Task 3 | Task 8 widens the installed-app detection with LaunchServices | it adds that plumbing for `DefaultApps` anyway | spec §5.10 |
+| 2026-10-30 | Task 4 | The rename keeps the same `Session` and changes its `Path` under the lock | the rename runs inside that session's save job; a second session would leave a second queue and stale waiters | spec §5.4 |
+| 2026-10-30 | Task 4 | The close watcher lets go of the old name before the rename call | Word moves its owner file during Save As, so the plan's order read every rename as a close and checked the document in | spec §5.4 |
+| 2026-10-30 | Task 4 | `ICycleEvents.Reopened` (a default no-op) and `HelperSession`'s handler | the menu must drop "(closed unexpectedly)" once Word has the copy again | spec §5.14 |
+| 2026-10-30 | Task 4 review | The crash window is dismissed once the save-back works; Send and Check In and Bring refuse a copy that is no longer crashed | the window stayed live after recovery, and its Send and Check In would check in an open document | spec §5.14 |
+| 2026-10-30 | Task 4 review | After a rename that failed or timed out, a file or owner file at the new name is followed as a rename with changed content; before acting on an Office copy's close, an unfinished rename is followed instead; "treat as unsaved" otherwise stands | a rename Word completed anyway was checked in as a close, orphaning its window | spec §5.4 |
+| 2026-10-30 | Task 4 review | The save-back asks `IsOpen` by path for up to 30 seconds before `SaveAs`, stays crashed until it works, and tries again; the close watcher lets go meanwhile | a one-shot `SaveAs` could save the front document over the copy | spec §5.14 |
+| 2026-10-31 | Task 5 | `409 wrong-window` means the mark is set but not shown for 3 seconds while the front window's path or name is no longer the ticket's; PowerPoint decides by the ticket's window name | the seam can't read another document's mark directly | spec §5.5 |
+| 2026-10-31 | Task 5 | `OfficeFiling`'s route errors are one exception type carrying the code | for the port to map | spec §5.8 |
+| 2026-10-31 | Task 5 | The ticket carries the folder, name and properties (`NewDocument`); PowerPoint isn't waited for a mark; Save as New Document is refused `wrong-window` at `save-new` when `url` names another copy; `Adopted(path, true)` still sends when the cycle already took the write | all within the spec | spec §5.5 |
+| 2026-10-31 | Task 5 | The add-in sets no mark in PowerPoint | PowerPoint never shows a mark to AppleScript, and the mark would stay in its files | spec §5.5 |
+| 2026-10-31 | Task 5 | The port turns a `file://` address into a path before looking for a copy | Office may give a file URL | spec §5.8 |
+| 2026-10-31 | Task 5 review | The fingerprint is taken first, as the bytes arrive | the plan's order folded an edit made during the mark wait into the filed bytes | spec §5.5 |
+| 2026-10-31 | Task 5 review | `SaveAs` never falls back to the front window, for any caller; the crash save-back has the same guarantee | the fallback could save another document as the copy | spec §5.2 |
+| 2026-10-31 | Task 6 | `MacCertificateTrust.IsTrusted` uses Security.framework's TLS server evaluation for `127.0.0.1`, not `X509Chain.Build` | `X509Chain` can't see a trust setting limited to SSL: it reported the trial's trusted certificate as untrusted | spec §5.13 |
+| 2026-10-31 | Task 6 | "Set Up Microsoft Office…" shows only on a Mac with Office installed, while Set Up is needed | a Mac without Office has nothing to set up | spec §5.13 |
+| 2026-10-31 | Task 6 review | `AddinCertificate.ForServer` serves an existing, unexpired certificate and never makes or renews one | renewal belongs to Set Up, or the port could mint an untrusted certificate under a working one | spec §5.13 |
+| 2026-10-31 | Task 7 | Nine wrong pairing codes in a row pause pairing for 10 minutes (`403 too-many-tries`) | another local user could otherwise start pairings and guess a six-digit code in under an hour | spec §5.9 |
+| 2026-10-31 | Task 7 review | The port lives as long as the helper, signed in or not; signed out, keyed routes answer `409 signed-out`; `hello`'s server and the Origin check read `settings.json` | the pane should say why, and a port tied to a sign-in is unreachable exactly then | spec §5.8 |
+| 2026-10-31 | Task 7 review | The port opens while the certificate exists, is unexpired and trusted; Set Up's renewal is swapped in on the same port | a working certificate shouldn't take the add-in down in its last 30 days | spec §5.8 |
+| 2026-10-31 | Task 7 | `hello` keeps the check order, so with no server in `settings.json` it answers `bad-origin` and `"server": null` can't be reached | an add-in can't be checked against a server the helper has never had | spec §5.8 |
+| 2026-10-31 | Task 7 | The add-in keeps its key in `localStorage` in Office's web view | that store is per app, inside the app's container; the key is the only defence against another page on the server's origin | spec §5.9 |
+| 2026-10-31 | Task 7 | The pane's message for `signed-out` reads "signed out, or still starting up" | a signed-in helper answers `signed-out` until its documents are published | spec §6.3 |
+| 2026-10-31 | Task 8 | The add-in's test command is `node --test 'clients/office/test/*.test.js'`, quoted | Node 21 and later read `--test`'s arguments as file patterns, so a folder fails | spec §6.1, CLAUDE.md |
+| 2026-10-31 | Task 8 | Locally, the add-in's tests run under Visual Studio Code's bundled Node (`ELECTRON_RUN_AS_NODE=1 "/Applications/Visual Studio Code.app/Contents/MacOS/Code" --test …`, Node 24.18.1); CI runs Node 22 | no Node is installed on the Mac, and none was downloaded | |
+| 2026-10-31 | Task 9 | `saveAsNewVersion` asks `state` first; `insertDocId` passes an empty string for a document not in Healdan; `pairFinish` refuses a code that isn't six digits itself; each port probe times out after 3 seconds | a read-only copy and a document not in Healdan need messages of their own; a typo shouldn't cost a try; a port held by something silent mustn't hang the window | spec §5.6, §5.7, §5.9 |
+| 2026-10-31 | Task 9 (9b) | Any keyed route still running after 20 seconds answers `202 {"pending": id}`, and `POST /v1/result {"id"}` waits up to 20 seconds more for its outcome, which is kept for 10 minutes, answered once, to its own key | WebKit is likely to give up on a request idle for about a minute, while the windows wait for the user and `file` can wait 300 seconds; a dropped answer would lose a ticket | spec §5.8 |
+| 2026-10-31 | Task 9b | A missing `X-Healdan-Protocol` stays `400 bad-request`; `426` is for a protocol the helper doesn't speak | the brief was wrong; the existing check is pinned by a test | spec §5.8 |
+| 2026-10-31 | Task 9b | Accepted: slow-route tests are gate-driven; the cap of 64 counts running and uncollected entries; an internal `WhenFinished` seam; the add-in retries a failed `result` once; a pending route keeps its session across a sign-out | a 3-times delay is racy; an outcome is answered once, so a repeat can't act twice | spec §5.8 |
+| 2026-10-31 | Task 9b | Once `call` has followed a `202`, any failure to get the outcome is `lost-result` ("check the document in Healdan before trying again"), not the route's own "try again" | a pending `file` may have finished, and trying again could file twice | spec §5.8 |
+| 2026-10-31 | Task 10 | The Office.js calls are in `office-glue.js`, not `office.js` | Office.js may look for its own script tag by that name, and a second one could confuse it | spec §6.1 |
+| 2026-10-31 | Task 10 | The window polls `ping`, never `state`; Insert Doc ID updates an existing field rather than adding a second | `state` makes the helper drive the app at every check; the User Guide says pressing it twice leaves one field | spec §6.3, §5.7 |
+| 2026-10-31 | Task 10 review | Pairing happens in a `displayDialogAsync` window, which hands the key to the button with `messageParent`; the button's press isn't completed until the dialog closes | the documented way for a dialog to talk to a function command; the key doesn't depend on shared storage | spec §5.9 |
+| 2026-10-31 | Task 10 review | Office's error text goes from the button to the window with `messageChild`, never in the window's address | the server's access log could hold file names | spec §6.2 |
 
 ## Follow-ups
 
-Filled in as the build finds them.
+Filled in as the build found them; left open when Tasks 1 to 11 were built. None is a known failure. The reviews' style points are left out.
+
+**For the owner's session** (spec §12.3 has the checks themselves)
+- `state` may ask Office for its front window by AppleScript and so block behind a Grant File Access dialog. It is read-only, and the window polls `ping`, but a button's `state` call can wait (`AddinHandler.cs`).
+- `commands.js`'s `displayDialogAsync` callback is unguarded: a throw there leaves `event.completed()` uncalled and the button busy. Wrap it, calling the failure path.
+- There is no fallback timer if Office never raises `DialogEventReceived` after the user closes the window.
+- An origin in another form (a port, a trailing slash) drops the paired message silently, and the manifest declares no DialogApi 1.2 requirement.
+- Accessibility: a `display:none` live region may not announce when it is shown; `aria-busy` is on all of `<main>` for up to 12 seconds; focus moves from the message to the code field at once; the message and the status repeat each other.
+- `MacCertificateTrust`'s cancel, failure, kill and timeout paths are untested; `OfficeSetUp.TrustAsync` re-checks `NeedsSetUp` straight after `security` returns, with no retry for trustd's lag; renewal leaves the old certificate and its trust entry in the login keychain.
+- The `check` icon's path data was written by hand in the release's format, not copied from Tabler 3.50.0; diff it against the real file.
+- Docs: the Install page names "a helper version with Microsoft Office support" with no number, and Task 12 should say 0.4.0; `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
+
+**Lost work and reachability, for the final review**
+- Adopting a rename on the owner file alone lets `CopyStore.Moved` delete the old copy without checking it's confirmed (`CopyCycle.cs`, `CopyStore.cs`). The pre-rename check covers the file but not the owner names. Theoretical: no helper flow leaves a stray owner file.
+- Until the save-back succeeds, the crash window's Send and Check In can still check in under Word's restored window.
+- `Word.SetDocId` reads `saved`, updates fields over many Apple events, then sets `saved` true: a keystroke in between is marked saved and lost at close. It runs after every Word rename.
+- An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
+- Word relaunched within one crash poll (5 seconds) of a Force Quit never registers as a crash, so its recovered window isn't saved back. A restored window open before the helper starts is treated as open and never saved back (pre-existing).
+- A body with an escaped lone surrogate (`{"app":"\ud800"}`) passes UTF-8 validation and JSON parsing, then throws in `TryGetValue<string>` and answers `500` with a stack trace in the log, without a key (`AddinHandler.cs`). `result` maps it to `400`; the other routes should.
+- `CopyCycleTests.PartialWriteNotSent` (M3's) failed once in a full run, then passed six times: possibly flaky.
+- A Settings change mid-flight re-records a copy's app when `CopyStore.Create` runs again, so a read-only or ended copy still open in Word could move its close watch to LibreOffice. Narrow.
+
+**The scripts and the seam**
+- `OsaRunner` promises its errors never carry arguments, but `osascript`'s stderr can echo values.
+- The HFS-path retry's bare `on error` also catches a timeout or a refusal, and retries for up to another 300 seconds, asking Grant File Access twice (`Word.Open`, `Word.Rename`, `Word.SaveAs`).
+- `PowerPoint.Reopen` reopens the argument path, not the located presentation's own full name; reachable through the `Copies` name fallback. `MacOfficeScripting`'s `copiesFolder` is optional, so a caller that forgets it loses the name fallback silently.
+- Window-name matching is the last step: a new document reusing a closed window's name, such as "Document1", during an upload could be saved as the copy. With neither a mark nor a window name, the window check passes on null equals null, and `SaveAs` then answers missing after filing.
+- A failed `SaveAs` after Save as New Document leaves the original Closing with its watchers off. Save-new's refusals (no document open; a mismatched `url`) throw without a notice, where spec §5.5 step 4 says "with a notice".
+- After a rename or reopen the new name is watched with `lockSeen: false`, so a close during the tail isn't seen until the program quits; `CloseWatcher` treats a null `LockWritten` as a reopen; the save-back's retry has no end while an owner file stays, at about seven `osascript` launches per 36 seconds.
+- `MicrosoftOfficeApp.IsRunningFor` passes macOS process names, and `InstalledApps` checks macOS bundle paths, in the core; a Windows port would translate them. `CopiesNotice`'s text is macOS-specific, called above the seam.
+- Detection is by bundle identifier but launch is by name (`open -a LibreOffice`), and LaunchServices may answer for an app in the Trash. The system default can't be recorded as an explicit choice without switching away and back.
+
+**The add-in's port**
+- No cap on connections at once; one 60-second window for TLS and the head; the body buffer is allocated at its declared length up front; refusals are logged without a rate limit, so a page in Safari can push history out of the 2 MiB log.
+- An app pairing again leaves its old key valid until Forget. A slow request from one server's page across a sign-out and a sign-in to another can run on the other's cycle (60 seconds at most).
+- A running port keeps serving a certificate past its expiry, and says "stays closed" in its log while open. `Dispose` disposes the certificate during handshakes. Signed in but not yet started also answers `signed-out`, while `ping` says `signedIn: true`.
+- A `file://` address with a literal `%` in a name Office didn't escape would be decoded wrongly; the front window still decides then.
+- An idempotent call (`ping`, `state`) isn't retried when the helper comes back on the same port. The remembered port skips `hello`, and `not-paired` from any port drops the key, which is within the two-people limitation; a failed `setItem` after pairing leaves a key the helper keeps.
+
+**Server and docs**
+- No test parses the served manifest as XML or checks that every `resid` has a `bt:*` id. `maven-resources-plugin` is unpinned in `healdan-api/pom.xml`. The blank `server.url` branch is untested, and the manifest varies by `Host` with no `Cache-Control: no-cache`.
+- The Install pages omit that the proxy must pass `Host`, and that `X-Forwarded-Proto` is believed only from `LOGICALDOC_TRUSTED_PROXIES`.
+- When Things Go Wrong's message table omits `too-large`, `too-many-pending`, `no-ticket`, `mark-left`, `storage-failed`, `internal-error` and `bad-request`. Known Limitations should mention the remembered-port case under two people on one Mac.
+- A Markdown file under `clients/office/` stays docs for `code-changed.sh`, which the Developer Guide and CLAUDE.md now say.
