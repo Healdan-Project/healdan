@@ -6,10 +6,17 @@
   which a signed build without them showed it doesn't need (2026-10-29): package.sh signs the bundle's native
   libraries with the helper's own identity, so library validation accepts them. No sandbox: the helper starts
   LibreOffice, and keeps its copies in its own folders.
+
+  apple-events lets the hardened runtime send Apple events to other apps: the helper drives Word, Excel and
+  PowerPoint with AppleScript (M3.5 spec §5.2, §5.11). Without it macOS refuses the events without asking, and
+  Info.plist's NSAppleEventsUsageDescription is what the Automation prompt says. No other app is named: macOS asks
+  once for each app it drives.
 -->
 <plist version="1.0">
 <dict>
   <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <key>com.apple.security.automation.apple-events</key>
   <true/>
 </dict>
 </plist>
