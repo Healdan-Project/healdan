@@ -35,6 +35,7 @@ public sealed class HelperSettingsTests : IDisposable
         Assert.True(settings.LoginItemRegistered);
         Assert.Null(settings.Kinds);
         Assert.Null(settings.ChosenApp("Documents"));
+        Assert.Null(settings.CopiesAnnounced);
     }
 
     [Theory]

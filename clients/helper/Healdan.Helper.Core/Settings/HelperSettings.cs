@@ -32,6 +32,12 @@ public sealed class HelperSettings
     public Dictionary<string, string>? Kinds { get; set; }
 
     /// <summary>
+    /// The programs (<c>Word</c>, <c>Excel</c>, <c>PowerPoint</c>) the helper has told, before their first save into
+    /// Copies, how to give them access to it (<see cref="Office.CopiesNotice"/>). Null in a file from before it was kept.
+    /// </summary>
+    public List<string>? CopiesAnnounced { get; set; }
+
+    /// <summary>
     /// The app chosen for the kind with this label, or null when none was, or when the settings name one that isn't an
     /// app the helper opens copies in (an older or edited file): that is no choice.
     /// </summary>

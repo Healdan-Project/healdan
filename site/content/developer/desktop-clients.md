@@ -29,8 +29,9 @@ app.
   - `Api/`: the API client, written by hand against `openapi.yaml`;
   - `Copies/`: the local copies and the record beside each;
   - `Cycle/`: the open-save-close cycle, and the apps it opens copies in;
-  - `Office/`: Word, Excel and PowerPoint: which program opens a file, `MicrosoftOfficeApp`, and `IOfficeScripting`
-    with its macOS implementation;
+  - `Office/`: Word, Excel and PowerPoint: which program opens a file, `MicrosoftOfficeApp`, `IOfficeScripting`
+    with its macOS implementation, and what the cycle asks of the programs after a save or a crash
+    (`OfficeAfterSave`, `CopiesNotice`);
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
@@ -107,9 +108,27 @@ size the helper uses, the widths then match CoreText's.
   characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`; a short
   name loses one for Word). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
   A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
+- **Renaming after a save (Word and Excel):** they take the window's title from the file name, so once a save is
+  confirmed, `CopyCycle.RenameAfterSaveAsync` has the program save the copy under the confirmed version's name
+  (`IOfficeScripting.RenameIfUnchangedAsync`), and the record (`CopyStore.Moved`), the session (`Rekey`) and both
+  watchers follow it. It runs in the confirmed save's job, only when no newer save or Save as New Version waits, and
+  not while the copy has changed since its confirmation. The watchers let go of the old name first, so the program's
+  writes aren't saves and its owner file moving isn't a close. The renamed file's hash becomes the confirmed one, so
+  it isn't sent, unless an edit landed in it: the program saw one between its check and its save (`RenamedChanged`),
+  or the old file changed as the rename began, and then it goes up as the next save. With unsaved changes in the
+  window, or when the program can't be asked (logged), nothing moves, and the next confirmation tries again. Then
+  Word's doc ID footer moves on (`SetDocIdAsync`), where the document has one. PowerPoint's copies keep their name.
+  Before a program's first save into `Copies`, `CopiesNotice` says how to grant it access, once per program
+  (`copiesAnnounced` in `settings.json`). A start that finds a renamed file the record didn't follow takes it as the
+  copy, and sends it.
 - **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
   or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
-  nothing of a copy another has).
+  nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
+  (`CloseWatcher.WatchCrashed`): once its owner file is written again, as when Word restores its "Recovered" window
+  at the copy's path, the helper saves that window over the copy (`SaveAsAsync`) and the folder watcher sends it.
+  The crash window's Reopen leaves that watch in place.
+- **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
+  close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close.
 - **Starting:** `ResumeAsync` reads every record, resends what wasn't confirmed, checks in what closed meanwhile, and
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
   `saveId` and the kind it went up as (the record's `sentKind`), and then, when newer content or a version was
@@ -131,8 +150,9 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   copy. `/`, `:`, `\` and control characters in the name become `-`.
 - **At most 241 bytes** in UTF-8, so the record beside it, `.<copy's name>.healdan.json`, fits in 255 bytes, and so
   does LibreOffice's lock file.
-- **A copy keeps the name it was opened with** while it's open. The record holds its file name and the version it
-  holds, and the title comes from the record.
+- **A copy keeps the name it was opened with** while it's open, except in Word and Excel, which save it under each
+  confirmed version's name (above). The record holds its file name and the version it holds, and the title comes
+  from the record.
 - **A copy with unconfirmed changes is never deleted** by the helper, and `CopyStore.Create` never deletes anything.
   Once nothing looks after one (its check-out ended, or Healdan refused it, and its window closed), the menu lists it
   under Not Yet in Healdan (`CopyCycle.KeptCopies`), and choosing it opens it as it is, with no check-out
@@ -330,7 +350,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 
 - **The helper's core** has tests for each part, the cycle's failure cases included, against a fake server
   (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`). A fake `IOfficeScripting`
-  (`FakeScripting`) stands in for Word, Excel and PowerPoint, with their owner files.
+  (`FakeScripting`) stands in for Word, Excel and PowerPoint, with their owner files, and renames, saves and reopens
+  copies as they do. `OfficeRenameTests` and `OfficeCrashTests` run the cycle over it.
 - **The cycle's tests wait for what they need,** not for a fixed time, so a slow runner can't change what they see.
   `Wait.Until` polls for it (a confirmation, a save reaching `FakeApi`, or one queued, through the internal
   `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`

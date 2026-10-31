@@ -843,7 +843,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             var store = new CopyStore(_paths, Address(api.Server));
             SettleCopies(store, api.Server);
-            cycle = new CopyCycle(api, store, _apps, _device.Id, this, _timings);
+            cycle = new CopyCycle(api, store, _apps, _device.Id, this, _timings,
+                new OfficeAfterSave(new CopiesNotice(_paths, _notifier), _log));
             lock (_gate)
                 _resuming = cycle; // its events name copies by their title
             await cycle.ResumeAsync();
@@ -1145,6 +1146,13 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             _crashed.Add(copy.Path);
         _log.Warn($"{copy.Title} closed unexpectedly; its copy and check-out are kept");
         _windows.Crashed(copy);
+        RaiseChanged();
+    }
+
+    void ICycleEvents.Reopened(string path)
+    {
+        lock (_gate)
+            _crashed.Remove(path); // no longer "(closed unexpectedly)": the app has it open again
         RaiseChanged();
     }
 

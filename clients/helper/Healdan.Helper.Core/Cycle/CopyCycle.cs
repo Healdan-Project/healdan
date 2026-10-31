@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Copies;
+using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
 
@@ -16,13 +18,18 @@ namespace Healdan.Helper.Core.Cycle;
 /// confirmed (spec §2.4). What a later step needs is in the copy's record, written before each send, so
 /// <see cref="ResumeAsync"/> carries on after a restart.
 /// <para>A copy keeps the file name it was opened with while the app has it open (R19); its title comes from the
-/// record's <see cref="CopyRecord.FileVersion"/>. Methods taking a path find the copy by its file name, as every copy is
-/// in the one folder. Nothing here logs, and no event carries a token or a file's contents.</para>
+/// record's <see cref="CopyRecord.FileVersion"/>. Word and Excel take the title from the file name, so their copies are
+/// saved under each confirmed version's name, and the session follows (M3.5 spec §5.4, <see cref="RenameAfterSaveAsync"/>).
+/// Methods taking a path find the copy by its file name, as every copy is in the one folder. Nothing here logs but
+/// <see cref="OfficeAfterSave"/>'s failed calls to Office, and no event carries a token or a file's contents.</para>
 /// </summary>
 public sealed class CopyCycle : IDisposable
 {
     private const string Snapshot = "snapshot";
     private const string NewVersion = "version";
+
+    /// <summary>How long PowerPoint's close and reopen may leave a presentation without its owner file (M3.5 spec §5.5).</summary>
+    private static readonly TimeSpan ReopenWait = TimeSpan.FromSeconds(10);
 
     private readonly HealdanApi _api;
     private readonly CopyStore _store;
@@ -30,6 +37,7 @@ public sealed class CopyCycle : IDisposable
     private readonly string _deviceId;
     private readonly ICycleEvents _events;
     private readonly CycleTimings _timings;
+    private readonly OfficeAfterSave _office;
 
     /// <summary>Guards the sessions and every read-modify-write of a record. Events are raised outside it.</summary>
     private readonly object _gate = new();
@@ -48,12 +56,17 @@ public sealed class CopyCycle : IDisposable
     /// computer's. Names aren't compared, as two computers can share one.
     /// </param>
     /// <param name="timings">The trial's timings by default (<see cref="CycleTimings.Default"/>).</param>
+    /// <param name="office">
+    /// What the cycle asks of Word, Excel and PowerPoint after a save and after a crash. Without one, it still renames
+    /// their copies, but tells no one before a program's first save into Copies and logs nothing.
+    /// </param>
     /// <param name="apps">
     /// The apps a copy opens in: a new copy in the one the chooser names for its file, an existing one in the one its record
     /// names. A file no office app edits (spec §5.11, <see cref="FileKinds"/>) opens read-only in the set's
     /// <see cref="DefaultApp"/>, never checked out; without one, every file opens in an office app.
     /// </param>
-    public CopyCycle(HealdanApi api, CopyStore store, OfficeApps apps, string deviceId, ICycleEvents events, CycleTimings? timings = null)
+    public CopyCycle(HealdanApi api, CopyStore store, OfficeApps apps, string deviceId, ICycleEvents events, CycleTimings? timings = null,
+        OfficeAfterSave? office = null)
     {
         _api = api;
         _store = store;
@@ -61,13 +74,15 @@ public sealed class CopyCycle : IDisposable
         _deviceId = deviceId;
         _events = events;
         _timings = timings ?? CycleTimings.Default;
+        _office = office ?? new OfficeAfterSave();
         store.EnsureFolders();
         _saves = new SaveWatcher(store.Folder, _timings, path => Guard(() => OnSettled(path)));
-        _closes = new CloseWatcher(_timings, path => Guard(() => Close(path)), path => Guard(() => OnCrashed(path)));
+        _closes = new CloseWatcher(_timings, path => Guard(() => Close(path)), path => Guard(() => OnCrashed(path)),
+            path => Guard(() => OnReopened(path)));
     }
 
     /// <summary>An open copy: its save queue and what the cycle knows about it beyond its record.</summary>
-    private sealed class Session
+    internal sealed class Session
     {
         public Session(string path, long docNumber, bool readOnly, Func<Session, SaveJob, CancellationToken, Task<SaveOutcome>> send,
             CycleTimings timings, Action<string, bool> waiting, Action<Session, SaveJob, Exception> failed)
@@ -75,10 +90,13 @@ public sealed class CopyCycle : IDisposable
             Path = path;
             DocNumber = docNumber;
             ReadOnly = readOnly;
-            Queue = new SaveQueue((job, ct) => send(this, job, ct), timings, w => waiting(path, w), (job, e) => failed(this, job, e));
+            Queue = new SaveQueue((job, ct) => send(this, job, ct), timings, w => waiting(Path, w), (job, e) => failed(this, job, e));
         }
 
-        public string Path { get; }
+        /// <summary>
+        /// The copy's path. It changes only when Word or Excel renames the copy after a save (<see cref="Rekey"/>), under the gate.
+        /// </summary>
+        public string Path { get; set; }
 
         public long DocNumber { get; }
 
@@ -241,12 +259,13 @@ public sealed class CopyCycle : IDisposable
                 // Tried again at the next start.
             }
         }
-        foreach (var (path, record) in _store.All())
+        foreach (var (listed, listedRecord) in _store.All())
         {
             lock (_gate)
-                if (Find(path) is not null)
+                if (Find(listed) is not null)
                     continue;
-            var app = _apps.Of(record); // each copy with the app that has it
+            var app = _apps.Of(listedRecord); // each copy with the app that has it
+            var (path, record) = UnfinishedRename(listed, listedRecord, app) ?? (listed, listedRecord);
             if (!File.Exists(path))
             {
                 // A download or adoption that never finished: nothing to send or lose. Release a check-out it took,
@@ -299,6 +318,7 @@ public sealed class CopyCycle : IDisposable
             if (!running)
             {
                 s.Crashed = true;
+                WatchForRecovery(s);
                 Raise(ev => ev.Crashed(path));
             }
             if (unconfirmed && TryRead(path) is { } content)
@@ -764,19 +784,22 @@ public sealed class CopyCycle : IDisposable
     private void Reopen(Session live)
     {
         bool closing;
+        var app = AppOf(live.Path);
         lock (_gate)
         {
             closing = live.Closing;
-            if (!closing && live.Crashed)
+            // A crashed copy of Word's, Excel's or PowerPoint's stays watched for its program to have it open again
+            // (M3.5 spec §5.14): opening it brings back the window the program recovered, which is saved back over it.
+            if (!closing && live.Crashed && OfficeAfterSave.Driver(app, live.Path) is null)
             {
                 live.Crashed = false;
-                _closes.Watch(live.Path, AppOf(live.Path));
+                _closes.Watch(live.Path, app);
             }
         }
         if (closing)
             Raise(ev => ev.Error($"#{live.DocNumber} is still being checked in. Open it again once that's done."));
         else
-            AppOf(live.Path).Open(live.Path);
+            app.Open(live.Path);
     }
 
     /// <summary>
@@ -1013,6 +1036,8 @@ public sealed class CopyCycle : IDisposable
             return await ReleaseAsync(s, job, ct); // a repeat of a save that kept it checked out to us: release it now
         if (job.CheckIn && confirmed)
             Finish(s);
+        else if (confirmed)
+            await RenameAfterSaveAsync(s); // Word's and Excel's titles come from the file name (M3.5 spec §5.4)
         return SaveOutcome.Done;
     }
 
@@ -1339,7 +1364,229 @@ public sealed class CopyCycle : IDisposable
                 return;
             s.Crashed = true;
         }
+        WatchForRecovery(s);
         Raise(ev => ev.Crashed(s.Path));
+    }
+
+    // --- Word, Excel and PowerPoint (M3.5) -------------------------------------------------------------------------
+
+    /// <summary>
+    /// M3.5 spec §5.4: Word and Excel take the window's title from the file name, so once Healdan has confirmed a save
+    /// of one of their copies, the program saves the copy under the confirmed version's name, and the copy's record,
+    /// its session and its watchers follow. It runs in the confirmed save's job, so nothing else is sent for the copy
+    /// meanwhile, and only when no newer save or Save as New Version waits, whose own confirmation renames it instead.
+    /// With unsaved changes in the window, or when the program can't be asked, nothing moves, and the next confirmed
+    /// save tries again. The renamed file is the confirmed content from then on, so it isn't sent again.
+    /// <para>Review Focus 1: nothing the user saved may be taken for that content. The copy isn't watched while the
+    /// program renames it, so the rename doesn't start if the copy has changed since its confirmation; and the renamed
+    /// file goes up as the next save when the program saw an edit land between its check and its save
+    /// (<see cref="RenameResult.RenamedChanged"/>), when the file it was saved from changed as the rename began, or when
+    /// it changes before it's watched again.</para>
+    /// </summary>
+    internal async Task RenameAfterSaveAsync(Session s)
+    {
+        string old;
+        CopyRecord record;
+        lock (_gate)
+        {
+            if (s.ReadOnly || s.Closing || s.Ended || s.Crashed || s.NextKind is not null || s.Queue.Queued is not null
+                || Find(s.Path) != s || Record(s.Path) is not { ReadOnly: false } found)
+                return;
+            (old, record) = (s.Path, found);
+        }
+        var app = _apps.Of(record);
+        if (OfficeAfterSave.Driver(app, old) is not { } driver || !OfficePrograms.RenamesAfterSave(driver.Program))
+            return;
+        var newPath = Path.Combine(_store.Folder, CopyNames.FileName(record.DocumentName, record.DocNumber, record.FileVersion, false));
+        if (Name(newPath) == Name(old) || Path.Exists(newPath) || Record(newPath) is not null)
+            return; // the name it has already, or another copy's, which the program would save over
+
+        var lockSeen = _closes.LockSeen(old);
+        _saves.Unwatch(old); // the program's writes under either name are its own, not saves
+        _closes.Unwatch(old); // its owner file goes to the new name, which isn't the window closing
+        var moved = false;
+        try
+        {
+            if (!SameHash(HashOrNull(old), record.ConfirmedHash))
+                return; // saved again since the confirmation: that save goes up, and its confirmation renames the copy
+            var result = await _office.RenameAsync(driver.Scripting, driver.Program, old, newPath);
+            if (result is not (RenameResult.Renamed or RenameResult.RenamedChanged) || !File.Exists(newPath))
+                return;
+            // Word's Save As leaves the file it saved from as it was, so that file changed means a save landed as the
+            // rename began, and the renamed file holds it.
+            var oldNow = HashOrNull(old);
+            var written = Settled(newPath);
+            var changed = result == RenameResult.RenamedChanged || written is null
+                || (oldNow is not null && !SameHash(oldNow, record.ConfirmedHash));
+            bool closing;
+            lock (_gate)
+            {
+                var current = Record(old) ?? record;
+                _store.Moved(old, newPath, changed ? current : current with { ConfirmedHash = written!.Value.Hash });
+                Rekey(s, newPath);
+                if (!changed)
+                    s.LastHash = written!.Value.Hash; // so a look at it before this job ends doesn't queue it either
+                moved = true;
+                closing = s.Closing;
+            }
+            if (closing)
+                return; // its check-in, queued meanwhile, reads the renamed file
+            _saves.Watch(newPath);
+            _closes.Watch(newPath, app, appSeenRunning: true);
+            bool versionWaits;
+            lock (_gate)
+                versionWaits = s.NextKind is not null;
+            if (changed || versionWaits || FileStamp.Of(newPath) != written!.Value.Stamp)
+                _saves.Touch(newPath);
+            await _office.MoveFooterOnAsync(driver.Scripting, driver.Program, newPath,
+                CopyNames.DocRef(record.DocNumber, record.FileVersion));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            // Only the record's move writes here, once the program has saved the copy under its new name: the next
+            // start finds that file and carries on with it (UnfinishedRename).
+            Raise(ev => ev.Error($"{Title(record)} was saved under its new name, but the helper couldn't move its record: "
+                + $"{e.Message} Quit Healdan Helper and start it again to carry on with it."));
+        }
+        finally
+        {
+            if (!moved && !IsClosing(s))
+            {
+                _saves.Watch(old);
+                _saves.Touch(old); // a save written while it wasn't watched still goes up
+                _closes.Watch(old, app, appSeenRunning: true, lockSeen);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The session follows its copy to <paramref name="newPath"/>, which its app saved it under, keyed by the new file name.
+    /// </summary>
+    internal void Rekey(Session s, string newPath)
+    {
+        lock (_gate)
+        {
+            var old = s.Path;
+            if (_sessions.TryGetValue(Name(old), out var current) && current == s)
+                _sessions.Remove(Name(old));
+            s.Path = newPath;
+            _sessions[Name(newPath)] = s;
+            if (_waiting.Remove(old))
+                _waiting.Add(newPath); // the queue's own retry, still waiting, ends under the new path
+        }
+    }
+
+    /// <summary>
+    /// At start: a rename (<see cref="RenameAfterSaveAsync"/>) the helper stopped in the middle of, after the program
+    /// saved the copy under the confirmed version's name but before the record followed. That file, which no record
+    /// names, is the copy now, and the window under the old name is gone. As nothing says what Healdan has of it, it
+    /// counts as changed, so it goes up rather than the old window being taken for closed and checked in.
+    /// </summary>
+    private (string Path, CopyRecord Record)? UnfinishedRename(string path, CopyRecord record, IOfficeApp app)
+    {
+        if (record.ReadOnly || !record.CheckedOutHere || OfficeAfterSave.Driver(app, path) is not { } driver
+            || !OfficePrograms.RenamesAfterSave(driver.Program))
+            return null;
+        var renamed = Path.Combine(_store.Folder, CopyNames.FileName(record.DocumentName, record.DocNumber, record.FileVersion, false));
+        if (Name(renamed) == Name(path) || !File.Exists(renamed) || Record(renamed) is not null || app.LockExists(path))
+            return null;
+        _store.Moved(path, renamed, record);
+        return Record(renamed) is { } moved ? (renamed, moved) : null;
+    }
+
+    /// <summary>
+    /// M3.5 spec §5.14: a crashed copy of Word's, Excel's or PowerPoint's is watched for its program to have it open again.
+    /// </summary>
+    private void WatchForRecovery(Session s)
+    {
+        var app = AppOf(s.Path);
+        if (!s.ReadOnly && OfficeAfterSave.Driver(app, s.Path) is not null)
+            _closes.WatchCrashed(s.Path, app);
+    }
+
+    /// <summary>
+    /// M3.5 spec §5.14, Review Focus 4: the program has a crashed copy open again by itself, as Word restores a
+    /// "Recovered" window at the copy's own path, whose Save opens Save As. The copy is looked after as an open one again,
+    /// and the window is saved back over it, so the folder watcher sends what was recovered. PowerPoint is then closed
+    /// and opened again, as after any save under a name through the seam, so its own Save saves in place. If the save
+    /// back fails, it's logged, and the crash window's Reopen and Send and Check In are the user's way on.
+    /// </summary>
+    private void OnReopened(string path)
+    {
+        Session? s;
+        lock (_gate)
+        {
+            s = Find(path);
+            if (s is null || !s.Crashed || s.Closing)
+                return;
+            s.Crashed = false;
+        }
+        Raise(ev => ev.Reopened(s.Path));
+        if (OfficeAfterSave.Driver(AppOf(s.Path), s.Path) is not { } driver)
+            return;
+        _ = Task.Run(async () =>
+        {
+            if (await _office.SaveRecoveredAsync(driver.Scripting, driver.Program, s.Path) && driver.Program == OfficeProgram.PowerPoint)
+                await ReopenOfficeAsync(s.Path);
+        });
+    }
+
+    /// <summary>
+    /// M3.5 spec §5.5 step 7: after PowerPoint saved a presentation under a name through the seam, its own Save opens
+    /// Save As, so the presentation is saved, closed and opened again from its file. Its owner file goes meanwhile, which
+    /// must never read as the window closing (Review Focus 3): the close watcher lets go of the copy until the owner file
+    /// is back, or for <see cref="ReopenWait"/>, then watches it as one PowerPoint has open. Failures are logged, and
+    /// the presentation stays open as it was. Anything but an open PowerPoint copy is left alone.
+    /// </summary>
+    internal async Task ReopenOfficeAsync(string path)
+    {
+        Session? s;
+        lock (_gate)
+            s = Find(path);
+        if (s is null || s.ReadOnly || IsClosing(s))
+            return;
+        var app = AppOf(s.Path);
+        if (OfficeAfterSave.Driver(app, s.Path) is not { Program: OfficeProgram.PowerPoint } driver)
+            return;
+        _closes.Unwatch(s.Path);
+        try
+        {
+            await _office.SaveAndReopenAsync(driver.Scripting, driver.Program, s.Path);
+            var waited = Stopwatch.StartNew();
+            while (!app.LockExists(s.Path) && waited.Elapsed < ReopenWait)
+                await Task.Delay(_timings.LockPoll, _stop.Token);
+        }
+        catch (OperationCanceledException) when (_stop.IsCancellationRequested)
+        {
+            // Shutting down.
+        }
+        finally
+        {
+            lock (_gate)
+                if (!s.Closing && Find(s.Path) == s)
+                    _closes.Watch(s.Path, app, appSeenRunning: true);
+        }
+    }
+
+    /// <summary>The file's stamp and hash, read while it didn't change; null when it's missing, unreadable or changing.</summary>
+    private static (FileStamp Stamp, string Hash)? Settled(string path)
+    {
+        var before = FileStamp.Of(path);
+        if (!before.Exists || HashOrNull(path) is not { } hash)
+            return null;
+        return FileStamp.Of(path) == before ? (before, hash) : null;
+    }
+
+    private static string? HashOrNull(string path)
+    {
+        try
+        {
+            return File.Exists(path) ? HashOf(path) : null;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     // --- Helpers -------------------------------------------------------------------------------------------------

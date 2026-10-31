@@ -26,4 +26,17 @@ public interface IOfficeApp
     /// several programs (Word running says nothing of an Excel copy). The app's <see cref="IsRunning"/> unless it knows better.
     /// </summary>
     bool IsRunningFor(string path) => IsRunning();
+
+    /// <summary>
+    /// When the app's lock file on the copy was last written, or null when it has none, or can't tell: a crashed copy's
+    /// lock file written again means the app has the copy open again (M3.5 spec §5.14).
+    /// </summary>
+    DateTime? LockWritten(string path) => null;
+
+    /// <summary>
+    /// What drives the app's programs, for an app the cycle does more with than open copies: Microsoft Office, whose
+    /// copies are renamed after each save and whose recovered windows are saved back (M3.5 spec §5.4, §5.14). Null for
+    /// an app that only opens them.
+    /// </summary>
+    Office.IOfficeScripting? Scripting => null;
 }

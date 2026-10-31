@@ -121,7 +121,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
 
     /// <summary>
     /// Moves the copy and its record to the name for <paramref name="newFileVersion"/> and returns the new path. Only for
-    /// a copy no app has open (R19); an open copy keeps its name, and its record's versions move on without it.
+    /// a copy no app has open (R19); an open copy keeps its name, and its record's versions move on without it, unless
+    /// the app renames it itself (<see cref="Moved"/>).
     /// </summary>
     public string Rename(string path, string newFileVersion)
     {
@@ -152,6 +153,29 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         lock (_hashes)
             _hashes.Remove(System.IO.Path.GetFileName(path));
         return target;
+    }
+
+    /// <summary>
+    /// M3.5 spec §5.4: the app has saved the open copy under a new name itself (Word's and Excel's rename after a save),
+    /// so the record follows the file there. <paramref name="record"/> is written beside <paramref name="newPath"/>,
+    /// with that file's name; then the old record goes, and the old file if it's still there, with the old name's owner
+    /// and lock files, which a crash may have left. The new file is the caller's to have checked: nothing here reads it.
+    /// </summary>
+    public void Moved(string oldPath, string newPath, CopyRecord record)
+    {
+        var oldName = System.IO.Path.GetFileName(oldPath);
+        var newName = System.IO.Path.GetFileName(newPath);
+        // The record first: a crash before the old one goes leaves the renamed file with its record.
+        Save(record with { FileName = newName });
+        if (oldName == newName)
+            return;
+        File.Delete(RecordPath(oldPath));
+        File.Delete(System.IO.Path.Combine(paths.Copies, oldName));
+        File.Delete(System.IO.Path.Combine(paths.Copies, CopyNames.LibreOfficeLockName(oldName)));
+        foreach (var owner in CopyNames.OfficeOwnerNames(oldName))
+            File.Delete(System.IO.Path.Combine(paths.Copies, owner));
+        lock (_hashes)
+            _hashes.Remove(oldName);
     }
 
     /// <summary>

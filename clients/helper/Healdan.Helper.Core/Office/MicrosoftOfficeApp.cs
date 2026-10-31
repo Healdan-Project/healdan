@@ -18,7 +18,10 @@ public sealed class MicrosoftOfficeApp(IOfficeScripting scripting, Func<string, 
 
     public string Name => AppName;
 
-    /// <summary>What drives the programs, for the add-in's routes and the filing, which use the same seam.</summary>
+    /// <summary>
+    /// What drives the programs: for the cycle's rename after each save and its crash recovery
+    /// (<see cref="OfficeAfterSave"/>), and for the add-in's routes and the filing, which use the same seam.
+    /// </summary>
     public IOfficeScripting Scripting => scripting;
 
     /// <summary>
@@ -51,11 +54,34 @@ public sealed class MicrosoftOfficeApp(IOfficeScripting scripting, Func<string, 
     public bool IsRunningFor(string path) =>
         ProgramFor(path) is { } program ? processRunning(OfficePrograms.ProcessName(program)) : IsRunning();
 
-    public bool LockExists(string path)
+    public bool LockExists(string path) => OwnerFiles(path).Any(File.Exists);
+
+    /// <summary>When the newest of the program's owner files beside the copy was last written; null when there's none.</summary>
+    public DateTime? LockWritten(string path)
+    {
+        DateTime? newest = null;
+        foreach (var owner in OwnerFiles(path))
+        {
+            try
+            {
+                var info = new FileInfo(owner);
+                if (info.Exists && (newest is null || info.LastWriteTimeUtc > newest))
+                    newest = info.LastWriteTimeUtc;
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                // Looked at again at the next poll.
+            }
+        }
+        return newest;
+    }
+
+    /// <summary>Where the program that opens the file may keep its owner file (<see cref="OfficePrograms.OwnerNames"/>).</summary>
+    private static IEnumerable<string> OwnerFiles(string path)
     {
         if (ProgramFor(path) is not { } program)
-            return false;
+            return [];
         var folder = Path.GetDirectoryName(path)!;
-        return OfficePrograms.OwnerNames(program, Path.GetFileName(path)).Any(owner => File.Exists(Path.Combine(folder, owner)));
+        return OfficePrograms.OwnerNames(program, Path.GetFileName(path)).Select(owner => Path.Combine(folder, owner));
     }
 }
