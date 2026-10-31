@@ -28,13 +28,15 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
             Scripting.SetRunning(program, true);
     }
 
-    private AddinHandler Handler(CopyCycle cycle)
+    private AddinHandler Handler(CopyCycle? cycle)
     {
         var log = new HelperLog(Paths.Log);
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office);
-        var filing = new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log);
-        var channel = new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths);
-        return new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), filing, channel, cycle, apps, log);
+        var documents = cycle is null
+            ? null
+            : new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
+                new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths));
+        return new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => documents, apps, log);
     }
 
     /// <summary>The front window holds the copy at <paramref name="path"/>, as Word reports it.</summary>
@@ -216,5 +218,21 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
         Assert.Null(AddinHandler.LocalPath("Memo.docx"));
         Assert.Null(AddinHandler.LocalPath(""));
         Assert.Null(AddinHandler.LocalPath(null));
+    }
+
+    [Fact]
+    public async Task SignedOutTheDocumentRoutesSaySoAndPairingWorks()
+    {
+        var handler = Handler(cycle: null); // the helper isn't signed in and started
+
+        foreach (var route in new[] { "open-dialog", "save-new", "file", "new-version", "properties", "state" })
+        {
+            var answer = await handler.HandleAsync(route, "Word", Body(""));
+            Assert.Equal((409, """{"error":"signed-out"}"""), (answer.Status, answer.Body.ToJsonString()));
+        }
+        Assert.Equal(0, Scripting.FrontAsked);
+        Assert.Empty(_windows.Asked);
+
+        Assert.Equal(200, (await handler.HandleAsync("pair/start", null, new JsonObject { ["app"] = "Word" })).Status);
     }
 }

@@ -272,15 +272,20 @@ is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks)
 - **The ports:** `127.0.0.1`, the first free of `47615`, `47616`, `47617` and `47618` (`AddinPorts`). The add-in
   tries them in the same order, so another user of the Mac with a helper on the first doesn't stop this one. The
   add-in's pages allow connections to these ports alone.
-- **When it's open:** once the helper has started, while Set Up Microsoft Office has nothing left to do: the
-  certificate exists, the Mac trusts it, and it has 30 days or more left. Set Up opens it, or opens it again with a
-  new certificate, without a restart (`HelperSession.EnsureAddinAsync`). Sign Out and Quit close it. The port serves
+- **When it's open:** from the helper's start to its quit, signed in or not, while the certificate exists, hasn't
+  expired and the Mac trusts it. That includes its last 30 days, when Set Up Microsoft Office offers to renew it: a
+  working certificate never takes the add-in down. Signed out, it stays open, so the pane can say so: the document
+  routes answer `409 signed-out`, and pairing still works. Set Up opens it without a restart
+  (`HelperSession.EnsureAddin`); when Set Up renews the certificate, the open port serves the new one from the next
+  connection on, on the same port (`AddinServer.UseCertificate`), rather than closing and opening again. The port serves
   the certificate there is (`AddinCertificate.ForServer`), and never makes or renews one: that's Set Up's, which has
   the Mac trust it.
+- **Nothing from outside closes it.** A connection that fails before it's taken, or the helper running out of file
+  descriptors for a moment, is logged once for each kind, and the port goes on listening, as Kestrel's does.
 - **HTTP/1.1, one request per connection** (`Connection: close`): a request line, headers to an empty line, and a
   `Content-Length` body of at most 150 MiB for `file` and 1 MiB for any other route. Anything else, such as a chunked
-  body, a second request, or a folded or doubled `Host`, is `400 bad-request`. Bodies are JSON, and errors are
-  `{"error": "<code>"}`, as the channel's are.
+  body, a second request, a folded or doubled `Host`, or a body that isn't UTF-8, is `400 bad-request`. Bodies are JSON,
+  and errors are `{"error": "<code>"}`, as the channel's are.
 
 ### The Checks
 
@@ -294,7 +299,7 @@ a web page in a browser, or a page from another Healdan is refused here.
 | `OPTIONS`, for any path, is a preflight: `204` with the CORS headers. It carries neither the protocol nor the key | |
 | `X-Healdan-Protocol: 1`, on every request but `GET /v1/hello` | `400 bad-request` without it; `426 update-healdan-helper` for a protocol the helper doesn't speak |
 | `X-Healdan-Key` is a key the helper gave, on every route but `hello` and the two pairing routes. A route that doesn't exist asks for one too, so a caller without a key learns nothing | `403 not-paired` |
-| The helper is signed in, on every keyed route but `ping` | `409 signed-out` |
+| The helper is signed in and started, on every keyed route but `ping` | `409 signed-out` |
 
 Every answer once `Origin` has passed, errors included, carries `Access-Control-Allow-Origin: <origin>`,
 `Vary: Origin`, `Access-Control-Allow-Headers: Content-Type, X-Healdan-Key, X-Healdan-Protocol`,
@@ -306,7 +311,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 
 | Route | Body | Answer |
 |---|---|---|
-| `GET /v1/hello` | none | `{"name": "Healdan Helper", "protocols": [1], "server": "<origin>"}`; no key |
+| `GET /v1/hello` | none | `{"name": "Healdan Helper", "protocols": [1], "server": "<origin>"}`, the server in `settings.json`, signed in or not; no key |
 | `POST /v1/pair/start` | `{"app"}` | `{"pairingId"}`, and the helper's window shows the code; `403 too-many-tries` while pairing rests |
 | `POST /v1/pair/finish` | `{"pairingId", "code"}` | `{"key"}`; `403 wrong-code` with `"triesLeft"`, or `403 pairing-expired` |
 | `POST /v1/ping` | `{}` | `{"ok": true, "signedIn": bool}` |
@@ -323,7 +328,9 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   URL. The helper uses it only when it names one of its copies, and otherwise takes the app's front window
   (`OfficeFiling.CopyForAsync`).
 - **`save-new` and `file`** are Save to Healdan from Office (`OfficeFiling`): `save-new` takes the front window as it
-  arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes.
+  arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes. The document routes are made anew
+  at each start (`AddinDocuments`), so a ticket from before a sign-out is `409 no-ticket` after it, whichever server the
+  helper signs in to next.
 - **`new-version`** saves the document first when it has unsaved changes, and that save goes up as the version;
   otherwise the file as it is goes up as one.
 - **The routes' own refusals** are `409`: `not-a-copy` for `new-version` on a window that isn't one of the helper's
@@ -341,7 +348,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   add-in keeps and sends as `X-Healdan-Key`. A wrong one is `403 wrong-code` with the tries left; after three, or two
   minutes, or once a newer pairing has started, it's `403 pairing-expired`.
 - **One pairing at a time:** a new one replaces the window and ends the one before. The window's Cancel ends its own
-  pairing, and the window closes once the app has paired or the code has expired.
+  pairing, and the window closes once the app has paired or the code has expired. Pairing needs no sign-in: a pairing
+  under way goes on through a sign-out, and only quitting ends it.
 - **Nine wrong codes in a row,** across pairings, and pairing rests for 10 minutes: `pair/start` answers
   `403 too-many-tries` and shows nothing. Otherwise another user of the Mac could start pairing over and over, three
   guesses at a time, faster than anyone types. A pairing that works starts the count again. Expiry and the rest go by

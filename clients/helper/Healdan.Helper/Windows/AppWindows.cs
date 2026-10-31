@@ -224,9 +224,9 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         {
             _single.Remove(key);
             done.TrySetResult(window.Trusted);
-            // The add-in's port opens now that the Mac trusts the certificate, or opens again with a new one.
+            // The add-in's port opens now that the Mac trusts the certificate, or serves the one Set Up renewed.
             if (window.Trusted && Session is { } session)
-                _ = Task.Run(session.EnsureAddinAsync).ContinueWith(t => log.Error("The Office add-in's port couldn't open after Set Up", t.Exception),
+                _ = Task.Run(session.EnsureAddin).ContinueWith(t => log.Error("The Office add-in's port couldn't open after Set Up", t.Exception),
                     TaskContinuationOptions.OnlyOnFaulted);
         });
         if (!shown)

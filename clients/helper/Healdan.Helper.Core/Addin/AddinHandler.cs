@@ -16,15 +16,25 @@ public sealed record AddinAnswer(int Status, JsonObject Body)
 }
 
 /// <summary>
+/// What the add-in's document routes work on while the helper is signed in and started: its cycle, the filing (which holds
+/// Save to Healdan's tickets) and the extension's handler, for the windows. The session makes new ones at each start, so a
+/// ticket given before a sign-out is no use after it, to the same server or another.
+/// </summary>
+public sealed record AddinDocuments(CopyCycle Cycle, OfficeFiling Filing, IChannelHandler Channel);
+
+/// <summary>
 /// What the add-in's routes do (M3.5 plan: the add-in's routes), once <see cref="AddinServer"/> has let the request through.
 /// The routes are the extension's (spec §5.8), for the program the request's key was paired for: the windows go to the
 /// extension's handler, filing to <see cref="OfficeFiling"/>, and Save as New Version and the copy's state to the cycle.
 /// <para>The add-in can't always say which document it's in, so the helper decides (spec §5.8): the copy its <c>url</c>
 /// names, when that's one of the helper's copies, else the program's front window's (<see cref="OfficeFiling.CopyForAsync"/>).
 /// Paths stay copies in <c>Copies</c>, as the extension's do, except for Save to Healdan on a document not in Healdan.</para>
+/// <para>The port outlives sign-ins, so the document routes look up the session's <see cref="AddinDocuments"/> at each
+/// request, and answer <c>409 signed-out</c> while there are none; pairing needs no sign-in.</para>
 /// <para>Its log says what was asked and what came of it, never a code, a key or a document's contents.</para>
 /// </summary>
-public sealed class AddinHandler(Pairing pairing, OfficeFiling filing, IChannelHandler channel, CopyCycle cycle, OfficeApps apps, HelperLog log)
+/// <param name="documents">The document routes' cycle, filing and windows now; null while the helper isn't signed in and started.</param>
+public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> documents, OfficeApps apps, HelperLog log)
 {
     /// <summary>The pairings, whose keys the port checks.</summary>
     public Pairing Pairing => pairing;
@@ -39,12 +49,15 @@ public sealed class AddinHandler(Pairing pairing, OfficeFiling filing, IChannelH
     {
         try
         {
+            if (route is "pair/start")
+                return PairStart(body);
+            if (route is "pair/finish")
+                return PairFinish(body);
+            if (documents() is not { } current)
+                return AddinAnswer.Error(409, "signed-out");
+            var (cycle, filing, channel) = current;
             switch (route)
             {
-                case "pair/start":
-                    return PairStart(body);
-                case "pair/finish":
-                    return PairFinish(body);
                 case "open-dialog":
                     return AddinAnswer.Ok(await channel.HandleAsync("open-dialog", new JsonObject { ["app"] = Name(Program(app, body)) }));
                 case "save-new":
@@ -53,7 +66,7 @@ public sealed class AddinHandler(Pairing pairing, OfficeFiling filing, IChannelH
                     var state = await filing.FileAsync(Text(body, "ticket"), Optional(body, "mark"), Bytes(body, "bytes"));
                     return AddinAnswer.Ok(ChannelHandler.Json(state));
                 case "new-version":
-                    return await NewVersionAsync(Program(app, body), body);
+                    return await NewVersionAsync(cycle, filing, Program(app, body), body);
                 case "properties":
                     var p = Program(app, body);
                     var request = new JsonObject { ["app"] = Name(p) };
@@ -126,7 +139,7 @@ public sealed class AddinHandler(Pairing pairing, OfficeFiling filing, IChannelH
     /// mark, so the version settles with the save's write in it rather than going up just before it. A read-only copy has
     /// no version to give, as from the extension.
     /// </summary>
-    private async Task<AddinAnswer> NewVersionAsync(OfficeProgram p, JsonObject body)
+    private async Task<AddinAnswer> NewVersionAsync(CopyCycle cycle, OfficeFiling filing, OfficeProgram p, JsonObject body)
     {
         var copy = await filing.CopyForAsync(p, LocalPath(Optional(body, "url")))
             ?? throw new OfficeRefusedException(OfficeRefusedException.NotACopy, "Save as New Version needs a document opened from Healdan.");

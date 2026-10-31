@@ -26,8 +26,12 @@ namespace Healdan.Helper.Core.Addin;
 /// the origin nor the key.</para>
 /// <para>It does transport and those checks; the routes are <see cref="AddinHandler"/>'s. Its log names routes and
 /// refusals, never a header's value, a key, a code or a body.</para>
+/// <para>It runs for the helper's lifetime, signed in or not, so the add-in's pane can say which (spec §6.3). Nothing from
+/// outside stops it: a connection that fails before it's taken, or the process running out of file descriptors for a
+/// moment, is logged once and the port goes on listening. When Set Up renews the certificate, the running port serves the
+/// new one from the next connection on (<see cref="UseCertificate"/>), on the same port.</para>
 /// </summary>
-/// <param name="server">The helper's server, whose pages alone it answers; null answers none.</param>
+/// <param name="server">The helper's server, as <c>settings.json</c> holds it, whose pages alone it answers; null answers none.</param>
 /// <param name="signedIn">Whether the helper holds a token Healdan hasn't refused.</param>
 /// <param name="certificate">
 /// The helper's certificate, with its key (<see cref="AddinCertificate.ForServer"/>), which <see cref="Dispose"/> disposes.
@@ -67,6 +71,11 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly object _gate = new();
+
+    /// <summary>The certificates it served before Set Up renewed them, kept until it's disposed, as a handshake may still be using one.</summary>
+    private readonly List<X509Certificate2> _retired = [];
+
+    private X509Certificate2 _certificate = certificate;
     private TcpListener? _listener;
     private CancellationTokenSource? _stop;
     private int? _port;
@@ -81,8 +90,36 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
         }
     }
 
-    /// <summary>The certificate it serves: Set Up may make a new one, which needs the server started again.</summary>
-    public string Thumbprint => certificate.Thumbprint;
+    /// <summary>The certificate it serves now.</summary>
+    public string Thumbprint
+    {
+        get
+        {
+            lock (_gate)
+                return _certificate.Thumbprint;
+        }
+    }
+
+    /// <summary>
+    /// Serves <paramref name="renewed"/> from the next connection on, on the same port (Set Up renewed the certificate).
+    /// The server disposes it, with the one it replaces, when it's disposed.
+    /// </summary>
+    public void UseCertificate(X509Certificate2 renewed)
+    {
+        lock (_gate)
+        {
+            _retired.Add(_certificate);
+            _certificate = renewed;
+        }
+        log.Info("The Office add-in's port serves the certificate Set Up Microsoft Office renewed");
+    }
+
+    /// <summary>Takes the next connection: the listener's own accept, unless a test stands in for it to make it fail.</summary>
+    internal Func<TcpListener, CancellationToken, ValueTask<TcpClient>> AcceptClient { get; init; } =
+        static (listener, ct) => listener.AcceptTcpClientAsync(ct);
+
+    /// <summary>How long it waits before accepting again once the process has run out of file descriptors.</summary>
+    internal TimeSpan DescriptorPause { get; init; } = TimeSpan.FromSeconds(1);
 
     /// <summary>Listens on the first of the ports it can take. False when every one is taken, by another user's helper, say.</summary>
     public bool Start()
@@ -129,24 +166,62 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
         stop?.Dispose();
     }
 
-    /// <summary>Stops listening, and lets the certificate go.</summary>
+    /// <summary>Stops listening, and lets the certificates go.</summary>
     public void Dispose()
     {
         Stop();
-        certificate.Dispose();
+        lock (_gate)
+        {
+            foreach (var old in _retired)
+                old.Dispose();
+            _retired.Clear();
+            _certificate.Dispose();
+        }
     }
 
+    /// <summary>
+    /// Takes connections until <see cref="Stop"/>. A failed accept never ends it, so nobody can close the port from outside:
+    /// a connection reset before it was taken, or the process out of file descriptors (after which it waits
+    /// <see cref="DescriptorPause"/>), is logged once for each kind and the port goes on listening, as Kestrel's does.
+    /// </summary>
     private async Task AcceptLoopAsync(TcpListener listener, int port, CancellationToken stop)
     {
+        var said = new HashSet<SocketError>();
         while (!stop.IsCancellationRequested)
         {
             TcpClient client;
             try
             {
-                client = await listener.AcceptTcpClientAsync(stop);
+                client = await AcceptClient(listener, stop);
             }
-            catch (Exception e) when (e is SocketException or ObjectDisposedException or OperationCanceledException or InvalidOperationException)
+            catch (Exception e) when (stop.IsCancellationRequested || e is ObjectDisposedException or OperationCanceledException)
             {
+                return; // stopped
+            }
+            catch (SocketException e)
+            {
+                if (said.Add(e.SocketErrorCode))
+                    log.Warn($"The Office add-in's port couldn't take a connection ({e.SocketErrorCode}): it goes on listening");
+                var pause = e.SocketErrorCode switch
+                {
+                    SocketError.ConnectionAborted or SocketError.ConnectionReset => TimeSpan.Zero,
+                    SocketError.TooManyOpenSockets or SocketError.NoBufferSpaceAvailable => DescriptorPause,
+                    _ => TimeSpan.FromMilliseconds(100), // something else, which may not pass at once: not a busy loop
+                };
+                try
+                {
+                    if (pause > TimeSpan.Zero)
+                        await Task.Delay(pause, stop);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                continue;
+            }
+            catch (Exception e)
+            {
+                log.Error("The Office add-in's port stopped listening", e);
                 return;
             }
             _ = Task.Run(() => ServeAsync(client, port));
@@ -164,9 +239,12 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
                 Answer answer;
                 using (var reading = new CancellationTokenSource(ReadTimeout))
                 {
+                    X509Certificate2 serving;
+                    lock (_gate)
+                        serving = _certificate; // the one Set Up renewed, from the next connection on
                     await tls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
                     {
-                        ServerCertificate = certificate,
+                        ServerCertificate = serving,
                         EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                         ClientCertificateRequired = false,
                     }, reading.Token);
@@ -436,8 +514,8 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
         }
 
         /// <summary>
-        /// The body, exactly <see cref="ContentLength"/> bytes, as a JSON object; null when it isn't one, or when more came
-        /// than it said (a second request on the connection).
+        /// The body, exactly <see cref="ContentLength"/> bytes, as a JSON object; null when it isn't one, isn't UTF-8, or
+        /// when more came than it said (a second request on the connection).
         /// </summary>
         public async Task<JsonObject?> ReadBodyAsync(Stream stream, CancellationToken ct)
         {
@@ -453,6 +531,9 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
                     return null;
                 filled += read;
             }
+            // System.Text.Json reads text that isn't UTF-8 and fails only when a value is looked at.
+            if (!System.Text.Unicode.Utf8.IsValid(body))
+                return null;
             try
             {
                 return JsonNode.Parse(body) as JsonObject;

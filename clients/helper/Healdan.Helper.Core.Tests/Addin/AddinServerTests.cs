@@ -68,8 +68,11 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         }
     }
 
-    /// <summary>The server as the helper starts it, signed in to <see cref="Origin"/>, on <paramref name="ports"/> (a free one by default).</summary>
-    private AddinServer Start(IReadOnlyList<int>? ports = null)
+    /// <summary>
+    /// The server as the helper starts it, signed in to <see cref="Origin"/>, on <paramref name="ports"/> (a free one by
+    /// default); <paramref name="accept"/> stands in for the listener's accept.
+    /// </summary>
+    private AddinServer Start(IReadOnlyList<int>? ports = null, Func<TcpListener, CancellationToken, ValueTask<TcpClient>>? accept = null)
     {
         var certificate = new AddinCertificate(Paths, TimeProvider.System);
         certificate.LoadOrCreate().Dispose();
@@ -78,10 +81,16 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         var cycle = Cycle();
         var log = new HelperLog(Paths.Log);
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office);
-        var handler = new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System),
-            new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
-            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths), cycle, apps, log);
-        var server = new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()]);
+        var documents = new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
+            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths));
+        var handler = new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => documents, apps, log);
+        var server = accept is null
+            ? new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()])
+            : new AddinServer(handler, () => new Uri(Origin + "/"), () => _signedIn, served, log, ports ?? [FreePort()])
+            {
+                AcceptClient = accept,
+                DescriptorPause = TimeSpan.FromMilliseconds(50),
+            };
         _servers.Add(server);
         Assert.True(server.Start());
         return server;
@@ -138,13 +147,15 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
     }
 
     /// <summary>One request written by hand over TLS, for what a well-behaved client never sends; the answer's status line and body.</summary>
-    private async Task<(string StatusLine, string Body)> Raw(AddinServer server, string head)
+    private async Task<(string StatusLine, string Body)> Raw(AddinServer server, string head, byte[]? body = null)
     {
         using var client = new TcpClient();
         await client.ConnectAsync(IPAddress.Loopback, server.Port!.Value);
         await using var tls = new SslStream(client.GetStream(), false, (_, cert, _, _) => cert?.GetCertHashString() == _thumbprint);
         await tls.AuthenticateAsClientAsync("127.0.0.1");
         await tls.WriteAsync(Encoding.ASCII.GetBytes(head));
+        if (body is not null)
+            await tls.WriteAsync(body);
         await tls.FlushAsync();
         using var reader = new StreamReader(tls, Encoding.UTF8);
         var answer = await reader.ReadToEndAsync().WaitAsync(TimeSpan.FromSeconds(10)); // the server closes once it has answered
@@ -199,8 +210,9 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         var cycle = Cycle();
         var log = new HelperLog(Paths.Log);
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office);
-        return new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
-            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths), cycle, apps, log);
+        var documents = new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
+            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths));
+        return new AddinHandler(new Pairing(Paths, _windows, TimeProvider.System), () => documents, apps, log);
     }
 
     private System.Security.Cryptography.X509Certificates.X509Certificate2 NewCertificate()
@@ -441,5 +453,45 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         Assert.DoesNotContain(key[..12], log);
         Assert.DoesNotContain(code, log);
         Assert.DoesNotContain((string)start.Body!["pairingId"]!, log);
+    }
+
+    [Fact]
+    public async Task AFailedAcceptDoesntCloseThePort()
+    {
+        // Connections reset while they waited to be taken, then the process out of file descriptors for a moment, as
+        // another user of the Mac could cause on purpose: the port goes on listening, as Kestrel's accept loop does.
+        var failures = new Queue<SocketError>([
+            SocketError.ConnectionAborted, SocketError.ConnectionAborted, SocketError.ConnectionAborted, SocketError.TooManyOpenSockets,
+        ]);
+        var server = Start(accept: (listener, ct) =>
+        {
+            lock (failures)
+                if (failures.TryDequeue(out var error))
+                    return ValueTask.FromException<TcpClient>(new SocketException((int)error));
+            return listener.AcceptTcpClientAsync(ct);
+        });
+
+        var hello = await Send(Request(server, HttpMethod.Get, "hello", protocol: null)).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(HttpStatusCode.OK, hello.Status);
+        var lines = Log.Split('\n');
+        Assert.Single(lines, l => l.Contains("ConnectionAborted", StringComparison.Ordinal)); // said once, not at each
+        Assert.Single(lines, l => l.Contains("TooManyOpenSockets", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ABodyThatIsntUtf8IsABadRequest()
+    {
+        var server = Start();
+        byte[] body = [.. "{\"app\":\""u8, 0xFF, 0xFE, .. "\"}"u8];
+
+        var (statusLine, answer) = await Raw(server,
+            $"POST /v1/pair/start HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+            + $"Content-Type: application/json\r\nContent-Length: {body.Length}\r\n\r\n", body);
+
+        Assert.Equal("HTTP/1.1 400 Bad Request", statusLine);
+        Assert.Equal("""{"error":"bad-request"}""", answer);
+        Assert.DoesNotContain(" ERROR ", Log);
+        Assert.Empty(_windows.PairingCodes);
     }
 }

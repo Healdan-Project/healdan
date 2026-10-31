@@ -134,9 +134,11 @@ other things macOS asks for later. You do it once, however many of the three app
   "Healdan Helper (this Mac)".
 - **It lasts 800 days.** When fewer than 30 are left, **Set Up Microsoft Office…** comes back in the menu. Its
   **Set Up** makes a new certificate and asks for your password to trust it: the helper never makes one by itself.
-  Until you've done that, Word, Excel and PowerPoint can't reach the helper after it next starts.
-- **Once Set Up is done,** Word, Excel and PowerPoint can reach the helper straight away, without restarting it.
-  Without a trusted certificate they can't, and the Healdan pane in each app says so.
+  Until then the old one keeps working; once it has run out, Word, Excel and PowerPoint can't reach the helper until
+  you set up again.
+- **Once Set Up is done,** Word, Excel and PowerPoint can reach the helper straight away, without restarting it,
+  whether you're signed in or not. Signed out, the Healdan pane says so. Without a trusted certificate they can't reach
+  it, and the pane says that instead.
 
 ## Pairing Word, Excel and PowerPoint
 

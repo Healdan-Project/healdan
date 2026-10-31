@@ -1307,12 +1307,12 @@ public sealed class HelperSessionTests : IDisposable
         string thumbprint;
         using (var made = certificate.LoadOrCreate())
             thumbprint = made.Thumbprint;
-        await session.EnsureAddinAsync();
+        session.EnsureAddin();
         Assert.Null(session.AddinPort);
 
         // Set Up has the Mac trust it: the port opens with no restart, and answers the server's own pages.
         trust.Trusted.Add(thumbprint);
-        await session.EnsureAddinAsync();
+        session.EnsureAddin();
         Assert.Equal(port, session.AddinPort);
         Assert.True(Logged($"127.0.0.1:{port}"));
         using (var hello = await HelloAsync(port, thumbprint))
@@ -1320,34 +1320,11 @@ public sealed class HelperSessionTests : IDisposable
             Assert.Equal(HttpStatusCode.OK, hello.StatusCode);
             Assert.Equal(Account, (string?)JsonNode.Parse(await hello.Content.ReadAsStringAsync())!["server"]);
         }
-        await session.EnsureAddinAsync(); // nothing to do: the same certificate, still open
+        session.EnsureAddin(); // nothing to do: the same certificate, still open
         Assert.Equal(port, session.AddinPort);
 
         // Quitting closes it.
         session.Dispose();
-        Assert.Null(session.AddinPort);
-        await Assert.ThrowsAnyAsync<HttpRequestException>(() => HelloAsync(port, thumbprint));
-    }
-
-    [Fact]
-    public async Task TheAddinsPortOpensAtTheStartWithATrustedCertificateAndClosesAtSignOut()
-    {
-        SignedInBefore();
-        var certificate = new AddinCertificate(Paths, TimeProvider.System);
-        string thumbprint;
-        using (var made = certificate.LoadOrCreate())
-            thumbprint = made.Thumbprint;
-        var port = FreePort();
-        var session = Make(trust: new FakeCertificateTrust { Trusted = { thumbprint } }, certificate: certificate, addinPorts: [port]);
-
-        await session.StartAsync();
-
-        Assert.Equal(port, session.AddinPort);
-        Assert.Equal(HttpStatusCode.OK, (await HelloAsync(port, thumbprint)).StatusCode);
-
-        await session.SignOutAsync();
-
-        Assert.True(Revoked());
         Assert.Null(session.AddinPort);
         await Assert.ThrowsAnyAsync<HttpRequestException>(() => HelloAsync(port, thumbprint));
     }
@@ -1362,7 +1339,195 @@ public sealed class HelperSessionTests : IDisposable
 
         Assert.True(session.Started);
         Assert.Null(session.AddinPort);
-        await session.EnsureAddinAsync();
+        session.EnsureAddin();
         Assert.Null(session.AddinPort);
     }
+
+    /// <summary>A request to the add-in's port as the add-in's page on the server sends it, trusting only the helper's certificate.</summary>
+    private static async Task<(HttpStatusCode Status, JsonNode? Body)> AddinAsync(int port, string thumbprint, string route,
+        JsonObject? body = null, string? key = null)
+    {
+        using var http = new HttpClient(new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = (_, cert, _, _) => cert?.Thumbprint == thumbprint,
+        }) { Timeout = TimeSpan.FromSeconds(30) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"https://127.0.0.1:{port}/v1/{route}")
+        {
+            Content = new StringContent((body ?? new JsonObject()).ToJsonString(), Encoding.UTF8, "application/json"),
+        };
+        request.Headers.Add("Origin", Account);
+        request.Headers.Add("X-Healdan-Protocol", "1");
+        if (key is not null)
+            request.Headers.Add("X-Healdan-Key", key);
+        using var response = await http.SendAsync(request);
+        var text = await response.Content.ReadAsStringAsync();
+        return (response.StatusCode, text.Length == 0 ? null : JsonNode.Parse(text));
+    }
+
+    /// <summary>Pairs <paramref name="app"/> over the add-in's port, with the code the helper's window shows, and returns its key.</summary>
+    private async Task<string> PairAddinAsync(int port, string thumbprint, string app = "Word")
+    {
+        var start = await AddinAsync(port, thumbprint, "pair/start", new JsonObject { ["app"] = app });
+        var finish = await AddinAsync(port, thumbprint, "pair/finish",
+            new JsonObject { ["pairingId"] = (string?)start.Body!["pairingId"], ["code"] = _windows.ShownCode });
+        Assert.Equal(HttpStatusCode.OK, finish.Status);
+        return (string)finish.Body!["key"]!;
+    }
+
+    /// <summary>Set Up made the certificate and the Mac trusts it: its thumbprint.</summary>
+    private static string Trusted(AddinCertificate certificate, FakeCertificateTrust trust)
+    {
+        using var made = certificate.LoadOrCreate();
+        trust.Trusted.Add(made.Thumbprint);
+        return made.Thumbprint;
+    }
+
+    /// <summary>Word through a fake scripting seam, beside LibreOffice, for the add-in's document routes.</summary>
+    private OfficeApps WithWord(FakeScripting scripting) =>
+        TestApps.Of(_app, microsoftOffice: new MicrosoftOfficeApp(scripting, scripting.IsRunning));
+
+    [Fact]
+    public async Task TheAddinsPortStaysOpenSignedOutAndSaysSo()
+    {
+        SignedInBefore();
+        var trust = new FakeCertificateTrust();
+        var certificate = new AddinCertificate(Paths, TimeProvider.System);
+        var thumbprint = Trusted(certificate, trust);
+        var port = FreePort();
+        var session = Make(apps: WithWord(new FakeScripting()), trust: trust, certificate: certificate, addinPorts: [port]);
+        await session.StartAsync();
+        var key = await PairAddinAsync(port, thumbprint);
+        Assert.Equal(HttpStatusCode.OK, (await AddinAsync(port, thumbprint, "state", new JsonObject { ["url"] = "" }, key)).Status);
+
+        // A pairing under way when the user signs out goes on.
+        var excel = await AddinAsync(port, thumbprint, "pair/start", new JsonObject { ["app"] = "Excel" });
+        var code = _windows.ShownCode;
+
+        await session.SignOutAsync();
+
+        Assert.True(Revoked());
+        Assert.Equal(port, session.AddinPort); // spec §6.3: the pane can say the helper is signed out
+        Assert.Equal(Account, (string?)JsonNode.Parse(await (await HelloAsync(port, thumbprint)).Content.ReadAsStringAsync())!["server"]);
+        var state = await AddinAsync(port, thumbprint, "state", new JsonObject { ["url"] = "" }, key);
+        Assert.Equal((HttpStatusCode.Conflict, """{"error":"signed-out"}"""), (state.Status, state.Body!.ToJsonString()));
+        var ping = await AddinAsync(port, thumbprint, "ping", key: key);
+        Assert.Equal((HttpStatusCode.OK, """{"ok":true,"signedIn":false}"""), (ping.Status, ping.Body!.ToJsonString()));
+        var finish = await AddinAsync(port, thumbprint, "pair/finish", new JsonObject { ["pairingId"] = (string?)excel.Body!["pairingId"], ["code"] = code });
+        Assert.Equal(HttpStatusCode.OK, finish.Status);
+
+        // Quitting closes it, and ends any pairing.
+        await AddinAsync(port, thumbprint, "pair/start", new JsonObject { ["app"] = "PowerPoint" });
+        Assert.NotNull(_windows.ShownCode);
+        session.Dispose();
+        Assert.Null(session.AddinPort);
+        Assert.Null(_windows.ShownCode);
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => HelloAsync(port, thumbprint));
+    }
+
+    [Fact]
+    public async Task TheAddinsPortOpensBeforeAnySignIn()
+    {
+        new HelperSettings { Server = Account }.Save(Paths); // signed out before, so no token is kept
+        var trust = new FakeCertificateTrust();
+        var certificate = new AddinCertificate(Paths, TimeProvider.System);
+        var thumbprint = Trusted(certificate, trust);
+        var port = FreePort();
+        var session = Make(apps: WithWord(new FakeScripting()), trust: trust, certificate: certificate, addinPorts: [port]);
+
+        await session.StartAsync(); // the Sign In window is closed
+
+        Assert.False(session.SignedIn);
+        Assert.Equal(port, session.AddinPort);
+        var key = await PairAddinAsync(port, thumbprint); // pairing needs no sign-in
+        IsSignedOut(await AddinAsync(port, thumbprint, "state", new JsonObject { ["url"] = "" }, key));
+
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(prompt.Server!, "robert", Password) is null;
+        await session.SignInAgainAsync();
+
+        Assert.True(session.Started);
+        Assert.Equal(port, session.AddinPort); // the same port all along
+        var state = await AddinAsync(port, thumbprint, "state", new JsonObject { ["url"] = "" }, key);
+        Assert.Equal((HttpStatusCode.OK, """{"known":false}"""), (state.Status, state.Body!.ToJsonString()));
+    }
+
+    [Fact]
+    public async Task ASaveToHealdanTicketDoesntOutliveASignOut()
+    {
+        SignedInBefore();
+        var trust = new FakeCertificateTrust();
+        var certificate = new AddinCertificate(Paths, TimeProvider.System);
+        var thumbprint = Trusted(certificate, trust);
+        var port = FreePort();
+        var scripting = new FakeScripting { Front = _ => new FrontDocument(null, "", "Document1"), MarksShown = true };
+        scripting.SetRunning(OfficeProgram.Word, true);
+        _windows.Answer = WindowAnswers.Save(9, "Memo", "docx", new JsonObject(), WindowAnswers.TempPath(Paths, "docx"));
+        var session = Make(apps: WithWord(scripting), trust: trust, certificate: certificate, addinPorts: [port]);
+        await session.StartAsync();
+        var key = await PairAddinAsync(port, thumbprint);
+        var saveNew = await AddinAsync(port, thumbprint, "save-new", new JsonObject { ["app"] = "Word", ["url"] = "", ["asNew"] = false }, key);
+        var ticket = (string)saveNew.Body!["ticket"]!;
+
+        await session.SignOutAsync();
+        _windows.OnSignIn = async prompt => await prompt.SignInAsync(prompt.Server!, "robert", Password) is null;
+        await session.SignInAgainAsync();
+        Assert.True(session.Started);
+
+        // The window the ticket was for was chosen under the old sign-in: it may be another document, or another
+        // server's folder, by now.
+        var file = await AddinAsync(port, thumbprint, "file",
+            new JsonObject { ["ticket"] = ticket, ["mark"] = "hd-mark-1", ["bytes"] = Convert.ToBase64String("the window's bytes"u8.ToArray()) }, key);
+
+        Assert.Equal((HttpStatusCode.Conflict, """{"error":"no-ticket"}"""), (file.Status, file.Body!.ToJsonString()));
+        Assert.DoesNotContain(_server.Calls, c => c.StartsWith("filed ", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task ACertificateInItsLastThirtyDaysStillServesAndSetUpsRenewalTakesOver()
+    {
+        SignedInBefore();
+        var clock = new PausableClock();
+        clock.Pause();
+        var trust = new FakeCertificateTrust();
+        var certificate = new AddinCertificate(Paths, clock);
+        var old = Trusted(certificate, trust);
+        clock.Advance(TimeSpan.FromDays(771)); // 29 days left: Set Up offers to renew it
+        var port = FreePort();
+        var session = Make(trust: trust, certificate: certificate, addinPorts: [port]);
+
+        await session.StartAsync();
+
+        Assert.True(certificate.NeedsSetUp(trust)); // the menu offers Set Up
+        Assert.Equal(port, session.AddinPort); // and meanwhile the add-in still works
+        Assert.Equal(HttpStatusCode.OK, (await HelloAsync(port, old)).StatusCode);
+
+        // Set Up renews it, and the Mac trusts the new one: the port serves it, on the same port.
+        var renewed = Trusted(certificate, trust);
+        Assert.NotEqual(old, renewed);
+        session.EnsureAddin();
+
+        Assert.Equal(port, session.AddinPort);
+        Assert.Equal(HttpStatusCode.OK, (await HelloAsync(port, renewed)).StatusCode);
+        await Assert.ThrowsAnyAsync<HttpRequestException>(() => HelloAsync(port, old));
+    }
+
+    [Fact]
+    public async Task AnExpiredCertificateKeepsTheAddinsPortClosed()
+    {
+        SignedInBefore();
+        var clock = new PausableClock();
+        clock.Pause();
+        var trust = new FakeCertificateTrust();
+        var certificate = new AddinCertificate(Paths, clock);
+        Trusted(certificate, trust);
+        clock.Advance(TimeSpan.FromDays(801));
+        var session = Make(trust: trust, certificate: certificate, addinPorts: [FreePort()]);
+
+        await session.StartAsync();
+
+        Assert.True(session.Started);
+        Assert.Null(session.AddinPort);
+    }
+
+    private static void IsSignedOut((HttpStatusCode Status, JsonNode? Body) answer) =>
+        Assert.Equal((HttpStatusCode.Conflict, """{"error":"signed-out"}"""), (answer.Status, answer.Body?.ToJsonString()));
 }
