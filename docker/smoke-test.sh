@@ -108,6 +108,9 @@ check "GET /login.jsp is 200" test "$(http_code "$BASE/login.jsp")" = 200
 # The healdan-api plugin is in the WAR and /api reaches its servlet, past CE's security chain.
 api_product() { curl -fsS "$BASE/api/v1/server" | jq -er .product; }
 check "GET /api/v1/server answers JSON naming Healdan" test "$(api_product)" = Healdan
+# The Office add-in's manifest, made from healdan-api's jar, names the address it was fetched at: no public address is
+# set here, so it takes the request's, and http is fine for 127.0.0.1.
+check "GET /api/addin/manifest.xml names this server" grep -q "$BASE/api/addin/commands.html" <(curl -fsS "$BASE/api/addin/manifest.xml")
 # A GWT loader names its build's *.cache.js files, so the browser checks it on every load (Docker spec §13).
 check "login.nocache.js is revalidated on every load" test "$(cache_control "$LOADER")" = no-cache
 loader=$(curl -fsS "$LOADER" || true)

@@ -96,6 +96,17 @@ class CodeChangedTest(unittest.TestCase):
                     "healdan-api/src/main/resources/healdan/api/other.yaml")
         self.assertEqual(["code=true", "clients=false"], self.outputs())
 
+    def test_addin_runs_the_build_and_the_clients(self):
+        # healdan-api packages clients/office/ into its jar and serves it, so a change there builds the server as well
+        self.change("clients/office/web/taskpane.html")
+        self.assertEqual(["code=true", "clients=true"], self.outputs())
+        self.change("clients/office/manifest.template.xml", "clients/helper/x.cs")
+        self.assertEqual(["code=true", "clients=true"], self.outputs())
+
+    def test_addin_docs_are_still_docs(self):
+        self.change("clients/office/README.md")
+        self.assertEqual(["code=false", "clients=true"], self.outputs())
+
     def test_clients_and_docs_is_not_code(self):
         self.change("clients/helper/x.cs", "docs/x.md")
         self.assertEqual(["code=false", "clients=true"], self.outputs())

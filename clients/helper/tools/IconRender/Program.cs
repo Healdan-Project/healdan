@@ -8,13 +8,16 @@ using Avalonia.Threading;
 using Healdan.Helper.Windows;
 
 // The LibreOffice extension's images (polish spec §8.2, §8.4), rendered from the helper's Tabler icons and Healdan's
-// mark into clients/libreoffice/healdan/icons/. Run by hand when an icon changes, and commit what it writes.
+// mark into clients/libreoffice/healdan/icons/, and the Office add-in's (M3.5 spec §6.1), the same icons at the ribbon's
+// sizes, into clients/office/web/assets/. Run by hand when an icon changes, and commit what it writes.
 
 AppBuilder.Configure<Application>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
 
 var root = FindRoot();
 var output = Path.Combine(root, "clients", "libreoffice", "healdan", "icons");
+var officeOutput = Path.Combine(root, "clients", "office", "web", "assets");
 Directory.CreateDirectory(output);
+Directory.CreateDirectory(officeOutput);
 var icons = (ResourceDictionary)AvaloniaXamlLoader.Load(new Uri("avares://HealdanHelper/Windows/HelperIcons.axaml"));
 
 (string File, string Icon, bool Shield)[] commands =
@@ -37,37 +40,46 @@ Dispatcher.UIThread.Invoke(() =>
         var drawing = (Geometry)icons["Icon." + icon]!;
         foreach (var size in new[] { 16, 26 })
         {
-            Save(Icon(drawing, size, grey, shield ? (mark.Shield(), shieldBlue, Colors.White) : null), $"{file}-{size}.png");
-            Save(Icon(drawing, size, Colors.White, shield ? (mark.Shield(), Colors.White, Colors.Black) : null), $"{file}-{size}-hc.png");
+            Save(Icon(drawing, size, grey, shield ? (mark.Shield(), shieldBlue, Colors.White) : null), output, $"{file}-{size}.png");
+            Save(Icon(drawing, size, Colors.White, shield ? (mark.Shield(), Colors.White, Colors.Black) : null), output, $"{file}-{size}-hc.png");
         }
+        // The Office ribbon's sizes: the group and the buttons at 16, 32 and 80 px, in the extension's colours
+        foreach (var size in new[] { 16, 32, 80 })
+            Save(Icon(drawing, size, grey, shield ? (mark.Shield(), shieldBlue, Colors.White) : null), officeOutput, $"{file}-{size}.png");
     }
-    Save(Mark(42, null), "healdan-42.png");
-    Save(Mark(42, Colors.White), "healdan-42-hc.png");
+    Save(Mark(42, null), output, "healdan-42.png");
+    Save(Mark(42, Colors.White), output, "healdan-42-hc.png");
+    // The manifest's icon is 32 px and its high-resolution icon 64; the ribbon's group takes 16, 32 and 80
+    foreach (var size in new[] { 16, 32, 64, 80 })
+        Save(Mark(size, null), officeOutput, $"healdan-{size}.png");
 });
 Console.WriteLine($"Wrote the extension's images to {output}");
+Console.WriteLine($"Wrote the Office add-in's images to {officeOutput}");
 
-void Save(RenderTargetBitmap bitmap, string name)
+void Save(RenderTargetBitmap bitmap, string folder, string name)
 {
-    bitmap.Save(Path.Combine(output, name), PngBitmapEncoderOptions.Default);
+    bitmap.Save(Path.Combine(folder, name), PngBitmapEncoderOptions.Default);
     bitmap.Dispose();
 }
 
-// One toolbar image: the 24-unit icon stroked 1.5 px at 16 and 2 px at 26, and the shield at its lower right, 7 and 11 px
-// across, inside a 1 px ring that keeps it clear of the strokes.
+// One toolbar image: the 24-unit icon stroked 1.5 px at 16 and 2 px at 26 (about 1/13 of the size above that), and the
+// shield at its lower right, 7 and 11 px across (about 3/7 of the size above that), inside a ring 1 px wide that keeps it
+// clear of the strokes (1 px per 26 above that).
 static RenderTargetBitmap Icon(Geometry drawing, int size, Color stroke, (Geometry Shape, Color Fill, Color Ring)? shield)
 {
     var bitmap = new RenderTargetBitmap(new PixelSize(size, size), new Vector(96, 96));
     using var context = bitmap.CreateDrawingContext();
     var scale = size / 24.0;
-    var width = size == 16 ? 1.5 : 2;
+    var width = size <= 16 ? 1.5 : size <= 26 ? 2 : Math.Round(size * 0.078 * 2) / 2;
     using (context.PushTransform(Matrix.CreateScale(scale, scale)))
         context.DrawGeometry(null, new Pen(new SolidColorBrush(stroke), width / scale, lineCap: PenLineCap.Round, lineJoin: PenLineJoin.Round), drawing);
     if (shield is { } s)
     {
-        var across = size == 16 ? 7 : 11;
+        var across = size <= 16 ? 7 : size <= 26 ? 11 : (int)Math.Round(size * 0.43);
+        var ring = size <= 26 ? 1 : Math.Max(1, Math.Round(size / 26.0));
         var badge = Matrix.CreateScale(across / 260.0, across / 260.0) * Matrix.CreateTranslation(size - across, size - across);
         using (context.PushTransform(badge))
-            context.DrawGeometry(new SolidColorBrush(s.Fill), new Pen(new SolidColorBrush(s.Ring), 260.0 / across), s.Shape);
+            context.DrawGeometry(new SolidColorBrush(s.Fill), new Pen(new SolidColorBrush(s.Ring), ring * 260.0 / across), s.Shape);
     }
     return bitmap;
 }

@@ -46,6 +46,12 @@ public class ApiCall {
 
 	private String remote = "127.0.0.1";
 
+	private String scheme;
+
+	private String serverName;
+
+	private int serverPort;
+
 	private String contentType;
 
 	private byte[] body;
@@ -90,6 +96,23 @@ public class ApiCall {
 	 */
 	public ApiCall remote(String address) {
 		this.remote = address;
+		return this;
+	}
+
+	/**
+	 * Names the address the request was made to, as Tomcat reads it from the
+	 * {@code Host} header and the connector (after {@code RemoteIpValve} has
+	 * applied {@code X-Forwarded-Proto}). The default is {@code http://localhost}
+	 * on port 80.
+	 *
+	 * @param scheme {@code http} or {@code https}
+	 * @param name the host's name
+	 * @param port the port
+	 */
+	public ApiCall server(String scheme, String name, int port) {
+		this.scheme = scheme;
+		this.serverName = name;
+		this.serverPort = port;
 		return this;
 	}
 
@@ -166,6 +189,11 @@ public class ApiCall {
 		// Like Tomcat's, the path info is decoded and the request URI isn't
 		request.setPathInfo(pathInfo.isEmpty() ? null : URLDecoder.decode(pathInfo.replace("+", "%2B"), StandardCharsets.UTF_8));
 		request.setRemoteAddr(remote);
+		if (serverName != null) {
+			request.setScheme(scheme);
+			request.setServerName(serverName);
+			request.setServerPort(serverPort);
+		}
 		if (query != null) {
 			request.setQueryString(query);
 			for (String pair : query.split("&")) {
