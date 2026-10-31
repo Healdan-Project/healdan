@@ -31,6 +31,8 @@ public sealed class FakeScripting : IOfficeScripting
     private readonly ConcurrentQueue<bool> _markAnswers = new();
     private readonly List<(OfficeProgram Program, string Mark)> _marksAsked = [];
     private readonly List<(OfficeProgram Program, DocumentRef Doc)> _fingerprints = [];
+    private readonly ConcurrentQueue<string?> _fingerprintAnswers = new();
+    private readonly ConcurrentQueue<Exception> _fingerprintFailures = new();
     private int _frontAsked;
     private readonly List<OfficeProgram> _frontPrograms = [];
     private readonly ConcurrentDictionary<string, bool> _running = new(StringComparer.Ordinal);
@@ -179,6 +181,19 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>Every fingerprint asked for, in order.</summary>
     public IReadOnlyList<(OfficeProgram Program, DocumentRef Doc)> Fingerprints => Copy(_fingerprints);
 
+    /// <summary>
+    /// The next fingerprints answer these, in order, null as when the program has no document to fingerprint; after
+    /// them, what the window holds.
+    /// </summary>
+    public void AnswerFingerprints(params string?[] answers)
+    {
+        foreach (var answer in answers)
+            _fingerprintAnswers.Enqueue(answer);
+    }
+
+    /// <summary>The next fingerprint throws this, as when the program doesn't answer.</summary>
+    public void FailNextFingerprint(Exception e) => _fingerprintFailures.Enqueue(e);
+
     public Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
     {
         if (FailOpen)
@@ -234,12 +249,14 @@ public sealed class FakeScripting : IOfficeScripting
     public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) =>
         Unsaved is { } unsaved ? Task.FromResult(unsaved(p, path)) : throw Unexpected();
 
-    /// <summary>What the window holds now, summarised (<see cref="FingerprintOf"/>).</summary>
+    /// <summary>What the window holds now, summarised (<see cref="FingerprintOf"/>), unless the test gave another answer.</summary>
     public Task<string?> FingerprintAsync(OfficeProgram p, DocumentRef doc, CancellationToken ct = default)
     {
         lock (_lock)
             _fingerprints.Add((p, doc));
-        return Task.FromResult<string?>(FingerprintOf(WindowText));
+        if (_fingerprintFailures.TryDequeue(out var failure))
+            throw failure;
+        return Task.FromResult(_fingerprintAnswers.TryDequeue(out var answer) ? answer : FingerprintOf(WindowText));
     }
 
     public Task<bool> HasMarkAsync(OfficeProgram p, string mark, CancellationToken ct = default)

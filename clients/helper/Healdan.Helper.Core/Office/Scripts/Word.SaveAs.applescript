@@ -1,7 +1,9 @@
 -- Word.SaveAs: saves a document under a new path, kept off Open Recent where Word allows.
 -- Looks for the document as locate does, but never takes the front one, which would save another document as the copy.
--- Answers how it was found (path, mark or window), character id 31, and the content's fingerprint text from just
--- before the save; or missing.
+-- Fingerprints the content just before the save and again after it, finding the document by its new name, as Rename does.
+-- Answers how it was found (path, mark or window), character id 31, same, changed (its content changed during the save)
+-- or lost (no document has the new name), character id 31, and the content's fingerprint text from just before the
+-- save; or missing.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,
 -- 5 the same with /private added or taken off, 6 mark, 7 window name; any may be empty),
 -- 8 the new POSIX path, 9 the new extension (no dot)
@@ -15,6 +17,7 @@ on run argv
     set windowName to item 7 of argv
     set newPath to item 8 of argv
     set newExt to item 9 of argv
+    set newName to my fileNameOf(newPath)
     if application "Microsoft Word" is not running then return "missing"
     set sep to my separator()
     tell application "Microsoft Word"
@@ -29,7 +32,22 @@ on run argv
             on error
                 my saveInFormat(d, ((POSIX file newPath) as text), newExt)
             end try
-            return howFound & sep & textBefore
+            set d2 to missing value
+            repeat with i from 1 to (count documents)
+                set xd to document i
+                try
+                    if (name of xd) is newName then set d2 to xd
+                end try
+            end repeat
+            set sameAfter to "lost"
+            if d2 is not missing value then
+                if my sameText(textBefore, my hdFingerprint(d2)) then
+                    set sameAfter to "same"
+                else
+                    set sameAfter to "changed"
+                end if
+            end if
+            return howFound & sep & sameAfter & sep & textBefore
         end timeout
     end tell
 end run
@@ -99,6 +117,21 @@ end isInFolder
 on separator()
     return character id 31
 end separator
+
+-- The file name at the end of a POSIX path.
+on fileNameOf(posixPath)
+    set AppleScript's text item delimiters to "/"
+    set lastPart to last text item of posixPath
+    set AppleScript's text item delimiters to ""
+    return lastPart
+end fileNameOf
+
+-- Whether two texts are the same, case and all: AppleScript ignores case unless told not to.
+on sameText(oneText, otherText)
+    considering case
+        return oneText is otherText
+    end considering
+end sameText
 
 -- The text that fingerprints a document: the same in every script that takes one.
 on hdFingerprint(d)

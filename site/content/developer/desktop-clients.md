@@ -387,6 +387,10 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes. The document routes are made anew
   at each start (`AddinDocuments`), so a ticket from before a sign-out is `409 no-ticket` after it, whichever server the
   helper signs in to next.
+- **Nothing typed while filing is lost:** once the user clicks Save in the Save window, `save-new` fingerprints the
+  window it took, before the add-in reads the bytes, and the ticket keeps the fingerprint. `file` saves that window as
+  the copy, and `SaveAs` fingerprints it just before and just after its save. If either differs from the ticket's, or
+  there's no fingerprint to compare, the copy goes up as a save rather than being taken as its starting point.
 - **`new-version`** saves the document first when it has unsaved changes, and that save goes up as the version;
   otherwise the file as it is goes up as one.
 - **The routes' own refusals** are `409`: `not-a-copy` for `new-version` on a window that isn't one of the helper's

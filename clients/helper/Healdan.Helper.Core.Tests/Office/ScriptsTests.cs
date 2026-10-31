@@ -153,7 +153,8 @@ public sealed partial class ScriptsTests
     [Fact]
     public void TheFingerprintIsTheSameInEveryScriptOfAProgram()
     {
-        // Fingerprint, SaveAs and Rename each carry their own copy of the handler, and their texts have to be comparable.
+        // Fingerprint, SaveAs, Rename and Word's SetDocId each carry their own copy of the handler, and their texts have to
+        // be comparable.
         foreach (var program in new[] { "Word", "Excel", "PowerPoint" })
         {
             var handlers = Scripts().Where(s => s.Key.StartsWith(program + ".", StringComparison.Ordinal) && s.Value.Contains("on hdFingerprint(", StringComparison.Ordinal))
@@ -215,6 +216,73 @@ public sealed partial class ScriptsTests
         foreach (var (name, text) in savesAs)
             Assert.True(text.Contains("my locate(p, pTwin, fname, copiesFolder, copiesTwin, wantedMark, windowName, false)", StringComparison.Ordinal),
                 $"{name} falls back to the front window");
+    }
+
+    [Fact]
+    public void SaveAsFingerprintsBeforeAndAfterTheSave()
+    {
+        // The final review's Minor 5: as Rename does, Save As fingerprints the content again after the save, finding the
+        // document by its new name, and compares the two case and all (in a handler of its own, as Word's dictionary
+        // takes "case"), so a line typed while the program saved counts as a change. The text from before the save goes
+        // last, as it may hold the separator.
+        var savesAs = Scripts().Where(s => s.Key.EndsWith(".SaveAs", StringComparison.Ordinal)).ToList();
+        Assert.Equal(3, savesAs.Count);
+        foreach (var (name, text) in savesAs)
+        {
+            InOrder(name, text,
+                "set newName to my fileNameOf(newPath)",
+                "set textBefore to my hdFingerprint(d)",
+                "my saveInFormat(d, newPath, newExt)",
+                "(name of xd) is newName then set d2 to xd",
+                "set sameAfter to \"lost\"",
+                "if my sameText(textBefore, my hdFingerprint(d2)) then",
+                "return howFound & sep & sameAfter & sep & textBefore");
+            Assert.Contains("considering case", Handler(text, "sameText"));
+        }
+    }
+
+    [Fact]
+    public void SetDocIdLeavesADocumentTypedInMeanwhileUnsaved()
+    {
+        // The final review's Important 2: Word takes keystrokes between the Apple events that update the footer's fields.
+        // SetDocId reads saved and fingerprints the text before it changes anything, fingerprints it again once the
+        // fields are done, and marks the document saved only if it was and the text is the same, case and all. A
+        // keystroke meanwhile leaves it unsaved, so Word asks about it at close.
+        var text = Scripts()["Word.SetDocId"];
+        InOrder("Word.SetDocId", text,
+            "set wasSaved to saved of d",
+            "set textBefore to my hdFingerprint(d)",
+            "set value of custom document property \"Healdan Doc ID\" of d to v",
+            "update field",
+            "set untouched to my sameText(textBefore, my hdFingerprint(d))",
+            "if wasSaved and untouched then set saved of d to true");
+        Assert.Single(Regex.Matches(text, "set saved of d"));
+        Assert.Contains("considering case", Handler(text, "sameText"));
+    }
+
+    [Fact]
+    public void TheComparingIsTheSameInEveryScript()
+    {
+        // sameText and fileNameOf are copied into each script that uses them, and must not drift apart.
+        foreach (var handler in new[] { "sameText", "fileNameOf" })
+        {
+            var handlers = Scripts().Where(s => s.Value.Contains($"on {handler}(", StringComparison.Ordinal))
+                .ToDictionary(s => s.Key, s => Handler(s.Value, handler));
+            Assert.True(handlers.Count >= 3, $"too few scripts with {handler}");
+            Assert.Single(handlers.Values.Distinct());
+        }
+    }
+
+    /// <summary>Each line is in the script, after the one before it.</summary>
+    private static void InOrder(string name, string script, params string[] lines)
+    {
+        var from = 0;
+        foreach (var line in lines)
+        {
+            var at = script.IndexOf(line, from, StringComparison.Ordinal);
+            Assert.True(at >= 0, $"{name} doesn't have, after what comes before it: {line}");
+            from = at + line.Length;
+        }
     }
 
     [Fact]

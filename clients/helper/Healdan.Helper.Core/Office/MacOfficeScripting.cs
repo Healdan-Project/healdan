@@ -112,12 +112,16 @@ public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder =
         var answer = await RunAsync(p, "SaveAs", [.. Finder(doc.Path, doc.Mark, doc.WindowName), newPath, extension], ct);
         if (answer == "missing")
             throw new OfficeScriptException($"{OfficePrograms.CheckOutName(p)} has no document to save.");
-        var split = answer.IndexOf(Separator);
+        // How it was found; whether the content after the save, found by its new name, was the same as before it (same,
+        // changed, or lost when no document had the new name); then the content's text from before the save, last, as it
+        // may hold the separator.
+        var parts = answer.Split(Separator, 3);
         // Never the front window: the scripts don't fall back to it, which would save another document as the copy.
-        if (split < 0 || answer[..split] is not ("path" or "mark" or "window"))
+        if (parts.Length != 3 || parts[0] is not ("path" or "mark" or "window") || parts[1] is not ("same" or "changed" or "lost"))
             throw Unexpected(p, "SaveAs");
-        var changed = fingerprint is not null && !string.Equals(Hash(answer[(split + 1)..]), fingerprint, StringComparison.OrdinalIgnoreCase);
-        return new SaveAsResult(answer[..split], changed);
+        var changed = fingerprint is not null
+            && (parts[1] != "same" || !string.Equals(Hash(parts[2]), fingerprint, StringComparison.OrdinalIgnoreCase));
+        return new SaveAsResult(parts[0], changed);
     }
 
     public async Task ReopenAsync(OfficeProgram p, string path, CancellationToken ct = default)

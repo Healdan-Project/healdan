@@ -984,6 +984,8 @@ Every call made while building that the plan or the spec didn't settle, in order
 | 2026-10-31 | Task 10 | The window polls `ping`, never `state`; Insert Doc ID updates an existing field rather than adding a second | `state` makes the helper drive the app at every check; the User Guide says pressing it twice leaves one field | spec §6.3, §5.7 |
 | 2026-10-31 | Task 10 review | Pairing happens in a `displayDialogAsync` window, which hands the key to the button with `messageParent`; the button's press isn't completed until the dialog closes | the documented way for a dialog to talk to a function command; the key doesn't depend on shared storage | spec §5.9 |
 | 2026-10-31 | Task 10 review | Office's error text goes from the button to the window with `messageChild`, never in the window's address | the server's access log could hold file names | spec §6.2 |
+| 2026-10-31 | Final review | Filing's fingerprint is taken in `save-new`, once the Save window answers Save, by the window `save-new` took, and the ticket keeps it; `file` takes none. `SaveAs` fingerprints after its save too, finding the window by its new name, and a null fingerprint, from the ticket or after the save, counts as changed | taken as the bytes arrived, the fingerprint already held a line typed while the add-in read them, set its mark and sent them, so the copy was taken as the starting point and the line lost at close | spec §5.5 |
+| 2026-10-31 | Final review | `Word.SetDocId` fingerprints the text before it sets the property and after the fields are updated, and marks the document saved only if it was and the text is the same, compared case and all | Word takes keystrokes between the fields' Apple events; marked saved, a line typed then closed without a prompt and was lost | spec §5.7 |
 
 ## Follow-ups
 
@@ -1002,7 +1004,6 @@ Filled in as the build found them; left open when Tasks 1 to 11 were built. None
 **Lost work and reachability, for the final review**
 - Adopting a rename on the owner file alone lets `CopyStore.Moved` delete the old copy without checking it's confirmed (`CopyCycle.cs`, `CopyStore.cs`). The pre-rename check covers the file but not the owner names. Theoretical: no helper flow leaves a stray owner file.
 - Until the save-back succeeds, the crash window's Send and Check In can still check in under Word's restored window.
-- `Word.SetDocId` reads `saved`, updates fields over many Apple events, then sets `saved` true: a keystroke in between is marked saved and lost at close. It runs after every Word rename.
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
 - Word relaunched within one crash poll (5 seconds) of a Force Quit never registers as a crash, so its recovered window isn't saved back. A restored window open before the helper starts is treated as open and never saved back (pre-existing).
 - A body with an escaped lone surrogate (`{"app":"\ud800"}`) passes UTF-8 validation and JSON parsing, then throws in `TryGetValue<string>` and answers `500` with a stack trace in the log, without a key (`AddinHandler.cs`). `result` maps it to `400`; the other routes should.

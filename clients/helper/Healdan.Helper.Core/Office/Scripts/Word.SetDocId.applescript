@@ -1,6 +1,7 @@
 -- Word.SetDocId: sets the document property Healdan Doc ID, updates the footer fields showing it and, if the
--- document was saved, leaves it saved. Answers ok, no-property (the document has no such property; none is made),
--- or missing.
+-- document was saved and its text is the same as before, leaves it saved. Word takes keystrokes between the Apple
+-- events that update the fields, so a document typed in meanwhile is left with unsaved changes, and Word asks about
+-- them at close. Answers ok, no-property (the document has no such property; none is made), or missing.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,
 -- 5 the same with /private added or taken off, 6 mark, 7 window name; any may be empty),
 -- 8 the value
@@ -18,6 +19,7 @@ on run argv
             set d to item 1 of located
             if d is missing value then return "missing"
             set wasSaved to saved of d
+            set textBefore to my hdFingerprint(d)
             try
                 set value of custom document property "Healdan Doc ID" of d to v
             on error
@@ -33,7 +35,8 @@ on run argv
                     end try
                 end repeat
             end repeat
-            if wasSaved then set saved of d to true
+            set untouched to my sameText(textBefore, my hdFingerprint(d))
+            if wasSaved and untouched then set saved of d to true
             return "ok"
         end timeout
     end tell
@@ -100,3 +103,17 @@ on isInFolder(docPath, folderPath)
     if docPath does not start with folderPrefix then return false
     return (text ((length of folderPrefix) + 1) thru -1 of docPath) does not contain "/"
 end isInFolder
+
+-- The text that fingerprints a document: the same in every script that takes one.
+on hdFingerprint(d)
+    tell application "Microsoft Word"
+        return "#" & (content of text object of d)
+    end tell
+end hdFingerprint
+
+-- Whether two texts are the same, case and all: AppleScript ignores case unless told not to.
+on sameText(oneText, otherText)
+    considering case
+        return oneText is otherText
+    end considering
+end sameText

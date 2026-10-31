@@ -33,7 +33,8 @@ public enum RenameResult
 /// <summary>
 /// What <see cref="IOfficeScripting.SaveAsAsync"/> did. <paramref name="FoundBy"/> is how the document was found:
 /// <c>path</c>, <c>mark</c> or <c>window</c>, never the front window. <paramref name="Changed"/> is whether its content differed from the fingerprint
-/// the caller gave, as the save began; false when the caller gave none.
+/// the caller gave, as the save began or once it was done, or couldn't be found under the new name to tell; false when the
+/// caller gave none.
 /// </summary>
 public sealed record SaveAsResult(string FoundBy, bool Changed);
 
@@ -94,7 +95,8 @@ public interface IOfficeScripting
 
     /// <summary>
     /// Saves a document under a new path, kept off Open Recent where the program allows, and says how it found the
-    /// document and whether its content differs from <paramref name="fingerprint"/> (a value <see cref="FingerprintAsync"/> gave).
+    /// document and whether its content, before the save or after it, differs from <paramref name="fingerprint"/> (a value
+    /// <see cref="FingerprintAsync"/> gave).
     /// The new path's extension picks the file format. It never takes the front window for the document given (Review
     /// Focus 2): another document saved under the new path would become that copy.
     /// </summary>

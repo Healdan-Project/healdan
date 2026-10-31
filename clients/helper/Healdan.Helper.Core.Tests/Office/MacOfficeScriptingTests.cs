@@ -21,7 +21,7 @@ public sealed class MacOfficeScriptingTests
     {
         const string path = "/tmp/a\"; do shell script \"x.docx";
         const string newPath = "/tmp/b.docx";
-        _runner.Answer = "path" + Separator + "#text";
+        _runner.Answer = "path" + Separator + "same" + Separator + "#text";
 
         await _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(path, null, null), newPath, null);
 
@@ -78,7 +78,7 @@ public sealed class MacOfficeScriptingTests
     [Fact]
     public async Task SaveAsAndRenameGetTheLongTimeout()
     {
-        _runner.Answer = "path" + Separator + "#text";
+        _runner.Answer = "path" + Separator + "same" + Separator + "#text";
         await _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef("/c/a.docx", null, null), "/c/b.docx", null);
         _runner.Answer = "renamed";
         await _scripting.RenameIfUnchangedAsync(OfficeProgram.Excel, "/c/a.xlsx", "/c/b.xlsx");
@@ -259,19 +259,53 @@ public sealed class MacOfficeScriptingTests
     {
         var before = await FingerprintOf("#hello");
 
-        _runner.Answer = "mark" + Separator + "#hello";
+        // The script answers how it found the document, whether its content after the save was the same as before it,
+        // and the content's text from before the save.
+        _runner.Answer = "mark" + Separator + "same" + Separator + "#hello";
         var same = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(null, "mark-1", "Book1"), "/c/a.XLSX", before);
 
-        _runner.Answer = "path" + Separator + "#hello, and more";
+        _runner.Answer = "path" + Separator + "same" + Separator + "#hello, and more";
         var edited = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef("/c/b.xlsx", null, null), "/c/a.xlsx", before);
 
-        _runner.Answer = "window" + Separator + "#anything";
+        _runner.Answer = "window" + Separator + "same" + Separator + "#anything";
         var noBaseline = await _scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(null, null, "Book1"), "/c/a.xlsx", null);
 
         Assert.Equal(new SaveAsResult("mark", false), same);
         Assert.Equal(new SaveAsResult("path", true), edited);
         Assert.Equal(new SaveAsResult("window", false), noBaseline); // nothing to compare with
         Assert.Equal(["", "", "", "", "", "mark-1", "Book1", "/c/a.XLSX", "xlsx"], _runner.Calls[0].Args);
+    }
+
+    [Fact]
+    public async Task SaveAsCountsAnEditDuringTheSaveAsAChange()
+    {
+        // The final review's Minor 5: the content is fingerprinted after the save too, as Rename does, so a line typed
+        // while the program saved is in the copy and goes up. A document the script can't find by its new name afterwards
+        // can't be shown unchanged either.
+        var before = await FingerprintOf("#hello");
+
+        _runner.Answer = "mark" + Separator + "changed" + Separator + "#hello";
+        var typedDuring = await _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(null, "mark-1", "Document1"), "/c/a.docx", before);
+        _runner.Answer = "mark" + Separator + "lost" + Separator + "#hello";
+        var lost = await _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(null, "mark-1", "Document1"), "/c/a.docx", before);
+        // The text is last, so a separator in it is the document's own.
+        var twoParts = await FingerprintOf("#hello" + Separator + "there");
+        _runner.Answer = "mark" + Separator + "same" + Separator + "#hello" + Separator + "there";
+        var withSeparator = await _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(null, "mark-1", "Document1"), "/c/a.docx", twoParts);
+
+        Assert.Equal(new SaveAsResult("mark", true), typedDuring);
+        Assert.Equal(new SaveAsResult("mark", true), lost);
+        Assert.Equal(new SaveAsResult("mark", false), withSeparator);
+    }
+
+    [Fact]
+    public async Task SaveAsRefusesAnAnswerItCantRead()
+    {
+        foreach (var answer in new[] { "path" + Separator + "#hello", "path" + Separator + "perhaps" + Separator + "#hello", "path" })
+        {
+            _runner.Answer = answer;
+            await Assert.ThrowsAsync<OfficeScriptException>(() => _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef("/c/a.docx", null, null), "/c/b.docx", null));
+        }
     }
 
     private async Task<string> FingerprintOf(string text)
@@ -287,7 +321,7 @@ public sealed class MacOfficeScriptingTests
     {
         // Review Focus 2: the scripts never take the front window (ScriptsTests.SaveAsNeverTakesTheFrontWindow); an
         // answer saying they did is one the helper doesn't know, never a document to take for the copy.
-        _runner.Answer = "front" + Separator + "#another document";
+        _runner.Answer = "front" + Separator + "same" + Separator + "#another document";
 
         await Assert.ThrowsAsync<OfficeScriptException>(() => _scripting.SaveAsAsync(OfficeProgram.Word, new DocumentRef(null, "mark-1", "Document1"), "/c/b.docx", null));
     }
@@ -359,7 +393,7 @@ public sealed class MacOfficeScriptingTests
         await _scripting.SaveAsync(program, path);
         _runner.Answer = "#text";
         await _scripting.FingerprintAsync(program, reference);
-        _runner.Answer = "path" + Separator + "#text";
+        _runner.Answer = "path" + Separator + "same" + Separator + "#text";
         await _scripting.SaveAsAsync(program, reference, path, null);
 
         Assert.Equal(7, _runner.Calls.Count);
@@ -416,7 +450,7 @@ public sealed class MacOfficeScriptingTests
         await scripting.FingerprintAsync(OfficeProgram.Excel, new DocumentRef(path, null, null));
         _runner.Answer = "renamed";
         await scripting.RenameIfUnchangedAsync(OfficeProgram.Excel, path, "/Users/me/Copies/b.xlsx");
-        _runner.Answer = "path" + Separator + "#text";
+        _runner.Answer = "path" + Separator + "same" + Separator + "#text";
         await scripting.SaveAsAsync(OfficeProgram.Excel, new DocumentRef(path, null, null), "/Users/me/Copies/b.xlsx", null);
 
         Assert.Equal(7, _runner.Calls.Count);
