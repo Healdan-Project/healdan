@@ -108,4 +108,3 @@ Office loads them before anyone has signed in to anything.
 - **Uploads and upgrades.** The manifest's add-in ID never changes, and its version changes only when the manifest
   itself does, which is what makes Microsoft 365 take a new one. The pages change with Healdan: an upgrade updates
   them for everyone, and needs no new upload unless the manifest changed too.
-- **The admin centre's steps** for deploying the manifest are on this page too, as part of this section.
