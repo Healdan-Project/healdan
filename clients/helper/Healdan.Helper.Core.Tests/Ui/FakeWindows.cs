@@ -58,6 +58,20 @@ public sealed class FakeWindows : IWindows
 
     public void DismissCrashed(string path) => Dismissed.Enqueue(path);
 
+    /// <summary>What Set Up Microsoft Office answers: by default the user chooses Not Now.</summary>
+    public Func<Task<bool>> OnSetUpOffice { get; set; } = () => Task.FromResult(false);
+
+    /// <summary>How many times Set Up Microsoft Office was shown.</summary>
+    public int SetUpOffices => Volatile.Read(ref _setUpOffices);
+
+    private int _setUpOffices;
+
+    public Task<bool> SetUpOfficeAsync()
+    {
+        Interlocked.Increment(ref _setUpOffices);
+        return OnSetUpOffice();
+    }
+
     /// <summary>How many times a dropped link brought the waiting window up.</summary>
     public int Brought => Volatile.Read(ref _brought);
 

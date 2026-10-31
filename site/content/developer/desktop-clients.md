@@ -46,7 +46,8 @@ app.
     bar icon is drawn at run time from `HealdanMark`'s shapes (`Tray/TrayIcons.cs`).
 - **`Healdan.Helper.Core.Tests`** is xUnit.
 - **`Healdan.Helper.Tests`** is xUnit too, for the app's own code that needs Avalonia to test. It runs Avalonia
-  headless, with Skia's real drawing.
+  headless, with Skia's real drawing and the helper's own styles (`Headless.cs`), so a test can make a window, click
+  its buttons and read what it shows, as `SetUpOfficeWindowTests` does.
 
 ### San Francisco's Layout
 
@@ -195,6 +196,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 | Settings | `<support>/settings.json` | the same |
 | Device id | `<support>/device.json`: a random UUID made once, not a secret | the same |
 | The channel | `<support>/channel.json`, mode 600: `{"port", "secret", "pid"}` | the same |
+| The add-in's certificate | `<support>/addin-cert.pem` and `addin-key.pem` (mode 600): the helper's own self-signed certificate for `localhost` and `127.0.0.1`, RSA 2048, valid 800 days and made again with fewer than 30 left (`AddinCertificate`). The user trusts it once, in their login keychain, with Set Up Microsoft Office (`OfficeSetUp`; `MacCertificateTrust` runs `security add-trusted-cert -r trustRoot -p ssl`) | none: Microsoft Office is a Mac app here, so nothing makes one |
 | Logs | `~/Library/Logs/Healdan Helper/helper.log` and `extension.log` | `<support>/helper.log` and `extension.log` |
 
 The token is in the keychain, never in a file: service `Healdan Helper`, account the server's base URL

@@ -2,6 +2,7 @@ using System.Text.Json.Nodes;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Healdan.Helper.Core;
+using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Forms;
@@ -21,7 +22,7 @@ namespace Healdan.Helper.Windows;
 /// <para>A window that asks what the user started (Sign In, Sign Out on This Computer Only?, Save, Open, Properties,
 /// Checked Out on Another Computer) waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link
 /// brings it to the front. One the user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links
-/// back, and nor do About and its Open-Source Notices (<see cref="OpenWindows"/>).</para>
+/// back, and nor do About, its Open-Source Notices and Set Up Microsoft Office (<see cref="OpenWindows"/>).</para>
 /// <para>One of each window at a time: a second request for one that's open brings it to the front and is answered
 /// Cancel. The windows read Healdan through the session's API client, whose refused token asks for the sign-in again,
 /// and open documents through its cycle once they've closed, so the app never waits on a window for a download.
@@ -33,12 +34,16 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     private readonly Dictionary<string, Window> _single = [];
     private readonly Dictionary<string, CrashWindow> _crashShown = new(StringComparer.Ordinal);
     private Task<bool>? _signIn;
+    private Task<bool>? _setUpOffice;
 
     /// <summary>The running helper, set once it's made (it needs these windows to be made first).</summary>
     public HelperSession? Session { get; set; }
 
     /// <summary>The LibreOffice extension's check, for Settings; set with <see cref="Session"/>.</summary>
     public ExtensionCheck? Extension { get; set; }
+
+    /// <summary>What Set Up Microsoft Office does (M3.5 spec §5.13), for its window and the menu; set with <see cref="Session"/>.</summary>
+    public OfficeSetUp? SetUp { get; set; }
 
     public bool Waiting => _open.Waiting;
 
@@ -192,6 +197,40 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     {
         if (_crashShown.TryGetValue(path, out var window))
             window.Close();
+    });
+
+    // --- Set Up Microsoft Office -----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Set Up Microsoft Office (M3.5 spec §5.13), from the first start or the menu. The user started it or it was offered,
+    /// and nothing waits on its answer, so it holds no links back, as Settings doesn't. One at a time: asked again, the open
+    /// window comes to the front and the answer is the same.
+    /// </summary>
+    public Task<bool> SetUpOfficeAsync() => OnUi(() =>
+    {
+        const string key = "set-up-office";
+        if (_setUpOffice is { IsCompleted: false } open)
+        {
+            Bring(key);
+            return open;
+        }
+        if (SetUp is not { } setUp)
+            return Task.FromResult(false);
+        var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var window = new SetUpOfficeWindow(setUp, log);
+        _single[key] = window;
+        var shown = Show(window, waits: false, () =>
+        {
+            _single.Remove(key);
+            done.TrySetResult(window.Trusted);
+        });
+        if (!shown)
+        {
+            _single.Remove(key);
+            return Task.FromResult(false);
+        }
+        log.Info("Set Up Microsoft Office window shown");
+        return _setUpOffice = done.Task;
     });
 
     // --- Settings --------------------------------------------------------------------------------------------------

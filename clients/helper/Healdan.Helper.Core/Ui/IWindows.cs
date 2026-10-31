@@ -58,4 +58,11 @@ public interface IWindows
     /// a Crash window goes, if it's up, as neither Reopen nor Send and Check In applies any more.
     /// </summary>
     void DismissCrashed(string path);
+
+    /// <summary>
+    /// Set Up Microsoft Office (M3.5 spec §5.13): says what the helper is about to ask for and why, and its Set Up has the
+    /// Mac trust the helper's certificate. True once the certificate is trusted; false for Not Now, a close, or a Set Up the
+    /// user cancelled or that failed. Asks nothing a link waits on, so it holds none back.
+    /// </summary>
+    Task<bool> SetUpOfficeAsync();
 }

@@ -105,6 +105,37 @@ mistaken for LibreOffice's own Save and Open.
   the extension is in, the helper reminds you each time it starts.
 - **After you install a new version of the helper,** LibreOffice may ask again, if it brings a newer extension.
 
+## Setting Up Microsoft Office
+
+Word, Excel and PowerPoint reach Healdan Helper on your Mac through a secure connection, which they use only once your
+Mac trusts a certificate the helper makes for itself. **Set Up Microsoft Office** does that, and tells you about the two
+other things macOS asks for later. You do it once, however many of the three apps you use.
+
+- **When it opens:** the first time the helper starts with Word, Excel or PowerPoint installed on your Mac, once you've
+  signed in. If you choose **Not Now**, it doesn't open again by itself: choose **Set Up Microsoft Office…** in the
+  helper's menu when you're ready. That item is in the menu only while Set Up has something to do, and goes once it's
+  done.
+- **The window** has three rows:
+
+  | Row | What it means |
+  |---|---|
+  | **Trust Healdan Helper's certificate** | macOS asks for your password once. Word, Excel and PowerPoint use the certificate to reach Healdan Helper on this Mac. **Set Up** does this one |
+  | **Allow Healdan Helper to control each app** | The first time the helper saves a document in Word, Excel or PowerPoint, macOS asks whether it may. Choose **Allow**. Each app asks for itself |
+  | **Grant each app the Copies folder** | The first time an app saves into Healdan Helper's `Copies` folder, it asks for access. Click **Select…**, go up one level, select `Copies`, and click **Grant Access**. The chooser opens inside `Copies`, where Grant Access is greyed out, which is why you go up first |
+
+- **Set Up** asks macOS to trust the certificate. macOS asks for your password (or Touch ID), and a tick shows in the
+  window when it's done. If you cancel the password prompt, or macOS refuses, a line under the rows says so, and you can
+  choose **Set Up** again. The other two rows aren't done by Set Up: macOS asks for them when each app first needs them,
+  and the window only tells you what to expect.
+- **The certificate** is the helper's own, made on your Mac, and good for the addresses `localhost` and `127.0.0.1`
+  only, which are your own Mac's. It isn't a certificate authority, so it can't vouch for any website, and its private
+  key stays in the helper's folder (`addin-key.pem`, in `~/Library/Application Support/Healdan Helper/`), readable by you
+  alone. macOS trusts it for secure connections only, in your login keychain, where Keychain Access lists it as
+  "Healdan Helper (this Mac)".
+- **It lasts 800 days.** When fewer than 30 are left, the helper makes a new one, and **Set Up Microsoft Office…** comes
+  back in the menu for you to trust it. Without a trusted certificate, Word, Excel and PowerPoint can't reach the
+  helper.
+
 ## The Prompts to Expect
 
 Each of these comes once.
@@ -115,9 +146,13 @@ Each of these comes once.
 | The first time the helper starts | macOS: allow notifications from Healdan Helper? | **Allow**. Without them, the helper's latest notice shows in its menu instead |
 | After your first sign-in | macOS may say that Healdan Helper was added to your login items | Nothing: it lets the helper start when you sign in |
 | After your first sign-in | LibreOffice: install the extension Healdan? | **OK**, then restart LibreOffice |
+| After your first sign-in, with Word, Excel or PowerPoint installed | The helper's Set Up Microsoft Office window, and when you choose Set Up, macOS asking for your password to change your certificate trust settings | **Set Up**, then your password: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
+| The first time the helper saves in each of Word, Excel and PowerPoint | macOS: allow Healdan Helper to control the app? | **Allow** |
+| The first time each of them saves into the helper's `Copies` folder | The app: grant access to the folder | **Select…**, up one level, `Copies`, **Grant Access** |
 | The first Open in App from each browser | The browser: allow this page to open Healdan Helper? | **Allow**. Ticking the box to remember it saves asking again |
 
-The helper doesn't ask for your keychain password: it reads its own sign-in without one.
+Apart from the password macOS asks for when you set up Microsoft Office, none of these asks for your Mac's password. The
+helper doesn't ask for your keychain password: it reads its own sign-in without one.
 
 ## The Helper's Menu
 
@@ -134,6 +169,7 @@ Click Healdan's icon in the menu bar.
 | Open from Healdan… | The Open from Healdan window: see [Opening Documents](../opening-documents/) |
 | Open Healdan in Browser | Healdan's web page, on the helper's server, in your usual browser. It works when the helper is signed out too: the web page has its own sign-in |
 | Install the LibreOffice Extension… | Only while the extension isn't installed, or an older version is |
+| Set Up Microsoft Office… | Only while Word, Excel or PowerPoint is installed and the helper's certificate isn't trusted yet, or is nearly out of date: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
 | Settings… | See [Settings](#settings) |
 | Sign Out, or Sign In… | See [Signing Out](#signing-out) |
 | About Healdan Helper | The helper's version, and the server's: see [About Healdan Helper](#about-healdan-helper) |
