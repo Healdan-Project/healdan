@@ -926,11 +926,11 @@ Expected: PASS.
 
 Not code. In order:
 
-- [ ] **Step 1:** tag `helper-v0.4.0` on master once PRs A–E are merged; `clients.yml` packages, signs, notarises and attaches the disk image.
-- [ ] **Step 2:** the owner upgrades the semi-production server to master (the persistent host's `git pull` and rebuild) and sets `LOGICALDOC_PUBLIC_URL` if it isn't set.
-- [ ] **Step 3:** the owner removes the trial's add-in from Integrated apps, and the trial certificate's trust (`security remove-trusted-cert` with the trial's path), then uploads `https://<server>/api/addin/manifest.xml`, assigned to themselves.
-- [ ] **Step 4:** the owner installs Healdan Helper 0.4.0, runs Set Up Microsoft Office, and runs spec §12.2's walkthrough, against the server over HTTPS, as a non-admin user. Each row is recorded in the plan's decision log; failures become a punch list.
-- [ ] **Step 5:** the roadmap's M3.5 row becomes **done**, with the date and the PRs.
+- [x] **Step 1:** tag `helper-v0.4.0` on master once PRs A–E are merged; `clients.yml` packages, signs, notarises and attaches the disk image.
+- [x] **Step 2:** the owner upgrades the semi-production server to master (the persistent host's `git pull` and rebuild) and sets `LOGICALDOC_PUBLIC_URL` if it isn't set.
+- [x] **Step 3:** the owner removes the trial's add-in from Integrated apps, and the trial certificate's trust (`security remove-trusted-cert` with the trial's path), then uploads `https://<server>/api/addin/manifest.xml`, assigned to themselves.
+- [x] **Step 4:** the owner installs Healdan Helper 0.4.0, runs Set Up Microsoft Office, and runs spec §12.2's walkthrough, against the server over HTTPS, as a non-admin user. Each row is recorded in the plan's decision log; failures become a punch list.
+- [x] **Step 5:** the roadmap's M3.5 row becomes **done**, with the date and the PRs.
 
 ## Decision log
 
@@ -1010,6 +1010,10 @@ Every call made while building that the plan or the spec didn't settle, in order
 | 2026-10-31 | Owner's walkthrough | Word's "changed by another application" warning on a save after a rename, seen once, and a crashed copy reopened after its check-out ended in the web page, which says so only at the next save, are left as issues | neither came back in the rest of the walkthrough, and the second is the documented "Your Check-Out Ended" | Healdan-Project/healdan#135, Healdan-Project/healdan#136 |
 | 2026-11-01 | Owner's walkthrough, on 0.4.0-rc2 | The first press in a freshly paired Excel, with the helper's Automation approval reset (`tccutil reset AppleEvents com.healdan.helper`) and the helper restarted, failed after 20 s with macOS's question still up. Pairing, then pressing again, is as designed and documented. Rows 5 and 6 go on with rc2; the first press runs again on rc3 | — | spec §12.2 |
 | 2026-11-01 | Owner's walkthrough, on rc2 | Each `Ask` counts its app's documents, workbooks or presentations, and `ScriptsTests` checks that it asks for something only the app answers | rc2's `Ask` got the app's name, which AppleScript answers itself, sending the app nothing: it came back at once, and the next script met the question with its 20 seconds. The unit tests fake `osascript`, and the `MacOffice` tests run with Automation already allowed | spec §5.2, `*.Ask.applescript` |
+| 2026-11-01 | Owner's walkthrough, on rc2 | Rows 5 and 6, and Save to Healdan on a Healdan document, pass. A second user's copy opened read-only with no Grant File Access prompt, and said who had it checked out. Save to Healdan saved as Cmd+S does, and the title moved on. After a Force Quit, Reopen brought Word's window back once, and the line left unsaved went up as the next version. A save made offline went up when the network came back | The first Force Quit came 4 s after a save, before AutoRecover's minute, so Word had nothing newer to bring back and nothing went up, as designed; the second waited | spec §12.2 |
+| 2026-11-01 | Owner's walkthrough, on 0.4.0-rc3 | The first press after the Automation reset passes: macOS asked for Excel, the owner waited 47 s before Allow, and the Save window opened. PowerPoint's first press, at 19 s, opened Save as New Document | rc3's `Ask` waits for the question | spec §5.2 |
+| 2026-11-01 | Owner's walkthrough, on rc3 | For a read-only Word copy, the docs give Word's route (save its Duplicate in a folder of one's own, then press Save to Healdan on it, and delete that file), and Known Limitations says so; a smoother route is left as an issue. The docs also say a read-only Office copy is deleted when its app quits | Word turns its whole ribbon off for a read-only copy, the Healdan tab included, and its banner's Duplicate is its own Save As. Excel and PowerPoint keep the tab on, and their Save to Healdan opens Save as New Document. Office leaves no owner file beside a read-only copy, so the close watcher sees only its app quit | spec §5.5, `opening-documents`, `known-limitations.md`, Healdan-Project/healdan#141 |
+| 2026-11-01 | Release of rc3 | `AnEditWhileFilingIsSent` takes either title, and `package.sh` tries each staple three times | master's macOS run after #139 found the edit already gone up as v1.1 in the filing's answer; rc3's Package run lost its connection to Apple while stapling the disk image, and passed when re-run | Healdan-Project/healdan#140 |
 
 ## Follow-ups
 
@@ -1022,7 +1026,7 @@ Filled in as the build found them, and left open once Tasks 1 to 11 and the fina
 - Accessibility: a `display:none` live region may not announce when it is shown; `aria-busy` is on all of `<main>` for up to 12 seconds; focus moves from the message to the code field at once; the message and the status repeat each other.
 - `MacCertificateTrust`'s cancel, failure, kill and timeout paths are untested; `OfficeSetUp.TrustAsync` re-checks `NeedsSetUp` straight after `security` returns, with no retry for trustd's lag; renewal leaves the old certificate and its trust entry in the login keychain.
 - The `check` icon's path data was written by hand in the release's format, not copied from Tabler 3.50.0; diff it against the real file.
-- Docs: the Install page names "a helper version with Microsoft Office support" with no number, and Task 12 should say 0.4.0; `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
+- Docs: `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
 
 **Lost work and reachability, left after the final review**
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
@@ -1048,6 +1052,9 @@ Filled in as the build found them, and left open once Tasks 1 to 11 and the fina
 - A running port keeps serving a certificate past its expiry, and says "stays closed" in its log while open. `Dispose` disposes the certificate during handshakes. Signed in but not yet started also answers `signed-out`, while `ping` says `signedIn: true`.
 - A `file://` address with a literal `%` in a name Office didn't escape would be decoded wrongly; the front window still decides then.
 - An idempotent call (`ping`, `state`) isn't retried when the helper comes back on the same port. The remembered port skips `hello`, and `not-paired` from any port drops the key, which is within the two-people limitation; a failed `setItem` after pairing leaves a key the helper keeps.
+
+**Found by the walkthrough**
+- Filing changes from a read-only Word copy takes Word's Duplicate and leaves a file for the user to delete: Healdan-Project/healdan#141, after 0.4.0.
 
 **Server and docs**
 - The blank `server.url` branch is untested, and the manifest varies by `Host` with no `Cache-Control: no-cache`.

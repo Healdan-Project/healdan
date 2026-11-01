@@ -54,7 +54,8 @@ Excel and PowerPoint), to start the document's next version: `v2.2` becomes `v3.
 - With no unsaved changes, the document as it stands becomes the new version.
 - If you save again while the new version is still waiting for an earlier save to reach Healdan, that later save
   becomes the new version instead, as it holds everything.
-- A read-only copy can't: use Save as New Document instead.
+- A read-only copy can't: use Save as New Document instead (from Word, see
+  [Read-Only Copies](../opening-documents/#read-only-copies)).
 
 ## Save as New Document
 

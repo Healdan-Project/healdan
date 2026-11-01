@@ -81,8 +81,9 @@ files in them, and in LibreOffice when it doesn't.
 - **The title bar** reads `Lease agreement #1234 v2.1`, as in LibreOffice. A copy open in Word or Excel takes each
   saved version's name as the title moves on; one in PowerPoint keeps the version it opened as. See
   [Editing and Versions](../editing-and-versions/#in-word-excel-and-powerpoint).
-- **A read-only copy** opens with "(read-only)" at the end of its title, and a notice says why, as for LibreOffice:
-  see [Read-Only Copies](#read-only-copies). To file your changes, use **Save as New Document** on the Healdan tab.
+- **A read-only copy** opens with "(read-only)" at the end of its title, and a notice says why, as for LibreOffice.
+  In Excel and PowerPoint, **Save as New Document** on the Healdan tab files your changes. Word turns its ribbon off
+  for a read-only copy, the Healdan tab included: see [Read-Only Copies](#read-only-copies).
 
 ## What Happens When It Opens
 
@@ -102,9 +103,20 @@ A document opens as a read-only copy when:
 - you ticked Open Read-Only, or chose an older version.
 
 Its title ends in "(read-only)", and a notice says why, such as "Opened read-only: Jamie Clarke has it checked out."
-The app opens it read-only. Nothing you do to it reaches the document: saving it shows Save as New Document
-instead, which files your changes as a new document (see
-[Editing and Versions](../editing-and-versions/#save-as-new-document)). The copy is deleted when you close it.
+The app opens it read-only, and nothing you do to it reaches the document. To file your changes as a new document,
+with its own doc # (see [Editing and Versions](../editing-and-versions/#save-as-new-document)):
+
+- **In LibreOffice,** save it: Save as New Document opens instead.
+- **In Excel and PowerPoint,** press **Save to Healdan** or **Save as New Document** on the Healdan tab. Their own
+  Save can't save over the copy, so if Excel asks whether to save your changes as you close it, choose
+  **Don't Save**.
+- **In Word,** the ribbon is off, the Healdan tab included, and Word's banner offers **Duplicate**, which is Word's
+  own Save As. Save the duplicate in a folder of your own, such as Documents, then press **Save to Healdan** on it:
+  it isn't in Healdan, so the Save window files it as a new document. Then delete the file you saved in your
+  folder, which Healdan doesn't look after.
+
+The copy is deleted when you close it in LibreOffice. Word, Excel and PowerPoint leave no sign that a read-only
+copy's window has closed, so it's deleted when you quit the app.
 
 ## Checked Out to You on Another Computer
 

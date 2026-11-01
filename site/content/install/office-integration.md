@@ -156,8 +156,7 @@ and PowerPoint for the people you choose. You need to be a Microsoft 365 adminis
 
 ### What Each Mac Needs for the Add-in
 
-- **Healdan Helper,** signed in to this server, with a version that has Microsoft Office support, and Set Up Microsoft
-  Office done. The add-in calls the helper at `https://127.0.0.1:47615` on the same Mac, or on `47616`, `47617` or
+- **Healdan Helper 0.4.0 or later,** signed in to this server, with Set Up Microsoft Office done. The add-in calls the helper at `https://127.0.0.1:47615` on the same Mac, or on `47616`, `47617` or
   `47618` if another person's helper on that Mac already has the first. Nothing leaves the Mac, so there's no firewall
   rule to make, and the helper answers only pages from your own server, once paired.
 - **Word, Excel or PowerPoint for Mac** from Microsoft 365, a current version: the add-in was tried with 16.114.
