@@ -20,6 +20,7 @@ import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.token.ApiToken;
@@ -209,6 +210,29 @@ public class SignInDataTest extends AbstractHealdanTestCase {
 		assertEquals(2, SignInIdentityDAO.get().countLinked("entra"));
 		assertEquals(1, SignInIdentityDAO.get().countLinked("authentik"));
 		assertEquals(0, SignInIdentityDAO.get().countLinked("nobody"));
+	}
+
+	@Test
+	public void testCountLinkedLeavesOutDeletedAccounts() throws Exception {
+		User one = fx.user("one");
+		User two = fx.user("two");
+		User three = fx.user("three");
+		SignInIdentityDAO.get().store(linked("entra", "oid-1", one.getId()));
+		SignInIdentityDAO.get().store(linked("entra", "oid-2", two.getId()));
+		SignInIdentityDAO.get().store(linked("authentik", "sub-1", three.getId()));
+		assertEquals(2, SignInIdentityDAO.get().countLinked("entra"));
+
+		// CE's delete marks the account and renames it, and doesn't tell the listeners: the link stays in the table
+		UserDAO.get().delete(two.getId());
+		UserDAO.get().delete(three.getId());
+
+		assertEquals(1, SignInIdentityDAO.get().countLinked("entra"));
+		assertEquals(0, SignInIdentityDAO.get().countLinked("authentik"));
+		assertEquals(3, jdbc().queryForObject("select count(*) from hd_signin_identity", Integer.class).intValue());
+		// as findLinked(provider), which joins the accounts, counts them
+		assertEquals(SignInIdentityDAO.get().findLinked("entra").size(), SignInIdentityDAO.get().countLinked("entra"));
+		assertEquals(SignInIdentityDAO.get().findLinked("authentik").size(),
+				SignInIdentityDAO.get().countLinked("authentik"));
 	}
 
 	@Test

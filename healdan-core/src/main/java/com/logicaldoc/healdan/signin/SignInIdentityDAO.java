@@ -44,7 +44,8 @@ public interface SignInIdentityDAO extends PersistentObjectDAO<SignInIdentity> {
 
 	/**
 	 * @param provider the provider's id
-	 * @return how many links in use the provider has
+	 * @return how many links in use the provider has, as {@link #findLinked(String)}
+	 *         finds them: the links of accounts that were deleted are left out
 	 * @throws PersistenceException error at data layer
 	 */
 	public int countLinked(String provider) throws PersistenceException;

@@ -50,8 +50,11 @@ public class HibernateSignInIdentityDAO extends HibernatePersistentObjectDAO<Sig
 
 	@Override
 	public int countLinked(String provider) throws PersistenceException {
-		return queryForInt("select count(*) from hd_signin_identity where hd_provider = :provider "
-				+ "and hd_unlinked is null and ld_deleted = 0", Map.of("provider", provider));
+		// Not the accounts CE deleted, which findLinked(provider) leaves out too: CE's delete tells no listener,
+		// so their links stay in the table
+		return queryForInt("select count(*) from hd_signin_identity i join ld_user u on u.ld_id = i.hd_userid "
+				+ "where i.hd_provider = :provider and i.hd_unlinked is null and i.ld_deleted = 0 and u.ld_deleted = 0",
+				Map.of("provider", provider));
 	}
 
 	@Override

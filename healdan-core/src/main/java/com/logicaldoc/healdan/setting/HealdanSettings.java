@@ -94,6 +94,27 @@ public class HealdanSettings {
 	}
 
 	/**
+	 * Deletes a setting, which then reads as missing. A setting that isn't there
+	 * is left as it is.
+	 *
+	 * @param key the setting name
+	 */
+	public void delete(String key) {
+		jdbc.update("delete from hd_setting where name = ?", key);
+	}
+
+	/**
+	 * @param prefix the start of the names to list, taken literally
+	 * @return the names of the settings that start with the prefix, in order
+	 */
+	public List<String> names(String prefix) {
+		// LIKE's wildcards are escaped with "!", which both databases take
+		String pattern = prefix.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%";
+		return jdbc.queryForList("select name from hd_setting where name like ? escape '!' order by name",
+				String.class, pattern);
+	}
+
+	/**
 	 * Writes a setting only if it doesn't exist yet.
 	 * 
 	 * @param key the setting name
