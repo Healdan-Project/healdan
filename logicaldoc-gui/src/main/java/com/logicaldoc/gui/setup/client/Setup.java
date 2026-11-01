@@ -54,13 +54,9 @@ public class Setup implements EntryPoint {
 
 	private static final String REG_NAME = "regName";
 
-	private static final String ORACLE = "Oracle";
-
 	private static final String MYSQL = "MySQL";
 
 	private static final String MARIADB = "MariaDB";
-
-	private static final String SQLSERVER = "MSSQL";
 
 	private static final String POSTGRESQL = "PostgreSQL";
 
@@ -217,6 +213,7 @@ public class Setup implements EntryPoint {
 	 */
 	private Tab setupDatabase(final ValuesManager vm, GUIInfo info) {
 		// Prepare the fieldsMap with all database engines
+		// Healdan: no Oracle or SQL Server, as it supports only open-source databases
 		engines.put(MYSQL, new String[] { MYSQL, "com.mysql.cj.jdbc.Driver",
 				"jdbc:mysql://<server>[,<failoverhost>][<:3306>]/<database>?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC",
 				"org.hibernate.dialect.MySQLDialect", SELECT_1 });
@@ -225,12 +222,6 @@ public class Setup implements EntryPoint {
 		engines.put(POSTGRESQL,
 				new String[] { POSTGRESQL, "org.postgresql.Driver", "jdbc:postgresql:[<//server>[<:5432>/]]<database>",
 						"org.hibernate.dialect.PostgreSQLDialect", SELECT_1 });
-		engines.put(ORACLE,
-				new String[] { ORACLE, "oracle.jdbc.driver.OracleDriver", "jdbc:oracle:thin:@<server>[<:1521>]:<sid>",
-						"org.hibernate.dialect.Oracle10gDialect", "SELECT 1 FROM DUAL" });
-		engines.put(SQLSERVER, new String[] { "SQL Server", "com.microsoft.sqlserver.jdbc.SQLServerDriver",
-				"jdbc:sqlserver://<server>[:<1433>];encrypt=false;trustServerCertificate=true;databaseName=<database>;instanceName=<instance>",
-				"org.hibernate.dialect.SQLServer2012Dialect", SELECT_1 });
 
 		Tab databaseTab = new Tab();
 		databaseTab.setTitle(I18N.message("database"));
