@@ -113,6 +113,25 @@ public sealed partial class ScriptsTests
             Assert.Contains("with timeout of 300 seconds", scripts[name]);
     }
 
+    /// <summary>
+    /// What each Ask asks its app inside the long wait. AppleScript answers an application's name, version, id and running
+    /// itself, sending the app nothing, so macOS never asks about those: rc2's Ask got the name and came back at once,
+    /// and the next script met the question with its 20 seconds (the owner's walkthrough, 2026-11-01).
+    /// </summary>
+    [Fact]
+    public void EachAskAsksItsAppSomethingOnlyTheAppAnswers()
+    {
+        var scripts = Scripts();
+        foreach (var (program, plural) in new[] { ("Word", "documents"), ("Excel", "workbooks"), ("PowerPoint", "presentations") })
+        {
+            var text = scripts[$"{program}.Ask"];
+            var start = text.IndexOf("with timeout of 300 seconds", StringComparison.Ordinal);
+            var wait = text[start..text.IndexOf("end timeout", start, StringComparison.Ordinal)];
+            Assert.Contains($"count {plural}", wait);
+            Assert.False(Regex.IsMatch(wait, @"\b(name|version|id|running)\b"), $"{program}.Ask asks for something AppleScript answers itself");
+        }
+    }
+
     [Fact]
     public void EveryOtherScriptWaitsTwentySeconds()
     {

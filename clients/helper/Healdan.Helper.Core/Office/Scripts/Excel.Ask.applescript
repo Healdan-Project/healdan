@@ -2,11 +2,14 @@
 -- started, as macOS may first ask the user whether Healdan Helper may control Excel (Automation), and every other
 -- script but those that wait for Grant File Access gives up after 20 seconds while it asks.
 -- Answers "ok", or "not-running" when Excel isn't running, which asks nothing.
+-- It counts Excel's workbooks, which Excel answers: AppleScript answers an application's name, version, id and
+-- running itself, sending Excel nothing, so asking for its name, as rc2 did, never brought the question up
+-- (the owner's walkthrough, 2026-11-01).
 on run argv
     if application "Microsoft Excel" is not running then return "not-running"
     tell application "Microsoft Excel"
         with timeout of 300 seconds
-            get name
+            count workbooks
         end timeout
     end tell
     return "ok"
