@@ -2,7 +2,7 @@
 
 - **Backlog item:** "S3, and a storage backend per Store" in [`docs/ROADMAP.md`](../../ROADMAP.md) §5. It stays in the backlog until the owner decides when to build it (owner, 2026-11-01).
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section. Written up for the owner's review. No implementation plan yet: that's a later step.
+- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section, and the written spec approved by the owner the same day. No implementation plan yet: that's a later step.
 - **Inputs:**
   - the roadmap's glossary, M1's Stores decisions and the backlog row;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md) §3.2;
