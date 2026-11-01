@@ -9,6 +9,7 @@ import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.authentication.DefaultAuthenticator;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.core.security.user.UserSource;
 import com.logicaldoc.healdan.token.TokenRefusedException;
 import com.logicaldoc.util.spring.Context;
 
@@ -20,6 +21,10 @@ import com.logicaldoc.util.spring.Context;
  * form: any other key starting {@link SignIns#PREFIX} is refused, so nobody
  * can sign in by making up a key. A key not in its form is left to the
  * authenticators after this one.
+ * <p>
+ * Only a provider account signs in this way, never {@code admin} nor an
+ * account with a password (spec sections 7.2 and 7.3; ruling R15), so
+ * {@link SignIns#openSession} can't be a way in as anyone else.
  */
 @Component("signInAuthenticator")
 public class SignInAuthenticator extends AbstractAuthenticator {
@@ -29,6 +34,9 @@ public class SignInAuthenticator extends AbstractAuthenticator {
 
 	/** Why the account of a pending sign-in was refused: it's gone */
 	static final String GONE = "signinaccount";
+
+	/** Why the account of a pending sign-in was refused: it isn't a provider account */
+	static final String NOT_PROVIDER = "signinnotprovider";
 
 	@Override
 	public User authenticate(String username, String password) throws AuthenticationException {
@@ -58,6 +66,9 @@ public class SignInAuthenticator extends AbstractAuthenticator {
 		}
 		if (user == null)
 			throw new TokenRefusedException(this, GONE);
+		// Uncounted, like the refusals above: it's a caller's mistake, not someone guessing
+		if (user.getSource() != UserSource.OIDC)
+			throw new TokenRefusedException(this, NOT_PROVIDER);
 
 		// The chain's own refusals (disabled, expired, outside working hours, legals) count as a key sign-in's do
 		Context.get(DefaultAuthenticator.class).validateUser(user);

@@ -143,6 +143,20 @@ public class SignInProviders {
 	}
 
 	/**
+	 * The redirect address of a provider, which an admin registers at it and
+	 * the sign-in pages send it (spec section 5.2, step 6): one per provider,
+	 * so a callback always knows which provider it expects.
+	 *
+	 * @param base the server's public address, with its path and no slash at
+	 *        the end ({@code PublicAddress.Address.base})
+	 * @param id the provider's id
+	 * @return {@code <base>/api/signin/<id>/callback}
+	 */
+	public static URI callback(String base, String id) {
+		return URI.create(base + "/api/signin/" + id + "/callback");
+	}
+
+	/**
 	 * @return every provider, in the order of their buttons
 	 */
 	public List<SignInProvider> all() {

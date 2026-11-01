@@ -42,12 +42,16 @@ public final class SignIns {
 	 * client ever knows: CE's {@code X-API-KEY} lookup can't find it, and the
 	 * account's id and name play no part in it.
 	 *
-	 * @param user the account the sign-in decided
+	 * @param user the account the sign-in decided, which must be a provider
+	 *        account ({@code UserSource.OIDC})
 	 * @param client the client
 	 * @return the new session, or null if the chain gave none
 	 * @throws AuthenticationException if the chain or its throttle refuses:
 	 *         the account is disabled, expired or outside its working hours,
-	 *         or the client's address is blocked
+	 *         or the client's address is blocked; or a
+	 *         {@code TokenRefusedException}, which isn't counted, if it isn't a
+	 *         provider account, such as {@code admin} or an account with a
+	 *         password (ruling R15)
 	 */
 	public static Session openSession(User user, Client client) throws AuthenticationException {
 		Pending pending = new Pending(PREFIX + ApiTokens.randomPart(), user.getId());

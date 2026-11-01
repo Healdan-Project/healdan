@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
@@ -45,6 +46,8 @@ public class ApiCall {
 	private final List<Cookie> cookies = new ArrayList<>();
 
 	private String remote = "127.0.0.1";
+
+	private MockHttpSession session;
 
 	private String scheme;
 
@@ -88,6 +91,19 @@ public class ApiCall {
 	 */
 	public ApiCall cookie(String name, String value) {
 		cookies.add(new Cookie(name, value));
+		return this;
+	}
+
+	/**
+	 * Sends the request in an HTTP session, as a browser with a
+	 * {@code JSESSIONID} cookie would. Without one, the request has no session
+	 * until the server makes one.
+	 *
+	 * @param session the session, which the server may change, such as by
+	 *        giving it a new id; null for none
+	 */
+	public ApiCall session(MockHttpSession session) {
+		this.session = session;
 		return this;
 	}
 
@@ -189,6 +205,8 @@ public class ApiCall {
 		// Like Tomcat's, the path info is decoded and the request URI isn't
 		request.setPathInfo(pathInfo.isEmpty() ? null : URLDecoder.decode(pathInfo.replace("+", "%2B"), StandardCharsets.UTF_8));
 		request.setRemoteAddr(remote);
+		if (session != null)
+			request.setSession(session);
 		if (serverName != null) {
 			request.setScheme(scheme);
 			request.setServerName(serverName);

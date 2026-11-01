@@ -323,6 +323,35 @@ Office loads with no sign-in, so nothing there takes a token or follows the API'
 as everywhere under `/api`. [Office Integration](../../install/office-integration/#microsoft-office) says what
 the server needs for it.
 
+## Sign-In Pages
+
+`/api/signin/` isn't part of the JSON API either. It runs a sign-in through a provider, such as Microsoft Entra ID,
+for the web page and for the Healdan Helper. Its addresses are pages a browser is sent through, so they take no token,
+answer with redirects and HTML rather than JSON, and `openapi.yaml` doesn't describe them.
+
+- **`/api/signin/<id>`** starts a sign-in through the provider with that id, and sends the browser to the provider.
+  A random value in an `hd_signin` cookie ties the sign-in to that browser, and it has 10 minutes to come back.
+- **`/api/signin/<id>/callback`** is where the provider sends the browser back, and the redirect address an
+  administrator registers at the provider: your install's public address followed by `/api/signin/<id>/callback`.
+  Each sign-in comes back once, to the browser that started it and to its own provider's address, or it's refused.
+  The web page's sign-in ends signed in, with the same session cookie as the password form, on the page asked for
+  or the web page. A refusal goes back to the sign-in page as `/login.jsp?signin=<code>`.
+- **`/api/signin/done`** is the page that says "Signed in to Healdan. You can close this tab." With
+  `?error=<code>`, it says what went wrong instead, naming the provider given by `&provider=<id>`.
+
+| Code | When |
+|---|---|
+| `no-group` | The person's groups at the provider map to no Healdan group |
+| `email-taken` | The email matches more than one account, or one that can't be linked |
+| `username-taken` | A new account's username is taken, or isn't one Healdan can use |
+| `account` | LogicalDOC's sign-in refused the account: disabled, expired or outside its working hours, say |
+| `provider` | The provider couldn't be reached, refused, or what it sent failed a check |
+| `expired` | The sign-in took more than 10 minutes, was already used, or came back to another browser or provider |
+
+The addresses are built from the server's public address, as the Office add-in's are: `LOGICALDOC_PUBLIC_URL`
+when it's set, otherwise the address the request came to. It must be `https://`, or plain `http://` on the machine
+itself. Without one, the pages answer `409` with a page that says to set `LOGICALDOC_PUBLIC_URL`.
+
 ## Healdan's Own Client
 
 The Healdan Helper, which brings Healdan into LibreOffice, is a client of this API, and uses most of what's above:
