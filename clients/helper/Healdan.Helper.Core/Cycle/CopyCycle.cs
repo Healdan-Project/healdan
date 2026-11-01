@@ -81,6 +81,9 @@ public sealed class CopyCycle : IDisposable
             (path, lockBack) => Guard(() => OnReopened(path, lockBack)));
     }
 
+    /// <summary>The apps copies open in, which the channel's filing names its app from (M3.6 spec §6.2).</summary>
+    public OfficeApps Apps => _apps;
+
     /// <summary>An open copy: its save queue and what the cycle knows about it beyond its record.</summary>
     internal sealed class Session
     {

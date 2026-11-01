@@ -13,6 +13,12 @@ public static class AppBundles
     /// <summary>LibreOffice's, as <c>LibreOffice.app</c>'s Info.plist names it.</summary>
     public const string LibreOffice = "org.libreoffice.script";
 
+    /// <summary>
+    /// CoffeePDF's, as its Info.plist names it (CoffeePDF spec §4.3). <see cref="NameOf"/> doesn't know it: it names the
+    /// system's default app for an office kind's main format, which CoffeePDF never is.
+    /// </summary>
+    public const string CoffeePdf = "com.healdan.coffeepdf";
+
     /// <summary>The program's bundle identifier. PowerPoint's has a small p.</summary>
     public static string Of(OfficeProgram p) => p switch
     {
