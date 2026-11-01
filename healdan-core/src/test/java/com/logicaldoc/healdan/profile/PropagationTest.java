@@ -399,7 +399,7 @@ public class PropagationTest extends AbstractRulesTestCase {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
 		Attribute region = new Attribute();
 		region.setLabel("Region");
-		region.setType(Attribute.TYPE_STRING);
+		region.setType(Attribute.Type.STRING);
 		region.setPosition(20);
 		profile.getTemplateAttributes().put("region", region);
 		TemplateDAO.get().store(profile);
@@ -414,7 +414,7 @@ public class PropagationTest extends AbstractRulesTestCase {
 		assertEquals("EU", text(inDocuments, "region"));
 		assertEquals("EU", text(inSub, "region"));
 		assertEquals(Set.of(), locals(inSub));
-		assertEquals(Integer.valueOf(Attribute.TYPE_STRING), jdbc.queryForObject(
+		assertEquals(Integer.valueOf(Attribute.Type.STRING.ordinal()), jdbc.queryForObject(
 				"select ld_type from ld_document_ext where ld_docid = ? and ld_name = 'region'", Integer.class,
 				inSub.getId()));
 		assertEquals("EU", text(upload(sub, "c.txt", alice), "region"));
@@ -549,7 +549,7 @@ public class PropagationTest extends AbstractRulesTestCase {
 		contract.setTenantId(Tenant.DEFAULT_ID);
 		Attribute attribute = new Attribute();
 		attribute.setLabel("Contract");
-		attribute.setType(Attribute.TYPE_STRING);
+		attribute.setType(Attribute.Type.STRING);
 		contract.getTemplateAttributes().put("contract", attribute);
 		TemplateDAO.get().store(contract);
 		return contract;

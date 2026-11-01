@@ -104,7 +104,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		assertEquals(workspace.getName(), client.inheritedFromName());
 		assertFalse(client.editable());
 		assertEquals("Client", client.label());
-		assertEquals(Attribute.TYPE_STRING, client.type());
+		assertEquals(Attribute.Type.STRING, client.type());
 		ProfileField matter = field(fields, HealdanConstants.ATTR_MATTER);
 		assertEquals("1", matter.value());
 		assertEquals(Source.INHERITED, matter.source());
@@ -123,7 +123,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 			ProfileField user = field(fields, name);
 			assertEquals(name, Long.valueOf(clerk.getId()), user.value());
 			assertEquals(name, Source.DEFAULT, user.source());
-			assertEquals(Attribute.TYPE_USER, user.type());
+			assertEquals(Attribute.Type.USER, user.type());
 			assertTrue(user.editable());
 			assertFalse(user.required());
 		}
@@ -134,7 +134,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 			assertNull(name, email.value());
 			assertNull(name, email.source());
 		}
-		assertEquals(Attribute.TYPE_DATE, field(fields, HealdanConstants.ATTR_EMAILSENT).type());
+		assertEquals(Attribute.Type.DATE, field(fields, HealdanConstants.ATTR_EMAILSENT).type());
 
 		// Empty fields have no source
 		ProfileField legacy = field(fields, HealdanConstants.ATTR_LEGACYDOCNUM);
@@ -217,19 +217,19 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
 		Attribute court = new Attribute();
 		court.setLabel("Court");
-		court.setType(Attribute.TYPE_STRING);
+		court.setType(Attribute.Type.STRING);
 		court.setMandatory(true);
 		court.setPosition(14);
 		profile.getTemplateAttributes().put("court", court);
 		Attribute secret = new Attribute();
 		secret.setLabel("Secret");
-		secret.setType(Attribute.TYPE_STRING);
+		secret.setType(Attribute.Type.STRING);
 		secret.setHidden(true);
 		secret.setPosition(15);
 		profile.getTemplateAttributes().put("secret", secret);
 		Attribute section = new Attribute();
 		section.setLabel("More");
-		section.setType(Attribute.TYPE_SECTION);
+		section.setType(Attribute.Type.SECTION);
 		section.setPosition(16);
 		profile.getTemplateAttributes().put("more", section);
 		TemplateDAO.get().store(profile);
@@ -238,7 +238,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		ProfileField last = fields.get(fields.size() - 1);
 		assertEquals("court", last.name());
 		assertEquals("Court", last.label());
-		assertEquals(Attribute.TYPE_STRING, last.type());
+		assertEquals(Attribute.Type.STRING, last.type());
 		assertTrue(last.required());
 		assertTrue(last.editable());
 		assertNull(last.value());

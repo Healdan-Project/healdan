@@ -79,21 +79,21 @@ public final class PropertyValues {
 		String label = StringUtils.defaultIfBlank(attribute.getLabel(), name);
 		try {
 			switch (attribute.getType()) {
-			case Attribute.TYPE_INT:
+			case Attribute.Type.INTEGER:
 				if (node.isIntegralNumber() && node.canConvertToLong())
 					return node.longValue();
 				return wrongType(errors, name, "%s takes a whole number.".formatted(label));
-			case Attribute.TYPE_DOUBLE:
+			case Attribute.Type.DOUBLE:
 				if (node.isNumber())
 					return node.doubleValue();
 				return wrongType(errors, name, "%s takes a number.".formatted(label));
-			case Attribute.TYPE_BOOLEAN:
+			case Attribute.Type.BOOLEAN:
 				if (node.isBoolean())
 					return node.booleanValue();
 				return wrongType(errors, name, "%s takes true or false.".formatted(label));
-			case Attribute.TYPE_DATE:
+			case Attribute.Type.DATE:
 				return date(node, name, label, errors);
-			case Attribute.TYPE_USER:
+			case Attribute.Type.USER:
 				Long userId = userId(node);
 				if (userId == null)
 					return wrongType(errors, name, "%s takes a user's id.".formatted(label));
@@ -101,14 +101,14 @@ public final class PropertyValues {
 				if (user == null || user.getDeleted() != 0)
 					return unknown(errors, name, "There's no user %d.".formatted(userId));
 				return user;
-			case Attribute.TYPE_FOLDER:
+			case Attribute.Type.FOLDER:
 				if (!isId(node))
 					return wrongType(errors, name, "%s takes a folder's id.".formatted(label));
 				Optional<Folder> folder = AccessChecks.readableFolder(node.longValue(), caller);
 				if (folder.isEmpty())
 					return unknown(errors, name, "There's no folder %d.".formatted(node.longValue()));
 				return folder.get();
-			case Attribute.TYPE_DOCUMENT:
+			case Attribute.Type.DOCUMENT:
 				if (!isId(node))
 					return wrongType(errors, name, "%s takes a doc #.".formatted(label));
 				Optional<Document> document = AccessChecks.readableDocument(node.longValue(), caller);
@@ -171,7 +171,7 @@ public final class PropertyValues {
 	static boolean unchanged(Attribute attribute, JsonNode node, Object current) {
 		if (says(attribute, node, current))
 			return true;
-		return attribute.getType() == Attribute.TYPE_STRING && node != null && node.isTextual()
+		return attribute.getType() == Attribute.Type.STRING && node != null && node.isTextual()
 				&& says(attribute, TextNode.valueOf(clean(attribute, node.textValue())), current);
 	}
 
@@ -180,7 +180,7 @@ public final class PropertyValues {
 	 *         {@code string} property's cleaned of markup, any other as it is
 	 */
 	private static String clean(Attribute attribute, String text) {
-		return attribute.getType() == Attribute.TYPE_STRING ? HTMLSanitizer.sanitizeSimpleText(text) : text;
+		return attribute.getType() == Attribute.Type.STRING ? HTMLSanitizer.sanitizeSimpleText(text) : text;
 	}
 
 	private static boolean says(Attribute attribute, JsonNode node, Object current) {
@@ -210,13 +210,13 @@ public final class PropertyValues {
 			return null;
 		try {
 			return switch (attribute.getType()) {
-			case Attribute.TYPE_USER -> value instanceof Number id ? userRef(id.longValue()) : value.toString();
-			case Attribute.TYPE_DOCUMENT -> value instanceof Number id ? docNumber(id.longValue()) : value.toString();
-			case Attribute.TYPE_INT, Attribute.TYPE_FOLDER ->
+			case Attribute.Type.USER -> value instanceof Number id ? userRef(id.longValue()) : value.toString();
+			case Attribute.Type.DOCUMENT -> value instanceof Number id ? docNumber(id.longValue()) : value.toString();
+			case Attribute.Type.INTEGER, Attribute.Type.FOLDER ->
 				value instanceof Number number ? (Object) number.longValue() : value.toString();
-			case Attribute.TYPE_DOUBLE -> value instanceof Number number ? (Object) number.doubleValue() : value.toString();
-			case Attribute.TYPE_DATE -> value instanceof Date date ? new Date(date.getTime()) : value.toString();
-			case Attribute.TYPE_BOOLEAN -> value instanceof Boolean ? value : value.toString();
+			case Attribute.Type.DOUBLE -> value instanceof Number number ? (Object) number.doubleValue() : value.toString();
+			case Attribute.Type.DATE -> value instanceof Date date ? new Date(date.getTime()) : value.toString();
+			case Attribute.Type.BOOLEAN -> value instanceof Boolean ? value : value.toString();
 			default -> value.toString();
 			};
 		} catch (PersistenceException e) {
@@ -260,15 +260,15 @@ public final class PropertyValues {
 	 * @param type CE's attribute type
 	 * @return the API's name for it
 	 */
-	static String typeName(int type) {
+	static String typeName(Attribute.Type type) {
 		return switch (type) {
-		case Attribute.TYPE_INT -> "integer";
-		case Attribute.TYPE_DOUBLE -> "decimal";
-		case Attribute.TYPE_DATE -> "date";
-		case Attribute.TYPE_USER -> "user";
-		case Attribute.TYPE_BOOLEAN -> "boolean";
-		case Attribute.TYPE_FOLDER -> "folder";
-		case Attribute.TYPE_DOCUMENT -> "document";
+		case Attribute.Type.INTEGER -> "integer";
+		case Attribute.Type.DOUBLE -> "decimal";
+		case Attribute.Type.DATE -> "date";
+		case Attribute.Type.USER -> "user";
+		case Attribute.Type.BOOLEAN -> "boolean";
+		case Attribute.Type.FOLDER -> "folder";
+		case Attribute.Type.DOCUMENT -> "document";
 		default -> "string";
 		};
 	}

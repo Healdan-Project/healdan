@@ -53,7 +53,7 @@ public class SavedSearchTest extends AbstractCoreTestCase {
 		assertEquals(hostile, roundTrip(fulltext).getExpression());
 
 		FolderCriterion criterion = new FolderCriterion();
-		criterion.setField(hostile + " type:" + Attribute.TYPE_STRING);
+		criterion.setField(hostile + " type:" + Attribute.Type.STRING.ordinal());
 		criterion.setOperator(FolderCriterion.OPERATOR_EQUALS);
 		criterion.setValue(hostile);
 		FolderSearchOptions folder = new FolderSearchOptions();

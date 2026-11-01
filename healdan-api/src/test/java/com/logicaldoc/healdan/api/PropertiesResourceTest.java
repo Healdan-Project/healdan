@@ -163,13 +163,13 @@ public class PropertiesResourceTest extends ApiTestCase {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
 		Attribute court = new Attribute();
 		court.setLabel("Court");
-		court.setType(Attribute.TYPE_STRING);
+		court.setType(Attribute.Type.STRING);
 		court.setMandatory(true);
 		court.setPosition(13);
 		profile.getTemplateAttributes().put("court", court);
 		Attribute box = new Attribute();
 		box.setLabel("Box");
-		box.setType(Attribute.TYPE_FOLDER);
+		box.setType(Attribute.Type.FOLDER);
 		box.setPosition(14);
 		profile.getTemplateAttributes().put("box", box);
 		TemplateDAO.get().store(profile);
@@ -256,7 +256,7 @@ public class PropertiesResourceTest extends ApiTestCase {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
 		Attribute hearing = new Attribute();
 		hearing.setLabel("Hearing");
-		hearing.setType(Attribute.TYPE_DATE);
+		hearing.setType(Attribute.Type.DATE);
 		hearing.setPosition(13);
 		profile.getTemplateAttributes().put("hearing", hearing);
 		TemplateDAO.get().store(profile);

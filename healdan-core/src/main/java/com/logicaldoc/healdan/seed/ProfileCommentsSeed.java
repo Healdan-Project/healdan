@@ -37,7 +37,7 @@ public class ProfileCommentsSeed implements SeedStep {
 
 		Attribute comments = new Attribute();
 		comments.setLabel("Comments");
-		comments.setType(Attribute.TYPE_STRING);
+		comments.setType(Attribute.Type.STRING);
 		comments.setPosition(POSITION);
 		comments.setEditor(Attribute.EDITOR_DEFAULT);
 		template.getTemplateAttributes().put(HealdanConstants.ATTR_COMMENTS, comments);
