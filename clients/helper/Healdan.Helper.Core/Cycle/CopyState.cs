@@ -15,8 +15,12 @@ namespace Healdan.Helper.Core.Cycle;
 /// app wrote that hasn't settled yet. False once Healdan has them, and for a copy nothing more is sent for. The
 /// extension asks <c>/v1/saved</c> again while it's true, so the title moves on however long the server takes.
 /// </param>
+/// <param name="SavesStopped">
+/// The copy isn't read-only, but its saves won't go up any more: its check-out ended here, or newer content was stored
+/// (M3.6 spec §6.3). The channel answers it as read-only; the helper's own windows read <see cref="ReadOnly"/>.
+/// </param>
 public sealed record CopyState(bool Known, long DocNumber, string Title, string DocRef, bool ReadOnly, string Path, string? HoldBy,
-    bool Pending = false)
+    bool Pending = false, bool SavesStopped = false)
 {
     /// <summary>The state of a path the helper has no copy at.</summary>
     public static CopyState Unknown(string path) => new(false, 0, "", "", false, path, null);

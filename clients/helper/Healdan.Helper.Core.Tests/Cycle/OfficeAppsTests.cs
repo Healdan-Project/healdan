@@ -12,6 +12,7 @@ public sealed class OfficeAppsTests
     private readonly FakeApp _libreOffice = new();
     private readonly FakeOpener _other = new();
     private readonly MicrosoftOfficeApp _microsoft = new(new FakeScripting(), _ => false);
+    private readonly CoffeePdfApp _coffee = new(_ => false, _ => { });
 
     private static CopyRecord Record(string app) =>
         new(5, "Lease.docx", "1.0", "1.0", false, true, null, null, app, null, "Lease #5 v1.0.docx");
@@ -83,4 +84,37 @@ public sealed class OfficeAppsTests
         Assert.False(apps.IsOtherFiles(_microsoft));
         Assert.False(new OfficeApps(_libreOffice, null, null, _ => "LibreOffice").IsOtherFiles(_libreOffice));
     }
+
+    [Fact]
+    public void ACopyOpenedInCoffeePdfStaysItsWhateverTheChooserSaysNow()
+    {
+        var available = true;
+        var apps = new OfficeApps(_libreOffice, _microsoft, _other,
+            name => name.EndsWith(".pdf") ? (available ? "CoffeePDF" : "Default") : "LibreOffice", _coffee);
+        Assert.Same(_coffee, apps.For("a.pdf"));
+
+        available = false; // Healdan support turned off in CoffeePDF
+
+        Assert.Same(_other, apps.For("a.pdf"));
+        Assert.Same(_coffee, apps.Of(Record("CoffeePDF")));
+        Assert.Same(_coffee, apps.CoffeePdf);
+        Assert.Equal<IOfficeApp>([_libreOffice, _microsoft, _coffee, _other], apps.All);
+    }
+
+    [Fact]
+    public void FilingTakesCoffeePdfAtItsWordAndLibreOfficeOtherwise()
+    {
+        var apps = new OfficeApps(_libreOffice, _microsoft, _other, _ => "LibreOffice", _coffee);
+
+        Assert.Same(_coffee, apps.Filing("CoffeePDF"));
+        Assert.Same(_libreOffice, apps.Filing("LibreOffice"));
+        Assert.Same(_libreOffice, apps.Filing(null));
+        Assert.Same(_libreOffice, apps.Filing("Microsoft Office")); // the add-in files through its own route
+        Assert.Same(_libreOffice, apps.Filing("coffeepdf"));
+        Assert.Same(_libreOffice, new OfficeApps(_libreOffice, null, _other, _ => "LibreOffice").Filing("CoffeePDF")); // none off macOS
+    }
+
+    [Fact]
+    public void ARecordNamingCoffeePdfIsLibreOfficesWhereThereIsNone() =>
+        Assert.Same(_libreOffice, new OfficeApps(_libreOffice, null, _other, _ => "LibreOffice").Of(Record("CoffeePDF")));
 }

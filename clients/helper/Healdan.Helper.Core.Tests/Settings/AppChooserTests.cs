@@ -10,6 +10,8 @@ public sealed class AppChooserTests
 {
     private static readonly InstalledApps Everything = new(LibreOffice: true, Word: true, Excel: true, PowerPoint: true);
 
+    private static readonly InstalledApps WithCoffeePdf = Everything with { CoffeePdf = true };
+
     private static HelperSettings Choosing(string kind, string app) => new() { Kinds = new Dictionary<string, string> { [kind] = app } };
 
     private static AppChooser Chooser(HelperSettings? settings = null, InstalledApps? installed = null, Func<string, string?>? systemDefault = null) =>
@@ -176,5 +178,51 @@ public sealed class AppChooserTests
         Assert.Equal("Microsoft Office", chooser.ForKind(FileKinds.Spreadsheets));
         Assert.Equal("LibreOffice", chooser.ForKind(FileKinds.Drawings));
         Assert.Equal("Default", Chooser(installed: new InstalledApps(false, false, false, false)).ForKind(FileKinds.Documents));
+    }
+
+    private static AppChooser ChooserWithCoffeePdf(bool installed, bool on) =>
+        new(new HelperSettings(), installed ? WithCoffeePdf : Everything, _ => null, coffeePdfOn: on);
+
+    [Theory]
+    [InlineData("Signed NDA.pdf")]
+    [InlineData("SCAN.PDF")]
+    public void APdfOpensInCoffeePdfOnlyWhileItsInstalledAndOn(string fileName)
+    {
+        Assert.Equal("CoffeePDF", ChooserWithCoffeePdf(installed: true, on: true).For(fileName));
+        Assert.Equal("Default", ChooserWithCoffeePdf(installed: true, on: false).For(fileName));
+        Assert.Equal("Default", ChooserWithCoffeePdf(installed: false, on: true).For(fileName)); // a settings file left by an uninstalled CoffeePDF
+    }
+
+    [Fact]
+    public void CoffeePdfChangesNothingElse()
+    {
+        var chooser = ChooserWithCoffeePdf(installed: true, on: true);
+
+        Assert.Equal("LibreOffice", chooser.For("a.docx"));
+        Assert.Equal("LibreOffice", chooser.For("a.odg"));
+        Assert.Equal("Default", chooser.For("photo.png"));
+        Assert.Equal("Default", chooser.For("pdf"));
+    }
+
+    [Fact]
+    public void WhatSettingsSayOfCoffeePdf()
+    {
+        Assert.True(ChooserWithCoffeePdf(installed: true, on: true).CoffeePdfAvailable);
+        Assert.False(ChooserWithCoffeePdf(installed: true, on: true).CoffeePdfSupportOff);
+        Assert.False(ChooserWithCoffeePdf(installed: true, on: false).CoffeePdfAvailable);
+        Assert.True(ChooserWithCoffeePdf(installed: true, on: false).CoffeePdfSupportOff);
+        Assert.False(ChooserWithCoffeePdf(installed: false, on: false).CoffeePdfSupportOff); // not installed: nothing to turn on
+        Assert.False(ChooserWithCoffeePdf(installed: false, on: true).CoffeePdfAvailable);
+    }
+
+    [Fact]
+    public void ReadOnlyIsWhateverGoesToTheDefaultApp()
+    {
+        Assert.False(ChooserWithCoffeePdf(installed: true, on: true).OpensReadOnly("a.pdf"));
+        Assert.True(ChooserWithCoffeePdf(installed: true, on: false).OpensReadOnly("a.pdf"));
+        Assert.True(ChooserWithCoffeePdf(installed: true, on: true).OpensReadOnly("photo.png"));
+        Assert.False(ChooserWithCoffeePdf(installed: true, on: true).OpensReadOnly("a.docx"));
+        // Neither LibreOffice nor Office: the cycle opens an office file read-only in the default app, so the window says so.
+        Assert.True(Chooser(installed: new InstalledApps(false, false, false, false)).OpensReadOnly("a.docx"));
     }
 }

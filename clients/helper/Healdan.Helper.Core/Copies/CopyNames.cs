@@ -8,8 +8,8 @@ namespace Healdan.Helper.Core.Copies;
 public static class CopyNames
 {
     /// <summary>
-    /// The longest copy file name in UTF-8 bytes. A file name holds 255, and the record's name adds 21
-    /// (<c>.</c> and <c>.healdan.json</c>) while LibreOffice's lock file adds 8, so 241 leaves both room.
+    /// The longest copy file name in UTF-8 bytes. A file name holds 255, and the record's name adds 14 (<c>.</c> and
+    /// <c>.healdan.json</c>), LibreOffice's lock file 8 and CoffeePDF's 13, so 241 leaves each room.
     /// </summary>
     public const int MaxBytes = 241;
 
@@ -41,6 +41,31 @@ public static class CopyNames
     /// <summary>LibreOffice's lock file for a copy.</summary>
     internal static string LibreOfficeLockName(string copyFileName) => $".~lock.{copyFileName}#";
 
+    /// <summary>CoffeePDF's lock file for a copy, which it keeps while the copy's window is open (CoffeePDF spec §6.8).</summary>
+    internal static string CoffeePdfLockName(string copyFileName) => $".~coffeepdf.{copyFileName}#";
+
+    /// <summary>
+    /// Every lock or owner file an app may keep beside a copy (M3.6 spec §4.5): LibreOffice's and CoffeePDF's lock files,
+    /// and each owner file Word, Excel or PowerPoint may keep (<see cref="OfficeOwnerNames"/>). A copy deleted, renamed or
+    /// set aside looks at these, and a new app adds its own here.
+    /// </summary>
+    internal static IEnumerable<string> AppFiles(string copyFileName) =>
+        [LibreOfficeLockName(copyFileName), CoffeePdfLockName(copyFileName), .. OfficeOwnerNames(copyFileName)];
+
+    private const string CoffeePdfTemporaryPrefix = ".coffeepdf-";
+
+    private const string CoffeePdfTemporarySuffix = ".tmp";
+
+    /// <summary>
+    /// CoffeePDF's temporary file for a save (its <c>AtomicFile</c>), written beside the copy and renamed over it:
+    /// <c>.coffeepdf-</c>, 32 lowercase hex digits and <c>.tmp</c>.
+    /// </summary>
+    internal static bool IsCoffeePdfTemporary(string fileName) =>
+        fileName.Length == CoffeePdfTemporaryPrefix.Length + 32 + CoffeePdfTemporarySuffix.Length
+        && fileName.StartsWith(CoffeePdfTemporaryPrefix, StringComparison.Ordinal)
+        && fileName.EndsWith(CoffeePdfTemporarySuffix, StringComparison.Ordinal)
+        && fileName.AsSpan(CoffeePdfTemporaryPrefix.Length, 32).IndexOfAnyExcept("0123456789abcdef") < 0;
+
     /// <summary>
     /// Every owner file Word, Excel or PowerPoint may keep for a copy, each once. Word's <c>~$</c> replaces the first two
     /// characters of a long name and the first one of a short one, so both candidates are given, as M3 did; Excel and
@@ -59,12 +84,15 @@ public static class CopyNames
     }
 
     /// <summary>
-    /// Whether a file in the folder is an app's own: LibreOffice's lock file or an owner file of Word, Excel or PowerPoint. The app deletes it by
-    /// the path it opened, so a copy set aside leaves it where it is (spec §5.4).
+    /// Whether a file in the folder is an app's own: LibreOffice's or CoffeePDF's lock file, an owner file of Word, Excel or
+    /// PowerPoint, or CoffeePDF's temporary file for a save. The app deletes it by the path it opened, so a copy set aside
+    /// leaves it where it is (spec §5.4, M3.6 spec §4.5).
     /// </summary>
     internal static bool IsAppFile(string fileName) =>
         (fileName.StartsWith(".~lock.", StringComparison.Ordinal) && fileName.EndsWith('#'))
-        || fileName.StartsWith("~$", StringComparison.Ordinal);
+        || (fileName.StartsWith(".~coffeepdf.", StringComparison.Ordinal) && fileName.EndsWith('#'))
+        || fileName.StartsWith("~$", StringComparison.Ordinal)
+        || IsCoffeePdfTemporary(fileName);
 
     private static string Clean(string s)
     {

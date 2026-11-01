@@ -3,7 +3,8 @@ using Healdan.Helper.Core.Office;
 namespace Healdan.Helper.Core.Settings;
 
 /// <summary>Which office apps are installed on this computer, so Settings offer, and the cycle uses, only those (M3.5 spec §5.10).</summary>
-public sealed record InstalledApps(bool LibreOffice, bool Word, bool Excel, bool PowerPoint)
+/// <param name="CoffeePdf">Whether CoffeePDF is installed (M3.6 spec §4.2); never off macOS.</param>
+public sealed record InstalledApps(bool LibreOffice, bool Word, bool Excel, bool PowerPoint, bool CoffeePdf = false)
 {
     /// <summary>Whether the Microsoft Office program is installed.</summary>
     public bool Has(OfficeProgram p) => p switch
@@ -17,7 +18,7 @@ public sealed record InstalledApps(bool LibreOffice, bool Word, bool Excel, bool
     /// <summary>Whether any of Word, Excel and PowerPoint is installed.</summary>
     public bool MicrosoftOffice => Word || Excel || PowerPoint;
 
-    /// <summary>Looks on this computer, as the helper looks for LibreOffice and the Office programs on macOS.</summary>
+    /// <summary>Looks on this computer, as the helper looks for LibreOffice, CoffeePDF and the Office programs on macOS.</summary>
     /// <param name="bundleFound">
     /// Whether LaunchServices finds an app by its bundle identifier (<see cref="AppBundles"/>), wherever it is installed;
     /// null on a computer that has none. Only macOS asks it.
@@ -26,7 +27,7 @@ public sealed record InstalledApps(bool LibreOffice, bool Word, bool Excel, bool
         Detect(OperatingSystem.IsMacOS(), Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Directory.Exists, bundleFound);
 
     /// <summary>
-    /// On macOS: the app bundles in the usual places, else what LaunchServices finds. LibreOffice.app is in
+    /// On macOS: the app bundles in the usual places, else what LaunchServices finds. LibreOffice.app and CoffeePDF.app are in
     /// <c>/Applications</c> or the user's own <c>~/Applications</c>, and Microsoft's programs are in <c>/Applications</c>
     /// (<see cref="OfficePrograms.BundlePath"/>). An app anywhere else counts as well, as it did when M3 opened LibreOffice
     /// with <c>open -a</c>, which LaunchServices resolves. LaunchServices is asked only about an app the folders didn't
@@ -43,7 +44,9 @@ public sealed record InstalledApps(bool LibreOffice, bool Word, bool Excel, bool
                 || Found(AppBundles.LibreOffice),
             Word: Microsoft(OfficeProgram.Word),
             Excel: Microsoft(OfficeProgram.Excel),
-            PowerPoint: Microsoft(OfficeProgram.PowerPoint));
+            PowerPoint: Microsoft(OfficeProgram.PowerPoint),
+            CoffeePdf: directoryExists("/Applications/CoffeePDF.app") || directoryExists(Path.Combine(home, "Applications", "CoffeePDF.app"))
+                || Found(AppBundles.CoffeePdf));
 
         bool Microsoft(OfficeProgram p) => directoryExists(OfficePrograms.BundlePath(p)) || Found(AppBundles.Of(p));
     }

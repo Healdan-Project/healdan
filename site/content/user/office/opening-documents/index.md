@@ -12,10 +12,12 @@ Select one document, then choose **Open in App** on the toolbar, or right-click 
 document opens in the app you've chosen for its kind in the helper's Settings (see
 [Opening in Word, Excel and PowerPoint](#opening-in-word-excel-and-powerpoint)), and the helper's menu lists it.
 
-- **It's on** for one document at a time, of a kind LibreOffice or Microsoft Office edits: `.doc`, `.docx`, `.docm`,
-  `.dotx`, `.dotm`, `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm`, `.odp` and
-  `.odg`. You need permission to download it. The helper opens only these kinds from the web page: a link to any
-  other file is refused, with a notice (see [Other Kinds of File](#other-kinds-of-file)).
+- **It's on** for one document at a time, of a kind LibreOffice or Microsoft Office edits, or a PDF: `.doc`, `.docx`,
+  `.docm`, `.dotx`, `.dotm`, `.rtf`, `.odt`, `.ott`, `.xls`, `.xlsx`, `.xlsm`, `.ods`, `.ppt`, `.pptx`, `.pptm`, `.odp`,
+  `.odg` and `.pdf`. You need permission to download it. A PDF opens as it does from a link: in CoffeePDF, checked out
+  like any document you can edit, when CoffeePDF is installed with Healdan support on, or else read-only in your Mac's
+  usual app for PDFs. A link opens the same kinds, and a link to any other file is refused, with a notice (see
+  [Other Kinds of File](#other-kinds-of-file)).
 - **It's on while the document is checked out** too, so you can reopen your own, and others get a read-only copy.
 - **The first time,** your browser asks whether this page may open Healdan Helper. Allow it, and tick the box to
   remember, if there is one.
@@ -134,14 +136,17 @@ A document checked out in the web page isn't held on any computer, so it opens f
 
 ## Other Kinds of File
 
-A PDF, an image or any other file LibreOffice doesn't edit opens read-only in your Mac's usual app for it, from the
-Open from Healdan window. It isn't checked out.
+A PDF opens in [CoffeePDF](https://github.com/coffeemuse/CoffeePDF), checked out like any document you can edit, when
+CoffeePDF is installed with Healdan support on (in CoffeePDF's Settings). Otherwise it opens read-only in your Mac's
+usual app for PDFs. An image or any other file LibreOffice doesn't edit opens read-only in your Mac's usual app for it,
+from the Open from Healdan window. A read-only copy isn't checked out.
 
-- **Only from Open from Healdan.** Open in App, and any other link, opens only documents, spreadsheets, presentations
-  and drawings. A link to another kind of file says "… wasn't opened: a link opens only documents, spreadsheets,
-  presentations and drawings". Open it from the Open from Healdan window, or download it from the web page.
-- **Your Mac checks it.** The helper marks the copy as downloaded from the internet, so macOS checks it as it would
-  any download.
+- **A link opens a PDF too.** The helper opens only documents, spreadsheets, presentations, drawings and PDFs from a
+  link, whichever way it was made. A link to another kind of file says "… wasn't opened: a link opens only
+  documents, spreadsheets, presentations, drawings and PDFs". Open it from the Open from Healdan window, or download
+  it from the web page.
+- **Your Mac checks it.** The helper marks a copy it opens in your Mac's usual app as downloaded from the internet, so
+  macOS checks it as it would any download.
 - **Never the kinds on its list.** The helper keeps a list of the common kinds of file that can run a program or
   change your Mac when opened, such as `.app`, `.command`, `.pkg`, `.dmg`, `.sh` or `.mobileconfig`. A file of one
   of those kinds isn't downloaded or opened: the helper says it never opens that kind of file. If you need it,

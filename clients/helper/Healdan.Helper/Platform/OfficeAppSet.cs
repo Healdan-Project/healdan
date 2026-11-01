@@ -8,8 +8,8 @@ namespace Healdan.Helper.Platform;
 
 /// <summary>
 /// The apps copies open in and the choice between them (M3.5 spec §5.10): LibreOffice, Microsoft Office on macOS (Word,
-/// Excel and PowerPoint, driven by AppleScript; it can't be installed anywhere else), and the system's default app for
-/// files no office app edits.
+/// Excel and PowerPoint, driven by AppleScript; it can't be installed anywhere else), CoffeePDF on macOS (for PDFs, M3.6
+/// spec §4), and the system's default app for files none of them edits.
 /// </summary>
 internal static class OfficeAppSet
 {
@@ -20,17 +20,20 @@ internal static class OfficeAppSet
     public static InstalledApps Installed() => InstalledApps.Detect(LaunchServices.IsInstalled);
 
     /// <summary>
-    /// What the chooser says now: the settings, the installed apps and the system's default apps are read at each call, so a
-    /// change in Settings or a newly installed app takes effect with the next copy opened, and Settings show the same answer.
+    /// What the chooser says now: the settings, the installed apps, the system's default apps and CoffeePDF's Healdan support
+    /// are read at each call, so a change in Settings or CoffeePDF, or a newly installed app, takes effect with the next copy
+    /// opened, and Settings show the same answer.
     /// </summary>
-    public static AppChooser Chooser(HelperPaths paths) => new(HelperSettings.Load(paths), Installed(), DefaultApps.For);
+    public static AppChooser Chooser(HelperPaths paths) =>
+        new(HelperSettings.Load(paths), Installed(), DefaultApps.For, CoffeePdfSettings.HealdanEnabled(CoffeePdfSettings.Folder()));
 
     public static OfficeApps Create(HelperPaths paths)
     {
         IOfficeApp? microsoftOffice = OperatingSystem.IsMacOS()
             ? new MicrosoftOfficeApp(new MacOfficeScripting(new OsaRunner(), paths.Copies), ProcessRunning)
             : null;
-        return new OfficeApps(new LibreOfficeApp(), microsoftOffice, new DefaultApp(), name => Chooser(paths).For(name));
+        IOfficeApp? coffeePdf = OperatingSystem.IsMacOS() ? new CoffeePdfApp(ProcessRunning) : null;
+        return new OfficeApps(new LibreOfficeApp(), microsoftOffice, new DefaultApp(), name => Chooser(paths).For(name), coffeePdf);
     }
 
     /// <summary>Whether a process of that name runs; macOS names a process by its executable, such as <c>Microsoft Word</c>.</summary>

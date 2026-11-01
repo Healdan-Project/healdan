@@ -11,6 +11,8 @@ namespace Healdan.Helper.Core.Settings;
 /// Office, else LibreOffice; an OpenDocument file is LibreOffice's whatever the choice. Only an installed app is chosen:
 /// the other one stands in for one that isn't, and the default app for both missing. The settings are read at each call, so a
 /// change takes effect with the next copy opened.
+/// A PDF is <see cref="CoffeePdfApp.AppName"/>'s while CoffeePDF is installed with Healdan support on, else the default
+/// app's (M3.6 spec §4.3).
 /// </summary>
 /// <param name="settings">The helper's settings, kept by reference.</param>
 /// <param name="installed">Which apps are installed.</param>
@@ -18,12 +20,18 @@ namespace Healdan.Helper.Core.Settings;
 /// The app the system opens an extension with (given without its dot, such as <c>docx</c>): <c>Microsoft Office</c>,
 /// <c>LibreOffice</c> or null for anything else, Pages for instance.
 /// </param>
-public sealed class AppChooser(HelperSettings settings, InstalledApps installed, Func<string, string?> systemDefaultApp)
+/// <param name="coffeePdfOn">
+/// Whether CoffeePDF's Healdan support is on (<see cref="CoffeePdfSettings"/>), read when the chooser is made.
+/// </param>
+public sealed class AppChooser(HelperSettings settings, InstalledApps installed, Func<string, string?> systemDefaultApp,
+    bool coffeePdfOn = false)
 {
     private static readonly string[] OpenDocumentExtensions = [".odt", ".ott", ".ods", ".odp", ".odg"];
 
     public string For(string fileName)
     {
+        if (PdfFiles.Is(fileName))
+            return CoffeePdfAvailable ? CoffeePdfApp.AppName : DefaultApp.AppName;
         if (FileKinds.OfFile(fileName) is not { } kind)
             return DefaultApp.AppName;
 
@@ -36,6 +44,18 @@ public sealed class AppChooser(HelperSettings settings, InstalledApps installed,
             : (installed.LibreOffice ? LibreOfficeApp.AppName : null, microsoftOffice ? MicrosoftOfficeApp.AppName : null);
         return first ?? second ?? DefaultApp.AppName;
     }
+
+    /// <summary>CoffeePDF is installed and its Healdan support is on (M3.6 spec §4.2): new copies of PDFs open in it.</summary>
+    public bool CoffeePdfAvailable => installed.CoffeePdf && coffeePdfOn;
+
+    /// <summary>CoffeePDF is installed with its Healdan support off, so Settings say how to turn it on (M3.6 spec §4.4).</summary>
+    public bool CoffeePdfSupportOff => installed.CoffeePdf && !coffeePdfOn;
+
+    /// <summary>
+    /// Whether a new copy of the file opens read-only, as it goes to the system's default app: what the Open window forces
+    /// and says (M3.6 spec §5.2).
+    /// </summary>
+    public bool OpensReadOnly(string fileName) => For(fileName) == DefaultApp.AppName;
 
     /// <summary>
     /// The app a new copy of a file of this kind opens in, as <see cref="For"/> says for the kind's first extension: what

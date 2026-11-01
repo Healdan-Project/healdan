@@ -95,7 +95,7 @@ public sealed class LinkHandlerTests : IDisposable
         Assert.Empty(_app.Opened);
         Assert.Equal(0, _server.Count("GET /documents/7/content"));
         var error = Assert.Single(_events.Errors);
-        Assert.Contains("a link opens only documents, spreadsheets, presentations and drawings", error);
+        Assert.Contains("a link opens only documents, spreadsheets, presentations, drawings and PDFs", error);
         Assert.Contains("Open it from the web page, or from Open from Healdan", error);
     }
 

@@ -136,6 +136,20 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void DeleteRemovesCoffeePdfsLockFile()
+    {
+        var store = Store();
+        var (copy, _, _) = store.Create(Doc(1, "Signed NDA.pdf"), false, "CoffeePDF");
+        File.WriteAllText(copy, "a pdf");
+        var lockFile = Path.Combine(Paths.Copies, ".~coffeepdf." + Path.GetFileName(copy) + "#");
+        File.WriteAllText(lockFile, """{"pid": 1}"""); // a crash left it
+
+        store.Delete(copy);
+
+        Assert.False(File.Exists(lockFile));
+    }
+
+    [Fact]
     public void UnconfirmedChanges()
     {
         var store = Store();
@@ -588,6 +602,19 @@ public class CopyStoreTests : IDisposable
     }
 
     [Fact]
+    public void OpenToSetAsideSeesCoffeePdfsLockFile()
+    {
+        var pdf = Write(A, 1, "Signed NDA.pdf");
+        var closed = Write(A, 2, "Closed.pdf");
+        File.WriteAllText(Path.Combine(Paths.Copies, ".~coffeepdf." + Path.GetFileName(pdf) + "#"), "open in CoffeePDF");
+
+        var open = Store(B).OpenToSetAside(B, A);
+
+        Assert.Equal([Path.GetFileName(pdf)], open.Select(c => c.FileName));
+        Assert.True(File.Exists(closed));
+    }
+
+    [Fact]
     public void SetAsideLeavesTheCopiesItIsToldTo()
     {
         var open = Write(A, 1);
@@ -666,6 +693,22 @@ public class CopyStoreTests : IDisposable
         Assert.True(File.Exists(Path.Combine(moved.Folder, "Stray #4 v1.0.docx")));
         Assert.True(File.Exists(finder)); // it stays whatever else moves
         Assert.False(File.Exists(Path.Combine(moved.Folder, ".DS_Store")));
+    }
+
+    [Fact]
+    public void CoffeePdfsFilesAreNotStraysAtASignIn()
+    {
+        Directory.CreateDirectory(Paths.Copies);
+        var temp = Path.Combine(Paths.Copies, ".coffeepdf-0123456789abcdef0123456789abcdef.tmp");
+        var lockFile = Path.Combine(Paths.Copies, ".~coffeepdf.Gone #4 v1.0.pdf#");
+        File.WriteAllText(temp, "half a save");
+        File.WriteAllText(lockFile, "a crash's");
+
+        Assert.Empty(Store(B).SetAside(B, A)); // nothing to announce for them alone
+
+        Assert.True(File.Exists(temp));
+        Assert.True(File.Exists(lockFile));
+        Assert.False(Directory.Exists(Path.Combine(_root, "Copies from healdan.example")));
     }
 
     [Fact]

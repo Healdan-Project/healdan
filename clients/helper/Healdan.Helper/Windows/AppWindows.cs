@@ -118,7 +118,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         {
             if (Ready("open-dialog") is not { } api)
                 return Task.FromResult(WindowAnswers.NotReady("open-dialog"));
-            return Answering("open", () => new OpenWindow(api, fromApp), window =>
+            return Answering("open", () => new OpenWindow(api, fromApp, name => OfficeAppSet.Chooser(paths).OpensReadOnly(name)), window =>
             {
                 if (window.Chosen is { } chosen && Session?.Cycle is { } cycle)
                 {

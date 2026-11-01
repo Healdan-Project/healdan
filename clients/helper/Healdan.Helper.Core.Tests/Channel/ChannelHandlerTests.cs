@@ -28,6 +28,7 @@ public sealed class ChannelHandlerTests : IDisposable
     private readonly List<string> _outside = [];
     private readonly FakeApi _server = new();
     private readonly FakeApp _app = new();
+    private readonly FakeCoffeePdf _coffee = new();
     private readonly RecordingEvents _events = new();
     private readonly FakeWindows _windows = new();
     private readonly FakeNotifier _notifier = new();
@@ -40,7 +41,8 @@ public sealed class ChannelHandlerTests : IDisposable
         var paths = HelperPaths.For(_root);
         var log = new HelperLog(paths.Log);
         var api = new HealdanApi(Server, _server) { Token = "hd_test" };
-        _cycle = new CopyCycle(api, new CopyStore(paths), TestApps.Of(_app), FakeApi.HereDevice, _events, Fast with { Clock = _clock });
+        _cycle = new CopyCycle(api, new CopyStore(paths), TestApps.Of(_app, coffeePdf: _coffee.App), FakeApi.HereDevice, _events,
+            Fast with { Clock = _clock });
         var links = new LinkHandler(_windows, _notifier, log);
         links.Ready(Server, _cycle).Wait();
         _handler = new ChannelHandler(_cycle, links, _windows, _notifier, log, paths, savedWait: TimeSpan.FromSeconds(10));
@@ -65,6 +67,8 @@ public sealed class ChannelHandlerTests : IDisposable
         (await _handler.HandleAsync(route, body))?.AsObject() ?? new JsonObject();
 
     private static JsonObject PathBody(string path) => new() { ["path"] = path };
+
+    private CopyRecord RecordOf(string path) => new CopyStore(HelperPaths.For(_root)).Find(path)!.Value.Item2;
 
     /// <summary>
     /// The app saves the copy in place. That empties the file first, so the settle's clock is stopped until the content
@@ -276,6 +280,105 @@ public sealed class ChannelHandlerTests : IDisposable
         Assert.Equal("Memo.odt", _server.Doc(100).Name); // the format's extension is the name's
         Assert.Contains("filed 100 checkOut=True", _server.Calls);
         Assert.False(File.Exists(temp));
+    }
+
+    [Fact]
+    public async Task FileFromCoffeePdfIsCoffeePdfsCopy()
+    {
+        var body = FileBody(TempFile("%PDF-1.7 the window's content"));
+        body["format"] = "pdf";
+        body["app"] = "CoffeePDF";
+
+        var state = await Call("file", body);
+
+        var path = (string)state["path"]!;
+        Assert.Equal(CopyPath("Memo #100 v1.0.pdf"), path);
+        Assert.Equal("CoffeePDF", RecordOf(path).App); // so the close watch and a restart look for CoffeePDF's lock
+    }
+
+    [Theory]
+    [InlineData("LibreOffice")]
+    [InlineData(null)]
+    [InlineData("Pages")]
+    [InlineData("Microsoft Office")]
+    public async Task FileForAnyOtherAppIsLibreOffices(string? app)
+    {
+        var body = FileBody(TempFile("content"));
+        if (app is null)
+            body.Remove("app");
+        else
+            body["app"] = app;
+
+        var state = await Call("file", body);
+
+        Assert.Equal("LibreOffice", RecordOf((string)state["path"]!).App);
+    }
+
+    [Fact]
+    public async Task SaveNewWithANullPathIsANewDocument()
+    {
+        await Call("save-new", new JsonObject
+        {
+            ["app"] = "CoffeePDF", ["name"] = "Scan", ["formats"] = new JsonArray("pdf"), ["path"] = null
+        });
+
+        var (_, request) = Assert.Single(_windows.Asked);
+        Assert.Null(request["path"]);
+        Assert.Null(request["docNumber"]);
+    }
+
+    [Fact]
+    public async Task ACopyWhoseCheckOutEndedIsReadOnly()
+    {
+        var path = await OpenAsync();
+        _server.Change(5, d => d.Hold = null); // the web page released it
+        Save(path, "my edits");
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+
+        var state = await Call("state", PathBody(path));
+
+        Assert.True((bool?)state["readOnly"]);
+        Assert.Equal("Lease agreement #5 v1.0", (string?)state["title"]); // its name doesn't change
+        Assert.Null((string?)state["holdBy"]);
+        Assert.False(_cycle.StateOf(path).ReadOnly); // the helper's own windows read the record as before
+    }
+
+    [Fact]
+    public async Task ACopyWhoseSavesCantGoOverNewerContentIsReadOnly()
+    {
+        var path = await OpenAsync();
+        _server.Change(5, d =>
+        {
+            d.Files["1.1"] = "from the web page"u8.ToArray();
+            d.Version = d.FileVersion = "1.1";
+        });
+        Save(path, "mine");
+        await Wait.Until(() => _events.Ended.Contains(path), "CheckoutEnded");
+
+        var state = await Call("state", PathBody(path));
+
+        Assert.True((bool?)state["readOnly"]); // still checked out here, but its saves don't go up
+    }
+
+    [Fact]
+    public async Task AnOpenCopyIsntReadOnly()
+    {
+        var path = await OpenAsync();
+
+        Assert.False((bool?)(await Call("state", PathBody(path)))["readOnly"]);
+    }
+
+    [Fact]
+    public async Task ClosedForACopyTheHelperDoesntKnowIsLogged()
+    {
+        var stranger = CopyPath("Not a copy #9 v1.0.pdf");
+        Directory.CreateDirectory(Path.GetDirectoryName(stranger)!);
+        File.WriteAllText(stranger, "someone's file");
+
+        Assert.Equal("{}", (await Call("closed", PathBody(stranger))).ToJsonString());
+
+        await Wait.Until(() => File.ReadAllText(HelperPaths.For(_root).Log).Contains("Ignored /v1/closed"), "the log line");
+        Assert.True(File.Exists(stranger));
     }
 
     [Fact]

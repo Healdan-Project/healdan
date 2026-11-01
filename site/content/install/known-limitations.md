@@ -18,6 +18,9 @@ weight: 10
 - **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
   Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
   helper for Ubuntu comes next. Windows comes later.
+- **PDFs are edited in CoffeePDF, on macOS only.** [CoffeePDF](https://github.com/coffeemuse/CoffeePDF) is the one app
+  that edits a PDF from Healdan, and only on a Mac where it's installed with its Healdan support on. On any other
+  computer, or a Mac without it, a PDF opens read-only in the computer's default app.
 - **Office's own Save, Save As and Open aren't taken over.** LibreOffice's are, but Word, Excel and PowerPoint keep
   theirs, and Healdan's buttons are on the Healdan tab. **⌘S** on a document that isn't in Healdan yet saves it on the
   Mac, as before; use Save to Healdan to file it.

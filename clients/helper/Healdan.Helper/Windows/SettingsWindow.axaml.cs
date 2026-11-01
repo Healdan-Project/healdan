@@ -4,10 +4,12 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Addin;
 using Healdan.Helper.Core.Browse;
+using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
@@ -20,15 +22,19 @@ namespace Healdan.Helper.Windows;
 /// opens each kind of file, as grouped rows. One server per helper (spec §5.1), so the address changes only by signing out and
 /// in again. Each kind has a pop-up of the installed apps (LibreOffice, Microsoft Office) showing the chooser's answer now, and
 /// choosing one writes it to <see cref="HelperSettings.Kinds"/>; a kind with one app to offer, Drawings always, shows it as
-/// text. Below them, while Word, Excel or PowerPoint is installed or an app is paired, the Microsoft Office group: Set Up
-/// (its status, and Set Up… while it's needed) and the paired apps, each with when it paired and Forget. Then whether the
-/// helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
+/// text. PDFs follow as text too: CoffeePDF while it's installed with Healdan support on, else the default app, read-only
+/// (M3.6 spec §4.4). Below them, while Word, Excel or PowerPoint is installed or an app is paired, the Microsoft Office group:
+/// Set Up (its status, and Set Up… while it's needed) and the paired apps, each with when it paired and Forget. Then whether
+/// the helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
 /// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does, and while
 /// an older version is, Update…, which does the same (changed in the build).
 /// </summary>
 public partial class SettingsWindow : Window
 {
     private const string Https = "https://";
+
+    /// <summary>Turn on Healdan support in CoffeePDF to have PDFs open there (M3.6 spec §4.4).</summary>
+    internal const string PdfSupportOffNote = "Turn on Healdan support in CoffeePDF's Settings to edit PDFs there.";
 
     private readonly HelperPaths? _paths;
     private readonly OfficeSettings? _office;
@@ -52,6 +58,7 @@ public partial class SettingsWindow : Window
             : "Sign in from the Healdan Helper menu to choose the server.";
         for (var i = 0; i < FileKinds.All.Count; i++)
             KindsGroup.Children.Add(KindRow(FileKinds.All[i], chooser, divided: i > 0));
+        KindsGroup.Children.Add(PdfRow(chooser));
         SetUpButton.Click += OnSetUp;
         ShowOffice();
 
@@ -102,14 +109,6 @@ public partial class SettingsWindow : Window
     /// </summary>
     private Control KindRow(FileKind kind, AppChooser chooser, bool divided)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Classes = { "row" } };
-        var icon = Icons.View(FileIcons.For(kind));
-        icon.Classes.Add("folder");
-        icon.Margin = new Thickness(0, 0, 8, 0);
-        icon.VerticalAlignment = VerticalAlignment.Center;
-        var name = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        name.Children.Add(new TextBlock { Text = kind.Label });
-        name.Children.Add(new TextBlock { Text = string.Join(" ", kind.Extensions), Classes = { "muted" }, FontSize = 11 });
         var app = chooser.ForKind(kind);
         Control value;
         if (chooser.Offered(kind) is { Count: > 1 } offered)
@@ -127,11 +126,23 @@ public partial class SettingsWindow : Window
             value = box;
         }
         else
-        {
-            var text = new TextBlock { Text = app, VerticalAlignment = VerticalAlignment.Center };
-            text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("HdSecondaryBrush")); // follows a theme switch
-            value = text;
-        }
+            value = AppText(app);
+        return Row(FileIcons.For(kind), kind.Label, string.Join(" ", kind.Extensions), null, value, divided);
+    }
+
+    /// <summary>A row of the kinds' group: its icon, its label with its extensions and any note under them, and the app.</summary>
+    private static Control Row(string iconName, string label, string extensions, string? note, Control value, bool divided)
+    {
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Classes = { "row" } };
+        var icon = Icons.View(iconName);
+        icon.Classes.Add("folder");
+        icon.Margin = new Thickness(0, 0, 8, 0);
+        icon.VerticalAlignment = VerticalAlignment.Center;
+        var name = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        name.Children.Add(new TextBlock { Text = label });
+        name.Children.Add(new TextBlock { Text = extensions, Classes = { "muted" }, FontSize = 11 });
+        if (note is not null)
+            name.Children.Add(new TextBlock { Text = note, Classes = { "muted" }, FontSize = 11, TextWrapping = TextWrapping.Wrap });
         Grid.SetColumn(name, 1);
         Grid.SetColumn(value, 2);
         grid.Children.Add(icon);
@@ -139,6 +150,22 @@ public partial class SettingsWindow : Window
         grid.Children.Add(value);
         return divided ? new Border { Classes = { "divided" }, Child = grid } : grid;
     }
+
+    /// <summary>The app as text, for a row with nothing to choose between.</summary>
+    private static TextBlock AppText(string app)
+    {
+        var text = new TextBlock { Text = app, VerticalAlignment = VerticalAlignment.Center };
+        text.Bind(TextBlock.ForegroundProperty, text.GetResourceObservable("HdSecondaryBrush")); // follows a theme switch
+        return text;
+    }
+
+    /// <summary>
+    /// PDFs (M3.6 spec §4.4), as text: CoffeePDF while it's installed with Healdan support on, else the default app,
+    /// read-only, with a note when CoffeePDF is installed and its support is off.
+    /// </summary>
+    private static Control PdfRow(AppChooser chooser) =>
+        Row("file-type-pdf", "PDFs", ".pdf", chooser.CoffeePdfSupportOff ? PdfSupportOffNote : null,
+            AppText(chooser.CoffeePdfAvailable ? CoffeePdfApp.AppName : "Default app, read-only"), divided: true);
 
     /// <summary>Keeps the user's choice for the kind, with the others as they were. False when it couldn't be written.</summary>
     private bool Choose(FileKind kind, string app)

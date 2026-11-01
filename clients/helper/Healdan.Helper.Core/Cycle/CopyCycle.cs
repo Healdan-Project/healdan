@@ -81,6 +81,9 @@ public sealed class CopyCycle : IDisposable
             (path, lockBack) => Guard(() => OnReopened(path, lockBack)));
     }
 
+    /// <summary>The apps copies open in, which the channel's filing names its app from (M3.6 spec §6.2).</summary>
+    public OfficeApps Apps => _apps;
+
     /// <summary>An open copy: its save queue and what the cycle knows about it beyond its record.</summary>
     internal sealed class Session
     {
@@ -264,17 +267,37 @@ public sealed class CopyCycle : IDisposable
         }
     }
 
-    /// <summary>The extension's close event for the copy's window: checks it in (or releases it) and deletes the copy, in the background.</summary>
-    public Task ClosedAsync(string path)
+    /// <summary>
+    /// An app's close event for the copy's window: checks it in (or releases it) and deletes the copy, in the background. A
+    /// read-only copy opened in the default app has no session, as nothing else says when its window closes, so its report
+    /// deletes it now, as the next start would (M3.6 spec §5.5); one with changes is kept, and so is one the document's open
+    /// is still downloading. False when the cycle has nothing to do with the path, so the channel can log a report it dropped.
+    /// </summary>
+    public Task<bool> ClosedAsync(string path)
     {
-        Close(path);
-        return Task.CompletedTask;
+        bool known;
+        lock (_gate)
+            known = Find(path) is not null;
+        if (known)
+        {
+            Close(path);
+            return Task.FromResult(true);
+        }
+        if (Record(path) is not { ReadOnly: true } record || !_apps.IsOtherFiles(_apps.Of(record)))
+            return Task.FromResult(false);
+        if (_store.HasUnconfirmedChanges(path))
+            return Task.FromResult(true);
+        lock (_gate)
+            if (!_opening.Contains(record.DocNumber))
+                _store.Delete(path); // else an earlier window's report has landed mid-download: the new open's copy stays
+        return Task.FromResult(true);
     }
 
     /// <summary>
     /// At start: for each copy left from before, an open one is watched again and its unconfirmed changes resent; a
     /// crashed one is offered (<see cref="ICycleEvents.Crashed"/>) and its changes resent; one whose window closed
-    /// meanwhile is checked in and deleted; and a closed read-only copy is deleted. Saves wait for the server as usual.
+    /// meanwhile is checked in and deleted; a closed read-only copy is deleted; and CoffeePDF's leftover temporary files go
+    /// while it isn't running. Saves wait for the server as usual.
     /// </summary>
     public Task ResumeAsync()
     {
@@ -288,6 +311,24 @@ public sealed class CopyCycle : IDisposable
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // Tried again at the next start.
+            }
+        }
+        // CoffeePDF's save leaves its temporary file only when CoffeePDF stopped part-way, but one may be a save going on
+        // now, so they go only while CoffeePDF isn't running (M3.6 spec §6.4).
+        if (_apps.CoffeePdf is { } coffeePdf && !SafeIsRunning(coffeePdf, _store.Folder))
+        {
+            foreach (var temp in Directory.EnumerateFiles(_store.Folder, ".coffeepdf-*.tmp"))
+            {
+                if (!CopyNames.IsCoffeePdfTemporary(Path.GetFileName(temp)))
+                    continue;
+                try
+                {
+                    File.Delete(temp);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    // Tried again at the next start.
+                }
             }
         }
         foreach (var (listed, listedRecord) in _store.All())
@@ -447,7 +488,8 @@ public sealed class CopyCycle : IDisposable
                 if (Find(path) is not null)
                     continue;
             // The menu asks at each rebuild, on the UI thread: a copy is read again only once its size or time has
-            // changed (re-review), so the default app's copies, which stay until the next start, aren't read every time.
+            // changed (re-review), so the default app's copies, which stay until their window's close is reported
+            // (ClosedAsync) or the next start, aren't read every time.
             if (File.Exists(path) && _store.HasUnconfirmedChanges(path, cached: true))
                 kept.Add(StateOf(path, record, null));
         }
@@ -473,8 +515,9 @@ public sealed class CopyCycle : IDisposable
     }
 
     /// <summary>
-    /// A link's open (spec §5.3), as <see cref="OpenAsync"/>, but only of spec §5.11's kinds (final review C2): a page
-    /// can make a link to any document, and anything else opens only from the Open window, where the user chose it.
+    /// A link's open (spec §5.3), as <see cref="OpenAsync"/>, but only of spec §5.11's kinds and PDFs (final review C2,
+    /// M3.6 spec §5.1): a page can make a link to any document, and anything else opens only from the Open window, where
+    /// the user chose it.
     /// </summary>
     public Task OpenLinkAsync(long docNumber, bool readOnly) =>
         ReportingAsync(docNumber, () => OpenCoreAsync(docNumber, readOnly, null, move: false, link: true));
@@ -529,17 +572,24 @@ public sealed class CopyCycle : IDisposable
     {
         Session? s;
         string? holdBy;
+        var ended = false;
         lock (_gate)
         {
             s = Find(path);
             holdBy = s?.HoldBy;
+            ended = s?.Ended == true;
             if (s is not null)
                 path = s.Path;
         }
         var record = Record(path);
         if (record is null)
             return CopyState.Unknown(path);
-        return StateOf(path, record, holdBy) with { Pending = pending ?? (s is not null && PendingOf(s)) };
+        var state = StateOf(path, record, holdBy);
+        return state with
+        {
+            Pending = pending ?? (s is not null && PendingOf(s)),
+            SavesStopped = state.SavesStopped || (!record.ReadOnly && ended)
+        };
     }
 
     /// <summary>
@@ -696,10 +746,10 @@ public sealed class CopyCycle : IDisposable
         var hadCopy = _store.All().Any(c => c.Record.DocNumber == n && c.Record.CheckedOutHere);
         var doc = await _api.DocumentAsync(n, ct);
         var app = _apps.For(doc.Name);
-        if (link && FileKinds.OfFile(doc.Name) is null)
+        if (link && FileKinds.OfFile(doc.Name) is null && !PdfFiles.Is(doc.Name))
         {
-            Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations and "
-                + "drawings. Open it from the web page, or from Open from Healdan."));
+            Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations, drawings "
+                + "and PDFs. Open it from the web page, or from Open from Healdan."));
             return;
         }
         if (_apps.IsOtherFiles(app))
@@ -858,10 +908,11 @@ public sealed class CopyCycle : IDisposable
 
     /// <summary>
     /// Spec §5.11: a file no office app edits, such as a PDF, opens read-only in the system's default app, with no
-    /// check-out. That app keeps no lock file, so nothing watches the copy; <see cref="ResumeAsync"/> deletes it at the
-    /// next start, as it's read-only and holds only Healdan's bytes. As anyone who can add files to a matter could
-    /// have put it there (final review C2), a kind that can run a program is never downloaded or handed over
-    /// (<see cref="DefaultApp.Refuses"/>), and the copy carries macOS's quarantine, so Gatekeeper checks it.
+    /// check-out. That app keeps no lock file, so nothing watches the copy; an app's close report deletes it
+    /// (<see cref="ClosedAsync"/>), or else <see cref="ResumeAsync"/> at the next start, as it's read-only and holds only
+    /// Healdan's bytes. As anyone who can add files to a matter could have put it there (final review C2), a kind that
+    /// can run a program is never downloaded or handed over (<see cref="DefaultApp.Refuses"/>), and the copy carries
+    /// macOS's quarantine, so Gatekeeper checks it.
     /// </summary>
     private async Task OpenOtherAsync(DocumentView doc, string? version, IOfficeApp other, CancellationToken ct)
     {
@@ -2022,7 +2073,8 @@ public sealed class CopyCycle : IDisposable
     }
 
     private static CopyState StateOf(string path, CopyRecord r, string? holdBy) =>
-        new(true, r.DocNumber, Title(r), CopyNames.DocRef(r.DocNumber, r.FileVersion), r.ReadOnly, path, holdBy);
+        new(true, r.DocNumber, Title(r), CopyNames.DocRef(r.DocNumber, r.FileVersion), r.ReadOnly, path, holdBy,
+            SavesStopped: !r.ReadOnly && !r.CheckedOutHere);
 
     private static string Title(CopyRecord r) => CopyNames.Title(r.DocumentName, r.DocNumber, r.FileVersion, r.ReadOnly);
 

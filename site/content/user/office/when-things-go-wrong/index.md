@@ -129,6 +129,19 @@ that was never saved. You don't need to:
 
 If Excel or PowerPoint brings a document back by itself in the same way, the helper saves it back too.
 
+## CoffeePDF Quits Unexpectedly
+
+[CoffeePDF](https://github.com/coffeemuse/CoffeePDF) quitting or crashing with a PDF open gives the same window as
+[LibreOffice's](#libreoffice-or-your-mac-crashes): the PDF stays checked out to you, and your local copy is kept as you
+last saved it. CoffeePDF doesn't bring back what you'd done since your last save, so there's nothing for the helper to
+save back.
+
+- **Reopen** opens your kept copy in CoffeePDF again, with what you last saved, and carries on as before.
+- **Send and Check In** sends what Healdan hasn't had yet, and checks the PDF in.
+
+A PDF opened read-only in CoffeePDF has nothing to lose: it goes from your Mac when its window closes, or at the latest
+once CoffeePDF has quit.
+
 ## Your Check-Out Ended
 
 While you had the document open, its check-out ended:
@@ -183,8 +196,8 @@ When Open in App doesn't open anything:
 - **One of the helper's windows is waiting for you,** such as Save to Healdan. The helper ignores links meanwhile,
   and brings that window to the front: finish with it, then click Open in App again.
 - **"#1234 is still being checked in":** you closed it moments ago. Open it again once the check-in is done.
-- **"… wasn't opened: a link opens only documents, spreadsheets, presentations and drawings":** the link was to a PDF
-  or another kind of file. Open it from **Open from Healdan…**, or download it from the web page. See
+- **"… wasn't opened: a link opens only documents, spreadsheets, presentations, drawings and PDFs":** the link was to
+  some other kind of file. Open it from **Open from Healdan…**, or download it from the web page. See
   [Other Kinds of File](../opening-documents/#other-kinds-of-file).
 
 ## Asking for Help
