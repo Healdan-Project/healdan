@@ -51,6 +51,7 @@ Throughout, **(owner)** marks something the owner decided or described. **(call)
 6. **Re-implement, never copy.** Features that LogicalDOC sells are rebuilt from observed behaviour, not from proprietary code. (owner's standing direction)
 7. **Linux and macOS first.** Windows comes later, for adoption. (owner)
 8. **One licence for the code.** All of Healdan's code, including its own modules, is under the LGPL-3.0, like upstream. The docs site's content is under CC BY 4.0. (owner, 2026-10-23)
+9. **Open-source databases only.** Healdan runs on MariaDB today. PostgreSQL is to become its first-class database, and Healdan will move away from MariaDB in time. MySQL isn't supported and won't be added, and Oracle and SQL Server are gone completely. (owner, 2026-10-29 and 2026-10-30, [Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110))
 
 ## 3. Glossary
 
@@ -561,6 +562,7 @@ The backlog isn't in priority order. Promote an item into a milestone through a 
 |---|---|---|
 | **Healdan Share**: a client-facing portal | owner: ancillary project, not yet designed | Like iManage Share. A subset of Healdan documents and folders is published or synced to an external, internet-facing site for clients. It is the only piece meant to face the internet; the core server stays on the LAN or behind a VPN. Its design must assume a hostile network, and it probably runs as a separate deployment so it doesn't expose the core server. |
 | S3, and a storage backend per Store | owner: later goal | CE has a single disk storage backend. It records no backend per document or version, and its "move files to another backend" path throws. The work: a storage backend that dispatches to the right place, recording where each version lives, an S3 implementation, and moving files when a workspace changes Store. |
+| PostgreSQL as the first-class database | owner, 2026-10-30 ([Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110)) | Healdan runs on MariaDB only today, and moves away from it in time (principle 9). The WAR already ships PostgreSQL's driver, but Healdan refuses to start on it. The work: Flyway migrations for the `hd_` tables in a `postgresql/` folder beside `mariadb/` and `hsqldb/`, with `HealdanMigrator` recognising PostgreSQL; CE's schema on PostgreSQL (it ships no `.postgresql` variant, so its generic scripts need checking) and Healdan's own SQL checked there; a compose option, with `DockerInit` and the backup and restore steps to match; CI coverage, at least the smoke test on PostgreSQL; and a path for existing MariaDB installs to move their data across. Needs its own design session. |
 | Bulk import/export with metadata | owner | Must set legacy doc #s and client/matter properties. |
 | Admin app, then retiring the old GWT UI | owner (UI split) | Needs the full API inventory from M2. |
 | Office add-ins on Windows | owner | The Outlook add-in already runs on Windows. |
