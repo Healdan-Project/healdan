@@ -69,9 +69,9 @@ public class ProfileSeed implements SeedStep {
 		set.setTenantId(Tenant.DEFAULT_ID);
 		// The set must hold the list attributes, or CE drops their options when it stores the set
 		set.getTemplateAttributes().put(HealdanConstants.ATTR_DOCCLASS,
-				attribute("Class", Attribute.TYPE_STRING, 0, Attribute.EDITOR_LISTBOX));
+				attribute("Class", Attribute.Type.STRING, 0, Attribute.EDITOR_LISTBOX));
 		set.getTemplateAttributes().put(HealdanConstants.ATTR_DOCSUBCLASS,
-				attribute("Subclass", Attribute.TYPE_STRING, 1, Attribute.EDITOR_LISTBOX));
+				attribute("Subclass", Attribute.Type.STRING, 1, Attribute.EDITOR_LISTBOX));
 		AttributeSetDAO.get().store(set);
 		return AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID, true);
 	}
@@ -79,38 +79,38 @@ public class ProfileSeed implements SeedStep {
 	private void addAttributes(Template template, long setId) {
 		String matterLabel = settings.matterLabel();
 
-		Attribute client = put(template, HealdanConstants.ATTR_CLIENT, "Client", Attribute.TYPE_STRING, 0);
+		Attribute client = put(template, HealdanConstants.ATTR_CLIENT, "Client", Attribute.Type.STRING, 0);
 		client.setReadonly(true);
-		Attribute matter = put(template, HealdanConstants.ATTR_MATTER, matterLabel, Attribute.TYPE_STRING, 1);
+		Attribute matter = put(template, HealdanConstants.ATTR_MATTER, matterLabel, Attribute.Type.STRING, 1);
 		matter.setReadonly(true);
-		put(template, HealdanConstants.ATTR_AUTHOR, "Author", Attribute.TYPE_USER, 2);
-		put(template, HealdanConstants.ATTR_TYPIST, "Typist", Attribute.TYPE_USER, 3);
+		put(template, HealdanConstants.ATTR_AUTHOR, "Author", Attribute.Type.USER, 2);
+		put(template, HealdanConstants.ATTR_TYPIST, "Typist", Attribute.Type.USER, 3);
 
-		Attribute docClass = put(template, HealdanConstants.ATTR_DOCCLASS, "Class", Attribute.TYPE_STRING, 4);
+		Attribute docClass = put(template, HealdanConstants.ATTR_DOCCLASS, "Class", Attribute.Type.STRING, 4);
 		docClass.setEditor(Attribute.EDITOR_LISTBOX);
 		docClass.setMandatory(true);
 		docClass.setSetId(setId);
-		Attribute subclass = put(template, HealdanConstants.ATTR_DOCSUBCLASS, "Subclass", Attribute.TYPE_STRING, 5);
+		Attribute subclass = put(template, HealdanConstants.ATTR_DOCSUBCLASS, "Subclass", Attribute.Type.STRING, 5);
 		subclass.setEditor(Attribute.EDITOR_LISTBOX);
 		subclass.setDependsOn(HealdanConstants.ATTR_DOCCLASS);
 		subclass.setSetId(setId);
 
-		put(template, HealdanConstants.ATTR_LEGACYDOCNUM, "Legacy doc #", Attribute.TYPE_STRING, 6);
-		put(template, HealdanConstants.ATTR_EMAILFROM, "From", Attribute.TYPE_STRING, 7);
-		put(template, HealdanConstants.ATTR_EMAILTO, "To", Attribute.TYPE_STRING, 8);
-		put(template, HealdanConstants.ATTR_EMAILCC, "CC", Attribute.TYPE_STRING, 9);
-		put(template, HealdanConstants.ATTR_EMAILSUBJECT, "Subject", Attribute.TYPE_STRING, 10);
-		put(template, HealdanConstants.ATTR_EMAILSENT, "Sent", Attribute.TYPE_DATE, 11);
-		put(template, HealdanConstants.ATTR_EMAILRECEIVED, "Received", Attribute.TYPE_DATE, 12);
+		put(template, HealdanConstants.ATTR_LEGACYDOCNUM, "Legacy doc #", Attribute.Type.STRING, 6);
+		put(template, HealdanConstants.ATTR_EMAILFROM, "From", Attribute.Type.STRING, 7);
+		put(template, HealdanConstants.ATTR_EMAILTO, "To", Attribute.Type.STRING, 8);
+		put(template, HealdanConstants.ATTR_EMAILCC, "CC", Attribute.Type.STRING, 9);
+		put(template, HealdanConstants.ATTR_EMAILSUBJECT, "Subject", Attribute.Type.STRING, 10);
+		put(template, HealdanConstants.ATTR_EMAILSENT, "Sent", Attribute.Type.DATE, 11);
+		put(template, HealdanConstants.ATTR_EMAILRECEIVED, "Received", Attribute.Type.DATE, 12);
 	}
 
-	private Attribute put(Template template, String name, String label, int type, int position) {
+	private Attribute put(Template template, String name, String label, Attribute.Type type, int position) {
 		Attribute attribute = attribute(label, type, position, Attribute.EDITOR_DEFAULT);
 		template.getTemplateAttributes().put(name, attribute);
 		return attribute;
 	}
 
-	private Attribute attribute(String label, int type, int position, int editor) {
+	private Attribute attribute(String label, Attribute.Type type, int position, int editor) {
 		Attribute attribute = new Attribute();
 		attribute.setLabel(label);
 		attribute.setType(type);

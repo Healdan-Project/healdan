@@ -65,15 +65,15 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 
 		Attribute client = at(t, 0);
 		assertEquals("Client", client.getLabel());
-		assertEquals(Attribute.TYPE_STRING, client.getType());
+		assertEquals(Attribute.Type.STRING, client.getType());
 		assertTrue(client.isReadonly());
 		Attribute matter = at(t, 1);
 		assertEquals(HealdanSettings.get().matterLabel(), matter.getLabel());
 		assertTrue(matter.isReadonly());
 		assertFalse(at(t, 2).isReadonly());
-		assertEquals(Attribute.TYPE_USER, at(t, 2).getType());
+		assertEquals(Attribute.Type.USER, at(t, 2).getType());
 		assertEquals("Author", at(t, 2).getLabel());
-		assertEquals(Attribute.TYPE_USER, at(t, 3).getType());
+		assertEquals(Attribute.Type.USER, at(t, 3).getType());
 		assertEquals("Typist", at(t, 3).getLabel());
 
 		Attribute docclass = at(t, 4);
@@ -86,18 +86,18 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 		assertEquals("docclass", sub.getDependsOn());
 		assertFalse(sub.isMandatory());
 		assertEquals("Comments", at(t, 6).getLabel());
-		assertEquals(Attribute.TYPE_STRING, at(t, 6).getType());
+		assertEquals(Attribute.Type.STRING, at(t, 6).getType());
 		assertFalse(at(t, 6).isMandatory());
 		assertEquals("Legacy doc #", at(t, 7).getLabel());
 
 		assertEquals(List.of("From", "To", "CC", "Subject"),
 				List.of(at(t, 8).getLabel(), at(t, 9).getLabel(), at(t, 10).getLabel(), at(t, 11).getLabel()));
 		for (int i = 8; i <= 11; i++)
-			assertEquals(Attribute.TYPE_STRING, at(t, i).getType());
+			assertEquals(Attribute.Type.STRING, at(t, i).getType());
 		assertEquals("Sent", at(t, 12).getLabel());
 		assertEquals("Received", at(t, 13).getLabel());
-		assertEquals(Attribute.TYPE_DATE, at(t, 12).getType());
-		assertEquals(Attribute.TYPE_DATE, at(t, 13).getType());
+		assertEquals(Attribute.Type.DATE, at(t, 12).getType());
+		assertEquals(Attribute.Type.DATE, at(t, 13).getType());
 	}
 
 	@Test
@@ -122,7 +122,7 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 		// An attribute an admin adds later is inheritable
 		Template t = template();
 		Attribute extra = new Attribute();
-		extra.setType(Attribute.TYPE_STRING);
+		extra.setType(Attribute.Type.STRING);
 		extra.setLabel("Office");
 		extra.setPosition(14);
 		t.getTemplateAttributes().put("office", extra);

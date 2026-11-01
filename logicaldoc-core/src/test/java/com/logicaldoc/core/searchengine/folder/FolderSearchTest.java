@@ -95,7 +95,7 @@ public class FolderSearchTest extends AbstractCoreTestCase {
 	@Test
 	public void testSearchByExtendedAttribute() throws SearchException {
 		FolderCriterion criterion = new FolderCriterion();
-		criterion.setField("val1 type:" + Attribute.TYPE_STRING);
+		criterion.setField("val1 type:" + Attribute.Type.STRING.ordinal());
 		criterion.setOperator(FolderCriterion.OPERATOR_EQUALS);
 		criterion.setValue("test_val_1");
 
@@ -109,7 +109,7 @@ public class FolderSearchTest extends AbstractCoreTestCase {
 		// No attribute has this name, but concatenated into the SQL it would
 		// match any attribute holding the value
 		FolderCriterion criterion = new FolderCriterion();
-		criterion.setField("x' or 1=1 or 'x'=' type:" + Attribute.TYPE_STRING);
+		criterion.setField("x' or 1=1 or 'x'=' type:" + Attribute.Type.STRING.ordinal());
 		criterion.setOperator(FolderCriterion.OPERATOR_EQUALS);
 		criterion.setValue("test_val_1");
 
