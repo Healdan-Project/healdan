@@ -44,6 +44,19 @@ public class ApiToken extends PersistentObject {
 	@Column(name = "hd_device", length = 64)
 	private String device;
 
+	/** The id of the sign-in provider the token came from, or null for a token from a password sign-in */
+	@Column(name = "hd_provider", length = 32)
+	private String provider;
+
+	/** The provider's refresh token, sealed by {@code SecretBox}; null when the token has none */
+	@Column(name = "hd_refresh", length = 4000)
+	private String refresh;
+
+	/** When the provider last said the person may still sign in, or null before the first check */
+	@Column(name = "hd_checked")
+	@Temporal(TemporalType.TIMESTAMP)
+	private Date checked;
+
 	public long getUserId() {
 		return userId;
 	}
@@ -98,5 +111,29 @@ public class ApiToken extends PersistentObject {
 
 	public void setDevice(String device) {
 		this.device = device;
+	}
+
+	public String getProvider() {
+		return provider;
+	}
+
+	public void setProvider(String provider) {
+		this.provider = provider;
+	}
+
+	public String getRefresh() {
+		return refresh;
+	}
+
+	public void setRefresh(String refresh) {
+		this.refresh = refresh;
+	}
+
+	public Date getChecked() {
+		return checked;
+	}
+
+	public void setChecked(Date checked) {
+		this.checked = checked;
 	}
 }

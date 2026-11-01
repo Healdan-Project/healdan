@@ -154,7 +154,7 @@ All target `master`, each stacked on the one before.
 - **PR C, Tasks 12–13:** the sign-in page and the Sign-In tab, with the Install manual's sign-in section. Usable by an admin from here.
 - **PR D, Tasks 14–15:** the helper's browser sign-in.
 - **PR E, Task 16:** CLAUDE.md, the capability map, the spec's corrections and the roadmap.
-- **Task 17:** Healdan Helper 0.5.0, the owner's server upgraded, and the owner's walkthrough.
+- **Task 17:** Healdan Helper 0.6.0, the owner's server upgraded, and the owner's walkthrough.
 
 ---
 
@@ -1414,15 +1414,17 @@ Expected: PASS.
 
 ---
 
-### Task 17: Healdan Helper 0.5.0 and the owner's acceptance
+### Task 17: Healdan Helper 0.6.0 and the owner's acceptance
 
-- [ ] **Step 1:** Once PRs A to E are merged, tag `helper-v0.5.0`. `clients.yml` signs, notarises and attaches the `.dmg`.
+- [ ] **Step 1:** Once PRs A to E are merged, tag `helper-v0.6.0`. `clients.yml` signs, notarises and attaches the `.dmg`.
 - [ ] **Step 2:** The owner upgrades their server, and keeps the `conf` volume's new key in its backups.
 - [ ] **Step 3:** The owner's walkthrough, spec §16.2, rows 1 to 8, on Entra ID and the owner's Authentik. Record each row's result and any punch-list item in the spec and this plan's decision log.
 
 ## Decision log
 
-(Empty until the build. Each ruling made while building goes here with its task, and into the spec where it changes what the spec says.)
+Each ruling made while building goes here with its task, and into the spec where it changes what the spec says.
+
+- **The helper's release is 0.6.0, not 0.5.0** (owner, 2026-11-01, relayed from the session planning what follows M4). M3.6 (PDFs in CoffeePDF) takes 0.5.0 and releases first. M4's helper is tagged `helper-v0.6.0`, with release candidates as `0.6.0-rcN`. Task 17, spec §2.1, §14 and §16.2 say so.
 
 ## Follow-ups
 

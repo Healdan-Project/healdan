@@ -13,6 +13,7 @@ import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.authentication.DefaultAuthenticator;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
+import com.logicaldoc.healdan.signin.SignIns;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -22,7 +23,8 @@ import com.logicaldoc.util.spring.Context;
  * only. Every other key in Healdan's form, a token included, is refused, so
  * CE's own routes never accept a token: its {@code loginApiKey} over SOAP and
  * REST, and the key of a Basic sign-in. Any other key is left to the
- * authenticators after this one.
+ * authenticators after this one, a provider sign-in's one-time key
+ * ({@link SignIns#PREFIX}) included: {@code SignInAuthenticator} owns those.
  */
 @Component("healdanTokenAuthenticator")
 public class HealdanTokenAuthenticator extends AbstractAuthenticator {
@@ -90,7 +92,8 @@ public class HealdanTokenAuthenticator extends AbstractAuthenticator {
 	@Override
 	public User authenticate(String username, String password, String key, Client client)
 			throws AuthenticationException {
-		if (key == null || !key.startsWith(ApiTokens.PREFIX))
+		// A provider sign-in's key starts in Healdan's form too, but isn't a token's to refuse
+		if (key == null || !key.startsWith(ApiTokens.PREFIX) || key.startsWith(SignIns.PREFIX))
 			return null;
 		// Refused as a stale token is: it doesn't count against the address, nor put the key in a counter's name
 		Pending pending = PENDING.get();
