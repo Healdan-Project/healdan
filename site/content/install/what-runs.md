@@ -15,12 +15,12 @@ weight: 2
 ## Supported Databases
 
 Healdan runs on MariaDB: the stack's own `db` service, or a MariaDB server of your own, which `DB_HOST` and
-`DB_PORT` point at (see [Configuration](../configuration/)). It supports only open-source databases, and stops when
-it starts on any other.
+`DB_PORT` point at (see [Configuration](../configuration/)). It supports only open-source databases, and of those
+only MariaDB so far: on any other database it stops when it starts.
 
 - **MySQL isn't supported,** although MariaDB grew out of it. Healdan's own tables use sequences, which MySQL
   doesn't have.
-- **Oracle and SQL Server aren't supported.** Healdan doesn't include their drivers.
+- **Oracle and SQL Server aren't supported.** Healdan doesn't include their drivers, so it can't connect to either.
 - **PostgreSQL** support comes later.
 
 ## What the App Does When It Starts
