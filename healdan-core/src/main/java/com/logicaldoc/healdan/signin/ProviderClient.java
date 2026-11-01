@@ -141,6 +141,9 @@ public class ProviderClient {
 	 */
 	private static final long KEYS_RATE_LIMIT_MILLIS = JWKSourceBuilder.DEFAULT_RATE_LIMIT_MIN_INTERVAL;
 
+	/** HTTP's Too Many Requests, which Nimbus has no constant for */
+	private static final int TOO_MANY_REQUESTS = 429;
+
 	/** The longest code taken from a callback, which real providers stay well below */
 	private static final int MAX_CODE = 8192;
 
@@ -196,10 +199,19 @@ public class ProviderClient {
 		/** The provider gave new tokens */
 		ACCEPTED,
 
-		/** The provider said no: the sign-in is over */
+		/**
+		 * The provider said no with {@code invalid_grant}: the account was
+		 * disabled, or its sessions revoked, so the sign-in is over. Nothing else
+		 * is a refusal.
+		 */
 		REFUSED,
 
-		/** No answer that decides it: no connection, a timeout, a server error, or an answer that failed its checks */
+		/**
+		 * No answer that decides it: no connection, a timeout, a server error, an
+		 * answer that failed its checks, or an error about the setup rather than
+		 * the person, such as {@code invalid_client} when the client secret has
+		 * expired. The token is kept.
+		 */
 		UNREACHABLE
 	}
 
@@ -361,10 +373,22 @@ public class ProviderClient {
 	 * provider still accepts it (spec section 9). It never throws for what the
 	 * provider does: only an explicit refusal is {@link Outcome#REFUSED}.
 	 * <ul>
-	 * <li>{@code REFUSED}: {@code 400}, {@code 401}, or {@code invalid_grant}.</li>
-	 * <li>{@code UNREACHABLE}: no connection, a timeout, a {@code 5xx}, any other
-	 * status, a discovery document that can't be fetched or fails its checks, a
-	 * client secret that can't be read, or an answer that can't be read.</li>
+	 * <li>{@code REFUSED}: the error code {@code invalid_grant}, at a status
+	 * under 500, and nothing else (spec section 9: "the account was disabled,
+	 * or its sessions revoked"; ruling R12).</li>
+	 * <li>{@code UNREACHABLE}: no connection, a timeout, a {@code 5xx} or
+	 * {@code 429}, logged as a warning.</li>
+	 * <li>{@code UNREACHABLE} too, logged as an error naming the provider and
+	 * the error code, for every other error answer: {@code invalid_client},
+	 * {@code unauthorized_client}, {@code invalid_request},
+	 * {@code invalid_scope}, {@code unsupported_grant_type}, any other code, or
+	 * a {@code 400} or {@code 401} with no error code Healdan can read. These
+	 * are about the setup, such as a client secret that expired, not about the
+	 * person, and must not revoke every helper's token (spec sections 7.5 and
+	 * 16.2).</li>
+	 * <li>{@code UNREACHABLE} too for a discovery document that can't be
+	 * fetched or fails its checks, a client secret that can't be read, or an
+	 * answer that can't be read.</li>
 	 * <li>{@code UNREACHABLE} too for an answer whose ID token fails its checks,
 	 * logged as a warning: a bad answer isn't an explicit refusal, and only an
 	 * explicit refusal revokes. The new refresh token comes back with it, if
@@ -421,16 +445,21 @@ public class ProviderClient {
 		if (status != HTTPResponse.SC_OK) {
 			ErrorObject error = error(response);
 			String said = describe(status, error, refreshToken, secret.getValue());
-			if (status >= 500) {
+			// Down or busy
+			if (status >= 500 || status == TOO_MANY_REQUESTS) {
 				log.warn("Sign-in provider {} answered a refresh with {}, which counts as unreachable", p.id(), said);
 				return unreachable(null);
 			}
-			if (status == HTTPResponse.SC_BAD_REQUEST || status == HTTPResponse.SC_UNAUTHORIZED
-					|| (error != null && OAuth2Error.INVALID_GRANT.getCode().equals(error.getCode()))) {
+			// Only invalid_grant is about the person: the account was disabled, or its sessions revoked (spec
+			// section 9, ruling R12)
+			if (error != null && OAuth2Error.INVALID_GRANT.getCode().equals(error.getCode())) {
 				log.info("Sign-in provider {} refused a refresh: {}", p.id(), said);
 				return new Refreshed(Outcome.REFUSED, null, null);
 			}
-			log.warn("Sign-in provider {} answered a refresh with {}, which counts as unreachable", p.id(), said);
+			// Anything else is about the setup, such as a client secret that expired, and mustn't revoke anyone
+			log.error("Sign-in provider {} answered a refresh with {}, which points to a problem with its setup, at "
+					+ "the provider or in Healdan, such as a client secret that expired or was changed. It counts as "
+					+ "unreachable, so helpers stay signed in until it's put right.", p.id(), said);
 			return unreachable(null);
 		}
 

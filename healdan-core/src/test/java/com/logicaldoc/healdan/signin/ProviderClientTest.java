@@ -406,21 +406,35 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertNull(refused.refreshToken());
 		assertEquals(Outcome.REFUSED, client.refresh(p, "a-token-the-provider-never-gave").outcome());
 
-		// Any 400 or 401, or invalid_grant at a status under 500, is a refusal; nothing else is
+		// Only invalid_grant, at a status under 500, is a refusal (ruling R12)
 		Tokens v = signIn(p, true);
-		Object[][] refusals = { { 400, null }, { 400, "invalid_request" }, { 401, "invalid_client" },
-				{ 403, "invalid_grant" } };
+		Object[][] refusals = { { 400, "invalid_grant" }, { 401, "invalid_grant" }, { 403, "invalid_grant" } };
 		for (Object[] answer : refusals) {
 			fake.answerRefresh((int) answer[0], (String) answer[1]);
 			assertEquals(answer[0] + " " + answer[1], Outcome.REFUSED, client.refresh(p, v.refreshToken()).outcome());
 		}
-		Object[][] outages = { { 403, "access_denied" }, { 404, null }, { 429, null }, { 500, "invalid_grant" },
+		// Any other error is Healdan's setup or the provider's, not the person's: the token is kept
+		Object[][] outages = { { 401, "invalid_client" }, { 400, "invalid_request" }, { 400, "unauthorized_client" },
+				{ 400, "invalid_scope" }, { 400, "unsupported_grant_type" }, { 400, "some_other_error" }, { 400, null },
+				{ 401, null }, { 403, "access_denied" }, { 404, null }, { 429, null }, { 500, "invalid_grant" },
 				{ 502, null }, { 302, null } };
 		for (Object[] answer : outages) {
 			fake.answerRefresh((int) answer[0], (String) answer[1]);
 			assertEquals(answer[0] + " " + answer[1], Outcome.UNREACHABLE,
 					client.refresh(p, v.refreshToken()).outcome());
 		}
+
+		// A client secret that no longer works, as when Entra's expires: logged as an error, the token kept
+		SignInProviders.get().save(p, "an-expired-secret-8b2f");
+		try (LogCapture log = LogCapture.of(ProviderClient.class)) {
+			Refreshed expired = client.refresh(p, v.refreshToken());
+			assertEquals(Outcome.UNREACHABLE, expired.outcome());
+			assertNull(expired.refreshToken());
+			assertTrue(log.lines().toString(), log.lines().stream().anyMatch(line -> line.startsWith("ERROR")
+					&& line.contains("fake") && line.contains("invalid_client")));
+			assertTrue(log.lines().stream().noneMatch(line -> line.contains("an-expired-secret-8b2f")));
+		}
+		SignInProviders.get().save(p, FakeProvider.SECRET);
 		assertEquals(Outcome.ACCEPTED, client.refresh(p, v.refreshToken()).outcome());
 
 		Tokens u = signIn(p, true);
