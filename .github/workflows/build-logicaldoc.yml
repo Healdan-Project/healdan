@@ -126,6 +126,7 @@ jobs:
             TasksDataServletTest
             JobsDataServletTest
             HealdanNamesTest
+            HealdanOpenInAppTest
             LockedDocsDataServletTest
             FolderSearchTest
             SavedSearchTest
