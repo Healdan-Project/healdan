@@ -27,7 +27,7 @@
 - **Helper:** .NET 10 and Avalonia 12.1.4, as M3. No new NuGet packages: `System.Net.HttpListener`, `System.Security.Cryptography`.
 - **Stand-in provider:** `quay.io/keycloak/keycloak:26.7.5` (Apache 2.0, amd64 and arm64), only in the smoke stack.
 
-**Status:** written on 2026-11-01, after the spec's approval. For the owner's review.
+**Status:** written on 2026-11-01, after the spec's approval, and approved by the owner the same day. Not yet built.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md`](../specs/2026-11-01-m4-oidc-sign-in-design.md), approved by the owner on 2026-11-01. Every § below points into it.
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".

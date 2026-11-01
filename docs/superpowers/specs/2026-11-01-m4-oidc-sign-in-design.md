@@ -2,7 +2,7 @@
 
 - **Milestone:** M4 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section. While the written spec was being reviewed, the owner asked about break glass and unlinking in a side conversation, and then decided both: unlinking is in M4, and an alert when `admin` signs in is optional (§7.5, §7.7). Approved by the owner on 2026-11-01. The implementation plan is next.
+- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section. While the written spec was being reviewed, the owner asked about break glass and unlinking in a side conversation, and then decided both: unlinking is in M4, and an alert when `admin` signs in is optional (§7.5, §7.7). Approved by the owner on 2026-11-01. Implementation plan: [`docs/superpowers/plans/2026-11-01-m4-oidc-sign-in.md`](../plans/2026-11-01-m4-oidc-sign-in.md), approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
 - **Inputs:**
   - the roadmap's M4 section, and its glossary;
   - the [M2 spec](2026-10-23-m2-api-foundation-design.md), above all §5 (device tokens and the sign-in throttle) and §10.3 (Spring Security);
