@@ -152,7 +152,8 @@ public class FSStore extends AbstractStore {
             if (name.startsWith("."))
                 return false;
             else if (StringUtils.isNotEmpty(fileVersion)) {
-                return name.startsWith(fileVersion);
+                // Healdan: this file version only, so 1.2 doesn't take in 1.20 to 1.29
+                return name.equals(fileVersion) || name.startsWith(fileVersion + "-");
             }
             return true;
         });
