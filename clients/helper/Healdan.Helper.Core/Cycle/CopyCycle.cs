@@ -267,11 +267,27 @@ public sealed class CopyCycle : IDisposable
         }
     }
 
-    /// <summary>The extension's close event for the copy's window: checks it in (or releases it) and deletes the copy, in the background.</summary>
-    public Task ClosedAsync(string path)
+    /// <summary>
+    /// An app's close event for the copy's window: checks it in (or releases it) and deletes the copy, in the background. A
+    /// read-only copy opened in the default app has no session, as nothing else says when its window closes, so its report
+    /// deletes it now, as the next start would (M3.6 spec §5.5); one with changes is kept. False when the cycle has nothing
+    /// to do with the path, so the channel can log a report it dropped.
+    /// </summary>
+    public Task<bool> ClosedAsync(string path)
     {
-        Close(path);
-        return Task.CompletedTask;
+        bool known;
+        lock (_gate)
+            known = Find(path) is not null;
+        if (known)
+        {
+            Close(path);
+            return Task.FromResult(true);
+        }
+        if (Record(path) is not { ReadOnly: true } record || !_apps.IsOtherFiles(_apps.Of(record)))
+            return Task.FromResult(false);
+        if (!_store.HasUnconfirmedChanges(path))
+            _store.Delete(path);
+        return Task.FromResult(true);
     }
 
     /// <summary>
@@ -476,8 +492,9 @@ public sealed class CopyCycle : IDisposable
     }
 
     /// <summary>
-    /// A link's open (spec §5.3), as <see cref="OpenAsync"/>, but only of spec §5.11's kinds (final review C2): a page
-    /// can make a link to any document, and anything else opens only from the Open window, where the user chose it.
+    /// A link's open (spec §5.3), as <see cref="OpenAsync"/>, but only of spec §5.11's kinds and PDFs (final review C2,
+    /// M3.6 spec §5.1): a page can make a link to any document, and anything else opens only from the Open window, where
+    /// the user chose it.
     /// </summary>
     public Task OpenLinkAsync(long docNumber, bool readOnly) =>
         ReportingAsync(docNumber, () => OpenCoreAsync(docNumber, readOnly, null, move: false, link: true));
@@ -699,10 +716,10 @@ public sealed class CopyCycle : IDisposable
         var hadCopy = _store.All().Any(c => c.Record.DocNumber == n && c.Record.CheckedOutHere);
         var doc = await _api.DocumentAsync(n, ct);
         var app = _apps.For(doc.Name);
-        if (link && FileKinds.OfFile(doc.Name) is null)
+        if (link && FileKinds.OfFile(doc.Name) is null && !PdfFiles.Is(doc.Name))
         {
-            Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations and "
-                + "drawings. Open it from the web page, or from Open from Healdan."));
+            Raise(ev => ev.Error($"{doc.Name} wasn't opened: a link opens only documents, spreadsheets, presentations, drawings "
+                + "and PDFs. Open it from the web page, or from Open from Healdan."));
             return;
         }
         if (_apps.IsOtherFiles(app))
@@ -861,10 +878,11 @@ public sealed class CopyCycle : IDisposable
 
     /// <summary>
     /// Spec §5.11: a file no office app edits, such as a PDF, opens read-only in the system's default app, with no
-    /// check-out. That app keeps no lock file, so nothing watches the copy; <see cref="ResumeAsync"/> deletes it at the
-    /// next start, as it's read-only and holds only Healdan's bytes. As anyone who can add files to a matter could
-    /// have put it there (final review C2), a kind that can run a program is never downloaded or handed over
-    /// (<see cref="DefaultApp.Refuses"/>), and the copy carries macOS's quarantine, so Gatekeeper checks it.
+    /// check-out. That app keeps no lock file, so nothing watches the copy; an app's close report deletes it
+    /// (<see cref="ClosedAsync"/>), or else <see cref="ResumeAsync"/> at the next start, as it's read-only and holds only
+    /// Healdan's bytes. As anyone who can add files to a matter could have put it there (final review C2), a kind that
+    /// can run a program is never downloaded or handed over (<see cref="DefaultApp.Refuses"/>), and the copy carries
+    /// macOS's quarantine, so Gatekeeper checks it.
     /// </summary>
     private async Task OpenOtherAsync(DocumentView doc, string? version, IOfficeApp other, CancellationToken ct)
     {

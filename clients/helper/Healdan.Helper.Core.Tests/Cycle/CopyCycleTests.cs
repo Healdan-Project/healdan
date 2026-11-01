@@ -1567,18 +1567,25 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Fact]
-    public async Task ALinkOpensOnlyOfficeKinds()
+    public async Task ALinkOpensOnlyOfficeKindsAndPdfs()
     {
         _server.Add(7, "Signed NDA.pdf", "a pdf");
+        _server.Add(8, "Photo.png", "an image");
         var cycle = Cycle(otherFiles: _opener);
 
-        await cycle.OpenLinkAsync(7, false);
+        await cycle.OpenLinkAsync(8, false);
 
         Assert.Empty(_opener.Opened);
         Assert.Empty(_app.Opened);
-        Assert.Equal(0, _server.Count("GET /documents/7/content"));
+        Assert.Equal(0, _server.Count("GET /documents/8/content"));
         Assert.Empty(CopiesFolder());
-        Assert.Contains("Open it from the web page, or from Open from Healdan", Assert.Single(_events.Errors));
+        var refusal = Assert.Single(_events.Errors);
+        Assert.Contains("a link opens only documents, spreadsheets, presentations, drawings and PDFs", refusal);
+        Assert.Contains("Open it from the web page, or from Open from Healdan", refusal);
+
+        // A PDF opens from a link: read-only in the default app, as there's no CoffeePDF here (M3.6 spec §5.1).
+        await cycle.OpenLinkAsync(7, false);
+        Assert.Equal([CopyPath("Signed NDA #7 v1.0 (read-only).pdf")], _opener.Opened);
 
         // An office kind still opens from a link.
         await cycle.OpenLinkAsync(5, false);
@@ -1674,6 +1681,42 @@ public sealed class CopyCycleTests : IDisposable
 
         Assert.False(File.Exists(path)); // read-only and Healdan's own bytes: nothing is lost
         Assert.Empty(CopiesFolder()); // its record went with it
+    }
+
+    [Fact]
+    public async Task TheDefaultAppsCopyGoesWhenItsCloseIsReported()
+    {
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener);
+        await cycle.OpenAsync(7, false);
+        var path = CopyPath("Signed NDA #7 v1.0 (read-only).pdf");
+
+        Assert.True(await cycle.ClosedAsync(path));
+
+        Assert.False(File.Exists(path)); // Healdan-Project/healdan#134: not left for the next start
+        Assert.Empty(CopiesFolder());
+    }
+
+    [Fact]
+    public async Task TheDefaultAppsCopyWithChangesIsKeptAndAnUnknownPathIgnored()
+    {
+        if (OperatingSystem.IsWindows())
+            return; // File.SetUnixFileMode isn't there
+
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        var cycle = Cycle(otherFiles: _opener);
+        await cycle.OpenAsync(7, false);
+        var path = CopyPath("Signed NDA #7 v1.0 (read-only).pdf");
+        File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        File.WriteAllText(path, "changed somehow");
+
+        Assert.True(await cycle.ClosedAsync(path));
+        Assert.True(File.Exists(path)); // not Healdan's bytes: kept, as any read-only copy with changes is
+
+        var stranger = CopyPath("Not a copy #9 v1.0.pdf");
+        File.WriteAllText(stranger, "someone's file");
+        Assert.False(await cycle.ClosedAsync(stranger));
+        Assert.True(File.Exists(stranger));
     }
 
     // --- Microsoft Office as a second app (M3.5) -------------------------------------------------------------------

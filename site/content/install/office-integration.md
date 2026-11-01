@@ -60,11 +60,14 @@ by the words in it.
   id or password, unlike LogicalDOC's "Edit with Office" links. The helper uses its own sign-in.
 - **A link can only open a document,** and only from the helper's own server. It never saves, files, releases or
   checks in anything, and it's ignored while one of the helper's windows is waiting for an answer.
-- **Links open only what LibreOffice edits:** documents, spreadsheets, presentations and drawings. A link to any other
-  kind of file is refused with a notice, before anything is downloaded, so a page can't hand a file someone put in a
-  matter to whatever app the Mac has for it.
+- **Links open only a few kinds of file:** documents, spreadsheets, presentations, drawings and PDFs. A link to any
+  other kind of file is refused with a notice, before anything is downloaded, so a page can't hand a file someone
+  put in a matter to whatever app the Mac has for it.
 - **Other files** open only from the helper's Open from Healdan window, where the person chose them, read-only in the
-  Mac's default app. Each copy is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
+  Mac's default app. A PDF is the exception to both: it opens in [CoffeePDF](https://github.com/coffeemuse/CoffeePDF),
+  checked out like any document the person can edit, on a Mac where CoffeePDF is installed with Healdan support on;
+  where it isn't, a PDF opens read-only in the default app, from Open from Healdan or from a link. Each copy the
+  default app opens is marked as downloaded from the internet (macOS's quarantine), so Gatekeeper checks
   it as it does a browser's downloads. The helper never downloads or opens a kind of file on its fixed list of 24
   extensions, which run a program or change the Mac when opened: apps, `.pkg` and `.mpkg` installers, `.dmg` disk
   images, common scripts, Automator and Shortcuts files, internet location files, kernel extensions and

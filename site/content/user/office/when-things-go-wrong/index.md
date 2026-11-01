@@ -183,8 +183,8 @@ When Open in App doesn't open anything:
 - **One of the helper's windows is waiting for you,** such as Save to Healdan. The helper ignores links meanwhile,
   and brings that window to the front: finish with it, then click Open in App again.
 - **"#1234 is still being checked in":** you closed it moments ago. Open it again once the check-in is done.
-- **"… wasn't opened: a link opens only documents, spreadsheets, presentations and drawings":** the link was to a PDF
-  or another kind of file. Open it from **Open from Healdan…**, or download it from the web page. See
+- **"… wasn't opened: a link opens only documents, spreadsheets, presentations, drawings and PDFs":** the link was to
+  some other kind of file. Open it from **Open from Healdan…**, or download it from the web page. See
   [Other Kinds of File](../opening-documents/#other-kinds-of-file).
 
 ## Asking for Help
