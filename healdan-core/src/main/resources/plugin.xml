@@ -124,6 +124,12 @@
 		<parameter id="position" value="105" />
 	</extension>
 
+	<!-- A provider sign-in opens its CE session through the chain, after the token authenticator (105) and before CE's API-key one (110) (M4 spec section 7.6) -->
+	<extension plugin-id="logicaldoc-core" point-id="Authentication" id="healdanSignInAuthentication">
+		<parameter id="authenticatorId" value="signInAuthenticator" />
+		<parameter id="position" value="106" />
+	</extension>
+
 	<!-- A password change or a disabled user revokes device tokens (spec section 5) -->
 	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanTokens">
 		<parameter id="position" value="110" />

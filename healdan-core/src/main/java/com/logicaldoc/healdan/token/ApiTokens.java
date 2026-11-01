@@ -164,7 +164,7 @@ public class ApiTokens {
 	/**
 	 * @return the 43 characters of 32 random bytes in base64url
 	 */
-	static String randomPart() {
+	public static String randomPart() {
 		byte[] bytes = new byte[32];
 		RANDOM.nextBytes(bytes);
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
