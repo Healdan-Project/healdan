@@ -99,8 +99,10 @@ size the helper uses, the widths then match CoreText's.
     file with `open -a`, as a double click does, so the file's access comes with it: Word's own open by path met Grant
     File Access for any copy whose name Word hadn't written itself, and its panel takes no folder. Before a program's
     first script since the helper started, its `Ask` script waits up to 300 s, as macOS may first ask whether the
-    helper may control it, and every other script but those that meet Grant File Access gives up after 20 s. Its scripts find a
-    document by its exact path, then by its file name only in `Copies`, then by the add-in's mark or its window's
+    helper may control it, and every other script but those that meet Grant File Access gives up after 20 s. `Ask`
+    counts the program's documents: AppleScript answers an application's name, version, id and running without
+    sending it anything, so asking for one of those never brings the question up (`ScriptsTests` checks). Its scripts
+    find a document by its exact path, then by its file name only in `Copies`, then by the add-in's mark or its window's
     name. Word's scripting names a document by its name, so of two open documents with one name (a copy in `Copies`
     and one set aside beside it) it reaches only one: the scripts refuse a name two open documents share, and
     `IsOpen` answers yes for it, so neither is checked in from under its window.
