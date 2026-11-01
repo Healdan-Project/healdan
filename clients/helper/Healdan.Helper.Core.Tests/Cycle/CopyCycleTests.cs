@@ -1815,12 +1815,13 @@ public sealed class CopyCycleTests : IDisposable
         Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
         Assert.NotNull(Store.Find(path));
 
-        // Reopening a kept copy opens it where it was opened, whatever Settings say now.
+        // Reopening a kept copy reopens it where it was opened, whatever Settings say now: Word is started, which restores
+        // what it recovered (M3.5 spec §5.14).
         cycle.Dispose();
         var restarted = Cycle(); // LibreOffice for everything
         await restarted.ResumeAsync();
         await restarted.OpenAsync(5, false);
-        Assert.Equal([(OfficeProgram.Word, path), (OfficeProgram.Word, path)], _scripting.Opened);
+        Assert.Equal([OfficeProgram.Word], _scripting.Started);
         Assert.Empty(_app.Opened);
         Assert.Equal(1, _server.Count("GET /documents/5/content"));
     }

@@ -63,6 +63,12 @@ public interface IOfficeScripting
     /// </summary>
     Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default);
 
+    /// <summary>
+    /// Starts the program, or brings it to the front, without opening a file: after a crash, it restores what it
+    /// recovered by itself, where a file handed to it would open again beside its recovered window (M3.5 spec §5.14).
+    /// </summary>
+    Task StartAsync(OfficeProgram p, CancellationToken ct = default);
+
     /// <summary>The document in the program's front window, or null when it has none open (or isn't running).</summary>
     Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default);
 

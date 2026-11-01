@@ -48,6 +48,12 @@ public sealed class MicrosoftOfficeApp(IOfficeScripting scripting, Func<string, 
         Task.Run(() => scripting.OpenAsync(program, path)).GetAwaiter().GetResult();
     }
 
+    public void Start(string path)
+    {
+        var program = ProgramFor(path) ?? throw new IOException($"Microsoft Office doesn't open {Path.GetExtension(path)} files.");
+        Task.Run(() => scripting.StartAsync(program)).GetAwaiter().GetResult();
+    }
+
     /// <summary>Whether any of the three programs is running.</summary>
     public bool IsRunning() => Enum.GetValues<OfficeProgram>().Any(p => processRunning(OfficePrograms.ProcessName(p)));
 

@@ -215,6 +215,16 @@ public sealed class MacOfficeScriptingTests
     }
 
     [Fact]
+    public async Task StartOpensTheProgramWithNoFile()
+    {
+        // After a crash the program restores what it recovered by itself (M3.5 spec §5.14).
+        await _scripting.StartAsync(OfficeProgram.Word);
+
+        Assert.Equal(["-a", "Microsoft Word"], Assert.Single(_runner.Processes).Args);
+        Assert.Empty(_runner.Calls);
+    }
+
+    [Fact]
     public async Task PowerPointOpensThroughOpenAToo()
     {
         await _scripting.OpenAsync(OfficeProgram.PowerPoint, "/c/Deck #4 v1.0.pptx");

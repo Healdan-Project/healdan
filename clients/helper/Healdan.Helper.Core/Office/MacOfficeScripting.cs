@@ -55,6 +55,9 @@ public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder =
     public Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default) =>
         runner.RunProcessAsync("/usr/bin/open", ["-a", OfficePrograms.ProcessName(p), path], ShortTimeout, ct);
 
+    public Task StartAsync(OfficeProgram p, CancellationToken ct = default) =>
+        runner.RunProcessAsync("/usr/bin/open", ["-a", OfficePrograms.ProcessName(p)], ShortTimeout, ct);
+
     public async Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default)
     {
         var answer = await RunAsync(p, "FrontDocument", [], ct);

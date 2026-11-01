@@ -6,8 +6,10 @@ namespace Healdan.Helper.Core.Tests.Cycle;
 
 /// <summary>
 /// M3.5 spec §5.14 and Review Focus 3 and 4: after a crash, Word restores the copy's window at its own path as
-/// "Recovered", where ⌘S opens Save As, so the helper saves it back over the copy itself. PowerPoint's close and reopen
-/// after Save to Healdan (§5.5 step 7) is never a close.
+/// "Recovered", where ⌘S opens Save As, so the helper saves it back over the copy itself. It's looked for once Word runs
+/// again, as Word 16.114 never wrote the owner file the crash left again (the owner's walkthrough), and the crash window's
+/// Reopen starts Word rather than handing it the file, which opened a second window beside the recovered one.
+/// PowerPoint's close and reopen after Save to Healdan (§5.5 step 7) is never a close.
 /// </summary>
 public sealed class OfficeCrashTests : OfficeCycleTestBase
 {
@@ -28,10 +30,12 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
         Assert.Empty(Scripting.SavesAs);
 
         Scripting.WindowText = "the work Word recovered";
+        var crashLeft = File.GetLastWriteTimeUtc(FakeScripting.OwnerPath(OfficeProgram.Word, path));
         Scripting.Recover(OfficeProgram.Word, path);
 
         await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
         Assert.Equal((OfficeProgram.Word, new DocumentRef(path, null, null), path, (string?)null), Scripting.SavesAs[0]);
+        Assert.Equal(crashLeft, File.GetLastWriteTimeUtc(FakeScripting.OwnerPath(OfficeProgram.Word, path))); // seen without it
         // The change goes up as a save, and the title moves on.
         var v11 = CopyPath("Lease agreement #5 v1.1.docx");
         await RenamedTo(cycle, v11);
@@ -51,19 +55,106 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
     }
 
     [Fact]
-    public async Task ReopenFromTheCrashWindowStillSavesTheRecoveredWindowBack()
+    public async Task ReopenFromTheCrashWindowStartsWordWhichBringsTheRecoveredWindowBack()
     {
         var (cycle, path) = await OpenAsync();
         await CrashAsync(path);
         Scripting.WindowText = "the work Word recovered";
 
-        // The crash window's Reopen opens the copy in Word, which restores its recovered window there.
+        // The crash window's Reopen starts Word, which restores its recovered window by itself.
         await cycle.OpenAsync(5, false);
 
+        Assert.Equal([OfficeProgram.Word], Scripting.Started);
         await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
         await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
         Assert.Equal(["the work Word recovered"], Server.Saves.Select(s => s.Content));
         Assert.Equal(1, Server.Count("GET /documents/5/content")); // the kept copy, never downloaded over
+        Assert.Single(Scripting.Opened); // never handed the file
+    }
+
+    [Fact]
+    public async Task ReopenBesideTheRecoveredWindowOpensNoSecondOne()
+    {
+        // The owner's walkthrough: Word had recovered the copy, Open from Healdan handed it the file, and Word opened it
+        // again beside the recovered window, with the same name, so neither could be found to save back.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RecoveryWait = TimeSpan.FromSeconds(5) });
+        await CrashAsync(path);
+        Scripting.AnswerIsOpen(false); // the first look comes before Word lists it
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        await cycle.OpenAsync(5, false);
+
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Single(Scripting.Opened);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ReopenOpensTheCopyWhenWordBringsNothingBack()
+    {
+        // Word started with nothing to restore (AutoRecover hadn't written the work yet): the copy opens as last saved,
+        // and is looked after as any open copy.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RecoveryWait = TimeSpan.FromMilliseconds(400) });
+        await CrashAsync(path);
+        Scripting.NeverListed = true;
+
+        await cycle.OpenAsync(5, false);
+
+        await Wait.Until(() => Scripting.Opened.Count == 2, "the copy opened as last saved");
+        Assert.Equal(path, Scripting.Opened[1].Path);
+        Assert.Empty(Scripting.SavesAs);
+        Assert.False(cycle.IsCrashed(path));
+        Scripting.NeverListed = false;
+        await LooksAsync(path);
+        FakeScripting.Close(OfficeProgram.Word, path);
+        await Wait.Until(() => !File.Exists(path), "closing it checks it in");
+        Assert.Null(Server.Doc(5).Hold);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ReopenWithWordRunningLooksBrieflyBeforeOpeningTheCopy()
+    {
+        // Word restores what it recovered as it starts: running without the copy, it's unlikely to bring it back, so the
+        // copy isn't kept waiting for the whole look.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RecoveryWait = TimeSpan.FromSeconds(30) });
+        await CrashAsync(path);
+        Scripting.NeverListed = true;
+        Scripting.SetRunning(OfficeProgram.Word, true); // started again for another document, without this one
+
+        await cycle.OpenAsync(5, false);
+
+        await Wait.Until(() => Scripting.Opened.Count == 2, "the copy opened as last saved", TimeSpan.FromSeconds(5));
+        Assert.Empty(Scripting.SavesAs);
+    }
+
+    [Fact]
+    public async Task AnOwnerFileWrittenAgainIsSeenToo()
+    {
+        // As Word did in the trial.
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Scripting.WindowText = "the work Word recovered";
+
+        Scripting.RecoverWritingTheOwnerFile(OfficeProgram.Word, path);
+
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+    }
+
+    [Fact]
+    public async Task SendAndCheckInIsntRefusedWhileWordRunsWithoutTheCopy()
+    {
+        // Word running is reason enough to look for the recovered window, but only finding it makes the copy open again.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RecoveryWait = TimeSpan.FromSeconds(30) });
+        await CrashAsync(path);
+        Scripting.NeverListed = true;
+        Scripting.SetRunning(OfficeProgram.Word, true);
+
+        await Wait.Until(() => Scripting.IsOpenAsked > 0, "looked for");
+
+        Assert.False(cycle.IsOpenAgain(path));
     }
 
     [Fact]

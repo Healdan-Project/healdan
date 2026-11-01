@@ -65,13 +65,15 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
     /// <summary>
     /// Spec §5.14: the program may have the crashed copy open again, as Word's "Recovered" window, where Save opens Save
     /// As. Looks for the copy by its path, which never takes the front window (<see cref="IOfficeScripting.IsOpenAsync"/>),
-    /// every <paramref name="every"/> for up to <paramref name="wait"/>, as the program writes its owner file before it
-    /// lists the document; only once it's found, saves that window over the copy's own path, so the cycle's folder
-    /// watcher sends what was recovered. False when the copy wasn't found, the save failed, or <paramref name="stop"/>
-    /// said to: the cycle tries again later. A miss is logged once until a save back works.
+    /// every <paramref name="every"/> for up to <paramref name="wait"/>, as the program may be running before it lists the
+    /// document; only once it's found, tells <paramref name="found"/>, then saves that window over the copy's own path, so
+    /// the cycle's folder watcher sends what was recovered. <see cref="Recovery.NotFound"/> when the copy wasn't found, or
+    /// <paramref name="stop"/> said to stop looking, and <see cref="Recovery.Failed"/> when the save failed or
+    /// <paramref name="stop"/> said to once it was found: the cycle tries again later. A miss is logged once until a save
+    /// back works.
     /// </summary>
-    internal async Task<bool> SaveRecoveredAsync(IOfficeScripting scripting, OfficeProgram p, string path, TimeSpan wait,
-        TimeSpan every, Func<bool> stop, CancellationToken ct)
+    internal async Task<Recovery> SaveRecoveredAsync(IOfficeScripting scripting, OfficeProgram p, string path, TimeSpan wait,
+        TimeSpan every, Func<bool> stop, Action found, CancellationToken ct)
     {
         var name = OfficePrograms.CheckOutName(p);
         var file = Path.GetFileName(path);
@@ -79,29 +81,29 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
         while (true)
         {
             if (stop())
-                return false;
-            bool found;
+                return Recovery.NotFound;
+            bool listed;
             try
             {
-                found = await scripting.IsOpenAsync(p, path, ct);
+                listed = await scripting.IsOpenAsync(p, path, ct);
             }
             catch (Exception e) when (e is not OperationCanceledException || !ct.IsCancellationRequested)
             {
-                found = false;
+                listed = false;
             }
-            if (found)
+            if (listed)
                 break;
             if (looking.Elapsed >= wait)
             {
                 if (FirstMiss(path))
-                    log?.Warn($"{name} didn't find {file} by its path within {wait.TotalSeconds:0} seconds after it closed "
-                        + "unexpectedly, so nothing was saved over it; it's looked for again");
-                return false;
+                    log?.Warn($"{name} didn't find {file} by its path after it closed unexpectedly, so nothing was saved over it");
+                return Recovery.NotFound;
             }
             await Task.Delay(every, ct);
         }
+        found();
         if (stop())
-            return false;
+            return Recovery.Failed;
         log?.Info($"{name} has {file} open again after it closed unexpectedly: saving it back over its copy");
         notice?.BeforeFirstSave(p);
         try
@@ -111,12 +113,12 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
             await scripting.SaveAsAsync(p, new DocumentRef(path, null, null), path, null);
             lock (_missed)
                 _missed.Remove(path);
-            return true;
+            return Recovery.Saved;
         }
         catch (Exception e)
         {
             log?.Warn($"{name} couldn't save {file} back after it closed unexpectedly, and tries again: {e.Message}");
-            return false;
+            return Recovery.Failed;
         }
     }
 
@@ -144,4 +146,17 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
             log?.Warn($"{OfficePrograms.CheckOutName(p)} didn't open {Path.GetFileName(path)} again: {e.Message}");
         }
     }
+}
+
+/// <summary>What <see cref="OfficeAfterSave.SaveRecoveredAsync"/> came to.</summary>
+internal enum Recovery
+{
+    /// <summary>The program had the copy open again, and its window was saved back over it.</summary>
+    Saved,
+
+    /// <summary>The program didn't list the copy by its path.</summary>
+    NotFound,
+
+    /// <summary>The program had the copy open again, but its window wasn't saved back.</summary>
+    Failed,
 }
