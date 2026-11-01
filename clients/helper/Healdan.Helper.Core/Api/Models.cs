@@ -60,7 +60,7 @@ public sealed record SaveRequest(string Kind, bool KeepCheckedOut, string Name, 
 [Schema("NewDocument")]
 public sealed record NewDocument(long FolderId, string Name, JsonObject Properties, bool CheckOut);
 
-[Schema("SignIn")]
+[Schema("PasswordSignIn")]
 internal sealed record SignInBody(string Username, string Password, string Name, DeviceRef Device);
 
 [Schema("DeviceRef")]

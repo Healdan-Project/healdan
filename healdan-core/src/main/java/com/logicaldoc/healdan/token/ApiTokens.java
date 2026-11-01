@@ -123,7 +123,7 @@ public class ApiTokens {
 	 *         the database can't store
 	 */
 	public Issued issue(User user, String name, String sid) throws PersistenceException {
-		return issue(user, name, null, sid);
+		return issue(user, name, null, sid, null, null);
 	}
 
 	/**
@@ -134,12 +134,18 @@ public class ApiTokens {
 	 * @param name what the device is called; blank becomes "Unnamed device"
 	 * @param device the computer's device id, or null for none
 	 * @param sid the CE session it is bound to, or null
+	 * @param provider the id of the sign-in provider the user signed in
+	 *        through, which re-checks the token (M4 spec section 9); null for
+	 *        a password sign-in
+	 * @param refresh the provider's refresh token, already sealed by
+	 *        {@code SecretBox}; null when there is none
 	 * @return the token and its row
 	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if the name is too long or holds characters
 	 *         the database can't store, or the device id isn't one
 	 */
-	public Issued issue(User user, String name, String device, String sid) throws PersistenceException {
+	public Issued issue(User user, String name, String device, String sid, String provider, String refresh)
+			throws PersistenceException {
 		String clean = checkName(name);
 		String deviceId = checkDevice(device);
 		String token = PREFIX + randomPart();
@@ -154,6 +160,11 @@ public class ApiTokens {
 		row.setExpires(new Date(now.getTime() + TimeUnit.DAYS.toMillis(settings.apiTokenMaxDays())));
 		row.setSid(sid);
 		row.setDevice(deviceId);
+		row.setProvider(provider);
+		row.setRefresh(refresh);
+		// The sign-in itself is the provider's say-so, so the first re-check is due an interval from now
+		if (provider != null)
+			row.setChecked(now);
 		dao.store(row);
 		// A password change while this sign-in ran may have revoked the user's tokens before this one was stored
 		if (!Objects.equals(user.getPassword(), storedPassword(user.getId())))

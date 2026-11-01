@@ -16,7 +16,8 @@ public class ContractTest {
 
 	private static final String GOOD = """
 			{"product": "Healdan", "version": "9.3.1", "apiVersion": "v1",
-			 "labels": {"matter": "Matter", "matters": "Matters"}, "signIn": ["password"]}""";
+			 "labels": {"matter": "Matter", "matters": "Matters"}, "signIn": ["password"],
+			 "providers": [], "passwordLabel": "Sign In with a Password"}""";
 
 	private static ApiResponse json(int status, String body) {
 		return new ApiResponse(status, Map.of("Content-Type", List.of("application/json")),

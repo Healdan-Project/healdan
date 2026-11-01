@@ -77,6 +77,36 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testIssueKeepsTheProviderAndItsRefreshToken() throws Exception {
+		User jane = fx.user("jane");
+		long before = System.currentTimeMillis();
+		ApiTokens.Issued issued = tokens().issue(jane, "Helper on Mac", "mac-1", null, "fake", "v1:c2VhbGVk");
+		long after = System.currentTimeMillis();
+
+		// Read back through Hibernate, as the re-check will (spec section 9)
+		ApiToken stored = ApiTokenDAO.get().findById(issued.row().getId());
+		assertEquals("fake", stored.getProvider());
+		assertEquals("v1:c2VhbGVk", stored.getRefresh());
+		assertEquals("mac-1", stored.getDevice());
+		// The sign-in itself was the provider's say-so, so the first re-check is due an interval later
+		assertTrue(String.valueOf(stored.getChecked()), stored.getChecked().getTime() >= before - 1000
+				&& stored.getChecked().getTime() <= after + 1000);
+		assertTrue(tokens().find(issued.token()).isPresent());
+
+		// A provider that gave no refresh token
+		ApiToken noRefresh = ApiTokenDAO.get().findById(tokens().issue(jane, "Helper", null, null, "fake", null).row()
+				.getId());
+		assertEquals("fake", noRefresh.getProvider());
+		assertEquals(null, noRefresh.getRefresh());
+
+		// A password sign-in's token has neither, and no check
+		ApiToken password = ApiTokenDAO.get().findById(tokens().issue(jane, "Laptop", null).row().getId());
+		assertEquals(null, password.getProvider());
+		assertEquals(null, password.getRefresh());
+		assertEquals(null, password.getChecked());
+	}
+
+	@Test
 	public void testFind() throws Exception {
 		User clerk = fx.user("clerk");
 		ApiTokens.Issued issued = tokens().issue(clerk, "Laptop", null);

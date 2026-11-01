@@ -23,6 +23,7 @@ import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.spring.LDDeferredSecurityContext;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.signin.IdClaims;
+import com.logicaldoc.healdan.signin.OneTimeCodes;
 import com.logicaldoc.healdan.signin.PendingSignIns;
 import com.logicaldoc.healdan.signin.PendingSignIns.Pending;
 import com.logicaldoc.healdan.signin.ProviderClient;
@@ -66,9 +67,24 @@ import jakarta.ws.rs.core.Response;
  * <li>{@code GET /signin/done} is the page that tells the person to close the
  * tab, which the helper's sign-in ends on (spec section 6.2).</li>
  * </ul>
- * Nothing secret is logged: no code, state, nonce, verifier, token, secret or
- * cookie. Each refusal is logged with the provider, the identity if it's
- * known, and its code.
+ * <b>The helper's sign-in</b> (spec section 6.2) starts at
+ * {@code GET /signin/<id>?client=helper} with the helper's loopback
+ * {@code redirect_uri}, its {@code state} and its PKCE {@code code_challenge}
+ * ({@code S256}). Those are checked before anything else: a redirect that isn't
+ * {@code http://127.0.0.1:<port>/} or {@code http://[::1]:<port>/}, or a
+ * missing or wrong challenge or state, is {@code 400} with a page, and the
+ * browser is sent nowhere. The sign-in then runs as the web page's does,
+ * cookie included, with {@code offline_access} for a refresh token. Its
+ * callback opens no CE session: it hands the helper's address a one-time code
+ * ({@link OneTimeCodes}), which the helper exchanges at
+ * {@code POST /v1/auth/tokens}. Its refusals go to the helper's address too,
+ * as {@code error=<code>} with the helper's state; only a callback whose
+ * sign-in is unknown, used or expired, which has no helper address, goes to
+ * the sign-in page.
+ * <p>
+ * Nothing secret is logged: no code, state, nonce, verifier, challenge, token,
+ * secret or cookie, and none of the helper's. Each refusal is logged with the
+ * provider, the identity if it's known, and its code.
  */
 @Component
 @Path("/signin")
@@ -112,6 +128,22 @@ public class SignInResource {
 			"{label} couldn't sign you in. Try again, or ask an administrator.", EXPIRED,
 			"That sign-in took too long or was already used. Start again.");
 
+	/** What the page says when the helper's start isn't one Healdan accepts */
+	static final String BAD_HELPER_REQUEST = "Healdan can't start this sign-in: the app that asked for it sent a "
+			+ "request Healdan doesn't accept. Try again from the app, or ask an administrator.";
+
+	/** The only client that isn't the web page */
+	static final String HELPER = "helper";
+
+	/** The only PKCE method the helper may use */
+	static final String S256 = "S256";
+
+	/** An S256 challenge: the 43 characters of a SHA-256 in base64url */
+	private static final Pattern CHALLENGE = Pattern.compile("[A-Za-z0-9_-]{43}");
+
+	/** The helper's state: 1 to 128 of RFC 3986's unreserved characters */
+	private static final Pattern HELPER_STATE = Pattern.compile("[A-Za-z0-9._~-]{1,128}");
+
 	private static final String NO_ADDRESS = "Healdan can't sign you in through a provider, because it doesn't know "
 			+ "its own address. Ask whoever runs the server to set LOGICALDOC_PUBLIC_URL to its https:// address, such "
 			+ "as https://healdan.example/, and restart Healdan.";
@@ -134,40 +166,98 @@ public class SignInResource {
 	private static final Logger log = LoggerFactory.getLogger(SignInResource.class);
 
 	/**
-	 * Starts a sign-in through a provider for the web page: Healdan keeps the
-	 * state, nonce and verifier for 10 minutes, and binds them to this
-	 * browser by a random value in the {@code hd_signin} cookie, whose SHA-256
-	 * it keeps.
+	 * The helper's side of its sign-in, checked at the start.
+	 *
+	 * @param redirect its loopback address, which its code or refusal goes to
+	 * @param state its own state, which goes back with them; secret
+	 * @param challenge its PKCE challenge, which the code is bound to; secret
+	 */
+	private record Helper(String redirect, String state, String challenge) {
+
+		/** @return the helper of a pending sign-in, or null for the web page's */
+		static Helper of(Pending pending) {
+			return pending.helperRedirect() == null ? null
+					: new Helper(pending.helperRedirect(), pending.helperState(), pending.helperChallenge());
+		}
+
+		/**
+		 * @return the helper's address with one parameter and the helper's
+		 *         state; the address has no query, so one can be added
+		 */
+		String answer(String name, String value) {
+			return redirect + "?" + name + "=" + URLEncoder.encode(value, StandardCharsets.UTF_8) + "&state="
+					+ URLEncoder.encode(state, StandardCharsets.UTF_8);
+		}
+
+		@Override
+		public String toString() {
+			return "Helper[hidden]";
+		}
+	}
+
+	/**
+	 * Starts a sign-in through a provider, for the web page or, with
+	 * {@code client=helper}, for the helper: Healdan keeps the state, nonce
+	 * and verifier for 10 minutes, and binds them to this browser by a random
+	 * value in the {@code hd_signin} cookie, whose SHA-256 it keeps. A
+	 * helper's sign-in keeps the helper's address, state and challenge with
+	 * them, and asks the provider for {@code offline_access} too.
 	 *
 	 * @param id the provider's id
+	 * @param client {@code helper} for the helper's sign-in; none for the web
+	 *        page's
+	 * @param redirectUri the helper's loopback address,
+	 *        {@code http://127.0.0.1:<port>/} or {@code http://[::1]:<port>/}
+	 * @param helperState the helper's state, which its code or refusal comes
+	 *        back with
+	 * @param challenge the helper's PKCE challenge
+	 * @param method the helper's PKCE method, which must be {@code S256}
 	 * @param request the request
-	 * @return {@code 302} to the provider, or to the sign-in page with
-	 *         {@code signin=provider} if the provider isn't on and set up or
-	 *         can't be reached; {@code 409} if Healdan has no public address
+	 * @return {@code 302} to the provider, or with a refusal to the sign-in
+	 *         page with {@code signin=provider} or the helper's address with
+	 *         {@code error=provider}, if the provider isn't on and set up or
+	 *         can't be reached; {@code 400} if the helper's request isn't one
+	 *         Healdan accepts; {@code 409} if Healdan has no public address
 	 */
 	@GET
 	@Public
 	@Path("{id: [a-z0-9-]{1,32}}")
-	public Response start(@PathParam("id") String id, @Context HttpServletRequest request) {
+	public Response start(@PathParam("id") String id, @QueryParam("client") String client,
+			@QueryParam("redirect_uri") String redirectUri, @QueryParam("state") String helperState,
+			@QueryParam("code_challenge") String challenge, @QueryParam("code_challenge_method") String method,
+			@Context HttpServletRequest request) {
+		// The helper's request is checked first: until it passes, there's no address it's safe to send anything to
+		Helper helper = null;
+		if (client != null) {
+			String wrong = helperProblem(client, redirectUri, helperState, challenge, method);
+			if (wrong != null) {
+				log.info("Refused to start an app's sign-in through the sign-in provider {}: {}", id, wrong);
+				return page(Response.Status.BAD_REQUEST.getStatusCode(), BAD_HELPER_REQUEST);
+			}
+			helper = new Helper(redirectUri, helperState, challenge);
+		}
+
 		Address address = PublicAddress.of(request).orElse(null);
 		if (address == null)
 			return noAddress(id);
 
 		SignInProvider provider = usable(id);
 		if (provider == null)
-			return refused(address, id, null, PROVIDER, "no provider with that id is on and set up", false).build();
+			return refused(address, helper, id, null, PROVIDER, "no provider with that id is on and set up", false)
+					.build();
 
 		ProviderClient.Start start;
 		try {
-			start = ProviderClient.get().start(provider, SignInProviders.callback(address.base(), id), false);
+			start = ProviderClient.get().start(provider, SignInProviders.callback(address.base(), id), helper != null);
 		} catch (ProviderException e) {
-			return refused(address, id, null, PROVIDER, "it couldn't start: " + e.getMessage(), true).build();
+			return refused(address, helper, id, null, PROVIDER, "it couldn't start: " + e.getMessage(), true).build();
 		}
 
 		String browser = ApiTokens.randomPart();
 		PendingSignIns pending = PendingSignIns.get();
 		pending.put(new Pending(id, start.state(), start.nonce(), start.verifier(), ApiTokens.hash(browser),
-				pending.expiry(), null, null, null));
+				pending.expiry(), helper != null ? helper.redirect() : null, helper != null ? helper.state() : null,
+				helper != null ? helper.challenge() : null));
 		return redirect(start.authorization()).header(HttpHeaders.SET_COOKIE,
 				COOKIE + "=" + browser + cookieAttributes(address, request.isSecure())).build();
 	}
@@ -176,7 +266,9 @@ public class SignInResource {
 	 * Where the provider sends the browser back: it checks the sign-in, then
 	 * exchanges the code, decides the account and opens its CE session. The
 	 * HTTP session gets a new id, then {@code ldoc-sid} is set and the
-	 * session's id saved in the HTTP session, as the password form does.
+	 * session's id saved in the HTTP session, as the password form does. A
+	 * helper's sign-in opens no session here: the browser goes to the helper's
+	 * address with a one-time code.
 	 *
 	 * @param id the provider's id, from the address
 	 * @param code the provider's code
@@ -187,8 +279,9 @@ public class SignInResource {
 	 * @param request the request
 	 * @param response the response, for the session's cookie
 	 * @return {@code 302} to the page asked for or the web page, or to the
-	 *         sign-in page with a refusal's code; {@code 409} if Healdan has no
-	 *         public address
+	 *         helper's address with a one-time code; or with a refusal's code,
+	 *         to the sign-in page or the helper's address; {@code 409} if
+	 *         Healdan has no public address
 	 */
 	@GET
 	@Public
@@ -204,16 +297,18 @@ public class SignInResource {
 		// Taken whatever comes of it, so a state works once
 		Pending pending = PendingSignIns.get().take(state).orElse(null);
 		if (pending == null)
-			return refused(address, id, null, EXPIRED, "its state is unknown, was used or has expired", false)
+			// No sign-in, so no helper's address to go back to
+			return refused(address, null, id, null, EXPIRED, "its state is unknown, was used or has expired", false)
 					.build();
+		Helper helper = Helper.of(pending);
 		// One callback per provider: an answer to another provider's sign-in isn't this one's (mix-up)
 		if (!pending.provider().equals(id))
-			return refused(address, id, null, EXPIRED,
+			return refused(address, helper, id, null, EXPIRED,
 					"it was started with the sign-in provider " + pending.provider() + ", not this one", true).build();
 		// Only the browser that started a sign-in may finish it (login CSRF)
 		if (!sameBrowser(request, pending))
-			return refused(address, id, null, EXPIRED, "it came back to a browser that didn't start it", true)
-					.build();
+			return refused(address, helper, id, null, EXPIRED, "it came back to a browser that didn't start it",
+					true).build();
 
 		// The cookie has done its work, whatever comes of the rest
 		return finish(pending, code, error, errorDescription, address, request, response)
@@ -252,11 +347,12 @@ public class SignInResource {
 	private Response.ResponseBuilder finish(Pending pending, String code, String error, String errorDescription,
 			Address address, HttpServletRequest request, HttpServletResponse response) {
 		String id = pending.provider();
+		Helper helper = Helper.of(pending);
 		SignInProvider provider = usable(id);
 		if (provider == null)
-			return refused(address, id, null, PROVIDER, "the provider isn't on and set up any more", false);
+			return refused(address, helper, id, null, PROVIDER, "the provider isn't on and set up any more", false);
 		if (error != null)
-			return refused(address, id, null, PROVIDER,
+			return refused(address, helper, id, null, PROVIDER,
 					"the provider answered " + providerError(error, errorDescription, pending, code), true);
 
 		ProviderClient.Tokens tokens;
@@ -264,11 +360,11 @@ public class SignInResource {
 			tokens = ProviderClient.get().exchange(provider, SignInProviders.callback(address.base(), id), code,
 					pending.verifier(), pending.nonce());
 		} catch (ProviderException e) {
-			return refused(address, id, null, PROVIDER, e.getMessage(), true);
+			return refused(address, helper, id, null, PROVIDER, e.getMessage(), true);
 		} catch (RuntimeException e) {
 			// Only its class: its message could quote what the provider sent
-			return refused(address, id, null, PROVIDER, "the code's exchange failed on " + e.getClass().getName(),
-					true);
+			return refused(address, helper, id, null, PROVIDER,
+					"the code's exchange failed on " + e.getClass().getName(), true);
 		}
 
 		IdClaims claims = tokens.claims();
@@ -277,28 +373,49 @@ public class SignInResource {
 			decision = SignInAccounts.get().decide(provider, claims);
 		} catch (PersistenceException | RuntimeException e) {
 			log.error("Couldn't decide the account of a sign-in through the sign-in provider {}", id, e);
-			return refused(address, id, claims.identity(), ACCOUNT, "Healdan couldn't decide its account", true);
+			return refused(address, helper, id, claims.identity(), ACCOUNT, "Healdan couldn't decide its account",
+					true);
 		}
 		if (decision instanceof Refused refusal)
-			return refused(address, id, claims.identity(), refusal.code(), "Healdan refused its account", false);
+			return refused(address, helper, id, claims.identity(), refusal.code(), "Healdan refused its account",
+					false);
 		User user = ((Allowed) decision).user();
+
+		// The helper's session opens when it exchanges the code, so this browser gets none
+		if (helper != null)
+			return handToHelper(helper, user, id, tokens.refreshToken());
 
 		Session session;
 		try {
 			session = SignIns.openSession(user, SessionManager.get().buildClient(request));
 		} catch (AuthenticationException e) {
 			// Disabled, expired, outside working hours, legals not confirmed, or the address blocked
-			return refused(address, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in refused the account "
+			return refused(address, null, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in refused the account "
 					+ quote(user.getUsername()) + " (" + e.getClass().getSimpleName() + ")", false);
 		}
 		if (session == null)
-			return refused(address, id, claims.identity(), ACCOUNT,
+			return refused(address, null, id, claims.identity(), ACCOUNT,
 					"LogicalDOC's sign-in opened no session for the account " + quote(user.getUsername()), true);
 
 		String landing = landing(request, address);
 		signInBrowser(session.getSid(), request, response);
 		log.info("Signed {} in to the web page through the sign-in provider {}", quote(user.getUsername()), id);
 		return redirect(URI.create(landing));
+	}
+
+	/**
+	 * Ends a helper's sign-in: a one-time code, bound to the account, the
+	 * provider, its refresh token and the helper's challenge and address, goes
+	 * to the helper's address with the helper's state (spec section 6.2, step
+	 * 4).
+	 */
+	private static Response.ResponseBuilder handToHelper(Helper helper, User user, String provider,
+			String refreshToken) {
+		String code = OneTimeCodes.get().issue(user.getId(), provider, refreshToken, helper.challenge(),
+				helper.redirect());
+		log.info("Handed the helper a one-time code for {} through the sign-in provider {}",
+				quote(user.getUsername()), provider);
+		return redirect(URI.create(helper.answer("code", code)));
 	}
 
 	/**
@@ -414,22 +531,78 @@ public class SignInResource {
 
 	/**
 	 * Logs a refusal, with the provider, the identity if it's known, and the
-	 * code, and sends the browser to the sign-in page with the code.
+	 * code, and sends the browser with the code to the sign-in page, or to the
+	 * helper's address with the helper's state.
 	 *
+	 * @param helper the helper whose sign-in it is; null for the web page's
 	 * @param why what went wrong, for the log; never a secret
 	 * @param notable true to log it as a warning: the provider failing, Healdan
 	 *        failing, or a sign-in coming back where it shouldn't, which are
 	 *        worth an admin's look
 	 */
-	private static Response.ResponseBuilder refused(Address address, String provider, String identity, String code,
-			String why, boolean notable) {
+	private static Response.ResponseBuilder refused(Address address, Helper helper, String provider, String identity,
+			String code, String why, boolean notable) {
 		String who = identity != null ? " for the identity " + quote(identity) : "";
+		String whose = helper != null ? "the helper's" : "a";
 		if (notable)
-			log.warn("Refused a sign-in through the sign-in provider {}{} ({}): {}", provider, who, code, why);
+			log.warn("Refused {} sign-in through the sign-in provider {}{} ({}): {}", whose, provider, who, code, why);
 		else
-			log.info("Refused a sign-in through the sign-in provider {}{} ({}): {}", provider, who, code, why);
+			log.info("Refused {} sign-in through the sign-in provider {}{} ({}): {}", whose, provider, who, code, why);
+		if (helper != null)
+			return redirect(URI.create(helper.answer("error", code)));
 		return redirect(URI.create(address.base() + "/login.jsp?signin=" + URLEncoder.encode(code,
 				StandardCharsets.UTF_8)));
+	}
+
+	/**
+	 * @return why the helper's start isn't one Healdan accepts, for the log,
+	 *         never quoting what it sent; null if it is
+	 */
+	static String helperProblem(String client, String redirectUri, String state, String challenge, String method) {
+		if (!HELPER.equals(client))
+			return "its client isn't the helper";
+		if (!loopback(redirectUri))
+			return "its redirect_uri isn't http://127.0.0.1:<port>/ or http://[::1]:<port>/";
+		if (state == null || !HELPER_STATE.matcher(state).matches())
+			return "its state isn't 1 to 128 unreserved characters";
+		if (challenge == null || !CHALLENGE.matcher(challenge).matches())
+			return "its code_challenge isn't an S256 challenge";
+		if (!S256.equals(method))
+			return "its code_challenge_method isn't S256";
+		return null;
+	}
+
+	/**
+	 * RFC 8252's loopback redirect, and nothing that could reach another
+	 * machine or another spelling of this one.
+	 *
+	 * @param redirect the helper's {@code redirect_uri}
+	 * @return true if it's {@code http}, exactly, on {@code 127.0.0.1} or
+	 *         {@code [::1]}, exactly, at a port from 1 to 65535 written plainly,
+	 *         with a path that's {@code /} or empty, and no user, query or
+	 *         fragment
+	 */
+	static boolean loopback(String redirect) {
+		if (redirect == null)
+			return false;
+		URI uri;
+		try {
+			uri = new URI(redirect);
+		} catch (URISyntaxException e) {
+			return false;
+		}
+		if (uri.isOpaque() || !"http".equals(uri.getScheme()))
+			return false;
+		// Java gives an IPv6 host with its brackets
+		String host = uri.getHost();
+		if (!"127.0.0.1".equals(host) && !"[::1]".equals(host))
+			return false;
+		int port = uri.getPort();
+		if (port < 1 || port > 65535 || !(host + ":" + port).equals(uri.getRawAuthority()))
+			return false;
+		String path = uri.getRawPath();
+		return (path == null || path.isEmpty() || "/".equals(path)) && uri.getRawUserInfo() == null
+				&& uri.getRawQuery() == null && uri.getRawFragment() == null;
 	}
 
 	private static Response.ResponseBuilder redirect(URI location) {
@@ -477,7 +650,7 @@ public class SignInResource {
 	}
 
 	/** @return text from outside, on one line and at most {@value #MAX_QUOTED} characters */
-	private static String quote(String text) {
+	static String quote(String text) {
 		if (text == null)
 			return "";
 		StringBuilder line = new StringBuilder();
