@@ -2029,6 +2029,45 @@ Every ruling made while building that the plan or the spec didn't settle, in ord
 - **Task 9's commit moves to the tip.** After Task 8, Task 9's commit is moved to the branch's tip, by rebasing onto the commit before it and then cherry-picking it. Pull request A is then the branch up to Task 8, and pull request B the last commit alone, so the web page's change stays out of pull request A without a later cherry-pick. It touches local history that isn't pushed, and the reflog recovers it if wrong.
 - **Task 8 fills this plan's records.** Task 8 also fills this plan's Status, Decision log and Follow-ups from the build's ledger, as M3.5's records did for its plan, since the plan's own sections say they fill during the build. It costs one more file in Task 8's diff if wrong.
 
+## Hands-on checks on Healdan Helper 0.5.0-rc1 (owner, 2026-11-01)
+
+The owner asked for hands-on checks before approving the pull requests, so `helper-v0.5.0-rc1` was tagged on #150's head
+(`bc73bf4e7`) at the owner's go-ahead, rather than after the merge as M3.5's rcs were. CI tested, signed and notarised
+it, and the owner installed it over 0.4.0, with CoffeePDF 0.2.1 and its Healdan support on, against the owner's server.
+All twelve checks passed: spec §11.2's walkthrough, CoffeePDF §2.5 steps 1 to 7 and H1 to H4, plus Settings.
+
+- **Settings:** the PDFs row showed CoffeePDF; with CoffeePDF's support off it showed "Default app, read-only" with its
+  note, and CoffeePDF again once support was back on. Both read CoffeePDF's real `settings.json`.
+- **§2.5 step 1,** by a typed link, `healdan://open/4?server=<host>`: the web page's Open in App for PDFs waits for #151.
+  A link without `?server=` is refused, as M3 designed. The copy's record named CoffeePDF, and CoffeePDF wrote its lock.
+- **Steps 2 to 4:** ⌘S made v1.1 with no temporary file left behind; Save as New Version made v2.0; closing checked #4
+  in and emptied `Copies`.
+- **Step 5:** held by another account, #4 opened read-only in CoffeePDF with the holder's name, and closing it deleted
+  the copy at once.
+- **Step 6:** Save to Healdan from a local PDF filed #14, whose copy's record named CoffeePDF (the `/v1/file` fix).
+- **Step 7 and H3:** with support off, a PDF link opened read-only in the default app and the Open window forced
+  read-only with the PDF note; with support on, the Open window left read-only as a choice.
+- **H1:** Force Quit gave the crash window with Reopen and Send and Check In; Reopen opened #4 in CoffeePDF, and closing
+  checked it in, its stale lock gone.
+- **H2:** with #4 opened and #14 filed, the Helper restarted without checking either in, and both went on saving and
+  checked in on close.
+- **H4:** after the check-out was released on the web page, ⌘S was refused; the channel answered `readOnly: true` with the
+  title unchanged, and CoffeePDF went read-only and offered Save as New Document.
+
+What it showed for CoffeePDF (its session's to weigh; nothing in the Helper changes):
+
+- **Save as New Version with no unsaved changes** sends the file as it is as the version at once, as the Helper has done
+  since M3 (`/v1/new-version` with no save to come). CoffeePDF says *The next save goes to Healdan as a new version.* and
+  doesn't follow, so its title stays a version behind until the next save. It should follow `/v1/saved` after
+  `/v1/new-version` instead, and drop the message.
+- **CoffeePDF marks the title read-only** for a copy whose saves stopped, where its §6.1 says it shows the Helper's title
+  as it is.
+- **#4 went from 204,021 bytes to 39,504** at CoffeePDF's first save, a full rewrite of an unsigned PDF. Worth checking
+  that nothing was lost.
+
+Left before Healdan Helper 0.5.0: the web page's Open in App on a PDF, once #151 merges and the server is upgraded, and
+the Settings screenshot in Installing the Helper.
+
 ## Follow-ups
 
 Filled in as the build found them, and left open once Tasks 1 to 9 were done and reviewed. Each is a point of style or a gap in a narrow case, none of which blocks the build; the whole-branch review may fix some of them. Paths are in `clients/helper/` unless they start with `site/` or `logicaldoc-gui/`. The reviews' other style points are left out.
