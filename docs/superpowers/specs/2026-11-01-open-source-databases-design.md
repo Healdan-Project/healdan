@@ -63,7 +63,7 @@ the icons.
 | File | Edit | Why |
 |---|---|---|
 | `logicaldoc-webapp/pom.xml` | Drops the `com.microsoft.sqlserver:mssql-jdbc` dependency | SQL Server is dropped completely |
-| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/setup/client/Setup.java` | Drops the Oracle and SQL Server entries from `setupDatabase`'s engine list, and their two constants; preselects MariaDB instead of MySQL. Each marked `Healdan:` | Oracle and SQL Server are dropped completely, and the WAR ships neither driver; MariaDB is the database Healdan runs on |
+| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/setup/client/Setup.java` | Drops the Oracle and SQL Server entries from `setupDatabase`'s engine list, and their two constants; preselects MariaDB instead of MySQL. A `Healdan:` comment marks the list and the default | Oracle and SQL Server are dropped completely, and the WAR ships neither driver; MariaDB is the database Healdan runs on |
 
 ## 6. Tests
 
