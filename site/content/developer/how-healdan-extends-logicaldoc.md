@@ -70,4 +70,10 @@ learn from.
   listeners ask Healdan first. Every refusal throws `HealdanVetoException`, which the document and folder DAOs roll
   back on.
 - **Upstream edits** are kept small, and each milestone's design spec lists every upstream file it edits, with the
-  reason.
+  reason. Signing in through a provider adds two to LogicalDOC's user code:
+  - `UserSource` has a fourth value, `OIDC`, for an account linked to a sign-in provider. It's appended after `SAML`,
+    because the database stores each source as its position in the list: a value inserted earlier would move the
+    sources of every account after it. `UserSourceTest` pins the numbers, and CI runs it on every pull request, so an
+    upstream sync that moves them fails.
+  - `UsersPanel`, the Users list in the admin screens, has a `case` for `OIDC` in its Source column. Without it, a
+    provider account shows as `DEFAULT`.
