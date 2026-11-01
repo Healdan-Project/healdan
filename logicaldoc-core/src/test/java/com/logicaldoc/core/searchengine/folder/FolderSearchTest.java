@@ -1,6 +1,7 @@
 package com.logicaldoc.core.searchengine.folder;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -136,6 +137,17 @@ public class FolderSearchTest extends AbstractCoreTestCase {
 		criterion.setValue("x' or 'a'='a");
 
 		assertTrue(search(criterion).isEmpty());
+	}
+
+	@Test
+	public void testLanguageCriterionWithAValueIsNotEmpty() {
+		// The search drops empty criteria, so a language read as a number would match every folder
+		FolderCriterion criterion = new FolderCriterion();
+		criterion.setField("val1 type:" + FolderCriterion.TYPE_LANGUAGE);
+		criterion.setOperator(FolderCriterion.OPERATOR_EQUALS);
+		criterion.setValue("en");
+
+		assertFalse(criterion.isEmpty());
 	}
 
 	@Test

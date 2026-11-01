@@ -154,7 +154,7 @@ public class FolderCriterion implements Serializable {
         if (OPERATOR_NULL.equals(operator))
             return false;
 
-        if (type == Attribute.Type.STRING.ordinal())
+        if (type == Attribute.Type.STRING.ordinal() || type == TYPE_LANGUAGE)
             return StringUtils.isEmpty(getStringValue());
         else if (type == Attribute.Type.DOUBLE.ordinal())
             return getDoubleValue() == null;
