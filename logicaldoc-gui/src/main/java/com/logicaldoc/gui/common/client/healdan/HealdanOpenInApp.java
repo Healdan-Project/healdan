@@ -15,9 +15,13 @@ import java.util.function.LongConsumer;
  */
 public final class HealdanOpenInApp {
 
-	/** The kinds of file the helper opens (spec 5.11), in lower case */
+	/**
+	 * The kinds of file the helper opens (spec 5.11), and PDFs, which it opens
+	 * in CoffeePDF or read-only in the default app (M3.6 spec 5.1), in lower
+	 * case
+	 */
 	private static final Set<String> EXTENSIONS = new HashSet<>(Arrays.asList("doc", "docx", "docm", "dotx", "dotm",
-			"rtf", "odt", "ott", "xls", "xlsx", "xlsm", "ods", "ppt", "pptx", "pptm", "odp", "odg"));
+			"rtf", "odt", "ott", "xls", "xlsx", "xlsm", "ods", "ppt", "pptx", "pptm", "odp", "odg", "pdf"));
 
 	private static LongConsumer opener = null;
 
@@ -29,8 +33,8 @@ public final class HealdanOpenInApp {
 	 *
 	 * @param fileName the document's file name; may be null
 	 *
-	 * @return true for a Writer, Calc, Impress or Draw kind of file, whatever
-	 *         the case of its extension
+	 * @return true for a Writer, Calc, Impress or Draw kind of file, or a PDF,
+	 *         whatever the case of its extension
 	 */
 	public static boolean handles(String fileName) {
 		if (fileName == null)
