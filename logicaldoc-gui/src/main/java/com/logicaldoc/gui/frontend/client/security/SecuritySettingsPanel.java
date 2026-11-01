@@ -2,7 +2,6 @@ package com.logicaldoc.gui.frontend.client.security;
 
 import java.util.Map;
 
-import com.google.gwt.core.client.GWT;
 import com.logicaldoc.gui.common.client.DefaultAsyncCallback;
 import com.logicaldoc.gui.common.client.Feature;
 import com.logicaldoc.gui.common.client.Menu;
@@ -441,17 +440,20 @@ public class SecuritySettingsPanel extends AdminPanel {
         enableAnonymous.setWrapTitle(false);
         enableAnonymous.setRequired(true);
 
-        String anonumousUrl = GWT.getHostPageBaseURL() + "frontend.jsp?anonymous=login&tenant="
-                + Session.get().getTenantName() + "&key=" + settings.getAnonymousKey();
-        final LinkItem url = ItemFactory.newLinkItem("anonUrl", I18N.message("url"), anonumousUrl, anonumousUrl);
+        String anonymousUrl = anonymousUrl(settings.getAnonymousKey());
+        // No url for the factory, so the copy icon copies the item's current value
+        final LinkItem url = ItemFactory.newLinkItem("anonUrl", I18N.message("url"), anonymousUrl, null);
+        url.setValue(anonymousUrl);
 
         TextItem anonymousKey = ItemFactory.newSimpleTextItem("anonymousKey", "key", settings.getAnonymousKey());
         anonymousKey.setHintStyle("hint");
         anonymousKey.setRequired(true);
         anonymousKey.addChangedHandler(changed -> {
-            if (changed.getValue() != null)
-                url.setValue(Util.contextPath() + "frontend.jsp?anonymous=login&tenant=" + Session.get().getTenantName()
-                        + "&key=" + changed.getValue().toString());
+            if (changed.getValue() != null) {
+                String newUrl = anonymousUrl(changed.getValue().toString());
+                url.setLinkTitle(newUrl);
+                url.setValue(newUrl);
+            }
         });
 
         anonymousUser = ItemFactory.newUserSelector("anonymousUser", "user", null, false, false);
@@ -473,6 +475,11 @@ public class SecuritySettingsPanel extends AdminPanel {
         anonymousForm.setItems(enableAnonymous, anonymousUser, anonymousKey, url);
         anonymous.setPane(anonymousForm);
         return anonymous;
+    }
+
+    private static String anonymousUrl(String key) {
+        return Util.contextPath() + "frontend.jsp?anonymous=login&tenant=" + Session.get().getTenantName() + "&key="
+                + key;
     }
 
     @Override
