@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -38,22 +39,21 @@ public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder =
 
     private static readonly Dictionary<string, string> Texts = [];
 
+    /// <summary>The programs that have answered their <c>Ask</c> script since the helper started.</summary>
+    private readonly ConcurrentDictionary<OfficeProgram, bool> _answered = new();
+
     /// <summary>The Copies folder and its other spelling, without a closing slash; both empty when there is none.</summary>
     private readonly (string Folder, string Twin) _copies = copiesFolder is { Length: > 0 }
         ? (copiesFolder.TrimEnd('/'), TwinOf(copiesFolder.TrimEnd('/')))
         : ("", "");
 
-    public async Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
-    {
-        if (p == OfficeProgram.Word)
-        {
-            // Word's own open takes add to recent files false. Excel and PowerPoint are handed the file by open -a, which they
-            // open as for a double click.
-            await RunAsync(p, "Open", [path], ct);
-            return;
-        }
-        await runner.RunProcessAsync("/usr/bin/open", ["-a", OfficePrograms.ProcessName(p), path], ShortTimeout, ct);
-    }
+    /// <summary>
+    /// Hands the file over by <c>open -a</c>, as for a double click, so the file's access comes with it (the owner's
+    /// walkthrough: Word's own open by path met Grant File Access for any copy whose name Word hadn't written itself,
+    /// and its panel takes no folder). A read-only copy opens read-only.
+    /// </summary>
+    public Task OpenAsync(OfficeProgram p, string path, CancellationToken ct = default) =>
+        runner.RunProcessAsync("/usr/bin/open", ["-a", OfficePrograms.ProcessName(p), path], ShortTimeout, ct);
 
     public async Task<FrontDocument?> FrontDocumentAsync(OfficeProgram p, CancellationToken ct = default)
     {
@@ -167,12 +167,28 @@ public sealed class MacOfficeScripting(IOsaRunner runner, string? copiesFolder =
         }
     }
 
-    private Task<string> RunAsync(OfficeProgram p, string operation, IReadOnlyList<string> args, CancellationToken ct)
+    private async Task<string> RunAsync(OfficeProgram p, string operation, IReadOnlyList<string> args, CancellationToken ct)
     {
+        await AskOnceAsync(p, ct);
         var script = ScriptText(p, operation);
         // The process waits a little longer than a script that waits for Grant File Access, and no longer than 20 s for any other.
         var timeout = script.Contains(LongWait, StringComparison.Ordinal) ? LongTimeout : ShortTimeout;
-        return runner.RunAsync(script, args, timeout, ct);
+        return await runner.RunAsync(script, args, timeout, ct);
+    }
+
+    /// <summary>
+    /// Before a program's first script since the helper started, its <c>Ask</c> script, which waits up to 300 seconds:
+    /// macOS may first ask the user whether the helper may control the program (Automation), and every other script but
+    /// those that wait for Grant File Access gives up after 20 (the owner's walkthrough: the first save after pairing gave
+    /// up while macOS asked). A program that isn't running asks nothing, so it's asked again before its next script; a
+    /// refusal or a timeout fails the script that was to follow, as the script itself would have.
+    /// </summary>
+    private async Task AskOnceAsync(OfficeProgram p, CancellationToken ct)
+    {
+        if (_answered.ContainsKey(p))
+            return;
+        if (await runner.RunAsync(ScriptText(p, "Ask"), [], LongTimeout, ct) == "ok")
+            _answered.TryAdd(p, true);
     }
 
     /// <summary>A document found by its path alone.</summary>

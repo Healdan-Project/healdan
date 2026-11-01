@@ -368,7 +368,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     {
         if (Bring(key))
         {
-            log.Info($"A {key} window is open already: the new request is cancelled");
+            log.Info($"The {_single[key].Title} window is open already: the new request is cancelled");
             return Task.FromResult(WindowAnswers.Cancel());
         }
         var window = make();
