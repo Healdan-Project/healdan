@@ -18,7 +18,7 @@
 - **Helper:** .NET 10 and Avalonia 12.1.4, as M3.5; xUnit, with Avalonia headless for the windows. No new NuGet packages.
 - **Web page:** GWT 2.12 client code in `logicaldoc-gui`, with a plain JUnit 4 test.
 
-**Status:** written 2026-11-01, awaiting the owner's approval.
+**Status:** written and approved by the owner on 2026-11-01, for subagent-driven building.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-m3-6-pdfs-in-coffeepdf-design.md`](../specs/2026-11-01-m3-6-pdfs-in-coffeepdf-design.md), approved by the owner on 2026-11-01. Every § below points into it, and "CoffeePDF §n" into CoffeePDF's v1 spec (`coffeemuse/CoffeePDF`, `docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md`).
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
