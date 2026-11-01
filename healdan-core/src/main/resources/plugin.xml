@@ -107,6 +107,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.branding.HealdanSystemInfo" />
 	</extension>
 
+	<!-- A provider account never gets a password (M4 spec section 7.3); before Everyone (100) and the tokens (110) -->
+	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanSignInPasswords">
+		<parameter id="position" value="95" />
+		<parameter id="class" value="com.logicaldoc.healdan.signin.ProviderPasswordListener" />
+	</extension>
+
 	<extension plugin-id="logicaldoc-core" point-id="UserListener" id="healdanEveryone">
 		<parameter id="position" value="100" />
 		<parameter id="class" value="com.logicaldoc.healdan.security.EveryoneUserListener" />
