@@ -9,7 +9,8 @@ namespace Healdan.Helper.Core.Tests.Addin;
 /// likely to give up on a request that has had no answer for about a minute, while the Open, Save and Properties windows
 /// wait for the user: a route still running after the hold time answers <c>202 {"pending": id}</c> and goes on, and
 /// <c>result</c> answers its outcome once, to the key that started it. The hold time here is milliseconds, not 20 s; a
-/// slow route waits on a gate the test opens, so nothing depends on how fast the machine is.
+/// slow route waits on a gate the test opens, and a quick one gets a hold no machine runs past, so nothing depends on
+/// how fast the machine is.
 /// </summary>
 public sealed class PendingResultsTests
 {
@@ -48,7 +49,9 @@ public sealed class PendingResultsTests
     [Fact]
     public async Task AQuickRouteAnswersAtOnce()
     {
-        var results = Results();
+        // The hold's timer keeps real time, as the route's 10 ms does, so a busy runner could take longer than Hold over
+        // them (macOS's did). A minute it never takes, and the route still answers as soon as it's done.
+        var results = new PendingResults(TimeSpan.FromMinutes(1), _clock);
 
         var answer = await results.RunAsync("save-new", KeyA, async () =>
         {

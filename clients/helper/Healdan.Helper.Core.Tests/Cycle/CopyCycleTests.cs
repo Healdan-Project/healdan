@@ -1759,10 +1759,10 @@ public sealed class CopyCycleTests : IDisposable
 
         FakeScripting.Close(OfficeProgram.Word, path);
 
-        await Wait.Until(() => !File.Exists(path), "the copy checked in and deleted");
+        // The store deletes the copy, then its record: waiting for the file alone could look between the two.
+        await Wait.Until(() => !File.Exists(path) && Store.All().Count == 0, "the copy checked in and deleted, record and all");
         Assert.Null(_server.Doc(5).Hold);
         Assert.Equal(1, _server.Count("DELETE /documents/5/checkout"));
-        Assert.Empty(Store.All());
         Assert.Empty(cycle.OpenCopies());
         Assert.Empty(_events.Errors);
     }
