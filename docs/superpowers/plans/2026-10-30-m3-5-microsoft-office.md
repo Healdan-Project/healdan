@@ -926,11 +926,11 @@ Expected: PASS.
 
 Not code. In order:
 
-- [ ] **Step 1:** tag `helper-v0.4.0` on master once PRs A–E are merged; `clients.yml` packages, signs, notarises and attaches the disk image.
-- [ ] **Step 2:** the owner upgrades the semi-production server to master (the persistent host's `git pull` and rebuild) and sets `LOGICALDOC_PUBLIC_URL` if it isn't set.
-- [ ] **Step 3:** the owner removes the trial's add-in from Integrated apps, and the trial certificate's trust (`security remove-trusted-cert` with the trial's path), then uploads `https://<server>/api/addin/manifest.xml`, assigned to themselves.
-- [ ] **Step 4:** the owner installs Healdan Helper 0.4.0, runs Set Up Microsoft Office, and runs spec §12.2's walkthrough, against the server over HTTPS, as a non-admin user. Each row is recorded in the plan's decision log; failures become a punch list.
-- [ ] **Step 5:** the roadmap's M3.5 row becomes **done**, with the date and the PRs.
+- [x] **Step 1:** tag `helper-v0.4.0` on master once PRs A–E are merged; `clients.yml` packages, signs, notarises and attaches the disk image.
+- [x] **Step 2:** the owner upgrades the semi-production server to master (the persistent host's `git pull` and rebuild) and sets `LOGICALDOC_PUBLIC_URL` if it isn't set.
+- [x] **Step 3:** the owner removes the trial's add-in from Integrated apps, and the trial certificate's trust (`security remove-trusted-cert` with the trial's path), then uploads `https://<server>/api/addin/manifest.xml`, assigned to themselves.
+- [x] **Step 4:** the owner installs Healdan Helper 0.4.0, runs Set Up Microsoft Office, and runs spec §12.2's walkthrough, against the server over HTTPS, as a non-admin user. Each row is recorded in the plan's decision log; failures become a punch list.
+- [x] **Step 5:** the roadmap's M3.5 row becomes **done**, with the date and the PRs.
 
 ## Decision log
 
@@ -1026,7 +1026,7 @@ Filled in as the build found them, and left open once Tasks 1 to 11 and the fina
 - Accessibility: a `display:none` live region may not announce when it is shown; `aria-busy` is on all of `<main>` for up to 12 seconds; focus moves from the message to the code field at once; the message and the status repeat each other.
 - `MacCertificateTrust`'s cancel, failure, kill and timeout paths are untested; `OfficeSetUp.TrustAsync` re-checks `NeedsSetUp` straight after `security` returns, with no retry for trustd's lag; renewal leaves the old certificate and its trust entry in the login keychain.
 - The `check` icon's path data was written by hand in the release's format, not copied from Tabler 3.50.0; diff it against the real file.
-- Docs: the Install page names "a helper version with Microsoft Office support" with no number, and Task 12 should say 0.4.0; `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
+- Docs: `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
 
 **Lost work and reachability, left after the final review**
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
