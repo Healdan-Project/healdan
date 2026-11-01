@@ -440,7 +440,7 @@ The signed, notarised Healdan Helper 0.4.0 was released on 2026-11-01 ([`helper-
 - **The Open window's rule is tested in the core,** through `AppChooser.OpensReadOnly`, as the window has no headless test harness of its own.
 - **`CopyCycle.ClosedAsync` says whether it had anything to do,** so the channel logs a `/v1/closed` it dropped.
 - **`HealdanOpenInAppTest` joins `UPSTREAM_TESTS`,** as tests in `logicaldoc-gui` run in CI only when named there. Still no upstream code changes.
-- **CoffeePDF's names are in `CopyNames`:** `CoffeePdfLockName`, `AppFiles` (the one list of every app's lock and owner files) and `IsCoffeePdfTemporary`.
+- **CoffeePDF's names are in `CopyNames`:** `CoffeePdfLockName`, `AppFiles` (every app's lock and owner files, for deleting, renaming and setting copies aside) and `IsCoffeePdfTemporary`. `IsAppFile`, for the stray sweep, is kept apart from `AppFiles`, so a new app adds its names to both.
 - **The Open window has two notes,** a PDF's and today's. An office file on a Mac with neither LibreOffice nor Office gets today's, which doesn't fit it, and a third wording is a follow-up.
 - **More docs pages changed than the spec listed,** among them a crash in CoffeePDF, in When Things Go Wrong.
 

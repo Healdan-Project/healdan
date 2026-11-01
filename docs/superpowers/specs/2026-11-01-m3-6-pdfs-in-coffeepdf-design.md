@@ -111,7 +111,7 @@ The group's note ("Other files open read-only in the computer's default app.") s
 - **`CopyNames.IsAppFile`** recognises every name in it, and CoffeePDF's temporary files too: `.coffeepdf-` followed by 32 hex digits and `.tmp` (`AtomicFile`), so the stray sweep leaves them where they are (§6.4).
 - A later app adds one entry.
 - **The names fit.** CoffeePDF's lock adds 13 bytes to a copy's name, and `CopyNames.MaxBytes` (241) leaves 14, so it stays. Its comment names CoffeePDF's lock beside LibreOffice's.
-- (changed in the build: the names are `CopyNames.CoffeePdfLockName`, `AppFiles` and `IsCoffeePdfTemporary`, and `IsAppFile` covers all three kinds of name. `MaxBytes`' comment now says the record's name adds 14 bytes, as it does; it said 21.)
+- (changed in the build: the names are `CopyNames.CoffeePdfLockName`, `AppFiles` and `IsCoffeePdfTemporary`, and `IsAppFile` covers all three kinds of name. `IsAppFile` is written out by hand, not derived from `AppFiles`, so "a later app adds one entry" is two: a new app adds its names to both, and its own `LockExists` names its lock as well. `MaxBytes`' comment now says the record's name adds 14 bytes, as it does; it said 21.)
 
 ## 5. Opening
 
