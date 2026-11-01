@@ -2046,6 +2046,7 @@ Filled in as the build found them, and left open once Tasks 1 to 9 were done and
 - `Healdan.Helper/Windows/OpenWindow.axaml.cs`: an office file on a Mac with neither LibreOffice nor Office is forced read-only and told "Only office documents can be edited from here", which is false for it. Spec §5.2 names the case without wording, so it needs a third wording.
 - `Healdan.Helper/Windows/OpenWindow.axaml`: `KindNote`'s default text repeats a string `ShowDetails` always overwrites.
 - `logicaldoc-gui/src/main/java/com/logicaldoc/gui/common/client/healdan/HealdanOpenInApp.java`: its class javadoc still calls the item "Edit with Office", from before M3.6.
+- `Healdan.Helper/Windows/AppWindows.cs`: the Open window's `opensReadOnly` builds the chooser (`OfficeAppSet.Chooser`) afresh at each check, which reads `settings.json` each time. Parked by the whole-branch review as an optimisation; and `CoffeePdfCycleTests.Dispose` shares the teardown that once failed with "Directory not empty", as the Tests list's last entry says (watch in CI).
 
 **Tests**
 
@@ -2068,6 +2069,4 @@ Filled in as the build found them, and left open once Tasks 1 to 9 were done and
 - `site/content/developer/desktop-clients.md`: the Local Copies bullet gives the lock files' reason ("the app deletes them by the path it opened") for CoffeePDF's temporary files too. Give them a clause of their own.
 - `site/content/developer/desktop-clients.md`: the "Other kinds of file" bullet reads awkwardly with the PDF exception.
 - `site/content/developer/desktop-clients.md`: the state paragraph doesn't say what `readOnly` means for every client, and the Office add-in's Save as New Version effect isn't in the docs.
-- `site/content/user/office/when-things-go-wrong/index.md`: the new entry's lines run to 152 columns. Rewrap near 120.
-- `site/content/user/office/when-things-go-wrong/index.md`: it says a read-only PDF goes "once CoffeePDF has quit", and it also goes when its window closes.
 - `site/content/user/office/opening-documents/index.md`: the Open in App bullet repeats the CoffeePDF rule that "Other Kinds of File" states. It could point there instead.

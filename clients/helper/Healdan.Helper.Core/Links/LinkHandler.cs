@@ -116,7 +116,7 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
         }
 
         log.Info($"Opening #{n}{(readOnly ? " read-only" : "")} from a link");
-        await Task.Run(() => cycle.OpenLinkAsync(n, readOnly)); // spec 5.11's kinds only
+        await Task.Run(() => cycle.OpenLinkAsync(n, readOnly)); // spec 5.11's kinds, and PDFs (M3.6 spec §5.1)
         if (!readOnly)
             SayIfReadOnly(cycle, n, notifier);
     }

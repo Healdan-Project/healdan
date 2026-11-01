@@ -1698,6 +1698,29 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Fact]
+    public async Task ACloseReportedWhileThePdfIsBeingOpenedAgainLeavesItsRecord()
+    {
+        // An earlier window of the same PDF reports its close while a new open of it is downloading: the record, written
+        // before the download, mustn't go, or the copy would arrive with none.
+        _server.Add(7, "Signed NDA.pdf", "a pdf");
+        _server.HoldDownloads();
+        var cycle = Cycle(otherFiles: _opener);
+        var opening = cycle.OpenAsync(7, false);
+        var path = CopyPath("Signed NDA #7 v1.0 (read-only).pdf");
+        await Wait.Until(() => _server.Count("GET /documents/7/content") == 1, "the download under way");
+        Assert.NotNull(Store.Find(path));
+
+        Assert.True(await cycle.ClosedAsync(path)); // known to the cycle, but not deleted now
+        Assert.NotNull(Store.Find(path));
+
+        _server.OpenDownloads();
+        await opening;
+        Assert.Equal(path, Assert.Single(_opener.Opened));
+        Assert.Equal("a pdf", File.ReadAllText(path));
+        Assert.NotNull(Store.Find(path));
+    }
+
+    [Fact]
     public async Task TheDefaultAppsCopyWithChangesIsKeptAndAnUnknownPathIgnored()
     {
         if (OperatingSystem.IsWindows())

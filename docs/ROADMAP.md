@@ -429,7 +429,7 @@ The signed, notarised Healdan Helper 0.4.0 was released on 2026-11-01 ([`helper-
 - **The holder's computer is dropped:** the API shows a check-out's device only to the user who holds it.
 - **The docs name CoffeePDF,** whose repository is public.
 
-**Calls.** CoffeePDF joins M3.5's set of apps, with no recovery watch: a crash gets LibreOffice's crash window. PDFs don't become a kind of file. One list of each app's lock and owner files serves every place the Helper names them. No trial: CoffeePDF's Phase 2 ran against Healdan Helper 0.3.0-rc1, and the save by rename and a late lock file are tested automatically.
+**Calls.** CoffeePDF joins M3.5's set of apps, with no recovery watch: a crash gets LibreOffice's crash window. PDFs don't become a kind of file. One list of each app's lock and owner files (`CopyNames.AppFiles`) serves deleting, renaming and setting copies aside; the stray sweep keeps its own (`IsAppFile`). No trial: CoffeePDF's Phase 2 ran against Healdan Helper 0.3.0-rc1, and the save by rename and a late lock file are tested automatically.
 
 **Done when.** One walkthrough on a Healdan Helper 0.5.0 release candidate, against the owner's server: CoffeePDF's spec §2.5 (also its Phase 4), plus a crash, a Helper restart, CoffeePDF unavailable and a refused save. Then Healdan Helper 0.5.0, and the web page's Open in App offering PDFs.
 

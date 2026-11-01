@@ -270,8 +270,8 @@ public sealed class CopyCycle : IDisposable
     /// <summary>
     /// An app's close event for the copy's window: checks it in (or releases it) and deletes the copy, in the background. A
     /// read-only copy opened in the default app has no session, as nothing else says when its window closes, so its report
-    /// deletes it now, as the next start would (M3.6 spec §5.5); one with changes is kept. False when the cycle has nothing
-    /// to do with the path, so the channel can log a report it dropped.
+    /// deletes it now, as the next start would (M3.6 spec §5.5); one with changes is kept, and so is one the document's open
+    /// is still downloading. False when the cycle has nothing to do with the path, so the channel can log a report it dropped.
     /// </summary>
     public Task<bool> ClosedAsync(string path)
     {
@@ -285,8 +285,11 @@ public sealed class CopyCycle : IDisposable
         }
         if (Record(path) is not { ReadOnly: true } record || !_apps.IsOtherFiles(_apps.Of(record)))
             return Task.FromResult(false);
-        if (!_store.HasUnconfirmedChanges(path))
-            _store.Delete(path);
+        if (_store.HasUnconfirmedChanges(path))
+            return Task.FromResult(true);
+        lock (_gate)
+            if (!_opening.Contains(record.DocNumber))
+                _store.Delete(path); // else an earlier window's report has landed mid-download: the new open's copy stays
         return Task.FromResult(true);
     }
 
@@ -485,7 +488,8 @@ public sealed class CopyCycle : IDisposable
                 if (Find(path) is not null)
                     continue;
             // The menu asks at each rebuild, on the UI thread: a copy is read again only once its size or time has
-            // changed (re-review), so the default app's copies, which stay until the next start, aren't read every time.
+            // changed (re-review), so the default app's copies, which stay until their window's close is reported
+            // (ClosedAsync) or the next start, aren't read every time.
             if (File.Exists(path) && _store.HasUnconfirmedChanges(path, cached: true))
                 kept.Add(StateOf(path, record, null));
         }
