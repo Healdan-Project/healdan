@@ -218,6 +218,9 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 		assertEquals(session.getSid(), SessionManager.get().getSessionId(request(script)));
 		String bobs = key(bob, "Bob's");
 		Session bobsSession = SessionManager.get().newSession(bobs, client);
+		// A session opened with a password has no key at all, and there's nearly always one open
+		Session bobsPasswordSession = SessionManager.get().newSession("bob", HealdanFixtures.PASSWORD, client);
+		assertNull(bobsPasswordSession.getKey());
 
 		try (LogCapture logs = LogCapture.of(SignInAccounts.class)) {
 			link();
@@ -227,6 +230,8 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 					&& line.contains("entra")));
 			assertTrue(String.join("\n", logs.lines()), logs.lines().stream()
 					.anyMatch(line -> line.startsWith("INFO ") && line.contains("1 ") && line.contains("session")));
+			assertFalse(String.join("\n", logs.lines()),
+					logs.lines().stream().anyMatch(line -> line.startsWith("WARN ") && line.contains("Couldn't")));
 		}
 
 		assertEquals(0, keys(jane));
@@ -237,10 +242,11 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 			assertThrows(AuthenticationException.class, () -> SessionManager.get().newSession(key, client));
 		assertEquals(0, SessionManager.get().countOpened("jane"));
 
-		// bob's key and session are his own
+		// bob's key and sessions are his own
 		assertEquals(1, keys(bob));
 		assertTrue(SessionManager.get().isOpen(bobsSession.getSid()));
 		assertEquals(bobsSession.getSid(), SessionManager.get().getSessionId(request(bobs)));
+		assertTrue(SessionManager.get().isOpen(bobsPasswordSession.getSid()));
 	}
 
 	@Test
@@ -413,6 +419,8 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 		assertThrows(org.springframework.security.core.AuthenticationException.class,
 				() -> basic(form, "nobody", "Not-the-password-1", true));
 		assertEquals(0, SessionManager.get().countOpened("jane"));
+		// Not counted against the address, the key or the usernames given
+		assertEquals(0, counters("loginfail-%"));
 
 		// bob's key still signs him in that way
 		MockHttpServletRequest withBobs = request(null);

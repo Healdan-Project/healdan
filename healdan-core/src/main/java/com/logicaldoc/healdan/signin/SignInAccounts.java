@@ -431,34 +431,54 @@ public class SignInAccounts {
 	 * by the part before an impersonation's {@code >}, as CE's chain reads it:
 	 * {@code <key>>bob} opens a session as {@code bob} with the key's owner as
 	 * the impersonator. Only the sessions in this node's pool can be found
-	 * from a key. It never throws: a failure here is logged, and the
-	 * decision, already committed, stands.
+	 * from a key. Each session is checked and closed on its own, so one that
+	 * fails doesn't keep the others open. It never throws: a failure here is
+	 * logged, and the decision, already committed, stands.
 	 */
 	private static void closeKeySessions(Set<String> hashes, String username) {
+		int closed = 0;
+		int failed = 0;
 		try {
 			SessionManager sessions = SessionManager.get();
-			List<String> sids;
 			// newSession holds this lock while it signs in, so a key sign-in that read its key before the commit has its
 			// session in the pool by now, and one that starts later finds the key gone. Healdan never decides a sign-in
 			// inside newSession, so the identity's lock, held here, is never taken the other way round.
 			synchronized (sessions) {
-				sids = sessions.getSessions().stream().filter(s -> s.isOpen() && openedWith(s, hashes))
-						.map(Session::getSid).toList();
-				sids.forEach(sessions::kill);
+				for (Session session : sessions.getSessions()) {
+					try {
+						if (session.isOpen() && openedWith(session, hashes)) {
+							sessions.kill(session.getSid());
+							closed++;
+						}
+					} catch (RuntimeException e) {
+						failed++;
+						log.debug("A session couldn't be checked or closed", e);
+					}
+				}
 			}
-			if (!sids.isEmpty())
-				log.info("Closed {} {} opened with the deleted API keys of the account {}", sids.size(),
-						sids.size() == 1 ? "session" : "sessions", username);
 		} catch (RuntimeException e) {
-			log.warn("Couldn't close the sessions opened with the deleted API keys of the account {}; an "
-					+ "administrator can kill them in the Sessions list", username, e);
+			failed++;
+			log.debug("The sessions couldn't be read", e);
 		}
+		if (closed > 0)
+			log.info("Closed {} {} opened with the deleted API keys of the account {}", closed,
+					closed == 1 ? "session" : "sessions", username);
+		if (failed > 0)
+			log.warn("Couldn't check or close {} of the sessions that may have been opened with the deleted API keys "
+					+ "of the account {}; an administrator can kill them in the Sessions list", failed, username);
 	}
 
+	/**
+	 * Whether one of the keys opened the session. A session opened with a
+	 * password has no key, neither as given nor hashed, so it's never one.
+	 */
 	private static boolean openedWith(Session session, Set<String> hashes) {
 		String key = session.getDecodedKey();
-		if (key == null)
-			return hashes.contains(session.getKey());
+		if (key == null) {
+			// The set refuses to look a null up
+			String hash = session.getKey();
+			return hash != null && hashes.contains(hash);
+		}
 		if (key.contains(">"))
 			key = StringUtils.substringBefore(key, ">").trim();
 		try {
