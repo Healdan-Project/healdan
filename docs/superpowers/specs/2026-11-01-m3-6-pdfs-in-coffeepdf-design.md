@@ -2,7 +2,7 @@
 
 - **Milestone:** M3.6 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner section by section on 2026-11-01, and this written spec approved by the owner the same day. Implementation plan: [`docs/superpowers/plans/2026-11-01-m3-6-pdfs-in-coffeepdf.md`](../plans/2026-11-01-m3-6-pdfs-in-coffeepdf.md), approved by the owner on 2026-11-01 for subagent-driven building; its "Spec corrections and calls" section lists where it departs from this spec.
+- **Status:** design agreed with the owner section by section on 2026-11-01, and this written spec approved by the owner the same day. Implementation plan: [`docs/superpowers/plans/2026-11-01-m3-6-pdfs-in-coffeepdf.md`](../plans/2026-11-01-m3-6-pdfs-in-coffeepdf.md), approved by the owner on 2026-11-01 for subagent-driven building; its "Spec corrections and calls" section lists where it departs from this spec. **Built on 2026-11-01**, on one branch, following the plan's Tasks 1 to 7 and 9, and then 8, the records. Each task was reviewed against this spec before the next began. Task 9, the web page's Open in App (§5.1), is a commit of its own, which pull request B is cut from. Where the build departs from this spec, the section says "changed in the build". Nothing built has yet run against a real CoffeePDF: the tests drive the real `CoffeePdfApp` with its launch and its process check faked (`FakeCoffeePdf`), so `open -b`, LaunchServices finding CoffeePDF and CoffeePDF's own `settings.json` are for the owner's walkthrough (§11.2). Next: a review of the whole branch, then, with the owner's go-ahead, pull request A, Healdan Helper 0.5.0-rc1, pull request B, the walkthrough on the rc, and Healdan Helper 0.5.0 (§12).
 - **Inputs:**
   - CoffeePDF's v1 design spec ([`docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md`](https://github.com/coffeemuse/CoffeePDF/blob/main/docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md) in `coffeemuse/CoffeePDF`), above all §4.4, the list of Healdan's changes that this milestone builds, §2.5, the acceptance it must make possible, §5 and §6, and §16's "For Healdan's milestone (Phase 3) and the acceptance (Phase 4)";
   - CoffeePDF's code at `5280c58`: `ChannelRoutes`, `CopyLock`, `AtomicFile` and `Settings/`;
@@ -83,7 +83,7 @@ The bundle identifier goes in `AppBundles` (`CoffeePdf = "com.healdan.coffeepdf"
 
 ### 4.2 What "available" means (call)
 
-CoffeePDF is available when it's installed and its Healdan support is on. Both are read at each choice, as M3.5's `AppChooser` reads everything, not "at start and as the menu opens" as CoffeePDF §4.4 item 5 had it, so turning support on takes effect with the next PDF opened.
+CoffeePDF is available when it's installed and its Healdan support is on. Both are read at each choice, as M3.5's `AppChooser` reads everything, not "at start and as the menu opens" as CoffeePDF §4.4 item 5 had it, so turning support on takes effect with the next PDF opened. (changed in the build: `AppChooser` takes Healdan support as a `bool`, `coffeePdfOn`, and reads no file itself. `OfficeAppSet.Chooser` makes a new chooser at each choice and reads `CoffeePdfSettings` for it, so support is still read at each choice. Plan correction 6.)
 
 - **Installed:** `InstalledApps` gains `CoffeePdf`, found as M3.5 finds the others: `CoffeePDF.app` in `/Applications` or `~/Applications`, else LaunchServices by bundle identifier. Never off macOS.
 - **Support on:** a new `CoffeePdfSettings` in `Settings/` reads `settings.json` from CoffeePDF's settings folder, found as CoffeePDF finds it (`SettingsLocation`): `COFFEEPDF_SETTINGS_DIR` when it's set, else `~/Library/Application Support/CoffeePDF/` on macOS. Support is on only when `healdan.enabled` is the JSON value `true` (CoffeePDF's `SettingsStore` documents the shape as a contract). A missing, unreadable or malformed file, or a value of another type, is off. The Helper only reads the file.
@@ -111,12 +111,13 @@ The group's note ("Other files open read-only in the computer's default app.") s
 - **`CopyNames.IsAppFile`** recognises every name in it, and CoffeePDF's temporary files too: `.coffeepdf-` followed by 32 hex digits and `.tmp` (`AtomicFile`), so the stray sweep leaves them where they are (§6.4).
 - A later app adds one entry.
 - **The names fit.** CoffeePDF's lock adds 13 bytes to a copy's name, and `CopyNames.MaxBytes` (241) leaves 14, so it stays. Its comment names CoffeePDF's lock beside LibreOffice's.
+- (changed in the build: the names are `CopyNames.CoffeePdfLockName`, `AppFiles` and `IsCoffeePdfTemporary`, and `IsAppFile` covers all three kinds of name. `MaxBytes`' comment now says the record's name adds 14 bytes, as it does; it said 21.)
 
 ## 5. Opening
 
 ### 5.1 Links (owner, call)
 
-- **A link takes PDFs** as well as M3's kinds: `CopyCycle`'s link check becomes "a kind, or `PdfFiles.Is`". Its refusal for other files says "documents, spreadsheets, presentations, drawings and PDFs".
+- **A link takes PDFs** as well as M3's kinds: `CopyCycle`'s link check becomes "a kind, or `PdfFiles.Is`". Its refusal for other files says "documents, spreadsheets, presentations, drawings and PDFs". (changed in the build: `LinkHandler`'s class summary says the same, and `LinkHandlerTests.OpensOnlyTheSpecsKinds` expects the new wording.)
 - **The chooser picks the app,** as for any open. In CoffeePDF the PDF is checked out, unless the link asks for read-only. Without CoffeePDF it opens read-only in the default app, with macOS's quarantine, as from the Open window today.
 - **Links refused PDFs because of final review C2:** any page can make a link to any document, so a link opened only kinds an office app edits. The guard that matters, never handing the default app a file that can run a program (`DefaultApp.Refuses`), stays, and a PDF isn't one. A read-only PDF in the default app is what the Open window already allows.
 - **The web page's Open in App** adds `pdf` to `HealdanOpenInApp`'s extensions, in a pull request of its own, as `.odg` did (§12).
@@ -130,6 +131,8 @@ The window forces read-only exactly when the chooser would send the file to the 
 - **an office file on a Mac with neither LibreOffice nor Office,** which today the window offers to edit and the cycle opens read-only anyway.
 
 With CoffeePDF available, a PDF can be edited, and Open Read-Only stays.
+
+(changed in the build: the note has two wordings, a PDF's and today's. An office file on a Mac with neither LibreOffice nor Office is forced read-only too, as the third case says, but it gets today's note, "Only office documents can be edited from here", which doesn't fit it. A wording of its own is a follow-up in the plan.)
 
 ### 5.3 Checking out
 
@@ -146,6 +149,7 @@ They go through the usual path, with a session, not `OpenOtherAsync`, so CoffeeP
 - **The channel's `/v1/closed`** (`CopyCycle.ClosedAsync`), finding no session, deletes the copy when its record is a read-only copy for the default app with no unconfirmed changes: the rule `ResumeAsync` applies at the next start.
 - **Any other `/v1/closed` with no session** is logged as ignored, so a dropped report shows.
 - **This lives in the route,** not in the cycle's own `Close`, which the cycle calls for its own reasons.
+- (changed in the build: `CopyCycle.ClosedAsync` returns `Task<bool>`, whether the cycle had anything to do with the path, so the route can log a report it dropped: "Ignored /v1/closed for a copy Healdan Helper isn't looking after". Plan correction 4.)
 
 ### 5.6 Kept copies
 
@@ -165,6 +169,7 @@ A copy kept with unconfirmed changes (the menu's kept copies) reopens in the app
 - **The app goes to `AdoptNewAsync`,** which already takes one (M3.5's filing passes Microsoft Office), so the record names CoffeePDF, the close watch looks for CoffeePDF's lock, and a restart no longer checks the copy in from under its window.
 - **The failure notice** names the app from the request where it now says "the copy LibreOffice wrote for it".
 - **`/v1/save-new`** needs no change: `app`, `formats: ["pdf"]` and `"path": null` work today.
+- (changed in the build: the route resolves `app` with `OfficeApps.Filing(name)`, which gives CoffeePDF for `CoffeePDF` and LibreOffice for anything else. The channel reaches it through a new `CopyCycle.Apps`. Plan correction 5.)
 
 ### 6.3 `readOnly` on the channel (owner, call)
 
@@ -214,7 +219,7 @@ Nothing here is CoffeePDF's own: the cycle's rules apply, asking each copy's app
   - `Channel/`: `ChannelHandler` (`/v1/file`'s `app`, `readOnly`).
 - **`Healdan.Helper`:** `Platform/OfficeAppSet` (builds the set and the chooser with CoffeePDF), the Settings window's PDFs row, and the Open window's rule.
 - **`logicaldoc-gui`:** `HealdanOpenInApp` (`com.logicaldoc.gui.common.client.healdan`, Healdan's own), in its own pull request.
-- **Pull requests (call; the plan settles them):** the Helper with its docs, then the web page's `pdf`. The second merges once Healdan Helper 0.5.0-rc1 exists (§12).
+- **Pull requests (call; the plan settles them):** the Helper with its docs, then the web page's `pdf`. The second merges once Healdan Helper 0.5.0-rc1 exists (§12). (changed in the build: the plan has Task 9 built "on a branch of its own from master". It was built on this one branch, as its own commit, as M3.5's pull requests were cut from one branch, and pull request B is cut from that commit. The commit is then moved to the branch's tip, so pull request A is the branch up to the records and B the last commit alone. Nothing is opened without the owner's go-ahead.)
 
 ## 10. Upstream files, fork-owned files and docs pages
 
@@ -222,10 +227,13 @@ Nothing here is CoffeePDF's own: the cycle's rules apply, asking each copy's app
 
 None. `UPSTREAM_TESTS` is unchanged.
 
+(changed in the build: `HealdanOpenInAppTest` joins `UPSTREAM_TESTS` in `.github/workflows/build-logicaldoc.yml`, as `HealdanNamesTest` does, because tests in `logicaldoc-gui` run in CI only when named there. It changes no upstream code. Plan correction 2.)
+
 ### 10.2 Fork-owned files
 
 - `clients/helper/`: §9's files and their tests;
-- `logicaldoc-gui/.../common/client/healdan/HealdanOpenInApp.java`;
+- `logicaldoc-gui/.../common/client/healdan/HealdanOpenInApp.java`, and its test, `HealdanOpenInAppTest`, in `logicaldoc-gui/src/test/java/com/logicaldoc/gui/common/client/healdan/` (changed in the build);
+- `.github/workflows/build-logicaldoc.yml`, which names that test in `UPSTREAM_TESTS` (changed in the build, §10.1);
 - `CLAUDE.md` (the clients paragraph points to this spec), `docs/ROADMAP.md`, and this spec.
 
 ### 10.3 Docs pages (the docs site, `site/content/`)
@@ -238,6 +246,8 @@ The docs name CoffeePDF and link to its repository, [coffeemuse/CoffeePDF](https
 - `install/office-integration.md`: PDFs in CoffeePDF, and "Other files" now opening from a link too.
 - `install/known-limitations.md`: PDFs are edited only in CoffeePDF, on macOS.
 - `developer/desktop-clients.md`: CoffeePDF in the cycle (its lock, its temporary files and the `settings.json` the Helper reads), the read-only copies tracked, `/v1/closed` for the default app, and §6.5's two meanings.
+
+(changed in the build: the build changed more than this list. `user/office/when-things-go-wrong/` gained "CoffeePDF Quits Unexpectedly". `install/office-integration.md`'s security bullet on links and its sentence on quarantine were brought up to date, the second because CoffeePDF's copies carry none. Task 9 changed `user/office/opening-documents/`'s Open in App bullet. Two things are left open, in the plan's follow-ups: `developer/desktop-clients.md`'s Tests section doesn't yet name `FakeCoffeePdf` or `CoffeePdfCycleTests`, and the Settings screenshot, `user/office/installing-the-helper/settings.png`, predates the PDFs row and is to be taken again before 0.5.0.)
 
 ## 11. Verification
 
@@ -263,7 +273,7 @@ In `Healdan.Helper.Core.Tests`, on Ubuntu and macOS in CI, with a fake `IOfficeA
   - `readOnly` after a refused save and after newer content was stored, with `title` unchanged;
   - `/v1/closed` for a default-app copy (deleted, or kept with unconfirmed changes) and for an unknown path (logged).
 
-In `Healdan.Helper.Tests` (Avalonia headless): Settings' PDFs row and note in each state, and the Open window forcing read-only by the chooser's answer.
+In `Healdan.Helper.Tests` (Avalonia headless): Settings' PDFs row and note in each state, and the Open window forcing read-only by the chooser's answer. (changed in the build: the Open window's rule is tested in the core, through `AppChooser.OpensReadOnly`, and not by a headless window test. The window takes the rule as a function and has no headless harness of its own. Plan correction 1.) (changed in the build: `"replaces": null` on `/v1/file` needed no new test, as every filing test in `ChannelHandlerTests` sends it; only `"path": null` on `/v1/save-new` got one. Plan correction 3.)
 
 ### 11.2 Manual acceptance (owner)
 
@@ -278,7 +288,7 @@ On the owner's Mac, against the owner's server upgraded with §5.1's web page, o
 ## 12. Order and release (owner, call)
 
 1. The Helper's change and its docs, in one pull request or a few (§9), then **Healdan Helper 0.5.0-rc1**.
-2. The web page's `pdf`, in its own pull request, merged once rc1 exists, as CoffeePDF §2.5 step 1 needs it. Until a Helper is updated, it refuses a PDF link with its usual message; the owner is the only Helper user today.
+2. The web page's `pdf`, in its own pull request, merged once rc1 exists, as CoffeePDF §2.5 step 1 needs it (changed in the build: built on the one branch, §9). Until a Helper is updated, it refuses a PDF link with its usual message; the owner is the only Helper user today.
 3. The owner's server upgraded, and the walkthrough (§11.2) on the rc. Fixes go into further rcs, as in M3.5.
 4. **Healdan Helper 0.5.0,** then CoffeePDF v1.0 (CoffeePDF §13).
 

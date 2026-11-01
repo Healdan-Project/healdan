@@ -18,7 +18,7 @@
 - **Helper:** .NET 10 and Avalonia 12.1.4, as M3.5; xUnit, with Avalonia headless for the windows. No new NuGet packages.
 - **Web page:** GWT 2.12 client code in `logicaldoc-gui`, with a plain JUnit 4 test.
 
-**Status:** written and approved by the owner on 2026-11-01, for subagent-driven building.
+**Status:** written and approved by the owner on 2026-11-01, for subagent-driven building. **Built** on 2026-11-01, on one branch: Tasks 1 to 7 and 9, then 8, the records, as Task 9 ran before Task 8 so the records cover it. Each task was reviewed against the spec before the next began. The spec carries the plan's corrections and the build's departures, marked "changed in the build"; the decision log lists the rulings, and the follow-ups what the build left open. **Next:** a review of the whole branch, then, with the owner's go-ahead, pull request A, Healdan Helper 0.5.0-rc1, pull request B, and Task 10: the owner's walkthrough on the rc (spec §11.2) and Healdan Helper 0.5.0. Nothing built has yet run against a real CoffeePDF: the tests drive the real `CoffeePdfApp` with its launch and process check faked (`FakeCoffeePdf`), so `open -b`, LaunchServices finding CoffeePDF and CoffeePDF's own `settings.json` are for the walkthrough.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-m3-6-pdfs-in-coffeepdf-design.md`](../specs/2026-11-01-m3-6-pdfs-in-coffeepdf-design.md), approved by the owner on 2026-11-01. Every § below points into it, and "CoffeePDF §n" into CoffeePDF's v1 spec (`coffeemuse/CoffeePDF`, `docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md`).
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
@@ -2017,8 +2017,57 @@ Not code. In order:
 
 ## Decision log
 
-Empty until the build starts.
+Every ruling made while building that the plan or the spec didn't settle, in order, with what it costs if it was wrong. The plan's own corrections are under "Spec corrections and calls this plan makes", and the spec carries both, marked "changed in the build". The first four were made before Task 1; the rest name the task or review that raised them. All of it was built on 2026-11-01.
+
+- **Pre-flight: a Unix-only call in a test.** Task 4's test that uses `File.SetUnixFileMode` starts with `if (OperatingSystem.IsWindows()) return;`, as the repository's other Unix-mode calls are guarded. Unguarded, CA1416 warns that the call is Unix-only. It costs nothing if wrong.
+- **Pre-flight: Task 9 before Task 8.** Task 9 runs before Task 8, so the records cover every task: Task 8 writes what Tasks 1 to 7 built, and the plan's correction 2 belongs to Task 9. If wrong, the records miss nothing either way.
+- **Pre-flight: a Task 5 test that fails.** If a Task 5 test other than the sweep's failed, the implementer reports it as blocked and the controller rules on the smallest fix to the cycle, rather than parking the build for the owner, unless the fix would change LibreOffice's or Office's behaviour: spec §7 already says what the cycle must do. If wrong, a change to the cycle lands that the owner would have wanted to see first, though it shows in the ledger and the diff. It wasn't needed: Task 5's new tests passed on the unchanged cycle, and only the sweep's failed before its change.
+- **Pre-flight: where Task 9 is built.** Task 9 is built on this branch as its own commit, and pull request B is cut from that commit when the pull requests are opened, as M3.5's were cut from one branch. That keeps one worktree and one branch, and nothing is opened without the owner's go-ahead. If wrong, cutting pull request B needs a cherry-pick onto master.
+- **Task 3: a test the plan missed.** `InstalledAppsTests.LaunchServicesIsAskedOnlyAboutWhatTheFoldersDidntShow` now expects LaunchServices to be asked about `com.healdan.coffeepdf` as well, which the plan's expected list lacked. The implementer said so, and the change is right.
+- **Task 4 review: the link refusal's wording in a test.** Task 4's change to `LinkHandlerTests.OpensOnlyTheSpecsKinds`' expected wording stands. Spec §5.1 changes the message, so the old assertion was wrong. It costs nothing if wrong.
+- **Task 4 review: two things gone stale.** Task 5 also fixes the class summary of `LinkHandler.cs` (links take PDFs now) and rewrites the Desktop Clients page's sentence that a link to a PDF is refused. Both went stale with Task 4, and no later task named them. It costs one extra file in Task 5's diff if wrong.
+- **Task 9's commit moves to the tip.** After Task 8, Task 9's commit is moved to the branch's tip, by rebasing onto the commit before it and then cherry-picking it. Pull request A is then the branch up to Task 8, and pull request B the last commit alone, so the web page's change stays out of pull request A without a later cherry-pick. It touches local history that isn't pushed, and the reflog recovers it if wrong.
+- **Task 8 fills this plan's records.** Task 8 also fills this plan's Status, Decision log and Follow-ups from the build's ledger, as M3.5's records did for its plan, since the plan's own sections say they fill during the build. It costs one more file in Task 8's diff if wrong.
 
 ## Follow-ups
 
-Empty until the build starts.
+Filled in as the build found them, and left open once Tasks 1 to 9 were done and reviewed. Each is a point of style or a gap in a narrow case, none of which blocks the build; the whole-branch review may fix some of them. Paths are in `clients/helper/` unless they start with `site/` or `logicaldoc-gui/`. The reviews' other style points are left out.
+
+**Code**
+
+- `Healdan.Helper.Core/Copies/CopyNames.cs`: CoffeePDF's temporary-file constants sit in the middle of the class, and the 32 and the hex digits are written inline. Move the constants to the top and name the digit count.
+- `Healdan.Helper.Core/Cycle/CoffeePdfApp.cs`: `Open` repeats `LibreOfficeApp`'s macOS `open` block (start it, wait 10 seconds, throw on a non-zero exit). Extract it when a third app needs it.
+- `Healdan.Helper.Core/Settings/PdfFiles.cs`: `Is(".pdf")` is true, a name with no stem. It's harmless for copy names, and no test pins it.
+- `Healdan.Helper.Core/Cycle/OfficeApps.cs`: `Filing` compares to `CoffeePdfApp.AppName` rather than `coffeePdf.Name`, which is equivalent.
+- `Healdan.Helper.Core/Settings/InstalledApps.cs`: `Detect`'s summary doesn't say CoffeePDF is never installed elsewhere, though the parameter's note does.
+- `Healdan.Helper.Core/Cycle/CopyCycle.cs`: `ClosedAsync`'s summary says "in the background", which is true only when there's a session.
+- `Healdan.Helper.Core/Cycle/CopyCycle.cs`: the "Ignored /v1/closed" log line names no copy, and the line `Copy()` logs is as bare.
+- `Healdan.Helper.Core/Cycle/CopyCycle.cs`: `StateOf`'s `var ended = false;` could be `bool ended;`, like its neighbours.
+- `Healdan.Helper/Windows/OpenWindow.axaml.cs`: an office file on a Mac with neither LibreOffice nor Office is forced read-only and told "Only office documents can be edited from here", which is false for it. Spec §5.2 names the case without wording, so it needs a third wording.
+- `Healdan.Helper/Windows/OpenWindow.axaml`: `KindNote`'s default text repeats a string `ShowDetails` always overwrites.
+- `logicaldoc-gui/src/main/java/com/logicaldoc/gui/common/client/healdan/HealdanOpenInApp.java`: its class javadoc still calls the item "Edit with Office", from before M3.6.
+
+**Tests**
+
+- `Healdan.Helper.Core.Tests/Copies/CopyStoreTests.cs`: nothing shows that `Moved` deletes CoffeePDF's lock for the old name. `Delete` and `IsOpen` have tests, and `Moved` shares the `AppFiles` loop.
+- `Healdan.Helper.Core.Tests/Settings/CoffeePdfSettingsTests.cs`: no case for a `settings.json` that can't be read as a file, such as a folder (`UnauthorizedAccessException`, `ArgumentException`).
+- `Healdan.Helper.Core.Tests/Settings/CoffeePdfSettingsTests.cs`: it sets `COFFEEPDF_SETTINGS_DIR` while xUnit runs tests in parallel, which is safe only while it's the one reader in `Core.Tests`.
+- `Healdan.Helper.Core.Tests/Settings/AppChooserTests.cs`: the class summary names only M3.5 §5.10.
+- `Healdan.Helper.Core.Tests/Cycle/CoffeePdfCycleTests.cs`: `AssertReadOnlyFile` is written again in each cycle test class, as the existing tests do.
+- `Healdan.Helper.Core.Tests/Cycle/CoffeePdfCycleTests.cs`: it writes `System.Text.Json.Nodes.JsonObject` in full, as the brief did; add a `using`.
+- `Healdan.Helper.Core.Tests/Cycle/CopyCycleTests.cs`: no test that `ClosedAsync` returns false for a record that isn't the default app's when there's no session, which would pin the `IsOtherFiles` guard.
+- `Healdan.Helper.Core.Tests/Channel/ChannelHandlerTests.cs`: `ClosedForACopyTheHelperDoesntKnowIsLogged` asserts "Ignored /v1/closed", which `Copy()`'s own line also starts with. Assert "isn't looking after" instead, and read the log without `Wait.Until`.
+- `Healdan.Helper.Core.Tests/Channel/ChannelHandlerTests.cs`: no test of the warning for an unrecognised `app`, that known ones don't log it, or that the failure notice names the app; nor that a close with a known session doesn't log "Ignored".
+- `Healdan.Helper.Tests/Windows/SettingsWindowTests.cs`: `PdfsShowCoffeePdfWhileItsOn` doesn't assert that "Default app, read-only" is absent.
+- `Healdan.Helper.Core.Tests/Cycle/CopyCycleTests.cs`: `OfficeSavesCountLikeAnyOthers` failed once in `Dispose` ("Directory not empty") in Task 4, and passed on every rerun. `CoffeePdfCycleTests` copies the same teardown, so watch both in CI.
+
+**Docs**
+
+- `site/content/user/office/installing-the-helper/settings.png` and its alt text lack the PDFs row. Take it again from the demo stack before 0.5.0.
+- `site/content/developer/desktop-clients.md`: the Tests section doesn't name `FakeCoffeePdf` or `CoffeePdfCycleTests`.
+- `site/content/developer/desktop-clients.md`: the Local Copies bullet gives the lock files' reason ("the app deletes them by the path it opened") for CoffeePDF's temporary files too. Give them a clause of their own.
+- `site/content/developer/desktop-clients.md`: the "Other kinds of file" bullet reads awkwardly with the PDF exception.
+- `site/content/developer/desktop-clients.md`: the state paragraph doesn't say what `readOnly` means for every client, and the Office add-in's Save as New Version effect isn't in the docs.
+- `site/content/user/office/when-things-go-wrong/index.md`: the new entry's lines run to 152 columns. Rewrap near 120.
+- `site/content/user/office/when-things-go-wrong/index.md`: it says a read-only PDF goes "once CoffeePDF has quit", and it also goes when its window closes.
+- `site/content/user/office/opening-documents/index.md`: the Open in App bullet repeats the CoffeePDF rule that "Other Kinds of File" states. It could point there instead.
