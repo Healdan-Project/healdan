@@ -362,6 +362,26 @@ public class SignInResourceTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testDisabledOrExpiredAccountIsNotLinked() throws Exception {
+		// The first sign-in of a disabled account would link it, then be refused by CE's chain (ruling R16)
+		jdbc().update("update ld_user set ld_enabled = 0 where ld_id = ?", jane.getId());
+		UserDAO.get().evict(jane.getId());
+		ApiResponse disabled = signIn("fake", null);
+		assertRefused("account", disabled);
+		assertNull(setCookie(disabled, "ldoc-sid"));
+		assertNothingMade();
+
+		// And of an account past its expiry date
+		jdbc().update("update ld_user set ld_enabled = 1, ld_expire = ? where ld_id = ?",
+				new java.util.Date(System.currentTimeMillis() - 86_400_000L), jane.getId());
+		UserDAO.get().evict(jane.getId());
+		ApiResponse expired = signIn("fake", null);
+		assertRefused("account", expired);
+		assertNull(setCookie(expired, "ldoc-sid"));
+		assertNothingMade();
+	}
+
+	@Test
 	public void testDonePage() throws Exception {
 		ApiResponse done = get("/api/signin/done").send();
 

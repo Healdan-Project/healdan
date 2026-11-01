@@ -86,8 +86,8 @@ public class SignInResource {
 	/** The provider couldn't be used, refused, or what it sent failed a check */
 	static final String PROVIDER = "provider";
 
-	/** CE's sign-in chain refused the account, or Healdan couldn't decide it */
-	static final String ACCOUNT = "account";
+	/** CE's sign-in chain refused the account, or would, or Healdan couldn't decide it */
+	static final String ACCOUNT = SignInAccounts.ACCOUNT;
 
 	/** Where {@code login.jsp} finds the page asked for before signing in */
 	static final String REQUESTED_URL = "RequestedUrl";

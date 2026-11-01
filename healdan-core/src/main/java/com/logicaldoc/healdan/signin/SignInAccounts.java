@@ -69,6 +69,13 @@ public class SignInAccounts {
 	/** A new account's username is taken or can't be stored */
 	public static final String USERNAME_TAKEN = "username-taken";
 
+	/**
+	 * The account the email matches is disabled or past its expiry date, so
+	 * CE's sign-in would refuse it (ruling R16); also the code of CE's own
+	 * refusals, which the sign-in pages give
+	 */
+	public static final String ACCOUNT = "account";
+
 	/** What a new account's language is when {@code _system} has none: what CE's user editor starts on */
 	static final String DEFAULT_LANGUAGE = "en";
 
@@ -119,8 +126,9 @@ public class SignInAccounts {
 	/**
 	 * The sign-in is refused, and made and linked nothing
 	 *
-	 * @param code {@code no-group}, {@code email-taken} or
-	 *        {@code username-taken} (spec section 5.3)
+	 * @param code {@code no-group}, {@code email-taken},
+	 *        {@code username-taken} or {@code account} (spec section 5.3;
+	 *        ruling R16)
 	 */
 	public record Refused(String code) implements Decision {
 	}
@@ -227,6 +235,15 @@ public class SignInAccounts {
 							+ "account {}, which {}", p.id(), printable(claims.username()),
 							printable(match.getUsername()), why);
 					return new Refused(EMAIL_TAKEN);
+				}
+				// CE's chain would refuse it once linked, so it isn't linked: nothing changes (ruling R16). What can
+				// pass, such as working hours or an address's block, is left to the chain after the link.
+				String state = refusedState(match);
+				if (state != null) {
+					journal.info("Refused a first sign-in through the provider {} for {}: its email matches the "
+							+ "account {}, which {}", p.id(), printable(claims.username()),
+							printable(match.getUsername()), state);
+					return new Refused(ACCOUNT);
 				}
 				return linkByEmail(match.getId(), p, claims, map, granted, journal);
 			}
@@ -387,6 +404,19 @@ public class SignInAccounts {
 			return "is a system account";
 		if (identities.findLinkedByUser(user.getId()).isPresent())
 			return "is already linked";
+		return null;
+	}
+
+	/**
+	 * @return why CE's sign-in would refuse the account whatever the time or
+	 *         the address, as {@code DefaultAuthenticator.validateUser} reads
+	 *         it, or null if it wouldn't
+	 */
+	private static String refusedState(User user) {
+		if (!user.isEnabled())
+			return "is disabled";
+		if (user.isExpired())
+			return "has expired";
 		return null;
 	}
 
