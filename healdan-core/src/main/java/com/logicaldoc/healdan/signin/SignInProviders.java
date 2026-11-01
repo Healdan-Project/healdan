@@ -18,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
@@ -178,15 +179,17 @@ public class SignInProviders {
 
 	/**
 	 * Adds a provider, if no provider has its id, or else changes it. Every
-	 * value is checked before any is written, so a refusal changes nothing.
+	 * value is checked before any is written, so a refusal changes nothing. A
+	 * new provider starts with no group map, whatever rows are under its id.
 	 *
 	 * @param p the provider; {@code hasSecret} is ignored
 	 * @param newSecret the client secret to keep, sealed; null or blank keeps the
 	 *        one stored, which a new provider doesn't have
+	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if a value isn't acceptable; the message
 	 *         names the field, for the person who typed it
 	 */
-	public synchronized void save(SignInProvider p, String newSecret) throws HealdanRuleException {
+	public synchronized void save(SignInProvider p, String newSecret) throws PersistenceException {
 		String id = p == null ? null : p.id();
 		if (id == null || !ID.matcher(id).matches())
 			throw refuse("A provider's id can have only lower-case letters, digits and hyphens, and at most "
@@ -206,6 +209,16 @@ public class SignInProviders {
 		String groupsClaim = required(p.groupsClaim(), "groups claim", MAX_CLAIM);
 		Preset preset = p.preset() == null ? Preset.OTHER : p.preset();
 		String sealed = sealedSecret(id, newSecret);
+
+		// A new provider starts with no group map. Rows already under its id belong to nobody (the provider
+		// they were saved for is gone), and the map is the gate and the grant, so they must not be adopted.
+		if (adding) {
+			int stale = groupMaps.findByProvider(id).size();
+			if (stale > 0) {
+				groupMaps.replace(id, List.of());
+				log.warn("Dropped {} group map rows left under the id of the new sign-in provider {}", stale, id);
+			}
+		}
 
 		settings.set(key(id, LABEL), label);
 		settings.set(key(id, PRESET), preset.key());
@@ -300,13 +313,15 @@ public class SignInProviders {
 	 * @param id the provider's id
 	 * @param mappings the new map
 	 * @throws PersistenceException error at data layer
-	 * @throws HealdanRuleException if a value is blank, too long or can't be
-	 *         stored, or a group doesn't exist
+	 * @throws HealdanRuleException if there is no such provider, a value is
+	 *         blank, too long or can't be stored, or a group doesn't exist or is
+	 *         a person's own group
 	 */
-	public void saveGroups(String id, List<GroupMapping> mappings) throws PersistenceException {
-		if (id == null || !ID.matcher(id).matches())
-			throw refuse("A provider's id can have only lower-case letters, digits and hyphens, and at most "
-					+ "32 characters.");
+	public synchronized void saveGroups(String id, List<GroupMapping> mappings) throws PersistenceException {
+		// Rows for an id nobody has would be adopted by the provider added under it later; the lock keeps
+		// this from running between the steps of remove
+		if (id == null || !ids().contains(id))
+			throw refuse("That provider doesn't exist.");
 		if (mappings == null)
 			throw refuse("The group map is missing.");
 
@@ -315,8 +330,13 @@ public class SignInProviders {
 		for (GroupMapping mapping : mappings) {
 			String value = required(mapping.value(), "provider group's value", MAX_GROUP_VALUE);
 			if (!found.contains(mapping.groupId())) {
-				if (GroupDAO.get().findById(mapping.groupId()) == null)
+				Group group = GroupDAO.get().findById(mapping.groupId());
+				if (group == null)
 					throw refuse("There is no Healdan group with id %d.".formatted(mapping.groupId()));
+				// The groups Security > Groups lists; a person's own group is hidden there and isn't one to map
+				if (group.getType() == Group.Type.USER)
+					throw refuse("The group with id %d is a person's own group, which can't be mapped."
+							.formatted(mapping.groupId()));
 				found.add(mapping.groupId());
 			}
 			clean.add(new GroupMapping(value, mapping.groupId()));

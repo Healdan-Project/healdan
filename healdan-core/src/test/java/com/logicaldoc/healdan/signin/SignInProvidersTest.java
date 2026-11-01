@@ -21,7 +21,9 @@ import org.junit.function.ThrowingRunnable;
 import org.junit.rules.TemporaryFolder;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.core.security.user.Group;
+import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
@@ -597,6 +599,91 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 
 		// and the map is as it was
 		assertEquals(kept, providers().groups("entra"));
+	}
+
+	@Test
+	public void testSaveGroupsForAnUnknownProviderIsRefused() throws Exception {
+		Group staff = fx.group("Staff");
+		providers().save(entra(), SECRET_ONE);
+		List<GroupMapping> map = List.of(new GroupMapping("Partners", staff.getId()));
+
+		assertRefused("provider", () -> providers().saveGroups("ghost", map));
+		assertRefused("provider", () -> providers().saveGroups("Not An Id", map));
+		assertRefused("provider", () -> providers().saveGroups(null, map));
+		// An empty map is a write too: it would clear rows that aren't any provider's
+		assertRefused("provider", () -> providers().saveGroups("ghost", List.of()));
+
+		// and nothing was written for the id, so a provider added under it later has nothing to adopt
+		assertEquals(0, jdbc().queryForObject("select count(*) from hd_signin_group", Integer.class).intValue());
+		assertEquals(List.of(), SignInGroupDAO.get().findByProvider("ghost"));
+		providers().save(valid("ghost"), SECRET_ONE);
+		assertEquals(List.of(), providers().groups("ghost"));
+	}
+
+	@Test
+	public void testSaveGroupsAfterTheProviderWasRemoved() throws Exception {
+		Group staff = fx.group("Staff");
+		providers().save(entra(), SECRET_ONE);
+		providers().saveGroups("entra", List.of(new GroupMapping("Partners", staff.getId())));
+		providers().remove("entra");
+
+		assertRefused("provider",
+				() -> providers().saveGroups("entra", List.of(new GroupMapping("Partners", staff.getId()))));
+		assertEquals(List.of(), SignInGroupDAO.get().findByProvider("entra"));
+	}
+
+	@Test
+	public void testAddingAProviderDoesNotInheritGroupRowsLeftUnderItsId() throws Exception {
+		Group staff = fx.group("Staff");
+		Group partners = fx.group("Partners");
+		providers().save(entra(), SECRET_ONE);
+		providers().saveGroups("entra", List.of(new GroupMapping("Staff-oid", staff.getId())));
+		// Rows no provider owns, as a failed or interleaved remove might have left; the map is the gate and the grant
+		SignInGroup stale = new SignInGroup();
+		stale.setValue("Everyone-oid");
+		stale.setGroupId(Group.GROUPID_ADMIN);
+		SignInGroup alsoStale = new SignInGroup();
+		alsoStale.setValue("Partners-oid");
+		alsoStale.setGroupId(partners.getId());
+		SignInGroupDAO.get().replace("ghost", List.of(stale, alsoStale));
+		assertEquals(2, SignInGroupDAO.get().findByProvider("ghost").size());
+
+		providers().save(valid("ghost"), SECRET_ONE);
+
+		assertEquals(List.of(), providers().groups("ghost"));
+		assertEquals(List.of(), SignInGroupDAO.get().findByProvider("ghost"));
+		assertEquals(0, jdbc().queryForObject("select count(*) from hd_signin_group where hd_provider = 'ghost'",
+				Integer.class).intValue());
+		// another provider's map is as it was
+		assertEquals(List.of(new GroupMapping("Staff-oid", staff.getId())), providers().groups("entra"));
+
+		// A map saved for it now is its own, and editing the provider keeps it
+		providers().saveGroups("ghost", List.of(new GroupMapping("Ghosts", partners.getId())));
+		providers().save(valid("ghost"), null);
+		assertEquals(List.of(new GroupMapping("Ghosts", partners.getId())), providers().groups("ghost"));
+	}
+
+	@Test
+	public void testAPersonsOwnGroupCantBeMapped() throws Exception {
+		User author = fx.user("author");
+		Group own = author.getUserGroup();
+		Group staff = fx.group("Staff");
+		assertEquals(Group.Type.USER, own.getType());
+		providers().save(entra(), SECRET_ONE);
+		providers().saveGroups("entra", List.of(new GroupMapping("Staff-oid", staff.getId())));
+
+		assertRefused("group", () -> providers().saveGroups("entra",
+				List.of(new GroupMapping("Staff-oid", staff.getId()), new GroupMapping("Authors", own.getId()))));
+
+		// and the map is as it was
+		assertEquals(List.of(new GroupMapping("Staff-oid", staff.getId())), providers().groups("entra"));
+
+		// admin and the other ordinary groups, the ones Security > Groups lists, can be mapped
+		Group authors = GroupDAO.get().findByName("author", Tenant.DEFAULT_ID);
+		assertEquals(Group.Type.DEFAULT, GroupDAO.get().findById(Group.GROUPID_ADMIN).getType());
+		providers().saveGroups("entra", List.of(new GroupMapping("Admins", Group.GROUPID_ADMIN),
+				new GroupMapping("Authors", authors.getId()), new GroupMapping("Staff-oid", staff.getId())));
+		assertEquals(3, providers().groups("entra").size());
 	}
 
 	@Test
