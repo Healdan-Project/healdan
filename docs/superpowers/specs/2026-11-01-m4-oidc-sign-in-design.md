@@ -2,7 +2,7 @@
 
 - **Milestone:** M4 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section. The owner's review of this written spec is next, then the implementation plan.
+- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section. While the written spec was being reviewed, the owner asked about break glass and unlinking in a side conversation, and then decided both: unlinking is in M4, and an alert when `admin` signs in is optional (§7.5, §7.7). The owner's review of this written spec is next, then the implementation plan.
 - **Inputs:**
   - the roadmap's M4 section, and its glossary;
   - the [M2 spec](2026-10-23-m2-api-foundation-design.md), above all §5 (device tokens and the sign-in throttle) and §10.3 (Spring Security);
@@ -39,10 +39,11 @@ The walkthrough in §16.2 passes, against the owner's server over HTTPS, with He
 3. **No passwords for provider accounts.** A linked account has no Healdan password on any route, and can't be given one (owner, §7.3).
 4. **Groups follow the provider** at every sign-in, and a sign-in that maps to no Healdan group is refused (owner, §8).
 5. **The helper** signs in through the browser and works with Word and LibreOffice as before. A person disabled at the provider is asked to sign in again within 8 hours (owner, §6, §9).
-6. **The emergency way in.** `admin` signs in with its password when the provider fails (roadmap, §7.5).
-7. **Authentik.** The same on the owner's own Authentik, where a new person gets a new account (owner).
-8. **In CI.** The automated tests in §16.1 run, including the whole flow against a stand-in provider on the Docker stack, on amd64 and arm64.
-9. **Documented.** The docs pages in §15.3 are written.
+6. **Break glass.** `admin` signs in with its password when the provider fails, and Healdan runs on without the provider (roadmap, §7.5).
+7. **Unlinking.** An admin unlinks an account, which goes back to a password and keeps everything it had (owner, §7.7).
+8. **Authentik.** The same on the owner's own Authentik, where a new person gets a new account (owner).
+9. **In CI.** The automated tests in §16.1 run, including the whole flow against a stand-in provider on the Docker stack, on amd64 and arm64.
+10. **Documented.** The docs pages in §15.3 are written.
 
 ### 2.2 Non-goals
 
@@ -51,7 +52,7 @@ The walkthrough in §16.2 passes, against the owner's server over HTTPS, with He
 - **Signing out of the provider.** Sign Out ends the Healdan session only; the person stays signed in at Microsoft or Authentik (call).
 - **Provisioning ahead of the first sign-in** (SCIM or the like). An account is made at its first sign-in, or by an admin by hand and then linked by email (§7.2; call).
 - **Re-checking web sessions with the provider.** A web session ends after 30 idle minutes, and the next sign-in goes to the provider (§9; recorded in Known Limitations).
-- **Moving accounts from one provider to another.** An account has one identity (§7.1). A firm that changes provider needs a way to move the links; that's a follow-up.
+- **Moving accounts from one provider to another in one step.** An account has one identity (§7.1). A firm that changes provider unlinks the accounts (§7.7), and each person's first sign-in through the new provider links them again by email (§7.2).
 - **Passwords for provider accounts on WebDAV, CMIS, SOAP and REST** (owner). Provider accounts use the web page, the helper and the add-ins. A separate app password for those routes is a follow-up if anyone needs one.
 - **Multi-tenant Entra apps.** One app registration in one tenant, with a fixed issuer, not `common` or `organizations` (call).
 - **An embedded web view in the helper.** The system browser, as RFC 8252 recommends for native apps (call).
@@ -216,7 +217,7 @@ The browser moves from Healdan's HTTPS page to `http://127.0.0.1` as a top-level
 
 ### 7.2 Which account a sign-in is (owner; call on the order)
 
-1. **An identity already linked** is its account.
+1. **An identity already linked** is its account. A link an admin has unlinked doesn't count (§7.7).
 2. **The gate.** The person's provider groups are mapped (§8). If no mapped Healdan group results, the sign-in is refused (`no-group`) and nothing is made. A linked account refused here is also taken out of every mapped group, so nothing it held through the map stays (owner).
 3. **Link by email**, when the provider's switch is on (owner).
    - The email claim must be present, and match exactly one account's email, ignoring case.
@@ -236,6 +237,7 @@ An admin who wants someone's account ready before their first sign-in makes it b
 - **It can't be given a password.** A Healdan `UserListener` refuses to store a password on a provider account, whichever way it comes: Change Password, the lost-password email, the user editor, SOAP's user calls. The builder lists every path that sets a password, and tests each one.
 - **So no password route signs a provider account in.** `DefaultAuthenticator` refuses a null password (§3.1), and nothing can set one. That covers the sign-in form, WebDAV, CMIS, SOAP, REST and the API's password sign-in.
 - **Accounts that aren't linked keep their passwords** on every route, `admin` included (owner).
+- **Unlinking is the only way back to a password** (§7.7). Without the listener, a lost-password email could quietly give a provider account a password and get round this section.
 
 ### 7.4 At every sign-in
 
@@ -243,11 +245,25 @@ An admin who wants someone's account ready before their first sign-in makes it b
 - Groups are synced (§8).
 - CE records the sign-in as for a password: the last login, the account's history and the session.
 
-### 7.5 `admin` (roadmap)
+### 7.5 `admin`, and break glass (roadmap; owner on the alert)
 
-- **Never linked,** and a provider username of `admin` is refused (§7.2).
-- **Keeps its password,** on every route, as the way in when a provider is down or misconfigured.
-- **The docs say** to keep its password somewhere safe and to use it only for that. The throttle protects it as M2 set it (M2 §5.7).
+- **`admin` is the break-glass account.** It's never linked, and a provider username of `admin` is refused (§7.2). It keeps its password on every route, and the password link stays on the sign-in page whatever state the provider is in. Local accounts an admin keeps on purpose work the same way.
+- **During a provider outage:**
+
+  | Who | What happens |
+  |---|---|
+  | `admin` and other local accounts | Sign in with their passwords, as today |
+  | Helper users already signed in | Keep working: the device token is Healdan's own, and an outage never revokes it (§9) |
+  | Web page sessions already open | Last until 30 idle minutes, as any session |
+  | New web page sign-ins through the provider | Wait for the provider: the button gives the `provider` refusal (§5.3) |
+
+- **Healdan runs without the provider.** It fetches a provider's discovery document and keys when it first needs them, and caches them. A provider it can't reach never stops Healdan starting, and never counts as a refusal (§9, §13).
+- **`admin` skips every permission check,** so it's for putting things right, not for daily work. Its password is a single factor. The docs advise a long random password kept offline, and the throttle (M2 §5.7) and the LAN or VPN limit its exposure.
+- **An alert when `admin` signs in with its password** (owner: optional, an admin's choice, and only by email):
+  - a system-wide switch in the Sign-In tab, off by default, with its recipients, `admin` by default (§10);
+  - while it's on and any provider is on, each `admin` password sign-in sends the recipients an email, from a message template a seed step adds;
+  - nothing is sent when outgoing email isn't set up, and the tab says the switch needs it; no system message is sent instead (owner);
+  - with no provider on, `admin`'s password is an ordinary sign-in, and nothing is sent.
 
 ### 7.6 Opening the CE session (call)
 
@@ -255,6 +271,27 @@ An admin who wants someone's account ready before their first sign-in makes it b
 - **The authenticator** returns that account only for the key that's pending. It first applies `DefaultAuthenticator.validateUser`'s checks: enabled, not expired, within working hours, legals confirmed. It refuses every other key of its form.
 - **So the throttle, CE's checks and CE's session bookkeeping apply,** as for any sign-in. Whether this is a new authenticator beside `HealdanTokenAuthenticator` or the same one taught a second kind of pending key is the builder's choice.
 - **Refusals made before the session** (the gate, linking, the username) aren't counted by the throttle, as the provider has already checked the person. The chain's own refusals count as a key sign-in's do (M2 §5.7).
+
+### 7.7 Unlinking (owner)
+
+A link is a record beside the CE account, never a new or replacement account. So unlinking loses nothing: the user id stays the same, and with it the documents, check-outs, history, My Matters, favourites and grants.
+
+**Unlinking one account** is an admin's action, in the Sign-In tab's list of linked accounts (§10.3):
+
+- **The link is kept as a record,** marked unlinked, with when and by whom, and no longer used (§12).
+- **The account goes back to a password account.** Its source returns to `DEFAULT`, with a random temporary password marked expired, so the person changes it at their next sign-in. That's what CE's own admin Change Password does (`SecurityServiceImpl.changePassword`). It's one step, as CE refuses to store a `DEFAULT` account without a password.
+- **The password reaches the person** by email when outgoing email is set up (CE's notify email). Otherwise the admin sees it once and passes it on, or the person uses Lost Password, whose link lasts 15 minutes.
+- **Groups stay as they are,** and are managed in Healdan from then on.
+- **Device tokens are revoked,** through M2's revoke on a password change (M2 §5.4), and the helper asks for the password.
+- **Signing in through the provider again,** while it's on, links the account again by the usual rule (§7.2), and its password is removed again (§7.3).
+
+**Taking a provider off an instance:**
+
+1. **Turn it off.** Its button leaves the sign-in page, `GET /server` stops listing it, so the helper offers only the password, and Healdan stops contacting it. Turning it off unlinks nothing, so a temporary "off" keeps every link.
+   - While it's off, its linked people can't start a sign-in, but helpers already signed in keep working (§9).
+   - Before the admin confirms, the tab says how many linked people that affects.
+2. **Unlink Everyone** on that provider runs the steps above for each of its accounts. Each gets a temporary password, by email when outgoing email is set up. Otherwise the admin gives each one a password in the user editor, which unlinking allows again.
+3. **Remove the provider.** Its settings go, and its links stay in `hd_signin_identity` as history. Remove is offered only once the provider has no linked accounts (§10.3).
 
 ## 8. Groups (owner)
 
@@ -290,7 +327,9 @@ Only one check runs for a token at a time.
 | **Accepts** | Keeps the new refresh token if one came. If an ID token came too, it applies §7.4 and §8, the gate included, and revokes the device token if the gate refuses |
 | **Refuses** (`invalid_grant` or similar: the account was disabled, or its sessions revoked) | Revokes the device token (M2 §5.4) and closes its CE sessions. The helper's next request gets `401` and the helper asks the person to sign in |
 | **Can't be reached** (no connection, no answer in 10 seconds, or a server error) | Logs it and keeps the token. It tries again no sooner than 15 minutes later, and the next check that reaches the provider decides |
-| **Is turned off or removed** in the Sign-In tab | Counts as refusing |
+| **Is turned off** in the Sign-In tab | Isn't contacted. The token is kept, within M2's idle and absolute limits, and the checks resume when the provider is turned on again (§7.7). A provider can't be removed while it has linked accounts (§10.3), and unlinking revokes the account's tokens |
+
+**Only an explicit refusal revokes a token.** "Can't reach the provider" never counts as "the provider refused" (§7.5).
 
 - **A provider that gave no refresh token.** The device token works as a password one does, within M2's idle and absolute limits, and isn't re-checked. The Sign-In tab's Check warns when the provider doesn't offer `offline_access`, and the log notes each such sign-in.
 - **Web sessions aren't re-checked** (§2.2). They end after 30 idle minutes. Disabling the person in Healdan, or ending their session in the Sessions list, works at once, as today.
@@ -307,7 +346,7 @@ In `hd_setting` (owner), apart from the group map (§8, §12):
 | `signin.password.label` | Sign In with a Password | The password link's label (owner) |
 | `signin.<id>.label` | from the preset | The button's label (owner) |
 | `signin.<id>.preset` | | `entra`, `authentik` or `other` |
-| `signin.<id>.enabled` | true | Off hides the button, refuses its sign-ins, and counts as a refusal at its re-checks (§9) |
+| `signin.<id>.enabled` | true | Off hides the button, refuses its sign-ins, and stops Healdan contacting it; nothing is unlinked, and helpers already signed in keep working (§7.7, §9) |
 | `signin.<id>.issuer` | | The provider's issuer address, `https` (§13) |
 | `signin.<id>.clientId` | | From the app registration |
 | `signin.<id>.clientSecret` | | Encrypted (§13); never shown again |
@@ -316,6 +355,8 @@ In `hd_setting` (owner), apart from the group map (§8, §12):
 | `signin.<id>.claim.email` | from the preset | §7.2 |
 | `signin.<id>.claim.groups` | from the preset | §8 |
 | `signin.<id>.linkByEmail` | from the preset | §7.2 |
+| `signin.adminAlert` | off | Email the recipients when `admin` signs in with its password while a provider is on (owner, §7.5) |
+| `signin.adminAlert.recipients` | `admin` | Usernames to email, as for the throttle's alert |
 
 A provider's id is lower-case letters, digits and hyphens, chosen when it's added. It appears in the redirect address, so it can't change.
 
@@ -348,8 +389,11 @@ A new tab in the existing Healdan Settings dialog, for admins (owner):
 
   It shows the redirect address to register (§5.2), and says plainly what's wrong.
 - **The password link's label.**
+- **The `admin` alert:** its switch and recipients (§7.5). The tab says the switch needs outgoing email, and shows whether it's set up.
+- **Linked accounts** (owner, §7.7): each provider's linked accounts, with how and when each was linked and its last sign-in, and **Unlink** on each. **Unlink Everyone** unlinks all of a provider's accounts after a confirmation that names how many.
+- **Turning a provider off** says first how many linked people can't sign in while it's off (§7.7).
 - **Changes take effect at once,** with no restart. If a change breaks sign-in, `admin` signs in with its password and puts it right (owner).
-- **Removing a provider keeps its links,** so adding it back with the same id restores them. Until then its accounts can't sign in, which the tab says before it removes the provider.
+- **Remove** is offered only for a provider with no linked accounts. With some, the tab says to turn it off or Unlink Everyone first. Its links stay as history (§7.7).
 
 ## 11. The API
 
@@ -365,11 +409,11 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 
 | Table | Columns (beyond the standard ones) | Notes |
 |---|---|---|
-| `hd_signin_identity` (new) | `hd_provider`, `hd_identity`, `hd_userid`, `hd_linked` (when), `hd_how` (`email` or `new`), `hd_lastsignin` | Unique on provider and identity, and on the user (§7.1) |
+| `hd_signin_identity` (new) | `hd_provider`, `hd_identity`, `hd_userid`, `hd_linked` (when), `hd_how` (`email` or `new`), `hd_lastsignin`, `hd_unlinked` (when, nullable), `hd_unlinkedby` (nullable) | Among links in use, unique on provider and identity, and on the user (§7.1). An unlinked row stays as a record (§7.7) |
 | `hd_signin_group` (new) | `hd_provider`, `hd_value`, `hd_groupid` | Unique on all three (§8) |
 | `hd_api_token` (new columns) | `hd_provider` (nullable), `hd_refresh` (encrypted, nullable), `hd_checked` | A token from a provider sign-in, and its re-check (§9) |
 
-- **A new seed step,** `signin-settings`, writes `signin.password.label`'s default. A smoke-only seed configures the stand-in provider (§16.1).
+- **A new seed step,** `signin-settings`, writes the defaults of `signin.password.label` and the `admin` alert's settings, and adds the alert's message template (§7.5). A smoke-only seed configures the stand-in provider (§16.1).
 - **Pending sign-ins and one-time codes are kept in memory,** for 10 minutes and 60 seconds. A restart drops them, and the person starts again (call).
 
 ## 13. Security (calls)
@@ -382,6 +426,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
   - `exp` and `iat`, allowing two minutes of clock skew;
   - the `nonce`.
 - **HTTPS only.** The issuer and every endpoint are reached over HTTPS, with the JVM's certificate checks (M1's validating client). The one exception is plain HTTP when the smoke overlay sets `HEALDAN_SIGNIN_ALLOW_HTTP`, which production never does.
+- **No dependence on the provider to run.** Discovery and keys are fetched when first needed, never at startup. A provider that can't be reached refuses only its own sign-ins, and never revokes anything (§7.5, §9).
 - **The browser's flow** has state, nonce and PKCE, and is bound to the browser that started it (§5.2). One callback per provider (§5.2) stops a response meant for one provider being taken for another's.
 - **The helper's flow** accepts only a loopback redirect, uses PKCE, and its code lives 60 seconds and works once (§6.2).
 - **Secrets at rest.**
@@ -451,7 +496,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 **New:**
 
 - `install/sign-in/`, a section of the Install manual, with a card on `install/_index.md`:
-  - `_index.md`: how provider sign-in works, the emergency `admin`, and what provider accounts can't do (no password routes);
+  - `_index.md`: how provider sign-in works; break glass, with what works during a provider outage and the advice for `admin`'s password (§7.5); what provider accounts can't do (no password routes); and taking a provider off an instance (§7.7);
   - `entra-id.md`:
     - the app registration and its redirect address;
     - the client secret and its expiry;
@@ -470,7 +515,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 
 **Changed:**
 
-- `admin/healdan-settings/index.md`: the Sign-In tab, the group map and its gate, linking by email, readying an account before a first sign-in, the emergency `admin`, and the re-check.
+- `admin/healdan-settings/index.md`: the Sign-In tab, the group map and its gate, linking by email, readying an account before a first sign-in, the linked accounts with Unlink and Unlink Everyone, turning a provider off, the emergency `admin` and its alert, and the re-check.
 - `user/getting-started/signing-in/index.md`: the provider's button, the password link, and what a refusal means.
 - `user/office/installing-the-helper/`: signing in through the browser.
 - `install/backup-and-restore.md`: the key in the configuration folder (§13).
@@ -498,7 +543,9 @@ The screenshots are of the demo firm (CLAUDE.md, "The demo overlay").
 - **groups:** added and removed, groups outside the map left alone, a deleted group ignored;
 - **passwords:** a provider account's password refused on every route (the sign-in form, SOAP, REST, WebDAV and CMIS Basic, the API), and a password refused on every path that sets one (§7.3);
 - **the helper's code:** used once only; expired after 60 seconds; a wrong verifier; a wrong address; a non-loopback address refused;
-- **the re-check:** accepted (groups updated), refused (token revoked), unreachable (token kept, and not retried before 15 minutes), the 8-hour rule, and a provider turned off;
+- **the re-check:** accepted (groups updated), refused (token revoked), unreachable (token kept, and not retried before 15 minutes), the 8-hour rule, and a provider turned off (not contacted, token kept);
+- **break glass:** Healdan starts with every provider unreachable; `admin` signs in meanwhile; the alert is sent only while it's on, a provider is on and outgoing email is set up, and not for other accounts (§7.5);
+- **unlinking:** the account goes back to `DEFAULT` with an expired temporary password, keeps its groups and everything it held, and loses its device tokens; its link is kept as a record; signing in through the provider again links it again; Unlink Everyone; Remove refused while a provider has linked accounts (§7.7);
 - **secrets:** stored encrypted, and a lost key handled (§13);
 - **the API:** `GET /server`'s providers, and the exchange, checked against `openapi.yaml` as every API test is (M2 §4.6).
 
@@ -531,9 +578,10 @@ On the owner's server over HTTPS, with Healdan Helper 0.5.0 from its signed rele
 4. **The helper.**
    - It signs in through the browser, and you open, edit and save a document in Word.
    - Disable the test user in Entra. Within 8 hours, or at once after a forced check, the helper asks them to sign in, and the sign-in is refused.
-5. **The emergency way in.** With the client secret broken on purpose in the Sign-In tab, the button fails with a message, and `admin` still signs in with its password and puts it right.
-6. **Authentik.** Rows 1 to 3 on your own Authentik, where a new test user gets a new account.
-7. **Sign Out** comes back to the sign-in page, and doesn't sign straight back in.
+5. **Break glass.** Turn the `admin` alert on, then break the client secret on purpose in the Sign-In tab. The button fails with a message, and `admin` still signs in with its password and puts it right. The alert arrives by email.
+6. **Unlinking.** Unlink the test user. They sign in with the temporary password, change it, and find their documents and favourites as before. Signing in through the provider again links them again.
+7. **Authentik.** Rows 1 to 3 on your own Authentik, where a new test user gets a new account.
+8. **Sign Out** comes back to the sign-in page, and doesn't sign straight back in.
 
 ## 17. Left to the builder
 
@@ -558,6 +606,8 @@ On the owner's server over HTTPS, with Healdan Helper 0.5.0 from its signed rele
 - **The sign-in page.** A button per provider, with the password form behind a link. Both labels are settings, not necessarily "Microsoft" (§5.1, §10.1).
 - **Acceptance.** Entra ID in the owner's tenant, and Authentik on the owner's own instance (§16.2).
 - **The approach.** Healdan's own endpoints, with Nimbus's libraries (§14).
+- **Unlinking** (after the written spec, from the owner's questions in a side conversation). An admin can unlink one account, or every account of a provider. The account goes back to a temporary, expired password and keeps everything it held. Turning a provider off unlinks nothing (§7.7).
+- **The `admin` alert** (the same conversation). Optional: a system-wide setting an admin turns on, sent by email only, and only when outgoing email is set up (§7.5).
 
 **Calls (approved section by section; open to the owner's review of this spec):**
 
@@ -569,6 +619,8 @@ On the owner's server over HTTPS, with Healdan Helper 0.5.0 from its signed rele
 - provider sign-ins open their CE session through the chain with a one-time key, as M2's tokens do (§7.6);
 - Entra's group overage refused rather than looked up in Microsoft Graph (§8);
 - web sessions not re-checked; Sign Out doesn't sign out of the provider (§2.2, §9);
+- break glass: Healdan runs without the provider, an outage never revokes anything, and a provider turned off keeps its helpers' tokens without contacting it (§7.5, §9, §13);
+- a provider can be removed only once it has no linked accounts, and its links stay as history (§7.7, §10.3);
 - secrets encrypted at rest with a key in the configuration folder (§13);
 - the group map in its own table, the rest in `hd_setting` (§10, §12);
 - `UserSourceTest` guarding the stored numbers (§15.1);
