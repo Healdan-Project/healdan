@@ -9,7 +9,7 @@ weight: 4
 
 | Check | Workflow | What it does |
 |---|---|---|
-| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`) and for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
+| `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`) and for Oracle's and SQL Server's drivers (`check-database-drivers.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
 | `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`) and the helper's open-save-close cycle (its stack test) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
@@ -18,8 +18,8 @@ weight: 4
 
 `build` is the last of several jobs, so that the tests can run side by side:
 
-1. **`checks`** runs the icon, doc-link, hosts and Maven repository checks, reads the JDK from the `Dockerfile`,
-   and plans the test shards with `.github/scripts/test-shards.py`.
+1. **`checks`** runs the icon, doc-link, hosts, Maven repository and database driver checks, reads the JDK from
+   the `Dockerfile`, and plans the test shards with `.github/scripts/test-shards.py`.
 2. **`Tests (1 of N)` … `Tests (N of N)`** each compile every module except the WAR, without the GWT compile, the
    javadoc or the plugin zips (the Docker build makes all of those), then run their share of the tests.
 3. **`build`** passes when `checks` and every shard passed. It's the check `master` requires.
@@ -157,9 +157,15 @@ accepted.
   `python3 import-artifact.py --verify https://maven.healdan.com/` passes. One whose licence doesn't allow hosting
   it is dropped from the build instead, as JAI was. A missing `com.logicaldoc:*` artifact is never imported: it
   means a module or version was left behind, so bump it.
+- **Oracle and SQL Server.** Healdan supports only open-source databases, so the WAR ships neither driver and the
+  setup wizard doesn't offer them. `.github/scripts/check-database-drivers.py` runs after the Maven repository
+  check and fails `build` on a POM dependency on Oracle's or SQL Server's JDBC driver, or on a tracked file naming
+  one of their driver classes, as the wizard's database list did, naming the file and line. It skips tests, prose
+  and the docs site. When a sync brings one in, take it out in the sync PR. CE's `isOracle()` and `isSQLServer()`
+  code paths and upstream's `.oracle` and `.mssql` SQL variants stay, and the check leaves them alone.
 - **Broken POMs.** Upstream sometimes ships a POM that fails Maven's validation, such as a duplicate dependency. If
-  CI fails within a minute, check the POMs, the icon check, the doc-links check, the hosts check and the Maven
-  repository check first.
+  CI fails within a minute, check the POMs, the icon check, the doc-links check, the hosts check, the Maven
+  repository check and the database driver check first.
 
 ## Publishing the Image
 

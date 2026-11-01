@@ -58,6 +58,10 @@ jobs:
       - name: Check Maven repositories
         run: python3 .github/scripts/check-maven-repositories.py
 
+      # Healdan supports only open-source databases; a sync can bring Oracle's or SQL Server's driver back
+      - name: Check for Oracle and SQL Server drivers
+        run: python3 .github/scripts/check-database-drivers.py
+
       # The Dockerfile's images name the JDK, so this build and the Docker image's run the same one.
       - name: JDK version (from the Dockerfile)
         id: jdk
