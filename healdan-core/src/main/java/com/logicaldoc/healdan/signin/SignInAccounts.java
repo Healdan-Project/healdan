@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.signin;
 
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -20,7 +21,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
@@ -28,6 +32,7 @@ import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserSource;
 import com.logicaldoc.healdan.signin.GroupSync.Change;
 import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
 
@@ -52,6 +57,12 @@ import com.logicaldoc.util.spring.Context;
  * refuses is taken out of every mapped group, so nothing it held through the
  * map stays (spec section 7.2, step 2). And a link whose account was deleted is
  * closed first, as it records only that (controller's ruling R8(b)).
+ * <p>
+ * Making an account a provider account, by linking it or by finding a linked
+ * one with another source or a password, deletes its LogicalDOC API keys, and
+ * once the transaction commits closes the CE sessions they opened (owner,
+ * 2026-11-01): a key signs in with no password, so it would skip the provider.
+ * CE's {@code HealdanThrottle} refuses any key made for it afterwards.
  * <p>
  * Every link, new account and membership change is logged at info, after the
  * transaction commits, with the provider, the account's username and the
@@ -269,13 +280,17 @@ public class SignInAccounts {
 
 		// Reads first, then the account's changes, then its store: no flush may write them before CE's listeners see them
 		List<Change> changes = GroupSync.changes(user, map, granted);
-		boolean wasProvider = isProviderAccount(user) && user.getImpersonators().isEmpty();
+		boolean converting = !isProviderAccount(user);
+		boolean wasProvider = !converting && user.getImpersonators().isEmpty();
 		boolean changed = followProvider(user, claims);
 		if (!wasProvider)
 			journal.warn("The account {}, linked to the sign-in provider {}, had a password, impersonators or another "
 					+ "source; it's a provider account again", printable(user.getUsername()), p.id());
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
+		// It wasn't a provider account, so its keys may have signed it in
+		if (converting)
+			deleteApiKeys(user, p, journal);
 		journal.changes(p, user, changes);
 
 		link.setLastSignIn(new Date());
@@ -301,6 +316,7 @@ public class SignInAccounts {
 
 		journal.info("Linked the account {} to the sign-in provider {}, by its email", printable(user.getUsername()),
 				p.id());
+		deleteApiKeys(user, p, journal);
 		if (hadImpersonators)
 			journal.info("The account {} no longer lets other accounts impersonate it, as it's a provider account",
 					printable(user.getUsername()));
@@ -368,11 +384,88 @@ public class SignInAccounts {
 		}
 
 		List<Change> changes = GroupSync.changes(user, map, granted);
+		boolean converting = !isProviderAccount(user);
 		boolean changed = followProvider(user, claims);
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
+		if (converting)
+			deleteApiKeys(user, p, journal);
 		journal.changes(p, user, changes);
 		return true;
+	}
+
+	/**
+	 * Deletes the account's LogicalDOC API keys, as it's a provider account
+	 * from now on (owner, 2026-11-01), the way CE's own user delete does. Every
+	 * row goes, the ones deleted in the web page included, which CE keeps
+	 * marked deleted; the line logged counts the others, the ones its API Keys
+	 * screen listed. Never a key: {@code ld_apikey} holds only their SHA-256.
+	 * <p>
+	 * Once the transaction commits, the open CE sessions the keys opened are
+	 * closed too, as CE's {@code X-API-KEY} lookup finds a session by its key's
+	 * hash ({@code SessionManager.getSessionFromApiKey}) and would go on
+	 * finding them after the keys went.
+	 */
+	private static void deleteApiKeys(User user, SignInProvider p, Journal journal) throws PersistenceException {
+		ApiKeyDAO keys = ApiKeyDAO.get();
+		Map<String, Object> account = Map.of("userId", user.getId());
+		List<String> hashes = keys.queryForList("select ld_key from ld_apikey where ld_userid = :userId", account,
+				String.class, null);
+		if (hashes.isEmpty())
+			return;
+		int listed = keys.queryForInt("select count(*) from ld_apikey where ld_userid = :userId and ld_deleted = 0",
+				account);
+		keys.jdbcUpdate("delete from ld_apikey where ld_userid = :userId", account);
+
+		String username = printable(user.getUsername());
+		if (listed > 0)
+			journal.info("Deleted the {} LogicalDOC API {} of the account {}, as it signs in through the sign-in "
+					+ "provider {}", listed, listed == 1 ? "key" : "keys", username, p.id());
+		Set<String> deleted = Set.copyOf(hashes);
+		journal.afterCommit(() -> closeKeySessions(deleted, username));
+	}
+
+	/**
+	 * Closes this node's open CE sessions that one of the keys opened. CE's
+	 * pool keeps each session's key as it was given, so a session is matched
+	 * by the part before an impersonation's {@code >}, as CE's chain reads it:
+	 * {@code <key>>bob} opens a session as {@code bob} with the key's owner as
+	 * the impersonator. Only the sessions in this node's pool can be found
+	 * from a key. It never throws: a failure here is logged, and the
+	 * decision, already committed, stands.
+	 */
+	private static void closeKeySessions(Set<String> hashes, String username) {
+		try {
+			SessionManager sessions = SessionManager.get();
+			List<String> sids;
+			// newSession holds this lock while it signs in, so a key sign-in that read its key before the commit has its
+			// session in the pool by now, and one that starts later finds the key gone. Healdan never decides a sign-in
+			// inside newSession, so the identity's lock, held here, is never taken the other way round.
+			synchronized (sessions) {
+				sids = sessions.getSessions().stream().filter(s -> s.isOpen() && openedWith(s, hashes))
+						.map(Session::getSid).toList();
+				sids.forEach(sessions::kill);
+			}
+			if (!sids.isEmpty())
+				log.info("Closed {} {} opened with the deleted API keys of the account {}", sids.size(),
+						sids.size() == 1 ? "session" : "sessions", username);
+		} catch (RuntimeException e) {
+			log.warn("Couldn't close the sessions opened with the deleted API keys of the account {}; an "
+					+ "administrator can kill them in the Sessions list", username, e);
+		}
+	}
+
+	private static boolean openedWith(Session session, Set<String> hashes) {
+		String key = session.getDecodedKey();
+		if (key == null)
+			return hashes.contains(session.getKey());
+		if (key.contains(">"))
+			key = StringUtils.substringBefore(key, ">").trim();
+		try {
+			return hashes.contains(Encrypter.encryptSHA256(key));
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	/** Marks a link whose account is gone unlinked now, by nobody */
@@ -667,7 +760,8 @@ public class SignInAccounts {
 	}
 
 	/**
-	 * The log lines of one attempt, written once it commits
+	 * The log lines of one attempt, written once it commits, and what it does
+	 * after the commit
 	 */
 	private static final class Journal {
 
@@ -679,6 +773,11 @@ public class SignInAccounts {
 
 		void warn(String format, Object... arguments) {
 			lines.add(() -> log.warn(format, arguments));
+		}
+
+		/** Something to do once the attempt commits, in its place among the lines, which must not throw */
+		void afterCommit(Runnable action) {
+			lines.add(action);
 		}
 
 		void changes(SignInProvider p, User user, List<Change> changes) {

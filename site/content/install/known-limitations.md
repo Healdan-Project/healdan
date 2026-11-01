@@ -15,6 +15,10 @@ weight: 10
   API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
   change. Sessions already open in the web page or with a key stay open until an administrator kills them. See
   [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
+- **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider, such as
+  Microsoft Entra ID, never signs in with an API key, on any route, as the key would skip the provider. Linking an
+  account to a provider deletes the API keys it had and closes the sessions they opened. The web page still lets a
+  provider account make a key, under the person icon, **Security → API Keys**, but that key never signs in.
 - **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
   Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
   helper for Ubuntu comes next. Windows comes later.

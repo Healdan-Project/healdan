@@ -378,6 +378,9 @@ bar, in **Security → API Keys**.
 They're LogicalDOC's older services. They speak LogicalDOC's words, so a Store is a workspace there, and an API key
 never expires and survives a password change. New clients use `/api`, which doesn't take API keys.
 
+An account that signs in through a provider can't use an API key at all: linking it deletes the keys it had, and a
+key it makes afterwards in the web page is refused on every route.
+
 **A device token isn't an API key.** It works only under `/api`. LogicalDOC's services refuse it however it's sent:
 to `/services/rest/auth/loginApiKey` or the SOAP service's `loginApiKey`, as `X-API-KEY` on any of their routes, or
 as the password or key of a Basic sign-in, which WebDAV and CMIS use. So a lost token can't be turned into an API

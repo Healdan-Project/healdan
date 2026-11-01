@@ -1425,6 +1425,7 @@ Expected: PASS.
 Each ruling made while building goes here with its task, and into the spec where it changes what the spec says.
 
 - **The helper's release is 0.6.0, not 0.5.0** (owner, 2026-11-01, relayed from the session planning what follows M4). M3.6 (PDFs in CoffeePDF) takes 0.5.0 and releases first. M4's helper is tagged `helper-v0.6.0`, with release candidates as `0.6.0-rcN`. Task 17, spec §2.1, §14 and §16.2 say so.
+- **CE API keys on provider accounts** (owner, 2026-11-01): "Delete on link, refuse". CE's `ld-` keys sign an account in with no password, so a key made before linking, or made afterwards in the web page, would sign a provider account in while skipping the provider and its re-check, against spec §2.3. Linking an account (and a sign-in or re-check that repairs a linked account with another source or a password) deletes its keys and, once committed, closes the CE sessions they opened. The fork-owned `HealdanThrottle` refuses a provider account's key on every route, uncounted, reading `<key>>bob` as CE does. Unlinked accounts, `admin` included, keep theirs; the web page can still make a key for a provider account, which never works. No new upstream edit. Added as Task 7b, with `ProviderApiKeysTest` (each route, the sessions, the counters, no key in a log line or refusal); spec §7.3, §15, §16.1 and §18, Known Limitations and the API page say so.
 
 ## Follow-ups
 
