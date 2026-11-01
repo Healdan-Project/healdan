@@ -20,6 +20,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
+import com.logicaldoc.core.security.authentication.DefaultAuthenticator;
 import com.logicaldoc.core.security.spring.LDDeferredSecurityContext;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.signin.IdClaims;
@@ -75,8 +76,9 @@ import jakarta.ws.rs.core.Response;
  * missing or wrong challenge or state, is {@code 400} with a page, and the
  * browser is sent nowhere. The sign-in then runs as the web page's does,
  * cookie included, with {@code offline_access} for a refresh token. Its
- * callback opens no CE session: it hands the helper's address a one-time code
- * ({@link OneTimeCodes}), which the helper exchanges at
+ * callback opens no CE session: it runs LogicalDOC's checks of the account,
+ * as {@code SignInAuthenticator} does, then hands the helper's address a
+ * one-time code ({@link OneTimeCodes}), which the helper exchanges at
  * {@code POST /v1/auth/tokens}. Its refusals go to the helper's address too,
  * as {@code error=<code>} with the helper's state; only a callback whose
  * sign-in is unknown, used or expired, which has no helper address, goes to
@@ -381,9 +383,18 @@ public class SignInResource {
 					false);
 		User user = ((Allowed) decision).user();
 
-		// The helper's session opens when it exchanges the code, so this browser gets none
-		if (helper != null)
+		// The helper's session opens when it exchanges the code, so this browser gets none. LogicalDOC's checks of
+		// the account run now, as SignInAuthenticator runs them, so a linked account the chain would refuse
+		// (disabled, expired, outside working hours, legals unconfirmed) is told so here, not given a code
+		if (helper != null) {
+			try {
+				com.logicaldoc.util.spring.Context.get(DefaultAuthenticator.class).validateUser(user);
+			} catch (AuthenticationException e) {
+				return refused(address, helper, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in would refuse "
+						+ "the account " + quote(user.getUsername()) + " (" + e.getClass().getSimpleName() + ")", false);
+			}
 			return handToHelper(helper, user, id, tokens.refreshToken());
+		}
 
 		Session session;
 		try {

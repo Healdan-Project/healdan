@@ -340,6 +340,19 @@ public class HelperSignInTest extends ApiTestCase {
 		jdbc().update("update ld_user set ld_enabled = 1 where ld_id = ?", jane.getId());
 		UserDAO.get().evict(jane.getId());
 
+		// A linked account that LogicalDOC's sign-in would refuse: the helper hears why, and gets no code
+		code(LOOPBACK);
+		assertEquals(jane.getId(), SignInIdentityDAO.get().findLinked("fake", "o-1001").orElseThrow().getUserId());
+		jdbc().update("update ld_user set ld_enabled = 0 where ld_id = ?", jane.getId());
+		UserDAO.get().evict(jane.getId());
+		assertLinkedAccountRefused();
+		jdbc().update("update ld_user set ld_enabled = 1, ld_expire = ? where ld_id = ?",
+				new java.util.Date(System.currentTimeMillis() - 86_400_000L), jane.getId());
+		UserDAO.get().evict(jane.getId());
+		assertLinkedAccountRefused();
+		jdbc().update("update ld_user set ld_expire = null where ld_id = ?", jane.getId());
+		UserDAO.get().evict(jane.getId());
+
 		// The provider says no
 		Started denied = startHelper(LOOPBACK, STATE);
 		assertHelperRefused("provider", get("/api/signin/fake/callback?error=access_denied&state=" + denied.state())
@@ -597,6 +610,28 @@ public class HelperSignInTest extends ApiTestCase {
 		assertEquals(response.toString(), 302, response.status());
 		assertEquals(response.toString(), LOOPBACK + "?error=" + code + "&state=" + STATE, response.header("Location"));
 		assertNull(setCookie(response, "ldoc-sid"));
+	}
+
+	/**
+	 * A helper's sign-in for jane, linked, is refused as {@code account} at the
+	 * helper's address: no code, no session, no token, and no link or account
+	 * made
+	 */
+	private void assertLinkedAccountRefused() throws Exception {
+		int codes = SignInTestHooks.codesKept();
+		int links = jdbc().queryForObject("select count(*) from hd_signin_identity", Integer.class);
+		int users = jdbc().queryForObject("select count(*) from ld_user", Integer.class);
+
+		assertHelperRefused("account", signInInBrowser(LOOPBACK));
+
+		assertEquals("no code was issued", codes, SignInTestHooks.codesKept());
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+		assertEquals(0, ApiTokens.get().list(jane.getId()).size());
+		assertEquals(Integer.valueOf(links),
+				jdbc().queryForObject("select count(*) from hd_signin_identity", Integer.class));
+		assertEquals(Integer.valueOf(users), jdbc().queryForObject("select count(*) from ld_user", Integer.class));
+		// Still linked to jane: a refusal unlinks nothing
+		assertEquals(jane.getId(), SignInIdentityDAO.get().findLinked("fake", "o-1001").orElseThrow().getUserId());
 	}
 
 	/** A plain page, and no redirect anywhere */

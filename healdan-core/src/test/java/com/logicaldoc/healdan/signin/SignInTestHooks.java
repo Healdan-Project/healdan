@@ -49,6 +49,15 @@ public final class SignInTestHooks {
 	}
 
 	/**
+	 * @return how many of the helper's one-time codes are kept, expired ones
+	 *         included until the next is issued, so a test can tell that none
+	 *         was issued
+	 */
+	public static int codesKept() {
+		return OneTimeCodes.get().size();
+	}
+
+	/**
 	 * @param state a sign-in's state
 	 * @return the pending sign-in kept for it, left in place, so a test knows
 	 *         its nonce and verifier
