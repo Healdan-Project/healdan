@@ -2,7 +2,7 @@
 
 - **Milestone:** M3.6 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner section by section on 2026-11-01, and this written spec approved by the owner the same day. The implementation plan follows in `docs/superpowers/plans/`.
+- **Status:** design agreed with the owner section by section on 2026-11-01, and this written spec approved by the owner the same day. Implementation plan: [`docs/superpowers/plans/2026-11-01-m3-6-pdfs-in-coffeepdf.md`](../plans/2026-11-01-m3-6-pdfs-in-coffeepdf.md), awaiting the owner's approval; its "Spec corrections and calls" section lists where it departs from this spec.
 - **Inputs:**
   - CoffeePDF's v1 design spec ([`docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md`](https://github.com/coffeemuse/CoffeePDF/blob/main/docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md) in `coffeemuse/CoffeePDF`), above all §4.4, the list of Healdan's changes that this milestone builds, §2.5, the acceptance it must make possible, §5 and §6, and §16's "For Healdan's milestone (Phase 3) and the acceptance (Phase 4)";
   - CoffeePDF's code at `5280c58`: `ChannelRoutes`, `CopyLock`, `AtomicFile` and `Settings/`;
