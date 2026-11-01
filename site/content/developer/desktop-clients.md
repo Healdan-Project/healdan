@@ -95,7 +95,11 @@ size the helper uses, the widths then match CoreText's.
   - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens
     the files it opens (`OfficePrograms`), and it opens them through `IOfficeScripting`, the one seam for everything
     the helper does to a document in Word, Excel and PowerPoint. Nothing above the seam knows how the programs are
-    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow. Its scripts find a
+    driven: `MacOfficeScripting` runs AppleScript with `osascript`, and a Windows one may follow. It hands a program a
+    file with `open -a`, as a double click does, so the file's access comes with it: Word's own open by path met Grant
+    File Access for any copy whose name Word hadn't written itself, and its panel takes no folder. Before a program's
+    first script since the helper started, its `Ask` script waits up to 300 s, as macOS may first ask whether the
+    helper may control it, and every other script but those that meet Grant File Access gives up after 20 s. Its scripts find a
     document by its exact path, then by its file name only in `Copies`, then by the add-in's mark or its window's
     name. Word's scripting names a document by its name, so of two open documents with one name (a copy in `Copies`
     and one set aside beside it) it reaches only one: the scripts refuse a name two open documents share, and
@@ -146,17 +150,23 @@ size the helper uses, the widths then match CoreText's.
 - **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
   or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
   nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
-  (`CloseWatcher.WatchCrashed`): once its owner file is written again, as when Word restores its "Recovered" window
-  at the copy's path, the close watcher lets go of it, and the helper looks for the copy by its path
-  (`IsOpenAsync`, which never takes the front window) for up to 30 seconds. Only once it's found is the window saved
-  over the copy (`SaveAsAsync`), and the folder watcher sends it. The copy stays crashed until that works, and is
-  looked for again after a miss or a failure. Then the crash window closes itself (`IWindows.DismissCrashed`), and its
-  Send and Check In and Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document
-  once it's renamed: a copy that's open again is brought up, never checked in. Send and Check In is refused from the
-  moment the owner file comes back, and while the save-back looks for the window or saves it, as Word takes its owner
-  file away during the save (`CopyCycle.IsOpenAgain`). Once the save-back has given up, it's refused only while the
-  owner file is there, so a window closed before it was found doesn't strand the copy. The crash window's Reopen
-  leaves the watch in place.
+  (`CloseWatcher.WatchCrashed`): once its program's process runs again, or its owner file is written again, the close
+  watcher lets go of it, and the helper looks for the copy by its path (`IsOpenAsync`, which never takes the front
+  window) for up to 30 seconds, as Word restores its "Recovered" window at the copy's path. Word 16.114 does so without
+  writing the owner file the crash left again, which the trial's Word did. Only once it's found is the window saved
+  over the copy (`SaveAsAsync`), and the folder watcher sends it. The copy stays crashed until that works. A failure is
+  tried again at the next look; a miss when the program restarts or writes its owner file, and while it runs only after
+  another 30 seconds. Then the crash window closes itself (`IWindows.DismissCrashed`), and its Send and Check In and
+  Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document once it's renamed: a
+  copy that's open again is brought up, never checked in. Send and Check In is refused once the owner file comes back,
+  or the window is found, and while the save-back looks after the owner file came back or saves the window, as Word
+  takes its owner file away during the save (`CopyCycle.IsOpenAgain`); the program merely running doesn't refuse it.
+  Once the save-back has given up, it's refused only while the owner file is there, so a window closed before it was
+  found doesn't strand the copy. Reopen, Open from Healdan and a link on a crashed Office copy start its program
+  without a file (`IOfficeScripting.StartAsync`), which restores what it recovered: handed the file, Word opened it
+  again beside its recovered window. The save-back looks at once, for the whole 30 seconds if the program had to
+  start, or for two process checks if it was running, and if it doesn't find the copy, the copy is opened as last
+  saved.
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,
   and then takes it on again knowing whether the owner file is there.
@@ -300,7 +310,9 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
   runs the function a button names (`saveToHealdan` and the rest, the manifest's names). Each is defined on `window` and
   with `Office.actions.associate` once Office is ready, runs its flow, and calls `event.completed()` once, whatever
   happens: after the flow has finished and, if it opened a window, after the window has closed (Office reports that as
-  a `DialogEventReceived`), so that the button's page is still there to hear the window.
+  a `DialogEventReceived`), so that the button's page is still there to hear the window. It never waits past four and
+  a half minutes (`PRESS_LIMIT`), as Office ends a button's function after about five with an error of its own, nor
+  more than 15 seconds for Office to answer for the window (`WINDOW_WAIT`): in the owner's walkthrough none came.
 - **`web/taskpane.html`, `taskpane.js` and `healdan.css`** are the pane and the message window, in the helper's look.
   The manifest declares no shared runtime, so a button can't open the pane. A button with something to tell opens
   `taskpane.html?message=<code>&app=<app>` through `Office.context.ui.displayDialogAsync` instead, and the page shows
@@ -398,7 +410,9 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   URL. The helper uses it only when it names one of its copies, and otherwise takes the app's front window
   (`OfficeFiling.CopyForAsync`).
 - **`save-new` and `file`** are Save to Healdan from Office (`OfficeFiling`): `save-new` takes the front window as it
-  arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes. The document routes are made anew
+  arrives and answers a `ticket` for it, which `file` uses once, within 10 minutes. On a window that's already one of
+  the helper's copies, Save to Healdan is what the extension's is: the helper saves a copy that can be saved, as ⌘S
+  does, and answers `{"action": "saved"}`, and a read-only copy goes to Save as New Document. The document routes are made anew
   at each start (`AddinDocuments`), so a ticket from before a sign-out is `409 no-ticket` after it, whichever server the
   helper signs in to next.
 - **Nothing typed while filing is lost:** once the user clicks Save in the Save window, `save-new` fingerprints the
@@ -551,7 +565,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **The helper's core** has tests for each part, the cycle's failure cases included, against a fake server
   (`FakeApi`) and a fake LibreOffice that writes files and lock files (`FakeApp`). A fake `IOfficeScripting`
   (`FakeScripting`) stands in for Word, Excel and PowerPoint, with their owner files, and renames, saves and reopens
-  copies as they do. `OfficeRenameTests` and `OfficeCrashTests` run the cycle over it.
+  copies as they do. Its `Recover` is Word's in the owner's walkthrough, which left the owner file the crash left as it
+  was, and `RecoverWritingTheOwnerFile` the trial's. `OfficeRenameTests` and `OfficeCrashTests` run the cycle over it.
 - **The cycle's tests wait for what they need,** not for a fixed time, so a slow runner can't change what they see.
   `Wait.Until` polls for it (a confirmation, a save reaching `FakeApi`, or one queued, through the internal
   `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`
@@ -598,8 +613,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   - `office-glue.test.js` covers `web/office-glue.js` against a fake Office.js that logs what it's asked: the slices
     and their base64, the mark in Word and Excel and none in PowerPoint, and Insert Doc ID's property and field.
   - `commands.test.js` covers `web/commands.js`: the function names against the manifest's, `event.completed()` once
-    however a press ends and not before the message window closes, the window's address, the detail sent to it and the
-    key taken from it, and the busy note.
+    however a press ends and not before the message window closes, unless Office never answers for the window or the
+    press reaches its limit, the window's address, the detail sent to it and the key taken from it, and the busy note.
   - `taskpane.test.js` covers `web/taskpane.js` on a fake page made from the real `taskpane.html`: pairing, the status,
     a slow helper, and the messages. They also fail on an inline script or an id the script asks for and the page
     lacks.

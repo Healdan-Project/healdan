@@ -22,6 +22,11 @@ weight: 10
   Mac, as before; use Save to Healdan to file it.
 - **Word for the web isn't supported.** The Healdan tab's buttons need the helper on the Mac, which a web browser
   can't reach, so they say they work in the desktop apps only.
+- **The Healdan tab needs Healdan.** Office loads the tab's buttons from the Healdan server, so while it can't be
+  reached, a button shows Office's own "Sorry, we can't load the add-in". **⌘S** on a Healdan document still saves it
+  on the Mac, and the helper sends it once Healdan is back.
+- **A Healdan button stops after about five minutes.** Office ends any add-in button still running by then, so a Save
+  to Healdan window left open that long may file nothing. Press Save to Healdan again.
 - **OpenDocument files open in LibreOffice.** A Word, Excel or PowerPoint window that holds an OpenDocument file
   (`.odt`, `.ods`, `.odp`) has its Healdan tab turned off by Office, and Excel and PowerPoint for Mac can't save in
   those formats. So the helper opens OpenDocument files in LibreOffice whichever app a kind of file is set to, while
@@ -30,10 +35,11 @@ weight: 10
   them, and ask for access to the helper's `Copies` folder, where the folder chooser opens inside `Copies` with
   Grant Access greyed out, so the person goes up one level and selects `Copies`. See
   [Installing the Healdan Helper](../../user/office/installing-the-helper/#the-prompts-to-expect).
-- **Open Recent keeps entries for old copies.** The helper keeps what it can off Open Recent: Word's lists none of
-  the copies, and Excel's lists a workbook as it was opened but not the names it takes as you save. PowerPoint offers no
-  control, so it lists each presentation opened. An entry for a copy that's gone can't be removed by the helper, and
-  choosing it fails: Word says "user does not have access privileges". Open the document from Healdan instead.
+- **Open Recent keeps entries for old copies.** Word, Excel and PowerPoint list each document opened from Healdan, as
+  it was opened: the helper hands them the file as a double click does, as Word's own open met Grant File Access for
+  every new copy. The names Word's and Excel's copies take as you save stay off the list. An entry for a copy that's
+  gone can't be removed by the helper, and choosing it fails: Word says "user does not have access privileges". Open
+  the document from Healdan instead.
 - **The extension is installed by a click.** On macOS, LibreOffice's command-line installer can't install Healdan's
   extension, so the helper opens it in LibreOffice for the person to accept: the first time, and whenever a new
   version of the helper brings a newer extension.

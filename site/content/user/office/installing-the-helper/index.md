@@ -195,7 +195,7 @@ Each of these comes once.
 | After your first sign-in | LibreOffice: install the extension Healdan? | **OK**, then restart LibreOffice |
 | After your first sign-in, with Word, Excel or PowerPoint installed | The helper's Set Up Microsoft Office window, and when you choose Set Up, macOS asking for your password to change your certificate trust settings | **Set Up**, then your password: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
 | The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan window: see [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint) |
-| The first time the helper saves in each of Word, Excel and PowerPoint | macOS: allow Healdan Helper to control the app? | **Allow** |
+| The first time the helper works in each of Word, Excel and PowerPoint, as at your first Save to Healdan | macOS: allow Healdan Helper to control the app? | **Allow**. The helper waits up to five minutes for your answer |
 | The first time each of them saves into the helper's `Copies` folder | The app: grant access to the folder | **Select…**, up one level, `Copies`, **Grant Access** |
 | The first Open in App from each browser | The browser: allow this page to open Healdan Helper? | **Allow**. Ticking the box to remember it saves asking again |
 

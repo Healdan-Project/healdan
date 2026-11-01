@@ -127,6 +127,8 @@ same window opens, and works as above, apart from these:
 - **Anything you type while it's filing** isn't lost: the helper sends it to Healdan as the next version, `v1.1`.
 - **Save as New Document,** on the same tab, files a Healdan document's window as a new document in the same way: see
   [Editing and Versions](../editing-and-versions/#save-as-new-document).
+- **On a document that's already in Healdan,** Save to Healdan saves it, as **⌘S** does, and the save goes up as the
+  next version. On a read-only copy, it opens the Save as New Document window instead.
 
 ### The First Save in Each App
 

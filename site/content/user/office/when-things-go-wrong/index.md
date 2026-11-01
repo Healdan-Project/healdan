@@ -18,7 +18,9 @@ You're offline, or the server is down, when you save.
 - **Restarting is safe.** If your Mac restarts first, the helper finds the waiting saves when it starts again and
   sends them.
 
-Opening a document needs Healdan, so that has to wait.
+Opening a document needs Healdan, so that has to wait. So do the Healdan tab's buttons in Word, Excel and PowerPoint,
+which Office loads from Healdan: until it's back, they show Office's own "Sorry, we can't load the add-in". **⌘S**
+still saves a Healdan document, as above.
 
 ## The Helper Isn't Running
 
@@ -119,7 +121,8 @@ that was never saved. You don't need to:
 - **The helper saves it back by itself,** over your local copy, once Word has it open again, and sends it to Healdan
   as your next save. The crash window then goes by itself, the title moves on, and you carry on as before.
 - **Until then, Reopen,** in the crash window, starts Word, which brings the recovered document back, and the helper
-  saves it in the same way.
+  saves it in the same way. Opening the document from Healdan does the same. If Word brings nothing back, as when it
+  hadn't kept what you'd typed yet, your local copy opens as you last saved it.
 - **Before Word has it open again, Send and Check In** sends what you last saved, and checks the document in. From
   the moment Word has it open again, even before the helper has saved it back, Send and Check In doesn't check it in
   under its open window, and says so: close the window, and that checks it in.

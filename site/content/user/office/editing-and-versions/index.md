@@ -98,9 +98,9 @@ Healdan, and **Don't Save** leaves Healdan at your last save.
   is simply released.
 - **Then it deletes the local copy,** once Healdan has confirmed it, and the document leaves the helper's menu.
 - **LibreOffice's Recent Documents** doesn't list Healdan's copies. To reopen a document, open it from Healdan.
-- **Word's Open Recent** doesn't list them either. Excel's and PowerPoint's list each document you open from Healdan,
-  though not the names Excel's copies take as you save. An entry for a copy that's gone can't be opened, and the helper
-  can't remove it: open the document from Healdan instead.
+- **Word's, Excel's and PowerPoint's Open Recent** list each document you open from Healdan, though not the names
+  Word's and Excel's copies take as you save. An entry for a copy that's gone can't be opened, and the helper can't
+  remove it: open the document from Healdan instead.
 
 ## The Local Copies
 
