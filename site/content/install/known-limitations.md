@@ -31,6 +31,12 @@ weight: 10
   (`.odt`, `.ods`, `.odp`) has its Healdan tab turned off by Office, and Excel and PowerPoint for Mac can't save in
   those formats. So the helper opens OpenDocument files in LibreOffice whichever app a kind of file is set to, while
   LibreOffice is installed, and a document filed from Word, Excel or PowerPoint is filed in the app's own format.
+- **Word turns the Healdan tab off on a read-only copy.** Word turns its whole ribbon off for a document it opens
+  read-only, so changes to someone else's checked-out document are filed by saving Word's Duplicate in a folder of
+  your own, then pressing Save to Healdan on it: see
+  [Read-Only Copies](../../user/office/opening-documents/#read-only-copies). Excel and PowerPoint keep the tab on.
+  Word, Excel and PowerPoint also leave no sign that a read-only copy's window has closed, so the helper deletes the
+  copy when the app quits.
 - **Each Office app asks for permission once.** Word, Excel and PowerPoint each ask macOS to let Healdan Helper control
   them, and ask for access to the helper's `Copies` folder, where the folder chooser opens inside `Copies` with
   Grant Access greyed out, so the person goes up one level and selects `Copies`. See
