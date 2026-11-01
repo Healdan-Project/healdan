@@ -568,17 +568,24 @@ public sealed class CopyCycle : IDisposable
     {
         Session? s;
         string? holdBy;
+        var ended = false;
         lock (_gate)
         {
             s = Find(path);
             holdBy = s?.HoldBy;
+            ended = s?.Ended == true;
             if (s is not null)
                 path = s.Path;
         }
         var record = Record(path);
         if (record is null)
             return CopyState.Unknown(path);
-        return StateOf(path, record, holdBy) with { Pending = pending ?? (s is not null && PendingOf(s)) };
+        var state = StateOf(path, record, holdBy);
+        return state with
+        {
+            Pending = pending ?? (s is not null && PendingOf(s)),
+            SavesStopped = state.SavesStopped || (!record.ReadOnly && ended)
+        };
     }
 
     /// <summary>
@@ -2062,7 +2069,8 @@ public sealed class CopyCycle : IDisposable
     }
 
     private static CopyState StateOf(string path, CopyRecord r, string? holdBy) =>
-        new(true, r.DocNumber, Title(r), CopyNames.DocRef(r.DocNumber, r.FileVersion), r.ReadOnly, path, holdBy);
+        new(true, r.DocNumber, Title(r), CopyNames.DocRef(r.DocNumber, r.FileVersion), r.ReadOnly, path, holdBy,
+            SavesStopped: !r.ReadOnly && !r.CheckedOutHere);
 
     private static string Title(CopyRecord r) => CopyNames.Title(r.DocumentName, r.DocNumber, r.FileVersion, r.ReadOnly);
 

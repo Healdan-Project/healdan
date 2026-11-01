@@ -54,8 +54,8 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
                     cycle.MarkNextVersion(next);
                 return new JsonObject();
             case "closed":
-                if (Copy(body, route) is { } closed)
-                    await cycle.ClosedAsync(closed);
+                if (Copy(body, route) is { } closed && !await cycle.ClosedAsync(closed))
+                    log.Info("Ignored /v1/closed for a copy Healdan Helper isn't looking after");
                 return new JsonObject();
             case "adopted":
                 // Save to Healdan's window has just been saved as the new document's copy: its starting point.
@@ -92,9 +92,13 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
                 log.Warn("Save as New Document named an original that isn't a local copy; it's left alone");
                 replaces = null;
             }
+            var named = Optional(body, "app");
+            var app = cycle.Apps.Filing(named);
+            if (named is not null && named != app.Name)
+                log.Warn($"/v1/file named an app the channel doesn't file for ({named}); filed as {app.Name}'s");
             try
             {
-                var state = await cycle.AdoptNewAsync(tempPath, new NewDocument(folderId, name, properties, true), replaces);
+                var state = await cycle.AdoptNewAsync(tempPath, new NewDocument(folderId, name, properties, true), replaces, app);
                 log.Info($"Filed {state.DocRef} from {(replaces is null ? "a new document" : "Save as New Document")}");
                 return Json(state);
             }
@@ -106,7 +110,7 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
                     ApiException { Status: 401 } => $"{name} wasn't filed: sign in to Healdan again, then save it once more.",
                     ApiException api => $"{name} couldn't be filed in Healdan: {api.Detail}",
                     FileNotFoundException or DirectoryNotFoundException or UnauthorizedAccessException =>
-                        $"{name} couldn't be filed: the copy LibreOffice wrote for it couldn't be read. It's still open, so save it again.",
+                        $"{name} couldn't be filed: the copy {app.Name} wrote for it couldn't be read. It's still open, so save it again.",
                     _ => $"{name} couldn't be filed in Healdan, which may be unreachable. It's still open, so save it again."
                 });
                 throw;
@@ -250,7 +254,11 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
         return null;
     }
 
-    /// <summary>A copy's state as the routes answer it (plan: the copy's state), or <c>{"known": false}</c>.</summary>
+    /// <summary>
+    /// A copy's state as the routes answer it (plan: the copy's state), or <c>{"known": false}</c>. <c>readOnly</c> is
+    /// also true for a copy whose saves have stopped going up (<see cref="CopyState.SavesStopped"/>), so an app that
+    /// can't save to Healdan shows it as read-only; the title stays the copy's own (M3.6 spec §6.3).
+    /// </summary>
     internal static JsonObject Json(CopyState s) => !s.Known
         ? new JsonObject { ["known"] = false }
         : new JsonObject
@@ -259,7 +267,7 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
             ["docNumber"] = s.DocNumber,
             ["title"] = s.Title,
             ["docRef"] = s.DocRef,
-            ["readOnly"] = s.ReadOnly,
+            ["readOnly"] = s.ReadOnly || s.SavesStopped,
             ["path"] = s.Path,
             ["holdBy"] = s.HoldBy,
             ["pending"] = s.Pending

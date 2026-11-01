@@ -297,6 +297,18 @@ A copy's state is `{"known": true, "docNumber", "title", "docRef", "readOnly", "
 `pending` is true while the copy has changes on their way to Healdan: a save queued, going up or waiting for the
 server, a Save as New Version still to go, or a write that hasn't settled.
 
+- **For CoffeePDF** ([coffeemuse/CoffeePDF](https://github.com/coffeemuse/CoffeePDF)): the routes and their shapes are
+  the extension's, and CoffeePDF's `ChannelRoutes` follows two meanings in them (M3.6 spec §6.5).
+  - **`/v1/file`'s `app`** names the app whose window is filed. `CoffeePDF` files the document as CoffeePDF's copy, so
+    the close watch and a restart look for its lock file; LibreOffice, anything else and no `app` file it as
+    LibreOffice's, and a name the channel doesn't file for is logged.
+  - **`readOnly` in a copy's state** is also true once the copy's saves have stopped going up: its check-out ended
+    here, or newer content was stored (`CopyState.SavesStopped`, which `ChannelHandler.Json` adds to `ReadOnly`). Its
+    `title` doesn't change. The helper's own windows still read the record's `ReadOnly`.
+- **`/v1/closed`** for a read-only copy in the default app deletes the copy, as that app has no session to say when its
+  window closes (a copy with unsent changes is kept). A path the helper has nothing to do with is logged and ignored,
+  and the answer is `{}` all the same.
+
 - **Following a save:** the extension calls `/v1/saved` after each save, and sets the title and footer from the
   answer. A confirmation answers only once nothing newer is on its way, so the title never stops a version behind.
   A save Healdan refuses for good, or one that fails, answers the same way.
