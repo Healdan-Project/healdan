@@ -25,6 +25,39 @@ public class CopyNamesTests
         Assert.Contains("~$Lease.docx", CopyNames.OfficeOwnerNames("📎aLease.docx"));
 
     [Fact]
+    public void AppFilesAreEveryAppsLockAndOwnerFiles()
+    {
+        const string name = "Signed NDA #7 v1.0.pdf";
+        var files = CopyNames.AppFiles(name).ToList();
+
+        Assert.Contains(".~lock.Signed NDA #7 v1.0.pdf#", files);
+        Assert.Contains(".~coffeepdf.Signed NDA #7 v1.0.pdf#", files);
+        Assert.All(CopyNames.OfficeOwnerNames(name), owner => Assert.Contains(owner, files));
+        Assert.Equal(files.Distinct(), files);
+        Assert.All(files, file => Assert.True(CopyNames.IsAppFile(file), file));
+    }
+
+    [Theory]
+    [InlineData(".~coffeepdf.Signed NDA #7 v1.0.pdf#", true)]
+    [InlineData(".coffeepdf-0123456789abcdef0123456789abcdef.tmp", true)]
+    [InlineData(".coffeepdf-0123456789ABCDEF0123456789ABCDEF.tmp", false)] // CoffeePDF's Guid "N" is lower case
+    [InlineData(".coffeepdf-0123456789abcdef.tmp", false)]
+    [InlineData(".coffeepdf-0123456789abcdef0123456789abcdef0.tmp", false)]
+    [InlineData(".coffeepdf-0123456789abcdef0123456789abcdef.pdf", false)]
+    [InlineData("coffeepdf-0123456789abcdef0123456789abcdef.tmp", false)]
+    [InlineData(".~coffeepdf.Signed NDA #7 v1.0.pdf", false)]
+    [InlineData("Signed NDA #7 v1.0.pdf", false)]
+    public void CoffeePdfsFilesAreAppFiles(string fileName, bool appFile) =>
+        Assert.Equal(appFile, CopyNames.IsAppFile(fileName));
+
+    [Fact]
+    public void CoffeePdfsLockFitsTheLongestCopyName()
+    {
+        var longest = CopyNames.FileName(new string('a', 400) + ".pdf", 123456, "12.34", readOnly: false);
+        Assert.True(Encoding.UTF8.GetByteCount(CopyNames.CoffeePdfLockName(longest)) <= 255);
+    }
+
+    [Fact]
     public void PlainName() =>
         Assert.Equal("Lease agreement #1234 v2.1.docx", CopyNames.FileName("Lease agreement.docx", 1234, "2.1", false));
 
