@@ -7,9 +7,10 @@ import java.util.Optional;
 /**
  * Lets a test set what {@link SignInProviders#httpAllowed()} reads, which in
  * production is the environment variable {@code HEALDAN_SIGNIN_ALLOW_HTTP},
- * and move the clocks {@link PendingSignIns} times sign-ins by and
- * {@link OneTimeCodes} times the helper's codes by. It lives in the
- * test sources, so it ships in the test-jar, which healdan-api's tests use.
+ * and move the clocks {@link PendingSignIns} times sign-ins by,
+ * {@link OneTimeCodes} times the helper's codes by and {@link ProviderRecheck}
+ * times its checks by. It lives in the test sources, so it ships in the
+ * test-jar, which healdan-api's tests use.
  * <p>
  * The settings are static, so a test that sets one must call {@link #reset}
  * when it ends (an {@code @After} method), or it leaks into the next test
@@ -49,6 +50,26 @@ public final class SignInTestHooks {
 	}
 
 	/**
+	 * Moves the clock the re-checks of device tokens with their providers are
+	 * timed by, as if that much time had passed, until {@link #reset}: the
+	 * interval since the last check, and the 15 minutes after a provider that
+	 * couldn't be reached. Each call moves it further.
+	 *
+	 * @param by how far to move it
+	 */
+	public static void passRecheckTime(Duration by) {
+		ProviderRecheck.clock = Clock.offset(ProviderRecheck.clock, by);
+	}
+
+	/**
+	 * @param tokenId a device token's id
+	 * @return true while a request is checking that token with its provider
+	 */
+	public static boolean rechecking(long tokenId) {
+		return ProviderRecheck.get().checking(tokenId);
+	}
+
+	/**
 	 * @return how many of the helper's one-time codes are kept, expired ones
 	 *         included until the next is issued, so a test can tell that none
 	 *         was issued
@@ -74,5 +95,6 @@ public final class SignInTestHooks {
 		SignInProviders.allowHttpSetting = SignInProviders.ENVIRONMENT;
 		PendingSignIns.clock = Clock.systemUTC();
 		OneTimeCodes.clock = Clock.systemUTC();
+		ProviderRecheck.clock = Clock.systemUTC();
 	}
 }

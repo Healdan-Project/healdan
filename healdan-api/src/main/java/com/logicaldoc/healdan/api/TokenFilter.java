@@ -17,6 +17,7 @@ import com.logicaldoc.core.security.authentication.AuthenticationException;
 import com.logicaldoc.core.security.spring.LDAuthenticationToken;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.signin.ProviderRecheck;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
 import com.logicaldoc.healdan.token.HealdanTokenAuthenticator;
@@ -36,7 +37,9 @@ import jakarta.ws.rs.core.Response;
  * Signs every API request in from its {@code Authorization: Bearer} device
  * token, unless the resource method is {@link Public} (spec section 5.3).
  * Nothing else signs a request in: no cookie, {@code sid}, Basic or
- * {@code X-API-KEY} (section 5.1).
+ * {@code X-API-KEY} (section 5.1). A token from a provider sign-in is checked
+ * back with its provider when that's due ({@link ProviderRecheck}, M4 spec
+ * section 9), before its session.
  * <p>
  * For the length of the request the caller is in {@link Caller}, and an
  * {@link LDAuthenticationToken} with the token's CE session is in
@@ -89,9 +92,18 @@ public class TokenFilter implements ContainerRequestFilter {
 			return;
 		}
 
+		// The provider's say-so (M4 spec section 9), before the session and never inside CE's newSession: a check
+		// that revokes the token closes its sessions, and nothing opens one for a revoked token
+		SessionManager sessions = SessionManager.get();
+		boolean reopening = bound(sessions, token, user) == null;
+		if (!ProviderRecheck.get().keep(token, reopening)) {
+			requestContext.abortWith(refused());
+			return;
+		}
+
 		Session session;
 		try {
-			session = session(presented, token, user);
+			session = session(presented, token, user, reopening);
 		} catch (AuthenticationException e) {
 			ApiProblem throttled = AuthResource.throttled(e);
 			requestContext.abortWith(throttled != null ? ProblemMapper.problem(throttled) : refused());
@@ -143,23 +155,39 @@ public class TokenFilter implements ContainerRequestFilter {
 	}
 
 	/**
+	 * @param checkedForReopening true if {@link ProviderRecheck#keep} was asked
+	 *        as for a session opened again
 	 * @return the CE session bound to the token, renewed, or a new one opened
 	 *         for the token and bound to it ({@link ApiTokens#openSession}),
-	 *         which CE's own routes can't find by the token
+	 *         which CE's own routes can't find by the token; null if the
+	 *         provider refused the token, now revoked
 	 * @throws AuthenticationException if CE's sign-in chain refuses the token
 	 */
-	private Session session(String presented, ApiToken token, User user) throws AuthenticationException {
+	private Session session(String presented, ApiToken token, User user, boolean checkedForReopening)
+			throws AuthenticationException {
 		SessionManager sessions = SessionManager.get();
-		String sid = token.getSid();
-		if (sid != null && sessions.isOpen(sid)) {
-			Session open = sessions.get(sid);
-			if (open != null && open.getUserId() == user.getId()) {
-				sessions.renew(sid);
-				return open;
-			}
+		Session open = bound(sessions, token, user);
+		if (open != null) {
+			sessions.renew(open.getSid());
+			return open;
 		}
 
+		// It closed since the provider was asked, so opening it again is checked as any reopening is
+		if (!checkedForReopening && !ProviderRecheck.get().keep(token, true))
+			return null;
 		return ApiTokens.get().openSession(presented, token, sessions.buildClient(servletRequest));
+	}
+
+	/**
+	 * @return the open CE session bound to the token, if it's the user's, or
+	 *         null
+	 */
+	private static Session bound(SessionManager sessions, ApiToken token, User user) {
+		String sid = token.getSid();
+		if (sid == null || !sessions.isOpen(sid))
+			return null;
+		Session open = sessions.get(sid);
+		return open != null && open.getUserId() == user.getId() ? open : null;
 	}
 
 	/**
