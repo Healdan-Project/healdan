@@ -201,6 +201,10 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
    `xcrun stapler validate` has found the disk image's notarisation ticket. It's the only job with write access to
    the repository, and it sees no signing secret.
 
+`package.sh` tries `hdiutil` and each staple three times, as both have failed for a moment on CI's runners (a stapler
+lost its connection to Apple on 0.4.0-rc3). A run that still fails can be run again with "Re-run failed jobs", which
+builds, signs and notarises from the start.
+
 Actions → Clients → Run workflow packages any branch or tag by hand, under a version you give or
 `0.0.0-dev.<run>`, and attaches nothing to a release. Only a `helper-v*` tag's run is signed: a branch's is built
 unsigned.

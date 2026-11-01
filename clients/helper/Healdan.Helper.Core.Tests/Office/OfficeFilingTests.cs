@@ -245,7 +245,8 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
 
         var state = await filing.FileAsync(await TicketAsync(filing), Mark, Bytes("the bytes"));
 
-        Assert.Equal("Memo #100 v1.0", state.Title);
+        // The answer is the copy as it is by then, and the edit may have gone up already (macOS's runner was that quick).
+        Assert.Contains(state.Title, new[] { "Memo #100 v1.0", "Memo #100 v1.1" });
         await Wait.Until(() => Server.Doc(100).Content == "the bytes, and a line typed while filing", "the copy sent as a save");
         var save = Assert.Single(Server.Saves);
         Assert.Equal(("snapshot", "1.0"), (save.Kind, save.IfVersion));
