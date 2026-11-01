@@ -67,7 +67,7 @@ public class ProfileView {
 	 *
 	 * @param name the attribute's name
 	 * @param label its label, the name when it has none
-	 * @param type CE's attribute type ({@code Attribute.TYPE_*})
+	 * @param type CE's attribute type
 	 * @param required whether it must have a value
 	 * @param editable false for client, matter, the email fields and read-only
 	 *        attributes
@@ -79,8 +79,8 @@ public class ProfileView {
 	 * @param options the values to pick from, in order; null for a field that
 	 *        isn't picked from a list
 	 */
-	public record ProfileField(String name, String label, int type, boolean required, boolean editable, Object value,
-			Source source, Long inheritedFromId, String inheritedFromName, List<Option> options) {
+	public record ProfileField(String name, String label, Attribute.Type type, boolean required, boolean editable,
+			Object value, Source source, Long inheritedFromId, String inheritedFromName, List<Option> options) {
 	}
 
 	/** A folder on the way from a folder up to its matter's workspace, with its local attributes */
@@ -166,7 +166,7 @@ public class ProfileView {
 	 */
 	private List<Map.Entry<String, Attribute>> definitions() {
 		return schema.template().getTemplateAttributes().entrySet().stream()
-				.filter(e -> e.getValue().getType() != Attribute.TYPE_SECTION && !e.getValue().isHidden())
+				.filter(e -> e.getValue().getType() != Attribute.Type.SECTION && !e.getValue().isHidden())
 				.sorted(Comparator.comparingInt((Map.Entry<String, Attribute> e) -> e.getValue().getPosition())
 						.thenComparing(Map.Entry::getKey))
 				.toList();
@@ -238,15 +238,15 @@ public class ProfileView {
 	 * @return the attribute's value as the field's type has it; null when it
 	 *         is blank or there is no attribute
 	 */
-	private static Object valueOf(Attribute own, int type) {
+	private static Object valueOf(Attribute own, Attribute.Type type) {
 		if (own == null)
 			return null;
 		Object value = switch (type) {
-		case Attribute.TYPE_INT, Attribute.TYPE_USER, Attribute.TYPE_FOLDER, Attribute.TYPE_DOCUMENT ->
+		case Attribute.Type.INTEGER, Attribute.Type.USER, Attribute.Type.FOLDER, Attribute.Type.DOCUMENT ->
 			own.getIntValue();
-		case Attribute.TYPE_DOUBLE -> own.getDoubleValue();
-		case Attribute.TYPE_DATE -> own.getDateValue();
-		case Attribute.TYPE_BOOLEAN -> own.getIntValue() == null ? null : own.getIntValue().longValue() == 1L;
+		case Attribute.Type.DOUBLE -> own.getDoubleValue();
+		case Attribute.Type.DATE -> own.getDateValue();
+		case Attribute.Type.BOOLEAN -> own.getIntValue() == null ? null : own.getIntValue().longValue() == 1L;
 		default -> own.getStringValue();
 		};
 		return blankToNull(value);

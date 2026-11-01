@@ -136,11 +136,11 @@ public class FormResourceTest extends ApiTestCase {
 	@Test
 	public void testTypes() throws Exception {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
-		addAttribute(profile, "pages", Attribute.TYPE_INT, 14);
-		addAttribute(profile, "fee", Attribute.TYPE_DOUBLE, 15);
-		addAttribute(profile, "urgent", Attribute.TYPE_BOOLEAN, 16);
-		addAttribute(profile, "box", Attribute.TYPE_FOLDER, 17);
-		addAttribute(profile, "related", Attribute.TYPE_DOCUMENT, 18);
+		addAttribute(profile, "pages", Attribute.Type.INTEGER, 14);
+		addAttribute(profile, "fee", Attribute.Type.DOUBLE, 15);
+		addAttribute(profile, "urgent", Attribute.Type.BOOLEAN, 16);
+		addAttribute(profile, "box", Attribute.Type.FOLDER, 17);
+		addAttribute(profile, "related", Attribute.Type.DOCUMENT, 18);
 		TemplateDAO.get().store(profile);
 
 		// Values set on Documents pass down
@@ -202,7 +202,7 @@ public class FormResourceTest extends ApiTestCase {
 				get(form(FolderDAO.get().findDefaultWorkspace(Tenant.DEFAULT_ID))).token(admin).send().status());
 	}
 
-	private static void addAttribute(Template template, String name, int type, int position) {
+	private static void addAttribute(Template template, String name, Attribute.Type type, int position) {
 		Attribute attribute = new Attribute();
 		attribute.setLabel(name);
 		attribute.setType(type);

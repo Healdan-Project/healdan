@@ -27,7 +27,7 @@ public class ProfileCommentsSeedTest extends AbstractHealdanTestCase {
 		Attribute comments = t.getAttribute(HealdanConstants.ATTR_COMMENTS);
 		assertNotNull(comments);
 		assertEquals("Comments", comments.getLabel());
-		assertEquals(Attribute.TYPE_STRING, comments.getType());
+		assertEquals(Attribute.Type.STRING, comments.getType());
 		assertFalse(comments.isMandatory());
 		assertEquals(6, comments.getPosition());
 		assertEquals(5, t.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS).getPosition());

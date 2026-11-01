@@ -320,7 +320,6 @@ public class ItemFactory {
 
         PasswordItem passwordItem = new PasswordItem();
         passwordItem.setHintStyle("hint");
-        spinnerItem.setWidth(150);
         passwordItem.setRequiredMessage(I18N.message(FIELDREQUIRED));
         passwordItem.setIconHeight(ITEM_ICON_SIZE);
         passwordItem.setIconWidth(ITEM_ICON_SIZE);
@@ -1682,6 +1681,7 @@ public class ItemFactory {
 
     public static PasswordItem newPasswordItem(String name, String title, String value) {
         PasswordItem password = new PasswordItem();
+        password.setWidth(150);
         password.setTitle(I18N.message(title));
         password.setName(originalItemName(name));
         if (value != null)

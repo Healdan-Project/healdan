@@ -160,7 +160,7 @@ public class StampingTest extends ApiTestCase {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
 		Attribute court = new Attribute();
 		court.setLabel("Court");
-		court.setType(Attribute.TYPE_STRING);
+		court.setType(Attribute.Type.STRING);
 		court.setMandatory(true);
 		court.setPosition(13);
 		profile.getTemplateAttributes().put("court", court);

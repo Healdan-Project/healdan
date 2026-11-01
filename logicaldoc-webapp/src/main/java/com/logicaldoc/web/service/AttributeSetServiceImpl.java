@@ -177,7 +177,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
         att.setParent(attribute.getParent());
         att.setDependsOn(attribute.getDependsOn());
         att.setStringValues(attribute.getStringValues());
-        att.setType(attribute.getType());
+        att.setType(Attribute.Type.values()[attribute.getType()]);
         att.setLabel(attribute.getLabel());
         att.setEditor(attribute.getEditor());
         att.setValidation(attribute.getValidation());
@@ -262,7 +262,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
         att.setHidden(extAttr.isHidden());
         att.setReadonly(extAttr.isReadonly());
         att.setMultiple(extAttr.isMultiple());
-        att.setType(extAttr.getType());
+        att.setType(extAttr.getType().ordinal());
         att.setValidation(extAttr.getValidation());
         att.setInitialization(extAttr.getInitialization());
         if (StringUtils.isEmpty(extAttr.getLabel()))
@@ -282,7 +282,7 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
 
         att.setEditor(extAttr.getEditor());
 
-        if (extAttr.getType() == Attribute.TYPE_USER || extAttr.getEditor() == Attribute.EDITOR_LISTBOX) {
+        if (extAttr.getType().equals(Attribute.Type.USER) || extAttr.getEditor() == Attribute.EDITOR_LISTBOX) {
             readAttributeOptions(extAttr, att);
         }
         return att;
