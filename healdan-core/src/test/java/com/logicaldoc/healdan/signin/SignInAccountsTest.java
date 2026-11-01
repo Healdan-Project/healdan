@@ -21,10 +21,19 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import com.logicaldoc.core.security.Client;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.core.security.spring.LDAuthenticationProvider;
+import com.logicaldoc.core.security.spring.LDAuthenticationToken;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
@@ -122,6 +131,10 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 
 	private static int storedSource(long userId) {
 		return jdbc().queryForObject("select ld_source from ld_user where ld_id = ?", Integer.class, userId);
+	}
+
+	private static int impersonatorRows(long userId) {
+		return jdbc().queryForObject("select count(*) from ld_impersonator where ld_userid = ?", Integer.class, userId);
 	}
 
 	private static int count(String table) {
@@ -245,6 +258,63 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 		// Removing the password is a change TokenUserListener sees (plan correction 2)
 		assertFalse(ApiTokens.get().find(token.token()).isPresent());
 		assertEquals(0, ApiTokens.get().list(jane.getId()).size());
+	}
+
+	/**
+	 * Ruling R14: CE's bob>jane signs bob in as jane with bob's password when
+	 * jane allows it, so linking takes jane's impersonators away
+	 */
+	@Test
+	public void testLinkingEndsImpersonation() throws Exception {
+		fx.user("bob");
+		User jane = local("jane", "jane@firm.example");
+		User carol = local("carol", "carol@firm.example");
+		for (User allowing : List.of(jane, carol)) {
+			User loaded = UserDAO.get().findById(allowing.getId(), true);
+			loaded.getImpersonators().add("bob");
+			UserDAO.get().store(loaded);
+		}
+		Client client = new Client(null, "192.0.2.10", "client.firm.example");
+		Session before = SessionManager.get().newSession("bob>jane", HealdanFixtures.PASSWORD, client);
+		assertEquals("jane", before.getUsername());
+		SessionManager.get().kill(before.getSid());
+
+		allowed(accounts().decide(entra, claims("oid-9", "jane.doe", "jane@firm.example", "g-lit")), true, false);
+
+		assertEquals(0, impersonatorRows(jane.getId()));
+		// CE's chain answers a refused impersonation with no account, so no session, rather than an exception
+		assertNull(SessionManager.get().newSession("bob>jane", HealdanFixtures.PASSWORD, client));
+		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+		try {
+			LDAuthenticationProvider form = new LDAuthenticationProvider();
+			assertThrows(org.springframework.security.core.AuthenticationException.class, () -> form
+					.authenticate(new UsernamePasswordAuthenticationToken("bob>jane", HealdanFixtures.PASSWORD)));
+			assertEquals(0, SessionManager.get().countOpened("jane"));
+
+			// carol, unlinked, still lets bob in, both ways
+			Session session = SessionManager.get().newSession("bob>carol", HealdanFixtures.PASSWORD, client);
+			String sid = ((LDAuthenticationToken) form
+					.authenticate(new UsernamePasswordAuthenticationToken("bob>carol", HealdanFixtures.PASSWORD)))
+					.getSid();
+			assertEquals("carol", session.getUsername());
+			assertEquals("carol", SessionManager.get().get(sid).getUsername());
+			SessionManager.get().kill(session.getSid());
+			SessionManager.get().kill(sid);
+		} finally {
+			RequestContextHolder.resetRequestAttributes();
+		}
+
+		// A row put back some other way signs nobody in, and the next sign-in removes it
+		jdbc().update("insert into ld_impersonator(ld_userid, ld_username) values (?, ?)", jane.getId(), "bob");
+		// CE's chain answers a refused impersonation with no account, so no session, rather than an exception
+		assertNull(SessionManager.get().newSession("bob>jane", HealdanFixtures.PASSWORD, client));
+		allowed(accounts().decide(entra, claims("oid-9", "jane.doe", "jane@firm.example", "g-lit")), false, false);
+		assertEquals(0, impersonatorRows(jane.getId()));
+
+		// and so does a refusal at the gate, which stores the account too
+		jdbc().update("insert into ld_impersonator(ld_userid, ld_username) values (?, ?)", jane.getId(), "bob");
+		refused("no-group", accounts().decide(entra, claims("oid-9", "jane.doe", "jane@firm.example", "g-other")));
+		assertEquals(0, impersonatorRows(jane.getId()));
 	}
 
 	@Test

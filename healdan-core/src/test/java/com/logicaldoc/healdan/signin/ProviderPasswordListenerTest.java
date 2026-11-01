@@ -107,6 +107,10 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 		return jdbc().queryForObject("select ld_source from ld_user where ld_id = ?", Integer.class, userId);
 	}
 
+	private static int impersonatorRows(long userId) {
+		return jdbc().queryForObject("select count(*) from ld_impersonator where ld_userid = ?", Integer.class, userId);
+	}
+
 	private static User load(User user) throws Exception {
 		return UserDAO.get().findById(user.getId(), true);
 	}
@@ -261,6 +265,59 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 		try {
 			assertEquals("bob", SessionManager.get().get(sid).getUsername());
 		} finally {
+			SessionManager.get().kill(sid);
+		}
+	}
+
+	/** Ruling R14: CE's impersonation is a password route, so a provider account has no impersonators */
+	@Test
+	public void testStoringImpersonatorsRefused() throws Exception {
+		User loaded = load(jane);
+		loaded.getImpersonators().add("bob");
+
+		ProviderImpersonationException e = assertThrows(ProviderImpersonationException.class,
+				() -> UserDAO.get().store(loaded));
+		assertEquals("A provider account can't allow other accounts to impersonate it.", e.getMessage());
+		assertEquals(0, impersonatorRows(jane.getId()));
+
+		// A local account still may
+		User carol = load(fx.user("carol"));
+		carol.getImpersonators().add("bob");
+		UserDAO.get().store(carol);
+		assertEquals(1, impersonatorRows(carol.getId()));
+	}
+
+	/**
+	 * A row for a provider account that got into ld_impersonator some other way
+	 * than UserDAO.store still signs nobody in: the account CE's chain loads to
+	 * check it has its impersonators emptied
+	 */
+	@Test
+	public void testImpersonatingAProviderAccountRefused() throws Exception {
+		User carol = load(fx.user("carol"));
+		carol.getImpersonators().add("bob");
+		UserDAO.get().store(carol);
+		jdbc().update("insert into ld_impersonator(ld_userid, ld_username) values (?, ?)", jane.getId(), "bob");
+		Client client = new Client(null, "192.0.2.10", "client.firm.example");
+
+		// CE's chain answers a refused impersonation with no account, so no session, rather than an exception
+		assertNull(SessionManager.get().newSession("bob>jane", HealdanFixtures.PASSWORD, client));
+		RequestContextHolder.setRequestAttributes(new ServletRequestAttributes(new MockHttpServletRequest()));
+		LDAuthenticationProvider form = new LDAuthenticationProvider();
+		assertThrows(org.springframework.security.core.AuthenticationException.class, () -> form
+				.authenticate(new UsernamePasswordAuthenticationToken("bob>jane", HealdanFixtures.PASSWORD)));
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+
+		// bob still impersonates the local account that allows it, both ways
+		Session session = SessionManager.get().newSession("bob>carol", HealdanFixtures.PASSWORD, client);
+		String sid = ((LDAuthenticationToken) form
+				.authenticate(new UsernamePasswordAuthenticationToken("bob>carol", HealdanFixtures.PASSWORD))).getSid();
+		try {
+			assertEquals("carol", session.getUsername());
+			assertEquals("bob", session.getImpersonator());
+			assertEquals("carol", SessionManager.get().get(sid).getUsername());
+		} finally {
+			SessionManager.get().kill(session.getSid());
 			SessionManager.get().kill(sid);
 		}
 	}

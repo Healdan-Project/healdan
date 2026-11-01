@@ -26,8 +26,13 @@ import com.logicaldoc.core.security.user.UserSource;
  * with a password, and an account that was a provider account and isn't one
  * now: only {@link #unlinking} moves an account back to a password. The
  * refusal is a {@link ProviderPasswordException}, so the save's transaction
- * rolls back. CE creates the listener by reflection, hence the public no-arg
- * constructor.
+ * rolls back.
+ * <p>
+ * CE's impersonation ({@code bob>jane} with {@code bob}'s password) is a
+ * password route too, so a provider account has no impersonators (ruling
+ * R14): storing one with any is refused with a
+ * {@link ProviderImpersonationException}, and loading one empties them. CE
+ * creates the listener by reflection, hence the public no-arg constructor.
  */
 public class ProviderPasswordListener implements UserListener {
 
@@ -62,9 +67,19 @@ public class ProviderPasswordListener implements UserListener {
 		}
 	}
 
+	/**
+	 * A provider account has no impersonators (ruling R14). CE's sign-in chain
+	 * reads them from the account it loads by username, and that load runs the
+	 * listeners after it fills them in from {@code ld_impersonator}: emptying
+	 * them here makes {@code bob>jane} fail even if a row for a provider account
+	 * got there some other way than {@code UserDAO.store}, which
+	 * {@link #beforeSave} guards. A load by id fills them in after the listeners,
+	 * which is why {@code beforeSave} refuses them too.
+	 */
 	@Override
 	public void afterLoad(User user, Map<String, Object> dictionary) throws PersistenceException {
-		// Nothing to do
+		if (user.getSource() == UserSource.OIDC)
+			user.getImpersonators().clear();
 	}
 
 	@Override
@@ -75,6 +90,9 @@ public class ProviderPasswordListener implements UserListener {
 		boolean wasProvider = user.getId() != 0 && storedSource(user.getId()) == UserSource.OIDC.ordinal();
 		if ((provider && StringUtils.isNotEmpty(user.getPassword())) || (wasProvider && !provider))
 			throw new ProviderPasswordException();
+		// CE writes the impersonators it's given, replacing the stored ones (HibernateUserDAO.updateImpersonifiers)
+		if (provider && !user.getImpersonators().isEmpty())
+			throw new ProviderImpersonationException();
 	}
 
 	@Override

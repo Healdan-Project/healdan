@@ -241,7 +241,9 @@ public class SignInAccounts {
 		if (granted.isEmpty()) {
 			// Nothing it held through the map stays
 			List<Change> changes = GroupSync.changes(user, map, Set.of());
-			if (!changes.isEmpty())
+			// A provider account stored with impersonators is refused (R14), so any that got in go with the groups
+			boolean dropped = user.getSource() == UserSource.OIDC && dropImpersonators(user);
+			if (!changes.isEmpty() || dropped)
 				UserDAO.get().store(user, history("Taken out of the groups of the sign-in provider " + p.id()));
 			journal.changes(p, user, changes);
 			refusedAtGate(p, claims, printable(user.getUsername()), journal);
@@ -250,11 +252,11 @@ public class SignInAccounts {
 
 		// Reads first, then the account's changes, then its store: no flush may write them before CE's listeners see them
 		List<Change> changes = GroupSync.changes(user, map, granted);
-		boolean wasProvider = isProviderAccount(user);
+		boolean wasProvider = isProviderAccount(user) && user.getImpersonators().isEmpty();
 		boolean changed = followProvider(user, claims);
 		if (!wasProvider)
-			journal.warn("The account {}, linked to the sign-in provider {}, had a password or another source; it's a "
-					+ "provider account again", printable(user.getUsername()), p.id());
+			journal.warn("The account {}, linked to the sign-in provider {}, had a password, impersonators or another "
+					+ "source; it's a provider account again", printable(user.getUsername()), p.id());
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
 		journal.changes(p, user, changes);
@@ -273,13 +275,18 @@ public class SignInAccounts {
 		// The link first: a second link for the account breaks hd_linkuser here, before the account changes
 		identities.store(newLink(p, claims, userId, SignInIdentity.HOW_EMAIL));
 
-		// A provider account from now on: the provider's names and email, and no password (spec section 7.3).
-		// Removing the password is a change TokenUserListener sees, so the account's device tokens are revoked.
+		// A provider account from now on: the provider's names and email, no password (spec section 7.3) and no
+		// impersonators (R14). Removing the password is a change TokenUserListener sees, so the account's device
+		// tokens are revoked.
+		boolean hadImpersonators = !user.getImpersonators().isEmpty();
 		followProvider(user, claims);
 		UserDAO.get().store(user, history("Linked to the sign-in provider " + p.id()));
 
 		journal.info("Linked the account {} to the sign-in provider {}, by its email", printable(user.getUsername()),
 				p.id());
+		if (hadImpersonators)
+			journal.info("The account {} no longer lets other accounts impersonate it, as it's a provider account",
+					printable(user.getUsername()));
 		journal.changes(p, user, changes);
 		return new Allowed(UserDAO.get().findById(userId, true), true, false);
 	}
@@ -334,7 +341,9 @@ public class SignInAccounts {
 		Set<Long> granted = claims.groupsOverage() ? Set.of() : GroupSync.mapped(map, claims.groups());
 		if (granted.isEmpty()) {
 			List<Change> changes = GroupSync.changes(user, map, Set.of());
-			if (!changes.isEmpty())
+			// A provider account stored with impersonators is refused (R14), so any that got in go with the groups
+			boolean dropped = user.getSource() == UserSource.OIDC && dropImpersonators(user);
+			if (!changes.isEmpty() || dropped)
 				UserDAO.get().store(user, history("Taken out of the groups of the sign-in provider " + p.id()));
 			journal.changes(p, user, changes);
 			refusedAtGate(p, claims, printable(user.getUsername()), journal);
@@ -383,8 +392,8 @@ public class SignInAccounts {
 
 	/**
 	 * Makes the account a provider account that follows the claims: its names
-	 * and email where they carry them, source OIDC and no password. The username
-	 * never changes.
+	 * and email where they carry them, source OIDC, no password and no
+	 * impersonators. The username never changes.
 	 *
 	 * @return true if anything changed
 	 */
@@ -410,7 +419,24 @@ public class SignInAccounts {
 			user.setPassword(null);
 			changed = true;
 		}
+		if (dropImpersonators(user))
+			changed = true;
 		return changed;
+	}
+
+	/**
+	 * Empties the account's impersonators, which CE writes back in place of the
+	 * stored ones. A provider account has none (ruling R14): CE's
+	 * {@code bob>jane} would sign {@code bob} in as it with {@code bob}'s
+	 * password.
+	 * 
+	 * @return true if it had any
+	 */
+	private static boolean dropImpersonators(User user) {
+		if (user.getImpersonators().isEmpty())
+			return false;
+		user.getImpersonators().clear();
+		return true;
 	}
 
 	/** OIDC with no password; an empty one is none, as no password's hash is empty */
