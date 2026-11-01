@@ -129,6 +129,17 @@ that was never saved. You don't need to:
 
 If Excel or PowerPoint brings a document back by itself in the same way, the helper saves it back too.
 
+## CoffeePDF Quits Unexpectedly
+
+[CoffeePDF](https://github.com/coffeemuse/CoffeePDF) quitting or crashing with a PDF open gives the same window as
+[LibreOffice's](#libreoffice-or-your-mac-crashes): the PDF stays checked out to you, and your local copy is kept as you last saved it. CoffeePDF doesn't
+bring back what you'd done since your last save, so there's nothing for the helper to save back.
+
+- **Reopen** opens your kept copy in CoffeePDF again, with what you last saved, and carries on as before.
+- **Send and Check In** sends what Healdan hasn't had yet, and checks the PDF in.
+
+A PDF opened read-only in CoffeePDF has nothing to lose: it goes from your Mac once CoffeePDF has quit.
+
 ## Your Check-Out Ended
 
 While you had the document open, its check-out ended:

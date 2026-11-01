@@ -73,15 +73,15 @@ size the helper uses, the widths then match CoreText's.
 
 ### The Cycle
 
-- **Opening:** `GET /documents/{n}`; a check-out with the app's name (`{"app": "LibreOffice"}`, or `Word`, `Excel` or
-  `PowerPoint`) when the user can edit it, else a read-only copy; the download into `Copies/`, through a temporary
-  file; then the file's app. If the open fails after the check-out, the check-out is released, unless this computer
-  already had a copy. One open of a document runs at a time: a second while one is under way, such as a
+- **Opening:** `GET /documents/{n}`; a check-out with the app's name (`{"app": "LibreOffice"}`, or `CoffeePDF`, `Word`,
+  `Excel` or `PowerPoint`) when the user can edit it, else a read-only copy; the download into `Copies/`, through a
+  temporary file; then the file's app. If the open fails after the check-out, the check-out is released, unless this
+  computer already had a copy. One open of a document runs at a time: a second while one is under way, such as a
   double-clicked Open in App, is dropped.
 - **The app is chosen for each file** when its copy is made, and kept in the copy's record (`App`: `LibreOffice`,
-  `Microsoft Office` or `Default`). `AppChooser` makes the choice: the user's for the file's kind (`kinds` in
-  `settings.json`), else the system's default app for the kind's main format when that is Word, Excel or PowerPoint,
-  else LibreOffice; an OpenDocument file is LibreOffice's whatever the choice; and only an installed app
+  `Microsoft Office`, `CoffeePDF` or `Default`). `AppChooser` makes the choice: the user's for the file's kind
+  (`kinds` in `settings.json`), else the system's default app for the kind's main format when that is Word, Excel or
+  PowerPoint, else LibreOffice; an OpenDocument file is LibreOffice's whatever the choice; and only an installed app
   (`InstalledApps`) is chosen. On macOS the system's default is what LaunchServices would open a file of that extension
   with (`DefaultApps.For`: `UTType typeWithFilenameExtension:`, then `NSWorkspace URLForApplicationToOpenContentType:`),
   named by its bundle identifier (`AppBundles`: `com.microsoft.Word`, `Excel` and `Powerpoint`, `org.libreoffice.script`).
@@ -106,17 +106,41 @@ size the helper uses, the widths then match CoreText's.
     name. Word's scripting names a document by its name, so of two open documents with one name (a copy in `Copies`
     and one set aside beside it) it reaches only one: the scripts refuse a name two open documents share, and
     `IsOpen` answers yes for it, so neither is checked in from under its window.
+  - **CoffeePDF** (`CoffeePdfApp`; [coffeemuse/CoffeePDF](https://github.com/coffeemuse/CoffeePDF)) is the app for a PDF
+    on macOS while it's available: installed (`CoffeePDF.app` in `/Applications` or `~/Applications`, or found by
+    `com.healdan.coffeepdf`) and with Healdan support on. The chooser reads that from CoffeePDF's own `settings.json`
+    (`CoffeePdfSettings`: in `COFFEEPDF_SETTINGS_DIR` when it's set, else `~/Library/Application Support/CoffeePDF/`),
+    at each choice, so turning support on takes effect with the next PDF opened. `healdan.enabled` must be the JSON
+    value `true`: a missing, unreadable or malformed file, or any other value, is off. The helper only reads the file.
+    A PDF isn't a `FileKind` (`PdfFiles.Is` tells it by its extension), and while CoffeePDF isn't available it's the
+    `Default` app's, read-only. A copy stays CoffeePDF's whatever the setting says by the time it closes. The helper
+    opens a copy with `open -b com.healdan.coffeepdf`, and CoffeePDF's process is `CoffeePDF`.
+    - **Its lock file** is `.~coffeepdf.<copy file name>#`, beside an editable copy, which CoffeePDF writes once the PDF
+      has loaded and removes when its window closes. A lock file that hasn't come yet is neither a close nor a crash:
+      a close counts only once the lock file has been seen, and a crash needs the lock file there when the process has
+      gone.
+    - **Its saves** are a temporary file in the copy's folder, `.coffeepdf-`, 32 lowercase hex digits and `.tmp`,
+      renamed over the copy. The folder watch counts that as one save of the copy, and never looks at the temporary
+      file.
+    - **A read-only copy** gets no lock file, but it has a session as LibreOffice's does: its window's close report, or
+      CoffeePDF's process going, deletes it, and so does a start that finds CoffeePDF not running (one with changes
+      is kept, as any read-only copy is).
+    - **A crash** gets the crash window a LibreOffice copy gets. CoffeePDF restores nothing, so there's no save-back:
+      Reopen opens the copy in CoffeePDF again, and Send and Check In checks in what was last saved, deleting the stale
+      lock file with the copy (`CopyNames.AppFiles`).
   - A file no office app edits is the `Default` app's, read-only, as below.
 - **Other kinds of file** (not spec §5.11's, by the file's own extension) open read-only in the system's default app
-  (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`). On
-  macOS the copy gets `com.apple.quarantine` (`Platform/Quarantine.cs`), so Gatekeeper checks it, and
+  (`DefaultApp`), with no check-out, and only from the Open window: a link to one is refused (`OpenLinkAsync`), unless
+  it's a PDF, which a link opens as the Open window does, in CoffeePDF while it's available and else read-only in the
+  default app. On macOS the copy gets `com.apple.quarantine` (`Platform/Quarantine.cs`), so Gatekeeper checks it, and
   `DefaultApp.RefusedExtensions` (apps, installers, scripts and the like) are never downloaded or handed over.
 - **Saving:** the helper watches the folder, so it works whether or not the extension took the save over. A save
   counts once the file's size has stopped changing for 1.2 seconds, checked every 300 ms, and its content differs
   from the last sent. It goes up as a snapshot with `keepCheckedOut: true`, the document's own `name`, `ifVersion`,
   `ifHeld: true` and a fresh `saveId`, which a retry repeats. Saves queue in order, and a newer one replaces a queued
   older one. If that one was a Save as New Version, the newer one goes up as `kind: version` in its place
-  (`SaveQueue.Enqueue`), so the version the user asked for is still made, with the newer content.
+  (`SaveQueue.Enqueue`), so the version the user asked for is still made, with the newer content. CoffeePDF's save, a
+  temporary file renamed over the copy, is one save.
 - **A new document's copy:** the extension's `/v1/adopted`, called right after `storeAsURL` while the window takes no
   input, makes the file as it is then the copy's starting point, so the next write is a save, however soon. Without
   it (an older extension), the first write that settles is. Until then the record's confirmed hash is the filed
@@ -124,12 +148,12 @@ size the helper uses, the widths then match CoreText's.
   while the helper was down, and the adoption differs from the filed file by the doc ID the extension sets first. So
   a restart there sends an identical version, and never loses a save.
 - **Closing:** the extension's `/v1/closed`, or the copy's app's lock file gone at two polls a second apart:
-  LibreOffice's `.~lock.<copy>#`, or Microsoft Office's owner file, `~$` and the copy's name with its first two
-  characters left out for Word and with none left out for Excel and PowerPoint (`OfficePrograms.OwnerNames`, which
-  for Word also gives `~$` and the whole name, as a short name may have; copies' names are always long). Tidying up,
-  the helper deletes every form any of them may use, including Word's with only one character left out
-  (`CopyNames.OfficeOwnerNames`). Unsent changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`;
-  then the copy is deleted.
+  LibreOffice's `.~lock.<copy>#`, CoffeePDF's `.~coffeepdf.<copy>#`, or Microsoft Office's owner file, `~$` and the
+  copy's name with its first two characters left out for Word and with none left out for Excel and PowerPoint
+  (`OfficePrograms.OwnerNames`, which for Word also gives `~$` and the whole name, as a short name may have; copies'
+  names are always long). Tidying up, the helper deletes every form any of them may use, including Word's with only
+  one character left out (`CopyNames.AppFiles` lists them all; `CopyNames.OfficeOwnerNames` has Office's). Unsent
+  changes go up with `keepCheckedOut: false`, otherwise `DELETE …/checkout`; then the copy is deleted.
   A check-in or release that's refused or fails keeps the copy, and the next start closes it again.
 - **Renaming after a save (Word and Excel):** they take the window's title from the file name, so once a save is
   confirmed, `CopyCycle.RenameAfterSaveAsync` has the program save the copy under the confirmed version's name
@@ -150,8 +174,8 @@ size the helper uses, the widths then match CoreText's.
   went because the program saved under the next name, once the user granted access, say, isn't a close
   (`FollowedRename`).
 - **A crash:** while a copy is open, the helper checks every 5 seconds that its app's process is running: `soffice`,
-  or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one running says
-  nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
+  `CoffeePDF`, or the program that has the copy (`Microsoft Word`, `Microsoft Excel` or `Microsoft PowerPoint`; one
+  running says nothing of a copy another has). A crashed copy of Word's, Excel's or PowerPoint's stays watched
   (`CloseWatcher.WatchCrashed`): once its program's process runs again, or its owner file is written again, the close
   watcher lets go of it, and the helper looks for the copy by its path (`IsOpenAsync`, which never takes the front
   window) for up to 30 seconds, as Word restores its "Recovered" window at the copy's path. Word 16.114 does so without
@@ -176,7 +200,10 @@ size the helper uses, the widths then match CoreText's.
   offers a crashed copy, before the helper takes any link. A save whose answer never came is repeated with its
   `saveId` and the kind it went up as (the record's `sentKind`), and then, when newer content or a version was
   still to go (`pendingKind`), that goes up as a new save; the repeat keeps the check-out for it. A window that
-  closed meanwhile is checked in as `pendingKind`, so a Save as New Version that was waiting is still made.
+  closed meanwhile is checked in as `pendingKind`, so a Save as New Version that was waiting is still made. It
+  also deletes CoffeePDF's leftover temporary files (`.coffeepdf-` and 32 lowercase hex digits, then `.tmp`, in
+  `Copies/`) while no `CoffeePDF` process runs: one may be a save going on now, and a name that isn't exactly
+  CoffeePDF's is left alone.
 - **Refusals:** `409 held-elsewhere` or `not-held` ends the copy's check-out: it's kept, never deleted, and the user
   is told to use Save as New Document. `409 version-moved` is resent once with the new `ifVersion` and the current
   name, but only while the document is still checked out here and its `fileVersion` hasn't moved. A repeated
@@ -192,7 +219,7 @@ Every copy is directly in one folder, `Copies/`, mode 700.
 - **The name** is `<name> #<doc #> v<fileVersion><ext>`, with ` (read-only)` before the extension for a read-only
   copy. `/`, `:`, `\` and control characters in the name become `-`.
 - **At most 241 bytes** in UTF-8, so the record beside it, `.<copy's name>.healdan.json`, fits in 255 bytes, and so
-  does LibreOffice's lock file.
+  do LibreOffice's lock file and CoffeePDF's, which add 8 and 13 bytes.
 - **A copy keeps the name it was opened with** while it's open, except in Word and Excel, which save it under each
   confirmed version's name (above). The record holds its file name and the version it holds, and the title comes
   from the record.
@@ -206,9 +233,9 @@ Every copy is directly in one folder, `Copies/`, mode 700.
   naming another server into `Copies from <host[-port]>/` beside `Copies/` (`CopyStore.SetAside`), numbered when a
   name is taken there; a start then brings back the signed-in server's (`CopyStore.BringBack`), except one open in an
   app there or whose name is taken in `Copies/`. A copy moves first, then its record, and moves back if the record
-  can't follow. Lock and owner files stay, as the app deletes them by the path it opened, and so does Finder's
-  `.DS_Store`. A setting aside that fails refuses the sign-in, or the start. The menu has a line per server with
-  copies waiting (`CopyStore.Aside`).
+  can't follow. Lock and owner files, and CoffeePDF's temporary files, stay, as the app deletes them by the path it
+  opened, and so does Finder's `.DS_Store`. A setting aside that fails refuses the sign-in, or the start. The menu has a
+  line per server with copies waiting (`CopyStore.Aside`).
 - **No open copy is moved from under its window.** A sign-in to another server is refused, before the helper signs
   in and again just before the move, while anything it would set aside has its lock or owner file beside it in
   `Copies/` and an app is running (`CopyStore.OpenToSetAside`, `IOfficeApp.IsRunning`); the window would otherwise

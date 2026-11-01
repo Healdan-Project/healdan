@@ -293,7 +293,8 @@ public sealed class CopyCycle : IDisposable
     /// <summary>
     /// At start: for each copy left from before, an open one is watched again and its unconfirmed changes resent; a
     /// crashed one is offered (<see cref="ICycleEvents.Crashed"/>) and its changes resent; one whose window closed
-    /// meanwhile is checked in and deleted; and a closed read-only copy is deleted. Saves wait for the server as usual.
+    /// meanwhile is checked in and deleted; a closed read-only copy is deleted; and CoffeePDF's leftover temporary files go
+    /// while it isn't running. Saves wait for the server as usual.
     /// </summary>
     public Task ResumeAsync()
     {
@@ -307,6 +308,24 @@ public sealed class CopyCycle : IDisposable
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             {
                 // Tried again at the next start.
+            }
+        }
+        // CoffeePDF's save leaves its temporary file only when CoffeePDF stopped part-way, but one may be a save going on
+        // now, so they go only while CoffeePDF isn't running (M3.6 spec §6.4).
+        if (_apps.CoffeePdf is { } coffeePdf && !SafeIsRunning(coffeePdf, _store.Folder))
+        {
+            foreach (var temp in Directory.EnumerateFiles(_store.Folder, ".coffeepdf-*.tmp"))
+            {
+                if (!CopyNames.IsCoffeePdfTemporary(Path.GetFileName(temp)))
+                    continue;
+                try
+                {
+                    File.Delete(temp);
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+                {
+                    // Tried again at the next start.
+                }
             }
         }
         foreach (var (listed, listedRecord) in _store.All())
