@@ -60,6 +60,16 @@ public sealed class InstalledAppsTests
     }
 
     [Fact]
+    public void CoffeePdfIsFoundLikeTheOthers()
+    {
+        Assert.True(OnMac("/Applications/CoffeePDF.app").CoffeePdf);
+        Assert.True(OnMac($"{Home}/Applications/CoffeePDF.app").CoffeePdf);
+        Assert.True(WhereverTheyAre("com.healdan.coffeepdf").CoffeePdf);
+        Assert.False(OnMac("/Applications/LibreOffice.app").CoffeePdf);
+        Assert.False(InstalledApps.Detect(macOS: false, "/home/user", _ => true, _ => true).CoffeePdf); // never off macOS
+    }
+
+    [Fact]
     public void LaunchServicesIsAskedOnlyAboutWhatTheFoldersDidntShow()
     {
         var asked = new List<string>();
@@ -71,7 +81,7 @@ public sealed class InstalledAppsTests
         });
 
         Assert.Equal(new InstalledApps(true, true, false, true), installed);
-        Assert.Equal(["com.microsoft.Excel", "com.microsoft.Powerpoint"], asked);
+        Assert.Equal(["com.microsoft.Excel", "com.microsoft.Powerpoint", "com.healdan.coffeepdf"], asked);
     }
 
     [Fact]

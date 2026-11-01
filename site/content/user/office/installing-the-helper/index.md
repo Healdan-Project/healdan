@@ -238,8 +238,8 @@ Settings has four groups (three while your Mac has no Word, Excel or PowerPoint 
   to the new server, where the same doc # can be a different document. They come back, with any saves still to send,
   when you sign in to the old server again. Meanwhile the menu shows how many are waiting.
 - **Open Each Kind of File In:** a row each for documents, spreadsheets, presentations and drawings, with the file
-  extensions it covers, and the app that opens them. Other files, such as PDFs, open read-only in your Mac's usual app
-  for them.
+  extensions it covers, and the app that opens them, then a row for PDFs. Other files open read-only in your Mac's usual
+  app for them.
   - **A pop-up** offers LibreOffice and Microsoft Office, whichever are installed. Microsoft Office is offered for
     documents when Word is installed, for spreadsheets when Excel is, and for presentations when PowerPoint is. Choose
     one, and it's kept straight away. It applies to the documents you open from then on: one you have open already
@@ -252,6 +252,10 @@ Settings has four groups (three while your Mac has no Word, Excel or PowerPoint 
     doesn't open them.
   - **OpenDocument files** (`.odt`, `.ott`, `.ods`, `.odp` and `.odg` drawings) always open in LibreOffice, whatever
     you choose, while it's installed. Your choice is for Microsoft's file types, such as `.docx`, `.xls` and `.pptx`.
+  - **PDFs** open in [CoffeePDF](https://github.com/coffeemuse/CoffeePDF) while it's installed on your Mac with its
+    Healdan support on, and read-only in your Mac's usual app for PDFs otherwise. There's nothing to choose in the
+    helper: the row shows the app as text, and CoffeePDF's own Settings turn its Healdan support on. While CoffeePDF is
+    installed with that support off, the row says **Default app, read-only** and tells you to turn it on there.
 - **Microsoft Office:** shown while Word, Excel or PowerPoint is installed on your Mac, or an app is still paired.
   - **Set Up:** shown while one of them is installed. **Done** once your Mac trusts the helper's certificate. While it
     doesn't, or the certificate is nearly out of date, it says **Needed**, and **Set Up…** opens the Set Up Microsoft

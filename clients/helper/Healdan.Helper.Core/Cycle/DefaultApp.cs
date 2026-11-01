@@ -5,10 +5,10 @@ namespace Healdan.Helper.Core.Cycle;
 /// <summary>
 /// The system's default app, for a file no office app edits (spec §5.11), such as a PDF, through
 /// <see cref="SystemOpener"/>: <c>open</c> on macOS, <c>xdg-open</c> on Linux. The cycle gives it a read-only copy
-/// and never checks such a file out. It keeps no lock file, so nothing can tell when it's closed: the copy goes at
-/// the helper's next start. It's never given a kind of file that runs a program, installs something or changes the
-/// system when opened (<see cref="Refuses"/>): anyone who can add files to a matter could have put one there (final
-/// review C2).
+/// and never checks such a file out. It keeps no lock file, so nothing watches the copy: an app's close report deletes
+/// it (<see cref="CopyCycle.ClosedAsync"/>), or else the helper's next start does. It's never given a kind of file
+/// that runs a program, installs something or changes the system when opened (<see cref="Refuses"/>): anyone who can
+/// add files to a matter could have put one there (final review C2).
 /// </summary>
 public sealed class DefaultApp : IOfficeApp
 {

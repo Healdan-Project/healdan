@@ -174,9 +174,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         File.Delete(RecordPath(oldPath));
         if (File.Exists(newPath))
             File.Delete(System.IO.Path.Combine(paths.Copies, oldName));
-        File.Delete(System.IO.Path.Combine(paths.Copies, CopyNames.LibreOfficeLockName(oldName)));
-        foreach (var owner in CopyNames.OfficeOwnerNames(oldName))
-            File.Delete(System.IO.Path.Combine(paths.Copies, owner));
+        foreach (var file in CopyNames.AppFiles(oldName))
+            File.Delete(System.IO.Path.Combine(paths.Copies, file));
         lock (_hashes)
             _hashes.Remove(oldName);
     }
@@ -190,9 +189,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
         var name = System.IO.Path.GetFileName(path);
         File.Delete(path);
         File.Delete(RecordPath(path));
-        File.Delete(System.IO.Path.Combine(paths.Copies, CopyNames.LibreOfficeLockName(name)));
-        foreach (var owner in CopyNames.OfficeOwnerNames(name))
-            File.Delete(System.IO.Path.Combine(paths.Copies, owner));
+        foreach (var file in CopyNames.AppFiles(name))
+            File.Delete(System.IO.Path.Combine(paths.Copies, file));
         lock (_hashes)
             _hashes.Remove(name);
     }
@@ -242,7 +240,7 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// went. A record without a server, from before records named one, counts as <paramref name="unrecorded"/>'s and has
     /// it written in as it moves, so it can come back there. When <paramref name="unrecorded"/> isn't
     /// <paramref name="keep"/>, anything else in the folder goes to that server's folder too, such as a copy with no
-    /// usable record, except an app's lock and owner files (<see cref="CopyNames.IsAppFile"/>), which the app deletes
+    /// usable record, except an app's lock, owner and temporary files (<see cref="CopyNames.IsAppFile"/>), which the app deletes
     /// by the path it opened, a download's temporary part, which the resume sweeps, and Finder's <c>.DS_Store</c>, which
     /// is no one's. The copies named in <paramref name="leave"/>, such as those an app has open
     /// (<see cref="OpenToSetAside"/>), stay with their records. Copies itself stays, so an app's access to it does too.
@@ -314,8 +312,8 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
     /// <summary>
     /// What setting aside for <paramref name="keep"/> moves (<see cref="SetAside"/>), read before anything moves: each
     /// readable record of every server's that doesn't name it, in name order, with the server it goes to, and when
-    /// <paramref name="unrecorded"/> isn't <paramref name="keep"/>, every other file in Copies by name, but an app's lock
-    /// and owner files, a download's temporary part and Finder's <c>.DS_Store</c>.
+    /// <paramref name="unrecorded"/> isn't <paramref name="keep"/>, every other file in Copies by name, but an app's lock,
+    /// owner and temporary files, a download's temporary part and Finder's <c>.DS_Store</c>.
     /// </summary>
     private (List<(CopyRecord Record, string Owner)> Copies, List<string> Strays) ToSetAside(string keep, string unrecorded)
     {
@@ -541,10 +539,9 @@ public sealed class CopyStore(HelperPaths paths, string? server = null)
             ? Directory.EnumerateDirectories(paths.Support, AsidePrefix + "*").Order(StringComparer.Ordinal).ToList()
             : [];
 
-    /// <summary>Whether an app's lock or owner file beside the copy says the app has it open there: LibreOffice's, or Word's, Excel's or PowerPoint's.</summary>
+    /// <summary>Whether an app's lock or owner file beside the copy says the app has it open there (<see cref="CopyNames.AppFiles"/>).</summary>
     private static bool IsOpen(string folder, string name) =>
-        File.Exists(System.IO.Path.Combine(folder, CopyNames.LibreOfficeLockName(name)))
-        || CopyNames.OfficeOwnerNames(name).Any(owner => File.Exists(System.IO.Path.Combine(folder, owner)));
+        CopyNames.AppFiles(name).Any(file => File.Exists(System.IO.Path.Combine(folder, file)));
 
     /// <summary>Creates the folders private from the start, rather than narrowing them after.</summary>
     internal void EnsureFolders()

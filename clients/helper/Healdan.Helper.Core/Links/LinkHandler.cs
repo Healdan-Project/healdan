@@ -6,8 +6,8 @@ namespace Healdan.Helper.Core.Links;
 
 /// <summary>
 /// Acts on the web page's links (spec §5.3), from an Apple event or the channel's <c>/v1/link</c>. A link only opens,
-/// only documents, spreadsheets, presentations and drawings (<see cref="CopyCycle.OpenLinkAsync"/>), and only from the
-/// server the helper is signed in to; one naming another server, or none, is refused with a notice
+/// only documents, spreadsheets, presentations, drawings and PDFs (<see cref="CopyCycle.OpenLinkAsync"/>; M3.6 spec §5.1),
+/// and only from the server the helper is signed in to; one naming another server, or none, is refused with a notice
 /// saying which server the helper is signed in to. The link that started the helper is held until it's first
 /// <see cref="Ready"/> (signed in, and its copies resumed, so no open runs before the stale downloads are swept), even
 /// while the Sign In window waits; later ones are dropped. Only that cold-start link is ever held: once the helper has
@@ -116,7 +116,7 @@ public sealed class LinkHandler(IWindows windows, INotifier notifier, HelperLog 
         }
 
         log.Info($"Opening #{n}{(readOnly ? " read-only" : "")} from a link");
-        await Task.Run(() => cycle.OpenLinkAsync(n, readOnly)); // spec 5.11's kinds only
+        await Task.Run(() => cycle.OpenLinkAsync(n, readOnly)); // spec 5.11's kinds, and PDFs (M3.6 spec §5.1)
         if (!readOnly)
             SayIfReadOnly(cycle, n, notifier);
     }
