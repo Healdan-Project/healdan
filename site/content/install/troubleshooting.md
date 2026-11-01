@@ -26,7 +26,7 @@ Healdan's own log is `repository/logs/dms.log`, in the repository volume.
 | `sun.misc.Unsafe::invokeCleaner has been called by org.apache.lucene.store.MMapDirectory` (once, at start) | Harmless. The search library uses a Java feature that Java 25 warns about. |
 | `Healdan's database migration failed: …` | An upgrade of Healdan's tables failed, and the app stopped. Back up first. Fix the cause, drop the `hd_` tables that step created, delete its failed row (`delete from hd_schema_history where success = 0`), and start again. |
 | `Seed step '…' failed: …` | One of Healdan's one-time setup steps failed, and the app stopped. Fix the cause and start again. The message also gives the SQL that skips the step instead. |
-| `Healdan's tables support MariaDB and HSQLDB only` | Healdan needs MariaDB. MySQL isn't supported. |
+| `Healdan's tables support MariaDB and HSQLDB only` | Healdan needs MariaDB. See [Supported Databases](../what-runs/#supported-databases). |
 
 ## Office Previews Say "Not Available"
 

@@ -12,6 +12,17 @@ weight: 2
 
 [Backup and Restore](../backup-and-restore/) covers all three volumes.
 
+## Supported Databases
+
+Healdan runs on MariaDB: the stack's own `db` service, or a MariaDB server of your own, which `DB_HOST` and
+`DB_PORT` point at (see [Configuration](../configuration/)). It supports only open-source databases, and stops when
+it starts on any other.
+
+- **MySQL isn't supported,** although MariaDB grew out of it. Healdan's own tables use sequences, which MySQL
+  doesn't have.
+- **Oracle and SQL Server aren't supported.** Healdan doesn't include their drivers.
+- **PostgreSQL** support comes later.
+
 ## What the App Does When It Starts
 
 - **On the first start** it writes `context.properties`, waits for MariaDB, and creates the database schema.
