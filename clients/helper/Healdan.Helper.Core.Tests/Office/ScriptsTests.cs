@@ -37,11 +37,11 @@ public sealed partial class ScriptsTests
     [Fact]
     public void TheScriptsAreTheOnesTheSeamNeeds()
     {
-        string[] common = ["FrontDocument", "IsOpen", "HasUnsavedChanges", "Fingerprint", "HasMark", "Save", "SaveAs"];
+        string[] common = ["Ask", "FrontDocument", "IsOpen", "HasUnsavedChanges", "Fingerprint", "HasMark", "Save", "SaveAs"];
         var expected = new List<string>();
         foreach (var program in new[] { "Word", "Excel", "PowerPoint" })
             expected.AddRange(common.Select(op => $"{program}.{op}"));
-        expected.AddRange(["Word.Open", "Word.Rename", "Word.SetDocId", "Excel.Rename", "PowerPoint.Reopen"]);
+        expected.AddRange(["Word.Rename", "Word.SetDocId", "Excel.Rename", "PowerPoint.Reopen"]);
 
         Assert.Equal(expected.Order().ToArray(), Scripts().Keys.Order().ToArray());
     }
@@ -99,10 +99,11 @@ public sealed partial class ScriptsTests
 
     /// <summary>
     /// The scripts that write or open files in a folder the app may not have been granted yet. The app then asks the
-    /// user (Grant File Access), and the script waits for the answer (spec §8.5).
+    /// user (Grant File Access), and the script waits for the answer (spec §8.5). And each program's Ask, which waits
+    /// for macOS's Automation prompt (the owner's walkthrough).
     /// </summary>
     private static readonly string[] LongScripts =
-        ["Word.SaveAs", "Excel.SaveAs", "PowerPoint.SaveAs", "Word.Rename", "Excel.Rename", "PowerPoint.Reopen", "Word.Open"];
+        ["Word.SaveAs", "Excel.SaveAs", "PowerPoint.SaveAs", "Word.Rename", "Excel.Rename", "PowerPoint.Reopen", "Word.Ask", "Excel.Ask", "PowerPoint.Ask"];
 
     [Fact]
     public void LongScriptsWaitForGrantFileAccess()
@@ -138,10 +139,10 @@ public sealed partial class ScriptsTests
     }
 
     [Fact]
-    public void EveryScriptButOpenChecksTheAppIsRunningFirst()
+    public void EveryScriptChecksTheAppIsRunningFirst()
     {
-        // A tell block starts a program that isn't running, and a poll must not. Open, which wants it started, is the exception.
-        foreach (var (name, text) in Scripts().Where(s => s.Key != "Word.Open"))
+        // A tell block starts a program that isn't running, and a poll must not. Opening, which wants it started, is open -a.
+        foreach (var (name, text) in Scripts())
         {
             var app = Regex.Match(text, "application \"([^\"]+)\"").Groups[1].Value;
             Assert.Contains($"if application \"{app}\" is not running then return", text);
@@ -216,7 +217,7 @@ public sealed partial class ScriptsTests
             "set copiesFolder to item 4 of argv", "set copiesTwin to item 5 of argv",
         ];
         var finding = Scripts().Where(s => s.Value.Contains("my locate(", StringComparison.Ordinal)).ToList();
-        Assert.Equal(22, finding.Count); // all but the three FrontDocuments and Word.Open
+        Assert.Equal(22, finding.Count); // all but the three FrontDocuments
 
         foreach (var (name, text) in finding)
         {
@@ -338,7 +339,7 @@ public sealed partial class ScriptsTests
         // again, it would wait up to another 300 seconds and ask for Grant File Access twice. Anything else is tried again,
         // as the path error's own number is unconfirmed without Word.
         var retrying = Scripts().Where(s => s.Value.Split('\n').Any(IsHfsRetry)).Select(s => s.Key).Order().ToList();
-        Assert.Equal(["Word.Open", "Word.Rename", "Word.SaveAs"], retrying);
+        Assert.Equal(["Word.Rename", "Word.SaveAs"], retrying);
         foreach (var name in retrying)
         {
             var lines = Scripts()[name].Split('\n').Select(l => l.Trim()).Where(l => !l.StartsWith("--", StringComparison.Ordinal)).ToList();

@@ -18,6 +18,7 @@ public sealed class FakeScripting : IOfficeScripting
 {
     private readonly object _lock = new();
     private readonly List<(OfficeProgram Program, string Path)> _opened = [];
+    private readonly List<OfficeProgram> _started = [];
     private readonly List<(OfficeProgram Program, string Path, string NewPath)> _renames = [];
     private readonly List<(OfficeProgram Program, DocumentRef Doc, string NewPath, string? Fingerprint)> _savesAs = [];
     private readonly List<(OfficeProgram Program, string Path)> _saves = [];
@@ -39,6 +40,9 @@ public sealed class FakeScripting : IOfficeScripting
 
     /// <summary>Every open the cycle asked for, in order.</summary>
     public IReadOnlyList<(OfficeProgram Program, string Path)> Opened => Copy(_opened);
+
+    /// <summary>Every start without a file the cycle asked for, in order.</summary>
+    public IReadOnlyList<OfficeProgram> Started => Copy(_started);
 
     /// <summary>Every rename the cycle asked for, in order, whatever it answered.</summary>
     public IReadOnlyList<(OfficeProgram Program, string Path, string NewPath)> Renames => Copy(_renames);
@@ -218,11 +222,32 @@ public sealed class FakeScripting : IOfficeScripting
     public static void Close(OfficeProgram p, string path) => File.Delete(OwnerPath(p, path));
 
     /// <summary>
-    /// The program crashed and starts again, restoring its window at the copy's own path, as Word does with a recovered
-    /// document: it's running, and its owner file beside the copy is written again. The write time moves on by a
-    /// second, so the clock's resolution can't hide the new file.
+    /// The program starts without a file: it's running, as after a crash, when it restores what it recovered.
+    /// </summary>
+    public Task StartAsync(OfficeProgram p, CancellationToken ct = default)
+    {
+        lock (_lock)
+            _started.Add(p);
+        SetRunning(p, true);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// The program crashed and starts again, restoring its window at the copy's own path, as Word 16.114 did in the
+    /// owner's walkthrough (2026-10-31): it's running, and lists the copy by its path, and the owner file the crash left
+    /// beside the copy stays as it was, never written again.
     /// </summary>
     public void Recover(OfficeProgram p, string path)
+    {
+        Assert.True(File.Exists(OwnerPath(p, path)), "the crash left the owner file");
+        SetRunning(p, true);
+    }
+
+    /// <summary>
+    /// As <see cref="Recover"/>, but writing the owner file beside the copy again, as Word did in the trial. The write
+    /// time moves on by a second, so the clock's resolution can't hide the new file.
+    /// </summary>
+    public void RecoverWritingTheOwnerFile(OfficeProgram p, string path)
     {
         SetRunning(p, true);
         var owner = OwnerPath(p, path);
@@ -240,13 +265,15 @@ public sealed class FakeScripting : IOfficeScripting
         return Task.FromResult(Front(p));
     }
 
-    /// <summary>Found by its path: the answers the test gave, then whether the program's owner file is beside it.</summary>
+    /// <summary>
+    /// Found by its path: the answers the test gave, then whether the program is running with its owner file beside it.
+    /// </summary>
     public Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
     {
         Interlocked.Increment(ref _isOpenAsked);
         if (_isOpenAnswers.TryDequeue(out var answer))
             return Task.FromResult(answer);
-        return Task.FromResult(!NeverListed && File.Exists(OwnerPath(p, path)));
+        return Task.FromResult(!NeverListed && IsRunning(OfficePrograms.ProcessName(p)) && File.Exists(OwnerPath(p, path)));
     }
 
     public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) =>

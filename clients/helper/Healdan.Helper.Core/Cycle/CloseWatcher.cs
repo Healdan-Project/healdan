@@ -11,7 +11,8 @@ namespace Healdan.Helper.Core.Cycle;
 /// copy's lock file still there is a crash. Gone without one is a close: a read-only copy may never get a lock file.</item>
 /// <item>A crashed copy the cycle watches with <see cref="WatchCrashed"/> (M3.5 spec §5.14): its lock file written
 /// since the crash, or back after it went, means the app may have the copy open again, as Word does with a recovered
-/// window.</item>
+/// window, and so does its process running again, checked every <see cref="CycleTimings.CrashPoll"/>, as Word 16.114
+/// restored its window without writing the lock file the crash left again (the owner's walkthrough).</item>
 /// </list>
 /// Each copy is watched with the app it was opened in (<see cref="IOfficeApp.LockExists"/>, and
 /// <see cref="IOfficeApp.IsRunningFor"/> for the process), as LibreOffice's lock file says nothing of a Word window.
@@ -38,6 +39,12 @@ internal sealed class CloseWatcher : IDisposable
 
         /// <summary>The lock file the crash left has gone since, so its coming back is the app's.</summary>
         public bool LockGoneSinceCrash { get; set; }
+
+        /// <summary>The app's process running counts from the first look, not only once it has gone and come back.</summary>
+        public bool LookIfRunning { get; init; }
+
+        /// <summary>The app's process has been seen gone since the copy was watched, so its running again is a restart.</summary>
+        public bool AppGoneSinceCrash { get; set; }
     }
 
     private readonly object _lock = new();
@@ -45,17 +52,17 @@ internal sealed class CloseWatcher : IDisposable
     private readonly CycleTimings _timings;
     private readonly Action<string> _closed;
     private readonly Action<string> _crashed;
-    private readonly Action<string>? _reopened;
+    private readonly Action<string, bool>? _reopened;
     private readonly CancellationTokenSource _stop = new();
 
     /// <param name="closed">Called once when a copy's window has closed; the copy is no longer watched.</param>
     /// <param name="crashed">Called once when the app went away with the copy open; the copy is no longer watched.</param>
     /// <param name="reopened">
     /// Called once when a copy watched with <see cref="WatchCrashed"/> has its lock or owner file written again since the
-    /// crash; the copy is no longer watched, so the cycle can save it back without its watch getting in the way, and
-    /// watches it again after.
+    /// crash, with true, or its app's process running again, with false; the copy is no longer watched, so the cycle can
+    /// save it back without its watch getting in the way, and watches it again after.
     /// </param>
-    public CloseWatcher(CycleTimings timings, Action<string> closed, Action<string> crashed, Action<string>? reopened = null)
+    public CloseWatcher(CycleTimings timings, Action<string> closed, Action<string> crashed, Action<string, bool>? reopened = null)
     {
         _timings = timings;
         _closed = closed;
@@ -79,13 +86,18 @@ internal sealed class CloseWatcher : IDisposable
     /// <summary>
     /// Watches a copy whose app went away with it open for the app to have it open again (M3.5 spec §5.14): its lock file
     /// written since <paramref name="crashWritten"/>, when the crash left it (<see cref="IOfficeApp.LockWritten"/>), or
-    /// back after it went. Neither its close nor a crash is looked for meanwhile. Watched again with the same time after a
-    /// save back that failed, a lock file written since is found again at the next look.
+    /// back after it went, or the app's process running again. Neither its close nor a crash is looked for meanwhile.
+    /// Watched again with the same time after a save back that failed, a lock file written since is found again at the
+    /// next look.
     /// </summary>
-    public void WatchCrashed(string path, IOfficeApp app, DateTime? crashWritten)
+    /// <param name="lookIfRunning">
+    /// The app's process running at the first look counts, as just after the crash or once the app was started for the
+    /// copy; false after a look that found nothing, when only its going and coming back does.
+    /// </param>
+    public void WatchCrashed(string path, IOfficeApp app, DateTime? crashWritten, bool lookIfRunning = true)
     {
         lock (_lock)
-            _entries[path] = new Entry(path, app, false, false) { Crashed = true, CrashWritten = crashWritten };
+            _entries[path] = new Entry(path, app, false, false) { Crashed = true, CrashWritten = crashWritten, LookIfRunning = lookIfRunning };
     }
 
     /// <summary>Whether the copy is watched and its lock file has been seen.</summary>
@@ -117,6 +129,7 @@ internal sealed class CloseWatcher : IDisposable
                 var closed = new List<Entry>();
                 var crashed = new List<Entry>();
                 var reopened = new List<Entry>();
+                var running = new HashSet<Entry>(); // reopened as its app runs again, its lock file as the crash left it
                 foreach (var entry in entries)
                 {
                     if (entry.Crashed)
@@ -142,6 +155,16 @@ internal sealed class CloseWatcher : IDisposable
                         else if (entry.AppSeen)
                             (entry.App.LockExists(entry.Path) ? crashed : closed).Add(entry);
                     }
+                    foreach (var entry in entries.Where(e => e.Crashed).Except(reopened))
+                    {
+                        if (!IsRunning(entry))
+                            entry.AppGoneSinceCrash = true;
+                        else if (entry.AppGoneSinceCrash || entry.LookIfRunning)
+                        {
+                            reopened.Add(entry);
+                            running.Add(entry);
+                        }
+                    }
                 }
 
                 // Report only what is still watched: the cycle may have let a copy go meanwhile.
@@ -156,7 +179,7 @@ internal sealed class CloseWatcher : IDisposable
                 foreach (var entry in crashed)
                     _crashed(entry.Path);
                 foreach (var entry in reopened)
-                    _reopened?.Invoke(entry.Path);
+                    _reopened?.Invoke(entry.Path, !running.Contains(entry));
             }
         }
         catch (OperationCanceledException)

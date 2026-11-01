@@ -25,6 +25,8 @@ public sealed class SeenLocks(IOfficeApp inner) : IOfficeApp
         inner.Open(path);
     }
 
+    public void Start(string path) => inner.Start(path);
+
     public bool IsRunning() => inner.IsRunning();
 
     public bool LockExists(string path)

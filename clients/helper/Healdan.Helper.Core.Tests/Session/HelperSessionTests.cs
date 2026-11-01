@@ -1246,7 +1246,7 @@ public sealed class HelperSessionTests : IDisposable
         // in then would delete it from under Word's recovered window.
         var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true };
         var (session, crashed, path) = await WordCrashedAsync(scripting);
-        scripting.Recover(OfficeProgram.Word, path);
+        scripting.RecoverWritingTheOwnerFile(OfficeProgram.Word, path);
         await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back looking for Word's window");
 
         session.SendAndCheckIn(crashed);
@@ -1295,7 +1295,7 @@ public sealed class HelperSessionTests : IDisposable
         // save-back has given up, the crash window's Send and Check In must work, or the copy is stuck for good.
         var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true };
         var (session, crashed, path) = await WordCrashedAsync(scripting, Fast with { RecoveryWait = TimeSpan.FromSeconds(1) });
-        scripting.Recover(OfficeProgram.Word, path);
+        scripting.RecoverWritingTheOwnerFile(OfficeProgram.Word, path);
         await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back looking for Word's window");
         FakeScripting.Close(OfficeProgram.Word, path);
         Assert.True(session.Cycle!.IsOpenAgain(path)); // still looking: the copy isn't free yet

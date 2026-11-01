@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Healdan.Helper.Core.Office;
 
 namespace Healdan.Helper.Core.Tests.Office;
@@ -91,13 +92,44 @@ public sealed class MacOfficeScriptingTests
     [Fact]
     public async Task EveryScriptThatMayMeetGrantFileAccessGetsTheLongTimeout()
     {
-        _runner.Answer = "ok";
-        await _scripting.OpenAsync(OfficeProgram.Word, "/c/a.docx");
         _runner.Answer = "reopened";
         await _scripting.ReopenAsync(OfficeProgram.PowerPoint, "/c/a.pptx");
 
-        Assert.All(_runner.Calls, c => Assert.Equal(TimeSpan.FromSeconds(330), c.Timeout));
-        Assert.Equal(2, _runner.Calls.Count);
+        Assert.Equal(TimeSpan.FromSeconds(330), Assert.Single(_runner.Calls).Timeout);
+    }
+
+    [Fact]
+    public async Task EachProgramIsAskedOnceWithTheLongTimeoutBeforeItsFirstScript()
+    {
+        // The owner's walkthrough (2026-10-31): the first save after pairing gave up after 20 seconds while macOS asked
+        // whether the helper may control Word.
+        _runner.Answer = "no";
+        _runner.AskAnswer = "not-running"; // nothing was asked, so it's asked again
+        await _scripting.IsOpenAsync(OfficeProgram.Word, "/c/a.docx");
+        _runner.AskAnswer = "ok";
+        await _scripting.IsOpenAsync(OfficeProgram.Word, "/c/a.docx");
+        await _scripting.IsOpenAsync(OfficeProgram.Word, "/c/a.docx");
+        await _scripting.IsOpenAsync(OfficeProgram.Excel, "/c/a.xlsx");
+
+        Assert.Equal(["Word", "Word", "Excel"], _runner.Asks.Select(a => a.Program));
+        Assert.All(_runner.Asks, a => Assert.Equal(TimeSpan.FromSeconds(330), a.Timeout));
+        Assert.Equal(4, _runner.Calls.Count);
+        Assert.All(_runner.Calls, c => Assert.Equal(TimeSpan.FromSeconds(20), c.Timeout));
+    }
+
+    [Fact]
+    public async Task AnAskThatFailsFailsTheScriptAndIsTriedAgain()
+    {
+        _runner.AskFailure = new OfficeScriptException("Not authorized to send Apple events to Microsoft Word. (-1743)");
+        await Assert.ThrowsAsync<OfficeScriptException>(() => _scripting.IsOpenAsync(OfficeProgram.Word, "/c/a.docx"));
+        Assert.Empty(_runner.Calls);
+
+        _runner.AskFailure = null;
+        _runner.Answer = "no";
+        await _scripting.IsOpenAsync(OfficeProgram.Word, "/c/a.docx");
+
+        Assert.Equal(2, _runner.Asks.Count);
+        Assert.Single(_runner.Calls);
     }
 
     [Fact]
@@ -167,25 +199,29 @@ public sealed class MacOfficeScriptingTests
     }
 
     [Fact]
-    public async Task WordOpensThroughWordAndOthersThroughOpenA()
+    public async Task EveryProgramOpensThroughOpenA()
     {
-        _runner.Answer = "ok";
-
+        // The owner's walkthrough (2026-10-31): Word's own open by path met Grant File Access for any copy whose name Word
+        // hadn't written itself, a read-only copy among them, and its panel takes no folder. Opened as for a double click,
+        // the file comes with its access, and a read-only one opens read-only.
         await _scripting.OpenAsync(OfficeProgram.Word, "/c/Lease #1 v1.0.docx");
-
-        var call = Assert.Single(_runner.Calls);
-        Assert.Contains("tell application \"Microsoft Word\"", call.Script);
-        Assert.Contains("add to recent files false", call.Script);
-        Assert.Equal(["/c/Lease #1 v1.0.docx"], call.Args);
-        Assert.Empty(_runner.Processes);
-
         await _scripting.OpenAsync(OfficeProgram.Excel, "/c/Fees #3 v1.0.xlsx");
 
-        Assert.Single(_runner.Calls);
-        var process = Assert.Single(_runner.Processes);
-        Assert.Equal("/usr/bin/open", process.File);
-        Assert.Equal(["-a", "Microsoft Excel", "/c/Fees #3 v1.0.xlsx"], process.Args);
-        Assert.Equal(TimeSpan.FromSeconds(20), process.Timeout);
+        Assert.Empty(_runner.Calls);
+        Assert.Equal(["/usr/bin/open", "/usr/bin/open"], _runner.Processes.Select(p => p.File));
+        Assert.Equal(["-a", "Microsoft Word", "/c/Lease #1 v1.0.docx"], _runner.Processes[0].Args);
+        Assert.Equal(["-a", "Microsoft Excel", "/c/Fees #3 v1.0.xlsx"], _runner.Processes[1].Args);
+        Assert.All(_runner.Processes, p => Assert.Equal(TimeSpan.FromSeconds(20), p.Timeout));
+    }
+
+    [Fact]
+    public async Task StartOpensTheProgramWithNoFile()
+    {
+        // After a crash the program restores what it recovered by itself (M3.5 spec §5.14).
+        await _scripting.StartAsync(OfficeProgram.Word);
+
+        Assert.Equal(["-a", "Microsoft Word"], Assert.Single(_runner.Processes).Args);
+        Assert.Empty(_runner.Calls);
     }
 
     [Fact]
@@ -514,7 +550,18 @@ internal sealed class FakeOsaRunner : IOsaRunner
 
     public sealed record ProcessCall(string File, IReadOnlyList<string> Args, TimeSpan Timeout);
 
+    public sealed record AskCall(string Program, TimeSpan Timeout);
+
+    /// <summary>The scripts run, but for each program's <c>Ask</c>, which goes in <see cref="Asks"/>.</summary>
     public List<Call> Calls { get; } = [];
+
+    public List<AskCall> Asks { get; } = [];
+
+    /// <summary>What every <c>Ask</c> answers.</summary>
+    public string AskAnswer { get; set; } = "ok";
+
+    /// <summary>When set, every <c>Ask</c> throws it.</summary>
+    public Exception? AskFailure { get; set; }
 
     public List<ProcessCall> Processes { get; } = [];
 
@@ -526,6 +573,11 @@ internal sealed class FakeOsaRunner : IOsaRunner
 
     public Task<string> RunAsync(string script, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken ct)
     {
+        if (Regex.Match(script, @"^-- (\w+)\.Ask:") is { Success: true } ask)
+        {
+            Asks.Add(new AskCall(ask.Groups[1].Value, timeout));
+            return AskFailure is null ? Task.FromResult(AskAnswer) : Task.FromException<string>(AskFailure);
+        }
         Calls.Add(new Call(script, args, timeout, ct));
         return Failure is null ? Task.FromResult(Answer) : Task.FromException<string>(Failure);
     }

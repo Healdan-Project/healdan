@@ -14,7 +14,8 @@
  * The function names are the manifest's (manifest.template.xml's <FunctionName>s). Each is defined on the global object,
  * and again with Office.actions.associate once Office is ready, as the trial did. Each calls event.completed() once,
  * whatever happened: when its flow has finished and, if it opened a window, the window has closed, so that this page is
- * still there to hear it.
+ * still there to hear it. It never waits past Office's own limit, though (PRESS_LIMIT), nor for a window Office never
+ * opens (WINDOW_WAIT).
  *
  * While a flow runs, a note in localStorage says so, refreshed every few seconds, so the pane can show that Healdan
  * Helper is working on it: a flow waits for as long as a window of the helper's stays open.
@@ -32,6 +33,16 @@
   const WINDOW = { width: 30, height: 45 };
 
   /**
+   * How long a press waits before it tells Office it is finished whatever is still running: Office stops a button's
+   * function after about five minutes, with an error of its own ("UI less Add-in command timed out"), as it did in the
+   * owner's walkthrough (2026-10-31). A flow still running goes on, but Office may have closed this page by then.
+   */
+  const PRESS_LIMIT = 270000;
+
+  /** How long Office has to answer for the message window before the press stops waiting for it. */
+  const WINDOW_WAIT = 15000;
+
+  /**
    * @param {object} env what the commands run on, so tests can fake it
    * @param {object} env.Healdan healdan.js's API
    * @param {Function} env.makeOffice makes the office object for this app (HealdanOffice.create over the page's globals)
@@ -40,6 +51,8 @@
    * @param {Function} env.now milliseconds, as Date.now
    * @param {Function} env.setInterval
    * @param {Function} env.clearInterval
+   * @param {Function} env.setTimeout
+   * @param {Function} env.clearTimeout
    * @param {object} [env.console]
    * @returns {object} the six functions, by name
    */
@@ -53,20 +66,39 @@
      *     isn't in the window's address because the server logs addresses;
      *   - when the window says it paired, the key it was given is kept here too, as the window may not share storage
      *     with this page.
-     * Office reports the window's closing, by the user or in error, as a DialogEventReceived.
+     * Office reports the window's closing, by the user or in error, as a DialogEventReceived. Office may never answer
+     * for the window at all, as in the owner's walkthrough, where none came and the press ran on until Office stopped
+     * it: after WINDOW_WAIT without an answer, the press stops waiting.
      */
     function showWindow(note, client, app) {
       return new Promise((resolve) => {
         const address = new URL(Healdan.messageLink(note), env.location.href).href;
         const origin = new URL(env.location.href).origin;
+        let answered = false;
+        let ended = false;
+        let waiting = null;
+        const end = () => {
+          if (!ended) {
+            ended = true;
+            env.clearTimeout(waiting);
+            resolve();
+          }
+        };
         const failed = (error) => {
           if (env.console) {
             env.console.warn(`Healdan: the message window didn't open: ${error && error.message}`);
           }
-          resolve();
+          end();
         };
+        waiting = env.setTimeout(() => {
+          if (!answered) {
+            failed(new Error(`Office didn't answer within ${WINDOW_WAIT / 1000} seconds`));
+          }
+        }, WINDOW_WAIT);
         try {
           Office.context.ui.displayDialogAsync(address, { ...WINDOW, promptBeforeOpen: false }, (opened) => {
+            answered = true;
+            env.clearTimeout(waiting);
             // Office calls this later, outside the try around the call: a throw here would leave the press unfinished,
             // and the button busy until Office is restarted.
             try {
@@ -89,7 +121,7 @@
                   client.adoptKey(message.key);
                 }
               });
-              dialog.addEventHandler(Office.EventType.DialogEventReceived, () => resolve());
+              dialog.addEventHandler(Office.EventType.DialogEventReceived, () => end());
             } catch (error) {
               failed(error);
             }
@@ -118,6 +150,21 @@
 
     function press(flow) {
       return async function (event) {
+        let completed = false;
+        let limit = null;
+        const finish = () => {
+          if (!completed) {
+            completed = true;
+            env.clearTimeout(limit);
+            event.completed();
+          }
+        };
+        limit = env.setTimeout(() => {
+          if (env.console) {
+            env.console.warn(`Healdan: ${flow} was still running near Office's limit, so Office is told it is finished`);
+          }
+          finish();
+        }, PRESS_LIMIT);
         let app;
         let client = null;
         try {
@@ -143,7 +190,7 @@
             // Nothing left to tell it with.
           }
         } finally {
-          event.completed();
+          finish();
         }
       };
     }
@@ -165,6 +212,8 @@
       now: () => Date.now(),
       setInterval: (...args) => page.setInterval(...args),
       clearInterval: (...args) => page.clearInterval(...args),
+      setTimeout: (...args) => page.setTimeout(...args),
+      clearTimeout: (...args) => page.clearTimeout(...args),
       console: page.console,
     });
     for (const flow of FLOWS) {
@@ -180,7 +229,7 @@
     return commands;
   }
 
-  const api = { FLOWS, createCommands, install };
+  const api = { FLOWS, PRESS_LIMIT, WINDOW_WAIT, createCommands, install };
 
   if (root.Office && root.document && root.Healdan && root.HealdanOffice) {
     install(root);

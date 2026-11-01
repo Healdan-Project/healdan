@@ -9,6 +9,12 @@ public interface IOfficeApp
     /// <summary>Opens the copy, or brings its window to the front if it's open already.</summary>
     void Open(string path);
 
+    /// <summary>
+    /// Starts the program the copy opens in without opening it, for a crashed copy the program restores by itself (M3.5
+    /// spec §5.14). An app that restores nothing opens the copy.
+    /// </summary>
+    void Start(string path) => Open(path);
+
     /// <summary>Whether the app's process is running; when it isn't but a copy's lock file is left, the app crashed.</summary>
     bool IsRunning();
 

@@ -203,6 +203,17 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     // --- Set Up Microsoft Office -----------------------------------------------------------------------------------
 
     /// <summary>
+    /// The moment the Mac trusts the certificate, the add-in's port opens, or serves the one Set Up renewed: not when the Set
+    /// Up window closes, as the user may leave it open on Done and go to Word (the owner's walkthrough, 2026-10-31).
+    /// </summary>
+    private void OpenAddin()
+    {
+        if (Session is { } session)
+            _ = Task.Run(session.EnsureAddin).ContinueWith(t => log.Error("The Office add-in's port couldn't open after Set Up", t.Exception),
+                TaskContinuationOptions.OnlyOnFaulted);
+    }
+
+    /// <summary>
     /// Set Up Microsoft Office (M3.5 spec §5.13), from the first start or the menu. The user started it or it was offered,
     /// and nothing waits on its answer, so it holds no links back, as Settings doesn't. One at a time: asked again, the open
     /// window comes to the front and the answer is the same.
@@ -218,16 +229,12 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         if (SetUp is not { } setUp)
             return Task.FromResult(false);
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var window = new SetUpOfficeWindow(setUp, log);
+        var window = new SetUpOfficeWindow(setUp, log, trusted: OpenAddin);
         _single[key] = window;
         var shown = Show(window, waits: false, () =>
         {
             _single.Remove(key);
             done.TrySetResult(window.Trusted);
-            // The add-in's port opens now that the Mac trusts the certificate, or serves the one Set Up renewed.
-            if (window.Trusted && Session is { } session)
-                _ = Task.Run(session.EnsureAddin).ContinueWith(t => log.Error("The Office add-in's port couldn't open after Set Up", t.Exception),
-                    TaskContinuationOptions.OnlyOnFaulted);
         });
         if (!shown)
         {
@@ -361,7 +368,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     {
         if (Bring(key))
         {
-            log.Info($"A {key} window is open already: the new request is cancelled");
+            log.Info($"The {_single[key].Title} window is open already: the new request is cancelled");
             return Task.FromResult(WindowAnswers.Cancel());
         }
         var window = make();

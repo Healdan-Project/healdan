@@ -510,12 +510,16 @@
    * Save, the add-in reads the document's bytes, then marks the document with a one-time id, so the helper can check it
    * is saving the window the button was pressed in, and sends the bytes, the mark and the window's ticket. The mark comes
    * off in every outcome. PowerPoint never shows a mark to AppleScript, and one would stay in its file, so it gets none.
+   * Save to Healdan on a Healdan document is a save: the helper saves it itself, as Cmd+S does, and answers saved.
    */
   async function saveNew(args, host, asNew) {
     const { client, office } = args;
     const answer = await client.call("save-new", { app: host, url: urlOf(office), asNew });
     if (answer.action === "cancel") {
       return { ok: true, cancelled: true };
+    }
+    if (answer.action === "saved") {
+      return { ok: true }; // a Healdan document: the helper saved it, as Cmd+S does, and its save goes up
     }
     if (answer.action === "local") {
       return { ok: true, local: true, code: "local-save", message: messageFor("local-save", { host }) };

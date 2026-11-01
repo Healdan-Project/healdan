@@ -49,27 +49,30 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
     /// (<paramref name="asNew"/>) after the document the window's copy is of. On Save, the window taken is fingerprinted at
     /// once, before the add-in reads its bytes, and the answer carries a ticket for <see cref="FileAsync"/> in place of a
     /// temporary file; anything else is answered as the window gave it. Save as New Document from a window that isn't a
-    /// copy is Save to Healdan.
+    /// copy is Save to Healdan. Save to Healdan from a copy is what the extension's is (the owner's walkthrough): a copy
+    /// that can be saved is saved, as Cmd+S saves it, and answered <c>saved</c>, and a read-only one is Save as New
+    /// Document.
     /// </summary>
     /// <param name="url">The add-in's <c>Office.context.document.url</c>, possibly empty. A copy it names must be the window's.</param>
     /// <exception cref="OfficeRefusedException">
     /// <see cref="OfficeRefusedException.WrongWindow"/>: the program has no document open, or the add-in named another
-    /// copy than the front window's for Save as New Document.
+    /// copy than the front window's.
     /// </exception>
     public async Task<JsonObject> SaveNewAsync(OfficeProgram p, string? url, bool asNew)
     {
         var app = OfficePrograms.CheckOutName(p);
         var window = await Scripting().FrontDocumentAsync(p)
             ?? throw new OfficeRefusedException(OfficeRefusedException.WrongWindow, $"{app} has no document open to save.");
-        CopyState? original = null;
-        if (asNew)
+        var original = KnownCopy(window.Path);
+        // The window saved is the front one, so the copy saved, or released and deleted afterwards, must be its own:
+        // another copy the add-in named would lose its file under its open window.
+        if (KnownCopy(url) is { } named && named.Path != original?.Path)
+            throw new OfficeRefusedException(OfficeRefusedException.WrongWindow,
+                $"{(asNew ? "Save as New Document" : "Save to Healdan")} was asked for a copy that isn't in {app}'s front window.");
+        if (!asNew && original is { ReadOnly: false })
         {
-            original = KnownCopy(window.Path);
-            // The window saved is the front one, so the copy released and deleted afterwards must be its own: another copy
-            // the add-in named would lose its file under its open window.
-            if (KnownCopy(url) is { } named && named.Path != original?.Path)
-                throw new OfficeRefusedException(OfficeRefusedException.WrongWindow,
-                    $"Save as New Document was asked for a copy that isn't in {app}'s front window.");
+            await Scripting().SaveAsync(p, original.Path);
+            return WindowAnswers.Saved();
         }
         var request = new JsonObject
         {

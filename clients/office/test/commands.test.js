@@ -63,6 +63,7 @@ function setup({
   const dialogs = [];
   const log = [];
   const intervals = [];
+  const timeouts = [];
   const escaped = []; // what Office's callback threw back at it
   let clock = 1000;
 
@@ -100,6 +101,9 @@ function setup({
           dialogs.push(entry);
           if (dialog === "throws") {
             throw new Error("DialogApi isn't there");
+          }
+          if (dialog === "silent") {
+            return; // Office never calls back, as in the owner's walkthrough
           }
           if (dialog === "handler-throws") {
             // Office calls back later, as it does, with a dialog whose handlers can't be added.
@@ -163,6 +167,15 @@ function setup({
     clearInterval: (id) => {
       intervals[id].cleared = true;
     },
+    setTimeout: (fn, ms) => {
+      timeouts.push({ fn, ms, cleared: false });
+      return timeouts.length - 1;
+    },
+    clearTimeout: (id) => {
+      if (id !== null && id !== undefined) {
+        timeouts[id].cleared = true;
+      }
+    },
     console: { warn: (text) => log.push(text) },
   });
 
@@ -180,7 +193,10 @@ function setup({
     return pressing.completed();
   }
 
-  return { commands, begin, press, storage, requests, dialogs, log, intervals, escaped, tick: (ms) => (clock += ms) };
+  /** The timers still set, for `ms` if given. */
+  const pending = (ms) => timeouts.filter((t) => !t.cleared && (ms === undefined || t.ms === ms));
+
+  return { commands, begin, press, storage, requests, dialogs, log, intervals, timeouts, pending, escaped, tick: (ms) => (clock += ms) };
 }
 
 const SAVE = [200, { action: "save", folderId: 12, name: "Lease agreement", format: "docx", properties: {}, ticket: "ticket-1" }];
@@ -203,10 +219,12 @@ test("the commands are the manifest's function names, each defined once", () => 
 // --- A press ---------------------------------------------------------------------------------------------------------
 
 test("a button that did what it was asked says nothing, and tells Office it is finished", async () => {
-  const { press, dialogs, storage } = setup({ answers: { "open-dialog": [200, { action: "opened" }] } });
+  const { press, dialogs, storage, timeouts, pending } = setup({ answers: { "open-dialog": [200, { action: "opened" }] } });
   assert.equal(await press("openFromHealdan"), 1);
   assert.deepEqual(dialogs, []);
   assert.equal(storage.getItem("healdan.last"), null);
+  assert.deepEqual(timeouts.map((t) => t.ms), [Commands.PRESS_LIMIT]);
+  assert.deepEqual(pending(), [], "no timer is left behind");
 });
 
 test("the first press in an app opens the window to pair in, and Office is finished once it is open", async () => {
@@ -358,6 +376,44 @@ test("a window that won't open ends the press at once, and once", async () => {
 
 // --- Pairing in the window: the key comes back to the button ------------------------------------------------------------
 
+test("a window Office never answers for ends the press after a while, and once", async () => {
+  // The owner's walkthrough (2026-10-31): the first press's window never came, and the press ran on until Office stopped
+  // it with an error of its own ("UI less Add-in command timed out").
+  const { begin, dialogs, log, pending } = setup({ dialog: "silent", closes: false, paired: false });
+  const pressing = begin("saveToHealdan");
+  await new Promise((resolve) => setImmediate(resolve));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(dialogs.length, 1);
+  assert.equal(pressing.completed(), 0, "Office may still answer");
+
+  const [wait] = pending(Commands.WINDOW_WAIT);
+  wait.fn();
+  await pressing.finished;
+  assert.equal(pressing.completed(), 1);
+  assert.match(log.at(-1), /didn't answer within 15 seconds/);
+  assert.deepEqual(pending(), []);
+});
+
+test("a press still going near Office's limit tells Office it is finished, and only once", async () => {
+  let release;
+  const waits = new Promise((resolve) => {
+    release = resolve;
+  });
+  const { begin, log, pending } = setup({ waits, answers: { "open-dialog": [200, { action: "cancel" }] } });
+  const pressing = begin("openFromHealdan");
+  await new Promise((resolve) => setImmediate(resolve));
+
+  const [limit] = pending(Commands.PRESS_LIMIT);
+  assert.ok(Commands.PRESS_LIMIT < 300000, "before Office's five minutes");
+  limit.fn();
+  assert.equal(pressing.completed(), 1);
+  assert.match(log.at(-1), /openFromHealdan was still running near Office's limit/);
+
+  release(); // the flow ends later, as the user closes the helper's window
+  await pressing.finished;
+  assert.equal(pressing.completed(), 1);
+});
+
 test("the key the window paired with is kept by the button too, as the two may not share storage", async () => {
   const { begin, dialogs, storage } = setup({ closes: false, paired: false });
   const pressing = begin("saveToHealdan");
@@ -452,6 +508,8 @@ test("on a page, the commands are defined on the global object and with Office o
     console,
     setInterval,
     clearInterval,
+    setTimeout,
+    clearTimeout,
   });
   vm.runInContext(healdanSource, page);
   vm.runInContext(commandsSource, page);

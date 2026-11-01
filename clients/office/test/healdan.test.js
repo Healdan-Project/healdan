@@ -749,6 +749,16 @@ test("saveToHealdan on cancel does nothing else", async () => {
   assert.deepEqual(office.marks, []);
 });
 
+test("saveToHealdan on a Healdan document is a save, as Cmd+S is", async () => {
+  // The owner's walkthrough (2026-10-31): the helper saves a copy itself and answers saved, and its save goes up.
+  const { client, helper, office, log } = setup({ routes: { "save-new": [200, { action: "saved" }] } });
+  const result = await Healdan.saveToHealdan({ client, office });
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(log, ["save-new"], "no bytes are read and no mark is set");
+  assert.equal(helper.calls().length, 1);
+  assert.deepEqual(office.marks, []);
+});
+
 test("saveToHealdan on local says to use the app's own Save As", async () => {
   for (const host of ["Word", "Excel", "PowerPoint"]) {
     const { client, office, log } = setup({ host, routes: { "save-new": [200, { action: "local" }] } });

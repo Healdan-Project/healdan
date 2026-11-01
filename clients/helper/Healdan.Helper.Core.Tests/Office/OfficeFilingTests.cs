@@ -441,6 +441,60 @@ public sealed class OfficeFilingTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task SaveToHealdanOnACopySavesIt()
+    {
+        // The owner's walkthrough (2026-10-31): Save to Healdan on a Healdan document offered the Save window, to file it
+        // again as a new document. A copy is saved instead, as Cmd+S and the extension's Save to Healdan do, and the
+        // cycle sends that save.
+        var (cycle, copy) = await OpenAsync();
+        var name = Path.GetFileName(copy);
+        Scripting.Front = _ => new FrontDocument(copy, name, name);
+        var filing = Filing(cycle);
+
+        var answer = await filing.SaveNewAsync(OfficeProgram.Word, Twin(copy), asNew: false);
+
+        Assert.Equal("""{"action":"saved"}""", answer.ToJsonString());
+        Assert.Equal([(OfficeProgram.Word, copy)], Scripting.Saves);
+        Assert.Empty(_windows.Asked);
+    }
+
+    [Fact]
+    public async Task SaveToHealdanOnAReadOnlyCopyFilesItAsANewDocument()
+    {
+        // Nothing of a read-only copy's reaches its document, so it's filed as Save as New Document would file it, as the
+        // extension does.
+        var cycle = Cycle();
+        await cycle.OpenAsync(5, true);
+        var copy = Scripting.Opened[^1].Path;
+        var name = Path.GetFileName(copy);
+        Scripting.Front = _ => new FrontDocument(copy, name, name);
+        var filing = Filing(cycle);
+
+        await TicketAsync(filing);
+
+        var request = Assert.Single(_windows.Asked).Request;
+        Assert.Equal((copy, 5L), ((string?)request["path"], (long?)request["docNumber"]));
+        Assert.Empty(Scripting.Saves);
+    }
+
+    [Fact]
+    public async Task SaveToHealdanFromAnotherWindowIsRefused()
+    {
+        Server.Add(6, "Brief.docx", "brief");
+        var (cycle, lease) = await OpenAsync();
+        await cycle.OpenAsync(6, false);
+        var brief = CopyPath("Brief #6 v1.0.docx");
+        Scripting.Front = _ => new FrontDocument(lease, Path.GetFileName(lease), Path.GetFileName(lease));
+        var filing = Filing(cycle);
+
+        var refused = await Assert.ThrowsAsync<OfficeRefusedException>(() => filing.SaveNewAsync(OfficeProgram.Word, brief, asNew: false));
+
+        Assert.Equal("wrong-window", refused.Code);
+        Assert.Empty(Scripting.Saves);
+        Assert.Empty(_windows.Asked);
+    }
+
+    [Fact]
     public async Task TicketsAreOneUseAndExpire()
     {
         Assert.Equal(TimeSpan.FromMinutes(10), FilingTickets.Lifetime);
