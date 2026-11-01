@@ -19,6 +19,7 @@ namespace Healdan.Helper.Windows;
 public partial class OpenWindow : Window
 {
     private readonly HealdanApi? _api;
+    private readonly Func<string, bool> _opensReadOnly = _ => false;
     private readonly Browser? _browser;
     private readonly BrowseControls? _controls;
     private DocumentDetails? _details;
@@ -31,9 +32,13 @@ public partial class OpenWindow : Window
     public OpenWindow() => InitializeComponent();
 
     /// <param name="fromApp">Asked for by the app's Open, so "Open from Local Computer" has a box to go back to.</param>
-    internal OpenWindow(HealdanApi api, bool fromApp) : this()
+    /// <param name="opensReadOnly">
+    /// Whether a document of this name goes to the computer's default app, which only reads it
+    /// (<see cref="AppChooser.OpensReadOnly"/>); asked each time, so it follows Settings and CoffeePDF's own switch.
+    /// </param>
+    internal OpenWindow(HealdanApi api, bool fromApp, Func<string, bool> opensReadOnly) : this()
     {
-        _api = api;
+        (_api, _opensReadOnly) = (api, opensReadOnly);
         BrowserChrome.Apply(this, Toolbar, WindowTitle, [BackButton, ForwardButton, UpButton, ScopePicker, SearchBox]);
         _browser = new Browser(api, BrowseMode.Open);
         var places = new PlacesPane(BrowseMode.Open);
@@ -132,7 +137,10 @@ public partial class OpenWindow : Window
         _details = details;
         var doc = details.Document;
         DetailsNote.IsVisible = false;
-        KindNote.IsVisible = FileKinds.Of(doc.Name) is null;
+        KindNote.IsVisible = _opensReadOnly(doc.Name);
+        KindNote.Text = PdfFiles.Is(doc.Name)
+            ? "PDFs open read-only in the computer's default app. Turn on Healdan support in CoffeePDF to edit them there."
+            : "Only office documents can be edited from here: this one opens read-only.";
         DetailRows.ItemsSource = details.Rows;
         ShowThumbnail(details.Thumbnail);
         ShowStar();
@@ -227,13 +235,16 @@ public partial class OpenWindow : Window
         AutomationProperties.SetName(DocStarButton, star); // as the crumb row's star (polish spec §9)
     }
 
-    /// <summary>An older version opens read-only, as does a file no office app edits; the header says which version (polish spec §6.2).</summary>
+    /// <summary>
+    /// An older version opens read-only, as does a file that opens in the default app (M3.6 spec §5.2); the header says which
+    /// version (polish spec §6.2).
+    /// </summary>
     private void VersionChanged()
     {
         var older = SelectedVersion();
         if (_details is { } d)
             ShowHeader(d.Document, older);
-        SetReadOnly(forced: older is not null || (_details is { } e && FileKinds.Of(e.Document.Name) is null));
+        SetReadOnly(forced: older is not null || (_details is { } e && _opensReadOnly(e.Document.Name)));
     }
 
     private void SetReadOnly(bool forced)
@@ -259,7 +270,7 @@ public partial class OpenWindow : Window
         if (_controls?.SelectedEntry?.Document is not { } doc)
             return;
         var version = _details?.Document.DocNumber == doc.DocNumber ? SelectedVersion() : null;
-        var readOnly = ReadOnlyBox.IsChecked == true || version is not null || FileKinds.Of(doc.Name) is null;
+        var readOnly = ReadOnlyBox.IsChecked == true || version is not null || _opensReadOnly(doc.Name);
         Chosen = (doc.DocNumber, readOnly, version);
         Finish(WindowAnswers.Opened());
     }

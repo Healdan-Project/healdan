@@ -21,6 +21,7 @@ public sealed class SettingsWindowTests : IDisposable
 {
     private static readonly InstalledApps Everything = new(LibreOffice: true, Word: true, Excel: true, PowerPoint: true);
     private static readonly InstalledApps OnlyLibreOffice = new(LibreOffice: true, Word: false, Excel: false, PowerPoint: false);
+    private static readonly InstalledApps WithCoffeePdf = Everything with { CoffeePdf = true };
     private static readonly DateTimeOffset Paired = new(2026, 10, 29, 14, 30, 0, TimeSpan.Zero);
 
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-settings-window-").FullName;
@@ -36,7 +37,7 @@ public sealed class SettingsWindowTests : IDisposable
     /// <paramref name="paired"/> is what the helper has paired; Forget takes it off the list, as the helper's does.
     /// </summary>
     private Task Run(Func<SettingsWindow, Task> test, InstalledApps? installed = null, Func<string, string?>? systemDefault = null, List<PairedApp>? paired = null,
-        Func<Task<bool>>? runSetUp = null, bool setUpAlready = false) => Headless.RunAsync(async () =>
+        Func<Task<bool>>? runSetUp = null, bool setUpAlready = false, bool coffeePdfOn = false) => Headless.RunAsync(async () =>
     {
         var apps = installed ?? Everything;
         var setUp = new OfficeSetUp(Paths, new AddinCertificate(Paths, TimeProvider.System), _mac, () => apps, macOS: true);
@@ -52,7 +53,7 @@ public sealed class SettingsWindowTests : IDisposable
                 _forgotten.Add(app);
                 pairedNow.RemoveAll(p => p.App == app);
             });
-        var chooser = new AppChooser(HelperSettings.Load(Paths), apps, systemDefault ?? (_ => null));
+        var chooser = new AppChooser(HelperSettings.Load(Paths), apps, systemDefault ?? (_ => null), coffeePdfOn);
         var window = new SettingsWindow("healdan.example", signedIn: true, Paths, chooser, new LoginItemSummary("On", true, null), extension: null, office);
         window.Show();
         try
@@ -172,6 +173,35 @@ public sealed class SettingsWindowTests : IDisposable
     {
         Assert.Contains(Texts(window), t => t.StartsWith("OpenDocument files open in LibreOffice whatever you choose", StringComparison.Ordinal));
         Assert.Contains(Texts(window), t => t.Contains("Other files open read-only in the computer's default app.", StringComparison.Ordinal));
+        return Task.CompletedTask;
+    });
+
+    [MacFact]
+    public Task PdfsShowCoffeePdfWhileItsOn() => Run(window =>
+    {
+        var texts = Texts(RowOf(window, "PDFs"));
+        Assert.Contains("CoffeePDF", texts);
+        Assert.Contains(".pdf", texts);
+        Assert.DoesNotContain(SettingsWindow.PdfSupportOffNote, texts);
+        Assert.Null(PopUp(window, "PDFs")); // CoffeePDF's own preference is the switch
+        return Task.CompletedTask;
+    }, installed: WithCoffeePdf, coffeePdfOn: true);
+
+    [MacFact]
+    public Task WithCoffeePdfOffPdfsOpenReadOnlyAndTheNoteSaysHowToTurnItOn() => Run(window =>
+    {
+        var texts = Texts(RowOf(window, "PDFs"));
+        Assert.Contains("Default app, read-only", texts);
+        Assert.Contains(SettingsWindow.PdfSupportOffNote, texts);
+        return Task.CompletedTask;
+    }, installed: WithCoffeePdf, coffeePdfOn: false);
+
+    [MacFact]
+    public Task WithoutCoffeePdfPdfsOpenReadOnlyWithNoNote() => Run(window =>
+    {
+        var texts = Texts(RowOf(window, "PDFs"));
+        Assert.Contains("Default app, read-only", texts);
+        Assert.DoesNotContain(SettingsWindow.PdfSupportOffNote, Texts(window));
         return Task.CompletedTask;
     });
 
