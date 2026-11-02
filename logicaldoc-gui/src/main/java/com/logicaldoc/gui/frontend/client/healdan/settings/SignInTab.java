@@ -288,7 +288,8 @@ public class SignInTab extends Tab {
 			public void handleSuccess(Integer linked) {
 				if (linked > 0) {
 					SC.warn(label + " has " + ProviderDialog.accounts(linked) + " linked, so it can't be removed. "
-							+ "Turn it off, or open it and Unlink Everyone, first. Turning it off keeps the links.");
+							+ "To stop its sign-ins and keep its links, turn it off. To remove it, open it and Unlink "
+							+ "Everyone first.");
 					return;
 				}
 				LD.ask("Remove " + label,
