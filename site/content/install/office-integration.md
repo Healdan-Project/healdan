@@ -28,6 +28,9 @@ server. The User Guide's [Working in Office Apps](../../user/office/) is for the
 - The helper's disk image, `Healdan-Helper-<version>.dmg`. Healdan's releases are on
   [GitHub](https://github.com/Healdan-Project/healdan/releases), each under a `helper-v<version>` tag, signed and
   notarised. Tell people where to get it, and which version.
+- For PDFs, Healdan Helper 0.5.0 or later. It opens them in [CoffeePDF](https://github.com/coffeemuse/CoffeePDF) on a
+  Mac where CoffeePDF is installed with its Healdan support on, and read-only in the Mac's default app elsewhere. An
+  earlier helper refuses Open in App on a PDF.
 - The same permissions as in the web page: Download to open a document, Write to edit it, and Add on a folder to
   file into it. The helper enforces nothing of its own, and can't do anything the web page wouldn't allow.
 

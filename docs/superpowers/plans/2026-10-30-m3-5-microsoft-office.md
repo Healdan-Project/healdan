@@ -1026,7 +1026,7 @@ Filled in as the build found them, and left open once Tasks 1 to 11 and the fina
 - Accessibility: a `display:none` live region may not announce when it is shown; `aria-busy` is on all of `<main>` for up to 12 seconds; focus moves from the message to the code field at once; the message and the status repeat each other.
 - `MacCertificateTrust`'s cancel, failure, kill and timeout paths are untested; `OfficeSetUp.TrustAsync` re-checks `NeedsSetUp` straight after `security` returns, with no retry for trustd's lag; renewal leaves the old certificate and its trust entry in the login keychain.
 - The `check` icon's path data was written by hand in the release's format, not copied from Tabler 3.50.0; diff it against the real file.
-- Docs: `settings.png` and its alt text show the old Settings; the screenshots listed in spec §11.3 are not taken.
+- Docs: the screenshots listed in spec §11.3 are not taken. (`settings.png` and its alt text were brought up to date for Healdan Helper 0.5.0, with the Microsoft Office group.)
 
 **Lost work and reachability, left after the final review**
 - An edit saved after the rename script's last fingerprint but before `Settled(newPath)` is taken as confirmed (tens of milliseconds); a modification-date check would close it.
