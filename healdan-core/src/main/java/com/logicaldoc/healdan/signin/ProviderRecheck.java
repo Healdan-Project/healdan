@@ -255,14 +255,21 @@ public class ProviderRecheck {
 	}
 
 	/**
-	 * @return the new refresh token sealed, or null if there is none or it
-	 *         couldn't be sealed
+	 * @return the new refresh token sealed, or null if there is none, it
+	 *         couldn't be sealed, or it's too long for the token's row to hold
+	 *         (ruling R35)
 	 */
 	private String seal(String refreshToken, SignInProvider p, String account) {
 		if (refreshToken == null)
 			return null;
 		try {
-			return box.seal(refreshToken);
+			String sealed = box.seal(refreshToken);
+			if (ApiTokens.refreshFits(sealed))
+				return sealed;
+			log.warn("The sign-in provider {} gave the account {} a new refresh token too long to keep ({} characters "
+					+ "sealed, and a device token holds {}). The device token keeps the old one, which the provider "
+					+ "may refuse at the next check.", p.id(), account, sealed.length(), ApiTokens.MAX_REFRESH);
+			return null;
 		} catch (IllegalStateException e) {
 			// Its message holds no secret, and neither does this line
 			log.warn("Couldn't seal the new refresh token the sign-in provider {} gave for the account {}, as "

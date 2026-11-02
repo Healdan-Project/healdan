@@ -79,6 +79,14 @@ public final class SignInTestHooks {
 	}
 
 	/**
+	 * @return how many sign-ins are waiting, expired ones included until the
+	 *         next is kept, so a test can tell that none was kept
+	 */
+	public static int pendingKept() {
+		return PendingSignIns.get().size();
+	}
+
+	/**
 	 * @param state a sign-in's state
 	 * @return the pending sign-in kept for it, left in place, so a test knows
 	 *         its nonce and verifier

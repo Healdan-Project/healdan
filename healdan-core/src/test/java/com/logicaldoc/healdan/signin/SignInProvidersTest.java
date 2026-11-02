@@ -565,6 +565,114 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertEquals("sub", providers().find("entra").orElseThrow().identityClaim());
 	}
 
+	/**
+	 * Ruling R33: a link is the provider's id and the identity, with no
+	 * issuer, so a new issuer (another tenant, or a provider whose identities
+	 * repeat) would map the links onto other people. It's refused while the
+	 * provider has linked accounts, but for a trailing slash.
+	 */
+	@Test
+	public void testIssuerFixedWhileLinked() throws Exception {
+		User clerk = fx.user("clerk");
+		providers().save(entra(), SECRET_ONE);
+		SignInIdentity identity = link("entra", "oid-1", clerk.getId());
+		SignInIdentityDAO.get().store(identity);
+
+		for (String other : List.of("https://login.microsoftonline.com/t2/v2.0",
+				"https://login.microsoftonline.com/T1/v2.0", "https://sts.firm.example/t1/v2.0")) {
+			SignInProvider moved = configured("entra", Preset.ENTRA, other, "c1");
+			assertSaveRefused("issuer", moved, null);
+			HealdanRuleException e = assertThrows(HealdanRuleException.class, () -> providers().save(moved, null));
+			assertTrue(e.getMessage(), e.getMessage().contains("Unlink its accounts first"));
+			assertTrue(e.getMessage(), e.getMessage().contains("entra"));
+		}
+		assertEquals(ENTRA_ISSUER, providers().find("entra").orElseThrow().issuer());
+
+		// A trailing slash, which the issuer must match to the character, can be put right while it's linked
+		providers().save(configured("entra", Preset.ENTRA, ENTRA_ISSUER + "/", "c1"), null);
+		assertEquals(ENTRA_ISSUER + "/", providers().find("entra").orElseThrow().issuer());
+		providers().save(configured("entra", Preset.ENTRA, " " + ENTRA_ISSUER + " ", "c1"), null);
+		assertEquals(ENTRA_ISSUER, providers().find("entra").orElseThrow().issuer());
+
+		// Unlinked, it can change
+		identity = SignInIdentityDAO.get().findLinked("entra", "oid-1").orElseThrow();
+		identity.setUnlinked(new Date());
+		SignInIdentityDAO.get().store(identity);
+		providers().save(configured("entra", Preset.ENTRA, "https://login.microsoftonline.com/t2/v2.0", "c1"), null);
+		assertEquals("https://login.microsoftonline.com/t2/v2.0", providers().find("entra").orElseThrow().issuer());
+	}
+
+	/**
+	 * Ruling R34: a claim people can change at some providers can't name the
+	 * person, as changing it would hand one person's linked account to another
+	 */
+	@Test
+	public void testMutableIdentityClaimsRefused() throws Exception {
+		for (String claim : List.of("email", "preferred_username", "upn", "unique_name", "name", "nickname", "Email",
+				" UPN ", "Preferred_Username")) {
+			SignInProvider p = build("entra", "Label", ENTRA_ISSUER, "c1", claim, "preferred_username", "email",
+					"groups");
+			assertSaveRefused("identity claim", p, SECRET_ONE);
+			HealdanRuleException e = assertThrows(HealdanRuleException.class, () -> providers().save(p, SECRET_ONE));
+			assertTrue(e.getMessage(), e.getMessage().contains(claim.strip().toLowerCase()));
+			assertTrue(e.getMessage(), e.getMessage().contains("sub") && e.getMessage().contains("oid"));
+		}
+		assertEquals(List.of(), providers().all());
+
+		// Nor can a saved provider take one
+		providers().save(entra(), SECRET_ONE);
+		assertSaveRefused("identity claim",
+				build("entra", "Label", ENTRA_ISSUER, "c1", "upn", "preferred_username", "email", "groups"), null);
+		assertEquals("oid", providers().find("entra").orElseThrow().identityClaim());
+
+		// Stable claims are fine
+		for (String claim : List.of("sub", "oid", "uid", "employee_id"))
+			providers().save(build("entra", "Label", ENTRA_ISSUER, "c1", claim, "preferred_username", "email",
+					"groups"), null);
+		assertEquals("employee_id", providers().find("entra").orElseThrow().identityClaim());
+	}
+
+	/**
+	 * The refusals reach the Sign-In tab, which shows them as HTML, so they
+	 * name a provider by its id, whose pattern is safe, never by its label,
+	 * and quote a recipient only if it looks like a username
+	 */
+	@Test
+	public void testRefusalsQuoteNothingAnAdminTyped() throws Exception {
+		User clerk = fx.user("clerk");
+		String label = "Firm <img src=x onerror=alert(1)>";
+		providers().save(build("entra", label, ENTRA_ISSUER, "c1", "oid", "preferred_username", "email", "groups"),
+				SECRET_ONE);
+		assertEquals(label, providers().find("entra").orElseThrow().label());
+		SignInIdentityDAO.get().store(link("entra", "oid-1", clerk.getId()));
+
+		List<HealdanRuleException> refusals = List.of(
+				assertThrows(HealdanRuleException.class, () -> providers().save(
+						build("entra", label, ENTRA_ISSUER, "c1", "sub", "preferred_username", "email", "groups"),
+						null)),
+				assertThrows(HealdanRuleException.class, () -> providers().save(
+						build("entra", label, ENTRA_ISSUER + "x", "c1", "oid", "preferred_username", "email", "groups"),
+						null)),
+				assertThrows(HealdanRuleException.class, () -> providers().remove("entra")),
+				assertThrows(HealdanRuleException.class,
+						() -> providers().saveOptions("Password", true, List.of("<img src=x onerror=alert(1)>"))),
+				assertThrows(HealdanRuleException.class,
+						() -> providers().saveOptions("Password", true, List.of("admin", "a&b"))));
+		for (HealdanRuleException e : refusals) {
+			assertFalse(e.getMessage(), e.getMessage().contains("<"));
+			assertFalse(e.getMessage(), e.getMessage().contains("&"));
+			assertFalse(e.getMessage(), e.getMessage().contains("Firm"));
+		}
+		assertTrue(refusals.get(0).getMessage(), refusals.get(0).getMessage().contains("entra"));
+		assertTrue(refusals.get(2).getMessage(), refusals.get(2).getMessage().contains("entra"));
+		assertTrue(refusals.get(3).getMessage(), refusals.get(3).getMessage().contains("recipient"));
+
+		// A recipient that looks like a username is still named
+		HealdanRuleException named = assertThrows(HealdanRuleException.class,
+				() -> providers().saveOptions("Password", true, List.of("jane.doe@firm.example")));
+		assertTrue(named.getMessage(), named.getMessage().contains("'jane.doe@firm.example'"));
+	}
+
 	@Test
 	public void testRemoveOfAnUnknownProvider() {
 		assertRefused("provider", () -> providers().remove("entra"));

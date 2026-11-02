@@ -368,6 +368,88 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
 	}
 
+	/**
+	 * A discovery document that couldn't be fetched is remembered for 30
+	 * seconds, so that while a provider is down an unthrottled start doesn't
+	 * hold a Tomcat worker for the timeouts on every call. Start, exchange,
+	 * refresh and Check all fail at once, the same way, asking the provider
+	 * nothing; forget, which saving a provider calls, tries again at once.
+	 */
+	@Test
+	public void testFailedDiscoveryIsRememberedFor30Seconds() throws Exception {
+		assertEquals(30_000L, ProviderClient.FAILED_DISCOVERY_MILLIS);
+		long[] now = { 1_000_000L };
+		client.clock = () -> now[0];
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		Start s = client.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		client.forget("fake");
+		int tokenRequests = fake.tokenRequests();
+		int keyRequests = fake.keyRequests();
+
+		fake.discoveryStatus(503);
+		ProviderException first = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(first.getMessage(), first.getMessage().contains("HTTP 503"));
+		int asked = fake.discoveryRequests();
+
+		// Back up, but not asked again yet
+		fake.discoveryStatus(200);
+		now[0] += 29_999;
+		ProviderException again = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertEquals(first.getMessage(), again.getMessage());
+		ProviderException exchanged = assertThrows(ProviderException.class,
+				() -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertEquals(first.getMessage(), exchanged.getMessage());
+		assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+		Check check = client.check(p, REDIRECT);
+		assertFalse(check.ok());
+		assertEquals(REDIRECT, check.redirect());
+		assertTrue(check.problems().toString(), mentions(check, first.getMessage()));
+		assertEquals(asked, fake.discoveryRequests());
+		assertEquals(tokenRequests, fake.tokenRequests());
+		assertEquals(keyRequests, fake.keyRequests());
+
+		// 30 seconds after the failure, the next use asks again
+		now[0] += 1;
+		assertNotNull(client.start(p, REDIRECT, false));
+		assertEquals(asked + 1, fake.discoveryRequests());
+
+		// Another provider's failure is its own
+		client.forget("fake");
+		fake.discoveryStatus(503);
+		assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		SignInProvider other = fake.asProvider("other");
+		fake.discoveryStatus(200);
+		assertNotNull(client.start(other, REDIRECT, false));
+
+		// forget, which a save in the Sign-In tab calls, tries again at once
+		client.forget("fake");
+		assertNotNull(client.start(p, REDIRECT, false));
+		assertEquals(asked + 4, fake.discoveryRequests());
+	}
+
+	@Test
+	public void testFailedDiscoveryIsRememberedWhenTheProviderIsClosed() throws Exception {
+		long[] now = { 1_000_000L };
+		client.clock = () -> now[0];
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		client.forget("fake");
+		fake.close();
+		fake = null;
+		SignInTestHooks.allowHttp(true);
+
+		ProviderException first = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(String.valueOf(first.getCause()), first.getCause() instanceof IOException);
+		now[0] += 10_000;
+		ProviderException again = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertEquals(first.getMessage(), again.getMessage());
+		assertTrue(String.valueOf(again.getCause()), again.getCause() instanceof IOException);
+		assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+		assertTrue(mentions(client.check(p, REDIRECT), first.getMessage()));
+	}
+
 	@Test
 	public void testTimeouts() throws Exception {
 		assertEquals(10_000, ProviderClient.TIMEOUT_MILLIS);
@@ -381,6 +463,8 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof SocketTimeoutException);
 
 		fake.delay("/.well-known/openid-configuration", Duration.ZERO);
+		// The failure is remembered for 30 seconds, unless the provider is saved, which forgets it
+		quick.forget("fake");
 		Tokens t = signIn(quick, p, true);
 		fake.delay("/token", Duration.ofSeconds(3));
 		began = System.nanoTime();
@@ -586,9 +670,10 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertNull(unknown.claims());
 	}
 
-	// Ruling R29: the token endpoint's client authentication follows the provider's discovery document
+	// Rulings R29 and R32: the token endpoint's client authentication follows the provider's discovery document,
+	// client_secret_post first, as Nimbus form-encodes a Basic header's secret and Entra's secrets hold a ~
 	@Test
-	public void testClientSecretPostWhenOnlyThatIsListed() throws Exception {
+	public void testClientSecretPostWhenListed() throws Exception {
 		fake.tokenEndpointAuthMethods(List.of("client_secret_post"));
 		SignInProvider p = fake.asProvider("fake");
 
@@ -621,26 +706,30 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		}
 		SignInProviders.get().save(p, FakeProvider.SECRET);
 
-		// Listed with other methods, basic or not
+		// Listed with other methods, client_secret_basic among them or not, in any order: Entra's own list is
+		// client_secret_post, private_key_jwt, client_secret_basic and self_signed_tls_client_auth
 		for (List<String> methods : List.of(List.of("private_key_jwt", "client_secret_post"),
-				List.of("tls_client_auth", "client_secret_jwt", "client_secret_post"))) {
+				List.of("tls_client_auth", "client_secret_jwt", "client_secret_post"),
+				List.of("client_secret_basic", "client_secret_post"), List.of("client_secret_post", "client_secret_basic"),
+				List.of("client_secret_post", "private_key_jwt", "client_secret_basic", "self_signed_tls_client_auth"))) {
 			fake.tokenEndpointAuthMethods(methods);
 			client.forget("fake");
-			signIn(p, false);
+			Tokens listed = signIn(p, true);
+			assertEquals(methods.toString(), "client_secret_post", fake.lastClientAuthentication());
+			assertEquals(Outcome.ACCEPTED, client.refresh(p, listed.refreshToken()).outcome());
 			assertEquals(methods.toString(), "client_secret_post", fake.lastClientAuthentication());
 		}
 	}
 
 	@Test
-	public void testClientSecretBasicByDefaultAndWhenListed() throws Exception {
+	public void testClientSecretBasicByDefaultAndWhenListedWithoutPost() throws Exception {
 		SignInProvider p = fake.asProvider("fake");
 		signIn(p, false);
 		assertEquals("client_secret_basic", fake.lastClientAuthentication());
 
-		// Listed beside client_secret_post, in either order, and with others
-		for (List<String> methods : List.of(List.of("client_secret_basic", "client_secret_post"),
-				List.of("client_secret_post", "client_secret_basic"),
-				List.of("private_key_jwt", "client_secret_post", "client_secret_basic"))) {
+		// Listed without client_secret_post, alone or with others
+		for (List<String> methods : List.of(List.of("client_secret_basic"),
+				List.of("private_key_jwt", "client_secret_basic"))) {
 			fake.tokenEndpointAuthMethods(methods);
 			client.forget("fake");
 			Tokens t = signIn(p, true);
@@ -806,6 +895,8 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertFalse(client.check(p, REDIRECT).ok());
 
 		fake.trust();
+		// The failure is remembered for 30 seconds, unless the provider is saved, which forgets it
+		client.forget("tls");
 		Tokens t = signIn(p, true);
 		assertEquals("s-1001", t.claims().identity());
 		assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());

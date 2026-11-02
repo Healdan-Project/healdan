@@ -118,7 +118,7 @@ final class HealdanThrottle {
             owner = UserDAO.get().findById(found.getUserId());
         } catch (PersistenceException | NoSuchAlgorithmException e) {
             // Refused rather than let through unchecked; the message is the database's, which never holds the key
-            log.warn(e.getMessage(), e);
+            log.warn("{}", e.getMessage(), e);
             throw new AuthenticationException("dataerror", e);
         }
         if (owner != null && owner.getSource() == UserSource.OIDC)
@@ -174,7 +174,7 @@ final class HealdanThrottle {
             if (apiKey != null)
                 return apiKey.getLabel();
         } catch (PersistenceException | NoSuchAlgorithmException e) {
-            log.warn(e.getMessage(), e);
+            log.warn("{}", e.getMessage(), e);
         }
         return "unknown";
     }
@@ -228,7 +228,7 @@ final class HealdanThrottle {
             Date waitStart = DateUtils.addMinutes(new Date(), -config.getInt("throttle.ip.wait", 0));
             return counter != null && waitStart.before(counter.getLastModified());
         } catch (PersistenceException e) {
-            log.warn(e.getMessage(), e);
+            log.warn("{}", e.getMessage(), e);
             return true;
         }
     }

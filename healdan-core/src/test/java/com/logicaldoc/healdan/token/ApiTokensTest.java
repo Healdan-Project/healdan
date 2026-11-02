@@ -417,6 +417,60 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 		}
 	}
 
+	/**
+	 * A revoked token keeps no refresh token, so a copy of the database and
+	 * the secret key together hold no live one
+	 */
+	@Test
+	public void testRevokingClearsTheRefreshToken() throws Exception {
+		User jane = fx.user("jane");
+		User boss = fx.user("boss");
+		ApiToken one = tokens().issue(jane, "Helper", null, null, "fake", "v1:b25l").row();
+		ApiToken two = tokens().issue(jane, "Helper 2", null, null, "fake", "v1:dHdv").row();
+		ApiToken three = tokens().issue(jane, "Helper 3", null, null, "fake", "v1:dGhyZWU=").row();
+		ApiToken bosses = tokens().issue(boss, "Helper", null, null, "fake", "v1:Ym9zcw==").row();
+
+		tokens().revoke(one);
+		assertEquals(null, refresh(one));
+		assertEquals("v1:dHdv", refresh(two));
+
+		assertEquals(2, tokens().revokeAll(jane.getId()));
+		assertEquals(null, refresh(two));
+		assertEquals(null, refresh(three));
+		// Another account's is its own
+		assertEquals("v1:Ym9zcw==", refresh(bosses));
+		assertEquals(Optional.empty(), tokens().recheckState(two.getId()));
+	}
+
+	/**
+	 * Ruling R35: the column holds a sealed refresh token of up to 65,535
+	 * characters, where V6's held 4,000; V7 widened it
+	 */
+	@Test
+	public void testLongRefreshTokensRoundTrip() throws Exception {
+		assertEquals(65_535, ApiTokens.MAX_REFRESH);
+		User jane = fx.user("jane");
+		String sealed = "v1:" + "A".repeat(ApiTokens.MAX_REFRESH - 3);
+		ApiToken token = tokens().issue(jane, "Helper", null, null, "fake", sealed).row();
+		assertEquals(sealed, refresh(token));
+		assertEquals(sealed, ApiTokenDAO.get().findById(token.getId()).getRefresh());
+		assertEquals(sealed, tokens().recheckState(token.getId()).orElseThrow().refresh());
+
+		String next = "v1:" + "B".repeat(10_000);
+		tokens().recordRecheck(token, null, next);
+		assertEquals(next, tokens().recheckState(token.getId()).orElseThrow().refresh());
+
+		// What fits, by the sealed length
+		assertTrue(ApiTokens.refreshFits(null));
+		assertTrue(ApiTokens.refreshFits(sealed));
+		assertFalse(ApiTokens.refreshFits(sealed + "A"));
+	}
+
+	private String refresh(ApiToken token) {
+		return jdbc().queryForObject("select hd_refresh from hd_api_token where ld_id = ?", String.class,
+				token.getId());
+	}
+
 	@Test
 	public void testRevokeIsIdempotent() throws Exception {
 		ApiToken token = tokens().issue(fx.user("clerk"), "x", null).row();

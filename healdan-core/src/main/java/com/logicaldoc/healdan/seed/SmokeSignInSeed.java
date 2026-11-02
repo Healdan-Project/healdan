@@ -30,8 +30,12 @@ import com.logicaldoc.util.spring.Context;
  * For the smoke test only: when {@code HEALDAN_SMOKE_SIGNIN_ISSUER},
  * {@code HEALDAN_SMOKE_SIGNIN_CLIENT_ID} and
  * {@code HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET} are set, as
- * {@code docker/tests/compose.signin.yaml} sets them, sets Healdan up to sign
- * in through the stand-in provider that overlay runs (M4 spec section 16.1):
+ * {@code docker/tests/compose.signin.yaml} sets them, and
+ * {@code HEALDAN_SMOKE_FIXTURE} is {@code true}, as
+ * {@code docker/tests/compose.smoke.yaml} sets it (and
+ * {@code docker/smoke-test.sh} always adds that overlay), sets Healdan up to
+ * sign in through the stand-in provider the sign-in overlay runs (M4 spec
+ * section 16.1):
  * <ul>
  * <li>the provider {@code smoke}, preset {@code other}, linking by email;</li>
  * <li>the group {@code Smoke SSO}, which the provider's group
@@ -45,8 +49,10 @@ import com.logicaldoc.util.spring.Context;
  * The issuer is plain HTTP, which needs {@code HEALDAN_SIGNIN_ALLOW_HTTP}
  * too; without it the step fails, and startup with it.
  * <p>
- * Production never sets the variables. Without all three the step does
- * nothing and writes no marker, so it can run on a later start.
+ * Production never sets the variables. Without all four the step does
+ * nothing and writes no marker, so it can run on a later start: the three
+ * alone, set somewhere by mistake, don't make a provider, a group and an
+ * account with a known password on a stack that isn't the smoke test's.
  */
 @Component
 public class SmokeSignInSeed implements SeedStep {
@@ -104,7 +110,15 @@ public class SmokeSignInSeed implements SeedStep {
 		if (!set.isEmpty() && set.size() < VARIABLES.size())
 			log.warn("The smoke test's sign-in seed needs {}, {} and {}, and only {} set: it waits for all three",
 					ISSUER, CLIENT_ID, CLIENT_SECRET, String.join(" and ", set));
-		return set.size() == VARIABLES.size();
+		if (set.size() < VARIABLES.size())
+			return false;
+		// As the smoke fixture reads it: only the smoke overlay sets it
+		if (!"true".equals(env.get(SmokeFixtureSeed.ENV))) {
+			log.warn("The smoke test's sign-in seed needs {}=true too, which the smoke overlay sets: it does nothing "
+					+ "on a stack that isn't the smoke test's", SmokeFixtureSeed.ENV);
+			return false;
+		}
+		return true;
 	}
 
 	/**

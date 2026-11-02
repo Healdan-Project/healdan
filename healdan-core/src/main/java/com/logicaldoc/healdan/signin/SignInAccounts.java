@@ -59,10 +59,15 @@ import com.logicaldoc.util.spring.Context;
  * closed first, as it records only that (controller's ruling R8(b)).
  * <p>
  * Making an account a provider account, by linking it or by finding a linked
- * one with another source or a password, deletes its LogicalDOC API keys, and
- * once the transaction commits closes the CE sessions they opened (owner,
- * 2026-11-01): a key signs in with no password, so it would skip the provider.
- * CE's {@code HealdanThrottle} refuses any key made for it afterwards.
+ * one with another source or a password, deletes its LogicalDOC API keys
+ * (owner, 2026-11-01): a key signs in with no password, so it would skip the
+ * provider. CE's {@code HealdanThrottle} refuses any key made for it
+ * afterwards. Once the transaction commits, every open CE session of the
+ * account on this node is closed, and every session its keys opened (ruling
+ * R31): one opened with its old password, or by another account's key
+ * impersonating it ({@code <bob's key>>jane}, which CE's {@code X-API-KEY}
+ * lookup goes on finding by the key's hash), would outlive what opened it.
+ * The provider sign-in's own session opens after the decision, so it stays.
  * <p>
  * {@link SignInAdmin}'s unlinking runs under the same locks
  * ({@link #lockedOnce}), so it can't land in the middle of a decision for the
@@ -292,9 +297,9 @@ public class SignInAccounts {
 					+ "source; it's a provider account again", printable(user.getUsername()), p.id());
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
-		// It wasn't a provider account, so its keys may have signed it in
+		// It wasn't a provider account, so its keys, its password or an impersonator may have signed it in
 		if (converting)
-			deleteApiKeys(user, signsInThrough(p), journal);
+			becomesProviderAccount(user, p, journal);
 		journal.changes(p, user, changes);
 
 		link.setLastSignIn(new Date());
@@ -320,7 +325,7 @@ public class SignInAccounts {
 
 		journal.info("Linked the account {} to the sign-in provider {}, by its email", printable(user.getUsername()),
 				p.id());
-		deleteApiKeys(user, signsInThrough(p), journal);
+		becomesProviderAccount(user, p, journal);
 		if (hadImpersonators)
 			journal.info("The account {} no longer lets other accounts impersonate it, as it's a provider account",
 					printable(user.getUsername()));
@@ -393,13 +398,28 @@ public class SignInAccounts {
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
 		if (converting)
-			deleteApiKeys(user, signsInThrough(p), journal);
+			becomesProviderAccount(user, p, journal);
 		journal.changes(p, user, changes);
 		return true;
 	}
 
 	private static String signsInThrough(SignInProvider p) {
 		return "as it signs in through the sign-in provider " + p.id();
+	}
+
+	/**
+	 * What making an account a provider account ends besides its password and
+	 * impersonators: its LogicalDOC API keys, as {@link #deleteApiKeys} deletes
+	 * them, and, once the transaction commits, every open CE session of the
+	 * account on this node as well as the sessions its keys opened (ruling
+	 * R31).
+	 */
+	private static void becomesProviderAccount(User user, SignInProvider p, Journal journal)
+			throws PersistenceException {
+		Set<String> deleted = deleteKeys(user, signsInThrough(p), journal);
+		long userId = user.getId();
+		String username = printable(user.getUsername());
+		journal.afterCommit(() -> closeSessions(deleted, userId, username));
 	}
 
 	/**
@@ -422,46 +442,63 @@ public class SignInAccounts {
 	 * @param journal the transaction's journal
 	 */
 	static void deleteApiKeys(User user, String why, Journal journal) throws PersistenceException {
+		Set<String> deleted = deleteKeys(user, why, journal);
+		if (deleted.isEmpty())
+			return;
+		String username = printable(user.getUsername());
+		journal.afterCommit(() -> closeSessions(deleted, null, username));
+	}
+
+	/**
+	 * @return the hashes of the keys deleted, which every row of the account's
+	 *         was; empty if it had none
+	 */
+	private static Set<String> deleteKeys(User user, String why, Journal journal) throws PersistenceException {
 		ApiKeyDAO keys = ApiKeyDAO.get();
 		Map<String, Object> account = Map.of("userId", user.getId());
 		List<String> hashes = keys.queryForList("select ld_key from ld_apikey where ld_userid = :userId", account,
 				String.class, null);
 		if (hashes.isEmpty())
-			return;
+			return Set.of();
 		int listed = keys.queryForInt("select count(*) from ld_apikey where ld_userid = :userId and ld_deleted = 0",
 				account);
 		keys.jdbcUpdate("delete from ld_apikey where ld_userid = :userId", account);
 
-		String username = printable(user.getUsername());
 		if (listed > 0)
 			journal.info("Deleted the {} LogicalDOC API {} of the account {}, {}", listed, listed == 1 ? "key" : "keys",
-					username, why);
-		Set<String> deleted = Set.copyOf(hashes);
-		journal.afterCommit(() -> closeKeySessions(deleted, username));
+					printable(user.getUsername()), why);
+		return Set.copyOf(hashes);
 	}
 
 	/**
-	 * Closes this node's open CE sessions that one of the keys opened. CE's
-	 * pool keeps each session's key as it was given, so a session is matched
-	 * by the part before an impersonation's {@code >}, as CE's chain reads it:
-	 * {@code <key>>bob} opens a session as {@code bob} with the key's owner as
-	 * the impersonator. Only the sessions in this node's pool can be found
-	 * from a key. Each session is checked and closed on its own, so one that
-	 * fails doesn't keep the others open. It never throws: a failure here is
-	 * logged, and the decision, already committed, stands.
+	 * Closes this node's open CE sessions that one of the keys opened, and,
+	 * given an account, every one of its own. CE's pool keeps each session's
+	 * key as it was given, so a session is matched by the part before an
+	 * impersonation's {@code >}, as CE's chain reads it: {@code <key>>bob}
+	 * opens a session as {@code bob} with the key's owner as the impersonator.
+	 * Only the sessions in this node's pool can be found. Each session is
+	 * checked and closed on its own, so one that fails doesn't keep the others
+	 * open. It never throws: a failure here is logged, and the decision,
+	 * already committed, stands.
+	 *
+	 * @param hashes the SHA-256 of the keys deleted, possibly none
+	 * @param userId the account whose sessions all close, or null for only the
+	 *        keys' sessions
+	 * @param username the account's username, printable, for the log
 	 */
-	private static void closeKeySessions(Set<String> hashes, String username) {
+	private static void closeSessions(Set<String> hashes, Long userId, String username) {
 		int closed = 0;
 		int failed = 0;
 		try {
 			SessionManager sessions = SessionManager.get();
-			// newSession holds this lock while it signs in, so a key sign-in that read its key before the commit has its
-			// session in the pool by now, and one that starts later finds the key gone. Healdan never decides a sign-in
-			// inside newSession, so the identity's lock, held here, is never taken the other way round.
+			// newSession holds this lock while it signs in, so a sign-in that read the account or its key before the
+			// commit has its session in the pool by now, and one that starts later finds the password or key gone.
+			// Healdan never decides a sign-in inside newSession, so the identity's lock, held here, is never taken the
+			// other way round.
 			synchronized (sessions) {
 				for (Session session : sessions.getSessions()) {
 					try {
-						if (session.isOpen() && openedWith(session, hashes)) {
+						if (session.isOpen() && (accounts(session, userId) || openedWith(session, hashes))) {
 							sessions.kill(session.getSid());
 							closed++;
 						}
@@ -475,12 +512,20 @@ public class SignInAccounts {
 			failed++;
 			log.debug("The sessions couldn't be read", e);
 		}
-		if (closed > 0)
-			log.info("Closed {} {} opened with the deleted API keys of the account {}", closed,
-					closed == 1 ? "session" : "sessions", username);
+		String sessions = closed == 1 ? "session" : "sessions";
+		if (closed > 0 && userId != null)
+			log.info("Closed {} {} of the account {}, or opened with its deleted API keys, as it signs in through a "
+					+ "provider now", closed, sessions, username);
+		else if (closed > 0)
+			log.info("Closed {} {} opened with the deleted API keys of the account {}", closed, sessions, username);
 		if (failed > 0)
-			log.warn("Couldn't check or close {} of the sessions that may have been opened with the deleted API keys "
-					+ "of the account {}; an administrator can kill them in the Sessions list", failed, username);
+			log.warn("Couldn't check or close {} of the sessions of the account {} or opened with its deleted API "
+					+ "keys; an administrator can kill them in the Sessions list", failed, username);
+	}
+
+	/** Whether the session is the account's own: it signed in as it, whoever impersonated it */
+	private static boolean accounts(Session session, Long userId) {
+		return userId != null && session.getUser() != null && session.getUserId() == userId;
 	}
 
 	/**
@@ -488,6 +533,8 @@ public class SignInAccounts {
 	 * password has no key, neither as given nor hashed, so it's never one.
 	 */
 	private static boolean openedWith(Session session, Set<String> hashes) {
+		if (hashes.isEmpty())
+			return false;
 		String key = session.getDecodedKey();
 		if (key == null) {
 			// The set refuses to look a null up

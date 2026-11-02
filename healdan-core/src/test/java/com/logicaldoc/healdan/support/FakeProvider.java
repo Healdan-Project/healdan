@@ -142,6 +142,9 @@ public final class FakeProvider implements AutoCloseable {
 
 	private final AtomicInteger discoveryRequests = new AtomicInteger();
 
+	/** What the discovery document is answered with; 200 serves it */
+	private final AtomicInteger discoveryStatus = new AtomicInteger(200);
+
 	private final AtomicInteger keyRequests = new AtomicInteger();
 
 	private volatile RSAKey signingKey;
@@ -181,6 +184,9 @@ public final class FakeProvider implements AutoCloseable {
 	private volatile boolean omitNonce;
 
 	private volatile boolean noRefreshToken;
+
+	/** How many characters its refresh tokens have; 0 for the 43 of 32 random bytes */
+	private volatile int refreshTokenLength;
 
 	private volatile boolean noIdTokenOnRefresh;
 
@@ -586,6 +592,17 @@ public final class FakeProvider implements AutoCloseable {
 	}
 
 	/**
+	 * @param length how many characters its refresh tokens have from now on,
+	 *        random ones padded with {@code x}, as a provider whose tokens are
+	 *        long; 0 goes back to 43
+	 * @return this provider
+	 */
+	public FakeProvider refreshTokenLength(int length) {
+		refreshTokenLength = length;
+		return this;
+	}
+
+	/**
 	 * @return this provider, which sends no ID token with a refresh from now on
 	 */
 	public FakeProvider noIdTokenOnRefresh() {
@@ -602,6 +619,17 @@ public final class FakeProvider implements AutoCloseable {
 	 */
 	public FakeProvider discovery(String member, Object value) {
 		discovery.put(member, value == null ? REMOVED : value);
+		return this;
+	}
+
+	/**
+	 * @param status the HTTP status to answer the discovery document with from
+	 *        now on, such as {@code 503} for a provider that's down; {@code 200}
+	 *        serves it again. The requests are counted either way.
+	 * @return this provider
+	 */
+	public FakeProvider discoveryStatus(int status) {
+		discoveryStatus.set(status);
 		return this;
 	}
 
@@ -664,7 +692,11 @@ public final class FakeProvider implements AutoCloseable {
 			switch (path) {
 				case "/.well-known/openid-configuration" -> {
 					discoveryRequests.incrementAndGet();
-					send(exchange, 200, JSON, JSONObjectUtils.toJSONString(discoveryDocument()));
+					int status = discoveryStatus.get();
+					if (status == 200)
+						send(exchange, 200, JSON, JSONObjectUtils.toJSONString(discoveryDocument()));
+					else
+						send(exchange, status, "text/html", "<html><body>Down for maintenance</body></html>");
 				}
 				case "/keys" -> {
 					keyRequests.incrementAndGet();
@@ -837,6 +869,9 @@ public final class FakeProvider implements AutoCloseable {
 		}
 		if (refresh && !noRefreshToken) {
 			String next = random();
+			int length = refreshTokenLength;
+			if (length > next.length())
+				next = next + "x".repeat(length - next.length());
 			refreshTokens.put(next, granted);
 			answer.put("refresh_token", next);
 		}

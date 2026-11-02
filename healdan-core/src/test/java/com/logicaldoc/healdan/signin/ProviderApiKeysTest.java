@@ -249,6 +249,82 @@ public class ProviderApiKeysTest extends AbstractHealdanTestCase {
 		assertTrue(SessionManager.get().isOpen(bobsPasswordSession.getSid()));
 	}
 
+	/**
+	 * Ruling R31: linking closes every open session of the account, not only
+	 * those its own keys opened. A password session would outlive the
+	 * password, and another account's key impersonating it ({@code <bob's
+	 * key>>jane}) would go on finding its session by the key's hash, a way in
+	 * that skips the provider.
+	 */
+	@Test
+	public void testLinkingClosesTheAccountsOtherSessions() throws Exception {
+		User loaded = UserDAO.get().findById(jane.getId(), true);
+		loaded.getImpersonators().add("bob");
+		UserDAO.get().store(loaded);
+		Session password = SessionManager.get().newSession("jane", HealdanFixtures.PASSWORD, client);
+		assertEquals("jane", password.getUsername());
+		String bobs = key(bob, "Bob's");
+		Session asJane = SessionManager.get().newSession(bobs + ">jane", client);
+		assertEquals("jane", asJane.getUsername());
+		assertEquals("bob", asJane.getImpersonator());
+		assertEquals(asJane.getSid(), SessionManager.get().getSessionId(request(bobs + ">jane")));
+		// bob's own sessions, by his key and by his password, are nothing to do with jane
+		Session bobsKeySession = SessionManager.get().newSession(bobs, client);
+		Session bobsPasswordSession = SessionManager.get().newSession("bob", HealdanFixtures.PASSWORD, client);
+
+		try (LogCapture logs = LogCapture.of(SignInAccounts.class)) {
+			link();
+
+			assertTrue(String.join("\n", logs.lines()), logs.lines().stream().anyMatch(
+					line -> line.startsWith("INFO ") && line.contains("2 sessions") && line.contains("jane")));
+		}
+
+		assertFalse(SessionManager.get().isOpen(password.getSid()));
+		assertFalse(SessionManager.get().isOpen(asJane.getSid()));
+		assertNull(SessionManager.get().getSessionId(request(bobs + ">jane")));
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+		assertTrue(SessionManager.get().isOpen(bobsKeySession.getSid()));
+		assertTrue(SessionManager.get().isOpen(bobsPasswordSession.getSid()));
+		assertEquals(1, keys(bob));
+	}
+
+	/**
+	 * Ruling R31: a later sign-in or a re-check that makes an account a
+	 * provider account again closes its open sessions too
+	 */
+	@Test
+	public void testRepairClosesTheAccountsSessions() throws Exception {
+		link();
+		Session bobsSession = SessionManager.get().newSession("bob", HealdanFixtures.PASSWORD, client);
+
+		// A local account with a password again behind Healdan's back, as a restore could leave it
+		String hash = Encrypter.encryptSHA256(HealdanFixtures.PASSWORD);
+		jdbc().update("update ld_user set ld_source = ?, ld_password = ? where ld_id = ?",
+				UserSource.DEFAULT.ordinal(), hash, jane.getId());
+		UserDAO.get().evict(jane.getId());
+		Session session = SessionManager.get().newSession("jane", HealdanFixtures.PASSWORD, client);
+		assertEquals("jane", session.getUsername());
+
+		Allowed allowed = (Allowed) SignInAccounts.get().decide(entra, janeClaims());
+		assertFalse(allowed.linkedNow());
+		assertFalse(SessionManager.get().isOpen(session.getSid()));
+
+		// And so does a helper's re-check with the provider
+		jdbc().update("update ld_user set ld_source = ?, ld_password = ? where ld_id = ?",
+				UserSource.DEFAULT.ordinal(), hash, jane.getId());
+		UserDAO.get().evict(jane.getId());
+		Session other = SessionManager.get().newSession("jane", HealdanFixtures.PASSWORD, client);
+		assertTrue(SignInAccounts.get().refresh(jane, entra, janeClaims()));
+		assertFalse(SessionManager.get().isOpen(other.getSid()));
+
+		// A provider account already, it keeps its sessions: the provider's own sign-in opens one after deciding
+		Session provider = SignIns.openSession(UserDAO.get().findById(jane.getId(), true), client);
+		assertNotNull(provider);
+		assertTrue(SignInAccounts.get().refresh(jane, entra, janeClaims()));
+		assertTrue(SessionManager.get().isOpen(provider.getSid()));
+		assertTrue(SessionManager.get().isOpen(bobsSession.getSid()));
+	}
+
 	@Test
 	public void testKeyMadeAfterLinkingRefused() throws Exception {
 		link();

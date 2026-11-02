@@ -49,7 +49,7 @@ public class ApiToken extends PersistentObject {
 	private String provider;
 
 	/** The provider's refresh token, sealed by {@code SecretBox}; null when the token has none */
-	@Column(name = "hd_refresh", length = 4000)
+	@Column(name = "hd_refresh", length = ApiTokens.MAX_REFRESH)
 	private String refresh;
 
 	/** When the provider last said the person may still sign in, or null before the first check */

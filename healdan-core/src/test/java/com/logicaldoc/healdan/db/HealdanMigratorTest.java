@@ -44,7 +44,7 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testMigratesFreshCeSchema() {
-		assertEquals(MigrationVersion.fromVersion("6"), migrator.currentVersion());
+		assertEquals(MigrationVersion.fromVersion("7"), migrator.currentVersion());
 		for (String t : List.of("hd_setting", "hd_counter", "hd_client", "hd_matter", "hd_searchfolder", "hd_local_value", "hd_api_token", "hd_hold_device",
 				"hd_signin_identity", "hd_signin_group"))
 			assertTrue(t, tableExists(jdbc, t));
@@ -83,8 +83,38 @@ public class HealdanMigratorTest extends AbstractHealdanTestCase {
 		try (LogCapture log = LogCapture.of(HealdanMigrator.class)) {
 			assertEquals(Status.MIGRATED, new HealdanMigrator(ds).migrate());
 			assertTrue(log.lines().toString(),
-					log.lines().contains("INFO Healdan's tables: 6 migrations applied, schema version 6"));
+					log.lines().contains("INFO Healdan's tables: 7 migrations applied, schema version 7"));
 		}
+	}
+
+	/**
+	 * Ruling R35: V7 widens the sealed refresh token's column, keeping the
+	 * tokens it holds, and drops those of tokens already revoked
+	 */
+	@Test
+	public void testV7WidensTheRefreshTokenAndClearsRevokedOnes() {
+		DataSource ds = freshDatabase();
+		JdbcTemplate fresh = new JdbcTemplate(ds);
+		fresh.execute("create table ld_user (ld_id bigint)");
+		MigrationTestSupport.migrateTo(ds, "6");
+		String insert = "insert into hd_api_token (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted, "
+				+ "ld_tenantid, hd_userid, hd_hash, hd_name, hd_lastused, hd_expires, hd_provider, hd_refresh) values "
+				+ "(?, current_timestamp, current_timestamp, 1, ?, 1, 5, ?, 'Helper', current_timestamp, "
+				+ "current_timestamp, 'fake', ?)";
+		fresh.update(insert, 1L, 0, "h1", "v1:kept");
+		fresh.update(insert, 2L, 1, "h2", "v1:revoked");
+		String tooLongForV6 = "v1:" + "A".repeat(5000);
+		assertThrows(RuntimeException.class, () -> fresh.update(insert, 3L, 0, "h3", tooLongForV6));
+
+		assertEquals(Status.MIGRATED, new HealdanMigrator(ds).migrate());
+
+		assertEquals("v1:kept", fresh.queryForObject("select hd_refresh from hd_api_token where ld_id = 1",
+				String.class));
+		assertEquals(null, fresh.queryForObject("select hd_refresh from hd_api_token where ld_id = 2", String.class));
+		String longest = "v1:" + "A".repeat(65_532);
+		fresh.update(insert, 3L, 0, "h3", longest);
+		assertEquals(longest, fresh.queryForObject("select hd_refresh from hd_api_token where ld_id = 3",
+				String.class));
 	}
 
 	@Test
