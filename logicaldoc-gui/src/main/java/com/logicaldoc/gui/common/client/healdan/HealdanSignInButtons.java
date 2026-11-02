@@ -101,8 +101,8 @@ public final class HealdanSignInButtons {
 
 	/**
 	 * The message for a refusal's code, as the sign-in page words it. It doesn't
-	 * know which provider refused, so it calls it "your sign-in provider" where the
-	 * server's own message would give the provider's label.
+	 * name the provider: the page shows which button was clicked, and the
+	 * server's done page and the helper word the refusals the same way.
 	 *
 	 * @param code the code the page came back with ({@code ?signin=}), if any
 	 *
@@ -114,7 +114,7 @@ public final class HealdanSignInButtons {
 
 		switch (code) {
 		case "no-group":
-			return "Your account at your sign-in provider doesn't give you access to Healdan. " + ASK;
+			return "Your account doesn't give you access to Healdan. " + ASK;
 		case "email-taken":
 			return "Healdan can't tell which account is yours. " + ASK;
 		case "username-taken":
@@ -122,7 +122,7 @@ public final class HealdanSignInButtons {
 		case "account":
 			return "This account can't sign in now. " + ASK;
 		case "provider":
-			return "Your sign-in provider couldn't sign you in. Try again, or ask an administrator.";
+			return "The sign-in provider couldn't sign you in. Try again, or ask an administrator.";
 		case "expired":
 			return "That sign-in took too long or was already used. Start again.";
 		default:

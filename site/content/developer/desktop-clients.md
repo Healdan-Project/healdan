@@ -297,8 +297,8 @@ is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in
 4. **It waits for the browser, for at most five minutes.** The receiver takes the first `GET` of `/` at the port and
    answers it with a `302` to Healdan's done page, which tells the person to close the tab. Then it stops
    listening, so a second request finds nothing there. Any other method or path, such as a browser's
-   `/favicon.ico`, gets a `404` and uses nothing up. The page is `<server>/api/signin/done?provider=<id>`; after
-   a refusal it is `…/done?error=<code>&provider=<id>`, and after a state that isn't the helper's, `error=expired`.
+   `/favicon.ico`, gets a `404` and uses nothing up. The page is `<server>/api/signin/done`; after
+   a refusal it is `…/done?error=<code>`, and after a state that isn't the helper's, `error=expired`.
 5. **It checks the state** with a constant-time comparison. Another state, or none, fails the sign-in with "The
    sign-in came back for another request. Try again." and nothing is exchanged, so the code goes nowhere. An
    `error` is a `ProviderRefusedException` that carries the server's code (`no-group`, `email-taken`,
@@ -319,8 +319,8 @@ can't reach or doesn't speak to gets the password form as before, whose Sign In 
 `HelperSession.TrySignInWithProviderAsync`, which makes the password sign-in's checks before and after (the address,
 another server's copies, the settings) and turns what went wrong into the window's error line:
 
-- **A refusal** says what the web page's done page says for its code (`HelperSession.ProviderRefusal`), naming the
-  provider by the label its button had, or as "your sign-in provider", and a code it doesn't know as `provider`. A
+- **A refusal** says what the web page's done page says for its code (`HelperSession.ProviderRefusal`), and a code
+  it doesn't know as `provider`. No refusal names the provider: the window already shows which button was clicked. A
   `401 sign-in-failed` at the exchange says `expired`'s message.
 - **The browser's five minutes** running out are an `OperationCanceledException` too, but not the person's: its
   message reaches the error line. The window's Cancel, and closing the window, cancel the token the call was given,

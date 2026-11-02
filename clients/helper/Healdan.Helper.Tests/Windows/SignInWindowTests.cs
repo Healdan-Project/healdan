@@ -226,7 +226,7 @@ public sealed class SignInWindowTests
     [MacFact]
     public Task RefusalShowsTheReason()
     {
-        const string reason = "Your account at Sign In with Microsoft doesn't give you access to Healdan. Ask an administrator.";
+        const string reason = "Your account doesn't give you access to Healdan. Ask an administrator.";
         var prompt = new FakePrompt
         {
             OnProviders = _ => Task.FromResult<ProviderChoice?>(Two),

@@ -130,16 +130,16 @@ public class SignInResource {
 
 	static final String SIGNED_IN = "Signed in to Healdan. You can close this tab.";
 
-	/** What stands for the provider's label when the page doesn't know which provider it was */
-	static final String SOME_PROVIDER = "your sign-in provider";
-
-	/** What each refusal says (spec section 5.3); {@code {label}} is the provider's label */
+	/**
+	 * What each refusal says (spec section 5.3). None names the provider: the
+	 * page already shows which button was clicked (owner, 2026-11-02).
+	 */
 	static final Map<String, String> MESSAGES = Map.of(SignInAccounts.NO_GROUP,
-			"Your account at {label} doesn't give you access to Healdan. Ask an administrator.",
+			"Your account doesn't give you access to Healdan. Ask an administrator.",
 			SignInAccounts.EMAIL_TAKEN, "Healdan can't tell which account is yours. Ask an administrator.",
 			SignInAccounts.USERNAME_TAKEN, "Healdan already has an account with your username. Ask an administrator.",
 			ACCOUNT, "This account can't sign in now. Ask an administrator.", PROVIDER,
-			"{label} couldn't sign you in. Try again, or ask an administrator.", EXPIRED,
+			"The sign-in provider couldn't sign you in. Try again, or ask an administrator.", EXPIRED,
 			"That sign-in took too long or was already used. Start again.");
 
 	/** What the page says when the helper's start isn't one Healdan accepts */
@@ -388,27 +388,22 @@ public class SignInResource {
 	 * The page that tells the person to close the tab, or what went wrong.
 	 *
 	 * @param error a refusal's code; none if the sign-in worked
-	 * @param provider the id of the provider, whose label the message names;
-	 *        without one it names "your sign-in provider"
 	 * @return {@code 200} with the page
 	 */
 	@GET
 	@Public
 	@Path("done")
-	public Response done(@QueryParam("error") String error, @QueryParam("provider") String provider) {
-		return page(Response.Status.OK.getStatusCode(), error == null ? SIGNED_IN : message(error, provider));
+	public Response done(@QueryParam("error") String error) {
+		return page(Response.Status.OK.getStatusCode(), error == null ? SIGNED_IN : message(error));
 	}
 
 	/**
 	 * @param code a refusal's code; one that isn't known says the provider
 	 *        couldn't sign the person in
-	 * @param providerId the provider's id, or null
-	 * @return what the refusal says, with the provider's label
+	 * @return what the refusal says
 	 */
-	static String message(String code, String providerId) {
-		String text = MESSAGES.getOrDefault(code, MESSAGES.get(PROVIDER)).replace("{label}", label(providerId));
-		// At the start of a sentence
-		return text.startsWith(SOME_PROVIDER) ? "Y" + text.substring(1) : text;
+	static String message(String code) {
+		return MESSAGES.getOrDefault(code, MESSAGES.get(PROVIDER));
 	}
 
 	private Response.ResponseBuilder finish(Pending pending, String code, String error, String errorDescription,
@@ -700,12 +695,6 @@ public class SignInResource {
 		return Response.status(status).entity(html.getBytes(StandardCharsets.UTF_8)).type("text/html; charset=UTF-8")
 				.header("Content-Security-Policy", POLICY).header("X-Content-Type-Options", "nosniff")
 				.header(HttpHeaders.CACHE_CONTROL, NO_STORE).header(REFERRER_POLICY, "no-referrer").build();
-	}
-
-	private static String label(String id) {
-		if (id == null || !SignInProviders.ID.matcher(id).matches())
-			return SOME_PROVIDER;
-		return SignInProviders.get().find(id).map(SignInProvider::label).orElse(SOME_PROVIDER);
 	}
 
 	/**

@@ -449,22 +449,29 @@ public class SignInResourceTest extends ApiTestCase {
 		assertEquals("nosniff", done.header("X-Content-Type-Options"));
 		assertEquals("no-store", done.header("Cache-Control"));
 
-		// A refusal, with the provider's label, which the page escapes
+		// A refusal never names the provider, whatever its label holds: the page already shows which button
+		// was clicked. An address that still names the provider is read as if it didn't.
 		SignInProvider p = SignInProviders.get().find("fake").orElseThrow();
 		SignInProviders.get().save(new SignInProvider(p.id(), p.preset(), "Firm <SSO> & \"Co\"", p.enabled(),
 				p.issuer(), p.clientId(), false, p.identityClaim(), p.usernameClaim(), p.emailClaim(), p.groupsClaim(),
 				p.linkByEmail()), null);
 		String refused = get("/api/signin/done?error=no-group&provider=fake").send().text();
-		assertTrue(refused, refused.contains("Your account at Firm &lt;SSO&gt; &amp; &quot;Co&quot; doesn&#39;t give "
-				+ "you access to Healdan. Ask an administrator."));
-		assertFalse(refused, refused.contains("<SSO>"));
+		assertTrue(refused, refused.contains("Your account doesn&#39;t give you access to Healdan. "
+				+ "Ask an administrator."));
+		for (String label : new String[] { "Firm", "SSO", "<SSO>", "&lt;SSO", "&quot;Co&quot;", "\"Co\"" })
+			assertFalse(label + " in " + refused, refused.contains(label));
 		assertFalse(refused, refused.contains("Signed in to Healdan"));
+		String failed = get("/api/signin/done?error=provider&provider=fake").send().text();
+		assertTrue(failed, failed.contains("The sign-in provider couldn&#39;t sign you in. "
+				+ "Try again, or ask an administrator."));
+		for (String label : new String[] { "Firm", "SSO", "<SSO>", "&lt;SSO", "&quot;Co&quot;", "\"Co\"" })
+			assertFalse(label + " in " + failed, failed.contains(label));
 
-		// Without a provider it doesn't know which, and says so
+		// The same without a provider, or with one it doesn't know
 		assertTrue(get("/api/signin/done?error=no-group").send().text()
-				.contains("Your account at your sign-in provider doesn&#39;t give you access to Healdan."));
+				.contains("Your account doesn&#39;t give you access to Healdan. Ask an administrator."));
 		assertTrue(get("/api/signin/done?error=provider&provider=nope").send().text()
-				.contains("Your sign-in provider couldn&#39;t sign you in. Try again, or ask an administrator."));
+				.contains("The sign-in provider couldn&#39;t sign you in. Try again, or ask an administrator."));
 		assertTrue(get("/api/signin/done?error=expired").send().text()
 				.contains("That sign-in took too long or was already used. Start again."));
 

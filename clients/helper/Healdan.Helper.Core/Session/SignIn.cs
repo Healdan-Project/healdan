@@ -146,7 +146,7 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
             browser.Open(start);
             try
             {
-                result = await receiver.WaitAsync(back => DonePage(providerId, Verdict(back, state)), _browserTimeout, ct);
+                result = await receiver.WaitAsync(back => DonePage(Verdict(back, state)), _browserTimeout, ct);
             }
             catch (TimeoutException)
             {
@@ -192,11 +192,11 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
 
     /// <summary>A page of Healdan's: <c>https://host/api/&lt;path&gt;?&lt;query&gt;</c>, beside the API the helper is signed in to.</summary>
     private Uri Page(string path, string query) =>
-        new($"{api.Server.GetLeftPart(UriPartial.Path).TrimEnd('/')}/api/{path}?{query}");
+        new($"{api.Server.GetLeftPart(UriPartial.Path).TrimEnd('/')}/api/{path}" + (query.Length > 0 ? "?" + query : ""));
 
-    /// <summary>The page the browser is sent on to once the helper has what it brought: it says to close the tab, or what went wrong.</summary>
-    private Uri DonePage(string providerId, string? error) =>
-        Page("signin/done", (error is null ? "" : $"error={Uri.EscapeDataString(error)}&") + $"provider={Uri.EscapeDataString(providerId)}");
+    /// <summary>The page the browser is sent on to once the helper has what it brought: it says to close the tab, or what went wrong, which never names the provider.</summary>
+    private Uri DonePage(string? error) =>
+        Page("signin/done", error is null ? "" : $"error={Uri.EscapeDataString(error)}");
 
     /// <summary>
     /// Runs <paramref name="flush"/> (the waiting saves) first, then revokes the token and clears the keychain. A token

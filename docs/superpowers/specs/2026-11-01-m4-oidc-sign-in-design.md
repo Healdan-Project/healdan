@@ -171,14 +171,14 @@ A refusal comes back to the sign-in page, or to the helper (§6.2), with a code.
 
 | Code | When | The message says |
 |---|---|---|
-| `no-group` | The person's provider groups map to no Healdan group (§8) | Ask an admin for access to Healdan |
+| `no-group` | The person's provider groups map to no Healdan group (§8) | "Your account doesn't give you access to Healdan. Ask an administrator." (owner, 2026-11-02; changed in the build: the messages don't name the provider, as the presets' labels read oddly in a sentence) |
 | `email-taken` | The email matches an account that can't be linked: `admin`, one already linked, or more than one (§7.2) | Ask an admin |
 | `username-taken` | A new account's username already exists, or isn't one Healdan can use (§7.2) | Ask an admin |
 | `account` | CE's chain refused the account: disabled, expired, outside working hours | What the password form says for the same refusal |
-| `provider` | The provider couldn't be reached, refused, or failed a check (§13) | Try again, or ask an admin |
+| `provider` | The provider couldn't be reached, refused, or failed a check (§13) | "The sign-in provider couldn't sign you in. Try again, or ask an administrator." It's also what any code a page doesn't know says (owner, 2026-11-02; changed in the build: the messages don't name the provider, as the presets' labels read oddly in a sentence) |
 | `expired` | The sign-in took more than 10 minutes, or its state was unknown or used | Start again |
 
-(changed in the build) The messages are the plan's Global Constraints' table. `account` has one message for every refusal of CE's chain, "This account can't sign in now. Ask an administrator.", rather than the password form's own for each. It also covers a disabled or expired account that linking by email would have matched (§7.2). `expired` also covers a callback from another browser, or at another provider's callback address. The sign-in page doesn't know which provider sent the person back, so its `{label}` is "your sign-in provider"; the helper's done page and window name it.
+(changed in the build) The messages are the plan's Global Constraints' table, but for the two the owner changed on 2026-11-02 (below). `account` has one message for every refusal of CE's chain, "This account can't sign in now. Ask an administrator.", rather than the password form's own for each. It also covers a disabled or expired account that linking by email would have matched (§7.2). `expired` also covers a callback from another browser, or at another provider's callback address. (owner, 2026-11-02; changed in the build) No message names the provider, in the sign-in page, the helper's done page or the helper's window: the presets' labels ("Sign In with Microsoft") read oddly in a sentence, and the person already sees which button was clicked. The first version put the provider's label in the `no-group` and `provider` messages, "your sign-in provider" where the sign-in page didn't know it. The done page therefore takes no `provider` parameter (one that comes is ignored), and the helper sends none.
 
 ## 6. Signing in from the helper
 
@@ -200,7 +200,7 @@ A refusal comes back to the sign-in page, or to the helper (§6.2), with a code.
    - The code is random, lives 60 seconds and works once. It's bound to the account, the provider, the refresh token, the challenge and the redirect address.
    - Healdan redirects the browser to the helper's address with `code` and the helper's `state`. A refusal goes there too, as `error=<code>` from §5.3, so the helper can say why.
    - (changed in the build) Before a code is made, Healdan runs CE's account checks (`DefaultAuthenticator.validateUser`), so a linked account CE would refuse gets `error=account` at once, rather than a code that fails at the exchange. A callback from another browser, or at another provider's address, goes to the helper as `error=expired`. A state Healdan doesn't know, or that was used or expired, goes to `/login.jsp?signin=expired`, as no helper address is known for it. The CE session opens only at the exchange.
-5. **The helper's listener** checks the state, then sends the browser on to `https://<server>/api/signin/done`, which says "Signed in to Healdan. You can close this tab." or what went wrong. Then it stops listening. (changed in the build: the helper adds `provider=<id>`, and `error=<code>` for a refusal, so the page names the provider in its message.)
+5. **The helper's listener** checks the state, then sends the browser on to `https://<server>/api/signin/done`, which says "Signed in to Healdan. You can close this tab." or what went wrong. Then it stops listening. (changed in the build: the helper adds `error=<code>` for a refusal. It first added `provider=<id>` too, so the page could name the provider in its message; the messages no longer do, so it doesn't, §5.3.)
 6. **The helper exchanges the code** at `POST /api/v1/auth/tokens` with `{code, codeVerifier, redirectUri, name, device}`.
    - Healdan checks the code, the verifier and the address.
    - It opens a CE session through the chain (§7.6), issues the device token (M2 §5.1 to §5.4), and keeps the refresh token with it (§9).
@@ -694,6 +694,7 @@ On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed rele
 - **Unlinking** (after the written spec, from the owner's questions in a side conversation). An admin can unlink one account, or every account of a provider. The account goes back to a temporary, expired password and keeps everything it held. Turning a provider off unlinks nothing (§7.7).
 - **The `admin` alert** (the same conversation). Optional: a system-wide setting an admin turns on, sent by email only, and only when outgoing email is set up (§7.5).
 - **The helper's release** (2026-11-01, during the build). M4's helper is Healdan Helper 0.6.0, as M3.6 (PDFs in CoffeePDF) took 0.5.0 and released first (§2.1, §16.2).
+- **The refusals don't name the provider** (2026-11-02, during the build). The `no-group` message is "Your account doesn't give you access to Healdan. Ask an administrator." and the `provider` message, and every code that falls back to it, "The sign-in provider couldn't sign you in. Try again, or ask an administrator." The other refusals' wording stays (§5.3).
 - **LogicalDOC's API keys** (2026-11-01, during the build: "Delete on link, refuse"). Linking deletes an account's API keys, and a key sign-in for a provider account is refused on every route, as a key would be a second way in that skips the provider. Unlinked accounts, `admin` included, keep theirs. The web page can still make a key for a provider account, which never works, and the docs say so. No new upstream edit (§7.3).
 
 **Calls (approved section by section; open to the owner's review of this spec):**

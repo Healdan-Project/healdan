@@ -103,7 +103,7 @@ A desktop client, such as the Healdan Helper, signs in through the system browse
 3. **The person signs in at the provider,** in that browser. Healdan sends the browser to the loopback address with
    `?code=<code>&state=<state>`, or with `?error=<code>&state=<state>` when it refuses, with one of the codes in
    [Sign-In Pages](#sign-in-pages). A provider that isn't on is `error=provider` straight away.
-4. **It checks the state,** then sends the browser on to `/api/signin/done?provider=<id>`, with `&error=<code>`
+4. **It checks the state,** then sends the browser on to `/api/signin/done`, with `?error=<code>`
    after a refusal. The page tells the person to close the tab, or what went wrong. Only a `GET` of `/` at the
    loopback address is the answer: the Healdan Helper answers anything else, such as a browser's `/favicon.ico`,
    with `404` and goes on waiting.
@@ -406,7 +406,8 @@ answer with redirects and HTML rather than JSON, and `openapi.yaml` doesn't desc
   no session in the browser: it ends at the helper's loopback address with a one-time code, or a refusal's code. A
   sign-in that's unknown, used or expired has no helper's address, so it goes to the sign-in page.
 - **`/api/signin/done`** is the page that says "Signed in to Healdan. You can close this tab." With
-  `?error=<code>`, it says what went wrong instead, naming the provider given by `&provider=<id>`.
+  `?error=<code>`, it says what went wrong instead. No message names the provider, and a `provider` parameter is
+  ignored.
 
 | Code | When |
 |---|---|
