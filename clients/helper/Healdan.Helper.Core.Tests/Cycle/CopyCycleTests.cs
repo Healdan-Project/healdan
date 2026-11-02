@@ -1933,8 +1933,11 @@ public sealed class CopyCycleTests : IDisposable
         Assert.True(_office.WasAskedAbout(xlsx));
 
         // Each window closes the way its own app closes it, once this cycle's watcher has seen the lock files: the first
-        // cycle's sightings don't count, so give it a few polls.
-        await Task.Delay(Fast.LockPoll * 8);
+        // cycle's sightings don't count. Two looks at each since the resume, as the first cycle's watcher may take one
+        // last look as it stops; a fixed wait for them wasn't always long enough for a busy runner (CI's macOS one).
+        var (docxAsked, xlsxAsked) = (_app.Asked(docx), _office.Asked(xlsx));
+        await Wait.Until(() => _app.Asked(docx) >= docxAsked + 2 && _office.Asked(xlsx) >= xlsxAsked + 2,
+            "this cycle's watcher looking at both lock files");
         FakeApp.Close(docx);
         FakeScripting.Close(OfficeProgram.Excel, xlsx);
         await Wait.Until(() => !File.Exists(docx) && !File.Exists(xlsx), "both checked in");
