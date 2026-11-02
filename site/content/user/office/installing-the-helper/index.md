@@ -95,7 +95,8 @@ Microsoft**, once it has found your server. They're the web page's buttons, with
 1. Choose the button. The helper opens a tab in your usual browser at the provider, and the window says "Finish
    signing in in your browser…".
 2. Sign in at the provider in that tab, as you do there for anything else. If you're signed in there already, it
-   may not ask you anything.
+   may not ask you anything, and the helper is signed in as whoever the browser is signed in as there. To sign the
+   helper in as someone else, sign out at the provider in that browser first.
 3. The tab says "Signed in to Healdan. You can close this tab." Close it. The helper is signed in, and its window
    goes.
 

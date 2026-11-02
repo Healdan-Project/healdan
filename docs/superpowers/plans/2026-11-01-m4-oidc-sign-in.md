@@ -1428,9 +1428,9 @@ Expected: PASS.
 
 ### Task 17: Healdan Helper 0.6.0 and the owner's acceptance
 
-- [ ] **Step 1:** Once PRs A to E are merged, tag `helper-v0.6.0`. `clients.yml` signs, notarises and attaches the `.dmg`.
-- [ ] **Step 2:** The owner upgrades their server, and keeps the `conf` volume's new key in its backups.
-- [ ] **Step 3:** The owner's walkthrough, spec §16.2, rows 1 to 8, on Entra ID and the owner's Authentik. Record each row's result and any punch-list item in the spec and this plan's decision log.
+- [ ] **Step 1:** Once PRs A to E are merged, tag `helper-v0.6.0`. `clients.yml` signs, notarises and attaches the `.dmg`. (2026-11-02: `helper-v0.6.0-rc1` tagged on master, signed and notarised, for the walkthrough.)
+- [x] **Step 2:** The owner upgrades their server, and keeps the `conf` volume's new key in its backups. (2026-11-02: backed up, upgraded to master, V6 and V7 applied; the key file was made at the first secret saved and is in the next backup.)
+- [ ] **Step 3:** The owner's walkthrough, spec §16.2, rows 1 to 8, on Entra ID and the owner's Authentik. Record each row's result and any punch-list item in the spec and this plan's decision log. (2026-11-02: rows 1 to 8 passed on Authentik, recorded in spec §16.2 and the decision log; Entra ID's rows not run.)
 
 ## Decision log
 
@@ -1590,15 +1590,23 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
 - **Task 14: the receiver picks the done page from the result.** `LoopbackReceiver.WaitAsync` has an overload taking a function from the result to the page, as the browser is sent on before the caller has looked at the result, and success, a refusal and a state mismatch each go to their own page. `SignIn` takes an optional browser timeout, for tests, and `ProviderRefusedException` has a file of its own.
 - **Task 15: `SignInWithProviderAsync` takes a `CancellationToken`,** beyond the plan's interface, so Cancel can stop the wait, and a 5-minute timeout can be told from the person's own cancel. The call runs off the UI thread, as `SystemOpener.Open` can block for 10 seconds. The window's tests run on macOS only (`MacFact`), as the helper's other window tests do.
 
+**The owner's walkthrough (2026-11-02)**
+
+- **Rows 1 to 8 passed on Authentik** (spec §16.2 has each). Entra ID wasn't set up, so its two questions stay open: whether it accepts `client_secret_post`, and whether it signs refreshed ID tokens.
+- **What it found,** in the follow-ups below: Check doesn't test the client secret, so a wrong one passed it; the helper gives no reason when a check signs it out; and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
+- **Before it,** a local check of the merged M4 on a stack with Keycloak found a refusal naming a group shown as HTML in the old UI's error popup, fixed in [Healdan-Project/healdan#165](https://github.com/Healdan-Project/healdan/pull/165), and passed the rest.
+
 ## Follow-ups
 
 Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. Each is a gap in a narrow case or for later, none of which blocks the walkthrough; the reviews' style points and the tests' wording are left out. The task in brackets found it.
 
 **For the owner**
 
-- **The helper's window with provider buttons** hasn't been looked at by hand, and Installing the Helper has no picture of it. The walkthrough's row 4 is the first look, and the picture can be taken then. (Task 15)
+- **The helper's window with provider buttons** (Task 15): done. Its picture is in Installing the Helper ([Healdan-Project/healdan#161](https://github.com/Healdan-Project/healdan/pull/161)), and the walkthrough's row 4 used it.
+- **Check doesn't test the client secret.** A wrong secret passed Check, and only the first sign-in showed it. A token request with a made-up code would: `invalid_grant` means the secret is right, `invalid_client` that it's wrong. (The walkthrough)
+- **The helper says nothing when a check signs it out.** It shows its Sign In window with no reason; a line such as "Your sign-in ended. Sign in again." would say why. (The walkthrough)
 - **What Entra does** (R28, R29): whether it signs the ID tokens it sends with a refresh, which row 4 shows (if not, groups follow Entra at sign-in only), and whether its token endpoint accepts the client secret as Healdan sends it, by `client_secret_post`, which Entra's discovery lists first (R32), which row 1 shows. (Tasks 13b and 9b)
-- **Safari and the loopback address.** Nothing checked that Safari shows no warning when the helper's sign-in moves from HTTPS to `http://127.0.0.1` (spec §6.2). Row 4 shows it. (Task 14)
+- **Safari and the loopback address** (Task 14): the walkthrough's row 4 went from HTTPS to `http://127.0.0.1` in Safari with no warning the owner reported.
 - **The unlinking email's words.** It's CE's `psw.rec1`, which welcomes the person as newly registered. Words of its own would need a new template and seed step. (Task 10)
 
 **Accounts and linking**
