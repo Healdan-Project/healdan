@@ -30,7 +30,7 @@ public class CopyStoreTests : IDisposable
         JsonSerializer.Deserialize<CopyRecord>(
             File.ReadAllText(Path.Combine(folder, "." + Path.GetFileName(copyPath) + ".healdan.json")), Json)!;
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     private static DocumentView Doc(long number, string name = "Lease agreement.docx", string fileVersion = "2.1") =>
         new("document", number, name, 10, "2.1", fileVersion, $"{number}.{fileVersion}",

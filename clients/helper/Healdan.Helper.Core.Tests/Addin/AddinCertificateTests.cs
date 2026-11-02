@@ -16,7 +16,7 @@ public sealed class AddinCertificateTests : IDisposable
 
     public AddinCertificateTests() => _clock.Pause();
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     private HelperPaths Paths => HelperPaths.For(_root);
 

@@ -53,7 +53,7 @@ public abstract class OfficeCycleTestBase : IDisposable
         foreach (var cycle in _cycles)
             cycle.Dispose();
         Server.OpenSaves();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
         GC.SuppressFinalize(this);
     }
 

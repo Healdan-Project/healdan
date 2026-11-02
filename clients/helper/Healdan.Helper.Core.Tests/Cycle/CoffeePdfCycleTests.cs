@@ -45,7 +45,7 @@ public sealed class CoffeePdfCycleTests : IDisposable
         foreach (var cycle in _cycles)
             cycle.Dispose();
         _server.OpenSaves();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
     }
 
     private HelperPaths Paths => HelperPaths.For(_root);

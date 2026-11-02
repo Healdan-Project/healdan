@@ -52,7 +52,7 @@ public sealed class HelperSessionTests : IDisposable
             session.Dispose();
         _server.OpenSaves();
         _http.HoldSignIns?.TrySetResult();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
     }
 
     private HelperPaths Paths => HelperPaths.For(_root);

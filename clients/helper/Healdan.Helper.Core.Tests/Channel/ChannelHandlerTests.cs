@@ -51,7 +51,7 @@ public sealed class ChannelHandlerTests : IDisposable
     public void Dispose()
     {
         _cycle.Dispose();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
         foreach (var path in _outside)
         {
             if (Directory.Exists(path))

@@ -230,7 +230,6 @@ public sealed class ChannelServerTests : IDisposable
         foreach (var s in servers)
             s.Stop();
         http.Dispose();
-        if (Directory.Exists(root))
-            Directory.Delete(root, true);
+        TempFolder.Delete(root);
     }
 }

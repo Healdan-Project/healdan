@@ -40,7 +40,7 @@ public sealed class LinkHandlerTests : IDisposable
     public void Dispose()
     {
         _cycle.Dispose();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
     }
 
     private string CopyPath(string name) => Path.Combine(HelperPaths.For(_root).Copies, name);

@@ -20,7 +20,7 @@ public sealed class PairingTests : IDisposable
 
     public PairingTests() => _clock.Pause();
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     private HelperPaths Paths => HelperPaths.For(_root);
 

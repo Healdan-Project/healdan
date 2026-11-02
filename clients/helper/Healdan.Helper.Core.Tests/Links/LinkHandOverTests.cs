@@ -16,7 +16,7 @@ public sealed class LinkHandOverTests : IDisposable
     {
         foreach (var server in _servers)
             server.Dispose();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
     }
 
     private HelperPaths Paths => HelperPaths.For(_root);
