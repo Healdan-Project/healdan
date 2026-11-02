@@ -32,7 +32,7 @@ People sign in to Healdan with the identity provider their firm already uses: Mi
 
 ### 2.1 Goals (M4 is done when)
 
-The walkthrough in §16.2 passes, against the owner's server over HTTPS, with Healdan Helper 0.5.0. In short:
+The walkthrough in §16.2 passes, against the owner's server over HTTPS, with Healdan Helper 0.6.0. In short:
 
 1. **Set up.** An admin sets Entra ID up in Healdan Settings' Sign-In tab, following the Install pages, and its Check passes (§10).
 2. **The web page.** Sign In with the provider's button works. The owner's day-to-day account is linked by email and keeps its history, check-outs and My Matters (§5, §7).
@@ -459,7 +459,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 - **`clients/helper/`:**
   - the browser sign-in in `Healdan.Helper.Core` (PKCE, the loopback listener, and opening the browser behind a seam, so tests replace it);
   - the sign-in window's buttons in the app;
-  - released as Healdan Helper 0.5.0.
+  - released as Healdan Helper 0.6.0.
 - **Pull requests** (the plan settles them):
   - A: the server side, with its tests and the smoke step;
   - B: the web page, the sign-in hook and the Sign-In tab;
@@ -566,7 +566,7 @@ CI runs it on amd64 and arm64, as it runs the rest of the smoke test. The plan p
 
 ### 16.2 Manual acceptance (owner)
 
-On the owner's server over HTTPS, with Healdan Helper 0.5.0 from its signed release (owner, 2026-11-01):
+On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed release (owner, 2026-11-01):
 
 1. **Entra setup.** Following the Install pages, set up Entra ID in the Sign-In tab, mapping a test group to a Healdan group. Check passes.
 2. **Your account.**

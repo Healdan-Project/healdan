@@ -19,6 +19,9 @@
 			<outputDirectory>WEB-INF/lib</outputDirectory>
 			<includes>
 				<include>org.flywaydb:*</include>
+				<include>com.nimbusds:*</include>
+				<include>net.minidev:*</include>
+				<include>com.github.stephenc.jcip:*</include>
 			</includes>
 		</dependencySet>
 	</dependencySets>
