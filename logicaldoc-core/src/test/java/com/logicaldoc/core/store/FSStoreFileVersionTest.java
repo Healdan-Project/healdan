@@ -2,6 +2,7 @@ package com.logicaldoc.core.store;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.File;
@@ -20,6 +21,7 @@ import com.logicaldoc.core.AbstractCoreTestCase;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.util.plugin.PluginException;
 
@@ -28,6 +30,8 @@ import com.logicaldoc.util.plugin.PluginException;
  * after it followed by {@code -} and a suffix. CE's listing kept every name
  * that started with the file version, so 1.2's took in 1.20 to 1.29 and their
  * thumbnails, and replacing 1.2's file or deleting version 1.2 deleted them.
+ * Replacing a file with no file version listed no file version, so it deleted
+ * every file but the new one.
  */
 public class FSStoreFileVersionTest extends AbstractCoreTestCase {
 
@@ -40,6 +44,11 @@ public class FSStoreFileVersionTest extends AbstractCoreTestCase {
      * Document 3's version 1.2, the only one on file version 1.2
      */
     private static final long VERSION_ID = 12L;
+
+    /**
+     * Document 3's version 1.3, the current one, on file version 1.3
+     */
+    private static final long CURRENT_VERSION_ID = 13L;
 
     // Instance under test
     private FSStore testSubject;
@@ -66,14 +75,42 @@ public class FSStoreFileVersionTest extends AbstractCoreTestCase {
     @Test
     public void testReplaceFileKeepsTheOtherFileVersions()
             throws IOException, PersistenceException, InterruptedException, ExecutionException {
-        File newFile = new File(tempDir, "replacement");
-        Files.writeString(newFile.toPath(), "replacement", StandardCharsets.UTF_8);
-
-        DocumentManager.get().replaceFile(DOC_ID, "1.2", newFile, transaction()).get();
+        DocumentManager.get().replaceFile(DOC_ID, "1.2", replacement(), transaction()).get();
 
         assertEquals("replacement", read("1.2"));
         assertFalse(exists("1.2-thumb.png"));
         assertKept("1.20", "1.20-thumb.png", "1.21");
+    }
+
+    /**
+     * No file version means the current one. CE stored the new file as the
+     * current one but deleted every other file in the container.
+     */
+    @Test
+    public void testReplaceFileWithoutAFileVersionReplacesTheCurrentOne()
+            throws IOException, PersistenceException, InterruptedException, ExecutionException {
+        File newFile = replacement();
+
+        DocumentManager.get().replaceFile(DOC_ID, null, newFile, transaction()).get();
+
+        assertEquals("replacement", read("1.3"));
+        assertKept("1.2", "1.2-thumb.png", "1.20", "1.20-thumb.png", "1.21");
+        assertEquals(newFile.length(), VersionDAO.get().findById(CURRENT_VERSION_ID).getFileSize());
+    }
+
+    /**
+     * CE refuses an empty file version before deleting anything
+     */
+    @Test
+    public void testReplaceFileWithAnEmptyFileVersionDeletesNothing() throws IOException, PersistenceException {
+        File newFile = replacement();
+        DocumentHistory transaction = transaction();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> DocumentManager.get().replaceFile(DOC_ID, "", newFile, transaction));
+
+        assertKept("1.2", "1.2-thumb.png", "1.20", "1.20-thumb.png", "1.21");
+        assertTrue(exists("1.3"));
     }
 
     @Test
@@ -83,6 +120,12 @@ public class FSStoreFileVersionTest extends AbstractCoreTestCase {
         assertFalse(exists("1.2"));
         assertFalse(exists("1.2-thumb.png"));
         assertKept("1.20", "1.20-thumb.png", "1.21");
+    }
+
+    private File replacement() throws IOException {
+        File newFile = new File(tempDir, "replacement");
+        Files.writeString(newFile.toPath(), "replacement", StandardCharsets.UTF_8);
+        return newFile;
     }
 
     private DocumentHistory transaction() throws PersistenceException {
