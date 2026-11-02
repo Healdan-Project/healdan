@@ -73,6 +73,18 @@ jobs:
         id: changes
         run: bash .github/scripts/code-changed.sh
 
+      # The amd64 runner starts with 14 to 20 GB free, depending on its image's version, and the build, the image,
+      # the smoke stack's Keycloak and the .NET SDK use most of it: on 2026-11-02 a run on an older image ran out of
+      # disk in the smoke test. No step uses the SDKs and tool caches deleted here. The arm64 runner hasn't run short.
+      - name: Free disk space (amd64)
+        if: steps.changes.outputs.code == 'true' && matrix.arch == 'amd64'
+        run: |
+          df -h /
+          start=$SECONDS
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /usr/share/swift /opt/hostedtoolcache/CodeQL
+          echo "Deleted in $((SECONDS - start)) s"
+          df -h /
+
       - name: Image metadata
         id: meta
         if: steps.changes.outputs.code == 'true'

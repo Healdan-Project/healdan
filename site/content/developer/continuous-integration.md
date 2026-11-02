@@ -147,6 +147,14 @@ with `docker/tests/test-signin.sh` (see [The Stand-In Sign-In Provider](../tests
   rarely waits for it. Step 1 prints how long it took.
 - **Step 5e** takes under 5 seconds on a Mac, and prints how long it took, so a run's log has CI's times.
 
+### Disk Space on the amd64 Runner
+
+The amd64 runner starts with 14 to 20 GB free, depending on its image's version, and the Maven build, the image, the
+smoke stack (Keycloak included) and the .NET SDK use most of it. On 2026-11-02 a run on an older image ran out of disk
+in the smoke test, so `Test (amd64)` now starts with a "Free disk space (amd64)" step. It deletes the runner's Android
+SDK, Haskell, Swift and CodeQL, which no step uses, and prints the free space before and after, and how long it took.
+The arm64 runner hasn't run short, so its job doesn't.
+
 ## Things That Catch Upstream Syncs
 
 - **Font Awesome Pro icons.** The GUI bundles Font Awesome Free 6, but upstream writes against Font Awesome Pro.
