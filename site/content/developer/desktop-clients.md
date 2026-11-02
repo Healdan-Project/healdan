@@ -180,8 +180,10 @@ size the helper uses, the widths then match CoreText's.
   watcher lets go of it, and the helper looks for the copy by its path (`IsOpenAsync`, which never takes the front
   window) for up to 30 seconds, as Word restores its "Recovered" window at the copy's path. Word 16.114 does so without
   writing the owner file the crash left again, which the trial's Word did. Only once it's found is the window saved
-  over the copy (`SaveAsAsync`), and the folder watcher sends it. The copy stays crashed until that works. A failure is
-  tried again at the next look; a miss when the program restarts or writes its owner file, and while it runs only after
+  over the copy (`SaveAsAsync`), and once that returns, the folder watcher sends it. The folder watcher lets go of the
+  copy while it's saved: a save sent meanwhile was confirmed while the copy still counted as crashed, so its title
+  stayed a version behind. The copy stays crashed until that works. A failure is tried again at the next look; a miss
+  when the program restarts or writes its owner file, and while it runs only after
   another 30 seconds. Then the crash window closes itself (`IWindows.DismissCrashed`), and its Send and Check In and
   Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document once it's renamed: a
   copy that's open again is brought up, never checked in. Send and Check In is refused once the owner file comes back,

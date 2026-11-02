@@ -1778,6 +1778,7 @@ public sealed class CopyCycle : IDisposable
         {
             Recovery outcome;
             var open = false;
+            var unwatched = false;
             TimeSpan wait;
             lock (_gate)
             {
@@ -1795,6 +1796,10 @@ public sealed class CopyCycle : IDisposable
                         // until the save returns, the program's owner file says nothing.
                         lock (_gate)
                             (s.Reopened, s.SavingBack) = (true, true);
+                        // The program's write over the copy is its own until the save returns: sent meanwhile, while the
+                        // copy still counts as crashed, its confirmation couldn't rename the copy (spec §5.4).
+                        _saves.Unwatch(s.Path);
+                        unwatched = true;
                     }, _stop.Token);
                 lock (_gate)
                 {
@@ -1816,8 +1821,17 @@ public sealed class CopyCycle : IDisposable
             }
             finally
             {
+                bool watchAgain;
                 lock (_gate)
+                {
                     (s.SavingBack, s.LookingBack) = (false, false);
+                    watchAgain = unwatched && !s.Closing && Find(s.Path) == s && !_stop.IsCancellationRequested;
+                }
+                if (watchAgain)
+                {
+                    _saves.Watch(s.Path);
+                    _saves.Touch(s.Path); // what the program saved goes up now, and its confirmation renames the copy
+                }
             }
             if (outcome == Recovery.Saved)
             {

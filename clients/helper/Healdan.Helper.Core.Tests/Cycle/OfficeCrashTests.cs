@@ -275,6 +275,26 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task TheRecoveredWorkIsRenamedThoughItsSaveWentUpBeforeSaveAsAnswered()
+    {
+        // Word wrote its recovered window over the copy a second before the script answered, long after a write settles
+        // (Fast.Settle): a slow answer, or a busy machine (CI's runner). Sent then, the save was confirmed while the copy
+        // still counted as crashed, so it was never renamed; it goes up once the save back is done, and renames it.
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Scripting.WindowText = "the work Word recovered";
+        Scripting.AfterSaveAsWrite = _ => Task.Delay(TimeSpan.FromSeconds(1));
+
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal(["the work Word recovered"], Server.Saves.Select(s => s.Content));
+        Assert.Equal([path], Events.Reopens);
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
     public async Task ACloseJustAfterPowerPointsReopenIsSeen()
     {
         // The final review's Minor 4: the presentation's owner file is back as the close watcher takes it on again, so

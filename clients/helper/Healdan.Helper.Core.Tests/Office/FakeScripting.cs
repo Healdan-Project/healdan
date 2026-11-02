@@ -146,8 +146,8 @@ public sealed class FakeScripting : IOfficeScripting
     public Action? BeforeSaveAs { get; set; }
 
     /// <summary>
-    /// Runs once a Save As under another name has written the file, before it answers, as the script answers only after
-    /// the program has saved: a slow answer, say, during which the cycle sees the write settle.
+    /// Runs once a Save As has written the file, before it answers, as the script answers only after the program has
+    /// saved: a slow answer, say, during which the cycle sees the write settle, or sends it.
     /// </summary>
     public Func<string, Task>? AfterSaveAsWrite { get; set; }
 
@@ -368,6 +368,8 @@ public sealed class FakeScripting : IOfficeScripting
         File.WriteAllText(newPath, WindowText);
         if (SaveAsTakes > TimeSpan.Zero)
             File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
+        if (AfterSaveAsWrite is { } afterInPlace)
+            await afterInPlace(newPath);
         return answer;
     }
 
