@@ -102,6 +102,10 @@ endpoint and offers `offline_access`, tries the client ID and secret there, and 
 with the one you registered. If it says Entra refused the client secret, copy the secret's **Value** again, not its
 **Secret ID**.
 
+Check's test of the secret works only if Entra checks the secret before the code Check makes up, which hasn't been
+confirmed. Until it is, a Check that passes doesn't prove the secret is right: sign in once through the button, as in
+[Try It Before You Tell Anyone](../#try-it-before-you-tell-anyone), before anyone else relies on it.
+
 {{% /steps %}}
 
 ## The Entra ID Preset

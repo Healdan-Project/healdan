@@ -830,6 +830,8 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 			assertTrue(problem, problem.contains("HTTP 401, invalid_client"));
 			// Authentik answers invalid_client for a redirect address it doesn't have, too
 			assertTrue(problem, problem.contains("redirect address"));
+			// The provider quoted the secret, as it is and encoded, and both were taken out
+			assertTrue(problem, problem.contains("[hidden] ([hidden])"));
 			for (String secret : List.of("another=secret&5d1e", "another%3Dsecret%265d1e", FakeProvider.SECRET)) {
 				assertFalse(problem, problem.contains(secret));
 				for (String line : log.lines())
@@ -859,8 +861,10 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 	}
 
 	/**
-	 * Any answer to Check's made-up code but invalid_grant, invalid_client or a
-	 * 401, and no answer, says the secret wasn't tested, and never passes.
+	 * Any answer to Check's made-up code but invalid_grant, invalid_client, or a
+	 * 401 with no error code or unauthorized_client, and no answer, says the
+	 * secret wasn't tested, and never passes. A 5xx or 429 says so whatever it
+	 * holds.
 	 */
 	@Test
 	public void testCheckSaysWhenItCouldntTestTheClientSecret() throws Exception {
@@ -878,16 +882,27 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertFalse(authentik.ok());
 		assertTrue(authentik.problems().toString(), mentions(authentik, "refused the client secret"));
 		assertTrue(authentik.problems().toString(), mentions(authentik, "HTTP 400, invalid_client"));
+		// The provider quoted the made-up code, the verifier and the secret, and each was taken out
+		assertTrue(authentik.problems().toString(),
+				mentions(authentik, "code [hidden], verifier [hidden], secret [hidden] ([hidden])"));
+		assertFalse(authentik.problems().toString(), mentions(authentik, FakeProvider.SECRET));
 		// Keycloak 26.7.5 answers a wrong secret with unauthorized_client, at 401
 		fake.answerCode(401, "unauthorized_client");
 		Check keycloak = client.check(p, REDIRECT);
 		assertFalse(keycloak.ok());
 		assertTrue(keycloak.problems().toString(), mentions(keycloak, "refused the client secret"));
 		assertTrue(keycloak.problems().toString(), mentions(keycloak, "HTTP 401, unauthorized_client"));
+		// A 401 with invalid_grant took the client and refused only the code
+		fake.answerCode(401, "invalid_grant");
+		Check grant = client.check(p, REDIRECT);
+		assertTrue(grant.problems().toString(), grant.ok());
 
+		// Down or busy, whatever it says, isn't a refusal; nor is a 401 with another error code, as from something
+		// in front of the provider
 		for (Object[] answer : new Object[][] { { 400, "invalid_request" }, { 400, "unauthorized_client" },
 				{ 400, "unsupported_grant_type" }, { 400, null }, { 403, "access_denied" }, { 429, null },
-				{ 500, "invalid_grant" }, { 503, null } }) {
+				{ 500, "invalid_grant" }, { 503, null }, { 503, "invalid_client" }, { 429, "invalid_client" },
+				{ 401, "invalid_request" } }) {
 			int status = (Integer) answer[0];
 			String error = (String) answer[1];
 			fake.answerCode(status, error);

@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.LongSupplier;
 import java.util.regex.Pattern;
@@ -120,7 +122,8 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * because Nimbus form-encodes a Basic header's client id and secret (RFC 6749
  * section 2.3.1), so a secret with a {@code ~}, as Entra ID's generated ones
  * have, goes as {@code %7E}, which a provider may not decode. {@link #check}
- * sends it the same way, and only where a sign-in would.
+ * sends it the same way, but more sparingly than a sign-in: not to a provider
+ * whose methods leave out both, where a sign-in still sends it by Basic.
  * <p>
  * <b>Never logged,</b> nor put in a {@link ProviderException}'s message:
  * tokens, codes, the client secret, ID tokens, verifiers, states and nonces.
@@ -504,14 +507,14 @@ public class ProviderClient {
 		if (status != HTTPResponse.SC_OK) {
 			ErrorObject error = error(response);
 			String said = describe(status, error, refreshToken, secret.getValue());
-			// Down or busy
-			if (status >= 500 || status == TOO_MANY_REQUESTS) {
+			TokenError kind = TokenError.of(status, error);
+			if (kind == TokenError.BUSY) {
 				log.warn("Sign-in provider {} answered a refresh with {}, which counts as unreachable", p.id(), said);
 				return unreachable(null);
 			}
 			// Only invalid_grant is about the person: the account was disabled, or its sessions revoked (spec
 			// section 9, ruling R12)
-			if (error != null && OAuth2Error.INVALID_GRANT.getCode().equals(error.getCode())) {
+			if (kind == TokenError.GRANT) {
 				log.info("Sign-in provider {} refused a refresh: {}", p.id(), said);
 				return new Refreshed(Outcome.REFUSED, null, null);
 			}
@@ -566,11 +569,13 @@ public class ProviderClient {
 	 * endpoint as a sign-in does, with a code it makes up, which can't be one
 	 * the provider gave. A provider that takes them refuses the code with
 	 * {@code invalid_grant}; one that doesn't refuses the client, with
-	 * {@code invalid_client} or a {@code 401}, which is a problem. Any other
-	 * answer, or none, is a problem too, saying the secret wasn't tested. The
-	 * secret goes only where a sign-in would send it: not when the issuer
-	 * doesn't match, an endpoint isn't HTTPS, or the provider takes no client
-	 * secret, which are problems already.
+	 * {@code invalid_client}, or a {@code 401} with no error code or
+	 * {@code unauthorized_client}, which is a problem. A {@code 5xx} or
+	 * {@code 429}, whatever it says, any other answer, or none, is a problem
+	 * too, saying the secret wasn't tested. The secret goes only to a token
+	 * endpoint a sign-in would use, and not when the provider takes no client
+	 * secret, or no client id or readable secret is set, which are problems
+	 * already.
 	 *
 	 * @param p the provider
 	 * @param redirect the redirect address to register, which comes back in the
@@ -578,9 +583,25 @@ public class ProviderClient {
 	 * @return the problems, if any, and the redirect address
 	 */
 	public Check check(SignInProvider p, URI redirect) {
+		return check(p, redirect, true);
+	}
+
+	/**
+	 * {@link #check(SignInProvider, URI)}, but with a redirect address that may
+	 * be only a guess.
+	 *
+	 * @param p the provider
+	 * @param redirect the redirect address to register
+	 * @param publicRedirect false when the redirect address is only a guess,
+	 *        with no public address set: the client secret isn't tested, as a
+	 *        provider may refuse the client for an address it doesn't have, and
+	 *        a problem says so
+	 * @return the problems, if any, and the redirect address
+	 */
+	public Check check(SignInProvider p, URI redirect, boolean publicRedirect) {
 		List<String> problems = new ArrayList<>();
 		try {
-			checkInto(p, redirect, problems);
+			checkInto(p, redirect, publicRedirect, problems);
 		} catch (RuntimeException e) {
 			log.warn("The check of sign-in provider {} stopped on {}", p.id(), e.getClass().getName());
 			problems.add("The check stopped on an unexpected error (%s).".formatted(e.getClass().getSimpleName()));
@@ -604,7 +625,7 @@ public class ProviderClient {
 		}
 	}
 
-	private void checkInto(SignInProvider p, URI redirect, List<String> problems) {
+	private void checkInto(SignInProvider p, URI redirect, boolean publicRedirect, List<String> problems) {
 		if (StringUtils.isBlank(p.clientId()))
 			problems.add("No client id is set.");
 		String secret = providers.secret(p.id());
@@ -629,19 +650,31 @@ public class ProviderClient {
 		}
 
 		String named = metadata.getIssuer() == null ? null : metadata.getIssuer().getValue();
-		boolean matches = issuer.equals(named);
-		if (!matches)
+		if (!issuer.equals(named))
 			problems.add(mismatch(named, issuer) + ".");
-		List<String> endpoints = endpointProblems(metadata);
-		for (String problem : endpoints)
+		for (String problem : endpointProblems(metadata))
 			problems.add(problem + ".");
+
+		// Fetched while the secret is tested, on a thread of its own, so a slow provider holds Check for one timeout
+		// there, not two
+		URI keys = metadata.getJWKSetURI();
+		CompletableFuture<List<String>> keyProblems = keys != null && secure(keys)
+				? CompletableFuture.supplyAsync(() -> checkKeys(keys), task -> Thread.ofVirtual().start(task))
+				: CompletableFuture.completedFuture(List.of());
+
 		boolean takesSecret = takesClientSecret(metadata);
 		if (!takesSecret)
 			problems.add(("The provider doesn't take a client secret at its token endpoint (it lists %s), and Healdan "
 					+ "sends one as client_secret_post or client_secret_basic.").formatted(listed(metadata)));
-		// Only to a token endpoint a sign-in would send the secret to
-		if (matches && endpoints.isEmpty() && takesSecret && StringUtils.isNotBlank(p.clientId()) && secret != null)
-			checkSecret(metadata, new ClientID(p.clientId()), new Secret(secret), redirect, problems);
+		// Only to a token endpoint a sign-in would use
+		if (usable(issuer, metadata) && takesSecret && StringUtils.isNotBlank(p.clientId()) && secret != null) {
+			if (publicRedirect)
+				checkSecret(metadata, new ClientID(p.clientId()), new Secret(secret), redirect, problems);
+			else
+				problems.add("Healdan didn't test the client secret, as the redirect address it would send is only a "
+						+ "guess until Healdan knows its own address, and a provider may refuse the client for an "
+						+ "address it doesn't have.");
+		}
 
 		List<JWSAlgorithm> algorithms = metadata.getIDTokenJWSAlgs();
 		if (algorithms == null || algorithms.stream().noneMatch(ALGORITHMS::contains))
@@ -657,9 +690,11 @@ public class ProviderClient {
 					+ "when it signs in through it, and Healdan can't check back with the provider for the helper's "
 					+ "sign-ins.");
 
-		URI keys = metadata.getJWKSetURI();
-		if (keys != null && secure(keys))
-			checkKeys(keys, problems);
+		try {
+			problems.addAll(keyProblems.join());
+		} catch (CompletionException e) {
+			throw e.getCause() instanceof RuntimeException cause ? cause : e;
+		}
 	}
 
 	/**
@@ -687,36 +722,36 @@ public class ProviderClient {
 			return;
 		}
 		ErrorObject error = error(response);
-		String errorCode = error == null ? null : error.getCode();
 		String said = describe(status, error, code.getValue(), verifier.getValue(), secret.getValue());
+		TokenError kind = TokenError.of(status, error);
 		// Authentik answers a wrong secret with a 400, and a redirect address it doesn't have with invalid_client too
-		if (status == HTTPResponse.SC_UNAUTHORIZED || OAuth2Error.INVALID_CLIENT.getCode().equals(errorCode))
+		if (kind == TokenError.CLIENT)
 			problems.add(("The provider refused the client secret: its token endpoint answered %s. Check that the "
 					+ "client id and secret are the ones the provider gave, then enter the secret again and save. "
 					+ "Some providers, Authentik among them, answer the same when the redirect address isn't "
 					+ "registered with them exactly.").formatted(said));
-		else if (status >= 500 || status == TOO_MANY_REQUESTS || !OAuth2Error.INVALID_GRANT.getCode().equals(errorCode))
+		else if (kind != TokenError.GRANT)
 			problems.add(("Healdan couldn't test the client secret: the provider's token endpoint answered a code "
 					+ "Healdan made up with %s, where a provider that takes the secret answers invalid_grant.")
 					.formatted(said));
 	}
 
-	private void checkKeys(URI address, List<String> problems) {
+	/** @return the problems with the keys at the address, if any */
+	private List<String> checkKeys(URI address) {
 		JWKSet set;
 		try {
 			set = JWKSet.parse(retriever.retrieveResource(address.toURL()).getContent());
 		} catch (IOException e) {
-			problems.add("Healdan couldn't fetch the provider's keys from %s: %s.".formatted(quote(address.toString()),
-					describe(e)));
-			return;
+			return List.of("Healdan couldn't fetch the provider's keys from %s: %s.".formatted(
+					quote(address.toString()), describe(e)));
 		} catch (java.text.ParseException | RuntimeException e) {
-			problems.add("The provider's keys at %s aren't a key set Healdan can read.".formatted(
+			return List.of("The provider's keys at %s aren't a key set Healdan can read.".formatted(
 					quote(address.toString())));
-			return;
 		}
 		if (set.getKeys().stream().noneMatch(ProviderClient::signs))
-			problems.add("The provider publishes no RSA or EC key to sign with at %s.".formatted(
+			return List.of("The provider publishes no RSA or EC key to sign with at %s.".formatted(
 					quote(address.toString())));
+		return List.of();
 	}
 
 	private static boolean signs(JWK key) {
@@ -739,10 +774,7 @@ public class ProviderClient {
 			if (recent != null)
 				throw new ProviderException(recent.message(), recent.cause());
 			OIDCProviderMetadata metadata = fetch(p.id(), issuer);
-			String named = metadata.getIssuer() == null ? null : metadata.getIssuer().getValue();
-			if (!issuer.equals(named))
-				throw new ProviderException(mismatch(named, issuer));
-			requireSecureEndpoints(metadata);
+			requireUsable(issuer, metadata);
 			d = new Discovered(issuer, metadata, keySource(metadata.getJWKSetURI()));
 			discovered.put(p.id(), d);
 			log.info("Fetched the discovery document of sign-in provider {}", p.id());
@@ -823,6 +855,28 @@ public class ProviderClient {
 		return ("The discovery document names the issuer %s, but the issuer address set here is %s. They must be the "
 				+ "same, to the last character, a trailing slash included")
 				.formatted(named == null ? "(none)" : quote(named), issuer);
+	}
+
+	/**
+	 * What a discovery document must be for a sign-in to use it: naming the
+	 * issuer set here, with every endpoint secure. {@link #check} reports each
+	 * problem, and tests the client secret only with none.
+	 */
+	private static void requireUsable(String issuer, OIDCProviderMetadata metadata) throws ProviderException {
+		String named = metadata.getIssuer() == null ? null : metadata.getIssuer().getValue();
+		if (!issuer.equals(named))
+			throw new ProviderException(mismatch(named, issuer));
+		requireSecureEndpoints(metadata);
+	}
+
+	/** @return true if a sign-in would use the discovery document (see {@link #requireUsable}) */
+	private static boolean usable(String issuer, OIDCProviderMetadata metadata) {
+		try {
+			requireUsable(issuer, metadata);
+			return true;
+		} catch (ProviderException e) {
+			return false;
+		}
 	}
 
 	private static void requireSecureEndpoints(OIDCProviderMetadata metadata) throws ProviderException {
@@ -1058,6 +1112,37 @@ public class ProviderClient {
 
 	private static Refreshed unreachable(String refreshToken) {
 		return new Refreshed(Outcome.UNREACHABLE, null, refreshToken);
+	}
+
+	/**
+	 * What a token endpoint's error answer is about, for a refresh and for
+	 * Check's test of the client secret alike
+	 */
+	private enum TokenError {
+		/** A {@code 5xx} or {@code 429}, whatever it says: down or busy */
+		BUSY,
+		/** {@code invalid_grant}: the provider took the client and refused the grant */
+		GRANT,
+		/**
+		 * {@code invalid_client}, or a {@code 401} with no error code or
+		 * {@code unauthorized_client}, as Keycloak answers a wrong secret: the
+		 * provider refused the client
+		 */
+		CLIENT,
+		/** Anything else */
+		OTHER;
+
+		static TokenError of(int status, ErrorObject error) {
+			String code = error == null ? null : error.getCode();
+			if (status >= 500 || status == TOO_MANY_REQUESTS)
+				return BUSY;
+			if (OAuth2Error.INVALID_GRANT.getCode().equals(code))
+				return GRANT;
+			if (OAuth2Error.INVALID_CLIENT.getCode().equals(code) || (status == HTTPResponse.SC_UNAUTHORIZED
+					&& (code == null || OAuth2Error.UNAUTHORIZED_CLIENT.getCode().equals(code))))
+				return CLIENT;
+			return OTHER;
+		}
 	}
 
 	private static ErrorObject error(HTTPResponse response) {

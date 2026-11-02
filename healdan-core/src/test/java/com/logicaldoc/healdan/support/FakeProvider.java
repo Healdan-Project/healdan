@@ -7,6 +7,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -77,7 +78,8 @@ import com.sun.net.httpserver.HttpsServer;
  * Its token endpoint checks what a real one does: the client id and secret,
  * sent by a method it advertises ({@code client_secret_basic} unless
  * {@link #tokenEndpointAuthMethods} says otherwise), refusing the client with
- * {@code 401} {@code invalid_client} before it reads the grant; a code used
+ * {@code 401} {@code invalid_client} before it reads the grant, quoting the
+ * secret it was sent in its {@code error_description}; a code used
  * once, with the redirect it was issued for and a verifier that matches its
  * {@code S256} challenge, and {@code 400} {@code invalid_grant} for any other,
  * such as one made up; and refresh tokens that turn over on each use.
@@ -417,8 +419,9 @@ public final class FakeProvider implements AutoCloseable {
 	/**
 	 * @param status the status to answer the next code with, once the client
 	 *        id and secret are taken, whatever the code
-	 * @param error the OAuth error code to answer it with, in JSON; null for a
-	 *        body that isn't JSON
+	 * @param error the OAuth error code to answer it with, in JSON, with an
+	 *        {@code error_description} quoting the code, verifier and secret it
+	 *        was sent; null for a body that isn't JSON
 	 * @return this provider
 	 */
 	public FakeProvider answerCode(int status, String error) {
@@ -778,14 +781,16 @@ public final class FakeProvider implements AutoCloseable {
 		if (!authenticated(exchange, form)) {
 			if (acceptsBasic())
 				exchange.getResponseHeaders().add("WWW-Authenticate", "Basic");
-			error(exchange, 401, "invalid_client");
+			String secret = sentSecret(exchange, form);
+			error(exchange, 401, "invalid_client", secret == null ? null : "No client has the secret " + echo(secret));
 			return;
 		}
 		String grant = one(form, "grant_type");
 		if ("authorization_code".equals(grant)) {
 			Answer answer = nextCode.getAndSet(null);
 			if (answer != null) {
-				answer(exchange, answer);
+				answer(exchange, answer, "Not a code issued here: code %s, verifier %s, secret %s".formatted(
+						one(form, "code"), one(form, "code_verifier"), echo(sentSecret(exchange, form))));
 				return;
 			}
 			Pending pending = codes.remove(String.valueOf(one(form, "code")));
@@ -804,7 +809,7 @@ public final class FakeProvider implements AutoCloseable {
 			}
 			Answer answer = nextRefresh.getAndSet(null);
 			if (answer != null) {
-				answer(exchange, answer);
+				answer(exchange, answer, null);
 				return;
 			}
 			Map<String, Object> granted = refreshTokens.remove(String.valueOf(one(form, "refresh_token")));
@@ -858,19 +863,43 @@ public final class FakeProvider implements AutoCloseable {
 	}
 
 	private static boolean basicMatches(String header) {
+		String[] pair = basic(header);
+		return pair != null && CLIENT_ID.equals(pair[0]) && SECRET.equals(pair[1]);
+	}
+
+	/** @return a Basic header's client id and secret, each decoded; null if it can't be read */
+	private static String[] basic(String header) {
 		String pair;
 		try {
 			pair = new String(Base64.getDecoder().decode(header.substring(6).strip()), StandardCharsets.UTF_8);
 		} catch (IllegalArgumentException e) {
-			return false;
+			return null;
 		}
 		int colon = pair.indexOf(':');
 		if (colon < 0)
-			return false;
+			return null;
 		// RFC 6749 section 2.3.1: each half is form-encoded before the pair is
-		String id = URLDecoder.decode(pair.substring(0, colon), StandardCharsets.UTF_8);
-		String secret = URLDecoder.decode(pair.substring(colon + 1), StandardCharsets.UTF_8);
-		return CLIENT_ID.equals(id) && SECRET.equals(secret);
+		return new String[] { URLDecoder.decode(pair.substring(0, colon), StandardCharsets.UTF_8),
+				URLDecoder.decode(pair.substring(colon + 1), StandardCharsets.UTF_8) };
+	}
+
+	/** @return the client secret the request sent, by either method, decoded; null if it sent none */
+	private static String sentSecret(HttpExchange exchange, Map<String, List<String>> form) {
+		String posted = one(form, "client_secret");
+		if (posted != null)
+			return posted;
+		String header = exchange.getRequestHeaders().getFirst("Authorization");
+		String[] pair = header != null && header.startsWith("Basic ") ? basic(header) : null;
+		return pair == null ? null : pair[1];
+	}
+
+	/**
+	 * @return a secret it was sent, as it is and form-encoded, which it quotes
+	 *         back in its errors so that tests see Healdan take it out of what
+	 *         it shows
+	 */
+	private static String echo(String secret) {
+		return secret + " (" + URLEncoder.encode(String.valueOf(secret), StandardCharsets.UTF_8) + ")";
 	}
 
 	private void issue(HttpExchange exchange, Map<String, Object> granted, String nonce, boolean refresh,
@@ -960,15 +989,24 @@ public final class FakeProvider implements AutoCloseable {
 		}
 	}
 
-	private static void answer(HttpExchange exchange, Answer answer) throws IOException {
+	private static void answer(HttpExchange exchange, Answer answer, String description) throws IOException {
 		if (answer.error() == null)
 			send(exchange, answer.status(), "text/plain", "No");
 		else
-			error(exchange, answer.status(), answer.error());
+			error(exchange, answer.status(), answer.error(), description);
 	}
 
 	private static void error(HttpExchange exchange, int status, String code) throws IOException {
-		send(exchange, status, JSON, JSONObjectUtils.toJSONString(Map.of("error", code)));
+		error(exchange, status, code, null);
+	}
+
+	/** @param description the error_description, or null for none */
+	private static void error(HttpExchange exchange, int status, String code, String description) throws IOException {
+		Map<String, Object> body = new LinkedHashMap<>();
+		body.put("error", code);
+		if (description != null)
+			body.put("error_description", description);
+		send(exchange, status, JSON, JSONObjectUtils.toJSONString(body));
 	}
 
 	private static void send(HttpExchange exchange, int status, String type, String body) throws IOException {

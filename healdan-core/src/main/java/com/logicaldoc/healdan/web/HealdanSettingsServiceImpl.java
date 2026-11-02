@@ -250,7 +250,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 					.orElseThrow(() -> new HealdanRuleException("That provider doesn't exist."));
 			RedirectBase base = redirectBase();
 			URI redirect = SignInProviders.callback(base.base(), provider.id());
-			Check check = ProviderClient.get().check(provider, redirect);
+			Check check = ProviderClient.get().check(provider, redirect, base.usable());
 
 			// The address first, always (ruling R5), then what's wrong
 			List<String> lines = new ArrayList<>();

@@ -178,11 +178,13 @@ the provider publishes about itself, and its keys, and confirms that:
 
 To test the client secret, Check sends the client ID and secret to the provider's token endpoint as a sign-in does,
 with a code it makes up. A provider that takes them refuses only the code, with `invalid_grant`, and Check passes.
-If it refuses the client instead, with `invalid_client` or HTTP 401, Check says the provider refused the client
-secret: copy the secret from the provider again, check the client ID, and save. Authentik answers the same when the
-redirect address isn't registered with it exactly. Any other answer, or none, is a problem too, which says the
-secret wasn't tested. Check sends the secret only where a sign-in would, so not when the issuer doesn't
-match or an address isn't `https://`: put those right first.
+If it refuses the client instead, with `invalid_client`, or HTTP 401 with `unauthorized_client` or no error code,
+Check says the provider refused the client secret: copy the secret from the provider again, check the client ID, and
+save. Authentik answers the same when the redirect address isn't registered with it exactly. Any other answer, or
+none, is a problem too, which says the secret wasn't tested, as is an answer from a provider that's down or busy
+(HTTP 5xx or 429), whatever it says. Check sends the secret only where a sign-in would, so not when the issuer
+doesn't match or an address isn't `https://`, nor while Healdan doesn't know its own address, as the redirect
+address is then only a guess: put those right first.
 
 It shows the redirect address first, with an icon that copies it, then each problem in a sentence, or that
 everything checks out. Check doesn't sign anyone in: try a sign-in through the button with a test person, which
