@@ -87,7 +87,11 @@ public partial class SignInWindow : Window
 
     private string Address => (Server.Text ?? "").Trim();
 
-    /// <summary>Asks for the providers of the address typed, unless they were asked for it already, or it's empty.</summary>
+    /// <summary>
+    /// Asks for the providers of the address typed, unless they were asked for it already, or it's empty. An address
+    /// that gave no answer is asked again next time: after a refused password the address is fixed, and an account that
+    /// signs in through a provider has no password, so one blip mustn't leave the window without its buttons.
+    /// </summary>
     private void AskProviders()
     {
         if (_prompt is null || _closed || Address == _askedFor)
@@ -113,7 +117,11 @@ public partial class SignInWindow : Window
             choice = null; // the password form, whose Sign In then says what's wrong with the address
         }
         if (ask == _ask && !_closed)
+        {
+            if (choice is null && _askedFor == address)
+                _askedFor = null;
             Show(choice, address);
+        }
     }
 
     /// <summary>

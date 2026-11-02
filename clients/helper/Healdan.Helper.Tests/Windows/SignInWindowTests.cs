@@ -400,6 +400,35 @@ public sealed class SignInWindowTests
     }
 
     [MacFact]
+    public Task AnUnreachableAnswerIsAskedAgain()
+    {
+        // After a refused password the address is fixed, and an account that signs in through a provider has no
+        // password: one blip mustn't leave the window on the password form for good.
+        var answers = new Queue<ProviderChoice?>([null, Two]);
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(answers.Dequeue()) };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
+        {
+            await window.Loading;
+            Assert.Empty(ProviderButtons(window));
+            Assert.True(Shown(Find<TextBox>(window, "User")));
+
+            var server = Find<TextBox>(window, "Server");
+            server.Focus();
+            Find<TextBox>(window, "Password").Focus();
+            await window.Loading;
+
+            Assert.Equal(["https://healdan.example", "https://healdan.example"], prompt.ProvidersAsked);
+            Assert.Equal(2, ProviderButtons(window).Count);
+
+            // Answered, it isn't asked again
+            server.Focus();
+            Find<TextBox>(window, "Password").Focus();
+            await window.Loading;
+            Assert.Equal(2, prompt.ProvidersAsked.Count);
+        });
+    }
+
+    [MacFact]
     public Task AFixedServerAsksForItsProvidersOnce()
     {
         var prompt = new FakePrompt { OnProviders = _ => Task.FromResult<ProviderChoice?>(Two) };

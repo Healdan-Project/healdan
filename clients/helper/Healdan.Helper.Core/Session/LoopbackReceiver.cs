@@ -8,9 +8,11 @@ public sealed record LoopbackResult(string? Code, string? State, string? Error);
 
 /// <summary>
 /// The helper's end of a sign-in in the system browser (RFC 8252, spec §6.2): a listener on <c>127.0.0.1</c>, at a port
-/// the system gave, for one request. Healdan sends the browser back to <see cref="RedirectUri"/> with the code, or the
+/// the system gave, for one answer. Healdan sends the browser back to <see cref="RedirectUri"/> with the code, or the
 /// reason it refused; the receiver reads that, sends the browser on to a page of Healdan's that tells the person to
-/// close the tab, and stops, so nothing else can reach the port. Only the loopback address is ever bound.
+/// close the tab, and stops, so nothing else can reach the port. Only a <c>GET</c> of <c>/</c> is the answer: any other
+/// method or path, such as a browser's <c>/favicon.ico</c>, gets a <c>404</c> and uses nothing up. Only the loopback
+/// address is ever bound.
 /// </summary>
 /// <remarks>The code, state and error are the caller's to guard: nothing here logs them.</remarks>
 public sealed class LoopbackReceiver : IAsyncDisposable
@@ -73,8 +75,8 @@ public sealed class LoopbackReceiver : IAsyncDisposable
     }
 
     /// <summary>
-    /// The first request to the port: its code, state or error. The browser is sent on (<c>302</c>) to
-    /// <paramref name="done"/>, and the listener stops.
+    /// The first <c>GET</c> of <c>/</c> at the port: its code, state or error. The browser is sent on (<c>302</c>) to
+    /// <paramref name="done"/>, and the listener stops. Any other request gets a <c>404</c>, and the wait goes on.
     /// </summary>
     /// <exception cref="TimeoutException">Nothing came within <paramref name="timeout"/>.</exception>
     /// <exception cref="OperationCanceledException">The caller cancelled, or the receiver was disposed.</exception>
@@ -93,11 +95,35 @@ public sealed class LoopbackReceiver : IAsyncDisposable
 
         using var limit = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limit.CancelAfter(timeout);
-        var accepting = _listener.GetContextAsync();
-        HttpListenerContext context;
         try
         {
-            context = await accepting.WaitAsync(limit.Token);
+            while (true)
+            {
+                var context = await AcceptAsync(limit.Token, ct);
+                if (!IsTheAnswer(context.Request))
+                {
+                    NotFound(context.Response);
+                    continue;
+                }
+                var query = context.Request.QueryString;
+                var result = new LoopbackResult(Value(query["code"]), Value(query["state"]), Value(query["error"]));
+                Respond(context.Response, done(result));
+                return result;
+            }
+        }
+        finally
+        {
+            Stop();
+        }
+    }
+
+    /// <summary>The next request to the port, within the wait's time.</summary>
+    private async Task<HttpListenerContext> AcceptAsync(CancellationToken limit, CancellationToken ct)
+    {
+        var accepting = _listener.GetContextAsync();
+        try
+        {
+            return await accepting.WaitAsync(limit);
         }
         catch (Exception e) when (e is OperationCanceledException or ObjectDisposedException or HttpListenerException)
         {
@@ -109,17 +135,25 @@ public sealed class LoopbackReceiver : IAsyncDisposable
                 throw new TimeoutException("Nothing came back to the sign-in's address in time.");
             throw new OperationCanceledException("The sign-in's listener was closed.", e);
         }
+    }
 
+    /// <summary>Whether it's the browser coming back to <see cref="RedirectUri"/>: a <c>GET</c> of <c>/</c>.</summary>
+    private static bool IsTheAnswer(HttpListenerRequest request) =>
+        request.HttpMethod == "GET" && request.Url?.AbsolutePath == "/";
+
+    /// <summary>Answers a request that isn't the answer with a 404, and closes its connection.</summary>
+    private static void NotFound(HttpListenerResponse response)
+    {
         try
         {
-            var query = context.Request.QueryString;
-            var result = new LoopbackResult(Value(query["code"]), Value(query["state"]), Value(query["error"]));
-            Respond(context.Response, done(result));
-            return result;
+            response.KeepAlive = false;
+            response.StatusCode = (int)HttpStatusCode.NotFound;
+            response.Headers["Cache-Control"] = "no-store";
+            response.Close();
         }
-        finally
+        catch (Exception e) when (e is HttpListenerException or ObjectDisposedException or IOException or InvalidOperationException)
         {
-            Stop();
+            // gone
         }
     }
 
