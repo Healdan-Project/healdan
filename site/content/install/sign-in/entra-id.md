@@ -79,9 +79,11 @@ group map still refuses anyone it gives no group, but Entra should refuse first.
 
 1. In **Entra ID → Enterprise apps**, open the application and choose **Properties**.
 2. Set **Assignment Required** to **Yes**, and save.
-3. While assignment is required, people can't give their own consent, so grant it for them. On the app registration,
-   choose **API permissions** and check that Microsoft Graph's delegated permissions include `openid`, `profile`,
-   `email` and `offline_access`, adding any that don't. Then choose **Grant admin consent** for your tenant.
+3. While assignment is required, people can't give their own consent, so you grant it for them. First the
+   application has to ask for the permissions Healdan needs, `openid`, `profile`, `email` and `offline_access`. On
+   the app registration, choose **API permissions**, then **Add a permission**, **Microsoft Graph** and **Delegated
+   permissions**, and tick those four. Skip any the list already shows, and add the rest.
+4. Back on **API permissions**, choose **Grant admin consent** for your tenant, and confirm.
 
 ### Add the Provider in Healdan
 
@@ -115,6 +117,16 @@ The preset fills in these, which you can leave as they are:
 
 Healdan reads `given_name` and `family_name` for the names, and `name` where they're missing. They follow Entra at each
 sign-in, and so does the email.
+
+## Groups Between Sign-Ins
+
+Healdan [checks a helper's sign-in](../#checking-back-with-the-provider) with Entra at least every 8 hours. When
+Entra's answer carries a signed ID token, the person's names, email and groups follow it. Microsoft's documentation
+describes the ID token in a refresh answer as unsigned, and Healdan ignores an unsigned ID token on a refresh, as if
+none came: the check counts as passed, and nothing is updated. If your tenant's answers are like that, the log says
+once, naming the provider, that its refreshed ID tokens are unsigned, and a change to someone's groups in Entra
+reaches Healdan when they next sign in. Someone Entra refuses outright, as a person who's been disabled, is still
+signed out by the check.
 
 ## When the Client Secret Expires
 

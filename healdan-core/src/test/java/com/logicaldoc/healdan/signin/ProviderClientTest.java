@@ -13,6 +13,7 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -456,14 +457,16 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 			assertTrue(log.lines().toString(),
 					log.lines().stream().anyMatch(line -> line.startsWith("WARN") && line.contains("fake")));
 		}
-		fake.audience(FakeProvider.CLIENT_ID).signWith("none");
-		Refreshed unsigned = client.refresh(p, bad.refreshToken());
-		assertEquals(Outcome.UNREACHABLE, unsigned.outcome());
+		// Signed with HMAC: the same, as only an unsigned ID token is ignored (ruling R28)
+		fake.audience(FakeProvider.CLIENT_ID).signWith("HS256");
+		Refreshed hmac = client.refresh(p, bad.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, hmac.outcome());
+		assertNull(hmac.claims());
 		fake.signWith("RS256");
 
 		// No ID token with the refresh: accepted, with no claims
 		fake.noIdTokenOnRefresh();
-		Refreshed bare = client.refresh(p, unsigned.refreshToken());
+		Refreshed bare = client.refresh(p, hmac.refreshToken());
 		assertEquals(Outcome.ACCEPTED, bare.outcome());
 		assertNull(bare.claims());
 		assertNotNull(bare.refreshToken());
@@ -481,6 +484,224 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		// Nor can a client that hasn't the discovery document yet
 		assertEquals(Outcome.UNREACHABLE,
 				new ProviderClient(SignInProviders.get()).refresh(p, bare.refreshToken()).outcome());
+	}
+
+	// Ruling R28: Microsoft's documentation describes the ID token in a refresh answer as unsigned (alg none). It's
+	// ignored, as if none came, and its claims are never read.
+	@Test
+	public void testUnsignedRefreshedIdTokenIsIgnored() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		SignInProvider other = fake.asProvider("other");
+		Tokens t = signIn(p, true);
+		Tokens u = signIn(other, true);
+		int keys = fake.keyRequests();
+		// Were its claims read, they would change the person's identity and take the groups away
+		fake.signRefreshesWith("none").claimsOnRefresh(Map.of("sub", "s-2002", "groups", List.of()));
+
+		Refreshed r;
+		List<String> lines;
+		try (LogCapture log = LogCapture.of(ProviderClient.class)) {
+			r = client.refresh(p, t.refreshToken());
+			Refreshed again = client.refresh(p, r.refreshToken());
+			assertEquals(Outcome.ACCEPTED, again.outcome());
+			assertNull(again.claims());
+			assertNotNull(again.refreshToken());
+			assertEquals(Outcome.ACCEPTED, client.refresh(other, u.refreshToken()).outcome());
+			lines = log.lines();
+		}
+		assertEquals(Outcome.ACCEPTED, r.outcome());
+		assertNull(r.claims());
+		assertNotNull(r.refreshToken());
+		assertNotEquals(t.refreshToken(), r.refreshToken());
+		// It was never checked against the keys
+		assertEquals(keys, fake.keyRequests());
+
+		// Logged at info once for each provider, naming it, and not once for each check
+		for (String id : List.of("fake", "other")) {
+			List<String> noted = lines.stream()
+					.filter(line -> line.contains("unsigned") && line.contains("provider " + id + ":")).toList();
+			assertEquals(lines.toString(), 1, noted.size());
+			assertTrue(noted.get(0), noted.get(0).startsWith("INFO"));
+			assertTrue(noted.get(0), noted.get(0).contains("can't update names or groups"));
+		}
+		for (String line : lines) {
+			assertFalse(line, line.contains(fake.lastIdToken()));
+			assertFalse(line, line.contains("s-2002"));
+		}
+
+		// The refresh token it brought works, and a refresh that follows an unsigned one can still be refused
+		fake.refuseRefresh();
+		assertEquals(Outcome.REFUSED, client.refresh(p, r.refreshToken()).outcome());
+
+		// Only on refresh: a sign-in's unsigned ID token is still refused
+		fake.signWith("none");
+		ProviderException e = refused(p);
+		assertTrue(e.getMessage(), e.getMessage().contains("isn't signed"));
+		assertEquals(keys, fake.keyRequests());
+	}
+
+	// Ruling R28 doesn't loosen any check: a signed ID token that fails one is unreachable, as before (ruling R10)
+	@Test
+	public void testRefreshedIdTokensStillCheckedWhenSigned() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		String refresh = t.refreshToken();
+
+		for (String alg : List.of("HS256", "HS384", "HS512")) {
+			fake.signRefreshesWith(alg);
+			Refreshed r = client.refresh(p, refresh);
+			assertEquals(alg, Outcome.UNREACHABLE, r.outcome());
+			assertNull(alg, r.claims());
+			// The provider may have retired the old refresh token
+			assertNotNull(alg, r.refreshToken());
+			refresh = r.refreshToken();
+		}
+
+		// Every other check, with a good signature
+		fake.signRefreshesWith(null).audience("someone-else");
+		Refreshed audience = client.refresh(p, refresh);
+		assertEquals(Outcome.UNREACHABLE, audience.outcome());
+		assertNull(audience.claims());
+		fake.audience(FakeProvider.CLIENT_ID).issuerInToken("https://evil.example");
+		Refreshed issuer = client.refresh(p, audience.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, issuer.outcome());
+		fake.issuerInToken(null).expiresIn(Duration.ofMinutes(-3));
+		Refreshed expired = client.refresh(p, issuer.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, expired.outcome());
+
+		// And a good one gives its claims
+		fake.expiresIn(Duration.ofMinutes(5));
+		Refreshed good = client.refresh(p, expired.refreshToken());
+		assertEquals(Outcome.ACCEPTED, good.outcome());
+		assertEquals("s-1001", good.claims().identity());
+
+		// Signed by a key the provider doesn't publish, under the kid of one it does, and under an unknown kid
+		fake.signWithAnotherKey();
+		Refreshed wrong = client.refresh(p, good.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, wrong.outcome());
+		assertNull(wrong.claims());
+		fake.signWithUnknownKey("k9");
+		Refreshed unknown = client.refresh(p, wrong.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, unknown.outcome());
+		assertNull(unknown.claims());
+	}
+
+	// Ruling R29: the token endpoint's client authentication follows the provider's discovery document
+	@Test
+	public void testClientSecretPostWhenOnlyThatIsListed() throws Exception {
+		fake.tokenEndpointAuthMethods(List.of("client_secret_post"));
+		SignInProvider p = fake.asProvider("fake");
+
+		Tokens t;
+		try (LogCapture log = LogCapture.of(ProviderClient.class)) {
+			t = signIn(p, true);
+			assertEquals("client_secret_post", fake.lastClientAuthentication());
+			assertEquals("s-1001", t.claims().identity());
+
+			// The refresh sends it the same way
+			Refreshed r = client.refresh(p, t.refreshToken());
+			assertEquals("client_secret_post", fake.lastClientAuthentication());
+			assertEquals(Outcome.ACCEPTED, r.outcome());
+			assertEquals("s-1001", r.claims().identity());
+
+			// A secret the provider refuses: its message never holds the secret, or its encoding
+			SignInProviders.get().save(p, "another=secret&5d1e");
+			Start s = client.start(p, REDIRECT, false);
+			String code = fake.authorize(s.authorization());
+			ProviderException wrong = assertThrows(ProviderException.class,
+					() -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+			assertEquals("client_secret_post", fake.lastClientAuthentication());
+			assertTrue(wrong.getMessage(), wrong.getMessage().contains("invalid_client"));
+			assertEquals(Outcome.UNREACHABLE, client.refresh(p, r.refreshToken()).outcome());
+			for (String secret : List.of("another=secret&5d1e", "another%3Dsecret%265d1e", FakeProvider.SECRET)) {
+				assertFalse(wrong.getMessage(), wrong.getMessage().contains(secret));
+				for (String line : log.lines())
+					assertFalse(line, line.contains(secret));
+			}
+		}
+		SignInProviders.get().save(p, FakeProvider.SECRET);
+
+		// Listed with other methods, basic or not
+		for (List<String> methods : List.of(List.of("private_key_jwt", "client_secret_post"),
+				List.of("tls_client_auth", "client_secret_jwt", "client_secret_post"))) {
+			fake.tokenEndpointAuthMethods(methods);
+			client.forget("fake");
+			signIn(p, false);
+			assertEquals(methods.toString(), "client_secret_post", fake.lastClientAuthentication());
+		}
+	}
+
+	@Test
+	public void testClientSecretBasicByDefaultAndWhenListed() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		signIn(p, false);
+		assertEquals("client_secret_basic", fake.lastClientAuthentication());
+
+		// Listed beside client_secret_post, in either order, and with others
+		for (List<String> methods : List.of(List.of("client_secret_basic", "client_secret_post"),
+				List.of("client_secret_post", "client_secret_basic"),
+				List.of("private_key_jwt", "client_secret_post", "client_secret_basic"))) {
+			fake.tokenEndpointAuthMethods(methods);
+			client.forget("fake");
+			Tokens t = signIn(p, true);
+			assertEquals(methods.toString(), "client_secret_basic", fake.lastClientAuthentication());
+			assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());
+			assertEquals(methods.toString(), "client_secret_basic", fake.lastClientAuthentication());
+		}
+
+		// OIDC's default when the list is absent
+		fake.tokenEndpointAuthMethods(null);
+		client.forget("fake");
+		Tokens t = signIn(p, true);
+		assertEquals("client_secret_basic", fake.lastClientAuthentication());
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());
+
+		// A provider that lists neither is sent basic, as before, and the provider's answer decides
+		fake.tokenEndpointAuthMethods(List.of("private_key_jwt"));
+		client.forget("fake");
+		Start s = client.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		ProviderException e = assertThrows(ProviderException.class,
+				() -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertEquals("client_secret_basic", fake.lastClientAuthentication());
+		assertTrue(e.getMessage(), e.getMessage().contains("invalid_client"));
+	}
+
+	@Test
+	public void testCheckReportsAProviderThatTakesNoClientSecret() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		assertTrue(client.check(p, REDIRECT).problems().toString(), client.check(p, REDIRECT).ok());
+
+		// Either, or the default, is fine
+		for (List<String> methods : Arrays.asList(List.of("client_secret_post"), List.of("client_secret_basic"),
+				List.of("private_key_jwt", "client_secret_post"), null)) {
+			fake.tokenEndpointAuthMethods(methods);
+			Check check = client.check(p, REDIRECT);
+			assertTrue(methods + ": " + check.problems(), check.ok());
+		}
+
+		fake.tokenEndpointAuthMethods(List.of("private_key_jwt", "tls_client_auth"));
+		Check check = client.check(p, REDIRECT);
+		assertFalse(check.ok());
+		assertEquals(check.problems().toString(), 1, check.problems().size());
+		String problem = check.problems().get(0);
+		assertTrue(problem,
+				problem.startsWith("The provider doesn't take a client secret at its token endpoint (it lists "));
+		assertTrue(problem, problem.contains("private_key_jwt") && problem.contains("tls_client_auth"));
+		assertEquals(REDIRECT, check.redirect());
+
+		// A list with nothing in it lists neither either
+		fake.tokenEndpointAuthMethods(List.of());
+		Check empty = client.check(p, REDIRECT);
+		assertFalse(empty.ok());
+		assertTrue(empty.problems().toString(), mentions(empty, "doesn't take a client secret"));
+
+		// What the provider lists is quoted as text, never believed
+		fake.tokenEndpointAuthMethods(List.of("line\nbreak" + "x".repeat(300)));
+		Check quoted = client.check(p, REDIRECT);
+		assertFalse(quoted.ok());
+		assertTrue(quoted.problems().toString(), quoted.problems().stream().noneMatch(line -> line.contains("\n")));
+		assertTrue(quoted.problems().toString(), quoted.problems().stream().allMatch(line -> line.length() < 500));
 	}
 
 	@Test

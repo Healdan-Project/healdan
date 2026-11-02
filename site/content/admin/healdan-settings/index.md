@@ -161,6 +161,7 @@ the provider publishes about itself, and its keys, and confirms that:
 - the issuer it gives is the one set, exactly;
 - every address it gives starts `https://`;
 - it signs with RSA or EC, and publishes a key to sign with;
+- it takes a client secret at its token endpoint, as `client_secret_basic` or `client_secret_post`;
 - it offers `offline_access`, without which Healdan can't [check back](#checking-back-with-the-provider) on a
   Healdan Helper's sign-in;
 - a client ID is set, and a client secret Healdan can read.
@@ -208,8 +209,9 @@ When someone signs in through a provider, Healdan finds their account in this or
    language, and the groups the map gives. A username that's taken, is `admin`, or has a `>` in it is refused.
 
 **Link by Email** is on in the Entra ID preset, where the tenant's admins set people's emails, and off in
-Authentik's, where people can change their own unless an admin stops them. Turn it on only where people can't: a
-person who can change their email at the provider could be linked to whichever account has the email they type.
+Authentik's, where by default people can't change their own, though an older instance, or one an administrator has
+changed, may allow it. Turn it on only where people can't: a person who can change their email at the provider could
+be linked to whichever account has the email they type.
 
 At every sign-in, the account's names and email follow the provider's. Its username never changes.
 
@@ -315,6 +317,9 @@ also loses their helper. Web page sessions aren't checked again: see
   is more than eight hours old.
 - **The provider accepts:** when its answer carries the person's details, their names, email and groups follow it,
   as at a sign-in, gate included. So a provider must send the groups claim then too, or the helper is signed out.
+  An ID token that isn't signed (`alg` of `none`), as Microsoft's documentation describes Entra ID's, is ignored as
+  if none came: the check counts as passed, nothing is updated, and the person's details follow at their next
+  sign-in. The log says so once for the provider.
 - **The provider refuses,** as when the person was disabled there or their sessions were ended: the helper is signed
   out, and asks the person to sign in again.
 - **The provider can't be reached:** nothing changes, and Healdan tries again no sooner than 15 minutes later. An

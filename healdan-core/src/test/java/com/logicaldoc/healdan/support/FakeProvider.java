@@ -75,18 +75,20 @@ import com.sun.net.httpserver.HttpsServer;
  * provider would send back.
  * <p>
  * Its token endpoint checks what a real one does: the client id and secret,
- * sent as {@code client_secret_basic}; a code used once, with the redirect it
- * was issued for and a verifier that matches its {@code S256} challenge; and
- * refresh tokens that turn over on each use.
+ * sent by a method it advertises ({@code client_secret_basic} unless
+ * {@link #tokenEndpointAuthMethods} says otherwise); a code used once, with the
+ * redirect it was issued for and a verifier that matches its {@code S256}
+ * challenge; and refresh tokens that turn over on each use.
  * <p>
  * Over plain HTTP it allows plain HTTP for providers while it runs, and
  * {@link #close} goes back to reading the environment. Over HTTPS
  * ({@link #startTls}) it doesn't, and {@link #trust} makes the client trust its
  * certificate. Close it in an {@code @After} method.
  * <p>
- * The settings that make it misbehave, and {@link #claimsOnRefresh}, last
- * until changed, apart from {@link #refuseRefresh}, {@link #downForRefresh}
- * and {@link #answerRefresh}, which answer one refresh each.
+ * The settings that make it misbehave, {@link #claimsOnRefresh} and
+ * {@link #signRefreshesWith}, last until changed, apart from
+ * {@link #refuseRefresh}, {@link #downForRefresh} and {@link #answerRefresh},
+ * which answer one refresh each.
  */
 public final class FakeProvider implements AutoCloseable {
 
@@ -153,6 +155,14 @@ public final class FakeProvider implements AutoCloseable {
 	private volatile Map<String, Object> refreshClaims;
 
 	private volatile String alg = "RS256";
+
+	/** What the ID tokens of refreshes are signed with, instead of {@link #alg}, when set */
+	private volatile String refreshAlg;
+
+	/** The methods the token endpoint advertises and takes; null leaves them out of the discovery document */
+	private volatile List<String> authMethods = List.of("client_secret_basic");
+
+	private volatile String lastClientAuthentication;
 
 	private volatile String issuerInToken;
 
@@ -408,6 +418,44 @@ public final class FakeProvider implements AutoCloseable {
 	}
 
 	/**
+	 * @param algorithm what to sign the ID tokens of refreshes with from now on,
+	 *        instead of what {@link #signWith} says, as Microsoft's documentation
+	 *        describes Entra ID's: {@code none}, or any of {@link #signWith}'s.
+	 *        The discovery document still names {@link #signWith}'s alone. Null
+	 *        goes back to {@link #signWith}'s.
+	 * @return this provider
+	 */
+	public FakeProvider signRefreshesWith(String algorithm) {
+		refreshAlg = algorithm;
+		return this;
+	}
+
+	/**
+	 * @param methods the client authentication methods the token endpoint
+	 *        advertises in {@code token_endpoint_auth_methods_supported}, and
+	 *        takes: {@code client_secret_basic} (the secret in an HTTP Basic
+	 *        header) and {@code client_secret_post} (in the form body) work, and
+	 *        any other name is advertised and not taken. Null leaves the member
+	 *        out of the discovery document, as OIDC's default allows, and the
+	 *        endpoint takes {@code client_secret_basic} alone. The default is
+	 *        {@code client_secret_basic}.
+	 * @return this provider
+	 */
+	public FakeProvider tokenEndpointAuthMethods(List<String> methods) {
+		authMethods = methods == null ? null : List.copyOf(methods);
+		return this;
+	}
+
+	/**
+	 * @return how the last request to {@code /token} sent the client's secret:
+	 *         {@code client_secret_basic}, {@code client_secret_post} or
+	 *         {@code none}; null before any request
+	 */
+	public String lastClientAuthentication() {
+		return lastClientAuthentication;
+	}
+
+	/**
 	 * @return this provider, which from now on signs with a new key {@code k2}
 	 *         (then {@code k3}, ...), published beside the old ones
 	 */
@@ -655,7 +703,9 @@ public final class FakeProvider implements AutoCloseable {
 		doc.put("subject_types_supported", List.of("public"));
 		doc.put("id_token_signing_alg_values_supported", List.of(alg));
 		doc.put("scopes_supported", List.of("openid", "profile", "email", "offline_access"));
-		doc.put("token_endpoint_auth_methods_supported", List.of("client_secret_basic"));
+		List<String> methods = authMethods;
+		if (methods != null)
+			doc.put("token_endpoint_auth_methods_supported", methods);
 		doc.put("code_challenge_methods_supported", List.of("S256"));
 		doc.put("grant_types_supported", List.of("authorization_code", "refresh_token"));
 		discovery.forEach((member, value) -> {
@@ -672,14 +722,15 @@ public final class FakeProvider implements AutoCloseable {
 			send(exchange, 405, "text/plain", "POST only");
 			return;
 		}
-		if (!authenticated(exchange)) {
-			exchange.getResponseHeaders().add("WWW-Authenticate", "Basic");
-			error(exchange, 401, "invalid_client");
-			return;
-		}
 		Map<String, List<String>> form;
 		try (InputStream in = exchange.getRequestBody()) {
 			form = URLUtils.parseParameters(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+		}
+		if (!authenticated(exchange, form)) {
+			if (acceptsBasic())
+				exchange.getResponseHeaders().add("WWW-Authenticate", "Basic");
+			error(exchange, 401, "invalid_client");
+			return;
 		}
 		String grant = one(form, "grant_type");
 		if ("authorization_code".equals(grant)) {
@@ -691,7 +742,7 @@ public final class FakeProvider implements AutoCloseable {
 				return;
 			}
 			boolean offline = List.of(pending.scope().split(" ")).contains("offline_access");
-			issue(exchange, pending.claims(), pending.nonce(), offline, true);
+			issue(exchange, pending.claims(), pending.nonce(), offline, true, alg);
 		} else if ("refresh_token".equals(grant)) {
 			if (downForRefresh.getAndSet(false)) {
 				send(exchange, 503, "text/html", "<html><body>Down for maintenance</body></html>");
@@ -711,7 +762,9 @@ public final class FakeProvider implements AutoCloseable {
 				return;
 			}
 			Map<String, Object> changed = refreshClaims;
-			issue(exchange, changed != null ? changed : granted, null, true, !noIdTokenOnRefresh);
+			String refreshSigning = refreshAlg;
+			issue(exchange, changed != null ? changed : granted, null, true, !noIdTokenOnRefresh,
+					refreshSigning != null ? refreshSigning : alg);
 		} else {
 			error(exchange, 400, "unsupported_grant_type");
 		}
@@ -725,10 +778,35 @@ public final class FakeProvider implements AutoCloseable {
 		}
 	}
 
-	private static boolean authenticated(HttpExchange exchange) {
+	/** @return true if the endpoint advertises client_secret_basic, or advertises nothing, which means the same */
+	private boolean acceptsBasic() {
+		List<String> methods = authMethods;
+		return methods == null || methods.contains("client_secret_basic");
+	}
+
+	private boolean acceptsPost() {
+		List<String> methods = authMethods;
+		return methods != null && methods.contains("client_secret_post");
+	}
+
+	/** Takes the client's id and secret by the methods the endpoint advertises, and notes how they came */
+	private boolean authenticated(HttpExchange exchange, Map<String, List<String>> form) {
 		String header = exchange.getRequestHeaders().getFirst("Authorization");
-		if (header == null || !header.startsWith("Basic "))
+		boolean basic = header != null && header.startsWith("Basic ");
+		boolean post = one(form, "client_secret") != null;
+		lastClientAuthentication = basic ? "client_secret_basic" : post ? "client_secret_post" : "none";
+		// One method per request (RFC 6749 section 2.3): a request using both is refused
+		if (basic && post)
 			return false;
+		if (basic)
+			return acceptsBasic() && basicMatches(header);
+		if (post)
+			return acceptsPost() && CLIENT_ID.equals(one(form, "client_id"))
+					&& SECRET.equals(one(form, "client_secret"));
+		return false;
+	}
+
+	private static boolean basicMatches(String header) {
 		String pair;
 		try {
 			pair = new String(Base64.getDecoder().decode(header.substring(6).strip()), StandardCharsets.UTF_8);
@@ -745,7 +823,7 @@ public final class FakeProvider implements AutoCloseable {
 	}
 
 	private void issue(HttpExchange exchange, Map<String, Object> granted, String nonce, boolean refresh,
-			boolean idToken) throws IOException {
+			boolean idToken, String algorithm) throws IOException {
 		Map<String, Object> answer = new LinkedHashMap<>();
 		String access = random();
 		lastAccessToken = access;
@@ -753,7 +831,7 @@ public final class FakeProvider implements AutoCloseable {
 		answer.put("token_type", "Bearer");
 		answer.put("expires_in", 300);
 		if (idToken) {
-			String token = sign(granted, nonce);
+			String token = sign(granted, nonce, algorithm);
 			lastIdToken = token;
 			answer.put("id_token", token);
 		}
@@ -766,7 +844,7 @@ public final class FakeProvider implements AutoCloseable {
 		send(exchange, 200, JSON, JSONObjectUtils.toJSONString(answer));
 	}
 
-	private String sign(Map<String, Object> granted, String nonce) {
+	private String sign(Map<String, Object> granted, String nonce, String algorithm) {
 		Instant now = Instant.now();
 		JWTClaimsSet.Builder builder = new JWTClaimsSet.Builder();
 		granted.forEach(builder::claim);
@@ -786,7 +864,6 @@ public final class FakeProvider implements AutoCloseable {
 		JWTClaimsSet set = builder.build();
 
 		try {
-			String algorithm = alg;
 			if ("none".equals(algorithm))
 				return new PlainJWT(set).serialize();
 			if (algorithm.startsWith("HS"))
@@ -802,7 +879,7 @@ public final class FakeProvider implements AutoCloseable {
 			jwt.sign(new RSASSASigner(key));
 			return jwt.serialize();
 		} catch (JOSEException e) {
-			throw new IllegalStateException("The fake provider couldn't sign with " + alg, e);
+			throw new IllegalStateException("The fake provider couldn't sign with " + algorithm, e);
 		}
 	}
 

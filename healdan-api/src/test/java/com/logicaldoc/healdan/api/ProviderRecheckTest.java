@@ -341,6 +341,69 @@ public class ProviderRecheckTest extends ApiTestCase {
 		assertEquals(Set.of(), mappedGroups());
 	}
 
+	// Ruling R28: Microsoft's documentation describes the ID token in a refresh answer as unsigned. The client ignores
+	// it, so a due check keeps the token and moves "checked" on, and the account is left as it was.
+	@Test
+	public void testUnsignedRefreshedIdTokensKeepTheTokenAndLeaveTheAccountAlone() throws Exception {
+		String token = helperToken();
+		String sid = boundSid(token);
+		String refresh = SecretBox.get().open(sealedRefresh(token));
+		Date issued = checked(token);
+		int asked = fake.tokenRequests();
+		// Were its claims believed, they would take a group away and rename jane
+		fake.signRefreshesWith("none")
+				.claimsOnRefresh(claims(Map.of("groups", List.of("g-conv"), "given_name", "Janet")));
+		assertEquals(MAPPED, mappedGroups());
+
+		// A check is due: the 8 hours passed
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(481));
+		ApiResponse due;
+		List<String> lines;
+		try (LogCapture log = LogCapture.of(ProviderRecheck.class)) {
+			due = me(token);
+			lines = log.lines();
+		}
+
+		assertEquals(due.toString(), 200, due.status());
+		assertEquals("one refresh", asked + 1, fake.tokenRequests());
+		assertEquals("kept", 0, deleted(token));
+		assertTrue(SessionManager.get().isOpen(sid));
+		// "checked" moved on, and the new refresh token is kept, sealed
+		assertTrue(checked(token) + " after " + issued, checked(token).after(issued));
+		String next = SecretBox.get().open(sealedRefresh(token));
+		assertNotNull(next);
+		assertNotEquals(refresh, next);
+		// The account is as it was
+		assertEquals(MAPPED, mappedGroups());
+		assertEquals("Jane", UserDAO.get().findById(jane.getId()).getFirstName());
+		// An accepted check, not one that decided nothing: no warning, no wait
+		assertTrue(lines.toString(), lines.stream().noneMatch(line -> line.startsWith("WARN")));
+		assertTrue(lines.toString(), lines.stream().anyMatch(line -> line.startsWith("INFO") && line.contains("fake")
+				&& line.contains("jane") && line.contains("accepted")));
+		assertNoSecrets(lines, token, next, fake.lastIdToken());
+
+		// So the interval holds: no new check until it has passed again
+		assertEquals(200, me(token).status());
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(479));
+		assertEquals(200, me(token).status());
+		assertEquals("no new check within the interval", asked + 1, fake.tokenRequests());
+
+		// And the next one, with the new refresh token, goes the same way
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(2));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 2, fake.tokenRequests());
+		assertEquals(0, deleted(token));
+		assertEquals(MAPPED, mappedGroups());
+
+		// Signed again, the same check updates the account: only an unsigned token was ignored
+		fake.signRefreshesWith(null);
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(481));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 3, fake.tokenRequests());
+		assertEquals(Set.of("Conveyancing"), mappedGroups());
+		assertEquals("Janet", UserDAO.get().findById(jane.getId()).getFirstName());
+	}
+
 	@Test
 	public void testAnotherIdentityRefused() throws Exception {
 		String token = helperToken();

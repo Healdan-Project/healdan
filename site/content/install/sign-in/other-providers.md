@@ -18,10 +18,14 @@ The examples use `healdan.example` for your Healdan server and `idp.firm.example
   character for character, a final slash included.
 - **The authorisation code flow with PKCE.** Healdan sends a PKCE challenge with the `S256` method, asks for the
   response in the query string (`response_mode=query`), and sends a `nonce` and a `state`. The provider must take
-  the client secret in an HTTP Basic header at its token endpoint (`client_secret_basic`).
+  the client secret at its token endpoint as `client_secret_basic` (in an HTTP Basic header) or `client_secret_post`
+  (in the request's body), whichever its discovery document lists. Healdan uses `client_secret_basic` when the
+  document lists it or lists no methods, and `client_secret_post` when that is the one listed. A provider that lists
+  only other methods, such as `private_key_jwt`, can't be used, and **Check** says so.
 - **ID tokens signed with RSA or EC.** The algorithm is `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`,
-  `ES256`, `ES384` or `ES512`, and the provider publishes its keys. Healdan refuses an unsigned ID token, and one
-  signed with HMAC (`HS256` and the like), which some providers fall back on when they have no signing key.
+  `ES256`, `ES384` or `ES512`, and the provider publishes its keys. Healdan refuses an unsigned ID token at a
+  sign-in, and one signed with HMAC (`HS256` and the like), which some providers fall back on when they have no
+  signing key.
 - **HTTPS everywhere.** The issuer, and every address the provider gives for itself, start `https://`, and the
   certificate is one the app's Java trusts: Healdan uses Java's usual certificate checks.
 - **`offline_access` and refresh tokens,** for the helper's [re-check](../#checking-back-with-the-provider). Healdan
@@ -31,7 +35,9 @@ The examples use `healdan.example` for your Healdan server and `idp.firm.example
 - **The groups claim in refreshed ID tokens too.** When a refresh answer carries an ID token, Healdan applies the
   person's details from it, the group map's gate included. A refreshed ID token without the groups claim therefore
   gives the person no group, so the helper is signed out and the person's mapped groups taken away. If your provider
-  leaves the groups out of refreshed ID tokens, ask it to include them.
+  leaves the groups out of refreshed ID tokens, ask it to include them. A refreshed ID token that isn't signed
+  (`alg` of `none`) is ignored, as if none came: nothing is updated and the helper is kept, so the person's details
+  follow at their next sign-in.
 - **The claims below,** in the ID token. Healdan reads claims from the ID token alone and doesn't call a userinfo
   address.
 
@@ -88,8 +94,9 @@ preset. Then fill in:
 | Claims | the names of the claims the provider uses, if they differ from the preset's |
 | Group map | a row for each provider group that may sign in, and the Healdan group it maps to |
 
-**Save**, then **Check**. It confirms the issuer and the signing algorithms, that every address is `https://`, and
-that the provider offers `offline_access`, and shows the redirect address to compare with the one you registered.
+**Save**, then **Check**. It confirms the issuer and the signing algorithms, that every address is `https://`, that
+the provider takes a client secret at its token endpoint, and that it offers `offline_access`, and shows the redirect
+address to compare with the one you registered.
 
 ### Try It
 

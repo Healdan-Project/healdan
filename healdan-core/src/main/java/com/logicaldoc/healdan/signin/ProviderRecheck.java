@@ -58,6 +58,12 @@ import com.logicaldoc.util.spring.Context;
  * updated. A new refresh token is kept whatever the answer, as a provider that
  * turns them over has retired the old one.
  * <p>
+ * An ID token that comes unsigned ({@code alg: none}), as Microsoft's
+ * documentation describes Entra ID's refreshes, is ignored by
+ * {@link ProviderClient#refresh} as if none came (ruling R28). The check is then
+ * accepted with no claims: the token is kept, {@code checked} moves on, and the
+ * account's names and groups stay as they are until the person's next sign-in.
+ * <p>
  * <b>One check per token at a time.</b> A request that finds its token being
  * checked doesn't wait for the provider: it goes on with the token as it
  * stands (ruling R20). If the running check revokes the token before that

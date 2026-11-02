@@ -30,11 +30,13 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 - **It's a small JDK HTTP server** on `127.0.0.1` at a random port. It serves the discovery document, its keys and a
   token endpoint, and signs its ID tokens with Nimbus. Its authorisation endpoint isn't called over HTTP: the test
   reads the address a sign-in would send the browser to, and gets back the code the provider would send.
-- **Its token endpoint checks what a real one does:** the client's id and secret, a code used once, the redirect
+- **Its token endpoint checks what a real one does:** the client's id and secret, sent by a method its discovery
+  document lists (`client_secret_basic` unless a test says `client_secret_post`), a code used once, the redirect
   address the code was issued for, a verifier that matches the PKCE challenge, and refresh tokens that turn over on
   each use.
 - **It can misbehave on purpose:** a bad signature, the wrong issuer or audience, an expired token, a refused or
-  unanswered refresh, and the like, for the checks Healdan makes.
+  unanswered refresh, ID tokens on a refresh that are signed differently from a sign-in's (or not at all, as
+  Microsoft's documentation describes Entra ID's), and the like, for the checks Healdan makes.
 - **Plain HTTP.** While it runs it allows providers over plain HTTP, which only the smoke stack's overlay allows
   outside the tests. `SignInTestHooks` sets that by hand, and moves the clocks that time pending sign-ins, the
   helper's codes and the re-checks. A test that uses it resets it when it ends, or the setting leaks into the next
