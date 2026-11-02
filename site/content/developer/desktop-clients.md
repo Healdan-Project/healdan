@@ -294,9 +294,10 @@ is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in
 3. **It opens the system browser** (`IBrowser`; `SystemBrowser` goes through `SystemOpener`, which hands the address
    over as one argument) at `<server>/api/signin/<id>?client=helper&redirect_uri=…&state=…&code_challenge=…&code_challenge_method=S256`,
    each value URL-encoded.
-4. **It waits for the browser, for at most five minutes.** The receiver takes the first request to the port and
+4. **It waits for the browser, for at most five minutes.** The receiver takes the first `GET` of `/` at the port and
    answers it with a `302` to Healdan's done page, which tells the person to close the tab. Then it stops
-   listening, so a second request finds nothing there. The page is `<server>/api/signin/done?provider=<id>`; after
+   listening, so a second request finds nothing there. Any other method or path, such as a browser's
+   `/favicon.ico`, gets a `404` and uses nothing up. The page is `<server>/api/signin/done?provider=<id>`; after
    a refusal it is `…/done?error=<code>&provider=<id>`, and after a state that isn't the helper's, `error=expired`.
 5. **It checks the state** with a constant-time comparison. Another state, or none, fails the sign-in with "The
    sign-in came back for another request. Try again." and nothing is exchanged, so the code goes nowhere. An
@@ -310,7 +311,8 @@ is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in
    A `401 sign-in-failed` means the code was used, came too late or didn't match, and the sign-in starts again.
 
 The Sign In window offers it (`Windows/SignInWindow.axaml`, through `SignInPrompt`). `HelperSession.ProvidersAsync`
-reads `GET /server` when the window opens, and again each time the address is changed and left. A server with
+reads `GET /server` when the window opens, and again each time the address is changed and left, or just left
+after an answer that didn't come. A server with
 providers gets a button for each, in its order, and the password form folds behind a link labelled with its
 `passwordLabel`, unless something is typed in the form already. A server with none, an older one, or one the helper
 can't reach or doesn't speak to gets the password form as before, whose Sign In then says why. A button runs

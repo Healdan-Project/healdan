@@ -506,7 +506,7 @@ During the build, the owner also decided that a linked account can't use Logical
 - **A provider account has no impersonators,** as `bob>jane` with `bob`'s password would be a password route into it.
 - **Only `invalid_grant` revokes a helper** at its re-check. Any other error answer, an expired client secret's included, keeps it, logged as an error.
 - **An unsigned ID token on a refresh is ignored.** Microsoft documents Entra's as unsigned; if so, groups follow Entra at sign-in only, not at the 8-hourly re-check. A disabled person is still signed out.
-- **The client secret goes the way the provider's discovery document lists:** Basic when it's listed, else `client_secret_post`. Entra's lists both, so Basic goes out to Entra.
+- **The client secret goes the way the provider's discovery document lists:** `client_secret_post` when it's listed, else Basic. Entra's lists both, so post goes out to Entra, as Nimbus form-encodes a Basic header's secret and Entra's secrets hold a `~`.
 - **The `admin` alert fires on every sign-in with `admin`'s password,** impersonating included, whatever key the form carries.
 - **A disabled or expired account isn't linked by email,** and the sign-in is refused.
 - **`PublicAddress` moved into `healdan-core`,** so the Sign-In tab shows the redirect address the pages use. Provider calls use the JVM's proxy settings, not LogicalDOC's.

@@ -31,12 +31,13 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
   token endpoint, and signs its ID tokens with Nimbus. Its authorisation endpoint isn't called over HTTP: the test
   reads the address a sign-in would send the browser to, and gets back the code the provider would send.
 - **Its token endpoint checks what a real one does:** the client's id and secret, sent by a method its discovery
-  document lists (`client_secret_basic` unless a test says `client_secret_post`), a code used once, the redirect
+  document lists (`client_secret_basic` unless a test lists `client_secret_post`), a code used once, the redirect
   address the code was issued for, a verifier that matches the PKCE challenge, and refresh tokens that turn over on
   each use.
 - **It can misbehave on purpose:** a bad signature, the wrong issuer or audience, an expired token, a refused or
   unanswered refresh, ID tokens on a refresh that are signed differently from a sign-in's (or not at all, as
-  Microsoft's documentation describes Entra ID's), and the like, for the checks Healdan makes.
+  Microsoft's documentation describes Entra ID's), a discovery document it answers with an error, refresh tokens
+  longer than a device token holds, and the like, for the checks Healdan makes.
 - **Plain HTTP.** While it runs it allows providers over plain HTTP, which only the smoke stack's overlay allows
   outside the tests. `SignInTestHooks` sets that by hand, and moves the clocks that time pending sign-ins, the
   helper's codes and the re-checks. A test that uses it resets it when it ends, or the setting leaks into the next
@@ -55,7 +56,9 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
   a `/v1` route the file leaves out. `OpenApiFileTest` checks that the file parses.
 - **`ApiPluginXmlTest`** checks that JPF accepts the module's `plugin.xml`, which it would otherwise drop without an
   error.
-- Their `context.properties` is `healdan-core`'s test copy, which the build copies in.
+- Their `context.properties` is `healdan-core`'s test copy, which the build copies in. Its public address,
+  `server.url`, is `http://localhost:8080`, which is where `ApiCall` sends a request unless a test names another
+  with `server(...)`: the sign-in pages send a start on any other name to the public address first.
 - **`AddinResourceTest`** checks the Office add-in's pages and manifest: the files served, the Content Security Policy,
   and a manifest that names the server's own address. `/api/addin/` isn't JSON API, so `Contract` and
   `RouteCoverageTest` leave it out, as they do `/docs`.
@@ -93,11 +96,12 @@ The smoke stack signs in through a real OpenID Connect provider, a throwaway Key
   container's health check, since Keycloak answers it on its management port, 9000, which isn't published.
 - **sets Healdan up to use it.** It sets `HEALDAN_SIGNIN_ALLOW_HTTP=true`, as Keycloak's address is plain HTTP, and
   the provider's issuer, client id and secret in `HEALDAN_SMOKE_SIGNIN_ISSUER`, `HEALDAN_SMOKE_SIGNIN_CLIENT_ID` and
-  `HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET`. With all three set, the `smoke-signin` setup step adds the provider `smoke`,
+  `HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET`. With all three set, and the smoke overlay's `HEALDAN_SMOKE_FIXTURE=true`,
+  which ties the step to the smoke test's stack, the `smoke-signin` setup step adds the provider `smoke`,
   linking by email, maps `healdan-users` to a new group `Smoke SSO`, makes a local account `sso-user` with
   Keycloak's `sso-user`'s email and a password, so the first sign-in links it, and sets `signin.recheck.minutes` to
   `0`, so a device token is checked with Keycloak on every request. Production never sets these variables, and
-  without them the step does nothing.
+  without all four the step does nothing.
 
 Step 5e times itself, and step 1 prints how long Keycloak took to start, by its own log. Step 5d's
 `StackProviderSignInTests` signs in through it too, as the helper does (see

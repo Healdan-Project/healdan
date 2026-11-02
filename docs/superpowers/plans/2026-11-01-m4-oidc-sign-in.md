@@ -1434,7 +1434,7 @@ Expected: PASS.
 
 ## Decision log
 
-Every ruling made while building that the plan or the spec didn't settle, in task order, with what it costs if it was wrong. R2 to R29 are the build's numbers for them, and the spec's "changed in the build" notes cite them. R1, R6 and R7 were rules for how the build ran (Maven's settings file, example names only, and the commits' form), and aren't repeated here. The plan's own corrections are under "Spec corrections and calls this plan makes". All of it was built on 2026-11-01 and 2026-11-02.
+Every ruling made while building that the plan or the spec didn't settle, in task order, with what it costs if it was wrong. R2 to R35 are the build's numbers for them, and the spec's "changed in the build" notes cite them. R30 split the final review into four areas, and isn't repeated here. R1, R6 and R7 were rules for how the build ran (Maven's settings file, example names only, and the commits' form), and aren't repeated here. The plan's own corrections are under "Spec corrections and calls this plan makes". All of it was built on 2026-11-01 and 2026-11-02.
 
 **Before Task 1**
 
@@ -1536,7 +1536,10 @@ Every ruling made while building that the plan or the spec didn't settle, in tas
 - **R28: an unsigned ID token on a refresh is ignored,** as if none came: the check is accepted, the new refresh token stored and `checked` moved on, with no names, groups or gate. It's logged at info, once per provider. A signed ID token that fails its checks stays unreachable (R10), and a sign-in still refuses `none`.
   - Why: Microsoft's documentation describes the refresh answer's `id_token` as unsigned. If Entra does that, every re-check would count as unreachable: a warning each time, a retry every 15 minutes, and groups never synced. Ignoring an untrusted token loosens no check: spec §13 still never accepts a `none` token's claims.
   - What the owner should know: with such a provider, groups follow it only at sign-in, not also at re-checks as spec §8 says. A disabled person is still revoked, by `invalid_grant`. The walkthrough's row 4 shows which it is.
-- **R29: the client authentication follows the discovery document.** `client_secret_basic` when it's listed or no methods are, else `client_secret_post` when that's listed; otherwise Basic, and Check reports the problem. The plan had Basic only, and a provider that lists only `client_secret_post` could refuse it. Entra's discovery lists `client_secret_basic` as well as `client_secret_post`, so Basic goes out to Entra, and the walkthrough's row 1 shows the tenant accepts it. It costs nothing for Keycloak and Authentik, which both list Basic.
+- **R29: the client authentication follows the discovery document.** `client_secret_basic` when it's listed or no methods are, else `client_secret_post` when that's listed; otherwise Basic, and Check reports the problem. The plan had Basic only, and a provider that lists only `client_secret_post` could refuse it. Entra's discovery lists `client_secret_basic` as well as `client_secret_post`, so Basic went out to Entra. It costs nothing for Keycloak and Authentik, which both list Basic. R32 reversed the order.
+- **R32, from the final review: `client_secret_post` comes first.** Post when the discovery document lists it; otherwise Basic when it's listed or no methods are; otherwise Basic, and Check reports the problem.
+  - Why: Nimbus form-encodes a Basic header's client id and secret (RFC 6749 section 2.3.1), so a secret with a `~`, as Entra's generated secrets have, goes out as `%7E`, and whether Entra decodes it is unproven. Post avoids the question, and Entra, Keycloak and Authentik all list it.
+  - If wrong: none known. A provider that lists post and then refuses it would need Basic forced, which nothing does yet.
 - **Task 9b** made R28 and R29, before the stack check, with two docs fixes from Task 13b's review: the Admin Guide's Authentik sentence, and where Entra's permissions are added before admin consent.
 
 **Task 13c (added in the build)**
@@ -1547,6 +1550,34 @@ Every ruling made while building that the plan or the spec didn't settle, in tas
   - CE's two-factor step couldn't be reached: two-factor is a paid LogicalDOC feature, with no server side in CE.
   - The docs' pictures were taken on a demo stack, with a provider set up by hand.
 - **An impersonator on a provider account.** The admin's user editor has no impersonators field, so it can't make the partial save Task 5's review expected. The account's own Allowed Impersonators answers a generic "500 The call failed on the server", as CE's `addImpersonifier` catches only `PersistenceException`, and stores nothing. It's left, as the message is upstream's (Follow-ups).
+
+**The final review's fix wave (added in the build)**
+
+The final review (R30) found nothing Critical. The controller's rulings for its two Important items and the minors fixed before the walkthrough are these, with R32 above beside R29.
+
+- **R31: linking closes the account's other open sessions.** Linking by email, and a later sign-in or re-check that makes a linked account a provider account again, close every open CE session of the account on this node after the commit, under the same lock as the deleted keys' sessions.
+  - Why: until then only the sessions its own keys opened closed. One opened with its old password, or by another account's key impersonating it (`<bob's key>>jane`, which `X-API-KEY` goes on finding by the key's hash), kept a way into a provider account that skips the provider (spec section 2.3). It settles the owner question Tasks 5 and 7b left.
+  - If wrong: the person's other open sessions end at their first sign-in through the provider, and they sign in again. The provider sign-in's own session opens after the decision, so it stays.
+- **R33: the issuer can't change while a provider has linked accounts,** but for a trailing slash, as R21 has it for the identity claim, with "Unlink its accounts first".
+  - Why: a link is the provider's id and the identity, with no issuer. A new tenant, or a provider whose `sub` values repeat, would map the links onto other people.
+  - If wrong: an admin moving a provider to a new issuer unlinks everyone first.
+- **R34: some identity claims are refused:** `email`, `preferred_username`, `upn`, `unique_name`, `name` and `nickname`, ignoring case. The refusal names the claim and says to use a stable one such as `sub` or `oid`.
+  - Why: some providers let people change these, which would let one person take over another's linked account.
+  - If wrong: nothing for the presets, which use `oid` and `sub`.
+- **R35: V7 widens `hd_api_token.hd_refresh`,** to `text` on MariaDB (65,535 bytes) and `varchar(65535)` on HSQLDB, and clears the refresh tokens of tokens already revoked.
+  - Why: V6's `varchar(4000)` held a refresh token of up to about 2,969 characters once sealed. A token too long even for the new width fails clearly: the code's exchange is `401 sign-in-failed`, logged as such, and a re-check keeps the old one, logged, rather than failing on the database.
+  - If wrong: a migration. V6 had shipped in the PRs, so it isn't edited.
+- **The other fixes, which needed no ruling.**
+  - Revoking a device token, and so unlinking, clears its sealed refresh token.
+  - A discovery document that couldn't be fetched is remembered for 30 seconds per provider: start, the exchange, a refresh and Check fail at once meanwhile, without a call, so an unthrottled start can't hold a Tomcat worker for 20 seconds each during an outage. Saving the provider forgets it.
+  - `HealdanThrottle` logs a database's message as text, not as a format; SLF4J already took the exception as the throwable, so the test passed before the fix too.
+  - The `smoke-signin` seed needs `HEALDAN_SMOKE_FIXTURE=true` as well as its three variables, tying it to the smoke overlays.
+  - `SignInProviders`' refusals name a provider by its id, never its label, and quote a recipient only if it looks like a username, as the Sign-In tab shows them as HTML.
+  - A start on another name than the public address is sent to the same path and query there first, with nothing kept and no cookie set. A proxy that doesn't pass the browser's `Host` header would now loop, so Reverse Proxy says to pass it.
+  - A helper start whose challenge another sign-in has, waiting or with a code, is refused at its own address as `expired`, so another local user can't race a code to the helper's port.
+  - The helper asks for the providers again after an answer that didn't come, and its loopback listener takes only a `GET` of `/`.
+  - `test-signin.sh` gives each `curl` a minute. The Remove refusal's words, the lost-device steps for a provider account, the User Guide's profile page, the refusal table, Authentik's issuer mode, `CATALINA_OPTS` beside the proxy flags and CLAUDE.md's two overstatements were put right.
+  - `ApiCall`, `healdan-api`'s test request, now goes to the test context's `server.url`, `http://localhost:8080`, unless a test names another server.
 
 **Tasks 14 and 15**
 
@@ -1559,9 +1590,8 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **For the owner**
 
-- **CE sessions opened before linking stay open** until 30 idle minutes: one the account opened with its old password, or one another account's key opened as it (`<key>>jane`) before linking cleared its impersonators. Spec §7.3 doesn't ask for them to close, and CE's own password change doesn't close sessions either. Closing them at linking would be one call. (Tasks 5 and 7b)
 - **The helper's window with provider buttons** hasn't been looked at by hand, and Installing the Helper has no picture of it. The walkthrough's row 4 is the first look, and the picture can be taken then. (Task 15)
-- **What Entra does** (R28, R29): whether it signs the ID tokens it sends with a refresh, which row 4 shows (if not, groups follow Entra at sign-in only), and whether its token endpoint accepts the client secret as Healdan sends it, by `client_secret_basic`, which Entra's discovery lists alongside `client_secret_post` (R29 follows the list), which row 1 shows. (Tasks 13b and 9b)
+- **What Entra does** (R28, R29): whether it signs the ID tokens it sends with a refresh, which row 4 shows (if not, groups follow Entra at sign-in only), and whether its token endpoint accepts the client secret as Healdan sends it, by `client_secret_post`, which Entra's discovery lists first (R32), which row 1 shows. (Tasks 13b and 9b)
 - **Safari and the loopback address.** Nothing checked that Safari shows no warning when the helper's sign-in moves from HTTPS to `http://127.0.0.1` (spec §6.2). Row 4 shows it. (Task 14)
 - **The unlinking email's words.** It's CE's `psw.rec1`, which welcomes the person as newly registered. Words of its own would need a new template and seed step. (Task 10)
 
@@ -1602,21 +1632,21 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - A temporary password can be lost after the commit when CE quietly doesn't send (`smtp.nosend`, or its sending aspect off) or its email pool refuses the task; Unlink Everyone would lose them all. `OutgoingEmail.isSetUp` should be false under `smtp.nosend`, and each send's failure should put its password in the list for the admin. A timed-out email isn't cancelled. (Task 10)
 - `PasswordGenerator`'s default allows a sequence of 4 where the password rules refuse 3, so about one temporary password in 10,000 fails them and rolls the unlink back. Try again once. (Task 10)
-- `HealdanThrottle` passes an exception's message to the log as its format string. A failure reading the session pool, while linking closes the keys' sessions, logs its cause only at debug. (Task 7b)
+- A failure reading the session pool, while linking closes the account's sessions, logs its cause only at debug. (Task 7b)
 
 **The smoke test and the tests**
 
-- `test-signin.sh` sets no `curl --max-time`, so a hang holds CI to the job's limit. Its checks say little when they fail, and check 5 doesn't assert the problem's code. (Task 11)
-- The `smoke-signin` seed would run with an `https` issuer too: its only guard against production is that production never sets its variables. (Task 11)
+- `test-signin.sh`'s checks say little when they fail, and check 5 doesn't assert the problem's code. (Task 11)
+- The `smoke-signin` seed would run with an `https` issuer too: its guard against production is that production never sets its variables, nor `HEALDAN_SMOKE_FIXTURE`. (Task 11)
 - The smoke seed's group `Smoke SSO` grants no menus, so `sso-user` lands on an empty page. The Install manual should say to map a provider group to a Healdan group that has menus, or new accounts see nothing. (Task 13c)
 - Untested in `ProviderClient`: the HTTPS check on a cached discovery document, redirects not followed, the key fetch's timeout, a token with no `kid`, an encrypted token, `jku`, `x5u` and embedded `jwk` headers, ES384 and ES512, the redaction of a provider's error description, and that the secret never goes in a query string. (Tasks 4 and 9b)
 - Two of the tab's tests rely on DNS failing for `login.firm.example`; `FakeProvider` would be steadier. (Task 13a)
 
 **The helper**
 
-- No retry after an unreachable answer to the providers question. The first server call on the provider path is bounded only by the overall 6 minutes. Showing the window again doesn't clear a stale problem, a refusal leaves no focus, and Enter in the address field does nothing while the form is folded. (Task 15)
+- The first server call on the provider path is bounded only by the overall 6 minutes. Showing the window again doesn't clear a stale problem, a refusal leaves no focus, and Enter in the address field does nothing while the form is folded. (Task 15)
 - A cancel during the exchange can leave a device token at Healdan that the helper never kept. (Task 15)
-- A caller's cancel comes back with the internal token, not the caller's. Any first request to the port ends the wait, so another local program could spoil a sign-in. Windows' `http.sys` would need a URL reservation for an IP-literal prefix, when Windows comes. (Task 14)
+- A caller's cancel comes back with the internal token, not the caller's. Any `GET` of `/` at the port ends the wait, so another local program could still spoil a sign-in, but not take it over: a second start with the helper's challenge is refused. Windows' `http.sys` would need a URL reservation for an IP-literal prefix, when Windows comes. (Task 14)
 
 **Docs**
 

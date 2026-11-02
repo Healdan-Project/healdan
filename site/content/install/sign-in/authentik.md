@@ -109,5 +109,7 @@ username or email, a person's `sub` changes, and Healdan takes their next sign-i
 `given_name` and `family_name` for the names, and `name` where they're missing. They follow Authentik at each
 sign-in, and so does the email.
 
-If you use Authentik's setting that gives every provider the same issuer, enter the issuer its discovery document
-reports, whatever that is. Healdan accepts only the exact issuer the provider gives for itself.
+Leave the provider's **Issuer mode** at its default, where each provider has its own issuer, based on the
+application's slug. Healdan fetches the discovery document at the issuer followed by
+`/.well-known/openid-configuration`, and Authentik publishes it under each application's slug, so the mode that
+gives every provider the same issuer doesn't work with Healdan.
