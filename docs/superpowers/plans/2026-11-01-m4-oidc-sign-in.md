@@ -27,7 +27,7 @@
 - **Helper:** .NET 10 and Avalonia 12.1.4, as M3. No new NuGet packages: `System.Net.HttpListener`, `System.Security.Cryptography`.
 - **Stand-in provider:** `quay.io/keycloak/keycloak:26.7.5` (Apache 2.0, amd64 and arm64), only in the smoke stack.
 
-**Status:** written on 2026-11-01, after the spec's approval, and approved by the owner the same day. Not yet built.
+**Status:** written on 2026-11-01, after the spec's approval, and approved by the owner the same day. **Built** on 2026-11-01 and 2026-11-02, on one branch, subagent-driven: Tasks 1 to 16, and four tasks the build added, 7b (the owner's call on LogicalDOC's API keys), 9b (unsigned refreshed ID tokens, and the token endpoint's client authentication), 13c (the stack check of Tasks 12 and 13, and the docs' pictures), and Task 13 split into 13a (the Sign-In tab) and 13b (the Install pages). Each was reviewed against the spec before the next began. The pull requests, each stacked on the one before: [Healdan-Project/healdan#154](https://github.com/Healdan-Project/healdan/pull/154) (A), [#156](https://github.com/Healdan-Project/healdan/pull/156) (B), [#157](https://github.com/Healdan-Project/healdan/pull/157) (C), [#158](https://github.com/Healdan-Project/healdan/pull/158) (D) and PR E (the records). The spec carries the corrections below and the build's rulings, marked "changed in the build"; the decision log lists the rulings, and the follow-ups what the build left open. **Next:** Task 17, Healdan Helper 0.6.0 and the owner's walkthrough (spec §16.2).
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md`](../specs/2026-11-01-m4-oidc-sign-in-design.md), approved by the owner on 2026-11-01. Every § below points into it.
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
@@ -156,6 +156,18 @@ All target `master`, each stacked on the one before.
 - **PR E, Task 16:** CLAUDE.md, the capability map, the spec's corrections and the roadmap.
 - **Task 17:** Healdan Helper 0.6.0, the owner's server upgraded, and the owner's walkthrough.
 
+As built, with what each adds to CI:
+
+| PR | Tasks | `build` | `Tests` jobs | Docker image and smoke test | `Clients` |
+|---|---|---|---|---|---|
+| A, [#154](https://github.com/Healdan-Project/healdan/pull/154) | 1–6 | none | about +375 s of runner time across the shards, +38 s on the longest (563 s → 601 s), most of it `ProviderClientTest` and the accounts tests | none | skipped |
+| B, [#156](https://github.com/Healdan-Project/healdan/pull/156) | 7–11, and 7b | none | about +145 s; the longest shard 611 s | step 5e about 3 s; Keycloak starts in 14 s (amd64) and 19 s (arm64) while the app starts, so step 1 waits no longer | ran for this PR only (the helper's `Models.cs` and `openapi.yaml`) |
+| C, [#157](https://github.com/Healdan-Project/healdan/pull/157) | 12, 13 (13a and 13b), 9b and 13c | none | about +25 s; the longest shard 594 s | none: the GWT compile was already in the image build | nothing of its own |
+| D, [#158](https://github.com/Healdan-Project/healdan/pull/158) | 14–15 | none | none | step 5d's second stack test; its run hadn't finished when these records were written | Helper 80 s (Ubuntu) and 109 s (macOS) on its run |
+| E | 16 | none | none | none | none |
+
+The WAR gains seven jars, about 1.9 MB (Nimbus's two and their dependencies, PR A).
+
 ---
 
 ### Task 1: `UserSource.OIDC`, and its guard
@@ -170,7 +182,7 @@ All target `master`, each stacked on the one before.
 **Interfaces:**
 - Produces: `UserSource.OIDC`, stored as 3.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```java
 package com.logicaldoc.core.security.user;
@@ -203,12 +215,12 @@ public class UserSourceTest {
 }
 ```
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `mvn -B -ntp -pl logicaldoc-core test -Dtest=UserSourceTest`
 Expected: FAIL to compile (`OIDC` doesn't exist).
 
-- [ ] **Step 3: Append `OIDC`**
+- [x] **Step 3: Append `OIDC`**
 
 ```java
 public enum UserSource {
@@ -229,12 +241,12 @@ In `UsersPanel`'s `switch (user.getSource())`, after `case 2`:
 
 Add `UserSourceTest` to `UPSTREAM_TESTS` in `build-logicaldoc.yml`.
 
-- [ ] **Step 4: Run it, and install core**
+- [x] **Step 4: Run it, and install core**
 
 Run: `mvn -B -ntp -pl logicaldoc-core test -Dtest=UserSourceTest && mvn -B -ntp -pl logicaldoc-core -DskipTests -Dgwt.skipCompilation=true install`
 Expected: PASS.
 
-- [ ] **Step 5: Docs, then commit:** "Add an OIDC source for accounts linked to a sign-in provider"
+- [x] **Step 5: Docs, then commit:** "Add an OIDC source for accounts linked to a sign-in provider"
 
 ---
 
@@ -291,7 +303,7 @@ public class SecretBox {
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInDataTest extends AbstractHealdanTestCase`:
 - `testMigrationMadeTheTables`: `hd_signin_identity`, `hd_signin_group` and the three new `hd_api_token` columns exist (query `INFORMATION_SCHEMA`), and `hd_schema_history` has version 6.
@@ -313,12 +325,12 @@ public class SecretBox {
 - `testDefaults`: after the seeds, `signin.password.label` is `Sign In with a Password`, `signin.adminAlert` `false`, `signin.adminAlert.recipients` `admin`, `signin.recheck.minutes` `480`, and the message template `signin.adminalert` exists in English.
 - `testKeepsAnAdminsValues`: with `signin.password.label` already `Use a Password`, running the step again (delete its marker) leaves it.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInDataTest,SecretBoxTest,SignInSettingsSeedTest'`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write the migration**
+- [x] **Step 3: Write the migration**
 
 MariaDB (`V6__signin.sql`; HSQLDB's is the same with `timestamp` for `datetime` and no `ENGINE` clause):
 
@@ -372,7 +384,7 @@ alter table hd_api_token add column hd_refresh varchar(4000);
 alter table hd_api_token add column hd_checked datetime;
 ```
 
-- [ ] **Step 4: Write the entities, DAOs, `SecretBox` and the seed**
+- [x] **Step 4: Write the entities, DAOs, `SecretBox` and the seed**
 
 - The entities and DAOs follow `ApiToken` and `HibernateApiTokenDAO`: `@Entity`, `@Table`, columns as above; `HibernateXxxDAO extends HibernatePersistentObjectDAO<Xxx>`, `@Repository("signInIdentityDAO")`.
 - **`SecretBox`:**
@@ -400,17 +412,17 @@ public String seal(String plain) {
   - subject `$product - admin signed in with its password`;
   - body `The emergency account <b>admin</b> signed in to $product with its password.<br/><br/>$I18N.get('ipaddress'): <b>$ip</b><br/>$I18N.get('dateandtime'): $DateTool.formatDate($date)`.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInDataTest,SecretBoxTest,SignInSettingsSeedTest,HealdanMigratorTest'`
 Expected: PASS.
 
-- [ ] **Step 6: Check the packaging**
+- [x] **Step 6: Check the packaging**
 
 Run: `mvn -B -ntp -pl healdan-core dependency:tree -Dscope=runtime | grep -E "nimbus|minidev|jcip|content-type|lang-tag|asm"`
 Expected: the five libraries, and no `asm`. Then `mvn -B -ntp -pl healdan-core -DskipTests package` and `unzip -l healdan-core/target/healdan-core-*-plugin.zip | grep WEB-INF/lib` lists them. Say in the PR which jars the WAR gains and their total size.
 
-- [ ] **Step 7: Docs, then commit:** "Add the tables, libraries and secret box for provider sign-in"
+- [x] **Step 7: Docs, then commit:** "Add the tables, libraries and secret box for provider sign-in"
 
 ---
 
@@ -464,7 +476,7 @@ public class SignInProviders {
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInProvidersTest extends AbstractHealdanTestCase`:
 - `testNoProvidersAtFirst`: `all()` and `enabled()` are empty.
@@ -478,21 +490,21 @@ public class SignInProviders {
 - `testGroups`: `saveGroups` stores and returns the rows; a mapping to a group id that doesn't exist is refused; a blank value is refused.
 - `testOptions`: `saveOptions("Use a Password", true, List.of("admin", "author"))` reads back; a blank label, or a recipient who isn't a user, is refused.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=SignInProvidersTest`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write `Preset`, `SignInProvider`, `GroupMapping` and `SignInProviders`**
+- [x] **Step 3: Write `Preset`, `SignInProvider`, `GroupMapping` and `SignInProviders`**
 
 Keys are built as `"signin." + id + "." + name`. `save` validates everything before writing anything. The issuer is parsed with `URI`, must be absolute with a host, no query or fragment, and `https` unless `httpAllowed()`. Booleans are written `true`/`false`. `enabled()` filters `all()` on `enabled && issuer != null && clientId != null && secret(id) != null`, so a lost key turns a provider off rather than failing (spec §13).
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=SignInProvidersTest`
 Expected: PASS.
 
-- [ ] **Step 5: Commit:** "Keep sign-in providers' settings in hd_setting"
+- [x] **Step 5: Commit:** "Keep sign-in providers' settings in hd_setting"
 
 ---
 
@@ -562,7 +574,7 @@ public final class FakeProvider implements AutoCloseable {
 
 It serves `/.well-known/openid-configuration`, `/keys`, `/authorize` (not called over HTTP: `authorize()` reads the parameters and answers the code) and `/token` (`authorization_code` and `refresh_token`, checking `client_secret_basic` and the verifier against the challenge), and signs ID tokens with `nimbus-jose-jwt`. Tests set `HEALDAN_SIGNIN_ALLOW_HTTP` through `SignInProviders`' supplier.
 
-- [ ] **Step 1: Write `FakeProvider`, then the failing tests**
+- [x] **Step 1: Write `FakeProvider`, then the failing tests**
 
 `ProviderClientTest extends AbstractHealdanTestCase`, against `FakeProvider`:
 - `testStartBuildsTheRequest`: `start(p, redirect, false)` gives an authorisation URI with `response_type=code`, `response_mode=query`, `scope=openid profile email`, `client_id`, `redirect_uri`, `state`, `nonce` and `code_challenge` with `code_challenge_method=S256`; `state`, `nonce` and `verifier` are each at least 43 characters and differ between two starts. With `offline` true the scope adds `offline_access`.
@@ -575,12 +587,12 @@ It serves `/.well-known/openid-configuration`, `/keys`, `/authorize` (not called
 - `testOverage`: an ID token with `_claim_names: {"groups": "src1"}` and no `groups` gives `groupsOverage` true and an empty `groups`.
 - `testCheck`: `check` is OK for the fake provider and gives the redirect; with `signWith("HS256")` only in its discovery's `id_token_signing_alg_values_supported`, or without `offline_access` in `scopes_supported`, the problems say so; with a wrong issuer in discovery, the problems name both issuers.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=ProviderClientTest`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write `ProviderClient`**
+- [x] **Step 3: Write `ProviderClient`**
 
 - **Discovery** with Nimbus's `OIDCProviderMetadata.resolve(new Issuer(issuer), connectTimeout, readTimeout)`, at 10 s each, cached per provider id until `forget`. **Keys** through `JWKSourceBuilder.create(jwksUri.toURL(), new DefaultResourceRetriever(10000, 10000))` with its own cache, which fetches again for an unknown `kid`.
 - **The ID token check:**
@@ -597,12 +609,12 @@ IDTokenClaimsSet claims = validator.validate(idToken, nonce == null ? null : new
 - **The refresh:** `RefreshTokenGrant`. A `TokenErrorResponse` with `invalid_grant`, or any 400 or 401, is `REFUSED`. An `IOException`, a 5xx or a timeout is `UNREACHABLE`.
 - **Logging:** never a token, code, verifier, state or secret: only the provider id and the outcome.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=ProviderClientTest`
 Expected: PASS.
 
-- [ ] **Step 5: Commit:** "Talk to sign-in providers through Nimbus's OIDC SDK"
+- [x] **Step 5: Commit:** "Talk to sign-in providers through Nimbus's OIDC SDK"
 
 ---
 
@@ -643,7 +655,7 @@ public class ProviderPasswordListener implements UserListener {
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInAccountsTest extends AbstractHealdanTestCase`, with an `entra` provider (link by email on), `authentik` (off), a group `Litigation` mapped from `g-lit`, and users made with `fx.user(...)`:
 - `testLinkedIdentityIsItsAccount`: with a linked row for `oid-1` → `author`, `decide` gives `Allowed(author, false, false)` whatever the email.
@@ -676,12 +688,12 @@ public class ProviderPasswordListener implements UserListener {
 
   Where a route can't run in `healdan-core`'s tests, the builder says so in the PR and covers it in Task 7's API tests or by hand on the stack.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInAccountsTest,GroupSyncTest,ProviderPasswordListenerTest'`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write `SignInAccounts`, `GroupSync` and the listener**
+- [x] **Step 3: Write `SignInAccounts`, `GroupSync` and the listener**
 
 - **`decide`** runs in one transaction, under a lock per provider and identity, so two first sign-ins of one person can't make two accounts. The order is spec §7.2's: linked, gate, email, new.
 - **Linking** sets `source` `OIDC`, `password` null (`setPassword(null)`, `setDecodedPassword` untouched), names and email, then `UserDAO.store`. The account's old device tokens are revoked by `TokenUserListener` (correction 2). The method then stores the identity row with `linkKey` and `linkUser`.
@@ -702,12 +714,12 @@ public void beforeSave(User user, UserHistory transaction, Map<String, Object> d
   `storedSource` reads `select ld_source from ld_user where ld_id = ?` with a bound parameter. It's registered in `plugin.xml` at position 95, before `TokenUserListener` (110).
 - **Logging:** every link, new account and group membership change is logged at info, with the provider, the account's username and, for groups, the group's name (spec §8).
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInAccountsTest,GroupSyncTest,ProviderPasswordListenerTest'`
 Expected: PASS.
 
-- [ ] **Step 5: Commit:** "Decide provider sign-ins' accounts, sync their groups, and keep passwords off them"
+- [x] **Step 5: Commit:** "Decide provider sign-ins' accounts, sync their groups, and keep passwords off them"
 
 ---
 
@@ -732,7 +744,7 @@ public final class SignIns {
 public class SignInAuthenticator extends AbstractAuthenticator { /* claims only the pending hd_signin_ key */ }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInsTest extends AbstractHealdanTestCase`:
 - `testOpensASessionForTheAccount`: `openSession(jane, client)` gives an open session for `jane`, keyed by a hash no client knows (not `jane`'s id or username).
@@ -741,21 +753,21 @@ public class SignInAuthenticator extends AbstractAuthenticator { /* claims only 
 - `testThrottleBlocksTheAddress`: with the address blocked (20 failures counted), `openSession` throws `IPBlockedException`.
 - `testDeviceTokensStillWork`: a device token's `HealdanTokenAuthenticator.openSession` still works (M2's tests pass unchanged: run `TokenFilterTest` in Step 4).
 
-- [ ] **Step 2: Run it to see it fail**
+- [x] **Step 2: Run it to see it fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=SignInsTest`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write it on M2's pattern**
+- [x] **Step 3: Write it on M2's pattern**
 
 `SignIns.openSession` puts a `Pending(key, userId)` in a `ThreadLocal`, calls `SessionManager.get().newSession(key, client)`, and removes it in `finally`. `SignInAuthenticator.authenticate` returns null for keys not starting `hd_signin_`. It refuses with `TokenRefusedException` (M2's, so the throttle doesn't count it against the address) unless the key is the pending one. It then loads the user and runs `DefaultAuthenticator.validateUser`. `HealdanTokenAuthenticator.authenticate` returns null for `hd_signin_` keys.
 
-- [ ] **Step 4: Run the tests, M2's included**
+- [x] **Step 4: Run the tests, M2's included**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInsTest,HealdanTokenAuthenticatorTest'` and `mvn -B -ntp -pl healdan-core install -DskipTests && mvn -B -ntp -pl healdan-api test -Dtest='TokenFilterTest,LogicalDocRoutesTest'`
 Expected: PASS.
 
-- [ ] **Step 5: Commit:** "Open a CE session for a provider sign-in through the whole chain"
+- [x] **Step 5: Commit:** "Open a CE session for a provider sign-in through the whole chain"
 
 ---
 
@@ -794,7 +806,7 @@ public class PendingSignIns {
 //   GET done                             the "close this tab" page (error optional)
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInResourceTest extends ApiTestCase`, with a `FakeProvider` saved as provider `fake`, `Litigation` mapped from `g-lit`, and `jane` (email `jane@firm.example`) a local account:
 - `testStartRedirectsAndSetsTheCookie`: `GET /api/signin/fake` is `302` to the fake provider's authorisation endpoint with `redirect_uri=http://localhost:8080/api/signin/fake/callback`, and sets `hd_signin` (HttpOnly, `SameSite=Lax`, `Path=/api/signin/`).
@@ -812,12 +824,12 @@ public class PendingSignIns {
 
 `PublicAddressTest`: the `AddinResourceTest` cases still pass through `PublicAddress`, plus `http://keycloak:8080` accepted only with `HEALDAN_SIGNIN_ALLOW_HTTP`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-api test -Dtest='SignInResourceTest,PublicAddressTest'`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write `PublicAddress`, `PendingSignIns` and `SignInResource`**
+- [x] **Step 3: Write `PublicAddress`, `PendingSignIns` and `SignInResource`**
 
 - **The redirect** is `PublicAddress.of(request).base() + "/api/signin/" + id + "/callback"`.
 - **`start`** for the web page (no `client` parameter):
@@ -839,12 +851,12 @@ return Response.seeOther(s.authorization())
   - Each refusal is logged with the provider, the identity, if known, and the code.
 - **`done.html`** is read from the jar, its message picked by code from Global Constraints' table, and served with `DocsResource`'s headers and a `Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'`.
 
-- [ ] **Step 4: Run the tests, the add-in's included**
+- [x] **Step 4: Run the tests, the add-in's included**
 
 Run: `mvn -B -ntp -pl healdan-api test -Dtest='SignInResourceTest,PublicAddressTest,AddinResourceTest,RouteCoverageTest,ContractTest'`
 Expected: PASS.
 
-- [ ] **Step 5: Docs, then commit:** "Sign the web page in through a provider at /api/signin/"
+- [x] **Step 5: Docs, then commit:** "Sign the web page in through a provider at /api/signin/"
 
 ---
 
@@ -878,7 +890,7 @@ public record SignIn(String username, String password, String name, DeviceRef de
 
 `POST /api/v1/auth/tokens` with `{code, codeVerifier, redirectUri, name, device}` gives `201` and the same `SignedIn` as a password; the token's row has `provider` and the sealed `refresh`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `HelperSignInTest extends ApiTestCase`, with the fake provider as `fake`:
 - `testHelperStartNeedsALoopbackRedirect`: `GET /api/signin/fake?client=helper&redirect_uri=http://127.0.0.1:50123/&state=h1&code_challenge=<S256 of v>&code_challenge_method=S256` is `302` to the provider, with `offline_access` in the scope. With `redirect_uri` `http://localhost:50123/`, `http://evil.example/`, `https://127.0.0.1:1/` or `http://127.0.0.1.evil.example/`, it's `400` and no redirect (Review Focus 4). `http://[::1]:50123/` is accepted.
@@ -898,12 +910,12 @@ public record SignIn(String username, String password, String name, DeviceRef de
 
 Every response is checked against `openapi.yaml` (`Contract`), as every API test is.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-api test -Dtest='HelperSignInTest,ServerResourceTest'`
 Expected: FAIL.
 
-- [ ] **Step 3: Write the helper's branch, `OneTimeCodes` and the exchange**
+- [x] **Step 3: Write the helper's branch, `OneTimeCodes` and the exchange**
 
 - **The loopback check:** `URI` parse, scheme exactly `http`, host exactly `127.0.0.1` or `[::1]`, a port, path `/` or empty, and no query, fragment or user info.
 - **`OneTimeCodes`:** codes are `ApiTokens.randomPart()`, stored in a `ConcurrentHashMap` keyed by their SHA-256, and removed on the first `redeem`, whatever the outcome. The verifier is checked as `Base64Url(SHA-256(verifier)) == challenge`.
@@ -914,12 +926,12 @@ Expected: FAIL.
   - when the provider gave no refresh token, it logs at info that this token won't be re-checked (spec §9);
   - any failure is `401 sign-in-failed`.
 
-- [ ] **Step 4: Run the tests, the contract's included**
+- [x] **Step 4: Run the tests, the contract's included**
 
 Run: `mvn -B -ntp -pl healdan-api test -Dtest='HelperSignInTest,ServerResourceTest,AuthResourceTest,OpenApiFileTest,RouteCoverageTest,ContractTest'`
 Expected: PASS.
 
-- [ ] **Step 5: Docs, then commit:** "Hand the helper a one-time code for its device token, and list providers in GET /server"
+- [x] **Step 5: Docs, then commit:** "Hand the helper a one-time code for its device token, and list providers in GET /server"
 
 ---
 
@@ -942,7 +954,7 @@ public class ProviderRecheck {
 }
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `ProviderRecheckTest extends ApiTestCase`, with a helper token from `fake` (Task 8's flow, as a helper in the test):
 - `testNoCheckWithinTheInterval`: a request soon after sign-in makes no refresh (`tokenRequests()` unchanged).
@@ -956,12 +968,12 @@ public class ProviderRecheck {
 - `testNoRefreshToken`: a token issued with `noRefreshToken()` is never re-checked.
 - `testPasswordTokensUntouched`: a password device token makes no refresh.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-api test -Dtest=ProviderRecheckTest`
 Expected: FAIL.
 
-- [ ] **Step 3: Write `ProviderRecheck`, and call it from `TokenFilter`**
+- [x] **Step 3: Write `ProviderRecheck`, and call it from `TokenFilter`**
 
 `keep` returns true at once for a token with no `provider` or no `refresh`, a provider turned off or unknown, or a check that isn't due. A check is due when `sessionReopening`, or `checked` is older than `signin.recheck.minutes`, and in either case not within 15 minutes of an unreachable attempt (kept in memory per token id).
 
@@ -972,12 +984,12 @@ It holds a per-token lock, opens the refresh token with `SecretBox`, and calls `
 
 `TokenFilter` calls `keep(token, sessionClosed)` after `findUsable` and before `session(...)`, and answers `refused()` when it's false.
 
-- [ ] **Step 4: Run the tests, M2's token tests included**
+- [x] **Step 4: Run the tests, M2's token tests included**
 
 Run: `mvn -B -ntp -pl healdan-api test -Dtest='ProviderRecheckTest,TokenFilterTest,AuthResourceTest'`
 Expected: PASS.
 
-- [ ] **Step 5: Commit:** "Re-check helper sign-ins with their provider, and revoke only on a refusal"
+- [x] **Step 5: Commit:** "Re-check helper sign-ins with their provider, and revoke only on a refusal"
 
 ---
 
@@ -1008,7 +1020,7 @@ public final class OutgoingEmail { public static boolean isSetUp(); } // correct
 public class AdminSignInAlert implements SessionListener {}
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInAdminTest extends AbstractHealdanTestCase`, with `jane` linked, a device token for her, and a document she has checked out:
 - `testUnlink`:
@@ -1027,12 +1039,12 @@ public class AdminSignInAlert implements SessionListener {}
 - `testAlertOnAdminPasswordSignIn`: `newSession("admin", "admin", client)` schedules one email per recipient with the subject `… - admin signed in with its password`, the address HTML-escaped, and no system message (owner).
 - `testNoAlertWhenOff`, `testNoAlertWithoutAProvider`, `testNoAlertWithoutOutgoingEmail` (correction 3), `testNoAlertForOtherAccounts` (`bob`), `testNoAlertForKeySessions` (`admin`'s device token reopening its session), `testNoAlertForImpersonation`.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInAdminTest,AdminSignInAlertTest,OutgoingEmailTest'`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write them**
+- [x] **Step 3: Write them**
 
 - **`unlink`**, inside `ProviderPasswordListener.unlinking(...)`, in one transaction:
   - `PasswordGenerator.generate("default")`, then `setSource(DEFAULT)`, `setDecodedPassword(password)` and `setPasswordExpired(true)`;
@@ -1047,12 +1059,12 @@ Expected: FAIL to compile.
 
   It then schedules, on `ThreadPools`, one `EMail` per recipient from the `signin.adminalert` template, as `LoginThrottle.notifyBruteForceAttack` does, but with no `SystemMessage`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='SignInAdminTest,AdminSignInAlertTest,OutgoingEmailTest,SignInAccountsTest'`
 Expected: PASS.
 
-- [ ] **Step 5: Docs, then commit:** "Unlink accounts, and alert the admins when admin signs in with its password"
+- [x] **Step 5: Docs, then commit:** "Unlink accounts, and alert the admins when admin signs in with its password"
 
 ---
 
@@ -1065,7 +1077,7 @@ Expected: PASS.
 - Test: `healdan-core/src/test/java/com/logicaldoc/healdan/seed/SmokeSignInSeedTest.java`
 - Docs: `site/content/developer/tests.md` (the fake provider, the stand-in, step 5e), `site/content/developer/continuous-integration.md` (Keycloak's image in the smoke test, and its time)
 
-- [ ] **Step 1: The overlay and the realm**
+- [x] **Step 1: The overlay and the realm**
 
 `compose.signin.yaml`:
 
@@ -1102,14 +1114,14 @@ The realm `healdan`:
   - `sso-helper` (in `healdan-users`);
   - `sso-outsider` (in `healdan-other`).
 
-- [ ] **Step 2: Write the failing seed test, then the seed**
+- [x] **Step 2: Write the failing seed test, then the seed**
 
 `SmokeSignInSeedTest`: with the three variables set (through the seed's `Supplier`), the step saves provider `smoke` (preset `other`, link by email on), maps `healdan-users` to a new group `Smoke SSO`, makes local user `sso-user` (email `sso-user@smoke.example`, a password, in `Smoke SSO`), and sets `signin.recheck.minutes` to `0`. Without them, `enabled()` is false and nothing is written.
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=SmokeSignInSeedTest`
 Expected: FAIL, then PASS once `SmokeSignInSeed` is written. It follows `SmokeFixtureSeed`'s pattern.
 
-- [ ] **Step 3: Write `test-signin.sh`**
+- [x] **Step 3: Write `test-signin.sh`**
 
 It needs `curl`, `jq` and `python3`. Every request to Keycloak from the host uses `--connect-to keycloak:8080:127.0.0.1:18080`. Its checks, each a `check` line as in `test-api.sh`:
 
@@ -1121,12 +1133,12 @@ It needs `curl`, `jq` and `python3`. Every request to Keycloak from the host use
 
 `smoke-test.sh` runs it as step 5e, after 5d.
 
-- [ ] **Step 4: Run the smoke test**
+- [x] **Step 4: Run the smoke test**
 
 Run: `docker/smoke-test.sh` (with `SMOKE_HELPER_TEST=1` once Task 15 lands)
 Expected: every check passes; record step 5e's seconds and Keycloak's start time in the PR.
 
-- [ ] **Step 5: Docs, then commit:** "Run provider sign-in against a stand-in Keycloak on the smoke stack"
+- [x] **Step 5: Docs, then commit:** "Run provider sign-in against a stand-in Keycloak on the smoke stack"
 
 ---
 
@@ -1151,7 +1163,7 @@ public final class HealdanSignInButtons {
 }
 ```
 
-- [ ] **Step 1: The hook**
+- [x] **Step 1: The hook**
 
 In `LoginPanel.initGUI`, straight after `inputsPanel.setMembers(logoLogin, spacer15, credentialsPanel, secretKeyPanel, licensing);`:
 
@@ -1160,7 +1172,7 @@ In `LoginPanel.initGUI`, straight after `inputsPanel.setMembers(logoLogin, space
         HealdanSignInButtons.install(inputsPanel, credentialsPanel);
 ```
 
-- [ ] **Step 2: Write `HealdanSignInButtons`**
+- [x] **Step 2: Write `HealdanSignInButtons`**
 
 - A `RequestBuilder` `GET` to `GWT.getHostPageBaseURL() + "api/v1/server"`. On failure, or with `providers` empty, it does nothing, so the page stays the password form.
 - **With providers:**
@@ -1169,7 +1181,7 @@ In `LoginPanel.initGUI`, straight after `inputsPanel.setMembers(logoLogin, space
   - when the page carries `?signin=<code>` (`Window.Location.getParameter`), a message above the buttons from the Global Constraints' table, with `{label}` "your sign-in provider", since the page doesn't know which; an unknown code shows nothing.
 - The labels come from the server and are set as text, never as HTML.
 
-- [ ] **Step 3: Build the GUI, and check it on a stack**
+- [x] **Step 3: Build the GUI, and check it on a stack**
 
 Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests install` (the GWT compile), then a stack with `-f docker/tests/compose.smoke.yaml -f docker/tests/compose.signin.yaml`.
 Expected:
@@ -1182,7 +1194,7 @@ Expected:
 
 Take the docs' screenshots on the demo stack with a provider set up.
 
-- [ ] **Step 4: Docs, then commit:** "Show sign-in providers' buttons on the sign-in page"
+- [x] **Step 4: Docs, then commit:** "Show sign-in providers' buttons on the sign-in page"
 
 ---
 
@@ -1217,19 +1229,19 @@ int countLinked(String id) throws ServerException;
 
 `GUISignInProvider` carries everything in `SignInProvider` but the secret, plus `hasSecret`, `redirect` and the group map (`GUIGroupMapping[]`: value, group id, group name, `deleted`).
 
-- [ ] **Step 1: Write the failing server tests**
+- [x] **Step 1: Write the failing server tests**
 
 `HealdanSettingsSignInTest extends AbstractHealdanTestCase`, calling `HealdanSettingsServiceImpl` with a session (as its existing tests do):
 - `testAdminsOnly`: `author` gets a `ServerException` from every method.
 - `testSecretNeverComesBack`: after `saveProvider(p, "s1")`, no field of `loadSignIn()` or any answer, serialised, contains `s1`; `hasSecret` is true.
 - `testSaveAndLoad`, `testRemoveRefusedWhileLinked`, `testUnlinkAndCount`, `testOptions`, and `testCheckGivesTheRedirectFirst` (against `FakeProvider`): each through the RPC, as Tasks 3 and 10 test the services.
 
-- [ ] **Step 2: Run them to see them fail, then write the RPCs**
+- [x] **Step 2: Run them to see them fail, then write the RPCs**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=HealdanSettingsSignInTest`
 Expected: FAIL, then PASS once the methods delegate to `SignInProviders`, `ProviderClient.check` (with `ProviderClient.forget` after each save) and `SignInAdmin`.
 
-- [ ] **Step 3: Write the tab**
+- [x] **Step 3: Write the tab**
 
 - **The tab, `SignInTab`:**
   - a `ListGrid` of providers (label, id, preset, on or off, linked accounts), with Add (asking for an id and preset), Edit, Remove, Move Up and Move Down;
@@ -1244,7 +1256,7 @@ Expected: FAIL, then PASS once the methods delegate to `SignInProviders`, `Provi
   - Linked Accounts, a grid with Unlink on each row and Unlink Everyone, each confirmed with the count. A temporary password is shown once, in a dialog that says to pass it on.
 - **Turning a provider off,** or Remove, first shows `countLinked` with the spec's §7.7 wording.
 
-- [ ] **Step 4: Build the GUI, and check the tab on a stack**
+- [x] **Step 4: Build the GUI, and check the tab on a stack**
 
 Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, then on a smoke stack with Keycloak:
 - add a provider for the Keycloak realm, and Check passes;
@@ -1253,7 +1265,7 @@ Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, then on a smoke stack
 - see the account under Linked Accounts, and unlink it;
 - sign in with the temporary password and change it.
 
-- [ ] **Step 5: Docs, then commit:** "Set sign-in providers up in Healdan Settings' Sign-In tab"
+- [x] **Step 5: Docs, then commit:** "Set sign-in providers up in Healdan Settings' Sign-In tab"
 
 ---
 
@@ -1303,7 +1315,7 @@ public Task<string> ExchangeCodeAsync(string code, string verifier, Uri redirect
 public Task SignInWithProviderAsync(string providerId, IBrowser browser, CancellationToken ct = default);
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 - `PkceTests.ChallengeIsTheVerifiersSha256`: for a fixed verifier, the challenge matches RFC 7636's appendix B example (`dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk` → `E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM`). Two `Make()`s differ.
 - `LoopbackReceiverTests`:
@@ -1320,12 +1332,12 @@ public Task SignInWithProviderAsync(string providerId, IBrowser browser, Cancell
   - `BrowserNeverComesBack`: after the timeout, an `OperationCanceledException` with the message "The sign-in in your browser didn't finish within 5 minutes."
   - `NoTokenInAnyLog`: `HelperLog` never holds the code, verifier or token.
 
-- [ ] **Step 2: Run them to see them fail**
+- [x] **Step 2: Run them to see them fail**
 
 Run: `dotnet test clients/helper/Healdan.Helper.sln --filter "FullyQualifiedName~Pkce|FullyQualifiedName~LoopbackReceiver|FullyQualifiedName~ProviderSignIn"`
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Write them**
+- [x] **Step 3: Write them**
 
 - **`LoopbackReceiver`** binds an `HttpListener` on `http://127.0.0.1:<port>/`. It first finds a free port by binding a `TcpListener` to port 0, reading it and closing it, and tries three times if `HttpListener` loses the race. It takes one request, answers `302 Location: done`, and stops.
 - **`SignInWithProviderAsync`:**
@@ -1335,12 +1347,12 @@ Expected: FAIL to compile.
   4. `WaitAsync(server/api/signin/done, 5 minutes)`; the state must match; an error is a `ProviderRefusedException`.
   5. `ExchangeCodeAsync`, then keep the token as `SignInAsync` does (`KeptToken`).
 
-- [ ] **Step 4: Run the tests, on macOS and Linux**
+- [x] **Step 4: Run the tests, on macOS and Linux**
 
 Run: `dotnet test clients/helper/Healdan.Helper.sln`
 Expected: PASS.
 
-- [ ] **Step 5: Docs, then commit:** "Sign the helper in through a provider in the system browser"
+- [x] **Step 5: Docs, then commit:** "Sign the helper in through a provider in the system browser"
 
 ---
 
@@ -1366,7 +1378,7 @@ public sealed record SignInPrompt(string? Server, bool ServerFixed,
 public sealed record ProviderChoice(IReadOnlyList<ProviderInfo> Providers, string PasswordLabel);
 ```
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `SignInWindowTests` (headless Avalonia, as `SetUpOfficeWindowTests`):
 - `NoProvidersShowsThePasswordForm`.
@@ -1378,7 +1390,7 @@ public sealed record ProviderChoice(IReadOnlyList<ProviderInfo> Providers, strin
 `StackProviderSignInTests` (skips without `HEALDAN_STACK_URL` and `HEALDAN_STACK_SIGNIN_PROVIDER`):
 - `SignsInThroughTheStandIn`: `SignInWithProviderAsync` with a fake browser that follows the redirects with an `HttpClient`. Its `SocketsHttpHandler.ConnectCallback` maps `keycloak:8080` to `HEALDAN_STACK_KEYCLOAK`. It posts Keycloak's login form as `sso-helper2`, and makes the loopback request. `/me` then names `sso-helper2`.
 
-- [ ] **Step 2: Run them to see them fail, then write the window and the session's method**
+- [x] **Step 2: Run them to see them fail, then write the window and the session's method**
 
 Run: `dotnet test clients/helper/Healdan.Helper.sln --filter "FullyQualifiedName~SignInWindow"`
 Expected: FAIL, then PASS.
@@ -1386,12 +1398,12 @@ Expected: FAIL, then PASS.
 - `TrySignInWithProviderAsync` mirrors `TrySignInAsync`: the same address checks, copies set aside and settings update, and the same messages for unreachable servers. A `ProviderRefusedException` maps to the Global Constraints' message with the provider's label.
 - The window keeps the password form's behaviour as it is.
 
-- [ ] **Step 3: The stack test against the smoke stack**
+- [x] **Step 3: The stack test against the smoke stack**
 
 Run: `SMOKE_HELPER_TEST=1 docker/smoke-test.sh`
 Expected: step 5d shows `Passed: 2` (the cycle and the provider sign-in), `Skipped: 0`.
 
-- [ ] **Step 4: Docs, then commit:** "Offer the server's sign-in providers in the helper's Sign In window"
+- [x] **Step 4: Docs, then commit:** "Offer the server's sign-in providers in the helper's Sign In window"
 
 ---
 
@@ -1407,7 +1419,7 @@ Expected: step 5d shows `Passed: 2` (the cycle and the provider sign-in), `Skipp
 - Modify: `docs/superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md` (each correction above, and anything the build changed, marked "changed in the build"; Status)
 - Modify: `docs/ROADMAP.md` (M4's row, status line and section: built, with the PRs)
 
-- [ ] **Step 1: Write them, run the docs checks, and commit:** "Record M4's build"
+- [x] **Step 1: Write them, run the docs checks, and commit:** "Record M4's build"
 
 Run: `python3 -m unittest discover -s .github/scripts/tests && python3 .github/scripts/check-logicaldoc-doc-links.py && python3 .github/scripts/check-logicaldoc-hosts.py`
 Expected: PASS.
@@ -1422,11 +1434,199 @@ Expected: PASS.
 
 ## Decision log
 
-Each ruling made while building goes here with its task, and into the spec where it changes what the spec says.
+Every ruling made while building that the plan or the spec didn't settle, in task order, with what it costs if it was wrong. R2 to R29 are the build's numbers for them, and the spec's "changed in the build" notes cite them. R1, R6 and R7 were rules for how the build ran (Maven's settings file, example names only, and the commits' form), and aren't repeated here. The plan's own corrections are under "Spec corrections and calls this plan makes". All of it was built on 2026-11-01 and 2026-11-02.
+
+**Before Task 1**
+
+- **Five pull requests.** The spec's §14 says A to D; this plan says A to E, with the records in E. The build followed the plan. It costs nothing if wrong.
+- **R2: `PublicAddress` lives in `healdan-core`,** as `com.logicaldoc.healdan.web.PublicAddress`, not in `healdan-api` as correction 5 says. Its `of(request)` gives an empty `Optional` when there's no usable address, and each caller in `healdan-api` turns that into its own `409`; the add-in keeps its Office wording. Task 13's Sign-In tab RPC, in `healdan-core`, must show the same redirect address the pages send, and `healdan-core` can't depend on `healdan-api`. If wrong, a class moves module.
+- **R3: a test hook for plain HTTP.** `SignInProviders` reads `HEALDAN_SIGNIN_ALLOW_HTTP` through a package-private supplier, and a public `SignInTestHooks.allowHttp(boolean)` in `healdan-core`'s test-jar sets it, as `FakeProvider` and `healdan-api`'s tests sit in other packages. The class later gained the clocks of the pending sign-ins, the codes and the re-check. If wrong, a test hook moves.
+- **R4: `SignInAccounts.refresh` returns a boolean,** false when the gate refused, after taking the account out of every mapped group. Task 9 must revoke on a gate refusal, which a `void` can't say. If wrong, a signature changes.
+- **R5: `checkProvider` returns the redirect address, then the problems.** The plan's "problems, or empty; the redirect address first" contradicts itself. Length 1 means the check passed. If wrong, the tab reads the answer differently.
+- **The `login` GWT module.** The pre-flight scan flagged that `HealdanSignInButtons` needs a request builder and a JSON parser in the `login` module, and that an inherit added to an upstream `.gwt.xml` would be a fifth upstream edit, needing the owner's say-so. The module already inherits `com.google.gwt.user.User` and `Core`, so Task 12 changed no `.gwt.xml`. GWT 2.12.2 has no `JsonUtils.safeParse`; `safeEval`, which is `JSON.parse`, is used.
+
+**Task 2**
 
 - **The helper's release is 0.6.0, not 0.5.0** (owner, 2026-11-01, relayed from the session planning what follows M4). M3.6 (PDFs in CoffeePDF) takes 0.5.0 and releases first. M4's helper is tagged `helper-v0.6.0`, with release candidates as `0.6.0-rcN`. Task 17, spec §2.1, §14 and §16.2 say so.
+- **R8: deleted accounts' links.** CE's user delete runs no listener and renames the account, so a deleted account's link stayed in use: hidden from the tab's list, which joins the account, yet counted against Remove and holding its identity. So `countLinked` counts only links whose account isn't deleted, matching the list (Task 3), and `decide` first closes a link whose account is gone, unlinked now by nobody and logged, then carries on as for an unlinked identity (Task 5). Spec §7.7 and §10.3 assume every counted link can be seen and unlinked, and say nothing of deleted accounts. If wrong, a stale link is closed by the system rather than an admin, which is easy to change.
+
+**Task 3**
+
+- **R9: a person's own group can't be mapped.** "Any Healdan group can be mapped" (spec §8) means the ordinary groups, so `saveGroups` refuses a user's own group (type `USER`), which would hand everyone the map lets in that person's permissions; no admin would mean that. `saveGroups` also needs a listed provider, and adding a provider clears any group rows left under its id, so a map can't outlive or precede its provider (the review's fix). If wrong, an admin can't map a personal group.
+- **Adding refuses an id in use.** `save` is add-or-edit, so adding refuses an id `find` knows, an id whose settings rows exist (`password` and `recheck` would collide with `signin.password.label` and `signin.recheck.minutes`), and `done`, the done page's address. The tab's Add asks the server first (Task 13). It costs nothing.
+
+**Task 4**
+
+- **R10: a refreshed ID token that fails its checks counts as unreachable,** with a warning, not as a refusal. Spec §9 revokes only on an explicit refusal, and a malformed answer isn't one. If wrong, such a token lives on until M2's idle and absolute limits instead of being revoked.
+- **R11: every endpoint the discovery document names must be HTTPS,** the authorisation, token and keys endpoints as well as the issuer, unless `HEALDAN_SIGNIN_ALLOW_HTTP` is set, as spec §13 says. It costs nothing.
+- **Healdan checks `azp` and `nbf` itself.** Nimbus 11.38.2 reads `azp` without comparing it, and never reads `nbf`. So `ProviderClient` refuses an `azp` that isn't the client id, more than one audience with no `azp`, and an `nbf` more than two minutes ahead (RFC 7519 §4.1.5). It costs nothing.
+- **R12: only `invalid_grant` refuses a refresh.** Every other error answer (`invalid_client`, `unauthorized_client`, `invalid_request`, `invalid_scope`, or a `400` or `401` that can't be read) counts as unreachable, is logged as an error naming the provider, and keeps the token. A `429` is logged as busy. This departs from Task 4's "any 400 or 401 is REFUSED".
+  - Why: spec §9 revokes on "`invalid_grant` or similar: the account was disabled, or its sessions revoked", and §7.5 and §16.2 row 5 break the client secret on purpose while helpers keep working. An expired Entra secret, which lasts at most 24 months, mustn't revoke every helper.
+  - If wrong: a provider that refuses a disabled person with another code leaves their helper signed in until M2's limits. Keycloak's answer is `invalid_grant`, which smoke step 5e checks.
+- **R13: provider calls use Nimbus's HTTP client,** with the JVM's trust store and host name checks, not M1's `HttpUtil.getValidatingClient`, as the plan has them. The checks are the same, but LogicalDOC's proxy settings don't apply, only the JVM's `https.proxyHost` properties. Spec §13 gets a note, and Known Limitations a line (Task 10). If wrong, an install whose proxy is set only in LogicalDOC's settings can't reach its provider, until it sets the JVM's properties.
+- **A new refresh token is kept whatever the outcome,** carried to Task 9: an unreachable answer can bring one too, and a provider that turns refresh tokens over has already retired the old one. A refresh is never tried for a provider that's off. It costs nothing.
+
+**Task 5**
+
+- **The lock is held across the commit.** `decide` takes a lock per provider and identity before its transaction starts, and lets it go after the commit, through a `TransactionTemplate`, so one person's two first sign-ins can't make two accounts. Two identities with one email or username are caught by the unique indexes, and roll back whole. `decide` refuses to run inside a caller's transaction, where a failed attempt would doom it.
+- **A new account takes `_system`'s language, else `en`.** CE keeps no default language: its setup wizard sets every account's, `_system`'s included. Spec §7.2 gets a note. It costs nothing.
+- **R14: a provider account has no impersonators.** CE signs `bob>jane` in as `jane` with `bob`'s password when `jane` allows `bob`, and a provider account could allow that itself: a password route into it, against spec §7.3. So the listener refuses storing a provider account with impersonators and empties them when one is loaded, and linking, sign-ins and re-checks clear them. If wrong, support staff can't impersonate a provider account, and sign in as `admin` instead.
+- **Two questions for the owner** came up here: LogicalDOC's API keys, which the owner decided (Task 7b, below), and the CE sessions open before linking, which is still open (Follow-ups).
+
+**Task 6**
+
+- **R15: `SignInAuthenticator` refuses any pending account that isn't a provider account,** uncounted. `SignIns.openSession` would otherwise open a session for anyone, and spec §7.2 and §7.3 say only provider accounts sign in this way. It was added in Task 7, its first caller. It costs nothing.
+
+**Task 7**
+
+- **R2: no public address gives a plain `409` page.** The sign-in pages can't send the browser back to `login.jsp` without an address, so they say the server's public address isn't set. If wrong, an install with no address shows a bare page rather than the sign-in page's message.
+- **R16: linking by email refuses a disabled or expired account** as `account`, and links and changes nothing, as CE's account checks would refuse it anyway. A refused sign-in must make and link nothing (Review Focus 2), and an admin who disabled a local account shouldn't find it converted. Passing conditions (working hours, an IP block, legals) don't block linking. A new account is never disabled. If wrong, a disabled person's first provider sign-in can't link until an admin enables them again, which they'd do anyway.
+- **Any `AuthenticationException` from CE's chain is `account`,** the base class included, as Task 6 carried over: legals not confirmed and a blocked address too.
+- **Where a sign-in lands.** The HTTP session's `RequestedUrl`, under `login.jsp`'s conditions and on this server only, else `frontend.jsp`. CE never sets `RequestedUrl`, so in practice it's `frontend.jsp`. `/api/signin/done` takes `&provider=<id>` so it can name the provider, which the helper passes (Tasks 14 and 15). Pending sign-ins drop the expired ones on each start, and keep at most 10,000.
+
+**Task 7b (added in the build)**
+
 - **CE API keys on provider accounts** (owner, 2026-11-01): "Delete on link, refuse". CE's `ld-` keys sign an account in with no password, so a key made before linking, or made afterwards in the web page, would sign a provider account in while skipping the provider and its re-check, against spec §2.3. Linking an account (and a sign-in or re-check that repairs a linked account with another source or a password) deletes its keys and, once committed, closes the CE sessions they opened. The fork-owned `HealdanThrottle` refuses a provider account's key on every route, uncounted, reading `<key>>bob` as CE does. Unlinked accounts, `admin` included, keep theirs; the web page can still make a key for a provider account, which never works. No new upstream edit. Added as Task 7b, with `ProviderApiKeysTest` (each route, the sessions, the counters, no key in a log line or refusal); spec §7.3, §15, §16.1 and §18, Known Limitations and the API page say so.
+- **R17, for Task 10: unlinking also deletes the account's API keys,** and closes the sessions they opened. Keys made while linked never worked, and would come alive once the account has a password again. Unlinking is a clean slate, like the device tokens it revokes (spec §7.7). If wrong, the person makes new keys after unlinking.
+
+**Task 8**
+
+- **R18: the helper's start checks its own parameters first.** The redirect (loopback only, exactly), the challenge (43 base64url characters), `S256` and the helper's state (1 to 128 unreserved characters) are checked before anything else, each a `400` page with no redirect. Only then does an unknown or turned-off provider go to the loopback as `error=provider`.
+  - The helper's flow still sets and checks `hd_signin`, and the CE session opens only at the exchange.
+  - Refusals at the callback go to the loopback as `?error=<code>&state=…`, except a state Healdan doesn't know, which has no helper address, so goes to `/login.jsp?signin=expired`.
+  - A body mixing password and code fields is `422`.
+  - Why: spec §6.2 and §13, no code to another machine and the browser bound. If wrong, a malformed helper request sees something slightly different.
+- **A linked account CE would refuse gets `error=account`, not a code.** The review found that the helper's branch handed a disabled linked account a code: the browser said "Signed in", and the exchange then failed with a generic `401`, where spec §6.2 step 4 says the helper gets `account`. So the branch runs CE's `validateUser` before making a code. That call counts nothing against the throttle, as the person has just signed in at the provider.
+- **Smaller calls.** A provider token counts as checked when it's issued (`hd_checked`), so its first re-check is due an interval later. A missing verifier is `422`, with the code unused; a wrong one is `401`, with the code used up. Mix-up and other-browser callbacks go to the helper as `error=expired`, since its checked address is known. The helper's password body is tagged `[Schema("PasswordSignIn")]`, as its contract test doesn't follow a `oneOf`. One-time codes are swept and capped as pending sign-ins are.
+
+**Task 9**
+
+- **R19: a provider token whose account has no link to that provider in use,** being unlinked or linked elsewhere, is revoked at its next due check, without asking the provider. The account isn't that provider's any more, and unlinking revokes the tokens anyway, so this only fails closed on stale state. It applies only while the provider is on, as one that's off is never checked. If wrong, a helper is asked to sign in again.
+- **R20: a second request doesn't wait for a check in progress.** It goes ahead with the token as it stands. Spec §9 says only one check runs at a time, and a helper's parallel saves shouldn't stall on a slow provider. If wrong, a request can get through during the check that then revokes the token: at most one provider round trip, 10 seconds.
+- **The key and the re-check.** A missing key file turns a provider off, as `enabled()` needs a secret that opens, so its tokens are kept. A refresh token that won't open while the client secret does is revoked (spec §13). The mark and the 15-minute wait are in memory, on one node. Nothing of the re-check's is held once `keep` returns, so it never runs inside `newSession`, which keeps the lock order linking relies on: linking holds the sign-in lock while it takes `SessionManager`'s.
+- **Two things the docs say,** from the review. A refresh the provider made but whose answer was lost loses the turned-over token, and a provider that turns them over strictly then refuses the old one, which revokes (R12's consequence). And refreshed ID tokens must carry the groups claim, or the gate refuses at the re-check. The Other Providers page says both.
+- **R21, for Task 10: a provider's identity claim can't change while it has linked accounts** ("Unlink its accounts first"). A changed claim makes every linked person a new identity: their helpers are revoked at the next check, and their next sign-ins make or refuse accounts. Spec §7.1 fixes the identity per provider. If wrong, an admin who really wants to change it unlinks everyone first.
+
+**Task 10**
+
+- **The temporary password's email** is CE's `psw.rec1` email built in Healdan, as `SecurityServiceImpl`'s own notify needs a session. It escapes the password for HTML, as a generated password can hold `&`, and is never filed as a document. Unlinking waits up to 15 seconds for the mail server, as CE's sender sets no timeouts, and hands the password to the admin when the email couldn't go in time. Unlink Everyone unlinks each account in its own transaction. `SignInAdmin` doesn't check that `by` is an admin: the tab's RPC does (Task 13).
+- **R22: the alert fires on every session opened with `admin`'s password,** whatever key the form carried, and when `admin` impersonates another account (`admin>bob`).
+  - It doesn't fire for a session a key really opened: one of `admin`'s own live API keys, or the one-time key a device token or a provider sign-in is opening on this thread. Nor for `x>admin`, which is `x`'s password.
+  - Why: the review found that CE keeps whatever key a sign-in form carries, so correction 4's "no key and no impersonator" let one form field suppress the alert. It stood in for spec §7.5's "each `admin` password sign-in". The settings are now read on the pool, outside `SessionManager`'s lock.
+  - `admin`'s password together with one of `admin`'s live keys isn't alerted, as it can't be told from a key sign-in, and whoever holds the key needs no password.
+  - If wrong, an extra email when `admin` impersonates someone.
+
+**Task 11**
+
+- **R23: Keycloak's host port is `127.0.0.1:18180`** (`SMOKE_KEYCLOAK_PORT`), not the plan's 18080, which is the smoke app's own port. Task 15's `HEALDAN_STACK_KEYCLOAK` uses it. It costs nothing.
+- **R24: `offline_access` stays an optional client scope** in the realm, Keycloak's default, not a default one. The helper asks for it and gets an offline token, and the web page's flow doesn't need one. If wrong, one line in the realm file.
+- **The overlay and the realm, beyond the plan.** Keycloak gets a health check on its management port. The realm's users have emails, names and the realm's default roles, without which Keycloak 26 stops a sign-in at a form, or gives no `offline_access`. Step 5e also signs the local account in with its password first, and checks that linking revokes that token.
+
+**Tasks 12 and 13**
+
+- **R25: one stack check, after Task 13.** Tasks 12 and 13 each prove the GWT compile. Their stack checks, with the password routes in `logicaldoc-webapp` and the impersonator check carried from Task 5, and the docs' pictures, run once on one image build. That became Task 13c, and saved a second image build of about 15 minutes. If wrong, a Task 12 defect is found a task later.
+- **R26: `HealdanSignInButtonsTest` isn't an upstream edit.** It tests fork-owned code in `logicaldoc-gui`, as M3.6's `HealdanOpenInAppTest` does, and is in `UPSTREAM_TESTS` because tests there run in CI only when named. `UserSourceTest` counts as one, because it tests upstream code in an upstream package. If wrong, one test class moves or goes.
+- **R27: Task 13 split into 13a and 13b.** 13a built the RPCs, the tab, the provider's window and the Admin Guide's page. 13b wrote the Install manual's sign-in section and the Outgoing Email page's two emails. It's the plan's largest task, and its halves share no files. It costs two commits instead of one.
+- **Task 13a: a `newProvider` RPC.** Add shows the preset's values and the redirect address before anything is saved, so the admin can register the address at the provider before having a client id and secret, and the presets stay defined once, in `Preset`. `SignInProviders.checkNewId` and `checkGroups` became public for it. Check won't run on unsaved changes, as it tests the saved settings. A deleted group's rows are dropped at the next save. Spec §10.3 records it.
+- **Task 13a: the provider's window and Check's window are destroyed when closed,** so a secret typed and not saved doesn't stay in a hidden field (Review Focus 6). A deferred minor, folded into the review's fix round.
+
+**Task 13b's findings, and Task 9b (added in the build)**
+
+- **What the Install pages turned up.** The Outgoing Email page is `admin/system/outgoing-email.md`, not under `install/`. Authentik's current releases don't let users change their email by default, where spec §3.2 says they may unless an admin stops them: the Authentik page says to check that it's off, and spec §3.2 gets a note. The Install pages after the new section moved down one weight.
+- **R28: an unsigned ID token on a refresh is ignored,** as if none came: the check is accepted, the new refresh token stored and `checked` moved on, with no names, groups or gate. It's logged at info, once per provider. A signed ID token that fails its checks stays unreachable (R10), and a sign-in still refuses `none`.
+  - Why: Microsoft's documentation describes the refresh answer's `id_token` as unsigned. If Entra does that, every re-check would count as unreachable: a warning each time, a retry every 15 minutes, and groups never synced. Ignoring an untrusted token loosens no check: spec §13 still never accepts a `none` token's claims.
+  - What the owner should know: with such a provider, groups follow it only at sign-in, not also at re-checks as spec §8 says. A disabled person is still revoked, by `invalid_grant`. The walkthrough's row 4 shows which it is.
+- **R29: the client authentication follows the discovery document.** `client_secret_basic` when it's listed or no methods are, else `client_secret_post` when that's listed; otherwise Basic, and Check reports the problem. The plan had Basic only, but Entra's discovery lists `client_secret_post` and `private_key_jwt`, though Microsoft documents Basic too. The walkthrough's row 1 shows Entra taking it. It costs nothing for Keycloak and Authentik, which both list Basic.
+- **Task 9b** made R28 and R29, before the stack check, with two docs fixes from Task 13b's review: the Admin Guide's Authentik sentence, and where Entra's permissions are added before admin consent.
+
+**Task 13c (added in the build)**
+
+- **The stack check and the pictures.** Every check of Tasks 12 and 13 passed in the built-in browser against Keycloak, after three layout fixes, each its own commit.
+  - The browser can't map a host name, so a scratch overlay renamed Keycloak `keycloak.localhost:18580` for it, which Chromium takes for this computer and the app reaches by a network alias.
+  - The user editor's Change Password and Lost Password refused a linked account's password.
+  - CE's two-factor step couldn't be reached: two-factor is a paid LogicalDOC feature, with no server side in CE.
+  - The docs' pictures were taken on a demo stack, with a provider set up by hand.
+- **An impersonator on a provider account.** The admin's user editor has no impersonators field, so it can't make the partial save Task 5's review expected. The account's own Allowed Impersonators answers a generic "500 The call failed on the server", as CE's `addImpersonifier` catches only `PersistenceException`, and stores nothing. It's left, as the message is upstream's (Follow-ups).
+
+**Tasks 14 and 15**
+
+- **Task 14: the receiver picks the done page from the result.** `LoopbackReceiver.WaitAsync` has an overload taking a function from the result to the page, as the browser is sent on before the caller has looked at the result, and success, a refusal and a state mismatch each go to their own page. `SignIn` takes an optional browser timeout, for tests, and `ProviderRefusedException` has a file of its own.
+- **Task 15: `SignInWithProviderAsync` takes a `CancellationToken`,** beyond the plan's interface, so Cancel can stop the wait, and a 5-minute timeout can be told from the person's own cancel. The call runs off the UI thread, as `SystemOpener.Open` can block for 10 seconds. The window's tests run on macOS only (`MacFact`), as the helper's other window tests do.
 
 ## Follow-ups
 
-(Empty until the build.)
+Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. Each is a gap in a narrow case or for later, none of which blocks the walkthrough; the reviews' style points and the tests' wording are left out. The task in brackets found it.
+
+**For the owner**
+
+- **CE sessions opened before linking stay open** until 30 idle minutes: one the account opened with its old password, or one another account's key opened as it (`<key>>jane`) before linking cleared its impersonators. Spec §7.3 doesn't ask for them to close, and CE's own password change doesn't close sessions either. Closing them at linking would be one call. (Tasks 5 and 7b)
+- **The helper's window with provider buttons** hasn't been looked at by hand, and Installing the Helper has no picture of it. The walkthrough's row 4 is the first look, and the picture can be taken then. (Task 15)
+- **What Entra does** (R28, R29): whether it signs the ID tokens it sends with a refresh, which row 4 shows (if not, groups follow Entra at sign-in only), and whether its token endpoint takes `client_secret_post`, which Healdan sends because Entra's discovery lists it and not `client_secret_basic`, which row 1 shows. (Tasks 13b and 9b)
+- **Safari and the loopback address.** Nothing checked that Safari shows no warning when the helper's sign-in moves from HTTPS to `http://127.0.0.1` (spec §6.2). Row 4 shows it. (Task 14)
+- **The unlinking email's words.** It's CE's `psw.rec1`, which welcomes the person as newly registered. Words of its own would need a new template and seed step. (Task 10)
+
+**Accounts and linking**
+
+- `signInLinked` doesn't refuse a link that points at `admin` or a system account. A stray row, which only a hand edit of the database could make, would have the repair strip `admin`'s password and delete its API keys. Refuse it, as linking by email does. (Tasks 5 and 7b)
+- An enabled, unexpired account past CE's maximum inactivity is linked by email, then refused by the chain: R16 named only disabled and expired accounts. A direct `validateUser` also doesn't turn an inactive account to disabled, as the chain's checks do. (Tasks 7 and 8)
+- `ProviderPasswordListener.unlinking` exempts every save on the thread while it runs. Keep it to the account being unlinked. (Task 5)
+- Stray `ld_impersonator` rows for a provider account, which only a JDBC write or a restore could make, block CE's own stores of it until its next sign-in, and dropping them logs nothing. (Task 5)
+- The races are tested on HSQLDB only; MariaDB's unique index was checked once by hand. A link row deleted through the DAO keeps its unique columns, though nothing deletes rows today. (Tasks 2 and 5)
+
+**The sign-in pages and the code exchange**
+
+- Each counted refusal by CE's chain (disabled, expired, outside working hours) leaves a `loginfail-apikey-<hash>` row in `ld_sequence` that nothing reads or deletes. And a disabled person clicking again and again counts towards the 20 failures that block a shared address, such as a VPN's. (Task 6)
+- A failure after `decide` (building the client, opening the session, saving the sid) gives a JSON `500` rather than a redirect, and leaves `hd_signin` set; a failure in `decide` is logged twice. (Task 7)
+- Starting a sign-in isn't throttled, and at about 17 a second would push other people's pending sign-ins out of the 10,000 kept. A `HEAD` on the callback uses up its state. The done and `409` pages send no `frame-ancestors`. No test runs under an install path such as `/dms`. (Task 7)
+- `GET /server` opens every provider's sealed secret on each call, and it's public. (Task 8)
+- `openapi.yaml`'s `codeVerifier` pattern isn't enforced, so a verifier of the wrong shape is `401` with the code used, not `422`. The provider isn't checked again at the exchange. A `RuntimeException` from `validateUser` in the helper's branch isn't caught. (Task 8)
+
+**The re-check, the provider and the key**
+
+- If the key file goes during a re-check, `SecretBox.seal` makes a new key, and every other helper's refresh token then fails to open and is revoked at its next check. `seal` shouldn't make a key once sealed values exist. (Task 9)
+- A `checked` in the future, after the clock went back, holds off the 8-hourly checks until it passes. (Task 9)
+- A turned-over refresh token is lost when Nimbus can't parse the answer, or something fails after a `200`. Reading `refresh_token` from the JSON first would keep it; with a strict provider, that helper is otherwise revoked at its next check. (Task 4)
+- Discovery and token answers have no size cap (the keys are capped at 50 KB). The 10-second timeout is per read, so a provider that trickles its answer can hold a request longer, and a key fetch waits up to 15 seconds. (Task 4)
+- `SecretBox` fills an empty key file that a start dying mid-way left, after it was made but before its mode was set, and there's no lock across processes (Healdan runs one app container). (Task 2)
+
+**Settings and the Sign-In tab**
+
+- `password` and `recheck` are reserved ids only while their settings rows exist. List them in `RESERVED_IDS`. (Task 3)
+- Saving a provider writes about 12 settings rows, then its group map, with no transaction around them, so a failed add can leave an id half made and then refused as in use. (Tasks 3 and 13a)
+- The secret's length limit counts characters, so a long secret in a multibyte script can overflow its column once sealed, part-way through a save. (Task 3)
+- A group-map row left being edited and invalid is dropped at Save without a word, and "null (deleted)" can show for a row whose group is gone. (Task 13a)
+- The provider's window is taller than its frame (about 870 px in 760), so Linked Accounts needs a scroll. Its id field says "ID", where the grid and the docs say "Id". (Task 13c)
+- The sign-in page folds the password form when the server answers, even if the person has started typing, and the password link has no role for screen readers. (Task 12)
+
+**Unlinking and the alert**
+
+- A temporary password can be lost after the commit when CE quietly doesn't send (`smtp.nosend`, or its sending aspect off) or its email pool refuses the task; Unlink Everyone would lose them all. `OutgoingEmail.isSetUp` should be false under `smtp.nosend`, and each send's failure should put its password in the list for the admin. A timed-out email isn't cancelled. (Task 10)
+- `PasswordGenerator`'s default allows a sequence of 4 where the password rules refuse 3, so about one temporary password in 10,000 fails them and rolls the unlink back. Try again once. (Task 10)
+- `HealdanThrottle` passes an exception's message to the log as its format string. A failure reading the session pool, while linking closes the keys' sessions, logs its cause only at debug. (Task 7b)
+
+**The smoke test and the tests**
+
+- `test-signin.sh` sets no `curl --max-time`, so a hang holds CI to the job's limit. Its checks say little when they fail, and check 5 doesn't assert the problem's code. (Task 11)
+- The `smoke-signin` seed would run with an `https` issuer too: its only guard against production is that production never sets its variables. (Task 11)
+- The smoke seed's group `Smoke SSO` grants no menus, so `sso-user` lands on an empty page. The Install manual should say to map a provider group to a Healdan group that has menus, or new accounts see nothing. (Task 13c)
+- Untested in `ProviderClient`: the HTTPS check on a cached discovery document, redirects not followed, the key fetch's timeout, a token with no `kid`, an encrypted token, `jku`, `x5u` and embedded `jwk` headers, ES384 and ES512, the redaction of a provider's error description, and that the secret never goes in a query string. (Tasks 4 and 9b)
+- Two of the tab's tests rely on DNS failing for `login.firm.example`; `FakeProvider` would be steadier. (Task 13a)
+
+**The helper**
+
+- No retry after an unreachable answer to the providers question. The first server call on the provider path is bounded only by the overall 6 minutes. Showing the window again doesn't clear a stale problem, a refusal leaves no focus, and Enter in the address field does nothing while the form is folded. (Task 15)
+- A cancel during the exchange can leave a device token at Healdan that the helper never kept. (Task 15)
+- A caller's cancel comes back with the internal token, not the caller's. Any first request to the port ends the wait, so another local program could spoil a sign-in. Windows' `http.sys` would need a URL reservation for an IP-literal prefix, when Windows comes. (Task 14)
+
+**Docs**
+
+- The Entra page's labels against the portal's own words ("Single tenant only", "Assignment Required"). No pointer for a provider behind a private certificate authority, which the app's Java must trust. Advise trying `admin`'s password before going live. (Task 13b)
+- Other Providers says "lists no methods" where an empty list is what Check reports, and the Entra page's Check sentence leaves out the token endpoint. (Task 9b)
+- Known Limitations could say that a provider account's Allowed Impersonators answers a generic 500, and that an admin's Change Password for one says "Wrong password", both upstream's messages. (Task 13c)
+
+**Upstream, seen in the build**
+
+- `LoginThrottle.recordFailure` throws a `NullPointerException` for a refused sign-in with no client. (Task 5)
+- `SessionFilter`'s own key sign-in, an `X-API-KEY` with no open session, reaches `AuthenticationChain` with no username, which throws a `NullPointerException`, so a local key there gets a `500`. (Task 7b)
+- `LDAuthenticationProvider` logs the raw key at debug level, which is off as shipped. (Task 7b)
+- CE's "View the mobile web version" links to `login-mobile.jsp`, which CE doesn't ship, and every page logs a Content Security Policy error for `http://server:port/`. (Task 13c)

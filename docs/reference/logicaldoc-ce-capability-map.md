@@ -5,6 +5,7 @@
 - **Upstream merges.** This reflects the code at merge `1c2389e3d` (upstream `3085e45c3`). Line numbers will drift.
 - **9.3.2.** Rechecked on 2026-10-26 against the 9.3.2 sync ([#80](https://github.com/Healdan-Project/healdan/pull/80), upstream `cfebaee9d`), which changed nothing this map records: the release number, Java 25 source, two stream leaks closed in `MailUtil` and `EMailSender`, a copiable anonymous URL and wider password fields.
 - **LogicalDOC's servers.** Updated on 2026-10-29: §6's rows after `StatsCollector`'s cover every call CE made to LogicalDOC, and the check that keeps new ones out.
+- **M4.** Updated on 2026-11-02, when M4 was built: §5.4 records Healdan's OpenID Connect sign-in, `UserSource.OIDC`, how a user listener can veto, and what CE's user delete skips. The [M4 plan](../superpowers/plans/2026-11-01-m4-oidc-sign-in.md) has the rulings and follow-ups.
 - **M3.** Updated on 2026-10-25, when M3's first phase was built: §2.3 adds Healdan's Comments property and how it's searched, §2.6 the API's favourites, and §5.1 Open in App and the Healdan Helper. The [M3 plan](../superpowers/plans/2026-10-24-m3-office-integration.md) has the rulings and follow-ups.
 - **M2.** Updated on 2026-10-24, when M2 was built: the sign-in throttle is **Fixed** (§5.4, §6), §4.1 points to Healdan's own API, and §6 adds what the build found.
 - **M1.** Updated on 2026-10-21, when M1 was built (`4d1b2ca2d`). The CE gaps M1 fixed are marked **Fixed in M1**, and §6 adds the CE defects M1 fixed or found. The [M1 plan](../superpowers/plans/2026-10-17-m1-move-in.md) has the details: its rulings (R1–R131), decision log (D1–D8) and follow-ups.
@@ -44,7 +45,7 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 | 5 / 11 / 53 / 56 | TAGS / TRASH / BOOKMARKS / TEMPLATE | yes | present |
 | 10 | EMAIL_IMPORT | no | absent: no `EmailAccount` entity, and `EmailAccountService` has no implementation |
 | 12 | SAVED_SEARCHES | no | **present**: `SearchServiceImpl` save/load/delete/share. Only `/data/savedsearches.xml` is missing |
-| 15 | SINGLE_SIGNON (SAML) | no | absent |
+| 15 | SINGLE_SIGNON (SAML) | no | absent. Healdan's OpenID Connect sign-in (M4) is its own and declares no feature (§5.4) |
 | 20 | OFFICE ("Edit with Office", `ldedit:` protocol) | no | absent: no `/ldedit` servlet |
 | 21 | ENTERPRISE_SEARCH | no | – |
 | 28 | BULK_UPDATE | no | – |
@@ -360,12 +361,17 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
   | DB password, API key | present |
   | LDAP/AD (55) | absent (`LDAPService` has no implementation) |
   | SAML (15) | absent |
-  | OIDC login | absent |
+  | OIDC login | absent in CE. **Healdan's since M4**, below |
   | 2FA (94) | partial: columns, settings and trusted devices exist, but **nothing verifies the code** |
   | Brute-force throttle (39) | **Fixed in M2**: runs on every route, on by default with Healdan's limits (§6). Its settings screen stays hidden, because nothing declares feature 39, so admins change `throttle.*` in `context.properties` |
   | Firewall (73) | present |
 
 - **`TokenProvider` is outbound only.** It provides OAuth for Microsoft 365 SMTP and IMAP, and has nothing to do with inbound API tokens.
+- **OpenID Connect sign-in is Healdan's (M4).** The web page and the Healdan Helper sign in through Microsoft Entra ID, Authentik or another provider, set up in Healdan Settings' Sign-In tab, with `admin` kept as a password account for break glass. It's `healdan-core`'s `signin` package and `healdan-api`'s `/api/signin/` pages, outside Spring Security, so `context-security.xml` isn't touched; Nimbus's libraries check the ID tokens. A provider sign-in opens its CE session through `SessionManager.newSession` and the whole chain, with a one-time key for Healdan's `SignInAuthenticator` (106). See the [M4 spec](../superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md).
+  - **`UserSource.OIDC`.** CE's `UserSource` had `DEFAULT`, `LDAP` and `SAML`, stored as their numbers in `ld_user.ld_source`. M4 appends `OIDC`, stored as 3, for an account linked to a provider; `UserSourceTest` pins the numbers. As for any source but `DEFAULT`, CE allows an empty password and skips its password rules, and the old UI hides Change Password. The Users list shows it as `OIDC`.
+  - **A user listener can veto a save only with an `AuthenticationException`.** `HibernateUserDAO.store` logs and swallows a listener's `PersistenceException`, and rethrows only an `AuthenticationException`, unlike the document and folder DAOs, which roll back on a `HealdanVetoException`. Healdan's `ProviderPasswordListener` uses that to keep passwords and impersonators off provider accounts.
+  - **CE's user delete bypasses the listeners.** `UserListener` has no delete hook, and `HibernateUserDAO.delete` marks the account deleted, renames it `<username>.<id>`, and deletes its group memberships, API keys and impersonators by JDBC. Healdan closes a deleted account's provider link at its identity's next sign-in.
+  - **Impersonation and API keys skip a password.** `AuthenticationChain` signs `bob>jane` in as `jane` with `bob`'s password when `jane` allows `bob`, and an `ld-` key signs its owner in with none. So Healdan clears a provider account's impersonators, deletes its API keys when it's linked or unlinked, and refuses its keys in `HealdanThrottle`.
 
 ## 6. Defects found (fix in Healdan; consider reporting upstream)
 

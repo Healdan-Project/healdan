@@ -2,7 +2,7 @@
 
 - **Milestone:** M4 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section. While the written spec was being reviewed, the owner asked about break glass and unlinking in a side conversation, and then decided both: unlinking is in M4, and an alert when `admin` signs in is optional (§7.5, §7.7). Approved by the owner on 2026-11-01. Implementation plan: [`docs/superpowers/plans/2026-11-01-m4-oidc-sign-in.md`](../plans/2026-11-01-m4-oidc-sign-in.md), approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
+- **Status:** built on 2026-11-01 and 2026-11-02, following the implementation plan named below, in five pull requests: [Healdan-Project/healdan#154](https://github.com/Healdan-Project/healdan/pull/154) (PR A: the server's core), [#156](https://github.com/Healdan-Project/healdan/pull/156) (PR B: the endpoints, the re-check, unlinking, the `admin` alert and the stand-in provider), [#157](https://github.com/Healdan-Project/healdan/pull/157) (PR C: the sign-in page, the Sign-In tab and the Install pages), [#158](https://github.com/Healdan-Project/healdan/pull/158) (PR D: the helper's browser sign-in) and PR E (the records). Where the build departs from this spec, the section says "changed in the build", and the plan's decision log has the reasons. The owner's walkthrough (§16.2, the plan's Task 17), on Healdan Helper 0.6.0, is still to come. Design agreed with the owner on 2026-11-01, question by question and then section by section. While the written spec was being reviewed, the owner asked about break glass and unlinking in a side conversation, and then decided both: unlinking is in M4, and an alert when `admin` signs in is optional (§7.5, §7.7). Approved by the owner on 2026-11-01. Implementation plan: [`docs/superpowers/plans/2026-11-01-m4-oidc-sign-in.md`](../plans/2026-11-01-m4-oidc-sign-in.md), approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
 - **Inputs:**
   - the roadmap's M4 section, and its glossary;
   - the [M2 spec](2026-10-23-m2-api-foundation-design.md), above all §5 (device tokens and the sign-in throttle) and §10.3 (Spring Security);
@@ -82,6 +82,10 @@ The walkthrough in §16.2 passes, against the owner's server over HTTPS, with He
   - Healdan adds Everyone, and `EveryoneUserListener` keeps every user except read-only ones in it.
   - A group carries a free-text `source` (`Group.getSource`).
 - **Usernames.** CE's user editor can't change an existing user's username.
+- **User listeners** (changed in the build: plan correction 1, and ruling R8 in the plan's decision log).
+  - `HibernateUserDAO.store` logs and swallows a listener's `PersistenceException`, and rethrows only an `AuthenticationException`. So a `UserListener` can veto a save only with an `AuthenticationException`.
+  - CE's user delete runs no listener, as `UserListener` has no delete hook. It marks the account deleted, renames it `<username>.<id>`, and deletes its group memberships, API keys and impersonators by JDBC.
+- **No default language.** CE keeps no setting for the server's default language. Its setup wizard sets the language of every account that exists then, `_system` included (changed in the build: found in Task 5).
 - **The sign-in page** is GWT's `login` module. `LoginPanel.initGUI` builds it, and `MobileLoginPanel` runs the same method, so one hook covers both layouts. It already carries a Healdan hook (`HealdanCredits`). `login.jsp` sends a browser on to the web page when its HTTP session holds an open `cas-sid`, which is LogicalDOC's own single sign-on; Healdan doesn't need it.
 - **`GET /api/v1/server`** is public and lists the sign-in methods: `["password"]` since M2 (M2 §5.6).
 - **Libraries.** The WAR ships no OAuth 2.0, OpenID Connect or JOSE library. `jose4j` 0.6.5 is in the build only as Solr's dependency, and isn't shipped. Spring Security 6.3.10 ships without its OAuth2 modules.
@@ -101,6 +105,7 @@ The plan checks each against the provider's current documentation, and the Insta
 - Client secrets expire, at most 24 months after they're made.
 - `offline_access` gives a refresh token. A refresh fails once the account is disabled or its sessions are revoked.
 - Without "Assignment required" on the enterprise app, any account in the tenant, guests included, can sign in to it.
+- (changed in the build: found while writing the Install pages.) Microsoft's documentation describes the ID token in a refresh's answer as unsigned (`alg: none`), so Healdan ignores such a token (§9). Entra's discovery document lists `client_secret_post` and `private_key_jwt` at the token endpoint, not `client_secret_basic`, though Microsoft documents Basic there too, so Healdan uses what the document lists (§13). The owner's walkthrough (§16.2) will show what the tenant really does.
 
 **Authentik:**
 
@@ -109,7 +114,7 @@ The plan checks each against the provider's current documentation, and the Insta
 - The default `profile` scope sends `groups`, by name.
 - A provider with no signing key signs ID tokens with HMAC on the client secret, which Healdan refuses (§13), so the provider needs a signing key.
 - Refresh tokens need the `offline_access` scope mapping on the provider.
-- Users may change their own email unless an admin turns that off.
+- Users may change their own email unless an admin turns that off. (changed in the build: current releases ship with users unable to change their email, by System Settings' "Allow users to change email". An older instance, or one an admin changed, may allow it, so the Authentik page says to check that it's off before turning Link by Email on. The preset still leaves Link by Email off, §7.2.)
 
 ### 3.3 The setup (owner)
 
@@ -154,9 +159,10 @@ The plan checks each against the provider's current documentation, and the Insta
 4. **It decides the account and its groups** (§7, §8).
 5. **It opens a CE session** through `SessionManager.newSession`, with a one-time key standing for the account (§7.6).
    - It gives the HTTP session a new id, then sets `ldoc-sid` and saves the session's id in the HTTP session, as the password form does.
-   - It then goes where the password form would: the page asked for before signing in, or else the web page.
+   - It then goes where the password form would: the page asked for before signing in, or else the web page. (changed in the build: that's the HTTP session's `RequestedUrl` under `login.jsp`'s conditions, followed only for a path on this server's own address. Nothing in CE sets `RequestedUrl`, though `login.jsp` reads it, so in practice a sign-in lands on `frontend.jsp`.)
 6. **The redirect address** an admin registers at the provider is `https://<server>/api/signin/<id>/callback`, one per provider. It's built from the server's public address (`LOGICALDOC_PUBLIC_URL` when set, as M3.5 §7's manifest is, else the address the request came to), and the Sign-In tab shows it (§10.3).
    - (Refined while writing the spec: Section 1 of the design said one callback address for every provider. One per provider means the callback always knows which provider it expects, which closes off "mix-up" attacks between providers.)
+   - (changed in the build: plan correction 5, and rulings R2 and R5.) The address logic moved out of `AddinResource` into a shared `PublicAddress`, in `healdan-core`'s `com.logicaldoc.healdan.web` rather than `healdan-api`, so the Sign-In tab's RPC shows exactly the address the pages send. It takes `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]`, or anywhere while `HEALDAN_SIGNIN_ALLOW_HTTP` is set. With no usable address, the sign-in pages answer a plain `409` page saying the server's public address isn't set, since they can't send the browser anywhere without one.
 
 ### 5.3 Refusals
 
@@ -170,6 +176,8 @@ A refusal comes back to the sign-in page, or to the helper (§6.2), with a code.
 | `account` | CE's chain refused the account: disabled, expired, outside working hours | What the password form says for the same refusal |
 | `provider` | The provider couldn't be reached, refused, or failed a check (§13) | Try again, or ask an admin |
 | `expired` | The sign-in took more than 10 minutes, or its state was unknown or used | Start again |
+
+(changed in the build) The messages are the plan's Global Constraints' table. `account` has one message for every refusal of CE's chain, "This account can't sign in now. Ask an administrator.", rather than the password form's own for each. It also covers a disabled or expired account that linking by email would have matched (§7.2). `expired` also covers a callback from another browser, or at another provider's callback address. The sign-in page doesn't know which provider sent the person back, so its `{label}` is "your sign-in provider"; the helper's done page and window name it.
 
 ## 6. Signing in from the helper
 
@@ -185,14 +193,17 @@ A refusal comes back to the sign-in page, or to the helper (§6.2), with a code.
 3. **Healdan runs §5.2's steps 1 to 4.**
    - It accepts only a loopback `redirect_uri`, on `127.0.0.1` or `[::1]` at any port, so a code can never be sent to another machine.
    - It adds `offline_access` to the scope, and keeps the provider's refresh token with the pending code (§9).
+   - (changed in the build: ruling R18.) The helper's parameters are checked first, before the public address and the provider: the redirect exactly `http://127.0.0.1:<port>/` or `http://[::1]:<port>/` (no user info, query, fragment or other path), a state of 1 to 128 unreserved characters, a 43-character base64url challenge, and the method `S256`. Any of them wrong is a `400` page with no redirect and no cookie. Only then does an unknown or turned-off provider go to the helper's address as `error=provider`. The helper's flow sets and checks the `hd_signin` cookie as the web page's does.
 4. **Healdan makes a one-time code** instead of a web session.
    - The code is random, lives 60 seconds and works once. It's bound to the account, the provider, the refresh token, the challenge and the redirect address.
    - Healdan redirects the browser to the helper's address with `code` and the helper's `state`. A refusal goes there too, as `error=<code>` from §5.3, so the helper can say why.
-5. **The helper's listener** checks the state, then sends the browser on to `https://<server>/api/signin/done`, which says "Signed in to Healdan. You can close this tab." or what went wrong. Then it stops listening.
+   - (changed in the build) Before a code is made, Healdan runs CE's account checks (`DefaultAuthenticator.validateUser`), so a linked account CE would refuse gets `error=account` at once, rather than a code that fails at the exchange. A callback from another browser, or at another provider's address, goes to the helper as `error=expired`. A state Healdan doesn't know, or that was used or expired, goes to `/login.jsp?signin=expired`, as no helper address is known for it. The CE session opens only at the exchange.
+5. **The helper's listener** checks the state, then sends the browser on to `https://<server>/api/signin/done`, which says "Signed in to Healdan. You can close this tab." or what went wrong. Then it stops listening. (changed in the build: the helper adds `provider=<id>`, and `error=<code>` for a refusal, so the page names the provider in its message.)
 6. **The helper exchanges the code** at `POST /api/v1/auth/tokens` with `{code, codeVerifier, redirectUri, name, device}`.
    - Healdan checks the code, the verifier and the address.
    - It opens a CE session through the chain (§7.6), issues the device token (M2 §5.1 to §5.4), and keeps the refresh token with it (§9).
    - The helper keeps the token in the keychain, as today (M3 §5.2).
+   - (changed in the build) A code body missing a field, or one that also carries a username or password, is `422 validation`, and uses up no code. A throttled exchange is `429`, as for a password.
 
 **Afterwards, as today:**
 
@@ -206,7 +217,7 @@ A refusal comes back to the sign-in page, or to the helper (§6.2), with a code.
 - `healdan://` links stay able only to open documents.
 - Another app can claim a URL scheme, but not a port the helper is listening on. PKCE makes an intercepted code useless anyway.
 
-The browser moves from Healdan's HTTPS page to `http://127.0.0.1` as a top-level navigation, which browsers allow. That's unlike M3.5's add-in, whose requests WebKit blocks as mixed content (M3.5 §3.2). The plan's first task checks that Safari shows no warning.
+The browser moves from Healdan's HTTPS page to `http://127.0.0.1` as a top-level navigation, which browsers allow. That's unlike M3.5's add-in, whose requests WebKit blocks as mixed content (M3.5 §3.2). The plan's first task checks that Safari shows no warning. (changed in the build: no task checked it, and the stack test's browser is a fake. The owner's walkthrough, §16.2 row 4, is the first real browser to take the helper's sign-in.)
 
 ## 7. Accounts
 
@@ -217,17 +228,19 @@ The browser moves from Healdan's HTTPS page to `http://127.0.0.1` as a top-level
 
 ### 7.2 Which account a sign-in is (owner; call on the order)
 
-1. **An identity already linked** is its account. A link an admin has unlinked doesn't count (§7.7).
+1. **An identity already linked** is its account. A link an admin has unlinked doesn't count (§7.7). (changed in the build: ruling R8.) A link whose account was deleted in CE, which runs no listener (§3.1), is closed first: marked unlinked now, by nobody, and logged. The sign-in then carries on as for an identity with no link.
 2. **The gate.** The person's provider groups are mapped (§8). If no mapped Healdan group results, the sign-in is refused (`no-group`) and nothing is made. A linked account refused here is also taken out of every mapped group, so nothing it held through the map stays (owner).
 3. **Link by email**, when the provider's switch is on (owner).
    - The email claim must be present, and match exactly one account's email, ignoring case.
    - That account must not be `admin`, a system account or already linked. It's then linked.
    - An email that matches an account that can't be linked, or more than one account, is refused (`email-taken`), rather than making a second account with the same email.
    - The switch is on in the Entra preset, where the tenant's admins set emails, and off in Authentik's, where users may change theirs unless an admin turns that off (owner, §3.2).
+   - (changed in the build: ruling R16.) An account that matches but is disabled, or past its expiry date, is refused as `account`, and nothing is linked or changed, so a refused sign-in never converts an account an admin turned off. Passing conditions, such as working hours, don't block linking.
 4. **Otherwise, a new account.**
    - Its username is the username claim's value: the UPN in Entra's preset.
    - It's refused (`username-taken`) if that username exists, is `admin`, contains `>` (CE's impersonation separator) or is something CE can't store.
-   - First name, last name and email come from `given_name`, `family_name` and `email`, falling back to `name` for the names. The language is the server's default, and the account is an ordinary one, not read-only.
+   - First name, last name and email come from `given_name`, `family_name` and `email`, falling back to `name` for the names. The language is the server's default, and the account is an ordinary one, not read-only. (changed in the build: CE has no default language (§3.1), so a new account takes `_system`'s, which the setup wizard set, else `en`.)
+   - (changed in the build) "Taken" counts every account's username, deleted accounts' included, ignoring case.
 
 An admin who wants someone's account ready before their first sign-in makes it by hand, with a password and the person's email, and the first sign-in links it by email (§7.3).
 
@@ -235,7 +248,10 @@ An admin who wants someone's account ready before their first sign-in makes it b
 
 - **Linking or making an account turns it into a provider account.** Its source becomes a new `UserSource.OIDC` and its password is removed (set to null).
 - **It can't be given a password.** A Healdan `UserListener` refuses to store a password on a provider account, whichever way it comes: Change Password, the lost-password email, the user editor, SOAP's user calls. The builder lists every path that sets a password, and tests each one.
+  - (changed in the build: plan correction 1.) The listener, `ProviderPasswordListener` at position 95, refuses with `ProviderPasswordException`, an `AuthenticationException`, as that's the only veto `HibernateUserDAO` passes on (§3.1). It also refuses moving a provider account to another source, except while unlinking (§7.7).
+  - Every path ends in `UserDAO.store`, where the listener refuses it. The user editor's Change Password and Lost Password, in `logicaldoc-webapp`, which Healdan's tests can't load, were checked by hand on a stack.
 - **So no password route signs a provider account in.** `DefaultAuthenticator` refuses a null password (§3.1), and nothing can set one. That covers the sign-in form, WebDAV, CMIS, SOAP, REST and the API's password sign-in.
+- **Nor does impersonation** (changed in the build: ruling R14). CE signs `bob>jane` in as `jane` with `bob`'s password when `jane` allows `bob` to impersonate her, which would be another account's password route into a provider account. So a provider account has no impersonators: linking and every later sign-in or re-check clear them, the listener refuses storing a provider account with any, and it empties them when the account is loaded.
 - **Nor does a LogicalDOC API key** (owner, 2026-11-01; changed in the build). A CE `ld-` key signs its account in with no password (`ApiKeyAuthenticator`), so a key made before linking, or made afterwards in the web page (`SecurityServiceImpl.createApiKey` needs only a session), would be a second way in that skips the provider (§2.3). So:
   - Linking an account by email, or a sign-in or re-check that finds a linked account with another source or a password, deletes the account's API keys, as CE's own user delete does, and logs how many went. Once the decision commits, it closes the CE sessions the keys opened, which CE's `X-API-KEY` lookup (`SessionManager.getSessionFromApiKey`) would otherwise go on finding from a deleted key.
   - The fork-owned `HealdanThrottle`, which `SessionManager.newSession` already calls before CE's chain, refuses a key whose account is a provider account, on every route a key signs in by: `X-API-KEY` through `SessionFilter`, REST's and SOAP's `loginApiKey`, and a Basic or form sign-in carrying a key, as WebDAV and CMIS take one. It reads the key as CE's chain does, so `<key>>bob` is refused too. The refusal names the key by its label and isn't counted against the address or the key, as M2's refused tokens aren't.
@@ -268,12 +284,13 @@ An admin who wants someone's account ready before their first sign-in makes it b
   - while it's on and any provider is on, each `admin` password sign-in sends the recipients an email, from a message template a seed step adds;
   - nothing is sent when outgoing email isn't set up, and the tab says the switch needs it; no system message is sent instead (owner);
   - with no provider on, `admin`'s password is an ordinary sign-in, and nothing is sent.
+  - (changed in the build: plan corrections 3 and 4, and ruling R22.) "Set up" means `default.smtp.host` isn't blank, `localhost`, `127.0.0.1` or `::1`, and `default.smtp.sender` isn't blank or CE's shipped `logicaldoc@acme.com`. The alert is a CE `SessionListener`, `AdminSignInAlert`. It fires on every session opened with `admin`'s password: `admin`'s own, whatever key the form carried, and `admin` impersonating another account (`admin>bob`). It doesn't fire for a session a key really opened (one of `admin`'s own API keys, or the one-time key of a device token or a provider sign-in), nor for `x>admin`, which is `x`'s password. So `admin`'s password together with one of `admin`'s live API keys isn't alerted: whoever holds the key needs no password.
 
 ### 7.6 Opening the CE session (call)
 
 - **On M2's pattern.** The endpoint puts a one-time key, standing for the decided account, on the thread, and calls `SessionManager.newSession(key, client)`.
 - **The authenticator** returns that account only for the key that's pending. It first applies `DefaultAuthenticator.validateUser`'s checks: enabled, not expired, within working hours, legals confirmed. It refuses every other key of its form.
-- **So the throttle, CE's checks and CE's session bookkeeping apply,** as for any sign-in. Whether this is a new authenticator beside `HealdanTokenAuthenticator` or the same one taught a second kind of pending key is the builder's choice.
+- **So the throttle, CE's checks and CE's session bookkeeping apply,** as for any sign-in. Whether this is a new authenticator beside `HealdanTokenAuthenticator` or the same one taught a second kind of pending key is the builder's choice. (changed in the build: a new one, `SignInAuthenticator` at position 106, for one-time keys starting `hd_signin_`, which `HealdanTokenAuthenticator` leaves alone. By ruling R15 it also refuses a pending account that isn't a provider account, uncounted, so the endpoints can't open a session for `admin` or a password account this way.)
 - **Refusals made before the session** (the gate, linking, the username) aren't counted by the throttle, as the provider has already checked the person. The chain's own refusals count as a key sign-in's do (M2 §5.7).
 
 ### 7.7 Unlinking (owner)
@@ -285,9 +302,13 @@ A link is a record beside the CE account, never a new or replacement account. So
 - **The link is kept as a record,** marked unlinked, with when and by whom, and no longer used (§12).
 - **The account goes back to a password account.** Its source returns to `DEFAULT`, with a random temporary password marked expired, so the person changes it at their next sign-in. That's what CE's own admin Change Password does (`SecurityServiceImpl.changePassword`). It's one step, as CE refuses to store a `DEFAULT` account without a password.
 - **The password reaches the person** by email when outgoing email is set up (CE's notify email). Otherwise the admin sees it once and passes it on, or the person uses Lost Password, whose link lasts 15 minutes.
+  - (changed in the build) `SecurityServiceImpl`'s own notify needs a session, so Healdan builds the same email from CE's `psw.rec1` template and sends it through CE's sender. It escapes the password for HTML, and never files the email as a document. Unlinking waits up to 15 seconds for the mail server to take it, as CE's sender sets no timeouts. The admin sees the password when the email couldn't go: no outgoing email, no email address on the account, a failed send, or no answer in time.
 - **Groups stay as they are,** and are managed in Healdan from then on.
-- **Device tokens are revoked,** through M2's revoke on a password change (M2 §5.4), and the helper asks for the password.
+- **Device tokens are revoked,** through M2's revoke on a password change (M2 §5.4), and the helper asks for the password. (changed in the build: plan correction 2. `TokenUserListener` notices a password change only when the stored password wasn't null, so unlinking revokes the account's device tokens itself.)
+- **LogicalDOC API keys are deleted** (changed in the build: ruling R17). Keys made while the account was linked never worked (§7.3), and would come alive once it has a password again, so unlinking deletes them and closes the sessions they opened, as linking does.
 - **Signing in through the provider again,** while it's on, links the account again by the usual rule (§7.2), and its password is removed again (§7.3).
+
+(changed in the build) Unlinking runs under the same lock as a sign-in and a re-check for that person, so it can't land in the middle of one. Unlink Everyone unlinks each account in its own transaction: one that fails is logged and stays linked, and the rest still go.
 
 **Taking a provider off an instance:**
 
@@ -295,20 +316,20 @@ A link is a record beside the CE account, never a new or replacement account. So
    - While it's off, its linked people can't start a sign-in, but helpers already signed in keep working (§9).
    - Before the admin confirms, the tab says how many linked people that affects.
 2. **Unlink Everyone** on that provider runs the steps above for each of its accounts. Each gets a temporary password, by email when outgoing email is set up. Otherwise the admin gives each one a password in the user editor, which unlinking allows again.
-3. **Remove the provider.** Its settings go, and its links stay in `hd_signin_identity` as history. Remove is offered only once the provider has no linked accounts (§10.3).
+3. **Remove the provider.** Its settings go, and its links stay in `hd_signin_identity` as history. Remove is offered only once the provider has no linked accounts (§10.3). (changed in the build: ruling R8. A deleted account's link isn't counted, as the tab's list can't show it to be unlinked.)
 
 ## 8. Groups (owner)
 
 - **A map per provider:** a provider group's value (an Entra object id or app role, an Authentik group name) to a Healdan group, stored in `hd_signin_group` by the Healdan group's id, so renaming the group in Healdan keeps it. One provider group may map to several Healdan groups.
-- **Any Healdan group can be mapped, `admin` included** (owner). The docs repeat M1's advice that a day-to-day account shouldn't be an admin, since admins skip every permission check.
+- **Any Healdan group can be mapped, `admin` included** (owner). The docs repeat M1's advice that a day-to-day account shouldn't be an admin, since admins skip every permission check. (changed in the build: ruling R9. "Any" means the ordinary groups, never a person's own, hidden group, which would hand everyone the map lets in that person's permissions.)
 - **The sync runs at every sign-in, and at every re-check the provider accepts** (§9). For each mapped Healdan group:
   - the person is added when one of their provider groups maps to it;
   - otherwise they're removed from it.
 
-  Groups outside the map, Everyone (kept by Healdan's listener) and the person's own group are left alone.
+  Groups outside the map, Everyone (kept by Healdan's listener) and the person's own group are left alone. (changed in the build) Everyone can be mapped, and then counts for the gate, so a map can let people in without giving them a group, but the sync never adds or removes it. A read-only account's groups aren't synced, as CE keeps it in its own group and `guest` only. With a provider whose refreshed ID tokens are unsigned, the sync runs only at sign-in (§9).
 - **The gate.** A sign-in that maps to no Healdan group is refused (owner, §7.2). The map is therefore also the list of who may sign in. The Install pages still advise Entra's "Assignment required" and Authentik's application policies, so the provider refuses first.
 - **Entra's overage.** If the ID token carries the overage pointer instead of the groups, the sign-in is refused as `no-group`, and the log says to send "groups assigned to the application". Healdan makes no Microsoft Graph call (call).
-- **A deleted Healdan group:** its rows are ignored, and the Sign-In tab shows them as deleted.
+- **A deleted Healdan group:** its rows are ignored, and the Sign-In tab shows them as deleted. (changed in the build: they're dropped when the provider is next saved, unless another group is picked for them.)
 - Every membership change is logged, with the provider and the account.
 
 ## 9. Checking back with the provider (owner)
@@ -322,6 +343,8 @@ A link is a record beside the CE account, never a new or replacement account. So
 
 Only one check runs for a token at a time.
 
+(changed in the build: plan correction 6, and ruling R20.) The 8 hours are `signin.recheck.minutes` (480), which the tab doesn't show and the smoke seed sets to 0. A token from a provider sign-in counts as checked when it's issued. While one request checks a token, another for it doesn't wait for the provider: it goes ahead with the token as it stands, so a helper's saves never stall on a slow provider. The cost is that a request can get through during the check that then revokes the token, at most one provider round trip of 10 seconds. The mark and the 15-minute wait are kept in memory, on one node.
+
 **How:** a refresh at the provider's token endpoint, with the client secret.
 
 **What happens:**
@@ -334,6 +357,14 @@ Only one check runs for a token at a time.
 | **Is turned off** in the Sign-In tab | Isn't contacted. The token is kept, within M2's idle and absolute limits, and the checks resume when the provider is turned on again (§7.7). A provider can't be removed while it has linked accounts (§10.3), and unlinking revokes the account's tokens |
 
 **Only an explicit refusal revokes a token.** "Can't reach the provider" never counts as "the provider refused" (§7.5).
+
+(changed in the build: rulings R10, R12, R19 and R28.)
+- **A refusal is `invalid_grant` alone.** Any other error answer (`invalid_client`, `unauthorized_client`, `invalid_request`, `invalid_scope`, or a `400` or `401` that can't be read) counts as can't be reached, and is logged as an error naming the provider, since it points to a setup problem. So an expired or broken client secret (§7.5, §16.2 row 5) signs no helper out. A `429` is logged as busy. The cost: a provider that refuses a disabled person with another code leaves their helper signed in until M2's idle and absolute limits. Keycloak's answer for a disabled user is `invalid_grant`, which the smoke test checks.
+- **An ID token in the answer that fails its checks** counts as can't be reached, with a warning, as a malformed answer isn't a refusal.
+- **An unsigned ID token in the answer** (`alg: none`, as Microsoft documents Entra's, §3.2) is ignored, as if none came: the check is accepted, and names, email and groups aren't updated, nor is the gate applied. Its claims are never read, and a sign-in still refuses an unsigned ID token (§13). It's logged once per provider. With such a provider, groups follow it only at sign-in.
+- **A new refresh token is kept whatever the outcome,** since a provider that turns them over has already retired the old one.
+- **A token whose account no longer has a link to that provider** in use, being unlinked or linked elsewhere, is revoked at its next check, without asking the provider.
+- **A refresh token that can't be opened** while the client secret can is revoked (the key changed, §13). If neither opens, as when the key can't be read for a moment, nothing is decided and the token is kept.
 
 - **A provider that gave no refresh token.** The device token works as a password one does, within M2's idle and absolute limits, and isn't re-checked. The Sign-In tab's Check warns when the provider doesn't offer `offline_access`, and the log notes each such sign-in.
 - **Web sessions aren't re-checked** (§2.2). They end after 30 idle minutes. Disabling the person in Healdan, or ending their session in the Sessions list, works at once, as today.
@@ -361,8 +392,9 @@ In `hd_setting` (owner), apart from the group map (§8, §12):
 | `signin.<id>.linkByEmail` | from the preset | §7.2 |
 | `signin.adminAlert` | off | Email the recipients when `admin` signs in with its password while a provider is on (owner, §7.5) |
 | `signin.adminAlert.recipients` | `admin` | Usernames to email, as for the throttle's alert |
+| `signin.recheck.minutes` | 480 | The re-check's interval (§9); not in the tab (changed in the build: plan correction 6) |
 
-A provider's id is lower-case letters, digits and hyphens, chosen when it's added. It appears in the redirect address, so it can't change.
+A provider's id is lower-case letters, digits and hyphens, chosen when it's added. It appears in the redirect address, so it can't change. (changed in the build: `done`, the done page's address, can't be an id, nor can an id whose `signin.<id>.` settings already exist, such as `password` and `recheck`.)
 
 ### 10.2 Presets
 
@@ -399,12 +431,20 @@ A new tab in the existing Healdan Settings dialog, for admins (owner):
 - **Changes take effect at once,** with no restart. If a change breaks sign-in, `admin` signs in with its password and puts it right (owner).
 - **Remove** is offered only for a provider with no linked accounts. With some, the tab says to turn it off or Unlink Everyone first. Its links stay as history (§7.7).
 
+(changed in the build: rulings R5 and R21, and the tab as built.)
+- **Add** asks for the id and the preset, refuses an id in use, and shows the preset's values and the redirect address before anything is saved (a `newProvider` RPC), so the admin can register the address at the provider before having a client id and secret.
+- **The identity claim can't change** while the provider has linked accounts: the field is greyed out, and the server refuses it with "Unlink its accounts first". A changed claim would make every linked person a new identity, so their helpers would be revoked at the next check and their next sign-ins would make or refuse accounts.
+- **Check** runs on the saved settings, so it asks for a save first. Its answer is the redirect address followed by the problems, and nothing else when it passes. Beyond the issuer, the algorithms and `offline_access`, it checks that the provider takes a client secret at its token endpoint (§13) and publishes an RSA or EC key. With no usable public address (§5.2), it says so and shows the address the request came to.
+- **The secret** field always starts empty, saying whether one is set, and only a typed value is sent. The provider's window and Check's window are destroyed when closed, so a typed, unsaved secret doesn't linger in the page.
+- **The group picker** offers only the groups §8 allows.
+
 ## 11. The API
 
 - **`GET /server`:** `signIn` lists `password` and, with a provider on, `provider`. The answer gains `providers: [{id, label}]` and `passwordLabel`, which the sign-in page and the helper read.
 - **`POST /auth/tokens`** takes a second body, `{code, codeVerifier, redirectUri, name, device}`, beside today's password body (`oneOf` in `openapi.yaml`).
   - A code that's unknown, used, expired, or doesn't match the verifier or address is `401 sign-in-failed`.
   - A provider account's password is `401 sign-in-failed` too, exactly as a wrong password is, so the answer doesn't say the account is linked.
+  - (changed in the build) The two bodies are `PasswordSignIn` and `CodeSignIn`, each closed, so a body mixing them matches neither and is `422 validation`, as is a code body missing a field. Neither uses up the code. "A provider on" in `GET /server` means one that's turned on and has its issuer, client id and a secret that opens.
 - **`/api/signin/<id>`, `/api/signin/<id>/callback` and `/api/signin/done` are pages,** not JSON API. They take no bearer token, and `openapi.yaml` and `RouteCoverageTest` leave them out, as they leave out `/api/addin/` (M3.5 §7).
 
 ## 12. Data model
@@ -417,8 +457,10 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 | `hd_signin_group` (new) | `hd_provider`, `hd_value`, `hd_groupid` | Unique on all three (§8) |
 | `hd_api_token` (new columns) | `hd_provider` (nullable), `hd_refresh` (encrypted, nullable), `hd_checked` | A token from a provider sign-in, and its re-check (§9) |
 
-- **A new seed step,** `signin-settings`, writes the defaults of `signin.password.label` and the `admin` alert's settings, and adds the alert's message template (§7.5). A smoke-only seed configures the stand-in provider (§16.1).
-- **Pending sign-ins and one-time codes are kept in memory,** for 10 minutes and 60 seconds. A restart drops them, and the person starts again (call).
+(changed in the build: plan correction 7.) "Among links in use" rests on two nullable unique columns in `hd_signin_identity`, `hd_linkkey` (`<provider>:<identity>`) and `hd_linkuser` (the user id). The DAO sets them from the row whenever it's stored: both while linked, both null once unlinked. MariaDB and HSQLDB let nulls repeat in a unique index, so unlinked rows repeat.
+
+- **A new seed step,** `signin-settings`, writes the defaults of `signin.password.label` and the `admin` alert's settings, and adds the alert's message template (§7.5). A smoke-only seed configures the stand-in provider (§16.1). (changed in the build: it also writes `signin.providers`, empty, and `signin.recheck.minutes`. The smoke-only step is `smoke-signin`.)
+- **Pending sign-ins and one-time codes are kept in memory,** for 10 minutes and 60 seconds. A restart drops them, and the person starts again (call). (changed in the build: each keeps at most 10,000, dropping the oldest, and sweeps the expired ones as it adds.)
 
 ## 13. Security (calls)
 
@@ -429,12 +471,16 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
   - `aud`, which must hold the client id (with `azp` checked when there's more than one audience);
   - `exp` and `iat`, allowing two minutes of clock skew;
   - the `nonce`.
+
+  (changed in the build) Nimbus 11.38.2 reads `azp` without comparing it, and never reads `nbf`, so Healdan checks both itself: an `azp` that isn't the client id is refused, so is more than one audience with no `azp`, and so is an `nbf` more than two minutes ahead. The identity claim must be a non-blank string. An encrypted ID token is refused. On a refresh only, an unsigned ID token is ignored rather than accepted (§9).
 - **HTTPS only.** The issuer and every endpoint are reached over HTTPS, with the JVM's certificate checks (M1's validating client). The one exception is plain HTTP when the smoke overlay sets `HEALDAN_SIGNIN_ALLOW_HTTP`, which production never does.
+  - (changed in the build: rulings R11 and R13.) "Every endpoint" is each one the discovery document names, the authorisation, token and keys endpoints, checked when it's fetched and at each use. Provider calls go through Nimbus's own HTTP client, as the plan has it, not M1's validating client. Its certificate and host name checks are the JVM's, the same ones, but LogicalDOC's proxy settings don't apply to it: an install that reaches the provider through a proxy sets the JVM's `https.proxyHost` and `https.proxyPort`, as Known Limitations says. Token requests don't follow redirects, as they carry the secret.
+  - (changed in the build: ruling R29.) At the token endpoint, Healdan sends the client secret as `client_secret_basic` when the discovery document lists it or lists no methods, else as `client_secret_post` when it lists that. Otherwise it sends Basic, and Check reports the problem (§10.3).
 - **No dependence on the provider to run.** Discovery and keys are fetched when first needed, never at startup. A provider that can't be reached refuses only its own sign-ins, and never revokes anything (§7.5, §9).
 - **The browser's flow** has state, nonce and PKCE, and is bound to the browser that started it (§5.2). One callback per provider (§5.2) stops a response meant for one provider being taken for another's.
 - **The helper's flow** accepts only a loopback redirect, uses PKCE, and its code lives 60 seconds and works once (§6.2).
 - **Secrets at rest.**
-  - Client secrets and refresh tokens are encrypted with AES-GCM, under a key Healdan makes the first time it needs one. The key lives in the configuration folder (the `conf` volume, beside `context.properties`), readable only by the app's user. So a database dump on its own carries neither.
+  - Client secrets and refresh tokens are encrypted with AES-GCM, under a key Healdan makes the first time it needs one. The key lives in the configuration folder (the `conf` volume, beside `context.properties`), readable only by the app's user. So a database dump on its own carries neither. (changed in the build: plan correction 8. `ContextProperties` doesn't say where it was loaded from, so the key file is the system property `healdan.secretKey`, which `docker/setenv.sh` sets to `/opt/logicaldoc/conf/healdan-secret.key`, else `~/logicaldoc/conf/healdan-secret.key`. `SecretBox` makes it with mode 600 and 32 random bytes, and a sealed value is `v1:` and the base64 of the IV, ciphertext and tag.)
   - **If the key is lost,** a secret reads as unset, the Check says so, and the admin enters it again. Refresh tokens can't be read, so their device tokens are revoked at their next check, and helpers sign in again.
   - The Backup and Restore page says to back the key up with the database.
 - **Never logged:** tokens, codes, secrets, ID tokens, verifiers or states. Logged: the provider, the account, the outcome and group changes.
@@ -447,7 +493,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 - **The library:** the Nimbus OAuth 2.0 SDK with OpenID Connect extensions (`com.nimbusds:oauth2-oidc-sdk`) and `com.nimbusds:nimbus-jose-jwt`, by Connect2id. They bring `json-smart`, `content-type`, `lang-tag` and `jcip-annotations`.
   - All are under the Apache License 2.0, which is compatible with the LGPL-3.0 that Healdan's code is under (roadmap principle 8).
   - Spring Security's own OAuth2 support is built on `nimbus-jose-jwt`.
-  - Their versions are pinned in `healdan-core`'s POM, as Flyway's are, at their current releases when the plan is written.
+  - Their versions are pinned in `healdan-core`'s POM, as Flyway's are, at their current releases when the plan is written. (changed in the build: `oauth2-oidc-sdk` 11.38.2 and `nimbus-jose-jwt` 10.10, with `json-smart` and its `accessors-smart`, `content-type`, `lang-tag` and `jcip-annotations`: seven jars, about 1.9 MB, in the WAR. `asm` is excluded, as the WAR already ships it.)
   - **Why not Spring Security's OAuth2 client:** its providers are fixed when Spring starts, so the Sign-In tab couldn't change them without a restart; the helper's flow would still need Healdan's own code; and it would add `<oauth2-login>` and its beans to upstream's `context-security.xml`. **Why not none:** the token checks are security-critical code Healdan shouldn't own.
 - **`healdan-core`**, in `com.logicaldoc.healdan.signin`, holds:
   - the providers' settings and presets, and their discovery cache;
@@ -456,10 +502,12 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
   - the authenticator, the re-check and the encryption of secrets.
 
   Its `plugin.xml` declares the authenticator with an extension id of its own (a duplicate id makes JPF drop the whole plugin).
-- **`healdan-api`:** `SignInResource` for the pages, the exchange in `AuthResource`, and the providers in `ServerResource`.
+
+  (changed in the build) The package also holds the user listener, which `plugin.xml` declares too (`healdanSignInPasswords`, beside `healdanSignInAuthentication`), the one-time codes and pending sign-ins, unlinking and the `admin` alert. `PublicAddress` moved to `healdan-core`'s `com.logicaldoc.healdan.web` (§5.2), beside the Sign-In tab's RPCs in `HealdanSettingsServiceImpl`.
+- **`healdan-api`:** `SignInResource` for the pages, the exchange in `AuthResource`, and the providers in `ServerResource`. (changed in the build: and the re-check, called from `TokenFilter` before a token's session is used.)
 - **`logicaldoc-gui`:**
   - `HealdanSignInButtons`, where the `login` module can reach it (in `common.client.healdan`, as `HealdanCredits` is);
-  - the Sign-In tab in `frontend.client.healdan.settings`, with its calls on Healdan's settings service.
+  - the Sign-In tab in `frontend.client.healdan.settings`, with its calls on Healdan's settings service. (changed in the build: `SignInTab` and `ProviderDialog`, with eleven RPCs on `HealdanSettingsService`, all for admins only.)
 - **`clients/helper/`:**
   - the browser sign-in in `Healdan.Helper.Core` (PKCE, the loopback listener, and opening the browser behind a seam, so tests replace it);
   - the sign-in window's buttons in the app;
@@ -470,7 +518,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
   - C: the helper;
   - D: the records (CLAUDE.md, the capability map, this spec and the roadmap).
 
-  Each carries its docs.
+  Each carries its docs. (changed in the plan and the build: five, A to E, as the Status says. A is the server's core; B the endpoints, the re-check, unlinking, the alert and the stand-in provider, with Task 7b; C the sign-in page, the Sign-In tab and the Install pages, with Tasks 9b and 13c; D the helper; E the records.)
 
 ## 15. Upstream files, fork-owned files and docs pages
 
@@ -478,7 +526,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 
 | File | Edit | Why |
 |---|---|---|
-| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/login/client/LoginPanel.java` | One line in `initGUI` handing the page's panels to `HealdanSignInButtons`, which adds the provider buttons and folds the password form behind its link. `MobileLoginPanel` runs the same method | §5.1 |
+| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/login/client/LoginPanel.java` | One line in `initGUI` handing the page's panels to `HealdanSignInButtons`, which adds the provider buttons and folds the password form behind its link. `MobileLoginPanel` runs the same method. (changed in the build: with its `// Healdan:` comment, and an `import` beside `HealdanCredits`', as the class is in another package. The `login` module already inherits what the class uses, so no `.gwt.xml` changes) | §5.1 |
 | `logicaldoc-core/src/main/java/com/logicaldoc/core/security/user/UserSource.java` | `OIDC` appended, after `SAML`, so the stored numbers of the others don't move | §7.3: CE skips its password rules for any source but `DEFAULT` |
 | `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/security/user/UsersPanel.java` | One `case` in the Source column's `switch`, for `OIDC` | Otherwise the Users list shows a provider account as `DEFAULT` |
 | `logicaldoc-core/src/test/java/com/logicaldoc/core/security/user/UserSourceTest.java` | New: pins each value's stored number (`DEFAULT` 0, `LDAP` 1, `SAML` 2, `OIDC` 3) | Covers the edit above; in CI's `UPSTREAM_TESTS`, so a sync that moves them fails |
@@ -488,12 +536,18 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 ### 15.2 Fork-owned files
 
 - `healdan-core`: the `signin` package, `plugin.xml`, `V6__signin.sql` for both databases, the seed steps, the POM, and a `UserListener` for §7.3;
+  - (changed in the build) also `web/PublicAddress` (moved from `healdan-api`'s `AddinResource`, §5.2), `web/HealdanSettingsServiceImpl` and `web/SignInBeans` (the Sign-In tab's RPCs), `HealdanStartup` (registers the `admin` alert), `token/ApiTokens` and `token/ApiToken` (the provider, the sealed refresh token and the re-check), `token/HealdanTokenAuthenticator` (leaves `hd_signin_` keys to `SignInAuthenticator`), `setting/HealdanSettings` (deleting and listing keys), and, in the test-jar, `support/FakeProvider`, `support/FakeTls` and `signin/SignInTestHooks`;
 - `healdan-api`: `SignInResource`, `AuthResource`, `ServerResource`, `openapi.yaml`, `RouteCoverageTest` and `Contract` (both leave `/api/signin/` out), and their tests;
+  - (changed in the build) also `AddinResource` (uses `PublicAddress`), `TokenFilter` (the re-check, §9), the models `SignIn`, `ServerInfo` and `ProviderInfo`, the page `signin/done.html`, and the POM (the tests' `healdan.secretKey` under `target/`);
 - `logicaldoc-gui`'s Healdan packages: `HealdanSignInButtons`, the Sign-In tab, and the settings bean and service;
+  - (changed in the build: ruling R26) and `HealdanSignInButtonsTest`, which pins the refusal messages. It tests fork-owned code, as M3.6's `HealdanOpenInAppTest` does, so it isn't an upstream edit, but it's in `UPSTREAM_TESTS`, as tests in `logicaldoc-gui` run in CI only when named there;
 - `logicaldoc-core`'s `HealdanThrottle` (M2's): refusing a provider account's API keys (§7.3; changed in the build);
 - `clients/helper/`: the core, the sign-in window, and its tests;
+  - (changed in the build) including `Api/Models.cs`, whose password body is tagged `[Schema("PasswordSignIn")]` now that `SignIn` is a `oneOf`, for the helper's contract test;
 - `docker/`: the test overlay with the stand-in provider, `docker/tests/test-signin.sh` (new), and a step in `docker/smoke-test.sh`;
-- `.github/workflows/build-logicaldoc.yml`: `UserSourceTest` in `UPSTREAM_TESTS`;
+  - (changed in the build) the overlay is `docker/tests/compose.signin.yaml`, with Keycloak's realm in `docker/tests/keycloak/healdan-realm.json`; `docker/setenv.sh` sets `-Dhealdan.secretKey` (§13); and `smoke-test.sh` runs step 5e and passes step 5d the helper's sign-in variables (§16.1);
+- `.github/workflows/build-logicaldoc.yml`: `UserSourceTest` in `UPSTREAM_TESTS`; (changed in the build) and `HealdanSignInButtonsTest`;
+- (changed in the build) `.github/workflows/docker-image.yml`: its comments on step 5d name both of the helper's stack tests;
 - `CLAUDE.md`, `docs/ROADMAP.md` and `docs/reference/logicaldoc-ce-capability-map.md` (§5.4).
 
 ### 15.3 Docs pages (the docs site, `site/content/`)
@@ -517,25 +571,28 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
     - stopping users changing their email before turning linking by email on;
     - the Sign-In tab's Authentik preset;
   - `other-providers.md`: what a provider needs, and the claims to set.
+  - (changed in the build) `_index.md` also covers what to have before starting, setting a provider up and trying it before telling anyone, the re-check, the secret key, and what an admin looks for when a sign-in is refused. `entra-id.md` also covers where the four permissions are added before granting admin consent, groups between sign-ins when Entra's refreshed ID tokens are unsigned (§9), what to do when the client secret expires, and Entra's refusals. `authentik.md` says to check that people can't change their email (§3.2). `other-providers.md` names `client_secret_basic` or `client_secret_post`, whichever the discovery document lists (§13), and says refreshed ID tokens should carry the groups claim. The section sits at weight 6, so the Install pages after it moved down one.
 
 **Changed:**
 
-- `admin/healdan-settings/index.md`: the Sign-In tab, the group map and its gate, linking by email, readying an account before a first sign-in, the linked accounts with Unlink and Unlink Everyone, turning a provider off, the emergency `admin` and its alert, and the re-check.
-- `user/getting-started/signing-in/index.md`: the provider's button, the password link, and what a refusal means.
-- `user/office/installing-the-helper/`: signing in through the browser.
+- `admin/healdan-settings/index.md`: the Sign-In tab, the group map and its gate, linking by email, readying an account before a first sign-in, the linked accounts with Unlink and Unlink Everyone, turning a provider off, the emergency `admin` and its alert, and the re-check. (changed in the build: with pictures of the Sign-In tab and a provider's window, and `healdan-settings.png` taken again with the Sign-In tab in its tab bar.)
+- (changed in the build) `admin/system/outgoing-email.md`, the Outgoing Email page: the `admin` alert (`signin.adminalert`) and the temporary password an unlinked account gets (`psw.rec1`).
+- `user/getting-started/signing-in/index.md`: the provider's button, the password link, and what a refusal means. (changed in the build: with a picture of the page with a provider, `sign-in-provider.png`, and Signing Out's words on the provider's session.)
+- `user/office/installing-the-helper/`: signing in through the browser. (changed in the build: without a picture of the window with provider buttons, which nobody has looked at by hand yet.)
 - `install/backup-and-restore.md`: the key in the configuration folder (§13).
 - `install/known-limitations.md`:
   - provider accounts have no password for WebDAV, CMIS, SOAP or REST;
   - provider accounts can't use LogicalDOC's API keys (changed in the build, §7.3);
   - web sessions aren't re-checked with the provider;
   - an account has one identity;
-  - Sign Out doesn't sign out of the provider.
+  - Sign Out doesn't sign out of the provider;
+  - (changed in the build) the `admin` alert needs outgoing email (§7.5), and providers are reached without LogicalDOC's proxy settings (§13).
 - `developer/api.md`: the providers in `GET /server`, the helper's code exchange, and the sign-in pages; and that provider accounts can't use API keys (changed in the build, §7.3).
 - `developer/desktop-clients.md`: the helper's browser sign-in.
 - `developer/tests.md` and `continuous-integration.md`: the fake and stand-in providers, and the new smoke step.
 - `developer/how-healdan-extends-logicaldoc.md`: the upstream edits in §15.1.
 
-The screenshots are of the demo firm (CLAUDE.md, "The demo overlay").
+The screenshots are of the demo firm (CLAUDE.md, "The demo overlay"). (changed in the build: the demo stack had a provider set up by hand, with the Entra preset, against a Keycloak that no picture shows.)
 
 ## 16. Verification
 
@@ -567,9 +624,14 @@ The screenshots are of the demo firm (CLAUDE.md, "The demo overlay").
 
 CI runs it on amd64 and arm64, as it runs the rest of the smoke test. The plan picks the stand-in: open source, with amd64 and arm64 images, a groups claim, refresh tokens and a way to disable a user. The candidates are Keycloak (Apache 2.0), Dex (Apache 2.0) and mock-oauth2-server (MIT).
 
-**The helper**, in CI on Ubuntu and macOS, with fakes: PKCE, the loopback listener (one request, the state, the timeout), the browser seam, the exchange, and the window's buttons from `GET /server`. Its `Stack` test signs in through the stand-in provider, with a fake browser following the redirects.
+(changed in the build: plan correction 9, and rulings R23 and R24.)
+- **The stand-in is Keycloak 26.7.5,** the one candidate with all four. `docker/tests/compose.signin.yaml` runs it, with a health check, and publishes it on `127.0.0.1:18180` only (`SMOKE_KEYCLOAK_PORT`; 18080 is the smoke app's own port). It names itself `http://keycloak:8080`, as the app reaches it, and the test's `curl` uses `--connect-to`. The `smoke-signin` seed adds provider `smoke`, maps `healdan-users` to a group `Smoke SSO`, makes the local account `sso-user` for the first sign-in to link by email, and sets `signin.recheck.minutes` to 0.
+- **The realm** keeps `offline_access` an optional client scope, Keycloak's default, rather than a default one, since the helper asks for it and the web page doesn't need it. Its users have emails and the realm's default roles, or Keycloak would stop their sign-in at a form.
+- **Step 5e runs `test-signin.sh`:** the local account signs in with its password first; then the web page's flow links it by email and opens the web page; its local password is then refused and the token from before is revoked; the gate refuses an outsider; the helper's flow hands over a code, and its exchange gives a token that works; and disabling the person at Keycloak revokes it at the next request. Keycloak answers that refresh with `invalid_grant`. The step takes about 3 seconds, and Keycloak starts in 14 to 19 seconds alongside the app.
 
-**The GUI** has no unit tests. The sign-in page and the Sign-In tab are checked on a stack.
+**The helper**, in CI on Ubuntu and macOS, with fakes: PKCE, the loopback listener (one request, the state, the timeout), the browser seam, the exchange, and the window's buttons from `GET /server`. Its `Stack` test signs in through the stand-in provider, with a fake browser following the redirects. (changed in the build: `StackProviderSignInTests` signs in a realm user of its own, `sso-helper2`, posting Keycloak's form with an `HttpClient` and making the loopback request. Smoke step 5d passes it the provider, the user and Keycloak's host port, and needs both of the helper's stack tests to pass. The window's tests run on macOS only, as the helper's other window tests do.)
+
+**The GUI** has no unit tests. The sign-in page and the Sign-In tab are checked on a stack. (changed in the build: ruling R25. `HealdanSignInButtonsTest` pins the sign-in page's refusal messages. The two stack checks ran once, after the Sign-In tab, on one image, as Task 13c, in a browser against Keycloak: every check passed after three layout fixes, and the password routes in `logicaldoc-webapp` (§7.3) and the impersonators (§7.3) were checked there too. CE's two-factor step can't be reached, as CE has no server side for it.)
 
 ### 16.2 Manual acceptance (owner)
 
@@ -590,6 +652,11 @@ On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed rele
 7. **Authentik.** Rows 1 to 3 on your own Authentik, where a new test user gets a new account.
 8. **Sign Out** comes back to the sign-in page, and doesn't sign straight back in.
 
+(changed in the build) Rows the build left questions for:
+- **Row 1:** Entra's discovery document lists `client_secret_post` and not `client_secret_basic`, so Healdan sends the secret in the body (§13). The first sign-in shows that Entra takes it.
+- **Row 4:** whether Entra signs the ID tokens it sends with a refresh. If they're unsigned, as Microsoft documents, a forced check is accepted without updating groups, which then follow Entra at sign-in only (§9); a disabled person is still refused, with `invalid_grant`. This row is also the first real browser to take the helper's sign-in (§6.2), and the first look at the helper's window with provider buttons, which Installing the Helper has no picture of.
+- **Row 5:** with the secret broken, a refresh should get `invalid_client`, which counts as can't be reached (§9), so helpers stay signed in and the log has an error naming the provider.
+
 ## 17. Left to the builder
 
 - Every path that sets a password, and the check on each (§7.3).
@@ -600,6 +667,8 @@ On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed rele
 - The `openapi.yaml` shapes beyond §11.
 - The stand-in provider (§16.1), and how its address works for both the app's container and the test's `curl`.
 - Nimbus's versions (§14).
+
+(changed in the build: what the builder chose.) A new `SignInAuthenticator` (§7.6); the cookie `hd_signin`, pending sign-ins in memory and the key file `healdan-secret.key` (§5.2, §13); the messages in the plan's Global Constraints (§5.3); Keycloak 26.7.5 as the stand-in, reached as `keycloak:8080` from both (§16.1); Nimbus 11.38.2 and 10.10 (§14). The password paths and their checks are in §7.3.
 
 ## 18. Decisions made in this session
 
@@ -615,6 +684,7 @@ On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed rele
 - **The approach.** Healdan's own endpoints, with Nimbus's libraries (§14).
 - **Unlinking** (after the written spec, from the owner's questions in a side conversation). An admin can unlink one account, or every account of a provider. The account goes back to a temporary, expired password and keeps everything it held. Turning a provider off unlinks nothing (§7.7).
 - **The `admin` alert** (the same conversation). Optional: a system-wide setting an admin turns on, sent by email only, and only when outgoing email is set up (§7.5).
+- **The helper's release** (2026-11-01, during the build). M4's helper is Healdan Helper 0.6.0, as M3.6 (PDFs in CoffeePDF) took 0.5.0 and released first (§2.1, §16.2).
 - **LogicalDOC's API keys** (2026-11-01, during the build: "Delete on link, refuse"). Linking deletes an account's API keys, and a key sign-in for a provider account is refused on every route, as a key would be a second way in that skips the provider. Unlinked accounts, `admin` included, keep theirs. The web page can still make a key for a provider account, which never works, and the docs say so. No new upstream edit (§7.3).
 
 **Calls (approved section by section; open to the owner's review of this spec):**
