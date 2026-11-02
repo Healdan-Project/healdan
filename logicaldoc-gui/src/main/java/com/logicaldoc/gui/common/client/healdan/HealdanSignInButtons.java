@@ -17,6 +17,7 @@ import com.google.gwt.safehtml.shared.SafeHtmlUtils;
 import com.google.gwt.user.client.Window;
 import com.smartgwt.client.types.Cursor;
 import com.smartgwt.client.util.JSOHelper;
+import com.smartgwt.client.widgets.Canvas;
 import com.smartgwt.client.widgets.HTMLFlow;
 import com.smartgwt.client.widgets.IButton;
 import com.smartgwt.client.widgets.layout.VLayout;
@@ -148,8 +149,9 @@ public final class HealdanSignInButtons {
 		panel.setMembersMargin(10);
 
 		String message = refusal(Window.Location.getParameter(REFUSAL_PARAMETER));
-		if (message != null)
-			panel.addMember(notice(message));
+		HTMLFlow notice = message != null ? notice(message) : null;
+		if (notice != null)
+			panel.addMember(notice);
 
 		for (Provider provider : providers)
 			panel.addMember(button(provider));
@@ -165,7 +167,23 @@ public final class HealdanSignInButtons {
 
 		inputsPanel.addMember(panel, BUTTONS_POSITION);
 		credentialsPanel.setVisible(false);
+		if (notice != null)
+			fitWhenFontsLoad(notice);
 	}
+
+	/**
+	 * Measures the canvas again once the page's web fonts have loaded. The
+	 * server's answer can come before the page's font does, and a notice drawn
+	 * then is measured in the browser's narrower fallback font: in the page's
+	 * font it wraps onto a line it wasn't given, under the first button.
+	 */
+	private static native void fitWhenFontsLoad(Canvas canvas) /*-{
+		var fonts = $doc.fonts;
+		if (fonts && fonts.ready)
+			fonts.ready.then($entry(function() {
+				canvas.@com.smartgwt.client.widgets.Canvas::adjustForContent(Z)(true);
+			}));
+	}-*/;
 
 	/**
 	 * Reads the providers and the password link's label from the server's answer.
