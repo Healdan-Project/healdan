@@ -1434,7 +1434,7 @@ Expected: PASS.
 
 ## Decision log
 
-Every ruling made while building that the plan or the spec didn't settle, in task order, with what it costs if it was wrong. R2 to R35 are the build's numbers for them, and the spec's "changed in the build" notes cite them. R30 split the final review into four areas, and isn't repeated here. R1, R6 and R7 were rules for how the build ran (Maven's settings file, example names only, and the commits' form), and aren't repeated here. The plan's own corrections are under "Spec corrections and calls this plan makes". All of it was built on 2026-11-01 and 2026-11-02.
+Every ruling made while building that the plan or the spec didn't settle, in task order, with what it costs if it was wrong. R2 to R36 are the build's numbers for them, and the spec's "changed in the build" notes cite them. R30 split the final review into four areas, and isn't repeated here. R1, R6 and R7 were rules for how the build ran (Maven's settings file, example names only, and the commits' form), and aren't repeated here. The plan's own corrections are under "Spec corrections and calls this plan makes". All of it was built on 2026-11-01 and 2026-11-02.
 
 **Before Task 1**
 
@@ -1567,13 +1567,15 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
 - **R35: V7 widens `hd_api_token.hd_refresh`,** to `text` on MariaDB (65,535 bytes) and `varchar(65535)` on HSQLDB, and clears the refresh tokens of tokens already revoked.
   - Why: V6's `varchar(4000)` held a refresh token of up to about 2,969 characters once sealed. A token too long even for the new width fails clearly: the code's exchange is `401 sign-in-failed`, logged as such, and a re-check keeps the old one, logged, rather than failing on the database.
   - If wrong: a migration. V6 had shipped in the PRs, so it isn't edited.
+- **R36: a start on another host than the public address's is sent there first, and only the host is compared.** The start goes to the same path and query at the public address, with nothing kept and no cookie set.
+  - Why: the `hd_signin` cookie belongs to the host the browser asked for, and the provider sends the browser back to the public address, so a start on another name always came back `expired`. The fix wave first compared the scheme and port too, and the re-review found that it then looped. Behind a proxy, Tomcat reports the scheme's own port for a public address with another, such as `https://healdan.example:8443`, and plain HTTP when the proxy isn't in `LOGICALDOC_TRUSTED_PROXIES`. A cookie ignores both.
+  - If wrong: a start on the right host but another scheme or port sets its cookie there, which the browser still sends back, as before the fix wave. A proxy that puts its own name in `Host` loops, so Reverse Proxy says to pass the browser's.
 - **The other fixes, which needed no ruling.**
   - Revoking a device token, and so unlinking, clears its sealed refresh token.
   - A discovery document that couldn't be fetched is remembered for 30 seconds per provider: start, the exchange, a refresh and Check fail at once meanwhile, without a call, so an unthrottled start can't hold a Tomcat worker for 20 seconds each during an outage. Saving the provider forgets it.
   - `HealdanThrottle` logs a database's message as text, not as a format; SLF4J already took the exception as the throwable, so the test passed before the fix too.
   - The `smoke-signin` seed needs `HEALDAN_SMOKE_FIXTURE=true` as well as its three variables, tying it to the smoke overlays.
   - `SignInProviders`' refusals name a provider by its id, never its label, and quote a recipient only if it looks like a username, as the Sign-In tab shows them as HTML.
-  - A start on another name than the public address is sent to the same path and query there first, with nothing kept and no cookie set. A proxy that doesn't pass the browser's `Host` header would now loop, so Reverse Proxy says to pass it.
   - A helper start whose challenge another sign-in has, waiting or with a code, is refused at its own address as `expired`, so another local user can't race a code to the helper's port.
   - The helper asks for the providers again after an answer that didn't come, and its loopback listener takes only a `GET` of `/`.
   - `test-signin.sh` gives each `curl` a minute. The Remove refusal's words, the lost-device steps for a provider account, the User Guide's profile page, the refusal table, Authentik's issuer mode, `CATALINA_OPTS` beside the proxy flags and CLAUDE.md's two overstatements were put right.
@@ -1607,6 +1609,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - Each counted refusal by CE's chain (disabled, expired, outside working hours) leaves a `loginfail-apikey-<hash>` row in `ld_sequence` that nothing reads or deletes. And a disabled person clicking again and again counts towards the 20 failures that block a shared address, such as a VPN's. (Task 6)
 - A failure after `decide` (building the client, opening the session, saving the sid) gives a JSON `500` rather than a redirect, and leaves `hd_signin` set; a failure in `decide` is logged twice. (Task 7)
+- A proxy that puts its own name in `Host` makes provider starts loop (R36). `RemoteIpValve`'s `hostHeader="X-Forwarded-Host"`, believed only from trusted proxies, would cover proxies that send that header. (The final review)
 - Starting a sign-in isn't throttled, and at about 17 a second would push other people's pending sign-ins out of the 10,000 kept. A `HEAD` on the callback uses up its state. The done and `409` pages send no `frame-ancestors`. No test runs under an install path such as `/dms`. (Task 7)
 - `GET /server` opens every provider's sealed secret on each call, and it's public. (Task 8)
 - `openapi.yaml`'s `codeVerifier` pattern isn't enforced, so a verifier of the wrong shape is `401` with the code used, not `422`. The provider isn't checked again at the exchange. A `RuntimeException` from `validateUser` in the helper's branch isn't caught. (Task 8)
@@ -1624,6 +1627,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 - `password` and `recheck` are reserved ids only while their settings rows exist. List them in `RESERVED_IDS`. (Task 3)
 - Saving a provider writes about 12 settings rows, then its group map, with no transaction around them, so a failed add can leave an id half made and then refused as in use. (Tasks 3 and 13a)
 - The secret's length limit counts characters, so a long secret in a multibyte script can overflow its column once sealed, part-way through a save. (Task 3)
+- The issuer field can still be edited while accounts are linked, and Save then refuses it (R33); the identity claim has a hint, which the issuer could have too. (The final review)
 - A group-map row left being edited and invalid is dropped at Save without a word, and "null (deleted)" can show for a row whose group is gone. (Task 13a)
 - The provider's window is taller than its frame (about 870 px in 760), so Linked Accounts needs a scroll. Its id field says "ID", where the grid and the docs say "Id". (Task 13c)
 - The sign-in page folds the password form when the server answers, even if the person has started typing, and the password link has no role for screen readers. (Task 12)
@@ -1633,6 +1637,8 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 - A temporary password can be lost after the commit when CE quietly doesn't send (`smtp.nosend`, or its sending aspect off) or its email pool refuses the task; Unlink Everyone would lose them all. `OutgoingEmail.isSetUp` should be false under `smtp.nosend`, and each send's failure should put its password in the list for the admin. A timed-out email isn't cancelled. (Task 10)
 - `PasswordGenerator`'s default allows a sequence of 4 where the password rules refuse 3, so about one temporary password in 10,000 fails them and rolls the unlink back. Try again once. (Task 10)
 - A failure reading the session pool, while linking closes the account's sessions, logs its cause only at debug. (Task 7b)
+- Linking closes the account's sessions, but not a session it opened as another account's impersonator with its old password (`jane>bob`), which lasts until 30 idle minutes. Matching the session's impersonator too would close it. (The final review)
+- Device tokens that expire without being revoked keep their sealed refresh token. (The final review)
 
 **The smoke test and the tests**
 
@@ -1646,6 +1652,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - The first server call on the provider path is bounded only by the overall 6 minutes. Showing the window again doesn't clear a stale problem, a refusal leaves no focus, and Enter in the address field does nothing while the form is folded. (Task 15)
 - A cancel during the exchange can leave a device token at Healdan that the helper never kept. (Task 15)
+- After an answer that didn't come, a helper with its server fixed asks for the providers again only when the address field loses focus: neither Sign In nor the password field asks. (The final review)
 - A caller's cancel comes back with the internal token, not the caller's. Any `GET` of `/` at the port ends the wait, so another local program could still spoil a sign-in, but not take it over: a second start with the helper's challenge is refused. Windows' `http.sys` would need a URL reservation for an IP-literal prefix, when Windows comes. (Task 14)
 
 **Docs**

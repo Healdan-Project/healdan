@@ -420,9 +420,10 @@ answer with redirects and HTML rather than JSON, and `openapi.yaml` doesn't desc
 The addresses are built from the server's public address, as the Office add-in's are: `LOGICALDOC_PUBLIC_URL`
 when it's set, otherwise the address the request came to. It must be `https://`, or plain `http://` on the machine
 itself. Without one, the pages answer `409` with a page that says to set `LOGICALDOC_PUBLIC_URL`. A start that
-comes to another address than `LOGICALDOC_PUBLIC_URL`'s, such as the server's own name on the office network, is
+comes to another host name than `LOGICALDOC_PUBLIC_URL`'s, such as the server's own name on the office network, is
 sent to the same path and query at the public address first, with nothing kept and no cookie set: the cookie
-belongs to the name the browser asked for, and the provider sends the browser back to the public address.
+belongs to the name the browser asked for, and the provider sends the browser back to the public address. Only
+the host name is compared, as a cookie ignores the scheme and port.
 
 ## Healdan's Own Client
 

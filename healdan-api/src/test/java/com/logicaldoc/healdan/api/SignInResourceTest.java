@@ -161,19 +161,28 @@ public class SignInResourceTest extends ApiTestCase {
 		assertNull(moved.header("Set-Cookie"));
 		assertEquals("nothing was asked of the provider", 0, fake.discoveryRequests());
 
-		// Another scheme, port or host is another name; a port that's the scheme's own isn't
-		assertTrue(get("/api/signin/fake").server("http", "healdan.example", 80).send().header("Location")
-				.startsWith("https://healdan.example/api/signin/fake"));
-		assertTrue(get("/api/signin/fake").server("https", "healdan.example", 8443).send().header("Location")
-				.startsWith("https://healdan.example/api/signin/fake"));
+		// Another host is another name
 		assertTrue(get("/api/signin/fake").server("https", "www.healdan.example", 443).send().header("Location")
 				.startsWith("https://healdan.example/api/signin/fake"));
 		assertEquals(0, fake.discoveryRequests());
-		for (String serverUrl : new String[] { "https://healdan.example", "https://HEALDAN.example:443/" }) {
+
+		/*
+		 * Another scheme or port isn't, as a cookie belongs to the host: behind
+		 * a proxy Tomcat reports the scheme's own port for a public address with
+		 * another, and plain HTTP when the proxy isn't trusted, and sending those
+		 * to the public address would only come back to the same place
+		 */
+		for (String serverUrl : new String[] { "https://healdan.example", "https://HEALDAN.example:443/",
+				"https://healdan.example:8443" }) {
 			config().setProperty(SERVER_URL, serverUrl);
-			ApiResponse here = get("/api/signin/fake").server("https", "Healdan.Example", 443).send();
-			assertTrue(serverUrl + ": " + here, here.header("Location").startsWith(fake.issuer() + "/authorize?"));
-			assertNotNull(setCookie(here, "hd_signin"));
+			for (Object[] request : new Object[][] { { "https", 443 }, { "http", 80 }, { "https", 8443 },
+					{ "http", 8080 } }) {
+				ApiResponse here = get("/api/signin/fake").server((String) request[0], "Healdan.Example",
+						(Integer) request[1]).send();
+				assertTrue(serverUrl + " " + request[0] + " " + request[1] + ": " + here,
+						here.header("Location").startsWith(fake.issuer() + "/authorize?"));
+				assertNotNull(setCookie(here, "hd_signin"));
+			}
 		}
 
 		// With a path, which the address keeps

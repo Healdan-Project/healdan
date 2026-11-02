@@ -313,23 +313,20 @@ public class SignInResource {
 	}
 
 	/**
-	 * @return true if the request came to the public address: the same
-	 *         scheme, host and port, a port left out being the scheme's own
+	 * @return true if the request came to the public address's host. Only
+	 *         the host is compared, as a cookie belongs to a host whatever the
+	 *         scheme or port: behind a proxy Tomcat reports the scheme's own
+	 *         port, or plain HTTP when the proxy isn't trusted, and comparing
+	 *         those would send the browser round in a loop
 	 */
 	static boolean atPublicAddress(HttpServletRequest request, Address address) {
-		URI origin = URI.create(address.origin());
-		return origin(request.getScheme(), request.getServerName(), request.getServerPort())
-				.equals(origin(origin.getScheme(), origin.getHost(), origin.getPort()));
+		return host(request.getServerName()).equals(host(URI.create(address.origin()).getHost()));
 	}
 
-	/** @return the origin, in lower case, with a bare IPv6 host in brackets and the scheme's own port left out */
-	private static String origin(String scheme, String host, int port) {
-		String s = String.valueOf(scheme).toLowerCase(Locale.ROOT);
+	/** @return the host in lower case, with a bare IPv6 address in brackets */
+	private static String host(String host) {
 		String h = String.valueOf(host).toLowerCase(Locale.ROOT);
-		if (h.indexOf(':') >= 0 && !h.startsWith("["))
-			h = "[" + h + "]";
-		boolean usual = port <= 0 || ("http".equals(s) && port == 80) || ("https".equals(s) && port == 443);
-		return s + "://" + h + (usual ? "" : ":" + port);
+		return h.indexOf(':') >= 0 && !h.startsWith("[") ? "[" + h + "]" : h;
 	}
 
 	/**
