@@ -179,9 +179,16 @@ public sealed class PendingResultsTests
         }));
         Assert.False(ran); // the route never started
 
-        // Another key isn't held up by this one's, and ping and state still answer. A route taken on answers 202 here, as
-        // it runs until a gate opens: a quick one would race the real 100 ms hold, which a busy runner can lose (CI did).
-        Pending(await results.RunAsync("save-new", KeyB, Until(new TaskCompletionSource())));
+        // Another key isn't held up by this one's: its route starts. And ping and state still answer. It answers 202 here,
+        // as it runs until a gate opens: a quick one would race the real 100 ms hold, which a busy runner can lose (CI did).
+        var startedB = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var gateB = Until(new TaskCompletionSource());
+        Pending(await results.RunAsync("save-new", KeyB, () =>
+        {
+            startedB.SetResult();
+            return gateB();
+        }));
+        await startedB.Task.WaitAsync(TimeSpan.FromSeconds(10));
         Is(200, """{"action":"save","ticket":"t-1"}""", await results.RunAsync("state", KeyA, Quick));
 
         // Finished but not collected, they still count; collecting one makes room for one.

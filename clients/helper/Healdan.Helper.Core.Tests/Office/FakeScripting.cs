@@ -356,20 +356,20 @@ public sealed class FakeScripting : IOfficeScripting
             File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
             if (doc.Path is not null)
                 File.Delete(OwnerPath(p, doc.Path));
-            if (AfterSaveAsWrite is { } after)
-                await after(newPath);
-            return answer;
         }
-        if (SaveAsTakes > TimeSpan.Zero)
+        else
         {
-            File.Delete(OwnerPath(p, newPath));
-            await Task.Delay(SaveAsTakes, ct);
+            if (SaveAsTakes > TimeSpan.Zero)
+            {
+                File.Delete(OwnerPath(p, newPath));
+                await Task.Delay(SaveAsTakes, ct);
+            }
+            File.WriteAllText(newPath, WindowText);
+            if (SaveAsTakes > TimeSpan.Zero)
+                File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
         }
-        File.WriteAllText(newPath, WindowText);
-        if (SaveAsTakes > TimeSpan.Zero)
-            File.WriteAllText(OwnerPath(p, newPath), "fake owner file");
-        if (AfterSaveAsWrite is { } afterInPlace)
-            await afterInPlace(newPath);
+        if (AfterSaveAsWrite is { } after)
+            await after(newPath);
         return answer;
     }
 

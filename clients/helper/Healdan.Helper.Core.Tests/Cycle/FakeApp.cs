@@ -13,7 +13,6 @@ public sealed class FakeApp : IOfficeApp
     private readonly object _lock = new();
     private readonly List<string> _opened = [];
     private readonly ConcurrentDictionary<string, bool> _lockSeen = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, int> _asked = new(StringComparer.Ordinal);
     private volatile bool _running;
 
     public string Name => "LibreOffice";
@@ -54,7 +53,6 @@ public sealed class FakeApp : IOfficeApp
 
     public bool LockExists(string path)
     {
-        _asked.AddOrUpdate(path, 1, (_, n) => n + 1);
         var exists = File.Exists(LockPath(path));
         if (exists)
             _lockSeen[path] = true;
@@ -67,9 +65,6 @@ public sealed class FakeApp : IOfficeApp
     /// window by removing the lock file waits for this first rather than for a fixed time.
     /// </summary>
     public bool LockSeen(string path) => _lockSeen.ContainsKey(path);
-
-    /// <summary>How many times the cycle has asked about the copy's lock file: once for each look the close watcher takes.</summary>
-    public int Asked(string path) => _asked.GetValueOrDefault(path);
 
     public static string LockPath(string path) =>
         Path.Combine(Path.GetDirectoryName(path)!, $".~lock.{Path.GetFileName(path)}#");
