@@ -538,6 +538,8 @@ public sealed class SignInWindowTests
             window.Hide();
             window.Show();
 
+            // The window asks on the thread pool, so the ask is recorded a moment later
+            await Until(() => !prompt.ProvidersAsked.IsEmpty);
             Assert.Equal(["https://healdan.example"], prompt.ProvidersAsked); // the one answer is still to come
 
             answer.SetResult(null);
@@ -625,6 +627,8 @@ public sealed class SignInWindowTests
             window.Hide();
             window.Show();
 
+            // The window asks on the thread pool, so the second ask is recorded a moment later
+            await Until(() => prompt.ProvidersAsked.Count >= 2);
             Assert.Equal(2, prompt.ProvidersAsked.Count);
             Assert.Empty(prompt.PasswordSignIns); // nothing is sent while the providers are still being asked
 
