@@ -181,21 +181,21 @@ size the helper uses, the widths then match CoreText's.
   watcher lets go of it, and the helper looks for the copy by its path (`IsOpenAsync`, which never takes the front
   window) for up to 30 seconds, as Word restores its "Recovered" window at the copy's path. Word 16.114 does so without
   writing the owner file the crash left again, which the trial's Word did. Only once it's found is the window saved
-  over the copy (`SaveAsAsync`), and once that returns, the folder watcher sends it. The folder watcher lets go of the
-  copy while it's saved: a save sent meanwhile was confirmed while the copy still counted as crashed, so its title
-  stayed a version behind. The copy stays crashed until that works. A failure is tried again at the next look; a miss
-  when the program restarts or writes its owner file, and while it runs only after
-  another 30 seconds. Then the crash window closes itself (`IWindows.DismissCrashed`), and its Send and Check In and
-  Reopen, and the menu, go by the copy as it is now (`CopyCycle.Current`), found by its document once it's renamed: a
-  copy that's open again is brought up, never checked in. Send and Check In is refused once the owner file comes back,
-  or the window is found, and while the save-back looks after the owner file came back or saves the window, as Word
+  over the copy (`SaveAsAsync`), and the folder watcher, which lets go of the copy while it's saved, sends it once that
+  returns. The copy stays crashed until the save over it works. A failure is tried again at the next look, and
+  anything the program wrote meanwhile waits for the save that works; a miss when the program restarts or writes its
+  owner file, and while it runs only after another 30 seconds. Then the crash window closes itself
+  (`IWindows.DismissCrashed`), and its Send and Check In and Reopen, and the menu, go by the copy as it is now
+  (`CopyCycle.Current`), found by its document once it's renamed: a copy that's open again is brought up, never
+  checked in. Send and Check In is refused once the owner file comes back, or the window is found, and while the save-back looks after the owner file came back or saves the window, as Word
   takes its owner file away during the save (`CopyCycle.IsOpenAgain`); the program merely running doesn't refuse it.
   Once the save-back has given up, it's refused only while the owner file is there, so a window closed before it was
   found doesn't strand the copy. Reopen, Open from Healdan and a link on a crashed Office copy start its program
   without a file (`IOfficeScripting.StartAsync`), which restores what it recovered: handed the file, Word opened it
   again beside its recovered window. The save-back looks at once, for the whole 30 seconds if the program had to
   start, or for two process checks if it was running, and if it doesn't find the copy, the copy is opened as last
-  saved.
+  saved. A save confirmed while the copy counted as crashed couldn't rename it, so before it opens, a Word or Excel
+  copy takes its confirmed version's name (`CopyCycle.CatchUpName`).
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,
   and then takes it on again knowing whether the owner file is there.
@@ -683,7 +683,11 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   `Wait.Until` polls for it (a confirmation, a save reaching `FakeApi`, or one queued, through the internal
   `CopyCycle.QueuedHash`). Where two writes must make one save, the test stops the settle's clock (a `PausableClock`
   in `CycleTimings.Clock`) between them. It stops it too while a write in place that must go up whole is made,
-  since the write empties the file first.
+  since the write empties the file first. A copy checked in and deleted is waited for with `Wait.Gone`, as the store
+  deletes the copy, then its record, then its apps' lock and owner files.
+- **Each test class that runs a cycle, a session or a server deletes its folder with `TempFolder.Delete`,** not
+  `Directory.Delete`. Disposing a cycle or session stops its work without waiting for it, so a record or a log line
+  can land while the folder is deleted; the delete is tried again for up to two seconds.
 - **`AddinServerTests`** run a real add-in's port on ports the system says are free, with a client that trusts only
   the test's certificate, and send what a web page, another program or another Healdan's page would.
   `PairingTests` and `AddinHandlerTests` cover pairing and the routes, and `PendingResultsTests` a route that answers
