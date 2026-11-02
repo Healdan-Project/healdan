@@ -13,9 +13,17 @@ Email**. Until you do, nothing it tries to send goes out.
   [the sign-in throttle](../../healdan-settings/#the-sign-in-throttle).
 - **A new device.** When someone signs in from a browser or device Healdan hasn't seen them use, they get an email
   saying so. **Alert login from new device**, under **Administration → Access Control → Security**, turns it off.
+- **A sign-in with `admin`'s password.** If you tick **Email When admin Signs In with Its Password** on the Sign-In
+  tab, the people you name get an email each time `admin` signs in with its password while a sign-in provider is on.
+  It's off to begin with, and Healdan sends it only once the mail server isn't `localhost` and the Sender Email isn't
+  `logicaldoc@acme.com`. See [The `admin` Alert](../../healdan-settings/#the-admin-alert) and the Install manual's
+  [Break Glass](../../../install/sign-in/#break-glass).
 - **Passwords.** A new person's username and password, when whoever adds them ticks **Notify credentials**. And
   when someone clicks **Lost your password?** on the sign-in page, a link; once they follow it, a new password,
   which they change when they next sign in.
+- **A temporary password.** When you unlink a person from a sign-in provider, their account gets a random password,
+  and Healdan emails it to them if the account has an email address. They change it when they next sign in. See
+  [Linked Accounts](../../healdan-settings/#linked-accounts).
 - **Documents and notices.** **Send by email** on a document's menu, and the notice people chosen on the **Notify
   users** tab get when someone uploads or checks in documents. Send by email needs the Download and Email
   permissions on every document sent.
@@ -56,8 +64,9 @@ the **Language** first. Select a template to change its wording, and click **Sav
 |---|---|
 | `bfa.alert` | the sign-in throttle's alert, which Healdan adds |
 | `newdevice` | a sign-in from a new device |
-| `psw.rec1` | a username and password: a new person's, or a new one after a password reset |
+| `psw.rec1` | a username and password: a new person's, a new one after a password reset, or the temporary password of an account unlinked from a sign-in provider |
 | `psw.rec2` | the link a password reset starts with |
+| `signin.adminalert` | the alert that `admin` signed in with its password, which Healdan adds |
 | `newdoc`, `checkin` | the notice to people chosen on **Notify users** |
 
 Templates of the System type can't be deleted.

@@ -1,6 +1,6 @@
 ---
 title: Host Folders Instead of Volumes
-weight: 8
+weight: 9
 ---
 
 By default the stack keeps its data in Docker volumes. To keep it in folders on the host instead, for example on

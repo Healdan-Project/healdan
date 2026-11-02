@@ -9,6 +9,7 @@ import com.logicaldoc.gui.common.client.Feature;
 import com.logicaldoc.gui.common.client.beans.GUIGroup;
 import com.logicaldoc.gui.common.client.beans.GUILDAPServer;
 import com.logicaldoc.gui.common.client.data.GroupsDS;
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
@@ -230,6 +231,8 @@ public class LDAPServerDetailsPanel extends VLayout {
 						.toArray(new Long[0]));
 		defaultGroupsItem.setValueField("id");
 		defaultGroupsItem.setDisplayField("name");
+		// Healdan: a group's name is text, not HTML, on its button and in the list
+		HealdanText.showAsText(defaultGroupsItem, "name");
 
 		ldapForm.setItems(url, anon, fakeUsername, hiddenPassword, username, password, pageSize, timeout, language,
 				userType, defaultGroupsItem, syncTtl, keepMembership, userIdentifierAttr, grpIdentifierAttr, userClass,

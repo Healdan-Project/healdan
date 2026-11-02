@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.logicaldoc.gui.common.client.data.GroupsDS;
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.util.AwesomeFactory;
 import com.smartgwt.client.widgets.form.fields.MultiComboBoxItem;
@@ -29,7 +30,10 @@ public class GroupSelectorCombo extends MultiComboBoxItem {
 
 		setWidth("*");
 
-		setValueFormatter((value, rec, form, item) -> AwesomeFactory.getIconHtml("user-friends") + "&nbsp;" + value);
+		// Healdan: a group's name is text, not HTML, on its button and in the list
+		setValueFormatter((value, rec, form, item) -> AwesomeFactory.getIconHtml("user-friends") + "&nbsp;"
+				+ HealdanText.escape(value));
+		HealdanText.showChoicesAsText(this, "name");
 	}
 
 	public List<Long> getGroupIds() {

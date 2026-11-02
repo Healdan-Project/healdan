@@ -58,6 +58,12 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// <summary>Under every API client: tells <see cref="TokenRefused"/> of a 401 to a call that carried the token.</summary>
     private readonly RefusedTokenHandler _http;
 
+    /// <summary>Where a provider's sign-in happens (M4 spec §6.2): the system browser, or the tests' person.</summary>
+    private readonly IBrowser _browser;
+
+    /// <summary>How long a provider's sign-in waits for the browser: 5 minutes, unless a test shortens it.</summary>
+    private readonly TimeSpan _browserTimeout;
+
     /// <summary>Guards the fields below. Nothing waits or raises an event while holding it.</summary>
     private readonly object _gate = new();
 
@@ -109,10 +115,15 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     /// The helper's certificate for the add-in's port, which Set Up Microsoft Office makes; null as for <paramref name="trust"/>.
     /// </param>
     /// <param name="addinPorts">The ports the add-in's port tries: <see cref="AddinPorts.All"/> by default (tests pass free ones).</param>
+    /// <param name="browser">Where a provider's sign-in happens: the system browser by default (tests pass a fake person).</param>
+    /// <param name="browserTimeout">How long a provider's sign-in waits for the browser; 5 minutes by default.</param>
     public HelperSession(HelperPaths paths, IKeychain keychain, DeviceIdentity device, OfficeApps apps, IWindows windows,
         INotifier notifier, HelperLog log, HttpMessageHandler? http = null, CycleTimings? timings = null, TimeSpan? signOutFlush = null,
-        ICertificateTrust? trust = null, AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null)
+        ICertificateTrust? trust = null, AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null,
+        IBrowser? browser = null, TimeSpan? browserTimeout = null)
     {
+        _browser = browser ?? new SystemBrowser();
+        _browserTimeout = browserTimeout ?? TimeSpan.FromMinutes(5);
         _paths = paths;
         _keychain = keychain;
         _device = device;
@@ -606,7 +617,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         _log.Info("Asking for the sign-in");
         try
         {
-            return await _windows.SignInAsync(new SignInPrompt(server, serverFixed, TrySignInAsync)) && SignedIn;
+            var prompt = new SignInPrompt(server, serverFixed, TrySignInAsync, ProvidersAsync, TrySignInWithProviderAsync);
+            return await _windows.SignInAsync(prompt) && SignedIn;
         }
         catch (Exception e)
         {
@@ -626,8 +638,177 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             return "Enter your Healdan server's address.";
         if (string.IsNullOrWhiteSpace(user) || string.IsNullOrEmpty(password))
             return "Enter your username and password.";
+        if (BeforeSignIn(address, out var server, out var api) is { } refused)
+            return refused;
+
+        using var timeout = new CancellationTokenSource(SignInTimeout);
+        try
+        {
+            await new SignIn(api, _keychain, _device).SignInAsync(user.Trim(), password, timeout.Token);
+        }
+        catch (InvalidOperationException e)
+        {
+            return e.Message; // not Healdan, an API this helper doesn't speak, or the keychain refused
+        }
+        catch (ApiException e)
+        {
+            return Refused(e, "Healdan refused the sign-in.");
+        }
+        catch (JsonException)
+        {
+            return NotHealdan;
+        }
+        catch (OperationCanceledException)
+        {
+            return $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
+        }
+        catch (HttpRequestException e)
+        {
+            return $"{server.Authority} couldn't be reached: {e.Message}";
+        }
+        return await AfterSignInAsync(server, api, $"as {user.Trim()}");
+    }
+
+    /// <summary>
+    /// The Sign In window's provider buttons (M4 spec §6.1): the sign-in choices of the server at
+    /// <paramref name="address"/>, or null when it isn't a Healdan server this helper can reach and speak to, for
+    /// which the window shows the password form, whose Sign In then says why. The labels are kept for the refusals'
+    /// messages.
+    /// </summary>
+    private async Task<ProviderChoice?> ProvidersAsync(string address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+            return null;
         Uri server;
-        HealdanApi api;
+        try
+        {
+            server = ParseAddress(address);
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+        using var timeout = new CancellationTokenSource(SignInTimeout);
+        try
+        {
+            var info = await NewApi(server).ServerAsync(timeout.Token);
+            if (info.Product != "Healdan" || info.ApiVersion != SignIn.SupportedApiVersion)
+                return null;
+            var providers = (info.Providers ?? [])
+                .Where(p => !string.IsNullOrWhiteSpace(p.Id))
+                .Select(p => string.IsNullOrWhiteSpace(p.Label) ? p with { Label = DefaultProviderLabel } : p)
+                .ToList();
+            return new ProviderChoice(providers, string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel);
+        }
+        catch (Exception e)
+        {
+            _log.Info($"The Sign In window couldn't read {server.Authority}'s sign-in providers ({e.GetType().Name})");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// A provider's button in the Sign In window (M4 spec §6.2): signs in through the provider in the system browser,
+    /// with the same checks before and after as a password sign-in. Null once signed in, else the reason, as the window
+    /// shows it: a refusal says what the web page does, with the provider's label, and the browser's 5 minutes running
+    /// out says so. <paramref name="ct"/> is the person's Cancel, which stops the helper listening for the browser;
+    /// its answer then isn't null, and the window shows none. A sign-in that works carries on to a full start, as a
+    /// password sign-in does.
+    /// </summary>
+    private async Task<string?> TrySignInWithProviderAsync(string address, string providerId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+            return "Enter your Healdan server's address.";
+        if (string.IsNullOrWhiteSpace(providerId))
+            return "Choose how to sign in.";
+        if (BeforeSignIn(address, out var server, out var api) is { } refused)
+            return refused;
+
+        // The browser has its 5 minutes; Healdan's two calls, before and after, the Sign In window's time each.
+        using var bound = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        bound.CancelAfter(_browserTimeout + 2 * SignInTimeout);
+        try
+        {
+            await new SignIn(api, _keychain, _device, log: _log, browserTimeout: _browserTimeout)
+                .SignInWithProviderAsync(providerId, _browser, bound.Token);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _log.Info("The sign-in in the browser was cancelled");
+            return "The sign-in was cancelled.";
+        }
+        catch (OperationCanceledException e)
+        {
+            // Not the person's cancel: the browser's 5 minutes ran out (SignIn says so), or Healdan didn't answer.
+            return bound.IsCancellationRequested ? $"{server.Authority} didn't answer in time." : e.Message;
+        }
+        catch (ProviderRefusedException e)
+        {
+            return ProviderRefusal(e.Code);
+        }
+        catch (InvalidOperationException e)
+        {
+            return e.Message; // not Healdan, an API this helper doesn't speak, another request's state, or the keychain refused
+        }
+        catch (ApiException e) when (e.Code == "sign-in-failed")
+        {
+            return ProviderRefusal("expired"); // the code came too late, or was used
+        }
+        catch (ApiException e)
+        {
+            return Refused(e, "Healdan refused the sign-in.");
+        }
+        catch (JsonException)
+        {
+            return NotHealdan;
+        }
+        catch (HttpRequestException e)
+        {
+            return $"{server.Authority} couldn't be reached: {e.Message}";
+        }
+        catch (IOException e)
+        {
+            return "The sign-in couldn't start: " + e.Message; // no browser, or nowhere to listen for it
+        }
+        return await AfterSignInAsync(server, api, $"through {providerId}");
+    }
+
+    /// <summary>What the web page says for a provider's refusal (M4 spec §5.3). None names the provider: the window already shows which button was clicked.</summary>
+    internal static string ProviderRefusal(string code) => code switch
+    {
+        "no-group" => "Your account doesn't give you access to Healdan. Ask an administrator.",
+        "email-taken" => "Healdan can't tell which account is yours. Ask an administrator.",
+        "username-taken" => "Healdan already has an account with your username. Ask an administrator.",
+        "account" => "This account can't sign in now. Ask an administrator.",
+        "expired" => "That sign-in took too long or was already used. Start again.",
+        _ => "The sign-in provider couldn't sign you in. Try again, or ask an administrator."
+    };
+
+    private const string NotHealdan = "That address isn't a Healdan server.";
+
+    /// <summary>The web page's word for a provider with no label of its own, as its sign-in page shows it.</summary>
+    private const string DefaultProviderLabel = "Sign In";
+
+    /// <summary>The password link's label when the server gives none, as <c>signin.password.label</c>'s default.</summary>
+    private const string DefaultPasswordLabel = "Sign In with a Password";
+
+    /// <summary>What Healdan's refusal says, as the Sign In window shows it.</summary>
+    private static string Refused(ApiException e, string otherwise) => e.Code switch
+    {
+        "http-404" => NotHealdan,
+        _ when e.Code.StartsWith("http-", StringComparison.Ordinal) => $"The server answered {e.Status}: {e.Detail}",
+        _ => e.Detail.Length > 0 ? e.Detail : otherwise
+    };
+
+    /// <summary>
+    /// The checks before either sign-in, and the client it signs in with: null when it can go on, else why not. The
+    /// address must be one the helper can use, and the running cycle's server if there is one, whose client takes the
+    /// new token; and no copy the sign-in would set aside may be open. Before the sign-in, so no token is made for a
+    /// server the helper then doesn't sign in to.
+    /// </summary>
+    private string? BeforeSignIn(string address, out Uri server, out HealdanApi api)
+    {
+        (server, api) = (null!, null!);
         try
         {
             server = ParseAddress(address);
@@ -645,47 +826,21 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         {
             return e is ArgumentException { ParamName: { } name } ? e.Message.Replace($" (Parameter '{name}')", "") : e.Message;
         }
+        return OpenToSetAside(server);
+    }
 
-        // Before the sign-in, so no token is made for a server the helper then doesn't sign in to.
-        if (OpenToSetAside(server) is { } open)
-            return open;
-
-        using var timeout = new CancellationTokenSource(SignInTimeout);
-        try
-        {
-            await new SignIn(api, _keychain, _device).SignInAsync(user.Trim(), password, timeout.Token);
-        }
-        catch (InvalidOperationException e)
-        {
-            return e.Message; // not Healdan, an API this helper doesn't speak, or the keychain refused
-        }
-        catch (ApiException e)
-        {
-            return e.Code switch
-            {
-                "http-404" => "That address isn't a Healdan server.",
-                _ when e.Code.StartsWith("http-", StringComparison.Ordinal) => $"The server answered {e.Status}: {e.Detail}",
-                _ => e.Detail.Length > 0 ? e.Detail : "Healdan refused the sign-in."
-            };
-        }
-        catch (JsonException)
-        {
-            return "That address isn't a Healdan server.";
-        }
-        catch (OperationCanceledException)
-        {
-            return $"{server.Authority} didn't answer within {SignInTimeout.TotalSeconds:0} seconds.";
-        }
-        catch (HttpRequestException e)
-        {
-            return $"{server.Authority} couldn't be reached: {e.Message}";
-        }
-
+    /// <summary>
+    /// After either sign-in has kept its token: the copies of another server set aside, the server kept in the
+    /// settings, and the helper started, or the saves that waited for a <c>401</c> sent. Null once that's done, else
+    /// why the sign-in can't go on (<see cref="SetCopiesAside"/>).
+    /// </summary>
+    private async Task<string?> AfterSignInAsync(Uri server, HealdanApi api, string how)
+    {
         if (SetCopiesAside(server) is { } refusal)
             return refusal;
         HelperSettings.Update(_paths, s => s.Server = Address(server));
         SetSignedIn(api, await UserNameAsync(api));
-        _log.Info($"Signed in to {LinkName(api)} as {user.Trim()}");
+        _log.Info($"Signed in to {LinkName(api)} {how}");
         if (Live is { } running)
             running.RetryNow(); // after a 401: the saves that waited go now
         else

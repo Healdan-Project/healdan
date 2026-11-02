@@ -109,6 +109,8 @@ public class GroupsPanel extends AdminPanel {
 		
 		ListGridField name = new ListGridField("name", I18N.message("name"), 150);
 		name.setCanFilter(true);
+		// Healdan: a group's name and description are text, not HTML
+		name.setEscapeHTML(true);
 
 		ListGridField source = new ListGridField("source", I18N.message("source"), 100);
 		source.setCanFilter(true);
@@ -116,6 +118,7 @@ public class GroupsPanel extends AdminPanel {
 
 		ListGridField description = new ListGridField(DESCRIPTION, I18N.message(DESCRIPTION), 200);
 		description.setCanFilter(true);
+		description.setEscapeHTML(true);
 
 		list = new RefreshableListGrid();
 		list.setEmptyMessage(I18N.message("notitemstoshow"));

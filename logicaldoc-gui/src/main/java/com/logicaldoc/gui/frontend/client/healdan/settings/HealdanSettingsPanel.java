@@ -30,7 +30,8 @@ import com.smartgwt.client.widgets.grid.ListGridRecord;
 import com.smartgwt.client.widgets.layout.HLayout;
 
 /**
- * Healdan's settings and its client list, under Administration (spec 8.6)
+ * Healdan's settings and its client list, under Administration (spec 8.6), with
+ * the Sign-In tab beside them (M4 spec section 10.3)
  */
 public class HealdanSettingsPanel extends AdminPanel {
 
@@ -67,6 +68,7 @@ public class HealdanSettingsPanel extends AdminPanel {
 
 	public HealdanSettingsPanel() {
 		super("Healdan settings");
+		tabs.addTab(new SignInTab());
 	}
 
 	@Override
