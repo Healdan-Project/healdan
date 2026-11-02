@@ -250,6 +250,78 @@ public sealed class SignInWindowTests
     }
 
     [MacFact]
+    public Task AFailedProviderSignInPutsTheFocusOnItsButton()
+    {
+        // The button the person pressed went off while the browser was waited for, and took the focus with it.
+        var prompt = new FakePrompt
+        {
+            OnProviders = _ => Task.FromResult<ProviderChoice?>(Two),
+            OnProvider = (_, _, _) => Task.FromResult<string?>("The sign-in provider couldn't sign you in. Try again, or ask an administrator.")
+        };
+        return Run(prompt.Make(), async window =>
+        {
+            await window.Loading;
+            var buttons = ProviderButtons(window);
+            buttons[1].Focus(); // where a click leaves it
+
+            Click(buttons[1]);
+            var problem = Find<TextBlock>(window, "Problem");
+            await Until(() => Shown(problem));
+
+            Assert.True(buttons[1].IsEnabled);
+            Assert.True(buttons[1].IsFocused);
+            Assert.Same(buttons[1], window.FocusManager?.GetFocusedElement());
+        });
+    }
+
+    [MacFact]
+    public Task AFailedProviderSignInPutsTheFocusOnItsButtonWhereverItWas()
+    {
+        // Even in a field the person had left.
+        var prompt = new FakePrompt
+        {
+            OnProviders = _ => Task.FromResult<ProviderChoice?>(Two),
+            OnProvider = (_, _, _) => Task.FromResult<string?>("The sign-in provider couldn't sign you in. Try again, or ask an administrator.")
+        };
+        return Run(prompt.Make(), async window =>
+        {
+            await window.Loading;
+            var buttons = ProviderButtons(window);
+            Find<TextBox>(window, "Server").Focus();
+
+            Click(buttons[0]);
+            var problem = Find<TextBlock>(window, "Problem");
+            await Until(() => Shown(problem));
+
+            Assert.Same(buttons[0], window.FocusManager?.GetFocusedElement());
+        });
+    }
+
+    [MacFact]
+    public Task AStaleProblemGoesWhenTheWindowIsShownAgain()
+    {
+        var prompt = new FakePrompt
+        {
+            OnProviders = _ => Task.FromResult<ProviderChoice?>(Two),
+            OnProvider = (_, _, _) => Task.FromResult<string?>("Your account doesn't give you access to Healdan. Ask an administrator.")
+        };
+        return Run(prompt.Make(), async window =>
+        {
+            await window.Loading;
+            Click(ProviderButtons(window)[0]);
+            var problem = Find<TextBlock>(window, "Problem");
+            await Until(() => Shown(problem));
+
+            window.Hide();
+            Assert.True(problem.IsVisible); // hidden is not shown again
+            window.Show();
+
+            Assert.False(Shown(problem));
+            Assert.All(ProviderButtons(window), b => Assert.True(Shown(b) && b.IsEnabled));
+        });
+    }
+
+    [MacFact]
     public Task TheBrowsersTimeOutReachesTheErrorLine()
     {
         // The prompt's 5 minutes run out without the person cancelling: the window says so rather than going quiet.
@@ -425,6 +497,163 @@ public sealed class SignInWindowTests
             Find<TextBox>(window, "Password").Focus();
             await window.Loading;
             Assert.Equal(2, prompt.ProvidersAsked.Count);
+        });
+    }
+
+    [MacFact]
+    public Task ShowingTheWindowAgainAsksAgainAfterAnAnswerThatDidntCome()
+    {
+        // A fixed address is read-only, so nobody clicks into it to ask again: showing the window does.
+        var answers = new Queue<ProviderChoice?>([null, Two]);
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(answers.Dequeue()) };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
+        {
+            await window.Loading;
+            Assert.Empty(ProviderButtons(window));
+
+            window.Hide();
+            window.Show();
+            await window.Loading;
+
+            Assert.Equal(["https://healdan.example", "https://healdan.example"], prompt.ProvidersAsked);
+            Assert.Equal(2, ProviderButtons(window).Count);
+
+            // Answered, it isn't asked again
+            window.Hide();
+            window.Show();
+            await window.Loading;
+            Assert.Equal(2, prompt.ProvidersAsked.Count);
+        });
+    }
+
+    [MacFact]
+    public Task ShowingTheWindowAgainWhileAskingAsksOnce()
+    {
+        var answer = new TaskCompletionSource<ProviderChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var prompt = new FakePrompt { OnProviders = _ => answer.Task };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
+        {
+            window.Hide();
+            window.Show();
+            window.Hide();
+            window.Show();
+
+            // The window asks on the thread pool, so the ask is recorded a moment later
+            await Until(() => !prompt.ProvidersAsked.IsEmpty);
+            Assert.Equal(["https://healdan.example"], prompt.ProvidersAsked); // the one answer is still to come
+
+            answer.SetResult(null);
+            await window.Loading;
+            Assert.Equal(["https://healdan.example"], prompt.ProvidersAsked);
+        });
+    }
+
+    [MacFact]
+    public Task SignInAsksAgainFirstAndShowsTheProvidersWithoutSendingThePassword()
+    {
+        // The person typed a password at a server whose providers never came. Now they do: that is news to the person,
+        // and an account that signs in through a provider has no password for it to count against.
+        var answers = new Queue<ProviderChoice?>([null, Two]);
+        var prompt = new FakePrompt { OnProviders = _ => Task.FromResult(answers.Dequeue()) };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
+        {
+            await window.Loading;
+            Assert.Empty(ProviderButtons(window));
+            Find<TextBox>(window, "User").Text = "robert";
+            var password = Find<TextBox>(window, "Password");
+            password.Text = "pa55-w0rd";
+
+            Click(Find<Button>(window, "SignInButton"));
+            await Until(() => ProviderButtons(window).Count == 2);
+
+            Assert.Equal(["https://healdan.example", "https://healdan.example"], prompt.ProvidersAsked);
+            Assert.Empty(prompt.PasswordSignIns); // not sent
+            Assert.Equal("pa55-w0rd", password.Text); // and still there, to send with the next press
+            Assert.True(window.IsVisible);
+            Assert.True(Shown(Find<TextBox>(window, "User"))); // something was typed, so the form stays open
+            Assert.True(Find<Button>(window, "SignInButton").IsEnabled);
+            Assert.False(Shown(Find<TextBlock>(window, "Problem")));
+            Assert.All(ProviderButtons(window), b => Assert.True(b.IsEnabled));
+
+            Click(Find<Button>(window, "SignInButton")); // the second press means it
+            await Until(() => !window.IsVisible);
+
+            Assert.Equal([("https://healdan.example", "robert", "pa55-w0rd")], prompt.PasswordSignIns);
+            Assert.Equal(2, prompt.ProvidersAsked.Count); // answered by now, so not asked a third time
+        });
+    }
+
+    [MacFact]
+    public Task SignInSendsThePasswordWhenTheProvidersStillDontComeBack()
+    {
+        // The password form's Sign In then says why, as it always has.
+        var prompt = new FakePrompt
+        {
+            OnProviders = _ => Task.FromResult<ProviderChoice?>(null),
+            OnPassword = (_, _, _) => Task.FromResult<string?>("https://healdan.example couldn't be reached.")
+        };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
+        {
+            await window.Loading;
+            Find<TextBox>(window, "User").Text = "robert";
+            Find<TextBox>(window, "Password").Text = "pa55-w0rd";
+
+            Click(Find<Button>(window, "SignInButton"));
+            var problem = Find<TextBlock>(window, "Problem");
+            await Until(() => Shown(problem));
+
+            Assert.Equal("https://healdan.example couldn't be reached.", problem.Text);
+            Assert.Equal(["https://healdan.example", "https://healdan.example"], prompt.ProvidersAsked);
+            Assert.Equal([("https://healdan.example", "robert", "pa55-w0rd")], prompt.PasswordSignIns);
+            Assert.Equal("", Find<TextBox>(window, "Password").Text);
+            Assert.Empty(ProviderButtons(window));
+        });
+    }
+
+    [MacFact]
+    public Task SignInPressedWhileItAsksAgainAsksOnce()
+    {
+        var second = new TaskCompletionSource<ProviderChoice?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var asked = 0;
+        var prompt = new FakePrompt { OnProviders = _ => ++asked == 1 ? Task.FromResult<ProviderChoice?>(null) : second.Task };
+        return Run(prompt.Make(server: "https://healdan.example", serverFixed: true), async window =>
+        {
+            await window.Loading;
+            Find<TextBox>(window, "User").Text = "robert";
+            Find<TextBox>(window, "Password").Text = "pa55-w0rd";
+
+            Click(Find<Button>(window, "SignInButton"));
+            Click(Find<Button>(window, "SignInButton"));
+            window.Hide();
+            window.Show();
+
+            // The window asks on the thread pool, so the second ask is recorded a moment later
+            await Until(() => prompt.ProvidersAsked.Count >= 2);
+            Assert.Equal(2, prompt.ProvidersAsked.Count);
+            Assert.Empty(prompt.PasswordSignIns); // nothing is sent while the providers are still being asked
+
+            second.SetResult(Two);
+            await Until(() => ProviderButtons(window).Count == 2);
+            Assert.Equal(2, prompt.ProvidersAsked.Count);
+            Assert.Empty(prompt.PasswordSignIns);
+        });
+    }
+
+    [MacFact]
+    public Task SignInDoesntAskAgainAfterAnAnswer()
+    {
+        var prompt = new FakePrompt();
+        return Run(prompt.Make(), async window =>
+        {
+            await window.Loading;
+            Find<TextBox>(window, "User").Text = "admin";
+            Find<TextBox>(window, "Password").Text = "pa55-w0rd";
+
+            Click(Find<Button>(window, "SignInButton"));
+            await Until(() => !window.IsVisible);
+
+            Assert.Equal(["healdan.example"], prompt.ProvidersAsked);
+            Assert.Equal([("healdan.example", "admin", "pa55-w0rd")], prompt.PasswordSignIns);
         });
     }
 

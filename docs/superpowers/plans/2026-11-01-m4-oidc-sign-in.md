@@ -1654,9 +1654,9 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **The helper**
 
-- The first server call on the provider path is bounded only by the overall 6 minutes. Showing the window again doesn't clear a stale problem, a refusal leaves no focus, and Enter in the address field does nothing while the form is folded. (Task 15)
+- The first server call on the provider path is bounded only by the overall 6 minutes. Enter in the address field does nothing while the form is folded. (Task 15)
 - A cancel during the exchange can leave a device token at Healdan that the helper never kept. (Task 15)
-- After an answer that didn't come, a helper with its server fixed asks for the providers again only when the address field loses focus: neither Sign In nor the password field asks. (The final review)
+- After an answer that didn't come, a helper with its server fixed doesn't ask for the providers again when the person moves into the password field. (The final review)
 - A caller's cancel comes back with the internal token, not the caller's. Any `GET` of `/` at the port ends the wait, so another local program could still spoil a sign-in, but not take it over: a second start with the helper's challenge is refused. Windows' `http.sys` would need a URL reservation for an IP-literal prefix, when Windows comes. (Task 14)
 
 **Docs**

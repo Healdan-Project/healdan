@@ -90,6 +90,8 @@ an account that signs in through a provider doesn't have: install the latest.
 When your administrator has set up a sign-in provider, the window shows a button for each, such as **Sign In with
 Microsoft**, once it has found your server. They're the web page's buttons, with the same words.
 
+![The Sign In to Healdan window for a server with a sign-in provider: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address https://healdan.example, the Sign In with Microsoft button, the Sign In with a Password link under it, and the Cancel button](sign-in-provider.png)
+
 1. Choose the button. The helper opens a tab in your usual browser at the provider, and the window says "Finish
    signing in in your browser…".
 2. Sign in at the provider in that tab, as you do there for anything else. If you're signed in there already, it

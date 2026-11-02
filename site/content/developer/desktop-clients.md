@@ -311,17 +311,25 @@ is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in
    A `401 sign-in-failed` means the code was used, came too late or didn't match, and the sign-in starts again.
 
 The Sign In window offers it (`Windows/SignInWindow.axaml`, through `SignInPrompt`). `HelperSession.ProvidersAsync`
-reads `GET /server` when the window opens, and again each time the address is changed and left, or just left
-after an answer that didn't come. A server with
+reads `GET /server` when the window opens, and again each time the address is changed and left. An answer that
+didn't come (the server couldn't be reached, or isn't Healdan) is asked for again, because a fixed address, as after a
+refused token, is read-only and nobody leaves it: whenever the window is shown again (Avalonia raises `Opened` on every
+`Show`), when the address field is left, and when **Sign In** is pressed. An ask under way is never repeated for the
+same address, and none runs on the UI thread. **Sign In** asks first, with the fields off and its label "Signing In…",
+and sends the password only if the providers still don't come. If they do, the window shows the buttons and sends
+nothing, since an account that signs in through a provider has no password for a wrong one to count against; what was
+typed stays in the form, and a second **Sign In** sends it. A server with
 providers gets a button for each, in its order, and the password form folds behind a link labelled with its
 `passwordLabel`, unless something is typed in the form already. A server with none, an older one, or one the helper
-can't reach or doesn't speak to gets the password form as before, whose Sign In then says why. A button runs
+can't reach or doesn't speak to gets the password form as before, whose Sign In then says why. Showing the window
+again clears the error line, which is a stale one by then. A button runs
 `HelperSession.TrySignInWithProviderAsync`, which makes the password sign-in's checks before and after (the address,
 another server's copies, the settings) and turns what went wrong into the window's error line:
 
 - **A refusal** says what the web page's done page says for its code (`HelperSession.ProviderRefusal`), and a code
   it doesn't know as `provider`. No refusal names the provider: the window already shows which button was clicked. A
-  `401 sign-in-failed` at the exchange says `expired`'s message.
+  `401 sign-in-failed` at the exchange says `expired`'s message. The button went off while the window waited and took
+  the focus with it, so the window gives it back to that button (the first, if it is gone) after any problem it shows.
 - **The browser's five minutes** running out are an `OperationCanceledException` too, but not the person's: its
   message reaches the error line. The window's Cancel, and closing the window, cancel the token the call was given,
   and that answer shows nothing. The whole call is bounded at the five minutes plus 30 seconds for each of Healdan's
@@ -688,8 +696,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   then follows its redirect to the helper's real listener, and records where the listener sent it on. `PkceTests`
   hold the challenge to RFC 7636's appendix B.
 - **`SignInWindowTests`** drive the Sign In window headless, with a fake prompt: the buttons and the folded form,
-  the wait and its Cancel, a refusal and the browser's time running out on the error line, and the providers asked
-  for again when the address changes. `HelperSessionTests` run `TrySignInWithProviderAsync` with the fake browsers
+  the wait and its Cancel, a refusal and the browser's time running out on the error line and the focus it leaves,
+  and the providers asked for again when the address changes, when the window is shown again and when Sign In is
+  pressed. `HelperSessionTests` run `TrySignInWithProviderAsync` with the fake browsers
   above.
 - **`Category=Stack`** tests run against a real stack, and skip without `HEALDAN_STACK_URL`: `StackCycleTests` the
   cycle, and `StackProviderSignInTests`, which also needs `HEALDAN_STACK_SIGNIN_PROVIDER`, a sign-in through the
