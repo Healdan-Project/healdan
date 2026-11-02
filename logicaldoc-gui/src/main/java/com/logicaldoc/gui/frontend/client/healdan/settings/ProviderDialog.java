@@ -221,6 +221,8 @@ public class ProviderDialog extends Window {
 		secret.setHint(provider.isHasSecret() ? "Set: leave empty to keep it" : "Not Set");
 
 		CheckboxItem enabled = ItemFactory.newCheckbox(ENABLED, "On");
+		// ItemFactory looks the title up in CE's bundle, whose "on" is lower case
+		enabled.setTitle("On");
 		enabled.setValue(provider.isEnabled());
 		enabled.setHint("off hides its button and stops its sign-ins; nothing is unlinked");
 
