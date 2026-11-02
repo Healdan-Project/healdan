@@ -1593,7 +1593,7 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
 **The owner's walkthrough (2026-11-02)**
 
 - **Rows 1 to 8 passed on Authentik** (spec §16.2 has each). Entra ID wasn't set up, so its two questions stay open: whether it accepts `client_secret_post`, and whether it signs refreshed ID tokens.
-- **What it found:** Check doesn't test the client secret, so a wrong one passed it, in the follow-ups below; the helper gave no reason when a check signed it out, which its Sign In window now gives ("Your sign-in ended. Sign in again.", PR_LINK); and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
+- **What it found:** Check doesn't test the client secret, so a wrong one passed it, in the follow-ups below; the helper gave no reason when a check signed it out, which its Sign In window now gives ("Your sign-in ended. Sign in again.", [Healdan-Project/healdan#168](https://github.com/Healdan-Project/healdan/pull/168)); and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
 - **Before it,** a local check of the merged M4 on a stack with Keycloak found a refusal naming a group shown as HTML in the old UI's error popup, fixed in [Healdan-Project/healdan#165](https://github.com/Healdan-Project/healdan/pull/165), and passed the rest.
 
 ## Follow-ups
