@@ -199,6 +199,25 @@ public class SignInsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testOnlyProviderAccounts() throws Exception {
+		// openSession must not be a way in as admin or as an account with a password (ruling R15)
+		User admin = UserDAO.get().findById(User.USERID_ADMIN, true);
+		User clerk = fx.user("clerk");
+		for (User user : List.of(admin, clerk)) {
+			TokenRefusedException e = assertThrows(user.getUsername(), TokenRefusedException.class,
+					() -> SignIns.openSession(user, client));
+			assertEquals(SignInAuthenticator.NOT_PROVIDER, e.getMessage());
+			assertEquals(0, SessionManager.get().countOpened(user.getUsername()));
+		}
+		assertNull(SignIns.PENDING.get());
+		// Refused without counting against the address or the account
+		assertEquals(0, counters("loginfail-%"));
+
+		// The account the provider sign-in made still opens
+		assertNotNull(SignIns.openSession(jane, client));
+	}
+
+	@Test
 	public void testThrottleBlocksTheAddress() throws Exception {
 		// 20 failures from the address: the limit the throttle seed sets
 		SequenceDAO.get().next("loginfail-ip-" + client.getAddress(), 0L, Tenant.SYSTEM_ID, 20L);

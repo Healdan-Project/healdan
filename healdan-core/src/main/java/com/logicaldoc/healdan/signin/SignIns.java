@@ -35,6 +35,16 @@ public final class SignIns {
 	}
 
 	/**
+	 * @param key a session's key, as CE's chain was given it
+	 * @return true if {@link #openSession} is opening a session on this thread
+	 *         with this one-time key: a provider sign-in opened it
+	 */
+	static boolean opening(String key) {
+		Pending pending = PENDING.get();
+		return pending != null && key != null && pending.key().equals(key);
+	}
+
+	/**
 	 * Opens a CE session for an account a provider sign-in decided, through
 	 * CE's whole sign-in chain and its throttle. The chain is given a
 	 * one-time key made here, 43 random characters that stand for the account
@@ -42,12 +52,16 @@ public final class SignIns {
 	 * client ever knows: CE's {@code X-API-KEY} lookup can't find it, and the
 	 * account's id and name play no part in it.
 	 *
-	 * @param user the account the sign-in decided
+	 * @param user the account the sign-in decided, which must be a provider
+	 *        account ({@code UserSource.OIDC})
 	 * @param client the client
 	 * @return the new session, or null if the chain gave none
 	 * @throws AuthenticationException if the chain or its throttle refuses:
 	 *         the account is disabled, expired or outside its working hours,
-	 *         or the client's address is blocked
+	 *         or the client's address is blocked; or a
+	 *         {@code TokenRefusedException}, which isn't counted, if it isn't a
+	 *         provider account, such as {@code admin} or an account with a
+	 *         password (ruling R15)
 	 */
 	public static Session openSession(User user, Client client) throws AuthenticationException {
 		Pending pending = new Pending(PREFIX + ApiTokens.randomPart(), user.getId());

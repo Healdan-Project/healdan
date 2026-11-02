@@ -257,7 +257,7 @@ public class DeviceHoldsTest extends AbstractHealdanTestCase {
 	}
 
 	private ApiToken token(String device) throws Exception {
-		return ApiTokens.get().issue(clerk, "Laptop", device, null).row();
+		return ApiTokens.get().issue(clerk, "Laptop", device, null, null, null).row();
 	}
 
 	private Document reload() throws Exception {

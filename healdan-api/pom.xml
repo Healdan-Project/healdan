@@ -268,6 +268,17 @@
 			</testResource>
 		</testResources>
 		<plugins>
+			<!-- SecretBox makes its key file on the first secret it seals, as the fake sign-in provider's does. A test
+				must not make one in the home folder of whoever runs it -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<healdan.secretKey>${project.build.directory}/healdan-secret.key</healdan.secretKey>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<!-- Swagger UI's files go into this jar under healdan/api/swagger-ui/, and DocsResource serves them at
 				/api/docs/. Not the webjar itself: Tomcat would serve its META-INF/resources, demo page included, at
 				/webjars/ -->

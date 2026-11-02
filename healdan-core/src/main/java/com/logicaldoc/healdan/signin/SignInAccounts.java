@@ -1,5 +1,6 @@
 package com.logicaldoc.healdan.signin;
 
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -20,7 +21,10 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.Session;
+import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
@@ -28,6 +32,7 @@ import com.logicaldoc.core.security.user.UserHistory;
 import com.logicaldoc.core.security.user.UserSource;
 import com.logicaldoc.healdan.signin.GroupSync.Change;
 import com.logicaldoc.healdan.util.BasicPlane;
+import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.html.HTMLSanitizer;
 import com.logicaldoc.util.spring.Context;
 
@@ -53,6 +58,16 @@ import com.logicaldoc.util.spring.Context;
  * map stays (spec section 7.2, step 2). And a link whose account was deleted is
  * closed first, as it records only that (controller's ruling R8(b)).
  * <p>
+ * Making an account a provider account, by linking it or by finding a linked
+ * one with another source or a password, deletes its LogicalDOC API keys, and
+ * once the transaction commits closes the CE sessions they opened (owner,
+ * 2026-11-01): a key signs in with no password, so it would skip the provider.
+ * CE's {@code HealdanThrottle} refuses any key made for it afterwards.
+ * <p>
+ * {@link SignInAdmin}'s unlinking runs under the same locks
+ * ({@link #lockedOnce}), so it can't land in the middle of a decision for the
+ * person it unlinks.
+ * <p>
  * Every link, new account and membership change is logged at info, after the
  * transaction commits, with the provider, the account's username and the
  * group's name; never a token or another claim's value (spec section 8).
@@ -68,6 +83,13 @@ public class SignInAccounts {
 
 	/** A new account's username is taken or can't be stored */
 	public static final String USERNAME_TAKEN = "username-taken";
+
+	/**
+	 * The account the email matches is disabled or past its expiry date, so
+	 * CE's sign-in would refuse it (ruling R16); also the code of CE's own
+	 * refusals, which the sign-in pages give
+	 */
+	public static final String ACCOUNT = "account";
 
 	/** What a new account's language is when {@code _system} has none: what CE's user editor starts on */
 	static final String DEFAULT_LANGUAGE = "en";
@@ -119,8 +141,9 @@ public class SignInAccounts {
 	/**
 	 * The sign-in is refused, and made and linked nothing
 	 *
-	 * @param code {@code no-group}, {@code email-taken} or
-	 *        {@code username-taken} (spec section 5.3)
+	 * @param code {@code no-group}, {@code email-taken},
+	 *        {@code username-taken} or {@code account} (spec section 5.3;
+	 *        ruling R16)
 	 */
 	public record Refused(String code) implements Decision {
 	}
@@ -228,6 +251,15 @@ public class SignInAccounts {
 							printable(match.getUsername()), why);
 					return new Refused(EMAIL_TAKEN);
 				}
+				// CE's chain would refuse it once linked, so it isn't linked: nothing changes (ruling R16). What can
+				// pass, such as working hours or an address's block, is left to the chain after the link.
+				String state = refusedState(match);
+				if (state != null) {
+					journal.info("Refused a first sign-in through the provider {} for {}: its email matches the "
+							+ "account {}, which {}", p.id(), printable(claims.username()),
+							printable(match.getUsername()), state);
+					return new Refused(ACCOUNT);
+				}
 				return linkByEmail(match.getId(), p, claims, map, granted, journal);
 			}
 		}
@@ -252,13 +284,17 @@ public class SignInAccounts {
 
 		// Reads first, then the account's changes, then its store: no flush may write them before CE's listeners see them
 		List<Change> changes = GroupSync.changes(user, map, granted);
-		boolean wasProvider = isProviderAccount(user) && user.getImpersonators().isEmpty();
+		boolean converting = !isProviderAccount(user);
+		boolean wasProvider = !converting && user.getImpersonators().isEmpty();
 		boolean changed = followProvider(user, claims);
 		if (!wasProvider)
 			journal.warn("The account {}, linked to the sign-in provider {}, had a password, impersonators or another "
 					+ "source; it's a provider account again", printable(user.getUsername()), p.id());
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
+		// It wasn't a provider account, so its keys may have signed it in
+		if (converting)
+			deleteApiKeys(user, signsInThrough(p), journal);
 		journal.changes(p, user, changes);
 
 		link.setLastSignIn(new Date());
@@ -284,6 +320,7 @@ public class SignInAccounts {
 
 		journal.info("Linked the account {} to the sign-in provider {}, by its email", printable(user.getUsername()),
 				p.id());
+		deleteApiKeys(user, signsInThrough(p), journal);
 		if (hadImpersonators)
 			journal.info("The account {} no longer lets other accounts impersonate it, as it's a provider account",
 					printable(user.getUsername()));
@@ -351,11 +388,119 @@ public class SignInAccounts {
 		}
 
 		List<Change> changes = GroupSync.changes(user, map, granted);
+		boolean converting = !isProviderAccount(user);
 		boolean changed = followProvider(user, claims);
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
+		if (converting)
+			deleteApiKeys(user, signsInThrough(p), journal);
 		journal.changes(p, user, changes);
 		return true;
+	}
+
+	private static String signsInThrough(SignInProvider p) {
+		return "as it signs in through the sign-in provider " + p.id();
+	}
+
+	/**
+	 * Deletes the account's LogicalDOC API keys, the way CE's own user delete
+	 * does: when it's a provider account from now on (owner, 2026-11-01), and
+	 * when it was unlinked, as a key made while it was linked never signed in
+	 * and would start to (ruling R17). Every row goes, the ones deleted in the
+	 * web page included, which CE keeps marked deleted; the line logged counts
+	 * the others, the ones its API Keys screen listed. Never a key:
+	 * {@code ld_apikey} holds only their SHA-256.
+	 * <p>
+	 * Once the transaction commits, the open CE sessions the keys opened are
+	 * closed too, as CE's {@code X-API-KEY} lookup finds a session by its key's
+	 * hash ({@code SessionManager.getSessionFromApiKey}) and would go on
+	 * finding them after the keys went.
+	 *
+	 * @param user the account
+	 * @param why why they go, for the line logged, such as {@code as it signs
+	 *        in through the sign-in provider entra}
+	 * @param journal the transaction's journal
+	 */
+	static void deleteApiKeys(User user, String why, Journal journal) throws PersistenceException {
+		ApiKeyDAO keys = ApiKeyDAO.get();
+		Map<String, Object> account = Map.of("userId", user.getId());
+		List<String> hashes = keys.queryForList("select ld_key from ld_apikey where ld_userid = :userId", account,
+				String.class, null);
+		if (hashes.isEmpty())
+			return;
+		int listed = keys.queryForInt("select count(*) from ld_apikey where ld_userid = :userId and ld_deleted = 0",
+				account);
+		keys.jdbcUpdate("delete from ld_apikey where ld_userid = :userId", account);
+
+		String username = printable(user.getUsername());
+		if (listed > 0)
+			journal.info("Deleted the {} LogicalDOC API {} of the account {}, {}", listed, listed == 1 ? "key" : "keys",
+					username, why);
+		Set<String> deleted = Set.copyOf(hashes);
+		journal.afterCommit(() -> closeKeySessions(deleted, username));
+	}
+
+	/**
+	 * Closes this node's open CE sessions that one of the keys opened. CE's
+	 * pool keeps each session's key as it was given, so a session is matched
+	 * by the part before an impersonation's {@code >}, as CE's chain reads it:
+	 * {@code <key>>bob} opens a session as {@code bob} with the key's owner as
+	 * the impersonator. Only the sessions in this node's pool can be found
+	 * from a key. Each session is checked and closed on its own, so one that
+	 * fails doesn't keep the others open. It never throws: a failure here is
+	 * logged, and the decision, already committed, stands.
+	 */
+	private static void closeKeySessions(Set<String> hashes, String username) {
+		int closed = 0;
+		int failed = 0;
+		try {
+			SessionManager sessions = SessionManager.get();
+			// newSession holds this lock while it signs in, so a key sign-in that read its key before the commit has its
+			// session in the pool by now, and one that starts later finds the key gone. Healdan never decides a sign-in
+			// inside newSession, so the identity's lock, held here, is never taken the other way round.
+			synchronized (sessions) {
+				for (Session session : sessions.getSessions()) {
+					try {
+						if (session.isOpen() && openedWith(session, hashes)) {
+							sessions.kill(session.getSid());
+							closed++;
+						}
+					} catch (RuntimeException e) {
+						failed++;
+						log.debug("A session couldn't be checked or closed", e);
+					}
+				}
+			}
+		} catch (RuntimeException e) {
+			failed++;
+			log.debug("The sessions couldn't be read", e);
+		}
+		if (closed > 0)
+			log.info("Closed {} {} opened with the deleted API keys of the account {}", closed,
+					closed == 1 ? "session" : "sessions", username);
+		if (failed > 0)
+			log.warn("Couldn't check or close {} of the sessions that may have been opened with the deleted API keys "
+					+ "of the account {}; an administrator can kill them in the Sessions list", failed, username);
+	}
+
+	/**
+	 * Whether one of the keys opened the session. A session opened with a
+	 * password has no key, neither as given nor hashed, so it's never one.
+	 */
+	private static boolean openedWith(Session session, Set<String> hashes) {
+		String key = session.getDecodedKey();
+		if (key == null) {
+			// The set refuses to look a null up
+			String hash = session.getKey();
+			return hash != null && hashes.contains(hash);
+		}
+		if (key.contains(">"))
+			key = StringUtils.substringBefore(key, ">").trim();
+		try {
+			return hashes.contains(Encrypter.encryptSHA256(key));
+		} catch (NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	/** Marks a link whose account is gone unlinked now, by nobody */
@@ -387,6 +532,19 @@ public class SignInAccounts {
 			return "is a system account";
 		if (identities.findLinkedByUser(user.getId()).isPresent())
 			return "is already linked";
+		return null;
+	}
+
+	/**
+	 * @return why CE's sign-in would refuse the account whatever the time or
+	 *         the address, as {@code DefaultAuthenticator.validateUser} reads
+	 *         it, or null if it wouldn't
+	 */
+	private static String refusedState(User user) {
+		if (!user.isEnabled())
+			return "is disabled";
+		if (user.isExpired())
+			return "has expired";
 		return null;
 	}
 
@@ -560,7 +718,7 @@ public class SignInAccounts {
 	 * A username for a log line: its control characters replaced, so it can't
 	 * forge a line, and at most 100 characters
 	 */
-	private static String printable(String text) {
+	static String printable(String text) {
 		if (text == null)
 			return "(no username)";
 		StringBuilder clean = new StringBuilder(text.length());
@@ -571,6 +729,33 @@ public class SignInAccounts {
 	private static void checkIdentity(SignInProvider p, IdClaims claims) {
 		if (p == null || claims == null || StringUtils.isBlank(claims.identity()))
 			throw new IllegalArgumentException("A provider sign-in needs the provider and the person's identity at it");
+	}
+
+	/**
+	 * Runs work in one transaction under the identity's lock, as decisions run,
+	 * so that it can't interleave with a sign-in or a re-check of that person:
+	 * unlinking (spec section 7.7). Unlike a decision it's tried once, as its
+	 * refusals are the caller's to give.
+	 *
+	 * @param provider the provider's id
+	 * @param identity the identity at the provider
+	 * @param work the work, which logs through the journal
+	 * @return what the work returns, once its transaction committed and its
+	 *         journal was written
+	 * @throws PersistenceException what the work throws, or an error at data
+	 *         layer
+	 * @throws IllegalStateException if it's called inside a transaction
+	 */
+	<T> T lockedOnce(String provider, String identity, Work<T> work) throws PersistenceException {
+		if (TransactionSynchronizationManager.isActualTransactionActive())
+			throw new IllegalStateException("Unlinking runs its own transaction: call it outside one");
+		ReentrantLock lock = locks[Math.floorMod(Objects.hash(provider, identity), STRIPES)];
+		lock.lock();
+		try {
+			return once(work);
+		} finally {
+			lock.unlock();
+		}
 	}
 
 	/**
@@ -620,7 +805,7 @@ public class SignInAccounts {
 	}
 
 	@FunctionalInterface
-	private interface Work<T> {
+	interface Work<T> {
 		T run(Journal journal) throws PersistenceException;
 	}
 
@@ -637,9 +822,10 @@ public class SignInAccounts {
 	}
 
 	/**
-	 * The log lines of one attempt, written once it commits
+	 * The log lines of one attempt, written once it commits, and what it does
+	 * after the commit
 	 */
-	private static final class Journal {
+	static final class Journal {
 
 		private final List<Runnable> lines = new ArrayList<>();
 
@@ -649,6 +835,11 @@ public class SignInAccounts {
 
 		void warn(String format, Object... arguments) {
 			lines.add(() -> log.warn(format, arguments));
+		}
+
+		/** Something to do once the attempt commits, in its place among the lines, which must not throw */
+		void afterCommit(Runnable action) {
+			lines.add(action);
 		}
 
 		void changes(SignInProvider p, User user, List<Change> changes) {

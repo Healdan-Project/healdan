@@ -84,9 +84,9 @@ import com.sun.net.httpserver.HttpsServer;
  * ({@link #startTls}) it doesn't, and {@link #trust} makes the client trust its
  * certificate. Close it in an {@code @After} method.
  * <p>
- * The settings that make it misbehave last until changed, apart from
- * {@link #refuseRefresh}, {@link #downForRefresh} and {@link #answerRefresh},
- * which answer one refresh each.
+ * The settings that make it misbehave, and {@link #claimsOnRefresh}, last
+ * until changed, apart from {@link #refuseRefresh}, {@link #downForRefresh}
+ * and {@link #answerRefresh}, which answer one refresh each.
  */
 public final class FakeProvider implements AutoCloseable {
 
@@ -148,6 +148,9 @@ public final class FakeProvider implements AutoCloseable {
 	private volatile RSAKey stranger;
 
 	private volatile Map<String, Object> claims = DEFAULT_CLAIMS;
+
+	/** The claims of the refreshes, instead of those the sign-in had, when set */
+	private volatile Map<String, Object> refreshClaims;
 
 	private volatile String alg = "RS256";
 
@@ -320,6 +323,17 @@ public final class FakeProvider implements AutoCloseable {
 	 */
 	public FakeProvider claims(Map<String, Object> c) {
 		claims = Map.copyOf(c);
+		return this;
+	}
+
+	/**
+	 * @param c the claims of the refreshes from now on, instead of those of the
+	 *        sign-in that gave the refresh token, as when the person's groups
+	 *        or names change at the provider; null to go back to those
+	 * @return this provider
+	 */
+	public FakeProvider claimsOnRefresh(Map<String, Object> c) {
+		refreshClaims = c == null ? null : Map.copyOf(c);
 		return this;
 	}
 
@@ -696,7 +710,8 @@ public final class FakeProvider implements AutoCloseable {
 				error(exchange, 400, "invalid_grant");
 				return;
 			}
-			issue(exchange, granted, null, true, !noIdTokenOnRefresh);
+			Map<String, Object> changed = refreshClaims;
+			issue(exchange, changed != null ? changed : granted, null, true, !noIdTokenOnRefresh);
 		} else {
 			error(exchange, 400, "unsupported_grant_type");
 		}

@@ -19,9 +19,9 @@ import jakarta.ws.rs.Path;
 /**
  * The server implements exactly the {@code /v1} operations that
  * {@code openapi.yaml} describes (spec section 4.6), and the file says which
- * of them need no token. Only the docs page, {@code /docs} and {@code /docs/{file}}, and the Office add-in's
- * files, {@code /addin/...}, aren't described: a resource anywhere else, such as {@code /v2} or a mistyped
- * {@code /vl}, fails.
+ * of them need no token. Only the docs page, {@code /docs} and {@code /docs/{file}}, the Office add-in's
+ * files, {@code /addin/...}, and the sign-in pages, {@code /signin/...}, aren't described: a resource anywhere
+ * else, such as {@code /v2} or a mistyped {@code /vl}, fails.
  */
 public class RouteCoverageTest extends AbstractHealdanTestCase {
 
@@ -55,8 +55,10 @@ public class RouteCoverageTest extends AbstractHealdanTestCase {
 					continue;
 				Path methodPath = method.getAnnotation(Path.class);
 				String path = normalize(classPath + "/" + (methodPath != null ? methodPath.value() : ""));
-				// The docs page and the Office add-in's files (AddinResource) are web pages, not JSON API
-				if (!path.equals("/docs") && !path.equals("/docs/{file}") && !path.startsWith("/addin/"))
+				// The docs page, the Office add-in's files (AddinResource) and the sign-in pages (SignInResource) are
+				// web pages, not JSON API
+				if (!path.equals("/docs") && !path.equals("/docs/{file}") && !path.startsWith("/addin/")
+						&& !path.startsWith("/signin/"))
 					routes.put(verb + " " + path, method.isAnnotationPresent(Public.class));
 			}
 		}

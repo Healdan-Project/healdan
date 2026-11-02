@@ -376,6 +376,47 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testEmailMatchingADisabledAccountRefused() throws Exception {
+		// CE's chain would refuse it after the link, so the link must not be made (ruling R16)
+		User jane = local("jane", "jane@firm.example");
+		jdbc().update("update ld_user set ld_enabled = 0 where ld_id = ?", jane.getId());
+		UserDAO.get().evict(jane.getId());
+		String password = storedPassword(jane.getId());
+		DbSnapshot before = snapshot();
+
+		refused("account", accounts().decide(entra, claims("oid-9", "jane.doe", "jane@firm.example", "g-lit")));
+
+		before.assertUnchanged();
+		assertEquals(password, storedPassword(jane.getId()));
+		assertEquals(UserSource.DEFAULT.ordinal(), storedSource(jane.getId()));
+		assertEquals(0, count("hd_signin_identity"));
+	}
+
+	@Test
+	public void testEmailMatchingAnExpiredAccountRefused() throws Exception {
+		User jane = local("jane", "jane@firm.example");
+		jdbc().update("update ld_user set ld_expire = ? where ld_id = ?",
+				new Date(System.currentTimeMillis() - 86_400_000L), jane.getId());
+		UserDAO.get().evict(jane.getId());
+		String password = storedPassword(jane.getId());
+		DbSnapshot before = snapshot();
+
+		refused("account", accounts().decide(entra, claims("oid-9", "jane.doe", "jane@firm.example", "g-lit")));
+
+		before.assertUnchanged();
+		assertEquals(password, storedPassword(jane.getId()));
+		assertEquals(UserSource.DEFAULT.ordinal(), storedSource(jane.getId()));
+
+		// An expiry still to come doesn't stop the link
+		jdbc().update("update ld_user set ld_expire = ? where ld_id = ?",
+				new Date(System.currentTimeMillis() + 86_400_000L), jane.getId());
+		UserDAO.get().evict(jane.getId());
+		assertEquals(jane.getId(),
+				allowed(accounts().decide(entra, claims("oid-9", "jane.doe", "jane@firm.example", "g-lit")), true,
+						false).getId());
+	}
+
+	@Test
 	public void testEmailMatchingASystemAccountRefused() throws Exception {
 		String email = jdbc().queryForObject("select ld_email from ld_user where ld_id = ?", String.class,
 				User.USERID_SYSTEM);

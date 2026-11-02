@@ -236,6 +236,10 @@ An admin who wants someone's account ready before their first sign-in makes it b
 - **Linking or making an account turns it into a provider account.** Its source becomes a new `UserSource.OIDC` and its password is removed (set to null).
 - **It can't be given a password.** A Healdan `UserListener` refuses to store a password on a provider account, whichever way it comes: Change Password, the lost-password email, the user editor, SOAP's user calls. The builder lists every path that sets a password, and tests each one.
 - **So no password route signs a provider account in.** `DefaultAuthenticator` refuses a null password (§3.1), and nothing can set one. That covers the sign-in form, WebDAV, CMIS, SOAP, REST and the API's password sign-in.
+- **Nor does a LogicalDOC API key** (owner, 2026-11-01; changed in the build). A CE `ld-` key signs its account in with no password (`ApiKeyAuthenticator`), so a key made before linking, or made afterwards in the web page (`SecurityServiceImpl.createApiKey` needs only a session), would be a second way in that skips the provider (§2.3). So:
+  - Linking an account by email, or a sign-in or re-check that finds a linked account with another source or a password, deletes the account's API keys, as CE's own user delete does, and logs how many went. Once the decision commits, it closes the CE sessions the keys opened, which CE's `X-API-KEY` lookup (`SessionManager.getSessionFromApiKey`) would otherwise go on finding from a deleted key.
+  - The fork-owned `HealdanThrottle`, which `SessionManager.newSession` already calls before CE's chain, refuses a key whose account is a provider account, on every route a key signs in by: `X-API-KEY` through `SessionFilter`, REST's and SOAP's `loginApiKey`, and a Basic or form sign-in carrying a key, as WebDAV and CMIS take one. It reads the key as CE's chain does, so `<key>>bob` is refused too. The refusal names the key by its label and isn't counted against the address or the key, as M2's refused tokens aren't.
+  - Accounts that aren't linked keep their keys, `admin` included. The web page can still make a key for a provider account, and that key never signs in. No new upstream edit; `ProviderApiKeysTest` covers each route.
 - **Accounts that aren't linked keep their passwords** on every route, `admin` included (owner).
 - **Unlinking is the only way back to a password** (§7.7). Without the listener, a lost-password email could quietly give a provider account a password and get round this section.
 
@@ -486,6 +490,7 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 - `healdan-core`: the `signin` package, `plugin.xml`, `V6__signin.sql` for both databases, the seed steps, the POM, and a `UserListener` for §7.3;
 - `healdan-api`: `SignInResource`, `AuthResource`, `ServerResource`, `openapi.yaml`, `RouteCoverageTest` and `Contract` (both leave `/api/signin/` out), and their tests;
 - `logicaldoc-gui`'s Healdan packages: `HealdanSignInButtons`, the Sign-In tab, and the settings bean and service;
+- `logicaldoc-core`'s `HealdanThrottle` (M2's): refusing a provider account's API keys (§7.3; changed in the build);
 - `clients/helper/`: the core, the sign-in window, and its tests;
 - `docker/`: the test overlay with the stand-in provider, `docker/tests/test-signin.sh` (new), and a step in `docker/smoke-test.sh`;
 - `.github/workflows/build-logicaldoc.yml`: `UserSourceTest` in `UPSTREAM_TESTS`;
@@ -521,10 +526,11 @@ One new Flyway script, `V6__signin.sql`, for MariaDB and HSQLDB (`healdan-core`)
 - `install/backup-and-restore.md`: the key in the configuration folder (§13).
 - `install/known-limitations.md`:
   - provider accounts have no password for WebDAV, CMIS, SOAP or REST;
+  - provider accounts can't use LogicalDOC's API keys (changed in the build, §7.3);
   - web sessions aren't re-checked with the provider;
   - an account has one identity;
   - Sign Out doesn't sign out of the provider.
-- `developer/api.md`: the providers in `GET /server`, the helper's code exchange, and the sign-in pages.
+- `developer/api.md`: the providers in `GET /server`, the helper's code exchange, and the sign-in pages; and that provider accounts can't use API keys (changed in the build, §7.3).
 - `developer/desktop-clients.md`: the helper's browser sign-in.
 - `developer/tests.md` and `continuous-integration.md`: the fake and stand-in providers, and the new smoke step.
 - `developer/how-healdan-extends-logicaldoc.md`: the upstream edits in §15.1.
@@ -542,6 +548,7 @@ The screenshots are of the demo firm (CLAUDE.md, "The demo overlay").
 - **accounts:** an identity already linked; the gate; linking by email (switch off, no email, two matches, `admin`, already linked); a new account; a username already taken or containing `>`;
 - **groups:** added and removed, groups outside the map left alone, a deleted group ignored;
 - **passwords:** a provider account's password refused on every route (the sign-in form, SOAP, REST, WebDAV and CMIS Basic, the API), and a password refused on every path that sets one (§7.3);
+- **API keys** (changed in the build): linking deletes an account's keys and closes the sessions they opened; a provider account's key refused, uncounted, on every route; unlinked accounts keep theirs (§7.3);
 - **the helper's code:** used once only; expired after 60 seconds; a wrong verifier; a wrong address; a non-loopback address refused;
 - **the re-check:** accepted (groups updated), refused (token revoked), unreachable (token kept, and not retried before 15 minutes), the 8-hour rule, and a provider turned off (not contacted, token kept);
 - **break glass:** Healdan starts with every provider unreachable; `admin` signs in meanwhile; the alert is sent only while it's on, a provider is on and outgoing email is set up, and not for other accounts (§7.5);
@@ -608,6 +615,7 @@ On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed rele
 - **The approach.** Healdan's own endpoints, with Nimbus's libraries (§14).
 - **Unlinking** (after the written spec, from the owner's questions in a side conversation). An admin can unlink one account, or every account of a provider. The account goes back to a temporary, expired password and keeps everything it held. Turning a provider off unlinks nothing (§7.7).
 - **The `admin` alert** (the same conversation). Optional: a system-wide setting an admin turns on, sent by email only, and only when outgoing email is set up (§7.5).
+- **LogicalDOC's API keys** (2026-11-01, during the build: "Delete on link, refuse"). Linking deletes an account's API keys, and a key sign-in for a provider account is refused on every route, as a key would be a second way in that skips the provider. Unlinked accounts, `admin` included, keep theirs. The web page can still make a key for a provider account, which never works, and the docs say so. No new upstream edit (§7.3).
 
 **Calls (approved section by section; open to the owner's review of this spec):**
 
