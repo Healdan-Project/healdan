@@ -522,6 +522,40 @@ public class ProviderRecheckTest extends ApiTestCase {
 		assertEquals(0, deleted(token));
 	}
 
+	// A request that read the row before another request's check stored a new refresh token must not present the
+	// spent one, which a provider that turns them over refuses with invalid_grant: that would revoke a helper that
+	// did nothing wrong. Nor may it check again when another check finished since it read the row.
+	@Test
+	public void testStaleRowPresentsTheNewestRefreshToken() throws Exception {
+		String token = helperToken();
+		HealdanSettings.get().set(RECHECK_MINUTES, "0");
+
+		// Read before another request's check turns the refresh token over, deciding nothing (a refused ID token)
+		ApiToken stale = ApiTokens.get().find(token).orElseThrow();
+		fake.audience("someone-else");
+		assertEquals(200, me(token).status());
+		assertNotEquals(stale.getRefresh(), sealedRefresh(token));
+		fake.audiences(FakeProvider.CLIENT_ID);
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(16));
+		Date before = checked(token);
+		int asked = fake.tokenRequests();
+
+		// The stale row's check presents the new refresh token, which the provider accepts; the old one it refuses
+		assertTrue(ProviderRecheck.get().keep(stale, true));
+		assertEquals("one refresh", asked + 1, fake.tokenRequests());
+		assertEquals(0, deleted(token));
+		assertTrue(checked(token).after(before));
+
+		// Read before another request's check finished: that check's answer stands, and the provider isn't asked
+		ApiToken read = ApiTokens.get().find(token).orElseThrow();
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(1));
+		assertEquals(200, me(token).status());
+		int after = fake.tokenRequests();
+		assertTrue(ProviderRecheck.get().keep(read, true));
+		assertEquals("no second check", after, fake.tokenRequests());
+		assertEquals(0, deleted(token));
+	}
+
 	// Spec section 9: one check per token at a time, and a second request doesn't wait for it (ruling R20)
 	@Test
 	public void testSecondRequestDoesntWait() throws Exception {
