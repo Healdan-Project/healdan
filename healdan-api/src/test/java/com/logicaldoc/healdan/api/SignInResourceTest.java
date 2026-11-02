@@ -137,8 +137,56 @@ public class SignInResourceTest extends ApiTestCase {
 		assertNotEquals(cookie, setCookie(again, "hd_signin"));
 
 		// Over HTTPS, the cookie is Secure
+		config().setProperty(SERVER_URL, "https://localhost:8443/");
 		ApiResponse secure = get("/api/signin/fake").server("https", "localhost", 8443).send();
 		assertTrue(setCookie(secure, "hd_signin"), has(setCookie(secure, "hd_signin"), "Secure"));
+	}
+
+	/**
+	 * A start on another name than the public address goes to the public
+	 * address first, path and query whole, before anything is kept or any
+	 * cookie set: the cookie is set on the name the browser asked for, and
+	 * the provider sends it back to the public address, where a cookie set on
+	 * another name would be missing
+	 */
+	@Test
+	public void testStartOnAnotherNameGoesToThePublicAddress() {
+		config().setProperty(SERVER_URL, "https://healdan.example");
+
+		ApiResponse moved = get("/api/signin/fake?a=b%20c&d=e").server("http", "127.0.0.1", 8080).send();
+
+		assertEquals(moved.toString(), 302, moved.status());
+		assertEquals("https://healdan.example/api/signin/fake?a=b%20c&d=e", moved.header("Location"));
+		assertEquals("no-store", moved.header("Cache-Control"));
+		assertNull(moved.header("Set-Cookie"));
+		assertEquals("nothing was asked of the provider", 0, fake.discoveryRequests());
+
+		// Another scheme, port or host is another name; a port that's the scheme's own isn't
+		assertTrue(get("/api/signin/fake").server("http", "healdan.example", 80).send().header("Location")
+				.startsWith("https://healdan.example/api/signin/fake"));
+		assertTrue(get("/api/signin/fake").server("https", "healdan.example", 8443).send().header("Location")
+				.startsWith("https://healdan.example/api/signin/fake"));
+		assertTrue(get("/api/signin/fake").server("https", "www.healdan.example", 443).send().header("Location")
+				.startsWith("https://healdan.example/api/signin/fake"));
+		assertEquals(0, fake.discoveryRequests());
+		for (String serverUrl : new String[] { "https://healdan.example", "https://HEALDAN.example:443/" }) {
+			config().setProperty(SERVER_URL, serverUrl);
+			ApiResponse here = get("/api/signin/fake").server("https", "Healdan.Example", 443).send();
+			assertTrue(serverUrl + ": " + here, here.header("Location").startsWith(fake.issuer() + "/authorize?"));
+			assertNotNull(setCookie(here, "hd_signin"));
+		}
+
+		// With a path, which the address keeps
+		config().setProperty(SERVER_URL, "https://healdan.example:8443/dms/");
+		assertEquals("https://healdan.example:8443/dms/api/signin/fake",
+				get("/api/signin/fake").server("http", "127.0.0.1", 8080).send().header("Location"));
+
+		// Without a public address, the request's own address is the one used, so it's never another
+		config().remove(SERVER_URL);
+		ApiResponse local = get("/api/signin/fake").server("http", "127.0.0.1", 8080).send();
+		assertTrue(local.header("Location"), local.header("Location").startsWith(fake.issuer() + "/authorize?"));
+		assertEquals(URI.create("http://127.0.0.1:8080/api/signin/fake/callback").toString(),
+				query(URI.create(local.header("Location")), "redirect_uri"));
 	}
 
 	@Test

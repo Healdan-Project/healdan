@@ -82,7 +82,19 @@ import jakarta.ws.rs.core.Response;
  * {@code POST /v1/auth/tokens}. Its refusals go to the helper's address too,
  * as {@code error=<code>} with the helper's state; only a callback whose
  * sign-in is unknown, used or expired, which has no helper address, goes to
- * the sign-in page.
+ * the sign-in page. A helper's start whose challenge another sign-in already
+ * has, waiting or with a code issued, is refused as {@code expired} at its
+ * own address: another local user who read the helper's start address could
+ * otherwise race a sign-in of their own, with the helper's challenge and
+ * address, to the helper's port, and whoever comes second loses.
+ * <p>
+ * <b>A start on another name</b> than the public address, such as
+ * {@code http://127.0.0.1:8080} when {@code server.url} is
+ * {@code https://healdan.example}, is sent to the same path and query at the
+ * public address first, before anything is kept or any cookie set: the
+ * {@code hd_signin} cookie is set on the name the browser asked for, and the
+ * provider sends the browser back to the public address, so a sign-in started
+ * on another name would always come back {@code expired}.
  * <p>
  * Nothing secret is logged: no code, state, nonce, verifier, challenge, token,
  * secret or cookie, and none of the helper's. Each refusal is logged with the
@@ -215,11 +227,14 @@ public class SignInResource {
 	 * @param challenge the helper's PKCE challenge
 	 * @param method the helper's PKCE method, which must be {@code S256}
 	 * @param request the request
-	 * @return {@code 302} to the provider, or with a refusal to the sign-in
-	 *         page with {@code signin=provider} or the helper's address with
-	 *         {@code error=provider}, if the provider isn't on and set up or
-	 *         can't be reached; {@code 400} if the helper's request isn't one
-	 *         Healdan accepts; {@code 409} if Healdan has no public address
+	 * @return {@code 302} to the provider; to the same path and query at the
+	 *         public address, if the request came to another; with a refusal
+	 *         to the sign-in page with {@code signin=provider} or the helper's
+	 *         address with {@code error=provider}, if the provider isn't on and
+	 *         set up or can't be reached, or to the helper's address with
+	 *         {@code error=expired} if another sign-in has its challenge;
+	 *         {@code 400} if the helper's request isn't one Healdan accepts;
+	 *         {@code 409} if Healdan has no public address
 	 */
 	@GET
 	@Public
@@ -243,10 +258,28 @@ public class SignInResource {
 		if (address == null)
 			return noAddress(id);
 
+		// The cookie must be set on the name the callback comes back to
+		if (!atPublicAddress(request, address)) {
+			String query = request.getQueryString();
+			URI moved;
+			try {
+				moved = URI.create(address.base() + "/api/signin/" + id + (query != null ? "?" + query : ""));
+			} catch (IllegalArgumentException e) {
+				return refused(address, helper, id, null, PROVIDER, "it came to another name than the public address, "
+						+ "with a query that can't be carried there", false).build();
+			}
+			log.debug("Sent a start through the sign-in provider {} on another name to the public address", id);
+			return redirect(moved).build();
+		}
+
 		SignInProvider provider = usable(id);
 		if (provider == null)
 			return refused(address, helper, id, null, PROVIDER, "no provider with that id is on and set up", false)
 					.build();
+
+		PendingSignIns pending = PendingSignIns.get();
+		if (helper != null && challengeTaken(helper.challenge()))
+			return challengeRefused(address, helper, id);
 
 		ProviderClient.Start start;
 		try {
@@ -256,12 +289,47 @@ public class SignInResource {
 		}
 
 		String browser = ApiTokens.randomPart();
-		PendingSignIns pending = PendingSignIns.get();
-		pending.put(new Pending(id, start.state(), start.nonce(), start.verifier(), ApiTokens.hash(browser),
+		// Kept only if no other start with the helper's challenge got there while the provider was asked
+		if (!pending.put(new Pending(id, start.state(), start.nonce(), start.verifier(), ApiTokens.hash(browser),
 				pending.expiry(), helper != null ? helper.redirect() : null, helper != null ? helper.state() : null,
-				helper != null ? helper.challenge() : null));
+				helper != null ? helper.challenge() : null)))
+			return challengeRefused(address, helper, id);
 		return redirect(start.authorization()).header(HttpHeaders.SET_COOKIE,
 				COOKIE + "=" + browser + cookieAttributes(address, request.isSecure())).build();
+	}
+
+	/**
+	 * @return true if the challenge is a helper's sign-in's that is waiting,
+	 *         or has a code waiting
+	 */
+	private static boolean challengeTaken(String challenge) {
+		return PendingSignIns.get().helperChallengePending(challenge) || OneTimeCodes.get().challengeIssued(challenge);
+	}
+
+	/** A helper's start whose challenge another sign-in has: refused at its own address, naming no challenge */
+	private static Response challengeRefused(Address address, Helper helper, String id) {
+		return refused(address, helper, id, null, EXPIRED,
+				"its code_challenge is another sign-in's, still waiting or with a code waiting", true).build();
+	}
+
+	/**
+	 * @return true if the request came to the public address: the same
+	 *         scheme, host and port, a port left out being the scheme's own
+	 */
+	static boolean atPublicAddress(HttpServletRequest request, Address address) {
+		URI origin = URI.create(address.origin());
+		return origin(request.getScheme(), request.getServerName(), request.getServerPort())
+				.equals(origin(origin.getScheme(), origin.getHost(), origin.getPort()));
+	}
+
+	/** @return the origin, in lower case, with a bare IPv6 host in brackets and the scheme's own port left out */
+	private static String origin(String scheme, String host, int port) {
+		String s = String.valueOf(scheme).toLowerCase(Locale.ROOT);
+		String h = String.valueOf(host).toLowerCase(Locale.ROOT);
+		if (h.indexOf(':') >= 0 && !h.startsWith("["))
+			h = "[" + h + "]";
+		boolean usual = port <= 0 || ("http".equals(s) && port == 80) || ("https".equals(s) && port == 443);
+		return s + "://" + h + (usual ? "" : ":" + port);
 	}
 
 	/**

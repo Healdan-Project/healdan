@@ -49,11 +49,12 @@ public class ApiCall {
 
 	private MockHttpSession session;
 
-	private String scheme;
+	/* The test context's server.url, http://localhost:8080, unless a test names another */
+	private String scheme = "http";
 
-	private String serverName;
+	private String serverName = "localhost";
 
-	private int serverPort;
+	private int serverPort = 8080;
 
 	private String contentType;
 
@@ -118,8 +119,9 @@ public class ApiCall {
 	/**
 	 * Names the address the request was made to, as Tomcat reads it from the
 	 * {@code Host} header and the connector (after {@code RemoteIpValve} has
-	 * applied {@code X-Forwarded-Proto}). The default is {@code http://localhost}
-	 * on port 80.
+	 * applied {@code X-Forwarded-Proto}). The default is
+	 * {@code http://localhost:8080}, the test context's {@code server.url}, so a
+	 * request comes to the public address unless a test says otherwise.
 	 *
 	 * @param scheme {@code http} or {@code https}
 	 * @param name the host's name
@@ -207,11 +209,9 @@ public class ApiCall {
 		request.setRemoteAddr(remote);
 		if (session != null)
 			request.setSession(session);
-		if (serverName != null) {
-			request.setScheme(scheme);
-			request.setServerName(serverName);
-			request.setServerPort(serverPort);
-		}
+		request.setScheme(scheme);
+		request.setServerName(serverName);
+		request.setServerPort(serverPort);
 		if (query != null) {
 			request.setQueryString(query);
 			for (String pair : query.split("&")) {

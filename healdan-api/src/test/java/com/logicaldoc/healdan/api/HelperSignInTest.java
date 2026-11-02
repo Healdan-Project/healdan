@@ -146,9 +146,10 @@ public class HelperSignInTest extends ApiTestCase {
 		assertNotNull(setCookie(ok, "hd_signin"));
 		assertNotNull(fake.authorize(location));
 
+		// Each start with a challenge of its own: a second with one already waiting is refused
 		for (String good : new String[] { LOOPBACK_V6, "http://127.0.0.1:1/", "http://127.0.0.1:65535/",
 				"http://127.0.0.1:50123" }) {
-			ApiResponse response = get(start("fake", good, STATE, CHALLENGE, "S256")).send();
+			ApiResponse response = get(start("fake", good, STATE, fresh(), "S256")).send();
 			assertEquals(good + ": " + response, 302, response.status());
 			assertTrue(response.header("Location").startsWith(fake.issuer() + "/authorize?"));
 		}
@@ -175,8 +176,10 @@ public class HelperSignInTest extends ApiTestCase {
 				+ STATE + "&code_challenge=" + CHALLENGE + "&code_challenge_method=S256").send());
 		assertEquals(0, fake.discoveryRequests());
 
-		for (String state : new String[] { "a".repeat(128), "A-z_0.9~", "x" })
-			assertEquals(state, 302, get(start("fake", LOOPBACK, state, CHALLENGE, "S256")).send().status());
+		for (String state : new String[] { "a".repeat(128), "A-z_0.9~", "x" }) {
+			ApiResponse response = get(start("fake", LOOPBACK, state, fresh(), "S256")).send();
+			assertTrue(state, response.header("Location").startsWith(fake.issuer() + "/authorize?"));
+		}
 	}
 
 	@Test
@@ -205,10 +208,11 @@ public class HelperSignInTest extends ApiTestCase {
 		assertEquals(EXPIRED, callback(started, providerCode).header("Location"));
 		assertEquals(1, fake.tokenRequests());
 
-		// [::1] gets its code at [::1], and a loopback address without a path keeps it so
-		assertTrue(signInInBrowser(LOOPBACK_V6).header("Location")
+		// [::1] gets its code at [::1], and a loopback address without a path keeps it so; each with a challenge of
+		// its own, as the first's code still waits
+		assertTrue(signInInBrowser(LOOPBACK_V6, STATE, fresh()).header("Location")
 				.matches("http://\\[::1\\]:50123/\\?code=[A-Za-z0-9_-]{43}&state=h1"));
-		assertTrue(signInInBrowser("http://127.0.0.1:50123").header("Location")
+		assertTrue(signInInBrowser("http://127.0.0.1:50123", STATE, fresh()).header("Location")
 				.matches("http://127\\.0\\.0\\.1:50123\\?code=[A-Za-z0-9_-]{43}&state=h1"));
 		assertEquals(0, SessionManager.get().countOpened("jane"));
 	}
@@ -260,6 +264,74 @@ public class HelperSignInTest extends ApiTestCase {
 		ApiToken noRefresh = ApiTokens.get().find(none.json().path("token").textValue()).orElseThrow();
 		assertEquals("fake", noRefresh.getProvider());
 		assertNull(noRefresh.getRefresh());
+	}
+
+	/**
+	 * Ruling R35: a sealed refresh token longer than the token row holds fails
+	 * the exchange clearly, as {@code sign-in-failed}, logged as such, rather
+	 * than as a database error; one that fits is kept whole
+	 */
+	@Test
+	public void testRefreshTokenTooLongToKeep() throws Exception {
+		fake.refreshTokenLength(49_200);
+		String code = code(LOOPBACK);
+		try (LogCapture log = LogCapture.of(AuthResource.class)) {
+			assertSignInFailed(exchange(code, VERIFIER, LOOPBACK));
+			assertTrue(String.join("\n", log.lines()), log.lines().stream()
+					.anyMatch(line -> line.startsWith("WARN ") && line.contains("fake") && line.contains("too long")));
+		}
+		assertEquals(0, ApiTokens.get().list(jane.getId()).size());
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+
+		// The longest a provider's refresh token can be
+		fake.refreshTokenLength(49_121);
+		ApiResponse response = exchange(code(LOOPBACK), VERIFIER, LOOPBACK);
+		assertEquals(response.toString(), 201, response.status());
+		ApiToken row = ApiTokens.get().find(response.json().path("token").textValue()).orElseThrow();
+		assertEquals(ApiTokens.MAX_REFRESH, row.getRefresh().length());
+		assertEquals(49_121, SecretBox.get().open(row.getRefresh()).length());
+	}
+
+	/**
+	 * A helper start whose challenge another sign-in has, waiting or with a
+	 * code waiting, is refused at its own address as expired, keeping nothing:
+	 * another local user who read the helper's start address could otherwise
+	 * race a sign-in of their own to the helper's port. Whoever comes second
+	 * loses.
+	 */
+	@Test
+	public void testStartWithAChallengeInUseRefused() throws Exception {
+		String other = "http://127.0.0.1:50999/";
+		Started first = startHelper(LOOPBACK, STATE);
+		int kept = SignInTestHooks.pendingKept();
+
+		ApiResponse second;
+		try (LogCapture log = LogCapture.of(SignInResource.class)) {
+			second = get(start("fake", other, "h2", CHALLENGE, "S256")).send();
+			assertTrue(String.join("\n", log.lines()), log.lines().stream()
+					.anyMatch(line -> line.startsWith("WARN ") && line.contains("code_challenge")));
+			for (String line : log.lines())
+				assertFalse(line, line.contains(CHALLENGE));
+		}
+		assertEquals(second.toString(), 302, second.status());
+		assertEquals(other + "?error=expired&state=h2", second.header("Location"));
+		assertNull(second.header("Set-Cookie"));
+		assertEquals(kept, SignInTestHooks.pendingKept());
+
+		// The first finishes, and its code goes to its own address; while it waits, the challenge is still taken
+		String code = codeOf(callback(first, fake.authorize(first.authorization())), LOOPBACK, STATE);
+		assertEquals(other + "?error=expired&state=h2",
+				get(start("fake", other, "h2", CHALLENGE, "S256")).send().header("Location"));
+
+		// Redeemed, it's free again
+		assertEquals(201, exchange(code, VERIFIER, LOOPBACK).status());
+		Started again = startHelper(LOOPBACK, STATE);
+		assertNotNull(again.cookie());
+
+		// And once the sign-in waiting with it expires
+		SignInTestHooks.passPendingTime(Duration.ofMinutes(10));
+		assertTrue(get(start("fake", other, "h2", CHALLENGE, "S256")).send().header("Location")
+				.startsWith(fake.issuer() + "/authorize?"));
 	}
 
 	@Test
@@ -340,8 +412,9 @@ public class HelperSignInTest extends ApiTestCase {
 		jdbc().update("update ld_user set ld_enabled = 1 where ld_id = ?", jane.getId());
 		UserDAO.get().evict(jane.getId());
 
-		// A linked account that LogicalDOC's sign-in would refuse: the helper hears why, and gets no code
-		code(LOOPBACK);
+		// A linked account that LogicalDOC's sign-in would refuse: the helper hears why, and gets no code. The code
+		// that linked it is used up, so its challenge is free again
+		assertSignInFailed(exchange(code(LOOPBACK), ApiTokens.randomPart(), LOOPBACK));
 		assertEquals(jane.getId(), SignInIdentityDAO.get().findLinked("fake", "o-1001").orElseThrow().getUserId());
 		jdbc().update("update ld_user set ld_enabled = 0 where ld_id = ?", jane.getId());
 		UserDAO.get().evict(jane.getId());
@@ -525,7 +598,11 @@ public class HelperSignInTest extends ApiTestCase {
 	}
 
 	private ApiResponse signInInBrowser(String redirect, String state) {
-		Started started = startHelper(redirect, state);
+		return signInInBrowser(redirect, state, CHALLENGE);
+	}
+
+	private ApiResponse signInInBrowser(String redirect, String state, String challenge) {
+		Started started = startHelper(redirect, state, challenge);
 		return callback(started, fake.authorize(started.authorization()));
 	}
 
@@ -544,10 +621,19 @@ public class HelperSignInTest extends ApiTestCase {
 	}
 
 	private Started startHelper(String redirect, String state) {
-		ApiResponse response = get(start("fake", redirect, state, CHALLENGE, "S256")).send();
+		return startHelper(redirect, state, CHALLENGE);
+	}
+
+	private Started startHelper(String redirect, String state, String challenge) {
+		ApiResponse response = get(start("fake", redirect, state, challenge, "S256")).send();
 		assertEquals(response.toString(), 302, response.status());
 		URI authorization = URI.create(response.header("Location"));
 		return new Started(authorization, cookieValue(setCookie(response, "hd_signin")), query(authorization, "state"));
+	}
+
+	/** @return a challenge no other start has: 43 characters of base64url, as an S256 challenge is */
+	private static String fresh() {
+		return ApiTokens.randomPart();
 	}
 
 	private ApiResponse callback(Started started, String code) {

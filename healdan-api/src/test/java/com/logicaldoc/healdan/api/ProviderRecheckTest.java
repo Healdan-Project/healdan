@@ -585,6 +585,29 @@ public class ProviderRecheckTest extends ApiTestCase {
 		assertEquals(0, deleted(token));
 	}
 
+	// Ruling R35: a new refresh token too long for the row to hold, sealed, is logged and not kept; the token keeps
+	// the old one, rather than failing on a database error
+	@Test
+	public void testRefreshTokenTooLongToKeepIsLogged() throws Exception {
+		String token = helperToken();
+		HealdanSettings.get().set(RECHECK_MINUTES, "0");
+		String before = sealedRefresh(token);
+		Date checked = checked(token);
+
+		fake.refreshTokenLength(49_200);
+		ApiResponse response;
+		try (LogCapture log = LogCapture.of(ProviderRecheck.class)) {
+			SignInTestHooks.passRecheckTime(Duration.ofMinutes(1));
+			response = me(token);
+			assertTrue(String.join("\n", log.lines()), log.lines().stream()
+					.anyMatch(line -> line.startsWith("WARN ") && line.contains("fake") && line.contains("too long")));
+		}
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals(0, deleted(token));
+		assertEquals(before, sealedRefresh(token));
+		assertTrue(checked(token) + " after " + checked, checked(token).after(checked));
+	}
+
 	// A request that read the row before another request's check stored a new refresh token must not present the
 	// spent one, which a provider that turns them over refuses with invalid_grant: that would revoke a helper that
 	// did nothing wrong. Nor may it check again when another check finished since it read the row.
