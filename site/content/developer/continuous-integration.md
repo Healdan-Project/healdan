@@ -112,18 +112,25 @@ The helper's tests marked `[Trait("Category", "Stack")]` need a running Healdan 
 app and needs no variable, but compiles the helper's AppleScripts against the apps' dictionaries, which only a Mac
 with Office has, so it too is for a Mac with Office.
 
-### The Helper's Stack Test in the Image CI
+### The Helper's Stack Tests in the Image CI
 
 `docker/smoke-test.sh` has a step 5d, after M2's client flow through the API (step 5c), that runs the helper's
-stack test (`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to
-the smoke stack). It signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves and
-closes it through the helper's cycle with a fake LibreOffice.
+stack tests (`dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack`, with `HEALDAN_STACK_URL` set to
+the smoke stack). There are two:
+
+- **`StackCycleTests`** signs in as `admin` through the API, files a document in the Smoke Matter, and opens, saves
+  and closes it through the helper's cycle with a fake LibreOffice.
+- **`StackProviderSignInTests`** signs in as the helper does through the stand-in Keycloak, provider `smoke`, as
+  `sso-helper2`, with a fake browser, and checks `/me` names `sso-helper2`. The step sets
+  `HEALDAN_STACK_SIGNIN_PROVIDER=smoke`, `HEALDAN_STACK_SIGNIN_USER`, `HEALDAN_STACK_SIGNIN_PASSWORD` and
+  `HEALDAN_STACK_KEYCLOAK=127.0.0.1:18180` (`SMOKE_KEYCLOAK_PORT`'s port) for it. It runs before step 5e, which
+  disables `sso-helper`, another person.
 
 - It runs only when `SMOKE_HELPER_TEST=1`, which `docker-image.yml` sets. The workflow sets up the .NET SDK and
   builds the helper's tests first, so a build failure shows on its own. Run locally without the variable, the
   smoke test skips the step.
-- `dotnet test` passes when no test ran, so the step passes only if its summary shows at least one passed test and
-  none skipped.
+- `dotnet test` passes when no test ran, so the step passes only if its summaries add up to two passed tests and
+  none skipped. A `Stack` test added to the helper changes the two (`HELPER_STACK_TESTS` in the script).
 
 A pull request that changes only the helper, the extension or the icons doesn't build the image, so this test
 doesn't run on it. It runs on `master` after the merge, and on pull requests that change the server. That gap is

@@ -8,8 +8,17 @@ namespace Healdan.Helper.Core.Api;
 [Schema("Page")]
 public sealed record Page<T>(List<T> Items, int Offset, int Limit, long? Total);
 
+/// <summary>
+/// What <c>GET /server</c> says. <see cref="Providers"/> and <see cref="PasswordLabel"/> are null from a server older
+/// than the sign-in providers (M4): it has only the password.
+/// </summary>
 [Schema("ServerInfo")]
-public sealed record ServerInfo(string Product, string Version, string ApiVersion, ServerLabels Labels, List<string> SignIn);
+public sealed record ServerInfo(string Product, string Version, string ApiVersion, ServerLabels Labels,
+    List<string> SignIn, List<ProviderInfo>? Providers = null, string? PasswordLabel = null);
+
+/// <summary>A sign-in provider people can sign in through: its id, as in <c>/api/signin/&lt;id&gt;</c>, and its button's label.</summary>
+[Schema("ProviderInfo")]
+public sealed record ProviderInfo(string Id, string Label);
 
 /// <summary>What the server calls a matter, for display only.</summary>
 public sealed record ServerLabels(string Matter, string Matters);
@@ -62,6 +71,10 @@ public sealed record NewDocument(long FolderId, string Name, JsonObject Properti
 
 [Schema("PasswordSignIn")]
 internal sealed record SignInBody(string Username, string Password, string Name, DeviceRef Device);
+
+/// <summary>The helper's one-time code from a sign-in through a provider, with the proof key that goes with it (RFC 7636).</summary>
+[Schema("CodeSignIn")]
+internal sealed record CodeSignInBody(string Code, string CodeVerifier, string RedirectUri, string Name, DeviceRef Device);
 
 [Schema("DeviceRef")]
 internal sealed record DeviceRef(string Id);

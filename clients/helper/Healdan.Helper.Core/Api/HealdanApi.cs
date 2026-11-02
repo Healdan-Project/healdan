@@ -53,6 +53,21 @@ public sealed class HealdanApi
         return signedIn.Token;
     }
 
+    /// <summary>
+    /// Exchanges the one-time code a sign-in through a provider ended with (spec §6.2), with its PKCE verifier and the
+    /// loopback address it came to, and the device it's for. Keeps the token in <see cref="Token"/> and returns it.
+    /// The code works once, so a refusal (<c>401 sign-in-failed</c>) leaves no token and the sign-in starts again.
+    /// </summary>
+    public async Task<string> ExchangeCodeAsync(string code, string verifier, Uri redirectUri, string deviceName, string deviceId,
+        CancellationToken ct = default)
+    {
+        Token = null;
+        var body = new CodeSignInBody(code, verifier, redirectUri.AbsoluteUri, deviceName, new DeviceRef(deviceId));
+        var signedIn = await SendJsonAsync<SignedIn>(HttpMethod.Post, "v1/auth/tokens", JsonContent.Create(body, options: Json), ct);
+        Token = signedIn.Token;
+        return signedIn.Token;
+    }
+
     public async Task SignOutAsync(CancellationToken ct = default)
     {
         using var response = await SendAsync(HttpMethod.Delete, "v1/auth/tokens/current", null, ct);

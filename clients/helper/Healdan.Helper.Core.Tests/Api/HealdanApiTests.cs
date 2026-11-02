@@ -62,6 +62,70 @@ public class HealdanApiTests : IDisposable
     }
 
     [Fact]
+    public async Task ExchangeCodeSendsTheCodeTheVerifierTheAddressAndTheDevice()
+    {
+        _handler.Enqueue(HttpStatusCode.Created,
+            """{"token":"hd_abc","id":1,"name":"Mac","expiresAt":"2027-01-01T00:00:00Z","user":{"id":2,"username":"u","name":"U","email":null,"language":"en","admin":false}}""");
+        var api = new HealdanApi(new Uri("https://healdan.example"), _handler) { Token = "hd_old" };
+        var token = await api.ExchangeCodeAsync("one-time", "the-verifier", new Uri("http://127.0.0.1:50123/"), "Healdan Helper on Mac", "dev-1");
+
+        Assert.Equal("hd_abc", token);
+        Assert.Equal("hd_abc", api.Token);
+        var request = _handler.Requests[0];
+        Assert.Equal(HttpMethod.Post, request.Method);
+        Assert.Null(request.Authorization); // the old token is not sent along
+        Assert.EndsWith("/api/v1/auth/tokens", request.Uri.AbsolutePath);
+        var body = JsonNode.Parse(request.BodyText)!.AsObject();
+        Assert.Equal(["code", "codeVerifier", "redirectUri", "name", "device"], body.Select(p => p.Key));
+        Assert.Equal("one-time", (string?)body["code"]);
+        Assert.Equal("the-verifier", (string?)body["codeVerifier"]);
+        Assert.Equal("http://127.0.0.1:50123/", (string?)body["redirectUri"]);
+        Assert.Equal("Healdan Helper on Mac", (string?)body["name"]);
+        Assert.Equal("dev-1", (string?)body["device"]!["id"]);
+    }
+
+    [Fact]
+    public async Task ExchangeCodeRefusedIsAnApiExceptionAndKeepsNoToken()
+    {
+        _handler.Enqueue(HttpStatusCode.Unauthorized,
+            """{"type":"about:blank","title":"Unauthorized","status":401,"detail":"The sign-in failed.","code":"sign-in-failed"}""");
+        var api = new HealdanApi(new Uri("https://healdan.example"), _handler) { Token = "hd_old" };
+
+        var e = await Assert.ThrowsAsync<ApiException>(
+            () => api.ExchangeCodeAsync("c", "v", new Uri("http://127.0.0.1:50123/"), "Mac", "dev-1"));
+
+        Assert.Equal("sign-in-failed", e.Code);
+        Assert.Null(api.Token);
+    }
+
+    [Fact]
+    public async Task ServerInfoReadsTheProvidersAndThePasswordLabel()
+    {
+        _handler.Enqueue(HttpStatusCode.OK,
+            """
+            {"product":"Healdan","version":"9.3.2","apiVersion":"v1","labels":{"matter":"Matter","matters":"Matters"},
+             "signIn":["password","provider"],
+             "providers":[{"id":"entra","label":"Sign In with Microsoft"},{"id":"authentik","label":"Sign In with Authentik"}],
+             "passwordLabel":"Sign In with a Password"}
+            """);
+        var info = await new HealdanApi(new Uri("https://healdan.example"), _handler).ServerAsync();
+
+        Assert.Equal([new ProviderInfo("entra", "Sign In with Microsoft"), new ProviderInfo("authentik", "Sign In with Authentik")], info.Providers);
+        Assert.Equal("Sign In with a Password", info.PasswordLabel);
+    }
+
+    [Fact]
+    public async Task ServerInfoFromAnOlderServerHasNoProviders()
+    {
+        _handler.Enqueue(HttpStatusCode.OK,
+            """{"product":"Healdan","version":"9.3.1","apiVersion":"v1","labels":{"matter":"Matter","matters":"Matters"},"signIn":["password"]}""");
+        var info = await new HealdanApi(new Uri("https://healdan.example"), _handler).ServerAsync();
+
+        Assert.Null(info.Providers);
+        Assert.Null(info.PasswordLabel);
+    }
+
+    [Fact]
     public async Task SignOutDeletesTheCurrentToken()
     {
         _handler.Enqueue(HttpStatusCode.NoContent, "");
