@@ -31,10 +31,10 @@ public sealed class SeenLocks(IOfficeApp inner) : IOfficeApp
 
     public bool LockExists(string path)
     {
-        _asked.AddOrUpdate(path, 1, (_, n) => n + 1);
         var exists = inner.LockExists(path);
         if (exists)
             _seen[path] = true;
+        _asked.AddOrUpdate(path, 1, (_, n) => n + 1); // once looked: a look counted has seen the file, or found it gone
         return exists;
     }
 
@@ -59,6 +59,9 @@ public sealed class SeenLocks(IOfficeApp inner) : IOfficeApp
     /// <summary>Whether the cycle has ever asked this app about the copy's lock file.</summary>
     public bool WasAskedAbout(string path) => _asked.ContainsKey(path);
 
-    /// <summary>How many times the cycle has asked about the copy's lock file: once for each look the close watcher takes.</summary>
+    /// <summary>
+    /// How many times the cycle has looked at the copy's lock file: once for each look the close watcher takes, and for
+    /// each time anything else in the cycle asks (a resume, a rename, a save-back).
+    /// </summary>
     public int Asked(string path) => _asked.GetValueOrDefault(path);
 }

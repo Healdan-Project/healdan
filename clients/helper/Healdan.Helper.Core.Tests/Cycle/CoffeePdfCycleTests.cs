@@ -45,7 +45,7 @@ public sealed class CoffeePdfCycleTests : IDisposable
         foreach (var cycle in _cycles)
             cycle.Dispose();
         _server.OpenSaves();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
     }
 
     private HelperPaths Paths => HelperPaths.For(_root);
@@ -261,9 +261,8 @@ public sealed class CoffeePdfCycleTests : IDisposable
 
         await cycle.ClosedAsync(Pdf); // the crash window's Send and Check In
 
-        await Wait.Until(() => _server.Doc(7).Hold is null && !File.Exists(Pdf), "checked in and deleted");
         // CopyStore.Delete takes the copy, then its lock (CopyNames.AppFiles, M3.6 spec §4.5), so wait for both.
-        await Wait.Until(() => !File.Exists(FakeCoffeePdf.LockPath(Pdf)), "the stale lock deleted");
+        await Wait.Until(() => _server.Doc(7).Hold is null && Wait.Gone(Pdf), "checked in and deleted, the stale lock and all");
     }
 
     [Fact]

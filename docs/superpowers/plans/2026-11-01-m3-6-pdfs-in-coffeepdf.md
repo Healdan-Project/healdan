@@ -2111,7 +2111,7 @@ Filled in as the build found them, and left open once Tasks 1 to 9 were done and
 - `Healdan.Helper.Core.Tests/Channel/ChannelHandlerTests.cs`: `ClosedForACopyTheHelperDoesntKnowIsLogged` asserts "Ignored /v1/closed", which `Copy()`'s own line also starts with. Assert "isn't looking after" instead, and read the log without `Wait.Until`.
 - `Healdan.Helper.Core.Tests/Channel/ChannelHandlerTests.cs`: no test of the warning for an unrecognised `app`, that known ones don't log it, or that the failure notice names the app; nor that a close with a known session doesn't log "Ignored".
 - `Healdan.Helper.Tests/Windows/SettingsWindowTests.cs`: `PdfsShowCoffeePdfWhileItsOn` doesn't assert that "Default app, read-only" is absent.
-- `Healdan.Helper.Core.Tests/Cycle/CopyCycleTests.cs`: `OfficeSavesCountLikeAnyOthers` failed once in `Dispose` ("Directory not empty") in Task 4, and passed on every rerun. `CoffeePdfCycleTests` copies the same teardown, so watch both in CI.
+- ~~`Healdan.Helper.Core.Tests/Cycle/CopyCycleTests.cs`: `OfficeSavesCountLikeAnyOthers` failed once in `Dispose` ("Directory not empty") in Task 4, and passed on every rerun. `CoffeePdfCycleTests` copies the same teardown, so watch both in CI.~~ **Done** in [Healdan-Project/healdan#162](https://github.com/Healdan-Project/healdan/pull/162): a disposed cycle's late writes landed during the delete, and every test class that runs a cycle, session or server now deletes its folder with `TempFolder.Delete`, which tries again.
 
 **Docs**
 

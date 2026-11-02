@@ -26,6 +26,7 @@ public sealed class CopyCycleTests : IDisposable
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-cycle-").FullName;
     private readonly FakeApi _server = new();
     private readonly FakeApp _app = new();
+    private readonly SeenLocks _libreOffice;
     private readonly RecordingEvents _events = new();
     private readonly FakeOpener _opener = new();
     private readonly FakeScripting _scripting = new();
@@ -35,6 +36,7 @@ public sealed class CopyCycleTests : IDisposable
     public CopyCycleTests()
     {
         _server.Add(5, "Lease agreement.docx", "downloaded");
+        _libreOffice = new SeenLocks(_app);
         _office = new SeenLocks(new MicrosoftOfficeApp(_scripting, _scripting.IsRunning));
     }
 
@@ -43,7 +45,7 @@ public sealed class CopyCycleTests : IDisposable
         foreach (var cycle in _cycles)
             cycle.Dispose();
         _server.OpenSaves();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
     }
 
     private HelperPaths Paths => HelperPaths.For(_root);
@@ -54,7 +56,7 @@ public sealed class CopyCycleTests : IDisposable
     private CopyCycle Cycle(CycleTimings? timings = null, IOfficeApp? otherFiles = null, Func<string, string>? appFor = null)
     {
         var api = new HealdanApi(new Uri("https://healdan.test"), _server) { Token = "hd_test" };
-        var apps = TestApps.Of(_app, otherFiles, _office, appFor);
+        var apps = TestApps.Of(_libreOffice, otherFiles, _office, appFor);
         var cycle = new CopyCycle(api, new CopyStore(Paths), apps, FakeApi.HereDevice, _events, timings ?? Fast);
         _cycles.Add(cycle);
         return cycle;
@@ -542,7 +544,7 @@ public sealed class CopyCycleTests : IDisposable
         FakeApp.Close(edited);
         FakeApp.Close(untouched);
 
-        await Wait.Until(() => !File.Exists(edited) && !File.Exists(untouched), "both copies deleted");
+        await Wait.Until(() => Wait.Gone(edited) && Wait.Gone(untouched), "both copies deleted, records and all");
         var save = Assert.Single(_server.Saves);
         Assert.Equal(5, save.DocNumber);
         Assert.False(save.KeepCheckedOut);
@@ -1825,8 +1827,8 @@ public sealed class CopyCycleTests : IDisposable
 
         FakeScripting.Close(OfficeProgram.Word, path);
 
-        // The store deletes the copy, then its record: waiting for the file alone could look between the two.
-        await Wait.Until(() => !File.Exists(path) && Store.All().Count == 0, "the copy checked in and deleted, record and all");
+        await Wait.Until(() => Wait.Gone(path), "the copy checked in and deleted, record and all");
+        Assert.Empty(Store.All());
         Assert.Null(_server.Doc(5).Hold);
         Assert.Equal(1, _server.Count("DELETE /documents/5/checkout"));
         Assert.Empty(cycle.OpenCopies());
@@ -1933,8 +1935,11 @@ public sealed class CopyCycleTests : IDisposable
         Assert.True(_office.WasAskedAbout(xlsx));
 
         // Each window closes the way its own app closes it, once this cycle's watcher has seen the lock files: the first
-        // cycle's sightings don't count, so give it a few polls.
-        await Task.Delay(Fast.LockPoll * 8);
+        // cycle's sightings don't count. Two looks at each since the resume, as the first cycle's watcher may take one
+        // last look as it stops; a fixed wait for them wasn't always long enough for a busy runner (CI's macOS one).
+        var (docxAsked, xlsxAsked) = (_libreOffice.Asked(docx), _office.Asked(xlsx));
+        await Wait.Until(() => _libreOffice.Asked(docx) >= docxAsked + 2 && _office.Asked(xlsx) >= xlsxAsked + 2,
+            "this cycle's watcher looking at both lock files");
         FakeApp.Close(docx);
         FakeScripting.Close(OfficeProgram.Excel, xlsx);
         await Wait.Until(() => !File.Exists(docx) && !File.Exists(xlsx), "both checked in");
@@ -1973,7 +1978,7 @@ public sealed class CopyCycleTests : IDisposable
         FakeScripting.Close(OfficeProgram.Word, path);
         await Wait.Until(() => cycle.KeptCopies().Count == 1, "listed");
         Assert.Same(_office, cycle.AppOf(path));
-        Assert.Same(_app, cycle.AppOf(CopyPath("Nothing here #1 v1.0.docx"))); // no record: LibreOffice, as before Microsoft Office
+        Assert.Same(_libreOffice, cycle.AppOf(CopyPath("Nothing here #1 v1.0.docx"))); // no record: LibreOffice, as before Microsoft Office
 
         cycle.OpenKept(path);
 

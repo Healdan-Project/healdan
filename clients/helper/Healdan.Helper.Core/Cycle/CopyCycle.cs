@@ -1608,6 +1608,11 @@ public sealed class CopyCycle : IDisposable
             bool closing;
             lock (_gate)
             {
+                // Stopped while the program answered (signed out, say): the record stays, and the cycle that looks after the
+                // copy next follows it to its new name, as a rename the helper stopped in the middle of (UnfinishedRename).
+                // Moved now, it would be moved from under that cycle.
+                if (_stop.IsCancellationRequested)
+                    return;
                 var current = Record(old) ?? record;
                 _store.Moved(old, newPath, changed ? current : current with { ConfirmedHash = written!.Value.Hash });
                 Rekey(s, newPath);
@@ -1640,7 +1645,8 @@ public sealed class CopyCycle : IDisposable
         {
             bool stays;
             lock (_gate)
-                stays = !moved && !s.Closing && s.Path == old; // a rename carried out late may have moved it (FollowedRename)
+                stays = !moved && !s.Closing && s.Path == old // a rename carried out late may have moved it (FollowedRename)
+                    && !_stop.IsCancellationRequested;
             if (stays)
             {
                 _saves.Watch(old);
@@ -1778,6 +1784,7 @@ public sealed class CopyCycle : IDisposable
         {
             Recovery outcome;
             var open = false;
+            var unwatched = false;
             TimeSpan wait;
             lock (_gate)
             {
@@ -1794,7 +1801,17 @@ public sealed class CopyCycle : IDisposable
                         // Found: from now on the crash window's Send and Check In would delete it from under the window, and
                         // until the save returns, the program's owner file says nothing.
                         lock (_gate)
+                        {
                             (s.Reopened, s.SavingBack) = (true, true);
+                            // The program's write over the copy is its own until the save returns: sent meanwhile, while the
+                            // copy still counts as crashed, its confirmation couldn't rename the copy (M3.5 spec §5.4). Only
+                            // while the copy is still this session's, as the folder watcher knows a copy by its file name: one
+                            // checked in and opened again under that name since is another session's.
+                            if (s.Closing || Find(s.Path) != s)
+                                return;
+                            _saves.Unwatch(s.Path);
+                            unwatched = true;
+                        }
                     }, _stop.Token);
                 lock (_gate)
                 {
@@ -1816,8 +1833,22 @@ public sealed class CopyCycle : IDisposable
             }
             finally
             {
+                bool watchAgain, touch;
                 lock (_gate)
+                {
                     (s.SavingBack, s.LookingBack) = (false, false);
+                    watchAgain = unwatched && !s.Closing && Find(s.Path) == s && !_stop.IsCancellationRequested;
+                    // Still crashed, as after a save that failed: what the program may have written meanwhile waits for the
+                    // save-back that works, as sent now, its confirmation couldn't rename the copy either. A version asked
+                    // for meanwhile still goes up.
+                    touch = !s.Crashed || s.NextKind is not null;
+                }
+                if (watchAgain)
+                {
+                    _saves.Watch(s.Path);
+                    if (touch)
+                        _saves.Touch(s.Path); // what the program saved goes up now, and once it's no longer crashed, its confirmation renames it
+                }
             }
             if (outcome == Recovery.Saved)
             {
@@ -1828,6 +1859,7 @@ public sealed class CopyCycle : IDisposable
             }
             if (open)
             {
+                CatchUpName(s, app);
                 app.Open(s.Path);
                 return;
             }
@@ -1854,6 +1886,40 @@ public sealed class CopyCycle : IDisposable
         {
             // Shutting down: the next start finds the crash again.
         }
+    }
+
+    /// <summary>
+    /// A crashed Word or Excel copy about to be opened as last saved: a save confirmed while it counted as crashed wasn't
+    /// renamed (<see cref="RenameAfterSaveAsync"/> leaves a crashed copy alone), so its name may be behind its confirmed
+    /// version. No program has it open, so it takes that version's name before it opens (R19), and its watchers follow.
+    /// If it can't, it opens under the name it has, and the next confirmed save renames it.
+    /// </summary>
+    private void CatchUpName(Session s, IOfficeApp app)
+    {
+        string old, renamed;
+        lock (_gate)
+        {
+            old = s.Path;
+            if (s.ReadOnly || s.Closing || Find(old) != s || Record(old) is not { ReadOnly: false } record
+                || OfficeAfterSave.Driver(app, old) is not { } driver || !OfficePrograms.RenamesAfterSave(driver.Program))
+                return;
+            var target = Path.Combine(_store.Folder, CopyNames.FileName(record.DocumentName, record.DocNumber, record.FileVersion, false));
+            if (Name(target) == Name(old) || Path.Exists(target) || Record(target) is not null || app.LockExists(target))
+                return;
+            try
+            {
+                renamed = _store.Rename(old, record.FileVersion);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                return;
+            }
+            Rekey(s, renamed);
+        }
+        _saves.Unwatch(old);
+        _closes.Unwatch(old);
+        _saves.Watch(renamed);
+        _closes.Watch(renamed, app);
     }
 
     /// <summary>

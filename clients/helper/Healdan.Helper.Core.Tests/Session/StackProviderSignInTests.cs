@@ -34,7 +34,7 @@ public sealed partial class StackProviderSignInTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-stack-signin-").FullName;
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     private static string? Env(string name) =>
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
@@ -53,17 +53,26 @@ public sealed partial class StackProviderSignInTests : IDisposable
 
         using var stop = new CancellationTokenSource();
         var signingIn = new SignIn(api, keychain, device, log: log).SignInWithProviderAsync(Needed("HEALDAN_STACK_SIGNIN_PROVIDER"), browser, stop.Token);
-        await Wait.Until(() => browser.Done is not null || signingIn.IsCompleted, "the browser opened", TimeSpan.FromSeconds(60));
-        if (browser.Done is { } browsing && await Task.WhenAny(signingIn, browsing) == browsing
-            && await Task.WhenAny(signingIn, Task.Delay(TimeSpan.FromSeconds(30))) != signingIn)
+        try
         {
-            // The browser stopped, and the helper heard nothing: it stopped somewhere else than the helper's address,
-            // and the helper would wait its 5 minutes. Say where instead.
-            stop.Cancel();
-            var (at, status, page) = await browsing; // or the browser's own failure
-            Assert.Fail($"The browser stopped at {at} with HTTP {(int)status}, not Healdan's done page: {page[..Math.Min(page.Length, 400)]}");
+            await Wait.Until(() => browser.Done is not null || signingIn.IsCompleted, "the browser opened", TimeSpan.FromSeconds(60));
+            if (browser.Done is { } browsing && await Task.WhenAny(signingIn, browsing) == browsing
+                && await Task.WhenAny(signingIn, Task.Delay(TimeSpan.FromSeconds(30))) != signingIn)
+            {
+                // The browser stopped, and the helper heard nothing: it stopped somewhere else than the helper's address,
+                // and the helper would wait its 5 minutes. Say where instead.
+                stop.Cancel();
+                var (at, status, page) = await browsing; // or the browser's own failure
+                Assert.Fail($"The browser stopped at {at} with HTTP {(int)status}, not Healdan's done page: {page[..Math.Min(page.Length, 400)]}");
+            }
+            await signingIn;
         }
-        await signingIn;
+        finally
+        {
+            // Never left running when the test fails: a sign-in still going would log into the folder Dispose deletes.
+            stop.Cancel();
+            await Task.WhenAny(signingIn, Task.Delay(TimeSpan.FromSeconds(30)));
+        }
         try
         {
             // The browser was sent on to Healdan's done page, which says to close the tab.

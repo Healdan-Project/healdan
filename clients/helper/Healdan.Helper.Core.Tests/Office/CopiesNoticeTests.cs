@@ -10,7 +10,7 @@ public sealed class CopiesNoticeTests : IDisposable
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-notice-").FullName;
     private readonly FakeNotifier _notifier = new();
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     private HelperPaths Paths => HelperPaths.For(_root);
 

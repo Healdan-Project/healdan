@@ -51,7 +51,7 @@ public sealed class ChannelHandlerTests : IDisposable
     public void Dispose()
     {
         _cycle.Dispose();
-        Directory.Delete(_root, true);
+        TempFolder.Delete(_root);
         foreach (var path in _outside)
         {
             if (Directory.Exists(path))
@@ -209,8 +209,10 @@ public sealed class ChannelHandlerTests : IDisposable
         Assert.Equal("#5 v1.0", (string?)during["docRef"]);
         Assert.True((bool?)during["pending"]); // the extension asks again
 
+        // Asked again once Healdan is back, with the class's longer wait: the save's retry and send must land within it,
+        // which 400 ms didn't always give a busy runner (CI's did), and a confirmation answers at once however long it is.
         _server.Down = false;
-        var after = (await handler.HandleAsync("saved", PathBody(path)))!.AsObject();
+        var after = (await _handler.HandleAsync("saved", PathBody(path)))!.AsObject();
         Assert.Equal("Lease agreement #5 v1.1", (string?)after["title"]);
         Assert.Equal("#5 v1.1", (string?)after["docRef"]);
         Assert.False((bool?)after["pending"]);

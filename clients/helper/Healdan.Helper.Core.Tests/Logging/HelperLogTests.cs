@@ -6,7 +6,7 @@ public sealed class HelperLogTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-log-").FullName;
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     [Fact]
     public void WritesLinesWithTheirLevel()

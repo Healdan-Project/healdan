@@ -275,6 +275,55 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task TheRecoveredWorkIsRenamedThoughItsSaveWentUpBeforeSaveAsAnswered()
+    {
+        // Word wrote its recovered window over the copy a second before the script answered, long after a write settles
+        // (Fast.Settle): a slow answer, or a busy machine (CI's runner). Sent then, the save was confirmed while the copy
+        // still counted as crashed, so it was never renamed; it goes up once the save back is done, and renames it.
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Scripting.WindowText = "the work Word recovered";
+        Scripting.AfterSaveAsWrite = _ => Task.Delay(TimeSpan.FromSeconds(1));
+
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal(["the work Word recovered"], Server.Saves.Select(s => s.Content));
+        Assert.Equal([path], Events.Reopens);
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ASaveConfirmedWhileCrashedRenamesTheCopyBeforeItOpensAsLastSaved()
+    {
+        // Word was Force Quit while a save waited for Healdan. Confirmed once Healdan was back, while the copy counted as
+        // crashed, it couldn't rename the copy, as no program had it. Reopen, with nothing for Word to bring back, opens
+        // it under the confirmed version's name, so its title is right.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RecoveryWait = TimeSpan.FromMilliseconds(400) });
+        Server.Down = true;
+        Save(path, "saved as Healdan went away");
+        await Wait.Until(() => Events.Waits.Contains(1), "the save waiting for Healdan");
+        await CrashAsync(path);
+        Server.Down = false;
+        await Wait.Until(() => Server.Doc(5).Version == "1.1" && !Store.HasUnconfirmedChanges(path), "the save confirmed");
+        Assert.True(cycle.IsCrashed(path));
+        Assert.True(File.Exists(path)); // not renamed while crashed
+        Scripting.NeverListed = true;
+
+        await cycle.OpenAsync(5, false);
+
+        await Wait.Until(() => Scripting.Opened.Count == 2, "the copy opened as last saved");
+        var v11 = CopyPath("Lease agreement #5 v1.1.docx");
+        Assert.Equal(v11, Scripting.Opened[1].Path);
+        Assert.False(File.Exists(path));
+        Assert.Equal("saved as Healdan went away", File.ReadAllText(v11));
+        Assert.Equal([v11], cycle.OpenCopies().Select(c => c.Path));
+        Assert.Equal(["saved as Healdan went away"], Server.Saves.Select(s => s.Content));
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
     public async Task ACloseJustAfterPowerPointsReopenIsSeen()
     {
         // The final review's Minor 4: the presentation's owner file is back as the close watcher takes it on again, so

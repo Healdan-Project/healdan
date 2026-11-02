@@ -318,11 +318,11 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
 
         FakeScripting.Close(OfficeProgram.Word, v11);
 
-        // The store deletes the copy, then its record: waiting for the file alone could look between the two.
-        await Wait.Until(() => !File.Exists(v11) && Store.All().Count == 0, "the renamed copy checked in and deleted, record and all");
+        await Wait.Until(() => Wait.Gone(v11), "the renamed copy checked in and deleted, record and all");
         Assert.Null(Server.Doc(5).Hold);
         Assert.Equal(1, Server.Count("DELETE /documents/5/checkout"));
         Assert.Equal(1, Server.SavesReceived);
+        Assert.Empty(Store.All());
         Assert.Empty(cycle.OpenCopies());
         Assert.Empty(Events.Errors);
     }
@@ -375,6 +375,33 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
         Assert.Equal("first draft", Server.Saves[0].Content);
         Assert.StartsWith("first draft (as Lease agreement #5 v1.1.docx)", Server.Saves[1].Content);
         Assert.Equal(FakeApi.Here("Word"), Server.Doc(5).Hold);
+    }
+
+    [Fact]
+    public async Task ARenameAnsweredOnceTheHelperStoppedLeavesTheCopyToTheNextCycle()
+    {
+        // The helper stopped (signed out, say) while Word was renaming the copy, and the next cycle took the copy on at
+        // its old name before Word answered. The stopped cycle doesn't move the record from under it: the next one
+        // follows the copy to its new name, as for any rename the helper stopped in the middle of.
+        using var renaming = new ManualResetEventSlim();
+        Scripting.BeforeRename = _ => renaming.Wait(TimeSpan.FromSeconds(10));
+        var (cycle, path) = await OpenAsync();
+        Save(path, "first draft");
+        await Wait.Until(() => Scripting.Renames.Count == 1, "the rename asked for");
+        cycle.Dispose();
+        var restarted = Cycle();
+        await restarted.ResumeAsync();
+        Assert.Equal([path], restarted.OpenCopies().Select(c => c.Path));
+        await LooksAsync(path, 2); // the next cycle's watcher has seen the owner file, as the stopped one may take one last look
+
+        renaming.Set(); // Word saves the copy under its new name and answers the stopped cycle
+
+        // The next cycle finds the window under its new name, and as nothing says what Healdan has of that file, it goes up.
+        await RenamedTo(restarted, CopyPath("Lease agreement #5 v1.2.docx"));
+        Assert.Equal(0, Server.Count("DELETE /documents/5/checkout"));
+        Assert.Equal("first draft", Server.Saves[0].Content);
+        Assert.StartsWith("first draft (as Lease agreement #5 v1.1.docx)", Server.Saves[1].Content);
+        Assert.Empty(Events.Errors);
     }
 
     [Fact]
