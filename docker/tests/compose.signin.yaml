@@ -1,0 +1,30 @@
+# Smoke test only: a throwaway Keycloak as a stand-in OpenID Connect provider (M4 spec section 16.1), and the switches
+# that make Healdan set it up as provider "smoke" and allow its plain-HTTP issuer. docker/smoke-test.sh adds it.
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    # --hostname puts http://keycloak:8080 in the discovery document and the tokens however Keycloak is reached: the
+    # app reaches it by that name on the stack's network, and docker/tests/test-signin.sh's curl through the host port
+    # with --connect-to. start-dev keeps the realm in the container, so each new container starts from the import.
+    command: ["start-dev", "--import-realm", "--http-port=8080", "--hostname=http://keycloak:8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: smoke-admin-pw
+      KC_HEALTH_ENABLED: "true"
+    # The health checks are on the management port, 9000, which isn't published, and the image has bash but no curl.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && read -r line <&3 && [[ $$line == *' 200 '* ]]"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+    volumes:
+      - ./docker/tests/keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "127.0.0.1:${SMOKE_KEYCLOAK_PORT:-18180}:8080"
+  app:
+    environment:
+      HEALDAN_SIGNIN_ALLOW_HTTP: "true"
+      HEALDAN_SMOKE_SIGNIN_ISSUER: http://keycloak:8080/realms/healdan
+      HEALDAN_SMOKE_SIGNIN_CLIENT_ID: healdan
+      HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET: smoke-client-secret

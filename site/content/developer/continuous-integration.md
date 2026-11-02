@@ -10,7 +10,7 @@ weight: 4
 | Check | Workflow | What it does |
 |---|---|---|
 | `build` | `build-logicaldoc.yml` | Checks the GUI's Font Awesome icons (`check-fontawesome-icons.py`), for links to LogicalDOC's docs (`check-logicaldoc-doc-links.py`), for LogicalDOC's servers (`check-logicaldoc-hosts.py`), for Maven repositories on LogicalDOC's hosts (`check-maven-repositories.py`) and for Oracle's and SQL Server's drivers (`check-database-drivers.py`), compiles every module except the WAR without the GWT compile, and runs Healdan's tests in parallel shards (see below) |
-| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`) and the helper's open-save-close cycle (its stack test) included |
+| `Test (amd64)`, `Test (arm64)` | `docker-image.yml` | Builds the image natively on each architecture, runs the init tool's unit tests, and runs `docker/smoke-test.sh` against the image, M2's client flow through the API (`test-api.sh`), the helper's open-save-close cycle (its stack test) and provider sign-in through a stand-in Keycloak (`test-signin.sh`) included |
 | `Clients` | `clients.yml` | Builds and tests the desktop clients in `clients/`: the helper on Ubuntu and macOS, the LibreOffice extension's Python tests and the Office add-in's Node tests on Ubuntu (see below) |
 | `Docs site` | `docs-site.yml` | Runs the script tests, builds the docs site strictly, checks its sources (`check-site-sources.py`) and its internal links (`check-site-links.py`), and on pushes to `master` publishes it |
 
@@ -128,6 +128,17 @@ closes it through the helper's cycle with a fake LibreOffice.
 A pull request that changes only the helper, the extension or the icons doesn't build the image, so this test
 doesn't run on it. It runs on `master` after the merge, and on pull requests that change the server. That gap is
 accepted.
+
+### The Stand-In Sign-In Provider in the Image CI
+
+The smoke stack runs a throwaway Keycloak as a stand-in OpenID Connect provider, and its step 5e signs in through it
+with `docker/tests/test-signin.sh` (see [The Stand-In Sign-In Provider](../tests/#the-stand-in-sign-in-provider)).
+
+- **Its image,** `quay.io/keycloak/keycloak:26.7.5`, has amd64 and arm64 builds, so both jobs run it natively. It's
+  about 475 MB, and the runners pull it on every run, as they start with no images.
+- **It starts beside the app,** in 15 to 25 seconds by its own log on a Mac, well inside the app's start, so step 1
+  rarely waits for it. Step 1 prints how long it took.
+- **Step 5e** takes under 5 seconds on a Mac, and prints how long it took, so a run's log has CI's times.
 
 ## Things That Catch Upstream Syncs
 

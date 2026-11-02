@@ -1,0 +1,90 @@
+{
+  "realm": "healdan",
+  "displayName": "Healdan smoke test",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "bruteForceProtected": false,
+  "clients": [
+    {
+      "clientId": "healdan",
+      "name": "Healdan",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "smoke-client-secret",
+      "redirectUris": ["*"],
+      "webOrigins": [],
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "fullScopeAllowed": true,
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "*"
+      },
+      "defaultClientScopes": ["acr", "basic", "email", "profile", "roles", "web-origins"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "false",
+            "userinfo.token.claim": "false",
+            "introspection.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "groups": [
+    { "name": "healdan-users" },
+    { "name": "healdan-other" }
+  ],
+  "users": [
+    {
+      "username": "sso-user",
+      "enabled": true,
+      "email": "sso-user@smoke.example",
+      "emailVerified": true,
+      "firstName": "Sso",
+      "lastName": "User",
+      "credentials": [{ "type": "password", "value": "Smoke-Sso-Pw-42!x", "temporary": false }],
+      "realmRoles": ["default-roles-healdan"],
+      "groups": ["/healdan-users"]
+    },
+    {
+      "username": "sso-helper",
+      "enabled": true,
+      "email": "sso-helper@smoke.example",
+      "emailVerified": true,
+      "firstName": "Sso",
+      "lastName": "Helper",
+      "credentials": [{ "type": "password", "value": "Smoke-Sso-Pw-42!x", "temporary": false }],
+      "realmRoles": ["default-roles-healdan"],
+      "groups": ["/healdan-users"]
+    },
+    {
+      "username": "sso-outsider",
+      "enabled": true,
+      "email": "sso-outsider@smoke.example",
+      "emailVerified": true,
+      "firstName": "Sso",
+      "lastName": "Outsider",
+      "credentials": [{ "type": "password", "value": "Smoke-Sso-Pw-42!x", "temporary": false }],
+      "realmRoles": ["default-roles-healdan"],
+      "groups": ["/healdan-other"]
+    }
+  ]
+}
