@@ -24,6 +24,9 @@ public sealed class HelperSessionTests : IDisposable
     private const string Account = "https://healdan.test";
     private const string Password = "pa55-w0rd-secret";
 
+    /// <summary>What the Sign In window says once Healdan has refused the token the helper held.</summary>
+    private const string Ended = "Your sign-in ended. Sign in again.";
+
     private static readonly CycleTimings Fast = new(
         Settle: TimeSpan.FromMilliseconds(150),
         SizePoll: TimeSpan.FromMilliseconds(25),
@@ -176,6 +179,7 @@ public sealed class HelperSessionTests : IDisposable
         var prompt = Assert.Single(_windows.SignIns);
         Assert.Equal(Account, prompt.Server);
         Assert.False(prompt.ServerFixed);
+        Assert.Null(prompt.Notice); // no sign-in has ended
         Assert.False(session.Started);
         Assert.False(File.Exists(Paths.Channel));
         Assert.Empty(_app.Opened);
@@ -192,7 +196,9 @@ public sealed class HelperSessionTests : IDisposable
         await session.StartAsync();
 
         Assert.Equal("DELETE healdan.test/api/v1/auth/tokens/current", _http.Calls[0]); // never used, only revoked
-        Assert.Equal(Account,Assert.Single(_windows.SignIns).Server);
+        var prompt = Assert.Single(_windows.SignIns);
+        Assert.Equal(Account, prompt.Server);
+        Assert.Null(prompt.Notice); // the helper's own refusal, not Healdan's
         Assert.True(session.Started);
         Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]);
         LogIndex("issued to device 00d0aa76-dev-helper");
@@ -590,6 +596,75 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Null(await signedIn.Task.WaitAsync(TimeSpan.FromSeconds(10)));
         Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]);
         Assert.Contains("Sign in", _notifier.All);
+    }
+
+    [Fact]
+    public async Task ARefusedTokenSaysInTheSignInWindowThatTheSignInEnded()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var asked = new TaskCompletionSource<SignInPrompt>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _windows.OnSignIn = prompt =>
+        {
+            asked.TrySetResult(prompt);
+            return StaysUp();
+        };
+
+        _server.Unauthorized = true; // the provider's check refused the person, say, so Healdan revoked the token
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+
+        var again = await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(Ended, again.Notice);
+    }
+
+    [Fact]
+    public async Task AKeptTokenHealdanRefusesAtTheStartSaysTheSignInEnded()
+    {
+        SignedInBefore();
+        _server.Unauthorized = true; // revoked while the helper wasn't running
+        var session = Make();
+
+        await session.StartAsync(); // the user closes the window
+
+        var prompt = Assert.Single(_windows.SignIns);
+        Assert.Equal(Ended, prompt.Notice);
+        Assert.Equal(Account, prompt.Server);
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public async Task AnEndedSignInIsStillSaidWhenSignInIsChosenFromTheMenu()
+    {
+        SignedInBefore();
+        _server.Unauthorized = true;
+        var session = Make();
+        await session.StartAsync(); // the user closes the window
+
+        await session.SignInAgainAsync(); // the menu's Sign In…, which they close too
+
+        Assert.Equal([Ended, Ended], _windows.SignIns.Select(p => p.Notice));
+    }
+
+    [Fact]
+    public async Task ASignInAfterAnEndedOneThenASignOutSaysNothingOfIt()
+    {
+        SignedInBefore();
+        _server.Unauthorized = true;
+        _windows.OnSignIn = async prompt =>
+        {
+            _server.Unauthorized = false;
+            return await prompt.SignInAsync(prompt.Server!, "robert", Password) is null;
+        };
+        var session = Make();
+        await session.StartAsync();
+        await session.SignOutAsync();
+        _windows.OnSignIn = _ => Task.FromResult(false);
+
+        await session.SignInAgainAsync(); // the menu's Sign In…
+
+        Assert.Equal([Ended, null], _windows.SignIns.Select(p => p.Notice));
+        Assert.False(session.SignedIn);
     }
 
     [Fact]

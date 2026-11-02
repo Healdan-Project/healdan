@@ -94,6 +94,13 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private bool _started;
     private bool _startFailed;
     private bool _signingOut;
+
+    /// <summary>
+    /// Healdan refused the token the helper held, at the start or while it ran, and no sign-in has worked since: the
+    /// Sign In window says the sign-in ended. Never set by a first sign-in or the person's own Sign Out.
+    /// </summary>
+    private bool _ended;
+
     private string? _userName;
     private int _waiting;
     private int _asking;
@@ -590,7 +597,15 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         try
         {
-            if (!await new SignIn(api, _keychain, _device, log: _log).TryResumeAsync())
+            var resume = await new SignIn(api, _keychain, _device, log: _log).TryResumeAsync();
+            if (resume == Resume.Refused)
+            {
+                lock (_gate)
+                    _ended = true;
+                _log.Warn($"Healdan refused the sign-in kept for {LinkName(api)}: asking for the sign-in again");
+                return false;
+            }
+            if (resume != Resume.Resumed)
             {
                 _log.Info($"No usable sign-in for {LinkName(api)} is kept: asking for one");
                 return false;
@@ -615,9 +630,13 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private async Task<bool> AskSignInAsync(string? server, bool serverFixed)
     {
         _log.Info("Asking for the sign-in");
+        bool ended;
+        lock (_gate)
+            ended = _ended;
         try
         {
-            var prompt = new SignInPrompt(server, serverFixed, TrySignInAsync, ProvidersAsync, TrySignInWithProviderAsync);
+            var prompt = new SignInPrompt(server, serverFixed, TrySignInAsync, ProvidersAsync, TrySignInWithProviderAsync,
+                ended ? SignInPrompt.Ended : null);
             return await _windows.SignInAsync(prompt) && SignedIn;
         }
         catch (Exception e)
@@ -981,8 +1000,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     /// <summary>
     /// Healdan refused the token, on any call that carried it (spec §5.2): the menu offers Sign In, the user hears it
-    /// once, and the Sign In window asks for the password with the server fixed. Saves wait meanwhile. Before the helper
-    /// has started, during Sign Out and while quitting, the caller deals with it.
+    /// once, and the Sign In window asks for the password with the server fixed, saying the sign-in ended. Saves wait
+    /// meanwhile. Before the helper has started, during Sign Out and while quitting, the caller deals with it.
     /// </summary>
     private void TokenRefused()
     {
@@ -992,6 +1011,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
             if ((_cycle ?? _resuming) is null || _signingOut || _disposed)
                 return;
             (wasSignedIn, _signedIn) = (_signedIn, false);
+            _ended |= wasSignedIn;
         }
         if (wasSignedIn)
         {
@@ -1006,7 +1026,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
     private void SetSignedIn(HealdanApi api, string? userName)
     {
         lock (_gate)
-            (_api, _signedIn, _userName) = (api, true, userName);
+            (_api, _signedIn, _userName, _ended) = (api, true, userName, false);
     }
 
     private async Task<string?> UserNameAsync(HealdanApi api)

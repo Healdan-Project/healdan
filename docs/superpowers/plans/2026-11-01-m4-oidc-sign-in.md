@@ -1593,7 +1593,7 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
 **The owner's walkthrough (2026-11-02)**
 
 - **Rows 1 to 8 passed on Authentik** (spec §16.2 has each). Entra ID wasn't set up, so its two questions stay open: whether it accepts `client_secret_post`, and whether it signs refreshed ID tokens.
-- **What it found,** in the follow-ups below: Check doesn't test the client secret, so a wrong one passed it; the helper gives no reason when a check signs it out; and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
+- **What it found:** Check doesn't test the client secret, so a wrong one passed it, in the follow-ups below; the helper gave no reason when a check signed it out, which its Sign In window now gives ("Your sign-in ended. Sign in again.", PR_LINK); and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
 - **Before it,** a local check of the merged M4 on a stack with Keycloak found a refusal naming a group shown as HTML in the old UI's error popup, fixed in [Healdan-Project/healdan#165](https://github.com/Healdan-Project/healdan/pull/165), and passed the rest.
 
 ## Follow-ups
@@ -1604,7 +1604,6 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - **The helper's window with provider buttons** (Task 15): done. Its picture is in Installing the Helper ([Healdan-Project/healdan#161](https://github.com/Healdan-Project/healdan/pull/161)), and the walkthrough's row 4 used it.
 - **Check doesn't test the client secret.** A wrong secret passed Check, and only the first sign-in showed it. A token request with a made-up code would: `invalid_grant` means the secret is right, `invalid_client` that it's wrong. (The walkthrough)
-- **The helper says nothing when a check signs it out.** It shows its Sign In window with no reason; a line such as "Your sign-in ended. Sign in again." would say why. (The walkthrough)
 - **What Entra does** (R28, R29): whether it signs the ID tokens it sends with a refresh, which row 4 shows (if not, groups follow Entra at sign-in only), and whether its token endpoint accepts the client secret as Healdan sends it, by `client_secret_post`, which Entra's discovery lists first (R32), which row 1 shows. (Tasks 13b and 9b)
 - **Safari and the loopback address** (Task 14): the walkthrough's row 4 went from HTTPS to `http://127.0.0.1` in Safari with no warning the owner reported.
 - **The unlinking email's words.** It's CE's `psw.rec1`, which welcomes the person as newly registered. Words of its own would need a new template and seed step. (Task 10)

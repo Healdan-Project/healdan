@@ -22,10 +22,22 @@ namespace Healdan.Helper.Core.Ui;
 /// worked, otherwise the reason to show on the error line, the browser's 5 minutes running out included. Cancelling
 /// stops the helper waiting for the browser; its answer is then not null, and the window needs no reason for it.
 /// </param>
+/// <param name="Notice">
+/// Why the window is asking, shown above the fields for as long as it's up: <see cref="Ended"/> once Healdan has
+/// refused the token the helper held. Null at a first sign-in, and after the person signed out themselves.
+/// </param>
 public sealed record SignInPrompt(string? Server, bool ServerFixed,
     Func<string, string, string, Task<string?>> SignInAsync,
     Func<string, Task<ProviderChoice?>> ProvidersAsync,
-    Func<string, string, CancellationToken, Task<string?>> SignInWithProviderAsync);
+    Func<string, string, CancellationToken, Task<string?>> SignInWithProviderAsync,
+    string? Notice = null)
+{
+    /// <summary>
+    /// Healdan refused the token (a <c>401</c>): it expired, was revoked, or the provider's check refused the person (M4
+    /// spec §9). The API doesn't say which, so neither does the window.
+    /// </summary>
+    public const string Ended = "Your sign-in ended. Sign in again.";
+}
 
 /// <summary>A server's sign-in choices (<c>GET /server</c>): its providers, in the order of their buttons, and the password link's label.</summary>
 public sealed record ProviderChoice(IReadOnlyList<ProviderInfo> Providers, string PasswordLabel);
