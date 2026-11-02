@@ -184,6 +184,10 @@ public class DocumentManager {
             throws PersistenceException, IOException {
         validateTransaction(transaction);
 
+        // Healdan: no file version is the current one, which the new file is stored as, not every file
+        if (fileVersion == null)
+            fileVersion = documentDAO.findDocument(docId).getFileVersion();
+
         transaction.setEvent(DocumentEvent.VERSION_REPLACED);
         transaction.setComment(String.format("file version %s - %s", fileVersion, transaction.getComment()));
 
