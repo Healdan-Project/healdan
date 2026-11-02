@@ -542,7 +542,7 @@ public sealed class CopyCycleTests : IDisposable
         FakeApp.Close(edited);
         FakeApp.Close(untouched);
 
-        await Wait.Until(() => !File.Exists(edited) && !File.Exists(untouched), "both copies deleted");
+        await Wait.Until(() => Wait.Gone(edited) && Wait.Gone(untouched), "both copies deleted, records and all");
         var save = Assert.Single(_server.Saves);
         Assert.Equal(5, save.DocNumber);
         Assert.False(save.KeepCheckedOut);
@@ -1825,8 +1825,8 @@ public sealed class CopyCycleTests : IDisposable
 
         FakeScripting.Close(OfficeProgram.Word, path);
 
-        // The store deletes the copy, then its record: waiting for the file alone could look between the two.
-        await Wait.Until(() => !File.Exists(path) && Store.All().Count == 0, "the copy checked in and deleted, record and all");
+        await Wait.Until(() => Wait.Gone(path), "the copy checked in and deleted, record and all");
+        Assert.Empty(Store.All());
         Assert.Null(_server.Doc(5).Hold);
         Assert.Equal(1, _server.Count("DELETE /documents/5/checkout"));
         Assert.Empty(cycle.OpenCopies());

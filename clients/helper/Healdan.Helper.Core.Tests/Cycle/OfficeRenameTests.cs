@@ -318,11 +318,11 @@ public sealed class OfficeRenameTests : OfficeCycleTestBase
 
         FakeScripting.Close(OfficeProgram.Word, v11);
 
-        // The store deletes the copy, then its record: waiting for the file alone could look between the two.
-        await Wait.Until(() => !File.Exists(v11) && Store.All().Count == 0, "the renamed copy checked in and deleted, record and all");
+        await Wait.Until(() => Wait.Gone(v11), "the renamed copy checked in and deleted, record and all");
         Assert.Null(Server.Doc(5).Hold);
         Assert.Equal(1, Server.Count("DELETE /documents/5/checkout"));
         Assert.Equal(1, Server.SavesReceived);
+        Assert.Empty(Store.All());
         Assert.Empty(cycle.OpenCopies());
         Assert.Empty(Events.Errors);
     }
