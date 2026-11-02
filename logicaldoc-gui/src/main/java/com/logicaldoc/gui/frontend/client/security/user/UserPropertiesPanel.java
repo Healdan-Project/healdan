@@ -12,6 +12,7 @@ import com.logicaldoc.gui.common.client.Session;
 import com.logicaldoc.gui.common.client.beans.GUIGroup;
 import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.gui.common.client.data.GroupsDS;
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.log.GuiLog;
 import com.logicaldoc.gui.common.client.util.ItemFactory;
@@ -397,6 +398,8 @@ public class UserPropertiesPanel extends HLayout {
                 || (ADMIN + Session.get().getTenantName()).equals(user.getUsername()));
         groupsItem.setValueField("id");
         groupsItem.setDisplayField("name");
+        // Healdan: a group's name is text, not HTML, on its button and in the list
+        HealdanText.showAsText(groupsItem, "name");
         groupsItem.addChangedHandler(changedHandler);
 
         DynamicForm form2 = new DynamicForm();

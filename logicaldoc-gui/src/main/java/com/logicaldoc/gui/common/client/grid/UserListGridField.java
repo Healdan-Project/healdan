@@ -1,6 +1,7 @@
 package com.logicaldoc.gui.common.client.grid;
 
 import com.logicaldoc.gui.common.client.Session;
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.util.AwesomeFactory;
 import com.logicaldoc.gui.common.client.util.Util;
@@ -94,7 +95,8 @@ public class UserListGridField extends ColoredListGridField {
 
 			Object avatarId = getAvatarId(value, rec);
 
-			String formattedValue = super.format(value, rec, rowNum, colNum);
+			// Healdan: a user's or group's name is text, not HTML
+			String formattedValue = super.format(HealdanText.escape(value), rec, rowNum, colNum);
 			if (avatarId == null || !UserListGridField.this.displayAvatar)
 				return formattedValue != null ? formattedValue : "";
 

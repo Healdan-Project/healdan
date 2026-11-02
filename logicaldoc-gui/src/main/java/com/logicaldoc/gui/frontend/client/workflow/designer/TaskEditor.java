@@ -380,6 +380,8 @@ public class TaskEditor extends Window {
 		ListGridField label = new ListGridField(LABEL, I18N.message(LABEL));
 		label.setWidth("*");
 		label.setCanFilter(false);
+		// Healdan: a candidate's name, a group's among them, is text, not HTML
+		label.setEscapeHTML(true);
 
 		ListGridField name = new ListGridField("name", I18N.message("name"), 50);
 		name.setCanFilter(false);

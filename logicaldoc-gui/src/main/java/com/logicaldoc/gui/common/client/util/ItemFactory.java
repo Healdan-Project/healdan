@@ -961,6 +961,10 @@ public class ItemFactory {
         group.setPickListWidth(300);
         ListGridField n = new ListGridField("name", I18N.message("name"));
         ListGridField description = new ListGridField(DESCRIPTION, I18N.message(DESCRIPTION));
+        // Healdan: a group's name and description are text, not HTML, in the list and once chosen
+        n.setEscapeHTML(true);
+        description.setEscapeHTML(true);
+        group.setEscapeHTML(true);
         group.setPickListFields(n, description);
         group.setOptionDataSource(new GroupsDS());
         return group;

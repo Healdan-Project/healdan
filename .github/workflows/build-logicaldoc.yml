@@ -127,6 +127,7 @@ jobs:
             JobsDataServletTest
             HealdanNamesTest
             HealdanOpenInAppTest
+            HealdanTextTest
             LockedDocsDataServletTest
             FolderSearchTest
             SavedSearchTest
