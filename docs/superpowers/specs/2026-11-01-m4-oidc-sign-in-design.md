@@ -72,7 +72,7 @@ The walkthrough in §16.2 passes, against the owner's server over HTTPS, with He
 
 - **Spring Security.** `context-security.xml` (upstream) has `<security:http pattern="/api/**" security="none" />` since M2 (M2 §10.3). So endpoints under `/api/` run outside Spring Security, answered by Healdan's own servlet. The roadmap's recon expected a hook in that file, which Spring's own OAuth2 login would need; Healdan's own endpoints don't.
 - **The web page's session.** The password form's success handler (`LDAuthenticationSuccessHandler`) sets an HttpOnly cookie, `ldoc-sid`, holding the CE session's id (Secure when `cookies.secure` is on), and saves the id in the HTTP session. `SessionFilter` signs every later request in from it. Any code that opens a CE session can do the same.
-- **One way into CE.** Every channel signs in through `SessionManager.newSession`, which runs the throttle (`HealdanThrottle`, M2 §5.7) and then the `Authentication` chain. M2's `HealdanTokenAuthenticator` opens a session for a device token by handing the chain a one-time key on the thread, and refuses every other key that starts `hd_` (M2 §5.1).
+- **One way into CE.** Every channel signs in through `SessionManager.newSession`, which runs the throttle (`HealdanThrottle`, M2 §5.7) and then the `Authentication` chain. M2's `HealdanTokenAuthenticator` opens a session for a device token by handing the chain a one-time key on the thread, and refuses every other key that starts `hd_` (M2 §5.1). (changed in the build: it leaves keys starting `hd_signin_` to `SignInAuthenticator`, §7.6.)
 - **The chain can't veto.** It tries authenticators in `position` order, and a refusal by one doesn't stop the next (`AuthenticationChain`). So a Healdan authenticator can't overrule a password that `DefaultAuthenticator` accepts. A provider account is kept from passwords by having none (§7.3).
 - **Where an account comes from.** `User.source` is CE's `UserSource` (`DEFAULT`, `LDAP`, `SAML`), stored as its number in `ld_user.ld_source`.
   - For any source but `DEFAULT`, CE allows an empty password (`HibernateUserDAO.store`) and skips its password history, rules and expiry. The old UI hides Change Password (`AccountMenu`).
@@ -105,7 +105,7 @@ The plan checks each against the provider's current documentation, and the Insta
 - Client secrets expire, at most 24 months after they're made.
 - `offline_access` gives a refresh token. A refresh fails once the account is disabled or its sessions are revoked.
 - Without "Assignment required" on the enterprise app, any account in the tenant, guests included, can sign in to it.
-- (changed in the build: found while writing the Install pages.) Microsoft's documentation describes the ID token in a refresh's answer as unsigned (`alg: none`), so Healdan ignores such a token (§9). Entra's discovery document lists `client_secret_post` and `private_key_jwt` at the token endpoint, not `client_secret_basic`, though Microsoft documents Basic there too, so Healdan uses what the document lists (§13). The owner's walkthrough (§16.2) will show what the tenant really does.
+- (changed in the build: found while writing the Install pages.) Microsoft's documentation describes the ID token in a refresh's answer as unsigned (`alg: none`), so Healdan ignores such a token (§9). Healdan sends the client secret the way the discovery document lists (§13); Entra's lists `client_secret_basic` as well as `client_secret_post`, so Basic goes out. The owner's walkthrough (§16.2) will show what the tenant really does.
 
 **Authentik:**
 
@@ -162,7 +162,7 @@ The plan checks each against the provider's current documentation, and the Insta
    - It then goes where the password form would: the page asked for before signing in, or else the web page. (changed in the build: that's the HTTP session's `RequestedUrl` under `login.jsp`'s conditions, followed only for a path on this server's own address. Nothing in CE sets `RequestedUrl`, though `login.jsp` reads it, so in practice a sign-in lands on `frontend.jsp`.)
 6. **The redirect address** an admin registers at the provider is `https://<server>/api/signin/<id>/callback`, one per provider. It's built from the server's public address (`LOGICALDOC_PUBLIC_URL` when set, as M3.5 §7's manifest is, else the address the request came to), and the Sign-In tab shows it (§10.3).
    - (Refined while writing the spec: Section 1 of the design said one callback address for every provider. One per provider means the callback always knows which provider it expects, which closes off "mix-up" attacks between providers.)
-   - (changed in the build: plan correction 5, and rulings R2 and R5.) The address logic moved out of `AddinResource` into a shared `PublicAddress`, in `healdan-core`'s `com.logicaldoc.healdan.web` rather than `healdan-api`, so the Sign-In tab's RPC shows exactly the address the pages send. It takes `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]`, or anywhere while `HEALDAN_SIGNIN_ALLOW_HTTP` is set. With no usable address, the sign-in pages answer a plain `409` page saying the server's public address isn't set, since they can't send the browser anywhere without one.
+   - (changed in the build: plan correction 5, and ruling R2, with its pages' detail.) The address logic moved out of `AddinResource` into a shared `PublicAddress`, in `healdan-core`'s `com.logicaldoc.healdan.web` rather than `healdan-api`, so the Sign-In tab's RPC shows exactly the address the pages send. It takes `https`, or `http` on `localhost`, `127.0.0.1` or `[::1]`, or anywhere while `HEALDAN_SIGNIN_ALLOW_HTTP` is set. With no usable address, the sign-in pages answer a plain `409` page saying the server's public address isn't set, since they can't send the browser anywhere without one.
 
 ### 5.3 Refusals
 
@@ -653,7 +653,7 @@ On the owner's server over HTTPS, with Healdan Helper 0.6.0 from its signed rele
 8. **Sign Out** comes back to the sign-in page, and doesn't sign straight back in.
 
 (changed in the build) Rows the build left questions for:
-- **Row 1:** Entra's discovery document lists `client_secret_post` and not `client_secret_basic`, so Healdan sends the secret in the body (§13). The first sign-in shows that Entra takes it.
+- **Row 1:** Healdan sends the client secret the way the discovery document lists (§13). Entra's lists `client_secret_basic` as well as `client_secret_post`, so Basic goes out, and the first sign-in shows the tenant accepts it.
 - **Row 4:** whether Entra signs the ID tokens it sends with a refresh. If they're unsigned, as Microsoft documents, a forced check is accepted without updating groups, which then follow Entra at sign-in only (§9); a disabled person is still refused, with `invalid_grant`. This row is also the first real browser to take the helper's sign-in (§6.2), and the first look at the helper's window with provider buttons, which Installing the Helper has no picture of.
 - **Row 5:** with the secret broken, a refresh should get `invalid_client`, which counts as can't be reached (§9), so helpers stay signed in and the log has an error naming the provider.
 
