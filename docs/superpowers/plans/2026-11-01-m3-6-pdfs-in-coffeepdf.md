@@ -2076,7 +2076,7 @@ After the merges, on 2026-11-01:
 - **A race in a test.** Master's Clients run for #151 failed once on Ubuntu, in
   `CoffeePdfCycleTests.SendAndCheckInAfterACrashTakesTheStaleLockWithIt`. `CopyStore.Delete` deletes the copy before
   its lock, on the check-in's thread, and the test asserted the lock gone as soon as it saw the copy go. It now waits
-  for the lock as well (PR_NUMBER). The Helper's code is unchanged.
+  for the lock as well (#155). The Helper's code is unchanged.
 - **Healdan Helper 0.5.0:** `helper-v0.5.0` was tagged on master at `23fa4f79a`, whose Helper code is rc1's, and CI
   tested, signed and notarised it and attached the disk image to its release.
 
