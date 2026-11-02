@@ -107,7 +107,9 @@ A sign-in provider is a service your firm already signs people in with, such as 
 Once one is set up and on, the sign-in page shows its button, and people sign in there rather than with a Healdan
 password. The **Sign-In** tab, beside Healdan's settings, sets providers up. Changes take effect at once, with no
 restart. If a change stops people signing in, `admin` signs in with its password and puts it right: see
-[`admin`, the Emergency Account](#admin-the-emergency-account).
+[`admin`, the Emergency Account](#admin-the-emergency-account). The Install manual's
+[Sign-In Providers](../../install/sign-in/) has what to plan for, and the steps at the provider for Microsoft Entra
+ID, Authentik and others.
 
 ### The Sign-In Tab
 

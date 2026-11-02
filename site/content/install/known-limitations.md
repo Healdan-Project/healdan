@@ -1,6 +1,6 @@
 ---
 title: Known Limitations
-weight: 10
+weight: 11
 ---
 
 - **LogicalDOC's database schema is never migrated.** Healdan upgrades its own tables on every start, but not

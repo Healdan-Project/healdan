@@ -1,6 +1,6 @@
 ---
 title: Backup and Restore
-weight: 6
+weight: 7
 ---
 
 Back up the database and both of the app's volumes together. The configuration volume holds the encryption key,
