@@ -4,9 +4,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Date;
 import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -123,7 +125,7 @@ public class ApiTokens {
 	 *         the database can't store
 	 */
 	public Issued issue(User user, String name, String sid) throws PersistenceException {
-		return issue(user, name, null, sid);
+		return issue(user, name, null, sid, null, null);
 	}
 
 	/**
@@ -134,12 +136,18 @@ public class ApiTokens {
 	 * @param name what the device is called; blank becomes "Unnamed device"
 	 * @param device the computer's device id, or null for none
 	 * @param sid the CE session it is bound to, or null
+	 * @param provider the id of the sign-in provider the user signed in
+	 *        through, which re-checks the token (M4 spec section 9); null for
+	 *        a password sign-in
+	 * @param refresh the provider's refresh token, already sealed by
+	 *        {@code SecretBox}; null when there is none
 	 * @return the token and its row
 	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if the name is too long or holds characters
 	 *         the database can't store, or the device id isn't one
 	 */
-	public Issued issue(User user, String name, String device, String sid) throws PersistenceException {
+	public Issued issue(User user, String name, String device, String sid, String provider, String refresh)
+			throws PersistenceException {
 		String clean = checkName(name);
 		String deviceId = checkDevice(device);
 		String token = PREFIX + randomPart();
@@ -154,6 +162,11 @@ public class ApiTokens {
 		row.setExpires(new Date(now.getTime() + TimeUnit.DAYS.toMillis(settings.apiTokenMaxDays())));
 		row.setSid(sid);
 		row.setDevice(deviceId);
+		row.setProvider(provider);
+		row.setRefresh(refresh);
+		// The sign-in itself is the provider's say-so, so the first re-check is due an interval from now
+		if (provider != null)
+			row.setChecked(now);
 		dao.store(row);
 		// A password change while this sign-in ran may have revoked the user's tokens before this one was stored
 		if (!Objects.equals(user.getPassword(), storedPassword(user.getId())))
@@ -164,7 +177,7 @@ public class ApiTokens {
 	/**
 	 * @return the 43 characters of 32 random bytes in base64url
 	 */
-	static String randomPart() {
+	public static String randomPart() {
 		byte[] bytes = new byte[32];
 		RANDOM.nextBytes(bytes);
 		return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -282,6 +295,76 @@ public class ApiTokens {
 	public void bind(ApiToken token, String sid) {
 		if (update("set sid = :sid where id = :id and deleted = 0", Map.of("sid", sid, "id", token.getId())) > 0)
 			token.setSid(sid);
+	}
+
+	/**
+	 * What a re-check with a token's provider works from (M4 spec section 9),
+	 * as the database holds it now.
+	 *
+	 * @param checked when the provider last said the person may still sign in,
+	 *        or null
+	 * @param refresh the provider's refresh token, sealed, or null
+	 */
+	public record Recheck(Date checked, String refresh) {
+
+		@Override
+		public String toString() {
+			return "Recheck[checked=" + checked + ", refresh=" + (refresh == null ? "none" : "hidden") + "]";
+		}
+	}
+
+	/**
+	 * Reads again what a re-check with the token's provider works from: another
+	 * request may have checked or revoked the token since this one read its
+	 * row, and a provider that turns refresh tokens over refuses the one it
+	 * replaced. It's a query rather than a lookup by id, so no copy Hibernate
+	 * keeps answers it, and Hibernate's rather than plain SQL, so its time
+	 * compares with the row's whichever time zone Hibernate stores times in.
+	 *
+	 * @param id the token's id
+	 * @return the token's last check and refresh token as stored now, or empty
+	 *         if it was revoked or is gone
+	 */
+	public Optional<Recheck> recheckState(long id) {
+		try {
+			return dao.findByQuery("select t.checked, t.refresh from " + ApiToken.class.getCanonicalName()
+					+ " t where t.id = :id and t.deleted = 0", Map.of("id", id), null).stream()
+					.map(row -> new Recheck((Date) row[0], (String) row[1])).findFirst();
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't read a device token", e);
+		}
+	}
+
+	/**
+	 * Records a re-check with the token's provider, unless the token was
+	 * revoked meanwhile.
+	 *
+	 * @param token a token row
+	 * @param checked when the provider accepted it, or null to leave the time
+	 *        of the last check as it is
+	 * @param refresh the provider's new refresh token, already sealed, or null
+	 *        to keep the one stored
+	 */
+	public void recordRecheck(ApiToken token, Date checked, String refresh) {
+		if (checked == null && refresh == null)
+			return;
+		Map<String, Object> parameters = new HashMap<>();
+		parameters.put("id", token.getId());
+		List<String> sets = new ArrayList<>();
+		if (checked != null) {
+			sets.add("checked = :checked");
+			parameters.put("checked", checked);
+		}
+		if (refresh != null) {
+			sets.add("refresh = :refresh");
+			parameters.put("refresh", refresh);
+		}
+		if (update("set " + String.join(", ", sets) + " where id = :id and deleted = 0", parameters) > 0) {
+			if (checked != null)
+				token.setChecked(checked);
+			if (refresh != null)
+				token.setRefresh(refresh);
+		}
 	}
 
 	/**

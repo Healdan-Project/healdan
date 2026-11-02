@@ -4,11 +4,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
-import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
+
+import com.logicaldoc.healdan.web.PublicAddress;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.ws.rs.GET;
@@ -35,15 +34,6 @@ public class AddinResource {
 
 	private static final String UTF8 = "; charset=UTF-8";
 
-	/** The key of the public address, which LOGICALDOC_PUBLIC_URL sets */
-	private static final String SERVER_URL = "server.url";
-
-	/**
-	 * LogicalDOC's default for the public address, which an install keeps
-	 * until LOGICALDOC_PUBLIC_URL sets it: no address at all
-	 */
-	private static final String PLACEHOLDER = "http://server:port";
-
 	/**
 	 * The scripts are the server's own and Office.js, which Office requires to
 	 * come from its network; the connections go to the Healdan Helper's ports
@@ -55,14 +45,6 @@ public class AddinResource {
 			+ "https://127.0.0.1:47618 https://*.microsoft.com https://*.office.com https://*.office.net";
 
 	/**
-	 * An address as the manifest can write it into XML: the origin, which Office
-	 * wants as the app domain, and a path if Healdan isn't at the root.
-	 */
-	private static final Pattern ADDRESS = Pattern.compile(
-			"(?<scheme>https?)://(?<host>[A-Za-z0-9.-]+|\\[[0-9A-Fa-f:.]+\\])(?<port>:[0-9]{1,5})?(?<path>(?:/[A-Za-z0-9._~-]+)*)/*",
-			Pattern.CASE_INSENSITIVE);
-
-	/**
 	 * The manifest, with the server's address in place of the template's
 	 * placeholders. Each firm uploads its own.
 	 */
@@ -70,7 +52,7 @@ public class AddinResource {
 	@Public
 	@Path("manifest.xml")
 	public Response manifest(@Context HttpServletRequest request) {
-		Address address = address(request);
+		PublicAddress.Address address = address(request);
 		String manifest = new String(read(TEMPLATE), StandardCharsets.UTF_8)
 				.replace("{{BASE}}", address.base() + "/api/addin").replace("{{ORIGIN}}", address.origin());
 		return ok(manifest.getBytes(StandardCharsets.UTF_8), "application/xml" + UTF8, false);
@@ -117,57 +99,15 @@ public class AddinResource {
 	}
 
 	/**
-	 * Works out the address Office will load the pages from: the public
-	 * address when the install has one, otherwise the one this request was
-	 * made to, which Tomcat's {@code RemoteIpValve} has already corrected from
-	 * {@code X-Forwarded-Proto}. Office loads pages over HTTPS only, so
-	 * anything else but a machine's own address is refused.
+	 * Works out the address Office will load the pages from
+	 * ({@link PublicAddress}). Office loads pages over HTTPS only, so anything
+	 * else but a machine's own address is refused.
 	 */
-	private static Address address(HttpServletRequest request) {
-		String configured = com.logicaldoc.util.spring.Context.get().getConfig().getProperty(SERVER_URL);
-		String candidate = isSet(configured) ? configured.trim() : requested(request);
-
-		Matcher matcher = ADDRESS.matcher(candidate);
-		if (matcher.matches()) {
-			String scheme = matcher.group("scheme").toLowerCase(Locale.ROOT);
-			String host = matcher.group("host").toLowerCase(Locale.ROOT);
-			if ("https".equals(scheme) || isThisMachine(host)) {
-				String origin = scheme + "://" + host + (matcher.group("port") != null ? matcher.group("port") : "");
-				return new Address(origin, origin + matcher.group("path"));
-			}
-		}
-		throw ApiProblem.conflict("no-public-address",
+	private static PublicAddress.Address address(HttpServletRequest request) {
+		return PublicAddress.of(request).orElseThrow(() -> ApiProblem.conflict("no-public-address",
 				"Office loads add-ins over HTTPS, and Healdan doesn't know an HTTPS address for itself. Set "
 						+ "LOGICALDOC_PUBLIC_URL to the server's https:// address, such as https://healdan.example/, "
-						+ "and restart Healdan.");
-	}
-
-	private static boolean isSet(String configured) {
-		return configured != null && !configured.isBlank()
-				&& !PLACEHOLDER.equalsIgnoreCase(configured.trim().replaceAll("/+$", ""));
-	}
-
-	private static String requested(HttpServletRequest request) {
-		String scheme = request.getScheme();
-		String host = request.getServerName();
-		// A bare IPv6 address needs its brackets in a URL
-		if (host != null && host.indexOf(':') >= 0 && !host.startsWith("["))
-			host = "[" + host + "]";
-		int port = request.getServerPort();
-		boolean usual = port <= 0 || ("http".equalsIgnoreCase(scheme) && port == 80)
-				|| ("https".equalsIgnoreCase(scheme) && port == 443);
-		return scheme + "://" + host + (usual ? "" : ":" + port) + request.getContextPath();
-	}
-
-	private static boolean isThisMachine(String host) {
-		return "localhost".equals(host) || "127.0.0.1".equals(host) || "[::1]".equals(host);
-	}
-
-	/**
-	 * @param origin scheme, host and port, which the manifest's app domain is
-	 * @param base the origin and the install's path, if it has one
-	 */
-	private record Address(String origin, String base) {
+						+ "and restart Healdan."));
 	}
 
 	private static byte[] read(String resource) {

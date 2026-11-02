@@ -23,7 +23,9 @@ import com.fasterxml.jackson.databind.JsonNode;
  * Checks every response a test receives against {@code openapi.yaml} (spec
  * section 4.6). A route the file doesn't describe, such as an unknown path or
  * a test-only resource, must answer with a problem. The docs page under
- * {@code /api/docs} isn't described, so it isn't checked. A {@code HEAD}
+ * {@code /api/docs}, the Office add-in's files under {@code /api/addin/} and
+ * the sign-in pages under {@code /api/signin/} aren't described, so they
+ * aren't checked. A {@code HEAD}
  * request is checked as the {@code GET} it stands for, without the body.
  */
 public final class Contract {
@@ -45,8 +47,10 @@ public final class Contract {
 	 * @param response what the server answered
 	 */
 	public static void check(String method, String path, ApiResponse response) {
-		// The docs page and the Office add-in's files are web pages, which openapi.yaml doesn't describe
-		if (path.equals("/api/docs") || path.startsWith("/api/docs/") || path.startsWith("/api/addin/"))
+		// The docs page, the Office add-in's files and the sign-in pages are web pages, which openapi.yaml doesn't
+		// describe
+		if (path.equals("/api/docs") || path.startsWith("/api/docs/") || path.startsWith("/api/addin/")
+				|| path.equals("/api/signin") || path.startsWith("/api/signin/"))
 			return;
 
 		// JAX-RS answers HEAD wherever it answers GET, with the GET's headers and no body

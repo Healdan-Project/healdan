@@ -57,9 +57,26 @@ paths:
   /v1/auth/tokens:
     post:
       operationId: signIn
-      summary: Sign in with a password, and get a device token
+      summary: Sign in with a password or a helper's code, and get a device token
       description: |
         Runs Healdan's whole sign-in, with the same rules as its web page.
+        The body is a password sign-in (`PasswordSignIn`) or, for the helper,
+        the one-time code a sign-in through a provider handed it
+        (`CodeSignIn`), never both: a body with fields of each is
+        `422 validation`.
+
+        The helper starts a provider's sign-in in the system browser at
+        `/api/signin/<id>?client=helper` with its loopback `redirect_uri`
+        (`http://127.0.0.1:<port>/` or `http://[::1]:<port>/`), its `state`
+        and its PKCE `code_challenge` (`S256`). Healdan sends the browser
+        back to that address with `code` and the helper's `state`, or with
+        `error` and the `state` when it refuses. The code works once, within
+        60 seconds, and only with the verifier of that challenge and the
+        same `redirectUri`. A code that's unknown, used or expired, or
+        doesn't match the verifier or the address, is `401 sign-in-failed`,
+        as a wrong password is. Those sign-in pages aren't JSON API, so this
+        file leaves them out.
+
         The token is shown only in this answer; send it as
         `Authorization: Bearer <token>`. It works only here, under `/api`:
         LogicalDOC's own services refuse it. It stops working when it goes
@@ -67,7 +84,9 @@ paths:
         it's revoked, or when the user's password changes.
 
         Refusals: `401 sign-in-failed` never says whether the username or
-        the password was wrong, or that the account can't sign in.
+        the password was wrong, or that the account can't sign in. An account
+        that signs in through a provider has no password, and its username
+        and any password are refused in the same words.
         `401 password-expired` means the password must be changed in the
         web page first. `429 too-many-attempts` means too many failed
         sign-ins; the detail says when to try again. `422 validation` with
@@ -76,7 +95,8 @@ paths:
         (`invalid`); with the field `device.id`, a device id that's missing
         (`required`), over 64 characters (`too-long`), or has characters
         other than letters, digits and hyphens (`invalid`). Both are checked
-        before the password.
+        before the password or the code, so a wrong one doesn't use the code
+        up.
 
         A client on a computer sends that computer's `device`, the same each
         time it signs in: the documents it has checked out stay its own when
@@ -1381,7 +1401,7 @@ components:
     ServerInfo:
       type: object
       additionalProperties: false
-      required: [product, version, apiVersion, labels, signIn]
+      required: [product, version, apiVersion, labels, signIn, providers, passwordLabel]
       properties:
         product:
           type: string
@@ -1407,13 +1427,48 @@ components:
               examples: [Matters]
         signIn:
           type: array
-          description: The ways to sign in
+          description: |
+            The ways to sign in: `password` always, and `provider` when a
+            sign-in provider is on.
           items:
             type: string
-            enum: [password]
-    SignIn:
+            enum: [password, provider]
+        providers:
+          type: array
+          description: |
+            The sign-in providers people can sign in through, in the order of
+            their buttons. Empty when none is on.
+          items:
+            $ref: '#/components/schemas/ProviderInfo'
+        passwordLabel:
+          type: string
+          description: The label of the link to sign in with a password.
+          examples: [Sign In with a Password]
+    ProviderInfo:
       type: object
       additionalProperties: false
+      required: [id, label]
+      properties:
+        id:
+          type: string
+          pattern: '^[a-z0-9-]{1,32}$'
+          description: The provider's id, as in `/api/signin/<id>`.
+          examples: [entra]
+        label:
+          type: string
+          description: The label of its button.
+          examples: [Sign In with Microsoft]
+    SignIn:
+      description: |
+        A password sign-in, or the helper's one-time code from a sign-in
+        through a provider. Each is closed, so a body can't mix the two.
+      oneOf:
+        - $ref: '#/components/schemas/PasswordSignIn'
+        - $ref: '#/components/schemas/CodeSignIn'
+    PasswordSignIn:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/SignInDevice'
       required: [username, password]
       properties:
         username:
@@ -1421,6 +1476,31 @@ components:
         password:
           type: string
           format: password
+      unevaluatedProperties: false
+    CodeSignIn:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/SignInDevice'
+      required: [code, codeVerifier, redirectUri]
+      properties:
+        code:
+          type: string
+          description: |
+            The one-time code the sign-in sent to `redirectUri`. It works
+            once, within 60 seconds.
+        codeVerifier:
+          type: string
+          pattern: '^[A-Za-z0-9._~-]{43,128}$'
+          description: The PKCE verifier whose S256 challenge started the sign-in.
+        redirectUri:
+          type: string
+          description: The loopback address the sign-in started with, exactly as it was sent.
+          examples: ['http://127.0.0.1:50123/']
+      unevaluatedProperties: false
+    SignInDevice:
+      type: object
+      description: What either kind of sign-in says about the device it's for.
+      properties:
         name:
           type: [string, 'null']
           maxLength: 100

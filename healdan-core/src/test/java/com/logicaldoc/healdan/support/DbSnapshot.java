@@ -24,8 +24,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 /**
  * Every row of the tables a refused document or folder operation could write:
  * LogicalDOC's document and folder tables and all of Healdan's {@code hd_}
- * tables. Take one before the operation and call {@link #assertUnchanged()}
- * after it.
+ * tables, and any others a test names. Take one before the operation and call
+ * {@link #assertUnchanged()} after it.
  */
 public final class DbSnapshot {
 
@@ -40,12 +40,18 @@ public final class DbSnapshot {
 	private final JdbcTemplate jdbc;
 
 	/**
+	 * The lower-case names of the tables dumped besides the usual ones
+	 */
+	private final List<String> more;
+
+	/**
 	 * Lower-case table name, then the table's rows rendered and sorted
 	 */
 	private final Map<String, List<String>> tables;
 
-	private DbSnapshot(JdbcTemplate jdbc, Map<String, List<String>> tables) {
+	private DbSnapshot(JdbcTemplate jdbc, List<String> more, Map<String, List<String>> tables) {
 		this.jdbc = jdbc;
+		this.more = more;
 		this.tables = tables;
 	}
 
@@ -57,10 +63,23 @@ public final class DbSnapshot {
 	 * @return the snapshot
 	 */
 	public static DbSnapshot take(JdbcTemplate jdbc) {
+		return take(jdbc, List.of());
+	}
+
+	/**
+	 * Dumps the tables, and some more
+	 *
+	 * @param jdbc access to the database
+	 * @param more the lower-case names of other tables to dump, such as
+	 *        LogicalDOC's user tables
+	 *
+	 * @return the snapshot
+	 */
+	public static DbSnapshot take(JdbcTemplate jdbc, List<String> more) {
 		Map<String, List<String>> tables = new TreeMap<>();
-		for (Map.Entry<String, String> table : findTables(jdbc).entrySet())
+		for (Map.Entry<String, String> table : findTables(jdbc, more).entrySet())
 			tables.put(table.getKey(), dump(jdbc, table.getValue()));
-		return new DbSnapshot(jdbc, tables);
+		return new DbSnapshot(jdbc, List.copyOf(more), tables);
 	}
 
 	/**
@@ -80,7 +99,7 @@ public final class DbSnapshot {
 	 */
 	public void assertUnchangedExcept(String... ignored) {
 		Set<String> skip = Set.of(ignored);
-		DbSnapshot now = take(jdbc);
+		DbSnapshot now = take(jdbc, more);
 		StringBuilder diff = new StringBuilder();
 		for (String table : tables.keySet())
 			if (!skip.contains(table))
@@ -96,7 +115,7 @@ public final class DbSnapshot {
 	 * @return the tables whose rows now differ from this snapshot
 	 */
 	public Set<String> changedTables() {
-		DbSnapshot now = take(jdbc);
+		DbSnapshot now = take(jdbc, more);
 		Set<String> changed = new TreeSet<>();
 		Set<String> names = new TreeSet<>(tables.keySet());
 		names.addAll(now.tables.keySet());
@@ -116,7 +135,7 @@ public final class DbSnapshot {
 	 *         snapshot
 	 */
 	public List<String> addedRows(String table) {
-		return minus(take(jdbc).tables.getOrDefault(table, List.of()), tables.getOrDefault(table, List.of()));
+		return minus(take(jdbc, more).tables.getOrDefault(table, List.of()), tables.getOrDefault(table, List.of()));
 	}
 
 	private static void appendDiff(StringBuilder diff, String table, List<String> before, List<String> after) {
@@ -149,7 +168,7 @@ public final class DbSnapshot {
 	/**
 	 * @return lower-case table name, then the quoted name to query it with
 	 */
-	private static Map<String, String> findTables(JdbcTemplate jdbc) {
+	private static Map<String, String> findTables(JdbcTemplate jdbc, List<String> more) {
 		Map<String, String> found = jdbc.execute((ConnectionCallback<Map<String, String>>) con -> {
 			DatabaseMetaData meta = con.getMetaData();
 			String quote = meta.getIdentifierQuoteString().trim();
@@ -158,13 +177,16 @@ public final class DbSnapshot {
 				while (rs.next()) {
 					String name = rs.getString("TABLE_NAME");
 					String lower = name.toLowerCase(Locale.ROOT);
-					if (LD_TABLES.contains(lower) || lower.startsWith(HD_PREFIX))
+					if (LD_TABLES.contains(lower) || more.contains(lower) || lower.startsWith(HD_PREFIX))
 						names.put(lower, quote + name + quote);
 				}
 			}
 			return names;
 		});
 		for (String table : LD_TABLES)
+			if (!found.containsKey(table))
+				throw new IllegalStateException("Table " + table + " not found");
+		for (String table : more)
 			if (!found.containsKey(table))
 				throw new IllegalStateException("Table " + table + " not found");
 		return found;

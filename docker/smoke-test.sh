@@ -10,6 +10,8 @@ cd "$(dirname "$0")/.."
 PROJECT=logicaldoc-smoke
 PORT=${SMOKE_PORT:-18080}
 BASE="http://127.0.0.1:$PORT"
+# The stand-in sign-in provider's host port (docker/tests/compose.signin.yaml), on 127.0.0.1 only.
+KEYCLOAK_PORT=${SMOKE_KEYCLOAK_PORT:-18180}
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
@@ -19,7 +21,11 @@ PW='sm0ke,p=a\ss $x #1 é:! '
 export TZ=UTC
 
 # docker/tests/compose.smoke.yaml makes Healdan seed a Store, template, client and matter to upload into.
-compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml "$@"; }
+# docker/tests/compose.signin.yaml adds a stand-in sign-in provider, Keycloak, and makes Healdan seed its setup.
+compose() {
+  docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml \
+    -f docker/tests/compose.signin.yaml "$@"
+}
 # The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
 # but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
 show_server_log() {
@@ -49,6 +55,8 @@ cleanup() {
   if [ "$status" != 0 ]; then
     echo "== the app container's last 150 lines of output"
     compose logs --no-log-prefix --tail 150 app
+    echo "== Keycloak's last 40 lines of output"
+    compose logs --no-log-prefix --tail 40 keycloak
     show_server_log
   fi
   compose down -v --remove-orphans >/dev/null 2>&1
@@ -56,7 +64,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\n" "$PW" "$PORT" > "$ENV_FILE"
+printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\n" "$PW" "$PORT" "$KEYCLOAK_PORT" > "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -101,6 +109,11 @@ LOADER=$BASE/login/login.nocache.js
 echo "== 1. build and start"
 if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -d --build; fi
 check "app healthy" wait_healthy "$(compose ps -q app)" 900
+# Keycloak starts beside the app and takes far less time, so this rarely waits.
+check "Keycloak healthy" wait_healthy "$(compose ps -q keycloak)" 300
+# Not head: under pipefail, the SIGPIPE'd compose logs would fail the line.
+kc_started=$(compose logs --no-log-prefix keycloak 2>&1 | sed -n 's/.* started in \([0-9.]*\)s\..*/\1/p' || true)
+echo "Keycloak started in ${kc_started%%$'\n'*} s"
 [ "$FAILED" = 0 ] || exit 1
 
 echo "== 2. login page and the API"
@@ -170,6 +183,8 @@ check "seed.profile and seed.everyone recorded" test \
   "$(db_query "select count(*) from hd_setting where name in ('seed.profile', 'seed.everyone')")" = 2
 check "smoke-fixture seed recorded" test \
   "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-fixture'")" = 1
+check "smoke-signin seed recorded" test \
+  "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-signin'")" = 1
 # doc_ids is "<pdf id> <png id>", uploaded in that order: doc #s 1 and 2
 n=1
 for id in $doc_ids; do
@@ -262,6 +277,15 @@ if [ "${SMOKE_HELPER_TEST:-0}" = 1 ]; then
 else
   echo "skipped: set SMOKE_HELPER_TEST=1 to run it"
 fi
+
+echo "== 5e. provider sign-in through the stand-in Keycloak (M4 spec section 16.1)"
+# Signs in through Keycloak as the web page does and as the helper does, with curl and a cookie jar, and checks linking
+# by email, the gate, and a person disabled at Keycloak losing their device token; its output carries its own PASS/FAIL
+# lines. Its one wrong password is sso-user's, and leaves this address well under the throttle's limit.
+signin_started=$SECONDS
+check "provider sign-in through the stand-in" env BASE="$BASE" KEYCLOAK="127.0.0.1:$KEYCLOAK_PORT" \
+  bash docker/tests/test-signin.sh
+echo "step 5e took $((SECONDS - signin_started)) s"
 
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \

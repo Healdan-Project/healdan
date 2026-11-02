@@ -60,9 +60,66 @@ curl -s "$BASE/api/v1/me" -H "Authorization: Bearer $TOKEN"
   web page can't make your browser call it with your sign-in.
 - **The token works only in the API,** under `/api`. LogicalDOC's own services refuse it (see
   [below](#logicaldocs-web-services-and-api-keys)).
-- **`GET /server`** needs no sign-in. A client calls it first, to check that it's talking to Healdan.
+- **`GET /server`** needs no sign-in. A client calls it first, to check that it's talking to Healdan and to see how
+  it can sign in (see [Signing In Through a Provider](#signing-in-through-a-provider)).
 - **A refused sign-in:** `401 sign-in-failed` never says whether the username or the password was wrong, or that
   the account can't sign in. `401 password-expired` means the password has to be changed in the web page first.
+
+## Signing In Through a Provider
+
+When an administrator turns a sign-in provider on, such as Microsoft Entra ID, `GET /server` lists it:
+
+```json
+{
+  "product": "Healdan",
+  "version": "9.3.2",
+  "apiVersion": "v1",
+  "labels": { "matter": "Matter", "matters": "Matters" },
+  "signIn": ["password", "provider"],
+  "providers": [{ "id": "entra", "label": "Sign In with Microsoft" }],
+  "passwordLabel": "Sign In with a Password"
+}
+```
+
+- **`providers`** are the providers people can sign in through, in the order their buttons go in. With none on,
+  it's empty and `signIn` is `["password"]`. A client shows a button for each, labelled with its `label`, and
+  the password form behind a link labelled `passwordLabel`.
+- **An account that signs in through a provider has no password.** A password sign-in for it gets
+  `401 sign-in-failed`, in the same words as a wrong password, so the answer doesn't say the account is linked.
+
+A desktop client, such as the Healdan Helper, signs in through the system browser and a loopback redirect
+(RFC 8252), then exchanges a one-time code for its device token:
+
+1. **It gets ready.** It makes a PKCE verifier and its `S256` challenge (RFC 7636), and a state of 1 to 128
+   letters, digits, `-`, `.`, `_` and `~`. It listens on `http://127.0.0.1:<port>/` or `http://[::1]:<port>/`.
+2. **It opens the system browser** at
+   `/api/signin/<id>?client=helper&redirect_uri=http://127.0.0.1:<port>/&state=<state>&code_challenge=<challenge>&code_challenge_method=S256`.
+   The `redirect_uri` must be exactly that: `http`, the host `127.0.0.1` or `[::1]`, a port, a path of `/` or
+   none, and nothing else. Another address, a challenge that isn't 43 characters of base64url, a method other than
+   `S256`, or a missing or wrong state is `400`, with a page, and the browser goes nowhere.
+3. **The person signs in at the provider,** in that browser. Healdan sends the browser to the loopback address with
+   `?code=<code>&state=<state>`, or with `?error=<code>&state=<state>` when it refuses, with one of the codes in
+   [Sign-In Pages](#sign-in-pages). A provider that isn't on is `error=provider` straight away.
+4. **It checks the state,** then sends the browser on to `/api/signin/done?provider=<id>`, with `&error=<code>`
+   after a refusal. The page tells the person to close the tab, or what went wrong.
+5. **It exchanges the code** within 60 seconds:
+
+   ```bash
+   curl -s -X POST "$BASE/api/v1/auth/tokens" -H 'Content-Type: application/json' \
+     -d '{"code": "…", "codeVerifier": "…", "redirectUri": "http://127.0.0.1:50123/",
+          "name": "Healdan Helper on Office PC", "device": {"id": "…"}}'
+   ```
+
+   The answer is `201`, as for a password.
+
+- **The code works once,** for 60 seconds, with the verifier of the challenge the sign-in started with and the same
+  `redirectUri`, character for character. Anything else is `401 sign-in-failed`, as a wrong password is, and a
+  wrong verifier or address uses the code up.
+- **A body has a password or a code, never both.** One with fields of each is `422 validation`, and so is a code
+  without its `codeVerifier` or `redirectUri` (`required`). `name` and `device` are checked as for a password,
+  before the code is used.
+- **The token is a device token like any other,** with the same limits and the same routes to sign it out. Healdan
+  keeps the provider's refresh token with it, encrypted, and never sends it to the client.
 
 ## Device Sign-Ins
 
@@ -323,6 +380,39 @@ Office loads with no sign-in, so nothing there takes a token or follows the API'
 as everywhere under `/api`. [Office Integration](../../install/office-integration/#microsoft-office) says what
 the server needs for it.
 
+## Sign-In Pages
+
+`/api/signin/` isn't part of the JSON API either. It runs a sign-in through a provider, such as Microsoft Entra ID,
+for the web page and for the Healdan Helper. Its addresses are pages a browser is sent through, so they take no token,
+answer with redirects and HTML rather than JSON, and `openapi.yaml` doesn't describe them.
+
+- **`/api/signin/<id>`** starts a sign-in through the provider with that id, and sends the browser to the provider.
+  A random value in an `hd_signin` cookie ties the sign-in to that browser, and it has 10 minutes to come back.
+  With `?client=helper` and the helper's parameters, it starts the helper's sign-in (see
+  [Signing In Through a Provider](#signing-in-through-a-provider)).
+- **`/api/signin/<id>/callback`** is where the provider sends the browser back, and the redirect address an
+  administrator registers at the provider: your install's public address followed by `/api/signin/<id>/callback`.
+  Each sign-in comes back once, to the browser that started it and to its own provider's address, or it's refused.
+  The web page's sign-in ends signed in, with the same session cookie as the password form, on the page asked for
+  or the web page. A refusal goes back to the sign-in page as `/login.jsp?signin=<code>`. The helper's sign-in opens
+  no session in the browser: it ends at the helper's loopback address with a one-time code, or a refusal's code. A
+  sign-in that's unknown, used or expired has no helper's address, so it goes to the sign-in page.
+- **`/api/signin/done`** is the page that says "Signed in to Healdan. You can close this tab." With
+  `?error=<code>`, it says what went wrong instead, naming the provider given by `&provider=<id>`.
+
+| Code | When |
+|---|---|
+| `no-group` | The person's groups at the provider map to no Healdan group |
+| `email-taken` | The email matches more than one account, or one that can't be linked |
+| `username-taken` | A new account's username is taken, or isn't one Healdan can use |
+| `account` | LogicalDOC's sign-in refused the account: disabled, expired or outside its working hours, say |
+| `provider` | The provider couldn't be reached, refused, or what it sent failed a check |
+| `expired` | The sign-in took more than 10 minutes, was already used, or came back to another browser or provider |
+
+The addresses are built from the server's public address, as the Office add-in's are: `LOGICALDOC_PUBLIC_URL`
+when it's set, otherwise the address the request came to. It must be `https://`, or plain `http://` on the machine
+itself. Without one, the pages answer `409` with a page that says to set `LOGICALDOC_PUBLIC_URL`.
+
 ## Healdan's Own Client
 
 The Healdan Helper, which brings Healdan into LibreOffice, is a client of this API, and uses most of what's above:
@@ -348,6 +438,9 @@ bar, in **Security → API Keys**.
 
 They're LogicalDOC's older services. They speak LogicalDOC's words, so a Store is a workspace there, and an API key
 never expires and survives a password change. New clients use `/api`, which doesn't take API keys.
+
+An account that signs in through a provider can't use an API key at all: linking it deletes the keys it had, and a
+key it makes afterwards in the web page is refused on every route.
 
 **A device token isn't an API key.** It works only under `/api`. LogicalDOC's services refuse it however it's sent:
 to `/services/rest/auth/loginApiKey` or the SOAP service's `loginApiKey`, as `X-API-KEY` on any of their routes, or

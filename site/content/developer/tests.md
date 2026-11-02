@@ -22,6 +22,24 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
   test database, which takes about two and a half minutes. A step its user can't do, or a file the manifest names
   that's missing, fails the build. See [A Demo Firm for Screenshots](../development-stack/#a-demo-firm-for-screenshots).
 
+### The Fake Sign-In Provider
+
+Provider sign-in's tests, in `healdan-core` and `healdan-api`, run against `FakeProvider`, an OpenID Connect provider
+in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests use it too.
+
+- **It's a small JDK HTTP server** on `127.0.0.1` at a random port. It serves the discovery document, its keys and a
+  token endpoint, and signs its ID tokens with Nimbus. Its authorisation endpoint isn't called over HTTP: the test
+  reads the address a sign-in would send the browser to, and gets back the code the provider would send.
+- **Its token endpoint checks what a real one does:** the client's id and secret, a code used once, the redirect
+  address the code was issued for, a verifier that matches the PKCE challenge, and refresh tokens that turn over on
+  each use.
+- **It can misbehave on purpose:** a bad signature, the wrong issuer or audience, an expired token, a refused or
+  unanswered refresh, and the like, for the checks Healdan makes.
+- **Plain HTTP.** While it runs it allows providers over plain HTTP, which only the smoke stack's overlay allows
+  outside the tests. `SignInTestHooks` sets that by hand, and moves the clocks that time pending sign-ins, the
+  helper's codes and the re-checks. A test that uses it resets it when it ends, or the setting leaks into the next
+  test class.
+
 ### The API's Tests
 
 `healdan-api`'s tests extend `ApiTestCase`, which builds on `healdan-core`'s `AbstractHealdanTestCase`, taken from
@@ -52,7 +70,33 @@ The tests use JUnit 4. [Building from Source](../building-from-source/) has the 
 | `docker/tests/test-previews.sh` | Office and drawing previews: converted ahead of time, text, markup and thumbnails, no fetching or macros while converting, a broken file failing cleanly, leftover processes cleaned up |
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the GUI's loaders sent with `Cache-Control: no-cache` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, M2's client flow through the API (`test-api.sh`, step 5c), the helper's open-save-close cycle (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
+| `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at `frontend.jsp` signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the GUI's loaders sent with `Cache-Control: no-cache` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, M2's client flow through the API (`test-api.sh`, step 5c), the helper's open-save-close cycle (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
+
+### The Stand-In Sign-In Provider
+
+The smoke stack signs in through a real OpenID Connect provider, a throwaway Keycloak, as well as with passwords.
+`docker/smoke-test.sh` adds the overlay `docker/tests/compose.signin.yaml`, which:
+
+- **runs Keycloak 26.7.5** (`quay.io/keycloak/keycloak`) in development mode, which imports the realm `healdan` from
+  `docker/tests/keycloak/healdan-realm.json` each time its container starts. The realm has a confidential client
+  `healdan` that requires PKCE `S256` and puts the person's groups in the ID token's `groups` claim, the groups
+  `healdan-users` and `healdan-other`, and three people: `sso-user` and `sso-helper` in `healdan-users`, and
+  `sso-outsider` in `healdan-other`. Their passwords are throwaway ones, in the realm file.
+- **publishes it on `127.0.0.1:18180` only** (`SMOKE_KEYCLOAK_PORT` changes the port). Keycloak names itself
+  `http://keycloak:8080` in its discovery document and tokens, the address the app reaches it at on the stack's
+  network. `test-signin.sh`'s `curl` sends that name to the published port with
+  `--connect-to keycloak:8080:127.0.0.1:18180`. The smoke test waits for its health in step 1, through the
+  container's health check, since Keycloak answers it on its management port, 9000, which isn't published.
+- **sets Healdan up to use it.** It sets `HEALDAN_SIGNIN_ALLOW_HTTP=true`, as Keycloak's address is plain HTTP, and
+  the provider's issuer, client id and secret in `HEALDAN_SMOKE_SIGNIN_ISSUER`, `HEALDAN_SMOKE_SIGNIN_CLIENT_ID` and
+  `HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET`. With all three set, the `smoke-signin` setup step adds the provider `smoke`,
+  linking by email, maps `healdan-users` to a new group `Smoke SSO`, makes a local account `sso-user` with
+  Keycloak's `sso-user`'s email and a password, so the first sign-in links it, and sets `signin.recheck.minutes` to
+  `0`, so a device token is checked with Keycloak on every request. Production never sets these variables, and
+  without them the step does nothing.
+
+Step 5e times itself, and step 1 prints how long Keycloak took to start, by its own log.
 
 ### When a Smoke Check Fails
 
@@ -62,6 +106,7 @@ removes the stack. It's at the end of the script's output, after `SOME CHECKS FA
 at the end of the `Smoke test` step of the `Test (amd64)` or `Test (arm64)` job:
 
 - **The app container's last 150 lines of output:** the entrypoint, the init tool and Tomcat's start.
+- **Keycloak's last 40 lines of output,** for the stand-in sign-in provider.
 - **The run's warnings and errors from `dms.log`,** the last 200 lines of them. Each keeps its exception's message
   and `Caused by` lines, without the stack frames.
 - **`dms.log`'s last 40 lines.**
