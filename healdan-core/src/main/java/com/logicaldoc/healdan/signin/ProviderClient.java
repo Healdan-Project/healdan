@@ -119,7 +119,8 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * again, which {@link #check} reports (rulings R29 and R32). Post comes first
  * because Nimbus form-encodes a Basic header's client id and secret (RFC 6749
  * section 2.3.1), so a secret with a {@code ~}, as Entra ID's generated ones
- * have, goes as {@code %7E}, which a provider may not decode.
+ * have, goes as {@code %7E}, which a provider may not decode. {@link #check}
+ * sends it the same way, and only where a sign-in would.
  * <p>
  * <b>Never logged,</b> nor put in a {@link ProviderException}'s message:
  * tokens, codes, the client secret, ID tokens, verifiers, states and nonces.
@@ -399,7 +400,7 @@ public class ProviderClient {
 		AuthorizationGrant grant = new AuthorizationCodeGrant(new AuthorizationCode(code), redirect, codeVerifier);
 		HTTPResponse response;
 		try {
-			response = send(d, clientId, secret, grant);
+			response = send(d.metadata(), clientId, secret, grant);
 		} catch (IOException e) {
 			throw new ProviderException("The token endpoint couldn't be reached: " + describe(e), e);
 		}
@@ -493,7 +494,7 @@ public class ProviderClient {
 
 		HTTPResponse response;
 		try {
-			response = send(d, clientId, secret, new RefreshTokenGrant(new RefreshToken(refreshToken)));
+			response = send(d.metadata(), clientId, secret, new RefreshTokenGrant(new RefreshToken(refreshToken)));
 		} catch (IOException e) {
 			log.warn("Sign-in provider {} couldn't be reached to refresh a sign-in: {}", p.id(), describe(e));
 			return unreachable(null);
@@ -560,16 +561,26 @@ public class ProviderClient {
 	 * signs with an RSA or EC algorithm, offers {@code offline_access}, and
 	 * publishes a key to sign with, that it takes a client secret at its token
 	 * endpoint, and that a client id and a secret that can be read are set.
+	 * <p>
+	 * Then it tests the client id and secret: it sends them to the token
+	 * endpoint as a sign-in does, with a code it makes up, which can't be one
+	 * the provider gave. A provider that takes them refuses the code with
+	 * {@code invalid_grant}; one that doesn't refuses the client, with
+	 * {@code invalid_client} or a {@code 401}, which is a problem. Any other
+	 * answer, or none, is a problem too, saying the secret wasn't tested. The
+	 * secret goes only where a sign-in would send it: not when the issuer
+	 * doesn't match, an endpoint isn't HTTPS, or the provider takes no client
+	 * secret, which are problems already.
 	 *
 	 * @param p the provider
 	 * @param redirect the redirect address to register, which comes back in the
-	 *        answer
+	 *        answer, and goes in the made-up code's request
 	 * @return the problems, if any, and the redirect address
 	 */
 	public Check check(SignInProvider p, URI redirect) {
 		List<String> problems = new ArrayList<>();
 		try {
-			checkInto(p, problems);
+			checkInto(p, redirect, problems);
 		} catch (RuntimeException e) {
 			log.warn("The check of sign-in provider {} stopped on {}", p.id(), e.getClass().getName());
 			problems.add("The check stopped on an unexpected error (%s).".formatted(e.getClass().getSimpleName()));
@@ -593,10 +604,11 @@ public class ProviderClient {
 		}
 	}
 
-	private void checkInto(SignInProvider p, List<String> problems) {
+	private void checkInto(SignInProvider p, URI redirect, List<String> problems) {
 		if (StringUtils.isBlank(p.clientId()))
 			problems.add("No client id is set.");
-		if (providers.secret(p.id()) == null)
+		String secret = providers.secret(p.id());
+		if (secret == null)
 			problems.add("No client secret is stored, or the one stored can't be read, as when the server's secret "
 					+ "key was lost. Enter the secret again.");
 
@@ -617,13 +629,19 @@ public class ProviderClient {
 		}
 
 		String named = metadata.getIssuer() == null ? null : metadata.getIssuer().getValue();
-		if (!issuer.equals(named))
+		boolean matches = issuer.equals(named);
+		if (!matches)
 			problems.add(mismatch(named, issuer) + ".");
-		for (String problem : endpointProblems(metadata))
+		List<String> endpoints = endpointProblems(metadata);
+		for (String problem : endpoints)
 			problems.add(problem + ".");
-		if (!takesClientSecret(metadata))
+		boolean takesSecret = takesClientSecret(metadata);
+		if (!takesSecret)
 			problems.add(("The provider doesn't take a client secret at its token endpoint (it lists %s), and Healdan "
 					+ "sends one as client_secret_post or client_secret_basic.").formatted(listed(metadata)));
+		// Only to a token endpoint a sign-in would send the secret to
+		if (matches && endpoints.isEmpty() && takesSecret && StringUtils.isNotBlank(p.clientId()) && secret != null)
+			checkSecret(metadata, new ClientID(p.clientId()), new Secret(secret), redirect, problems);
 
 		List<JWSAlgorithm> algorithms = metadata.getIDTokenJWSAlgs();
 		if (algorithms == null || algorithms.stream().noneMatch(ALGORITHMS::contains))
@@ -642,6 +660,45 @@ public class ProviderClient {
 		URI keys = metadata.getJWKSetURI();
 		if (keys != null && secure(keys))
 			checkKeys(keys, problems);
+	}
+
+	/**
+	 * Tests the client id and secret at the token endpoint with a made-up code
+	 * (see {@link #check}). The provider's answer is quoted with the code, the
+	 * verifier and the secret taken out.
+	 */
+	private void checkSecret(OIDCProviderMetadata metadata, ClientID clientId, Secret secret, URI redirect,
+			List<String> problems) {
+		AuthorizationCode code = new AuthorizationCode();
+		CodeVerifier verifier = new CodeVerifier();
+		HTTPResponse response;
+		try {
+			response = send(metadata, clientId, secret, new AuthorizationCodeGrant(code, redirect, verifier));
+		} catch (IOException e) {
+			problems.add("Healdan couldn't test the client secret: the token endpoint couldn't be reached: %s."
+					.formatted(describe(e)));
+			return;
+		}
+
+		int status = response.getStatusCode();
+		if (status == HTTPResponse.SC_OK) {
+			problems.add("The provider's token endpoint accepted a code Healdan made up to test the client secret, "
+					+ "where it should refuse it with invalid_grant, so the secret wasn't tested.");
+			return;
+		}
+		ErrorObject error = error(response);
+		String errorCode = error == null ? null : error.getCode();
+		String said = describe(status, error, code.getValue(), verifier.getValue(), secret.getValue());
+		// Authentik answers a wrong secret with a 400, and a redirect address it doesn't have with invalid_client too
+		if (status == HTTPResponse.SC_UNAUTHORIZED || OAuth2Error.INVALID_CLIENT.getCode().equals(errorCode))
+			problems.add(("The provider refused the client secret: its token endpoint answered %s. Check that the "
+					+ "client id and secret are the ones the provider gave, then enter the secret again and save. "
+					+ "Some providers, Authentik among them, answer the same when the redirect address isn't "
+					+ "registered with them exactly.").formatted(said));
+		else if (status >= 500 || status == TOO_MANY_REQUESTS || !OAuth2Error.INVALID_GRANT.getCode().equals(errorCode))
+			problems.add(("Healdan couldn't test the client secret: the provider's token endpoint answered a code "
+					+ "Healdan made up with %s, where a provider that takes the secret answers invalid_grant.")
+					.formatted(said));
 	}
 
 	private void checkKeys(URI address, List<String> problems) {
@@ -842,10 +899,10 @@ public class ProviderClient {
 		}
 	}
 
-	private HTTPResponse send(Discovered d, ClientID clientId, Secret secret, AuthorizationGrant grant)
-			throws IOException {
-		TokenRequest request = new TokenRequest.Builder(d.metadata().getTokenEndpointURI(),
-				authentication(d.metadata(), clientId, secret), grant).build();
+	private HTTPResponse send(OIDCProviderMetadata metadata, ClientID clientId, Secret secret,
+			AuthorizationGrant grant) throws IOException {
+		TokenRequest request = new TokenRequest.Builder(metadata.getTokenEndpointURI(),
+				authentication(metadata, clientId, secret), grant).build();
 		HTTPRequest http = request.toHTTPRequest();
 		http.setConnectTimeout(timeout);
 		http.setReadTimeout(timeout);

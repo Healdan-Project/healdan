@@ -173,11 +173,20 @@ the provider publishes about itself, and its keys, and confirms that:
 - it takes a client secret at its token endpoint, as `client_secret_post` or `client_secret_basic`;
 - it offers `offline_access`, without which Healdan can't [check back](#checking-back-with-the-provider) on a
   Healdan Helper's sign-in;
-- a client ID is set, and a client secret Healdan can read.
+- a client ID is set, and a client secret Healdan can read;
+- the provider takes the client ID and secret.
+
+To test the client secret, Check sends the client ID and secret to the provider's token endpoint as a sign-in does,
+with a code it makes up. A provider that takes them refuses only the code, with `invalid_grant`, and Check passes.
+If it refuses the client instead, with `invalid_client` or HTTP 401, Check says the provider refused the client
+secret: copy the secret from the provider again, check the client ID, and save. Authentik answers the same when the
+redirect address isn't registered with it exactly. Any other answer, or none, is a problem too, which says the
+secret wasn't tested. Check sends the secret only where a sign-in would, so not when the issuer doesn't
+match or an address isn't `https://`: put those right first.
 
 It shows the redirect address first, with an icon that copies it, then each problem in a sentence, or that
-everything checks out. Check doesn't sign anyone in, or try the client secret at the provider: a sign-in through
-the button does.
+everything checks out. Check doesn't sign anyone in: try a sign-in through the button with a test person, which
+also tests the group map.
 
 When Healdan can't fetch what a provider publishes, as when it's down, it doesn't ask again for 30 seconds:
 sign-ins through it fail at once meanwhile, and Check shows the same failure. Saving the provider asks again at

@@ -22,6 +22,9 @@ The examples use `healdan.example` for your Healdan server and `idp.firm.example
   (in an HTTP Basic header), whichever its discovery document lists. Healdan uses `client_secret_post` when the
   document lists it, and `client_secret_basic` when it lists that and not `client_secret_post`, or lists no methods.
   A provider that lists only other methods, such as `private_key_jwt`, can't be used, and **Check** says so.
+  **Check** tests the secret with a code the provider never issued, so it relies on the token endpoint checking the
+  client before the code: a wrong secret answered with `invalid_client` or HTTP 401, and a right one with
+  `invalid_grant`, as Keycloak and Authentik answer. Any other answer, and Check says it couldn't test the secret.
 - **ID tokens signed with RSA or EC.** The algorithm is `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`,
   `ES256`, `ES384` or `ES512`, and the provider publishes its keys. Healdan refuses an unsigned ID token at a
   sign-in, and one signed with HMAC (`HS256` and the like), which some providers fall back on when they have no
@@ -95,8 +98,8 @@ preset. Then fill in:
 | Group map | a row for each provider group that may sign in, and the Healdan group it maps to |
 
 **Save**, then **Check**. It confirms the issuer and the signing algorithms, that every address is `https://`, that
-the provider takes a client secret at its token endpoint, and that it offers `offline_access`, and shows the redirect
-address to compare with the one you registered.
+the provider takes a client secret at its token endpoint, and that it offers `offline_access`, tests the client ID
+and secret there, and shows the redirect address to compare with the one you registered.
 
 ### Try It
 

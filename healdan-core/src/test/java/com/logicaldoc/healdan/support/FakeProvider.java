@@ -76,9 +76,11 @@ import com.sun.net.httpserver.HttpsServer;
  * <p>
  * Its token endpoint checks what a real one does: the client id and secret,
  * sent by a method it advertises ({@code client_secret_basic} unless
- * {@link #tokenEndpointAuthMethods} says otherwise); a code used once, with the
- * redirect it was issued for and a verifier that matches its {@code S256}
- * challenge; and refresh tokens that turn over on each use.
+ * {@link #tokenEndpointAuthMethods} says otherwise), refusing the client with
+ * {@code 401} {@code invalid_client} before it reads the grant; a code used
+ * once, with the redirect it was issued for and a verifier that matches its
+ * {@code S256} challenge, and {@code 400} {@code invalid_grant} for any other,
+ * such as one made up; and refresh tokens that turn over on each use.
  * <p>
  * Over plain HTTP it allows plain HTTP for providers while it runs, and
  * {@link #close} goes back to reading the environment. Over HTTPS
@@ -88,7 +90,8 @@ import com.sun.net.httpserver.HttpsServer;
  * The settings that make it misbehave, {@link #claimsOnRefresh} and
  * {@link #signRefreshesWith}, last until changed, apart from
  * {@link #refuseRefresh}, {@link #downForRefresh} and {@link #answerRefresh},
- * which answer one refresh each.
+ * which answer one refresh each, and {@link #answerCode}, which answers one
+ * code.
  */
 public final class FakeProvider implements AutoCloseable {
 
@@ -137,6 +140,8 @@ public final class FakeProvider implements AutoCloseable {
 	private final AtomicBoolean downForRefresh = new AtomicBoolean();
 
 	private final AtomicReference<Answer> nextRefresh = new AtomicReference<>();
+
+	private final AtomicReference<Answer> nextCode = new AtomicReference<>();
 
 	private final AtomicInteger tokenRequests = new AtomicInteger();
 
@@ -406,6 +411,18 @@ public final class FakeProvider implements AutoCloseable {
 	 */
 	public FakeProvider answerRefresh(int status, String error) {
 		nextRefresh.set(new Answer(status, error));
+		return this;
+	}
+
+	/**
+	 * @param status the status to answer the next code with, once the client
+	 *        id and secret are taken, whatever the code
+	 * @param error the OAuth error code to answer it with, in JSON; null for a
+	 *        body that isn't JSON
+	 * @return this provider
+	 */
+	public FakeProvider answerCode(int status, String error) {
+		nextCode.set(new Answer(status, error));
 		return this;
 	}
 
@@ -766,6 +783,11 @@ public final class FakeProvider implements AutoCloseable {
 		}
 		String grant = one(form, "grant_type");
 		if ("authorization_code".equals(grant)) {
+			Answer answer = nextCode.getAndSet(null);
+			if (answer != null) {
+				answer(exchange, answer);
+				return;
+			}
 			Pending pending = codes.remove(String.valueOf(one(form, "code")));
 			String verifier = one(form, "code_verifier");
 			if (pending == null || !pending.redirect().equals(one(form, "redirect_uri")) || verifier == null
@@ -782,10 +804,7 @@ public final class FakeProvider implements AutoCloseable {
 			}
 			Answer answer = nextRefresh.getAndSet(null);
 			if (answer != null) {
-				if (answer.error() == null)
-					send(exchange, answer.status(), "text/plain", "No");
-				else
-					error(exchange, answer.status(), answer.error());
+				answer(exchange, answer);
 				return;
 			}
 			Map<String, Object> granted = refreshTokens.remove(String.valueOf(one(form, "refresh_token")));
@@ -939,6 +958,13 @@ public final class FakeProvider implements AutoCloseable {
 		} catch (NoSuchAlgorithmException | InvalidKeyException e) {
 			throw new IllegalStateException(e);
 		}
+	}
+
+	private static void answer(HttpExchange exchange, Answer answer) throws IOException {
+		if (answer.error() == null)
+			send(exchange, answer.status(), "text/plain", "No");
+		else
+			error(exchange, answer.status(), answer.error());
 	}
 
 	private static void error(HttpExchange exchange, int status, String code) throws IOException {

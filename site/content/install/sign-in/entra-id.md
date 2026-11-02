@@ -97,8 +97,10 @@ On the Sign-In tab of **Administration → Healdan → Settings**, choose **Add*
 | Client Secret | the secret's **Value** |
 | Group map | a row for each provider group: its object id (or role value), and the Healdan group it maps to |
 
-**Save**, then **Check**. Check confirms the issuer, that Entra signs with RSA, and that it offers `offline_access`,
-and shows the redirect address to compare with the one you registered.
+**Save**, then **Check**. Check confirms the issuer, that Entra signs with RSA, takes a client secret at its token
+endpoint and offers `offline_access`, tries the client ID and secret there, and shows the redirect address to compare
+with the one you registered. If it says Entra refused the client secret, copy the secret's **Value** again, not its
+**Secret ID**.
 
 {{% /steps %}}
 

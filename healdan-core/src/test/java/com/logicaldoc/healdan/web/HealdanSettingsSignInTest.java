@@ -560,6 +560,14 @@ public class HealdanSettingsSignInTest extends AbstractHealdanTestCase {
 			assertEquals(2, lines.length);
 			assertEquals(BASE + "/api/signin/fake/callback", lines[0]);
 			assertTrue(lines[1], lines[1].contains("offline_access"));
+
+			// So does a client secret the provider refuses
+			fake.discovery("scopes_supported", List.of("openid", "offline_access"));
+			SignInProviders.get().save(SignInProviders.get().find("fake").orElseThrow(), "not-the-secret");
+			lines = as(boss).checkProvider("fake");
+			assertEquals(Arrays.toString(lines), 2, lines.length);
+			assertEquals(BASE + "/api/signin/fake/callback", lines[0]);
+			assertTrue(lines[1], lines[1].startsWith("The provider refused the client secret"));
 		}
 
 		assertHolds("unknown provider", "doesn't exist", () -> as(boss).checkProvider("nobody"));

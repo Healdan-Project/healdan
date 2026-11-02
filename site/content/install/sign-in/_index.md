@@ -76,7 +76,7 @@ and a client secret, which tell it which application is asking. Note both. The p
 
 As an administrator, go to **Administration → Healdan → Settings** and open the **Sign-In** tab. Choose **Add**, give
 the id, choose the preset, then fill in the issuer, client ID and client secret, and the group map. The preset
-fills in the rest. **Save**, and then **Check**.
+fills in the rest. **Save**, and then **Check**, which tests the saved settings, the client secret among them.
 
 ### Try It Before You Tell Anyone
 
