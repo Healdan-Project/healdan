@@ -8,6 +8,7 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -15,16 +16,19 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.EnumSet;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.LongSupplier;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import javax.sql.DataSource;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.util.spring.Context;
@@ -35,10 +39,17 @@ import com.logicaldoc.util.spring.Context;
  * AES-256-GCM under a key in a file of the configuration folder.
  * <p>
  * The key is 32 random bytes, in a file only the app's user can read. It is
- * made the first time something is sealed, never when one is opened. A
- * database dump on its own carries no secret, and a lost key makes every
- * sealed value read as unset ({@link #open} answers null), which the person
- * puts right by entering the secret again.
+ * made the first time something is sealed on a fresh install, never when one
+ * is opened. A database dump on its own carries no secret, and a lost key
+ * makes every sealed value read as unset ({@link #open} answers null), which
+ * an administrator puts right by entering the secrets again
+ * ({@link #sealEntered}).
+ * <p>
+ * Once stored values are sealed, {@link #seal} never makes a key: a key file
+ * that went missing, even for a moment, would otherwise be replaced by a new
+ * key, and every value sealed with the old one lost for good, helpers' refresh
+ * tokens revoked at their next check and every client secret unset, even
+ * after the file came back. It fails instead, and logs what to do.
  * <p>
  * A sealed value is {@code v1:} and the base64 of the IV (12 bytes), the
  * ciphertext and the tag. The values and the key are never logged.
@@ -66,6 +77,8 @@ public class SecretBox {
 
 	private final Path keyFile;
 
+	private final LongSupplier sealedStored;
+
 	private final AtomicBoolean warned = new AtomicBoolean();
 
 	/**
@@ -78,17 +91,24 @@ public class SecretBox {
 	/**
 	 * A box whose key file is the one named by the system property
 	 * {@code healdan.secretKey}, or else {@code logicaldoc/conf/healdan-secret.key}
-	 * in the user's home folder.
+	 * in the user's home folder, for the values sealed in this database
+	 *
+	 * @param dataSource the database
 	 */
-	public SecretBox() {
-		this(defaultKeyFile());
+	@Autowired
+	public SecretBox(DataSource dataSource) {
+		this(defaultKeyFile(), sealedIn(dataSource));
 	}
 
 	/**
 	 * @param keyFile where the key is, or will be made
+	 * @param sealedStored counts the values stored sealed, which it asks only
+	 *        when there is no key; while it answers more than none, only
+	 *        {@link #sealEntered} makes one
 	 */
-	public SecretBox(Path keyFile) {
+	public SecretBox(Path keyFile, LongSupplier sealedStored) {
 		this.keyFile = keyFile;
+		this.sealedStored = sealedStored;
 	}
 
 	private static Path defaultKeyFile() {
@@ -99,22 +119,61 @@ public class SecretBox {
 	}
 
 	/**
-	 * Seals a secret, making the key file first if there is none.
+	 * @param dataSource the database
+	 * @return counts the values sealed in it: settings, such as client secrets,
+	 *         and the refresh tokens of device tokens
+	 */
+	static LongSupplier sealedIn(DataSource dataSource) {
+		JdbcTemplate jdbc = new JdbcTemplate(dataSource);
+		return () -> count(jdbc, "select count(*) from hd_setting where value like ?", PREFIX + "%")
+				+ count(jdbc, "select count(*) from hd_api_token where hd_refresh is not null");
+	}
+
+	private static long count(JdbcTemplate jdbc, String sql, Object... arguments) {
+		Long count = jdbc.queryForObject(sql, Long.class, arguments);
+		return count == null ? 0L : count;
+	}
+
+	/**
+	 * Seals a secret, making the key file first if there is none and nothing
+	 * stored is sealed, as on a fresh install.
 	 * 
 	 * @param plain the secret
 	 * @return the sealed value, which differs each time; null if {@code plain} is
 	 *         null
+	 * @throws IllegalStateException if the key can't be read or made, or there
+	 *         is no key and stored values are sealed, which it logs at error
+	 *         level with what to do; the message never holds the secret
+	 */
+	public String seal(String plain) {
+		return seal(plain, false);
+	}
+
+	/**
+	 * Seals a secret an administrator has just entered, as {@link #seal} does,
+	 * but with no key file it makes one even when stored values are sealed:
+	 * entering the secrets again is how an administrator puts a lost key right
+	 * (spec section 13). Values sealed before then can't be opened, which it
+	 * logs at warning level.
+	 * 
+	 * @param plain the secret
+	 * @return the sealed value; null if {@code plain} is null
 	 * @throws IllegalStateException if the key can't be read or made; the message
 	 *         never holds the secret
 	 */
-	public String seal(String plain) {
+	public String sealEntered(String plain) {
+		return seal(plain, true);
+	}
+
+	private String seal(String plain, boolean entered) {
 		if (plain == null)
 			return null;
 		try {
 			byte[] iv = new byte[IV_BYTES];
 			RANDOM.nextBytes(iv);
 			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(key(true), "AES"), new GCMParameterSpec(TAG_BITS, iv));
+			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(keyToSeal(entered), "AES"),
+					new GCMParameterSpec(TAG_BITS, iv));
 			byte[] sealed = cipher.doFinal(plain.getBytes(StandardCharsets.UTF_8));
 			return PREFIX + Base64.getEncoder()
 					.encodeToString(ByteBuffer.allocate(iv.length + sealed.length).put(iv).put(sealed).array());
@@ -136,7 +195,7 @@ public class SecretBox {
 		if (StringUtils.isEmpty(sealed))
 			return null;
 		try {
-			byte[] key = key(false);
+			byte[] key = read();
 			if (key == null || !sealed.startsWith(PREFIX))
 				return unopened();
 			byte[] raw = Base64.getDecoder().decode(sealed.substring(PREFIX.length()));
@@ -156,7 +215,7 @@ public class SecretBox {
 	 */
 	public boolean hasKey() {
 		try {
-			return key(false) != null;
+			return read() != null;
 		} catch (IOException e) {
 			return false;
 		}
@@ -165,24 +224,25 @@ public class SecretBox {
 	private String unopened() {
 		if (warned.compareAndSet(false, true))
 			log.warn("A sealed secret can't be opened: the key file {} is missing or doesn't fit, or the value is "
-					+ "damaged. The secret reads as unset until it is entered again.", keyFile);
+					+ "damaged. The secret reads as unset until the key file is restored from a backup, or the secret "
+					+ "is entered again.", keyFile);
 		return null;
 	}
 
 	/**
-	 * @param make whether to make the key file when there is none
-	 * @return the key, or null if there is no usable key file and {@code make} is
-	 *         false
+	 * @param entered whether an administrator entered the secret, who may make
+	 *        a key even when stored values are sealed
+	 * @return the key, made first if there is none
 	 */
-	private byte[] key(boolean make) throws IOException {
+	private byte[] keyToSeal(boolean entered) throws IOException {
 		byte[] key = read();
-		if (key != null || !make)
+		if (key != null)
 			return key;
 		synchronized (MAKING) {
 			key = read();
 			if (key != null)
 				return key;
-			return makeKey();
+			return makeKey(entered);
 		}
 	}
 
@@ -193,31 +253,82 @@ public class SecretBox {
 		return key.length == KEY_BYTES ? key : null;
 	}
 
-	private byte[] makeKey() throws IOException {
-		boolean posix = FileSystems.getDefault().supportedFileAttributeViews().contains("posix");
+	private byte[] makeKey(boolean entered) throws IOException {
 		boolean leftover = Files.exists(keyFile);
-		// A file of another size isn't ours to overwrite; an empty one is what a start that died left
+		// A file of another size isn't ours to overwrite; an empty one is what a start that died left, before keys were
+		// put in place whole
 		if (leftover && Files.size(keyFile) > 0)
 			throw new IOException("The key file " + keyFile + " is not " + KEY_BYTES + " bytes");
+
+		long sealed = sealedStored();
+		if (sealed > 0 && !entered) {
+			log.error("Healdan's secret key file {} is missing or empty, but {} stored {} sealed, so Healdan won't make "
+					+ "a new key, which would leave them unreadable for good. Restore the key file from a backup; "
+					+ "nothing needs restarting. If it's lost for good, enter each sign-in provider's client secret "
+					+ "again on the Sign-In tab of Healdan Settings, which makes a new key, and helpers that signed in "
+					+ "through a provider sign in again.", keyFile, sealed, sealed == 1 ? "value is" : "values are");
+			throw new IllegalStateException("Can't seal a secret: the key file " + keyFile
+					+ " is missing or empty, and stored values are sealed with it");
+		}
 
 		byte[] key = new byte[KEY_BYTES];
 		RANDOM.nextBytes(key);
 		Path folder = keyFile.toAbsolutePath().getParent();
 		if (folder != null)
 			Files.createDirectories(folder);
+		write(key, leftover);
 
-		// Made and written through one open file, with the mode set at creation: it is never readable by others
-		Set<StandardOpenOption> options = leftover ? EnumSet.of(StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING)
-				: EnumSet.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
-		FileAttribute<?>[] attributes = posix && !leftover
+		if (sealed > 0)
+			log.warn("Made a new secret key file {}, for a client secret an administrator entered, while {} stored {} "
+					+ "sealed with a key that's missing. Those can't be opened: enter each other sign-in provider's "
+					+ "client secret again, and helpers that signed in through a provider sign in again at their next "
+					+ "check.", keyFile, sealed, sealed == 1 ? "value was" : "values were");
+		else
+			log.info("Made the secret key file {}. Back it up with the database.", keyFile);
+		return key;
+	}
+
+	/**
+	 * @return how many values are stored sealed
+	 * @throws IOException if that can't be told, as a key made then might leave
+	 *         them unreadable
+	 */
+	private long sealedStored() throws IOException {
+		try {
+			return sealedStored.getAsLong();
+		} catch (RuntimeException e) {
+			throw new IOException("Can't tell whether stored values are sealed, so no key is made", e);
+		}
+	}
+
+	/**
+	 * Puts a key in place whole. It's written to a file beside the key file,
+	 * made with its mode so it's never readable by others, then moved into
+	 * place. A start that dies part-way leaves at most that file, which the
+	 * next one clears, and never an empty or partial key file.
+	 *
+	 * @param leftover whether an empty key file is there, which the key
+	 *        replaces
+	 */
+	private void write(byte[] key, boolean leftover) throws IOException {
+		Path fresh = keyFile.resolveSibling(keyFile.getFileName() + ".new");
+		Files.deleteIfExists(fresh);
+		FileAttribute<?>[] attributes = FileSystems.getDefault().supportedFileAttributeViews().contains("posix")
 				? new FileAttribute<?>[] { PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")) }
 				: new FileAttribute<?>[0];
-		try (FileChannel channel = FileChannel.open(keyFile, options, attributes)) {
-			channel.write(ByteBuffer.wrap(key));
-			channel.force(true);
+		try {
+			try (FileChannel channel = FileChannel.open(fresh,
+					EnumSet.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE), attributes)) {
+				channel.write(ByteBuffer.wrap(key));
+				channel.force(true);
+			}
+			if (leftover)
+				Files.move(fresh, keyFile, StandardCopyOption.ATOMIC_MOVE);
+			else
+				// Fails if another process made a key meanwhile, rather than replacing it
+				Files.move(fresh, keyFile);
+		} finally {
+			Files.deleteIfExists(fresh);
 		}
-		if (posix && leftover)
-			Files.setPosixFilePermissions(keyFile, PosixFilePermissions.fromString("rw-------"));
-		return key;
 	}
 }

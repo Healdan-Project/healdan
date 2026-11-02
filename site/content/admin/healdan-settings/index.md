@@ -269,10 +269,10 @@ Unlinking an account:
 - **keeps the account** and its user id, so it keeps its documents, check-outs, history, My Matters, favourites,
   grants and groups. Its groups are managed in Healdan from then on;
 - **gives it a random temporary password,** which the person changes when they next sign in. Healdan emails it to
-  them when [outgoing email](../system/outgoing-email/) is set up and the account has an email address. Otherwise,
-  or if the mail server doesn't take it, the window shows it once, for you to pass on: nothing shows it again. Unlink
-  Everyone lists each password it couldn't email, beside its username. You can also give an unlinked account a
-  password of your own in the user editor;
+  them when [outgoing email is set up](../system/outgoing-email/#when-email-counts-as-set-up) and the account has an
+  email address. Otherwise, or if the email can't be sent or the mail server doesn't take it within 15 seconds, the
+  window shows it once, for you to pass on: nothing shows it again. Unlink Everyone lists each password it couldn't
+  email, beside its username. You can also give an unlinked account a password of your own in the user editor;
 - **signs out its Healdan Helpers,** and deletes its LogicalDOC API keys;
 - **keeps the link as a record,** marked unlinked, with when and by whom.
 
@@ -325,8 +325,8 @@ with an email address in Healdan: `admin` to begin with. `admin`'s address is Lo
 `admin@admin.net`, until you change it, so give it a real one or name your own username instead. The alert is off to
 begin with.
 
-- **It needs [outgoing email](../system/outgoing-email/).** Until that's set up, the tab says "Needs outgoing email,
-  which isn't set up", nothing is sent, and no message in Healdan takes its place.
+- **It needs [outgoing email](../system/outgoing-email/#when-email-counts-as-set-up).** Until that's set up, the tab
+  says "Needs outgoing email, which isn't set up", nothing is sent, and no message in Healdan takes its place.
 - **With no provider on,** `admin`'s password is an ordinary sign-in, and nothing is sent.
 
 ### Checking Back with the Provider

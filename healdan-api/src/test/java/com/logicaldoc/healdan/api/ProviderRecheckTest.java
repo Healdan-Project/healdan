@@ -518,7 +518,7 @@ public class ProviderRecheckTest extends ApiTestCase {
 		int asked = fake.tokenRequests();
 
 		Path keyDir = Files.createTempDirectory(Path.of("target"), "other-key");
-		String sealedElsewhere = new SecretBox(keyDir.resolve("healdan-secret.key")).seal("a-refresh-token");
+		String sealedElsewhere = new SecretBox(keyDir.resolve("healdan-secret.key"), () -> 0L).seal("a-refresh-token");
 		jdbc().update("update hd_api_token set hd_refresh = ? where hd_hash = ?", sealedElsewhere,
 				ApiTokens.hash(otherKey));
 		assertEquals(401, me(otherKey).status());

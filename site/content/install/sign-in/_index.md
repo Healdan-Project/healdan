@@ -155,7 +155,8 @@ To stop using a provider, without leaving anyone locked out:
 1. **Turn it off,** by unticking **On** in the provider's window. Its button leaves the sign-in page, the helper stops
    offering it, and Healdan stops contacting it. Nothing is unlinked, so turning it on again lets everyone back in.
 2. **Unlink Everyone,** in the provider's window. Each linked account gets a temporary password, which Healdan emails to
-   the person if outgoing email is set up. Otherwise the window shows each password once, for you to pass on.
+   the person if outgoing email is set up. Otherwise, or if an email can't go, the window shows that password once,
+   for you to pass on.
 3. **Remove** the provider on the Sign-In tab. Remove refuses while any account is linked. The provider's settings and
    group map go, and the record of the accounts it linked stays.
 
@@ -167,6 +168,10 @@ Accounts keep their user ids, so everything they own stays with them. The Admin 
 Healdan seals each provider's client secret, and the refresh tokens of helpers that signed in through a provider,
 under a key in the configuration volume, `conf/healdan-secret.key`. Back it up with the database: a database restored
 without its key reads those secrets as unset, and each provider needs its client secret entered again.
+
+Healdan makes the key when it first seals a secret, and never makes another on its own once secrets are sealed. If
+the file goes missing, providers count as off until you restore it, and nothing sealed is lost. If it's lost for
+good, entering a provider's client secret again makes a new key.
 [Backup and Restore](../backup-and-restore/#the-key-for-sign-in-secrets) says more.
 
 ## When a Sign-In Is Refused

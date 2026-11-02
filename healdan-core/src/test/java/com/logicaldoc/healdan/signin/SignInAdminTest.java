@@ -27,7 +27,9 @@ import org.apache.commons.lang.StringEscapeUtils;
 import org.junit.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.EMail;
+import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
@@ -75,6 +77,17 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 
 	private static final String CLIENT_ADDRESS = "10.0.0.8";
 
+	/** CE's switch for sending email, in the default run level */
+	private static final String SENDING = "aspect.sendingmessages.default";
+
+	/** The size of CE's email pool */
+	private static final String EMAIL_POOL_CORE = "threadpool.Email.core";
+
+	/** A password CE's generator can make, which the password rules refuse: its sequence of 4, abcd */
+	private static final String WEAK = "Kp7!abcdRz";
+
+	private static final String STRONG = "Bq4$Wn8-Yh2pLx";
+
 	private final HealdanFixtures fx = new HealdanFixtures();
 
 	private final List<EMail> emails = new CopyOnWriteArrayList<>();
@@ -94,7 +107,7 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 	@Override
 	public void setUp() throws IOException, SQLException, PluginException {
 		super.setUp();
-		for (String name : List.of("default.smtp.host", "default.smtp.sender", "smtp.nosend"))
+		for (String name : List.of("default.smtp.host", "default.smtp.sender", "smtp.nosend", SENDING, EMAIL_POOL_CORE))
 			savedConfig.put(name, config().getProperty(name));
 		config().setProperty("smtp.nosend", "true");
 		OutgoingEmail.sender = emails::add;
@@ -339,6 +352,112 @@ public class SignInAdminTest extends AbstractHealdanTestCase {
 		assertNotNull(bobs);
 		assertEquals(List.of(), emails);
 		assertTemporary("bob", bobs);
+	}
+
+	@Test
+	public void testUnlinkShowsThePasswordWhenLogicalDocDoesntSend() throws Exception {
+		emailSetUp();
+		// CE's own sender, which drops every email quietly under smtp.nosend, as set up
+		OutgoingEmail.sender = OutgoingEmail.CE;
+		assertFalse(OutgoingEmail.isSetUp());
+
+		String password = SignInAdmin.get().unlink(jane.getId(), admin);
+
+		assertNotNull(password);
+		assertTemporary("jane", password);
+
+		// And with its sending aspect off
+		config().setProperty("smtp.nosend", "false");
+		config().setProperty(SENDING, "false");
+		assertFalse(OutgoingEmail.isSetUp());
+		User bob = local("bob", "bob@firm.example");
+		link(fake, "oid-bob", bob);
+
+		String bobs = SignInAdmin.get().unlink(bob.getId(), admin);
+
+		assertNotNull(bobs);
+		assertTemporary("bob", bobs);
+
+		// Both on, it counts as set up
+		config().setProperty(SENDING, "true");
+		assertTrue(OutgoingEmail.isSetUp());
+	}
+
+	@Test
+	public void testLogicalDocsSenderFailsRatherThanDropAnEmail() throws Exception {
+		emailSetUp();
+		EMail email = new EMail();
+		email.setTenantId(Tenant.DEFAULT_ID);
+		Recipient recipient = new Recipient();
+		recipient.setAddress("jane@firm.example");
+		email.addRecipient(recipient);
+		email.setSubject("Healdan - Account details");
+		email.setMessageText("A temporary password");
+
+		// As when either is switched off after unlinking checked, CE would return as if it had sent it
+		assertThrows(jakarta.mail.MessagingException.class, () -> OutgoingEmail.CE.send(email));
+		config().setProperty("smtp.nosend", "false");
+		config().setProperty(SENDING, "false");
+		assertThrows(jakarta.mail.MessagingException.class, () -> OutgoingEmail.CE.send(email));
+	}
+
+	@Test
+	public void testUnlinkEveryoneShowsThePasswordsWhenTheEmailPoolFails() throws Exception {
+		emailSetUp();
+		User bob = local("bob", "bob@firm.example");
+		link(fake, "oid-bob", bob);
+		// A pool that can't be made throws, as one that refuses the task does
+		config().setProperty(EMAIL_POOL_CORE, "-1");
+
+		Unlinked unlinked = SignInAdmin.get().unlinkEveryone("fake", admin);
+
+		assertEquals(2, unlinked.count());
+		assertEquals(Set.of("bob", "jane"), unlinked.passwords().keySet());
+		for (Map.Entry<String, String> entry : unlinked.passwords().entrySet())
+			assertTemporary(entry.getKey(), entry.getValue());
+		assertEquals(List.of(), emails);
+	}
+
+	@Test
+	public void testUnlinkShowsThePasswordWhenTheEmailPoolHasStopped() throws Exception {
+		emailSetUp();
+		ThreadPools.get().getPool("Email").shutdown();
+
+		String password = SignInAdmin.get().unlink(jane.getId(), admin);
+
+		assertNotNull(password);
+		assertTemporary("jane", password);
+		assertEquals(List.of(), emails);
+	}
+
+	@Test
+	public void testUnlinkTriesAgainWhenATemporaryPasswordFailsTheRules() throws Exception {
+		List<String> made = new ArrayList<>(List.of(WEAK, STRONG));
+		SignInAdmin.generator = tenant -> made.remove(0);
+
+		String password = SignInAdmin.get().unlink(jane.getId(), admin);
+
+		assertEquals(STRONG, password);
+		assertTemporary("jane", password);
+		assertEquals(List.of(), made);
+	}
+
+	@Test
+	public void testUnlinkRefusedWhenTwoTemporaryPasswordsFailTheRules() throws Exception {
+		SignInAdmin.generator = tenant -> WEAK;
+		String before = storedPassword(jane);
+
+		Exception e = assertThrows(PersistenceException.class, () -> SignInAdmin.get().unlink(jane.getId(), admin));
+
+		// Never the password, nor the sequence the rules found in it
+		for (Throwable t = e; t != null; t = t.getCause()) {
+			assertFalse(t.toString(), t.toString().contains(WEAK));
+			assertFalse(t.toString(), t.toString().contains("abcd"));
+		}
+		// Rolled back: still linked, with no password
+		assertEquals(UserSource.OIDC, reload(jane).getSource());
+		assertEquals(before, storedPassword(jane));
+		assertEquals(1, SignInIdentityDAO.get().countLinked("fake"));
 	}
 
 	@Test

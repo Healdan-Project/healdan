@@ -648,7 +648,8 @@ public class SignInProviders {
 		if (secret.length() > MAX_SECRET)
 			throw refuse("The client secret can't be longer than %d characters.".formatted(MAX_SECRET));
 		try {
-			return box.seal(secret);
+			// An administrator's entry may make a new key after a lost one, which putting a lost key right needs
+			return box.sealEntered(secret);
 		} catch (IllegalStateException e) {
 			// The message holds no secret, and neither does this one
 			throw new HealdanRuleException("The client secret couldn't be kept, because Healdan couldn't read or "

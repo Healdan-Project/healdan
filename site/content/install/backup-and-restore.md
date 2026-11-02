@@ -33,10 +33,27 @@ makes one.
 A database dump on its own holds no readable secret. The backup above takes the key too, in
 `logicaldoc-files.tgz`, so keep the two files where only administrators can read them.
 
-If the key is lost, or a database is restored without the key that matches it, the sealed secrets read as unset and
-nothing else is lost:
+### If the Key File Goes Missing
 
-- a provider whose client secret can't be read stays off until you enter the secret again in Healdan Settings;
+Once secrets are sealed, Healdan never makes another key on its own: a new key would leave every secret sealed with
+the old one unreadable for good, even after the file came back. While the file is missing or empty, each provider
+counts as off, as its client secret can't be read, and the log, `repository/logs/dms.log`, says what to do.
+Helpers already signed in keep working.
+
+Restore the file from the backup, and everything works again at once, with no restart:
+
+```bash
+docker run --rm -v logicaldoc_logicaldoc-conf:/conf -v "$PWD":/backup busybox \
+  tar xzf /backup/logicaldoc-files.tgz -C / conf/healdan-secret.key
+```
+
+### If the Key Is Lost
+
+If there's no copy of the key, or a database is restored without the key that matches it, the sealed secrets read
+as unset and nothing else is lost:
+
+- a provider whose client secret can't be read stays off until you enter the secret again in Healdan Settings. The
+  first secret you enter makes a new key, so enter each provider's;
 - each Healdan Helper that signed in through a provider is asked to sign in again.
 
 Accounts, documents and the links between accounts and providers are not affected, and `admin` still signs in with

@@ -15,14 +15,15 @@ Email**. Until you do, nothing it tries to send goes out.
   saying so. **Alert login from new device**, under **Administration → Access Control → Security**, turns it off.
 - **A sign-in with `admin`'s password.** If you tick **Email When admin Signs In with Its Password** on the Sign-In
   tab, the people you name get an email each time `admin` signs in with its password while a sign-in provider is on.
-  It's off to begin with, and Healdan sends it only once the mail server isn't `localhost` and the Sender Email isn't
-  `logicaldoc@acme.com`. See [The `admin` Alert](../../healdan-settings/#the-admin-alert) and the Install manual's
+  It's off to begin with, and Healdan sends it only once outgoing email [counts as set up](#when-email-counts-as-set-up).
+  See [The `admin` Alert](../../healdan-settings/#the-admin-alert) and the Install manual's
   [Break Glass](../../../install/sign-in/#break-glass).
 - **Passwords.** A new person's username and password, when whoever adds them ticks **Notify credentials**. And
   when someone clicks **Lost your password?** on the sign-in page, a link; once they follow it, a new password,
   which they change when they next sign in.
 - **A temporary password.** When you unlink a person from a sign-in provider, their account gets a random password,
-  and Healdan emails it to them if the account has an email address. They change it when they next sign in. See
+  and Healdan emails it to them if outgoing email [counts as set up](#when-email-counts-as-set-up) and the account
+  has an email address. Otherwise you see it, to pass on. They change it when they next sign in. See
   [Linked Accounts](../../healdan-settings/#linked-accounts).
 - **Documents and notices.** **Send by email** on a document's menu, and the notice people chosen on the **Notify
   users** tab get when someone uploads or checks in documents. Send by email needs the Download and Email
@@ -48,6 +49,19 @@ Click **Save**.
 Choosing **SMTP Microsoft 365** fills in Microsoft's server, port 587 and STARTTLS, and adds a **Client ID**,
 **Tenant ID** and **Client secret**. They name an app registered for your firm in Microsoft Entra ID that may send
 mail by SMTP; whoever runs your Microsoft 365 sets it up.
+
+## When Email Counts as Set Up
+
+The `admin` alert and the email of a temporary password go only once outgoing email counts as set up:
+
+- the server isn't empty or this computer (`localhost`, `127.0.0.1` or `::1`), and the Sender Email isn't empty or
+  `logicaldoc@acme.com`;
+- **Sending messages** is on for the **Default** run level, on the **Run level** tab of **Administration → System →
+  General**. It's on to begin with;
+- `smtp.nosend` isn't `true` in `context.properties`, in the configuration volume. It isn't set to begin with.
+
+With either switch off, LogicalDOC drops every email as if it had sent it, so Healdan doesn't count on it: the
+Sign-In tab says the alert needs outgoing email, and unlinking shows you each temporary password instead.
 
 ## Testing It
 

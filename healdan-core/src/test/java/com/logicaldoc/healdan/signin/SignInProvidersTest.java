@@ -7,10 +7,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.function.LongSupplier;
 
 import javax.sql.DataSource;
 
@@ -30,6 +33,7 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.token.ApiTokens;
 import com.logicaldoc.util.spring.Context;
 
 public class SignInProvidersTest extends AbstractHealdanTestCase {
@@ -463,7 +467,7 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		providers().save(entra(), SECRET_ONE);
 		// A value another key sealed, as when the key file was replaced
 		settings().set("signin.entra.clientSecret",
-				new SecretBox(folder.getRoot().toPath().resolve("other.key")).seal(SECRET_ONE));
+				new SecretBox(folder.getRoot().toPath().resolve("other.key"), () -> 0L).seal(SECRET_ONE));
 
 		assertNull(providers().secret("entra"));
 		SignInProvider found = providers().find("entra").orElseThrow();
@@ -477,6 +481,38 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		providers().save(entra(), SECRET_TWO);
 		assertEquals(SECRET_TWO, providers().secret("entra"));
 		assertEquals(1, providers().enabled().size());
+	}
+
+	@Test
+	public void testNoKeyIsMadeOverStoredSecrets() throws Exception {
+		LongSupplier sealed = SecretBox.sealedIn(Context.get(DataSource.class));
+		// A fresh install's settings hold nothing sealed
+		assertEquals(0L, sealed.getAsLong());
+		providers().save(entra(), SECRET_ONE);
+		assertEquals(1L, sealed.getAsLong());
+		// A helper's refresh token counts too, and a token with none doesn't
+		User clerk = fx.user("clerk");
+		ApiTokens.get().issue(clerk, "Laptop", null, null, "entra", SecretBox.get().seal("a-refresh-token"));
+		ApiTokens.get().issue(clerk, "Phone", null, null, null, null);
+		assertEquals(2L, sealed.getAsLong());
+
+		// The key file is gone: nothing seals, and the stored secret reads as unset
+		Path gone = folder.getRoot().toPath().resolve("gone.key");
+		SecretBox box = new SecretBox(gone, sealed);
+		SignInProviders lost = new SignInProviders(settings(), box, SignInIdentityDAO.get(), SignInGroupDAO.get());
+		assertThrows(IllegalStateException.class, () -> box.seal("another-refresh-token"));
+		assertFalse(Files.exists(gone));
+		assertNull(lost.secret("entra"));
+
+		// Saving without a new secret makes no key either
+		lost.save(entra(), null);
+		assertFalse(Files.exists(gone));
+
+		// Entering the secret again does: it's how an administrator puts a lost key right
+		lost.save(entra(), SECRET_TWO);
+		assertTrue(Files.exists(gone));
+		assertEquals(SECRET_TWO, lost.secret("entra"));
+		assertEquals("a-refresh-token-2", box.open(box.seal("a-refresh-token-2")));
 	}
 
 	@Test

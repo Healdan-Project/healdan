@@ -1596,6 +1596,17 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
 - **What it found,** in the follow-ups below: Check doesn't test the client secret, so a wrong one passed it; the helper gives no reason when a check signs it out; and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
 - **Before it,** a local check of the merged M4 on a stack with Keycloak found a refusal naming a group shown as HTML in the old UI's error popup, fixed in [Healdan-Project/healdan#165](https://github.com/Healdan-Project/healdan/pull/165), and passed the rest.
 
+**Fixed after the walkthrough (PR_LINK)**
+
+Two follow-ups that could hurt a live server, and the one beside them.
+
+- **R37: once anything stored is sealed, only an admin's entry makes a key.** `SecretBox.seal` makes a key only while no `hd_setting` value starts `v1:` and no device token holds a refresh token, which it asks only when there's no key. Otherwise it fails, and logs at error level the key file, how many values are sealed and what to do: restore the file from a backup (no restart), or enter each provider's client secret again. `sealEntered`, which only the Sign-In tab's save of a typed secret calls, makes a new key over sealed values, logging at warning level that they can't be opened.
+  - Why: spec §13 and Backup and Restore have the admin enter the secrets again after a lost key, so that must still make one. A re-check or a helper's exchange is never the admin's decision.
+  - A key is written to `healdan-secret.key.new`, made with mode 600, and moved into place, over an empty file left by an older start, else only if no file has appeared meanwhile. So a start that dies leaves no empty key file, and the next clears the `.new`. That settles Task 2's follow-up, but for two processes making a key over an old empty file at once (Healdan runs one app container).
+  - If wrong: a key file missing while an admin types a client secret makes a new key, and the restored file then has to replace it.
+- **R38: unlinking keeps every temporary password it couldn't email.** `OutgoingEmail.isSetUp` is false under `smtp.nosend` or with CE's sending messages aspect off, which CE's sender reports (`Sender.sends`); it fails rather than drop an email if either is switched off after the check. An email pool that throws when handed the email, as one that refuses a task does, puts that password in the admin's list, and Unlink Everyone goes on. A temporary password is checked against the tenant's rules before the unlinking's transaction, as CE's check refuses with a runtime exception that would mark it for rollback, on a stand-in account as CE checks a ticket's, and one the rules refuse gets a second try. The refusal never quotes CE's message, which names the sequence it found.
+  - If wrong: an admin with `smtp.nosend` set on purpose passes each password on by hand, and the `admin` alert is off.
+
 ## Follow-ups
 
 Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. Each is a gap in a narrow case or for later, none of which blocks the walkthrough; the reviews' style points and the tests' wording are left out. The task in brackets found it.
@@ -1628,11 +1639,9 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **The re-check, the provider and the key**
 
-- If the key file goes during a re-check, `SecretBox.seal` makes a new key, and every other helper's refresh token then fails to open and is revoked at its next check. `seal` shouldn't make a key once sealed values exist. (Task 9)
 - A `checked` in the future, after the clock went back, holds off the 8-hourly checks until it passes. (Task 9)
 - A turned-over refresh token is lost when Nimbus can't parse the answer, or something fails after a `200`. Reading `refresh_token` from the JSON first would keep it; with a strict provider, that helper is otherwise revoked at its next check. (Task 4)
 - Discovery and token answers have no size cap (the keys are capped at 50 KB). The 10-second timeout is per read, so a provider that trickles its answer can hold a request longer, and a key fetch waits up to 15 seconds. (Task 4)
-- `SecretBox` fills an empty key file that a start dying mid-way left, after it was made but before its mode was set, and there's no lock across processes (Healdan runs one app container). (Task 2)
 
 **Settings and the Sign-In tab**
 
@@ -1646,8 +1655,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **Unlinking and the alert**
 
-- A temporary password can be lost after the commit when CE quietly doesn't send (`smtp.nosend`, or its sending aspect off) or its email pool refuses the task; Unlink Everyone would lose them all. `OutgoingEmail.isSetUp` should be false under `smtp.nosend`, and each send's failure should put its password in the list for the admin. A timed-out email isn't cancelled. (Task 10)
-- `PasswordGenerator`'s default allows a sequence of 4 where the password rules refuse 3, so about one temporary password in 10,000 fails them and rolls the unlink back. Try again once. (Task 10)
+- A timed-out email isn't cancelled: it may still go, with the password the admin was shown. (Task 10)
 - A failure reading the session pool, while linking closes the account's sessions, logs its cause only at debug. (Task 7b)
 - Linking closes the account's sessions, but not a session it opened as another account's impersonator with its old password (`jane>bob`), which lasts until 30 idle minutes. Matching the session's impersonator too would close it. (The final review)
 - Device tokens that expire without being revoked keep their sealed refresh token. (The final review)

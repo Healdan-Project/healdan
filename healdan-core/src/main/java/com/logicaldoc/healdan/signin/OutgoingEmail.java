@@ -13,9 +13,13 @@ import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.EMailSender;
 import com.logicaldoc.core.communication.MessageTemplate;
 import com.logicaldoc.core.communication.MessageTemplateDAO;
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
+
+import jakarta.mail.MessagingException;
 
 /**
  * Whether Healdan can send email, and how provider sign-in's emails go out:
@@ -26,7 +30,9 @@ import com.logicaldoc.util.spring.Context;
  * server isn't blank or this machine ({@code localhost}, {@code 127.0.0.1},
  * {@code ::1}), and its sender isn't blank or CE's shipped
  * {@code logicaldoc@acme.com}. CE ships {@code localhost} and that sender, and
- * a stack nobody set up keeps them.
+ * a stack nobody set up keeps them. Nor is it set up while CE drops every
+ * email without a word: under {@code smtp.nosend}, or with its sending
+ * messages aspect off in the current run level.
  */
 public final class OutgoingEmail {
 
@@ -40,6 +46,9 @@ public final class OutgoingEmail {
 	/** Names of this machine, which a container or a stack nobody set up has no mail server on */
 	private static final Set<String> THIS_MACHINE = Set.of("localhost", "127.0.0.1", "::1", "[::1]");
 
+	/** CE's switch that keeps every email from the mail server, logging that it wasn't sent */
+	static final String NO_SEND = "smtp.nosend";
+
 	/**
 	 * Hands an email to the mail server
 	 */
@@ -51,14 +60,38 @@ public final class OutgoingEmail {
 		 * @throws Exception if the mail server didn't take it
 		 */
 		void send(EMail email) throws Exception;
+
+		/**
+		 * @return false if emails handed to it now would be dropped, as if sent
+		 */
+		default boolean sends() {
+			return true;
+		}
 	}
 
 	/**
 	 * CE's way, as its notify of a new password sends it
 	 * ({@code SecurityServiceImpl.notifyAccount}): a sender made for the
-	 * email's tenant, which reads the mail server's settings as they are now
+	 * email's tenant, which reads the mail server's settings as they are now.
+	 * Where CE would drop the email and return as if it had sent it, this
+	 * fails, as when they were switched off after {@link #isSetUp} was asked.
 	 */
-	static final Sender CE = email -> new EMailSender(email.getTenantId()).send(email);
+	static final Sender CE = new Sender() {
+
+		@Override
+		public void send(EMail email) throws Exception {
+			if (!sends())
+				throw new MessagingException("LogicalDOC doesn't send email now: " + NO_SEND
+						+ " is on, or its sending messages aspect is off");
+			new EMailSender(email.getTenantId()).send(email);
+		}
+
+		@Override
+		public boolean sends() {
+			return !Context.get().getConfig().getBoolean(NO_SEND, false)
+					&& RunLevel.current().aspectEnabled(Aspect.SENDINGMESSAGES);
+		}
+	};
 
 	/** How emails go out; {@code SignInTestHooks} puts it back to {@link #CE} after a test replaced it */
 	static volatile Sender sender = CE;
@@ -67,11 +100,12 @@ public final class OutgoingEmail {
 	}
 
 	/**
-	 * @return true if outgoing email is set up (plan correction 3)
+	 * @return true if outgoing email is set up (plan correction 3), and emails
+	 *         aren't dropped
 	 */
 	public static boolean isSetUp() {
 		ContextProperties config = Context.get().getConfig();
-		return isSetUp(config.getProperty(HOST), config.getProperty(SENDER));
+		return isSetUp(config.getProperty(HOST), config.getProperty(SENDER)) && sender.sends();
 	}
 
 	/**

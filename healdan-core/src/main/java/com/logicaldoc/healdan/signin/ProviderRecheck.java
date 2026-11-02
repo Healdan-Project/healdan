@@ -273,8 +273,9 @@ public class ProviderRecheck {
 		} catch (IllegalStateException e) {
 			// Its message holds no secret, and neither does this line
 			log.warn("Couldn't seal the new refresh token the sign-in provider {} gave for the account {}, as "
-					+ "Healdan's secret key couldn't be read or made. The device token keeps the old one, which the "
-					+ "provider may refuse at the next check.", p.id(), account);
+					+ "Healdan's secret key couldn't be read, or is missing while values sealed with it are stored. "
+					+ "The device token keeps the old one, which the provider may refuse at the next check.", p.id(),
+					account);
 			return null;
 		}
 	}
