@@ -131,6 +131,7 @@ jobs:
             FolderSearchTest
             SavedSearchTest
             UserSourceTest
+            HealdanSignInButtonsTest
         run: python3 .github/scripts/test-shards.py plan --times test-times.txt --minutes 5 --max-shards 8 "$UPSTREAM_TESTS"
 
   tests:

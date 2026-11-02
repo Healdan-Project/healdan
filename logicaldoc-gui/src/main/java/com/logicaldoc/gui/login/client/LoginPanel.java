@@ -21,6 +21,7 @@ import com.logicaldoc.gui.common.client.beans.GUIParameter;
 import com.logicaldoc.gui.common.client.beans.GUISession;
 import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.gui.common.client.healdan.HealdanCredits;
+import com.logicaldoc.gui.common.client.healdan.HealdanSignInButtons;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.services.SecurityService;
 import com.logicaldoc.gui.common.client.util.AwesomeFactory;
@@ -272,6 +273,8 @@ public class LoginPanel extends VLayout {
         inputsPanel.setWidth(FORM_WIDTH);
         inputsPanel.setStyleName("control-group");
         inputsPanel.setMembers(logoLogin, spacer15, credentialsPanel, secretKeyPanel, licensing);
+        // Healdan: the sign-in providers' buttons, with the password form behind a link (M4 spec section 5.1)
+        HealdanSignInButtons.install(inputsPanel, credentialsPanel);
 
         // Panel containing the login form
         VLayout loginForm = new VLayout();
