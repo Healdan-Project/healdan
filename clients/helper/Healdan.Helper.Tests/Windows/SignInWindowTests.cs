@@ -717,14 +717,13 @@ public sealed class SignInWindowTests
     [MacFact]
     public Task ANoticeSaysWhyTheWindowAsks()
     {
-        const string ended = "Your sign-in ended. Sign in again.";
         var prompt = new FakePrompt { OnPassword = (_, _, _) => Task.FromResult<string?>("The username or password is wrong.") };
-        return Run(prompt.Make(serverFixed: true, notice: ended), async window =>
+        return Run(prompt.Make(serverFixed: true, notice: SignInPrompt.Ended), async window =>
         {
             await window.Loading;
             var notice = Find<TextBlock>(window, "NoticeText");
             Assert.True(Shown(notice));
-            Assert.Equal(ended, notice.Text);
+            Assert.Equal("Your sign-in ended. Sign in again.", notice.Text); // the User Guide quotes it
 
             // It stays up through a refusal, which has the error line, and through the window being shown again.
             Find<TextBox>(window, "User").Text = "admin";

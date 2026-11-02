@@ -119,6 +119,18 @@ public sealed class SignInTests : IDisposable
     }
 
     [Fact]
+    public async Task ResumeWith401SaysHealdanRefusedTheTokenWhenTheKeychainKeepsIt()
+    {
+        _keychain.Items[Account] = KeptHere(Token);
+        _keychain.RefuseDelete = true;
+        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthenticated","detail":"This device token doesn't work any more. Sign in again."}""");
+        var api = Api();
+        Assert.Equal(Resume.Refused, await Make(api).TryResumeAsync());
+        Assert.Equal(KeptHere(Token), _keychain.Items[Account]); // the next start finds it refused again
+        Assert.Null(api.Token);
+    }
+
+    [Fact]
     public async Task ResumeKeepsTheTokenWhenTheServerCannotBeReached()
     {
         _keychain.Items[Account] = KeptHere(Token);

@@ -32,8 +32,8 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
 
     /// <summary>
     /// Takes the token from the keychain and checks it with <c>/me</c>. A <c>401</c> means it expired or was revoked:
-    /// it is removed and the answer is <see cref="Resume.Refused"/>, so the caller asks for the sign-in and says it
-    /// ended. Other failures (no network) propagate and keep the token. A token issued to another device id, or kept
+    /// it is removed (or left, if the keychain refuses) and the answer is <see cref="Resume.Refused"/>, so the caller
+    /// asks for the sign-in and says it ended. Other failures (no network) propagate and keep the token. A token issued to another device id, or kept
     /// without one by an older helper, is never used: the server would record this computer's check-outs under that
     /// device, and this computer would then read them as another's. It's revoked and removed, and the answer is
     /// <see cref="Resume.None"/>, as when none was kept.
@@ -58,7 +58,15 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
         catch (ApiException e) when (e.Status == 401)
         {
             api.Token = null;
-            keychain.Delete(Account);
+            try
+            {
+                keychain.Delete(Account);
+            }
+            catch (InvalidOperationException d)
+            {
+                // Still refused: the next start finds it refused again.
+                log?.Warn($"The keychain kept the sign-in Healdan refused for {Account}: {d.Message}");
+            }
             return Resume.Refused;
         }
     }

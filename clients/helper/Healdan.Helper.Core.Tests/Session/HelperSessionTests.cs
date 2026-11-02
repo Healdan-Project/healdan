@@ -24,9 +24,6 @@ public sealed class HelperSessionTests : IDisposable
     private const string Account = "https://healdan.test";
     private const string Password = "pa55-w0rd-secret";
 
-    /// <summary>What the Sign In window says once Healdan has refused the token the helper held.</summary>
-    private const string Ended = "Your sign-in ended. Sign in again.";
-
     private static readonly CycleTimings Fast = new(
         Settle: TimeSpan.FromMilliseconds(150),
         SizePoll: TimeSpan.FromMilliseconds(25),
@@ -615,7 +612,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.Links.Handle("healdan://open/5?server=healdan.test");
 
         var again = await asked.Task.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.Equal(Ended, again.Notice);
+        Assert.Equal(SignInPrompt.Ended, again.Notice);
     }
 
     [Fact]
@@ -628,7 +625,7 @@ public sealed class HelperSessionTests : IDisposable
         await session.StartAsync(); // the user closes the window
 
         var prompt = Assert.Single(_windows.SignIns);
-        Assert.Equal(Ended, prompt.Notice);
+        Assert.Equal(SignInPrompt.Ended, prompt.Notice);
         Assert.Equal(Account, prompt.Server);
         Assert.Empty(_keychain.Items);
     }
@@ -643,7 +640,7 @@ public sealed class HelperSessionTests : IDisposable
 
         await session.SignInAgainAsync(); // the menu's Sign In…, which they close too
 
-        Assert.Equal([Ended, Ended], _windows.SignIns.Select(p => p.Notice));
+        Assert.Equal([SignInPrompt.Ended, SignInPrompt.Ended], _windows.SignIns.Select(p => p.Notice));
     }
 
     [Fact]
@@ -663,7 +660,30 @@ public sealed class HelperSessionTests : IDisposable
 
         await session.SignInAgainAsync(); // the menu's Sign In…
 
-        Assert.Equal([Ended, null], _windows.SignIns.Select(p => p.Notice));
+        Assert.Equal([SignInPrompt.Ended, null], _windows.SignIns.Select(p => p.Notice));
+        Assert.False(session.SignedIn);
+    }
+
+    [Fact]
+    public async Task ASignOutRightAfterTheSignInEndedSaysNothingOfIt()
+    {
+        SignedInBefore();
+        var session = Make();
+        await session.StartAsync();
+        var close = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _windows.OnSignIn = _ => close.Task;
+        var window = session.SignInAgainAsync(); // up as Healdan refuses the token, so the refusal opens no other
+
+        _server.Unauthorized = true;
+        await session.Links.Handle("healdan://open/5?server=healdan.test");
+        await session.SignOutAsync(); // the menu's Sign Out, before it changed to Sign In…
+        close.SetResult(false);
+        await window;
+        _windows.OnSignIn = _ => Task.FromResult(false);
+
+        await session.SignInAgainAsync();
+
+        Assert.Equal([null, null], _windows.SignIns.Select(p => p.Notice));
         Assert.False(session.SignedIn);
     }
 

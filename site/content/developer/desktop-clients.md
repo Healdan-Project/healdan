@@ -277,8 +277,10 @@ file's contents.
   refused the person, and the API doesn't say which. `RefusedTokenHandler` notices one on any call that carried the
   token while the helper runs, and `TryResumeAsync` answers `Resume.Refused` for one at the start. Either way the Sign
   In window says "Your sign-in ended. Sign in again." (`SignInPrompt.Notice`), each time it's shown, until a sign-in
-  works. A first sign-in, the person's own Sign Out and a token the helper discards itself (`Resume.None`) say
-  nothing.
+  works or the helper quits. The helper keeps that in memory only: a token refused while it runs stays in the
+  keychain, so the next start finds it refused and says it again, but `TryResumeAsync` removes one it finds refused,
+  so the start after that says nothing. A first sign-in, the person's own Sign Out and a token the helper discards
+  itself (`Resume.None`) say nothing.
 - **A helper with its files elsewhere** (`HEALDAN_HELPER_DEV_ROOT`) uses the service `Healdan Helper (<root>)`
   (`HelperPaths.KeychainService`), so it never takes the installed helper's token, nor the installed helper its.
 

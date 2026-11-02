@@ -97,7 +97,9 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     /// <summary>
     /// Healdan refused the token the helper held, at the start or while it ran, and no sign-in has worked since: the
-    /// Sign In window says the sign-in ended. Never set by a first sign-in or the person's own Sign Out.
+    /// Sign In window says the sign-in ended. Never set by a first sign-in, and cleared by the person's own Sign Out
+    /// (<see cref="Stop"/>). In memory only: after a Quit, the next start says it again only if the keychain still
+    /// holds the refused token, which a refusal at the start removes.
     /// </summary>
     private bool _ended;
 
@@ -1319,7 +1321,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         lock (_gate)
         {
             (channel, cycle) = (_channel, _cycle ?? _resuming);
-            (_channel, _cycle, _resuming, _signedIn, _started, _userName, _waiting) = (null, null, null, false, false, null, 0);
+            (_channel, _cycle, _resuming, _signedIn, _started, _userName, _waiting, _ended) = (null, null, null, false, false, null, 0, false);
             _addinDocuments = null;
             _crashed.Clear();
         }
