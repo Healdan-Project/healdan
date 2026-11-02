@@ -14,6 +14,8 @@ BASE=${BASE:-http://127.0.0.1:8080}
 # on the stack's network; from here, that name is sent to its host port.
 KEYCLOAK=${KEYCLOAK:-127.0.0.1:18180}
 KC=(--connect-to "keycloak:8080:$KEYCLOAK")
+# Every request gives up after a minute, so a hang fails the step rather than waiting for the job's time limit.
+MAX=(--max-time 60)
 KC_URL=http://keycloak:8080
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -34,7 +36,7 @@ next=
 hop() {
   local url=$1 got
   shift
-  got=$(curl -sS "${KC[@]}" -b "$JAR" -c "$JAR" -o "$OUT" -w '%{http_code} %{redirect_url}' "$@" "$url") \
+  got=$(curl -sS "${MAX[@]}" "${KC[@]}" -b "$JAR" -c "$JAR" -o "$OUT" -w '%{http_code} %{redirect_url}' "$@" "$url") \
     || got="000 "
   code=${got%% *}
   next=${got#* }
@@ -97,7 +99,7 @@ status=
 req() {
   local auth=()
   [ -z "$TOKEN" ] || auth=(-H "Authorization: Bearer $TOKEN")
-  status=$(curl -s -o "$OUT" -w '%{http_code}' ${auth[@]+"${auth[@]}"} "$@") || status=000
+  status=$(curl -s "${MAX[@]}" -o "$OUT" -w '%{http_code}' ${auth[@]+"${auth[@]}"} "$@") || status=000
 }
 # expect <status> <what>: succeeds when the last req answered that status; otherwise says what came back.
 expect() {
@@ -194,14 +196,14 @@ print(sys.argv[1] + "?" + u.urlencode({"client": "helper", "redirect_uri": sys.a
 # the helper's token.
 step5() {
   local admin id put
-  admin=$(curl -sS "${KC[@]}" -d grant_type=password -d client_id=admin-cli -d username=admin \
+  admin=$(curl -sS "${MAX[@]}" "${KC[@]}" -d grant_type=password -d client_id=admin-cli -d username=admin \
     --data-urlencode "password=$KC_ADMIN_PW" "$KC_URL/realms/master/protocol/openid-connect/token" \
     | jq -r '.access_token // empty') || true
   [ -n "$admin" ] || { echo "  no admin token from Keycloak"; return 1; }
-  id=$(curl -sS "${KC[@]}" -H "Authorization: Bearer $admin" \
+  id=$(curl -sS "${MAX[@]}" "${KC[@]}" -H "Authorization: Bearer $admin" \
     "$KC_URL/admin/realms/healdan/users?username=sso-helper&exact=true" | jq -r '.[0].id // empty') || true
   [ -n "$id" ] || { echo "  Keycloak has no sso-helper"; return 1; }
-  put=$(curl -sS "${KC[@]}" -o "$OUT" -w '%{http_code}' -X PUT -H "Authorization: Bearer $admin" "${JSON[@]}" \
+  put=$(curl -sS "${MAX[@]}" "${KC[@]}" -o "$OUT" -w '%{http_code}' -X PUT -H "Authorization: Bearer $admin" "${JSON[@]}" \
     -d '{"enabled": false}' "$KC_URL/admin/realms/healdan/users/$id") || put=000
   [ "$put" = 204 ] || { echo "  disabling sso-helper: HTTP $put: $(head -c 300 "$OUT")"; return 1; }
   TOKEN=$HELPER_TOKEN
