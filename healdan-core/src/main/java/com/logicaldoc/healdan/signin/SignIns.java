@@ -35,6 +35,16 @@ public final class SignIns {
 	}
 
 	/**
+	 * @param key a session's key, as CE's chain was given it
+	 * @return true if {@link #openSession} is opening a session on this thread
+	 *         with this one-time key: a provider sign-in opened it
+	 */
+	static boolean opening(String key) {
+		Pending pending = PENDING.get();
+		return pending != null && key != null && pending.key().equals(key);
+	}
+
+	/**
 	 * Opens a CE session for an account a provider sign-in decided, through
 	 * CE's whole sign-in chain and its throttle. The chain is given a
 	 * one-time key made here, 43 random characters that stand for the account

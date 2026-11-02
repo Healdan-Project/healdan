@@ -15,28 +15,45 @@ import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionListener;
+import com.logicaldoc.core.security.apikey.ApiKey;
+import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.threading.ThreadPools;
+import com.logicaldoc.healdan.token.HealdanTokenAuthenticator;
 
 /**
  * Emails the chosen recipients when {@code admin}, the break-glass account,
  * signs in with its password (M4 spec section 7.5).
  * <p>
  * It hangs on CE's {@link SessionListener} (plan correction 4), which
- * {@code HealdanStartup} registers once the seeds ran, and acts on a new
- * session of user id 1 that has no key and no impersonator: a password
- * sign-in by {@code admin}, not a device token, an API key or another
- * account impersonating it. It sends only while the alert is on, a provider
- * is on (with none, {@code admin}'s password is an ordinary sign-in) and
- * outgoing email is set up (plan correction 3). It's email only, with no
- * system message instead (owner).
+ * {@code HealdanStartup} registers once the seeds ran, and acts on every
+ * session opened with {@code admin}'s password, and on no other (ruling R22):
+ * <ul>
+ * <li>{@code admin}'s own session, whatever key the request also carried: CE's
+ * web sign-in takes a key from any request ({@code j_secretkey} or
+ * {@code key}) and keeps it on a session its password opened;</li>
+ * <li>a session {@code admin} impersonates another account in
+ * ({@code admin>bob}), which its password opened too;</li>
+ * <li>not a session a key really opened: one of {@code admin}'s own LogicalDOC
+ * API keys, or the one-time key a device token or a provider sign-in opens its
+ * session with on this thread. A key that merely starts as Healdan's do
+ * counts for nothing, as a request can carry any;</li>
+ * <li>not another account's password impersonating {@code admin}
+ * ({@code bob>admin}).</li>
+ * </ul>
+ * It sends only while the alert is on, a provider is on (with none,
+ * {@code admin}'s password is an ordinary sign-in) and outgoing email is set up
+ * (plan correction 3). It's email only, with no system message instead
+ * (owner).
  * <p>
- * Each recipient gets one email from the {@code signin.adminalert} template,
- * which the {@code signin-settings} seed adds, sent on CE's thread pools as
- * CE's throttle alert is ({@code LoginThrottle.notifyBruteForceAttack}), so
- * the sign-in never waits for the mail server. A recipient that isn't a user,
- * or has no email, is skipped with a warning.
+ * {@code SessionManager} holds its lock while it calls this, so here only what
+ * the session and the thread hold is read; the rest, the settings included, is
+ * read on CE's thread pools, as CE's throttle alert is sent
+ * ({@code LoginThrottle.notifyBruteForceAttack}). Each recipient gets one
+ * email from the {@code signin.adminalert} template, which the
+ * {@code signin-settings} seed adds. A recipient that isn't a user, or has no
+ * email, is skipped with a warning.
  */
 @Component
 public class AdminSignInAlert implements SessionListener {
@@ -44,39 +61,50 @@ public class AdminSignInAlert implements SessionListener {
 	/** The message template, which {@code SignInSettingsSeed} adds */
 	static final String TEMPLATE = "signin.adminalert";
 
-	/** The pool the emails are sent from */
+	/** The pool the alert is decided and sent on */
 	static final String POOL = "AdminSignInAlert";
 
 	/** What the email says when the session has no address */
 	static final String UNKNOWN_ADDRESS = "unknown";
+
+	/** CE's impersonation separator, in a username or a key */
+	private static final String IMPERSONATION = ">";
 
 	/** As CE's throttle alert waits */
 	private static final long DELAY_MILLIS = 500L;
 
 	private static final Logger log = LoggerFactory.getLogger(AdminSignInAlert.class);
 
+	/**
+	 * A new session that a password may have opened, as it was when it opened
+	 *
+	 * @param impersonator who impersonates the session's account, or null
+	 * @param key the key the chain was given, before any {@code >}, or null;
+	 *        never logged
+	 * @param address the client's address, or null
+	 * @param date when it opened
+	 */
+	private record Candidate(String impersonator, String key, String address, Date date) {
+
+		@Override
+		public String toString() {
+			// Never the key
+			return "Candidate[impersonator=%s, address=%s]".formatted(impersonator, address);
+		}
+	}
+
 	@Override
 	public void onSessionCreated(Session session) {
-		// SessionManager holds its lock while it calls this, so it only decides, and schedules
 		try {
-			if (!adminPasswordSignIn(session))
-				return;
-			SignInProviders providers = SignInProviders.get();
-			if (!providers.adminAlert() || providers.enabled().isEmpty() || !OutgoingEmail.isSetUp())
-				return;
-
-			String address = session.getClient() == null ? null : session.getClient().getAddress();
-			List<String> recipients = providers.adminAlertRecipients();
-			Date date = new Date();
-			log.info("admin signed in with its password; alerting {} {}", recipients.size(),
-					recipients.size() == 1 ? "recipient" : "recipients");
-			ThreadPools.get().schedule(() -> {
-				alert(recipients, address, date);
-				return null;
-			}, POOL, DELAY_MILLIS);
+			Candidate candidate = candidate(session);
+			if (candidate != null)
+				ThreadPools.get().schedule(() -> {
+					alertIfAdminsPassword(candidate);
+					return null;
+				}, POOL, DELAY_MILLIS);
 		} catch (RuntimeException e) {
 			// The sign-in stands whatever happens here
-			log.warn("Couldn't alert anyone that admin signed in with its password", e);
+			log.warn("Couldn't check whether admin signed in with its password", e);
 		}
 	}
 
@@ -86,12 +114,62 @@ public class AdminSignInAlert implements SessionListener {
 	}
 
 	/**
-	 * @return true for a session of {@code admin} opened with its own password:
-	 *         no key (a device token or an API key) and no impersonator
+	 * Decides, from what the session and this thread hold, whether a password
+	 * may have opened the session for {@code admin}: it's {@code admin}'s with no
+	 * impersonator, or someone impersonates its account; and it isn't one a
+	 * device token or a provider sign-in is opening on this thread.
+	 *
+	 * @return what the rest of the decision needs, or null if it can't be
+	 *         {@code admin}'s password
 	 */
-	static boolean adminPasswordSignIn(Session session) {
-		return session != null && session.getUserId() == User.USERID_ADMIN && session.getKey() == null
-				&& session.getDecodedKey() == null && StringUtils.isEmpty(session.getImpersonator());
+	private static Candidate candidate(Session session) {
+		if (session == null)
+			return null;
+		String impersonator = StringUtils.trimToNull(session.getImpersonator());
+		if (impersonator == null && session.getUserId() != User.USERID_ADMIN)
+			return null;
+		String key = StringUtils.trimToNull(session.getDecodedKey());
+		if (HealdanTokenAuthenticator.opening(key) || SignIns.opening(key))
+			return null;
+		if (key != null && key.contains(IMPERSONATION))
+			key = StringUtils.trimToNull(StringUtils.substringBefore(key, IMPERSONATION));
+		String address = session.getClient() == null ? null : session.getClient().getAddress();
+		return new Candidate(impersonator, key, address, new Date());
+	}
+
+	/** On the pool: the rest of the decision, then the emails */
+	private static void alertIfAdminsPassword(Candidate candidate) {
+		try {
+			if (!adminsPassword(candidate))
+				return;
+			SignInProviders providers = SignInProviders.get();
+			if (!providers.adminAlert() || providers.enabled().isEmpty() || !OutgoingEmail.isSetUp())
+				return;
+			List<String> recipients = providers.adminAlertRecipients();
+			log.info("admin signed in with its password; alerting {} {}", recipients.size(),
+					recipients.size() == 1 ? "recipient" : "recipients");
+			alert(recipients, candidate.address(), candidate.date());
+		} catch (Exception e) {
+			log.warn("Couldn't alert anyone that admin signed in with its password", e);
+		}
+	}
+
+	/**
+	 * @return true if {@code admin}'s password opened the session: the password
+	 *         is the impersonator's when there is one, and no key of
+	 *         {@code admin}'s own opened it
+	 */
+	private static boolean adminsPassword(Candidate candidate) throws Exception {
+		if (candidate.impersonator() != null) {
+			User by = UserDAO.get().findByUsername(candidate.impersonator());
+			if (by == null || by.getId() != User.USERID_ADMIN)
+				return false;
+		}
+		if (candidate.key() == null)
+			return true;
+		// Only live rows: CE's lookup leaves the deleted ones out
+		ApiKey key = ApiKeyDAO.get().findByKey(candidate.key());
+		return key == null || key.getUserId() != User.USERID_ADMIN;
 	}
 
 	private static void alert(List<String> recipients, String address, Date date) {

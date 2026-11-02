@@ -73,6 +73,17 @@ public class HealdanTokenAuthenticator extends AbstractAuthenticator {
 	}
 
 	/**
+	 * @param key a session's key, as CE's chain was given it
+	 * @return true if {@link #openSession} is opening a session on this thread
+	 *         with this one-time key: a device token opened it, not a key a
+	 *         request merely carried beside a password
+	 */
+	public static boolean opening(String key) {
+		Pending pending = PENDING.get();
+		return pending != null && key != null && pending.key().equals(key);
+	}
+
+	/**
 	 * @return the bean in the application context
 	 */
 	public static HealdanTokenAuthenticator get() {

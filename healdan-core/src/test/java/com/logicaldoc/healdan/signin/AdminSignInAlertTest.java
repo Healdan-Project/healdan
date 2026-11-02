@@ -220,6 +220,47 @@ public class AdminSignInAlertTest extends AbstractHealdanTestCase {
 		assertEquals(List.of(), emails);
 	}
 
+	/**
+	 * Ruling R22: CE's web sign-in keeps any key a request carries
+	 * ({@code j_secretkey} or {@code key}) on the session admin's password
+	 * opened, so a key on the session doesn't stop the alert. Not even one that
+	 * starts as Healdan's own one-time keys do.
+	 */
+	@Test
+	public void testAlertWhateverKeyTheRequestCarried() throws Exception {
+		List<String> keys = List.of("x", "ld-" + ApiTokens.randomPart(), ApiTokens.PREFIX + ApiTokens.randomPart(),
+				SignIns.PREFIX + ApiTokens.randomPart());
+		for (String key : keys) {
+			Session session = SessionManager.get().newSession("admin", "admin", key, client);
+			assertNotNull(key, session);
+			assertEquals("admin", session.getUsername());
+			assertEquals(key, session.getDecodedKey());
+			awaitAlerts();
+		}
+
+		assertEquals(keys.size(), emails.size());
+		for (EMail email : emails)
+			assertEquals(SUBJECT, email.getSubject());
+	}
+
+	/** Ruling R22: admin impersonating another account signs in with admin's password too */
+	@Test
+	public void testAlertWhenAdminImpersonates() throws Exception {
+		User bob = fx.user("bob");
+		User loaded = UserDAO.get().findById(bob.getId(), true);
+		loaded.getImpersonators().add("admin");
+		UserDAO.get().store(loaded);
+
+		Session session = SessionManager.get().newSession("admin>bob", "admin", client);
+		assertNotNull(session);
+		assertEquals("bob", session.getUsername());
+		assertEquals("admin", session.getImpersonator());
+		awaitAlerts();
+
+		assertEquals(1, emails.size());
+		assertEquals(Set.of(ADMIN_EMAIL), addresses(emails));
+	}
+
 	@Test
 	public void testNoAlertForKeySessions() throws Exception {
 		User admin = fx.admin();
@@ -228,13 +269,24 @@ public class AdminSignInAlertTest extends AbstractHealdanTestCase {
 		Session device = ApiTokens.get().openSession(issued.token(), issued.row(), client);
 		assertNotNull(device);
 		assertEquals("admin", device.getUsername());
-		// and a LogicalDOC API key of admin's
+		// a LogicalDOC API key of admin's
 		ApiKey key = new ApiKey(admin.getId(), "Script");
 		key.setTenantId(admin.getTenantId());
 		ApiKeyDAO.get().store(key);
 		Session keyed = SessionManager.get().newSession(key.getDecodedKey(), client);
 		assertNotNull(keyed);
 		assertEquals("admin", keyed.getUsername());
+		// the key impersonating an account that allows admin
+		User bob = fx.user("bob");
+		User loaded = UserDAO.get().findById(bob.getId(), true);
+		loaded.getImpersonators().add("admin");
+		UserDAO.get().store(loaded);
+		Session asBob = SessionManager.get().newSession(key.getDecodedKey() + ">bob", client);
+		assertNotNull(asBob);
+		assertEquals("bob", asBob.getUsername());
+		assertEquals("admin", asBob.getImpersonator());
+		// and a sign-in that carries one of admin's live keys: whoever holds it needs no password
+		assertNotNull(SessionManager.get().newSession("admin", "admin", key.getDecodedKey(), client));
 
 		awaitAlerts();
 		assertEquals(List.of(), emails);
