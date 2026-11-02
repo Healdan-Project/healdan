@@ -532,6 +532,39 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertEquals(List.of("authentik", "entra"), providers().all().stream().map(SignInProvider::id).toList());
 	}
 
+	/**
+	 * Ruling R21: a changed identity claim would make every linked person a new
+	 * identity, so it's refused while the provider has linked accounts
+	 */
+	@Test
+	public void testIdentityClaimFixedWhileLinked() throws Exception {
+		User clerk = fx.user("clerk");
+		providers().save(entra(), SECRET_ONE);
+		SignInIdentity identity = link("entra", "oid-1", clerk.getId());
+		SignInIdentityDAO.get().store(identity);
+		SignInProvider sub = build("entra", "Sign In with Microsoft", ENTRA_ISSUER, "c1", "sub", "preferred_username",
+				"email", "groups");
+
+		assertSaveRefused("identity claim", sub, null);
+		HealdanRuleException e = assertThrows(HealdanRuleException.class, () -> providers().save(sub, null));
+		assertTrue(e.getMessage(), e.getMessage().contains("Unlink its accounts first"));
+		assertEquals("oid", providers().find("entra").orElseThrow().identityClaim());
+
+		// The same claim, typed with spaces, and every other field can change while it's linked
+		providers().save(build("entra", "Microsoft", ENTRA_ISSUER, "c2", " oid ", "upn", "mail", "roles"), null);
+		SignInProvider saved = providers().find("entra").orElseThrow();
+		assertEquals("oid", saved.identityClaim());
+		assertEquals("upn", saved.usernameClaim());
+		assertEquals("c2", saved.clientId());
+
+		// Unlinked, it can change
+		identity = SignInIdentityDAO.get().findLinked("entra", "oid-1").orElseThrow();
+		identity.setUnlinked(new Date());
+		SignInIdentityDAO.get().store(identity);
+		providers().save(sub, null);
+		assertEquals("sub", providers().find("entra").orElseThrow().identityClaim());
+	}
+
 	@Test
 	public void testRemoveOfAnUnknownProvider() {
 		assertRefused("provider", () -> providers().remove("entra"));

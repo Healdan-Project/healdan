@@ -15,10 +15,29 @@ weight: 10
   API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
   change. Sessions already open in the web page or with a key stay open until an administrator kills them. See
   [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
-- **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider, such as
-  Microsoft Entra ID, never signs in with an API key, on any route, as the key would skip the provider. Linking an
-  account to a provider deletes the API keys it had and closes the sessions they opened. The web page still lets a
-  provider account make a key, under the person icon, **Security → API Keys**, but that key never signs in.
+- **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
+  has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's SOAP and
+  REST web services. Unlinking the account from its provider gives it a password again.
+- **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider never signs in
+  with an API key, on any route, as the key would skip the provider. Linking an account to a provider deletes the
+  API keys it had and closes the sessions they opened, and so does unlinking it. The web page still lets a provider
+  account make a key, under the person icon, **Security → API Keys**, but that key never signs in, and unlinking
+  deletes it rather than let it start working.
+- **Web page sessions aren't checked again with the provider.** Healdan checks a Healdan Helper sign-in with its
+  provider every eight hours, but not a sign-in to the web page. A web page session stays open after the person is
+  disabled at the provider, until they sign out, it times out, or an administrator kills it.
+- **An account has one identity.** Each account is linked to one person at one provider. Someone who also signs in
+  through a second provider isn't linked to the account they have: Healdan refuses the sign-in, or makes them a
+  second account.
+- **Signing out doesn't sign out of the provider.** Signing out of Healdan ends the Healdan session only, and the
+  person stays signed in at the provider. On a shared computer, the next person to choose the provider's button may
+  be signed straight back in as them, so sign out of the provider too.
+- **The `admin` alert needs outgoing email.** The email Healdan can send when `admin` signs in with its password goes
+  only by [outgoing email](../../admin/system/outgoing-email/). Until a mail server other than `localhost` and a
+  Sender Email other than `logicaldoc@acme.com` are set, nothing is sent, and no message in Healdan takes its place.
+- **Providers are reached without LogicalDOC's proxy.** Healdan calls a sign-in provider directly, or through the
+  proxy that Java's own settings name (`-Dhttps.proxyHost`, `-Dhttps.proxyPort` and `-Dhttp.nonProxyHosts`, in
+  [`CATALINA_OPTS`](../configuration/)), not the one under **Administration → Settings → Proxy**.
 - **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
   Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
   helper for Ubuntu comes next. Windows comes later.

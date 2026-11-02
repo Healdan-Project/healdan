@@ -200,8 +200,9 @@ public class SignInProviders {
 	 * @param newSecret the client secret to keep, sealed; null or blank keeps the
 	 *        one stored, which a new provider doesn't have
 	 * @throws PersistenceException error at data layer
-	 * @throws HealdanRuleException if a value isn't acceptable; the message
-	 *         names the field, for the person who typed it
+	 * @throws HealdanRuleException if a value isn't acceptable, or the identity
+	 *         claim would change while accounts are linked; the message names
+	 *         the field, for the person who typed it
 	 */
 	public synchronized void save(SignInProvider p, String newSecret) throws PersistenceException {
 		String id = p == null ? null : p.id();
@@ -222,6 +223,16 @@ public class SignInProviders {
 		String emailClaim = required(p.emailClaim(), "email claim", MAX_CLAIM);
 		String groupsClaim = required(p.groupsClaim(), "groups claim", MAX_CLAIM);
 		Preset preset = p.preset() == null ? Preset.OTHER : p.preset();
+		// A changed identity claim would make every linked person a new identity (ruling R21)
+		if (!adding) {
+			SignInProvider current = read(id);
+			if (!identityClaim.equals(current.identityClaim())) {
+				int linked = identities.countLinked(id);
+				if (linked > 0)
+					throw refuse("The identity claim can't change while %s has %s linked. Unlink its accounts first."
+							.formatted(current.label(), linked == 1 ? "1 account" : linked + " accounts"));
+			}
+		}
 		String sealed = sealedSecret(id, newSecret);
 
 		// A new provider starts with no group map. Rows already under its id belong to nobody (the provider

@@ -9,7 +9,7 @@ import java.util.Optional;
  * production is the environment variable {@code HEALDAN_SIGNIN_ALLOW_HTTP},
  * and move the clocks {@link PendingSignIns} times sign-ins by,
  * {@link OneTimeCodes} times the helper's codes by and {@link ProviderRecheck}
- * times its checks by. It lives in the test sources, so it ships in the
+ * times its checks by. Its {@link #reset} also puts back how emails go out. It lives in the test sources, so it ships in the
  * test-jar, which healdan-api's tests use.
  * <p>
  * The settings are static, so a test that sets one must call {@link #reset}
@@ -88,11 +88,13 @@ public final class SignInTestHooks {
 	}
 
 	/**
-	 * Goes back to reading the environment variable, and to the system's
-	 * clocks.
+	 * Goes back to reading the environment variable, to the system's clocks,
+	 * and to sending emails through CE, which a test in this package may have
+	 * replaced ({@code OutgoingEmail.sender}).
 	 */
 	public static void reset() {
 		SignInProviders.allowHttpSetting = SignInProviders.ENVIRONMENT;
+		OutgoingEmail.sender = OutgoingEmail.CE;
 		PendingSignIns.clock = Clock.systemUTC();
 		OneTimeCodes.clock = Clock.systemUTC();
 		ProviderRecheck.clock = Clock.systemUTC();

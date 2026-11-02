@@ -64,6 +64,10 @@ import com.logicaldoc.util.spring.Context;
  * 2026-11-01): a key signs in with no password, so it would skip the provider.
  * CE's {@code HealdanThrottle} refuses any key made for it afterwards.
  * <p>
+ * {@link SignInAdmin}'s unlinking runs under the same locks
+ * ({@link #lockedOnce}), so it can't land in the middle of a decision for the
+ * person it unlinks.
+ * <p>
  * Every link, new account and membership change is logged at info, after the
  * transaction commits, with the provider, the account's username and the
  * group's name; never a token or another claim's value (spec section 8).
@@ -290,7 +294,7 @@ public class SignInAccounts {
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
 		// It wasn't a provider account, so its keys may have signed it in
 		if (converting)
-			deleteApiKeys(user, p, journal);
+			deleteApiKeys(user, signsInThrough(p), journal);
 		journal.changes(p, user, changes);
 
 		link.setLastSignIn(new Date());
@@ -316,7 +320,7 @@ public class SignInAccounts {
 
 		journal.info("Linked the account {} to the sign-in provider {}, by its email", printable(user.getUsername()),
 				p.id());
-		deleteApiKeys(user, p, journal);
+		deleteApiKeys(user, signsInThrough(p), journal);
 		if (hadImpersonators)
 			journal.info("The account {} no longer lets other accounts impersonate it, as it's a provider account",
 					printable(user.getUsername()));
@@ -389,24 +393,35 @@ public class SignInAccounts {
 		if (changed || !changes.isEmpty())
 			UserDAO.get().store(user, history("Updated from the sign-in provider " + p.id()));
 		if (converting)
-			deleteApiKeys(user, p, journal);
+			deleteApiKeys(user, signsInThrough(p), journal);
 		journal.changes(p, user, changes);
 		return true;
 	}
 
+	private static String signsInThrough(SignInProvider p) {
+		return "as it signs in through the sign-in provider " + p.id();
+	}
+
 	/**
-	 * Deletes the account's LogicalDOC API keys, as it's a provider account
-	 * from now on (owner, 2026-11-01), the way CE's own user delete does. Every
-	 * row goes, the ones deleted in the web page included, which CE keeps
-	 * marked deleted; the line logged counts the others, the ones its API Keys
-	 * screen listed. Never a key: {@code ld_apikey} holds only their SHA-256.
+	 * Deletes the account's LogicalDOC API keys, the way CE's own user delete
+	 * does: when it's a provider account from now on (owner, 2026-11-01), and
+	 * when it was unlinked, as a key made while it was linked never signed in
+	 * and would start to (ruling R17). Every row goes, the ones deleted in the
+	 * web page included, which CE keeps marked deleted; the line logged counts
+	 * the others, the ones its API Keys screen listed. Never a key:
+	 * {@code ld_apikey} holds only their SHA-256.
 	 * <p>
 	 * Once the transaction commits, the open CE sessions the keys opened are
 	 * closed too, as CE's {@code X-API-KEY} lookup finds a session by its key's
 	 * hash ({@code SessionManager.getSessionFromApiKey}) and would go on
 	 * finding them after the keys went.
+	 *
+	 * @param user the account
+	 * @param why why they go, for the line logged, such as {@code as it signs
+	 *        in through the sign-in provider entra}
+	 * @param journal the transaction's journal
 	 */
-	private static void deleteApiKeys(User user, SignInProvider p, Journal journal) throws PersistenceException {
+	static void deleteApiKeys(User user, String why, Journal journal) throws PersistenceException {
 		ApiKeyDAO keys = ApiKeyDAO.get();
 		Map<String, Object> account = Map.of("userId", user.getId());
 		List<String> hashes = keys.queryForList("select ld_key from ld_apikey where ld_userid = :userId", account,
@@ -419,8 +434,8 @@ public class SignInAccounts {
 
 		String username = printable(user.getUsername());
 		if (listed > 0)
-			journal.info("Deleted the {} LogicalDOC API {} of the account {}, as it signs in through the sign-in "
-					+ "provider {}", listed, listed == 1 ? "key" : "keys", username, p.id());
+			journal.info("Deleted the {} LogicalDOC API {} of the account {}, {}", listed, listed == 1 ? "key" : "keys",
+					username, why);
 		Set<String> deleted = Set.copyOf(hashes);
 		journal.afterCommit(() -> closeKeySessions(deleted, username));
 	}
@@ -703,7 +718,7 @@ public class SignInAccounts {
 	 * A username for a log line: its control characters replaced, so it can't
 	 * forge a line, and at most 100 characters
 	 */
-	private static String printable(String text) {
+	static String printable(String text) {
 		if (text == null)
 			return "(no username)";
 		StringBuilder clean = new StringBuilder(text.length());
@@ -714,6 +729,33 @@ public class SignInAccounts {
 	private static void checkIdentity(SignInProvider p, IdClaims claims) {
 		if (p == null || claims == null || StringUtils.isBlank(claims.identity()))
 			throw new IllegalArgumentException("A provider sign-in needs the provider and the person's identity at it");
+	}
+
+	/**
+	 * Runs work in one transaction under the identity's lock, as decisions run,
+	 * so that it can't interleave with a sign-in or a re-check of that person:
+	 * unlinking (spec section 7.7). Unlike a decision it's tried once, as its
+	 * refusals are the caller's to give.
+	 *
+	 * @param provider the provider's id
+	 * @param identity the identity at the provider
+	 * @param work the work, which logs through the journal
+	 * @return what the work returns, once its transaction committed and its
+	 *         journal was written
+	 * @throws PersistenceException what the work throws, or an error at data
+	 *         layer
+	 * @throws IllegalStateException if it's called inside a transaction
+	 */
+	<T> T lockedOnce(String provider, String identity, Work<T> work) throws PersistenceException {
+		if (TransactionSynchronizationManager.isActualTransactionActive())
+			throw new IllegalStateException("Unlinking runs its own transaction: call it outside one");
+		ReentrantLock lock = locks[Math.floorMod(Objects.hash(provider, identity), STRIPES)];
+		lock.lock();
+		try {
+			return once(work);
+		} finally {
+			lock.unlock();
+		}
 	}
 
 	/**
@@ -763,7 +805,7 @@ public class SignInAccounts {
 	}
 
 	@FunctionalInterface
-	private interface Work<T> {
+	interface Work<T> {
 		T run(Journal journal) throws PersistenceException;
 	}
 
@@ -783,7 +825,7 @@ public class SignInAccounts {
 	 * The log lines of one attempt, written once it commits, and what it does
 	 * after the commit
 	 */
-	private static final class Journal {
+	static final class Journal {
 
 		private final List<Runnable> lines = new ArrayList<>();
 
