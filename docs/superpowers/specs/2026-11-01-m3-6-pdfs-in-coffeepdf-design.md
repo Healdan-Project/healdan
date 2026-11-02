@@ -247,7 +247,7 @@ The docs name CoffeePDF and link to its repository, [coffeemuse/CoffeePDF](https
 - `install/known-limitations.md`: PDFs are edited only in CoffeePDF, on macOS.
 - `developer/desktop-clients.md`: CoffeePDF in the cycle (its lock, its temporary files and the `settings.json` the Helper reads), the read-only copies tracked, `/v1/closed` for the default app, and §6.5's two meanings.
 
-(changed in the build: the build changed more than this list. `user/office/when-things-go-wrong/` gained "CoffeePDF Quits Unexpectedly". `install/office-integration.md`'s security bullet on links and its sentence on quarantine were brought up to date, the second because CoffeePDF's copies carry none. Task 9 changed `user/office/opening-documents/`'s Open in App bullet. Two things are left open, in the plan's follow-ups: `developer/desktop-clients.md`'s Tests section doesn't yet name `FakeCoffeePdf` or `CoffeePdfCycleTests`, and the Settings screenshot, `user/office/installing-the-helper/settings.png`, predates the PDFs row and is to be taken again before 0.5.0.)
+(changed in the build: the build changed more than this list. `user/office/when-things-go-wrong/` gained "CoffeePDF Quits Unexpectedly". `install/office-integration.md`'s security bullet on links and its sentence on quarantine were brought up to date, the second because CoffeePDF's copies carry none. Task 9 changed `user/office/opening-documents/`'s Open in App bullet. One thing is left open, in the plan's follow-ups: `developer/desktop-clients.md`'s Tests section doesn't yet name `FakeCoffeePdf` or `CoffeePdfCycleTests`. The Settings screenshot, `user/office/installing-the-helper/settings.png`, predated the PDFs row, and was taken again before 0.5.0.)
 
 ## 11. Verification
 

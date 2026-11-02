@@ -18,7 +18,7 @@
 - **Helper:** .NET 10 and Avalonia 12.1.4, as M3.5; xUnit, with Avalonia headless for the windows. No new NuGet packages.
 - **Web page:** GWT 2.12 client code in `logicaldoc-gui`, with a plain JUnit 4 test.
 
-**Status:** written and approved by the owner on 2026-11-01, for subagent-driven building. **Built** on 2026-11-01, on one branch: Tasks 1 to 7 and 9, then 8, the records, as Task 9 ran before Task 8 so the records cover it. Each task was reviewed against the spec before the next began. The spec carries the plan's corrections and the build's departures, marked "changed in the build"; the decision log lists the rulings, and the follow-ups what the build left open. **Next:** a review of the whole branch, then, with the owner's go-ahead, pull request A, Healdan Helper 0.5.0-rc1, pull request B, and Task 10: the owner's walkthrough on the rc (spec §11.2) and Healdan Helper 0.5.0. Nothing built has yet run against a real CoffeePDF: the tests drive the real `CoffeePdfApp` with its launch and process check faked (`FakeCoffeePdf`), so `open -b`, LaunchServices finding CoffeePDF and CoffeePDF's own `settings.json` are for the walkthrough.
+**Status:** written and approved by the owner on 2026-11-01, for subagent-driven building. **Built** on 2026-11-01, on one branch: Tasks 1 to 7 and 9, then 8, the records, as Task 9 ran before Task 8 so the records cover it. Each task was reviewed against the spec before the next began. The spec carries the plan's corrections and the build's departures, marked "changed in the build"; the decision log lists the rulings, and the follow-ups what the build left open. The whole branch was then reviewed and merged as pull requests A and B (#150 and #151), and **Task 10 is done**: the owner's walkthrough on Healdan Helper 0.5.0-rc1 (spec §11.2) passed on 2026-11-01, and Healdan Helper 0.5.0 was released the same day (see "Hands-on checks"). The tests drive the real `CoffeePdfApp` with its launch and process check faked (`FakeCoffeePdf`); the walkthrough ran it against a real CoffeePDF.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-m3-6-pdfs-in-coffeepdf-design.md`](../specs/2026-11-01-m3-6-pdfs-in-coffeepdf-design.md), approved by the owner on 2026-11-01. Every § below points into it, and "CoffeePDF §n" into CoffeePDF's v1 spec (`coffeemuse/CoffeePDF`, `docs/superpowers/specs/2026-10-29-coffeepdf-v1-design.md`).
 - Where the two disagree, the spec wins, except for the corrections under "Spec corrections and calls this plan makes".
@@ -2010,10 +2010,12 @@ Open PR B only with the owner's go-ahead, and merge it only once Healdan Helper 
 
 Not code. In order:
 
-- [ ] **Step 1:** once PR A is merged, tag `helper-v0.5.0-rc1` on master; `clients.yml` packages, signs and notarises it and attaches the disk image.
-- [ ] **Step 2:** merge PR B, and the owner upgrades their server to master (the image now offers Open in App for PDFs).
-- [ ] **Step 3:** the owner installs Healdan Helper 0.5.0-rc1 and CoffeePDF built from its `main`, with Healdan support on, and runs spec §11.2's walkthrough: CoffeePDF §2.5 steps 1 to 7 (step 3 adds a markup before Save as New Version), then rows H1 to H4. Each row is recorded in this plan's decision log; failures become a punch list, fixed in further release candidates.
-- [ ] **Step 4:** tag `helper-v0.5.0`; the roadmap's M3.6 row becomes **done**, with the date and the pull requests; CoffeePDF's session releases CoffeePDF v1.0.
+- [x] **Step 1:** once PR A is merged, tag `helper-v0.5.0-rc1` on master; `clients.yml` packages, signs and notarises it and attaches the disk image.
+- [x] **Step 2:** merge PR B, and the owner upgrades their server to master (the image now offers Open in App for PDFs).
+- [x] **Step 3:** the owner installs Healdan Helper 0.5.0-rc1 and CoffeePDF built from its `main`, with Healdan support on, and runs spec §11.2's walkthrough: CoffeePDF §2.5 steps 1 to 7 (step 3 adds a markup before Save as New Version), then rows H1 to H4. Each row is recorded in this plan's decision log; failures become a punch list, fixed in further release candidates.
+- [x] **Step 4:** tag `helper-v0.5.0`; the roadmap's M3.6 row becomes **done**, with the date and the pull requests; CoffeePDF's session releases CoffeePDF v1.0.
+
+All four ran on 2026-11-01, not quite as written, as "Hands-on checks" below says: rc1 was tagged on PR A's head before the merge, CoffeePDF was its 0.2.1 release, and the rows are recorded there rather than in the decision log. CoffeePDF v1.0 is CoffeePDF's session's to release.
 
 ## Decision log
 
@@ -2065,8 +2067,18 @@ What it showed for CoffeePDF (its session's to weigh; nothing in the Helper chan
 - **#4 went from 204,021 bytes to 39,504** at CoffeePDF's first save, a full rewrite of an unsigned PDF. Worth checking
   that nothing was lost.
 
-Left before Healdan Helper 0.5.0: the web page's Open in App on a PDF, once #151 merges and the server is upgraded, and
-the Settings screenshot in Installing the Helper.
+After the merges, on 2026-11-01:
+
+- **Step 1 from the web page:** with #151 merged and the owner's server upgraded to master (`23fa4f79a`), the web page's
+  Open in App on a PDF opened it in CoffeePDF, checked out, as the typed link had.
+- **The Settings picture** in Installing the Helper was taken again on rc1, with the PDFs row showing CoffeePDF and the
+  Microsoft Office group, cropped below the Server group as before.
+- **A race in a test.** Master's Clients run for #151 failed once on Ubuntu, in
+  `CoffeePdfCycleTests.SendAndCheckInAfterACrashTakesTheStaleLockWithIt`. `CopyStore.Delete` deletes the copy before
+  its lock, on the check-in's thread, and the test asserted the lock gone as soon as it saw the copy go. It now waits
+  for the lock as well (PR_NUMBER). The Helper's code is unchanged.
+- **Healdan Helper 0.5.0:** `helper-v0.5.0` was tagged on master at `23fa4f79a`, whose Helper code is rc1's, and CI
+  tested, signed and notarised it and attached the disk image to its release.
 
 ## Follow-ups
 
@@ -2103,7 +2115,6 @@ Filled in as the build found them, and left open once Tasks 1 to 9 were done and
 
 **Docs**
 
-- `site/content/user/office/installing-the-helper/settings.png` and its alt text lack the PDFs row. Take it again from the demo stack before 0.5.0.
 - `site/content/developer/desktop-clients.md`: the Tests section doesn't name `FakeCoffeePdf` or `CoffeePdfCycleTests`.
 - `site/content/developer/desktop-clients.md`: the Local Copies bullet gives the lock files' reason ("the app deletes them by the path it opened") for CoffeePDF's temporary files too. Give them a clause of their own.
 - `site/content/developer/desktop-clients.md`: the "Other kinds of file" bullet reads awkwardly with the PDF exception.
