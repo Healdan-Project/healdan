@@ -37,8 +37,9 @@ account has none.
 
 - **Healdan's public address.** Set `LOGICALDOC_PUBLIC_URL` in `.env` to the server's `https://` address, as
   [Configuration](../configuration/) and [Reverse Proxy](../reverse-proxy/) say. The redirect address you register
-  at the provider is built from it, and nobody can sign in through a provider until it's set. Give people that one
-  address for the web page and the helper.
+  at the provider is built from it. Until it's set, Healdan uses the address each page was reached at, which works
+  only over `https://` and only for the address you registered. Once it's set, a sign-in started on another name
+  for the server goes to that address first. Give people that one address for the web page and the helper.
 - **The server reaches the provider.** Healdan calls the provider's issuer address and every address it publishes,
   all of which must start `https://`, directly or through the proxy that Java's own settings name: see
   [Known Limitations](../known-limitations/). Each call gives up after 10 seconds.
@@ -178,9 +179,11 @@ code or a secret. What to look for:
 | The person is told | Usually |
 |---|---|
 | Their account doesn't give them access to Healdan | None of their provider groups is in the provider's group map. Add a row, or put them in a group that is. With Entra ID, it can also be that the groups claim isn't sent: see [Microsoft Entra ID](entra-id/#send-the-groups) |
-| Their provider couldn't sign them in | The redirect address isn't registered exactly as Healdan builds it, the client secret is wrong or has expired, the issuer isn't the provider's exact issuer, or the provider can't be reached. **Check** on the Sign-In tab finds most of these |
+| Their provider couldn't sign them in | The client secret is wrong or has expired, the issuer isn't the provider's exact issuer, or the provider can't be reached. **Check** on the Sign-In tab finds most of these. A redirect address that isn't registered exactly as Healdan builds it is refused on the provider's own page, before the person gets back to Healdan |
 | Healdan can't tell which account is theirs | With Link by Email on, their email at the provider matches more than one Healdan account, or `admin`, or an account already linked to someone |
 | Healdan already has an account with their username | A new account couldn't be made for them, because one with their username exists. Link by Email, or a different username at the provider, is the way round it |
+| This account can't sign in now | The account Healdan found is disabled or past its expiry date, as with Link by Email matching a disabled account, or LogicalDOC's sign-in refused it, outside its working hours, say. Enable the account, or put its dates or hours right |
+| That sign-in took too long or was already used | The person took more than 10 minutes at the provider, used the browser's Back button to send the provider's answer twice, or finished in another browser than the one they started in. It's also the sign-in starting on a different address from the one the provider sends the browser back to, which `LOGICALDOC_PUBLIC_URL` puts right. Starting again works |
 
 {{< cards >}}
   {{< card link="entra-id/" title="Microsoft Entra ID" icon="office-building" >}}

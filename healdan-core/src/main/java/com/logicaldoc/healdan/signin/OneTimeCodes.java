@@ -7,6 +7,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -32,6 +33,10 @@ import com.logicaldoc.util.spring.Context;
  * wrong verifier or address uses it up. The map can't grow without end: every
  * {@link #issue} first drops the codes that have expired, and when
  * {@value #MAX} are still waiting, it drops the oldest.
+ * <p>
+ * A code is also found by the helper's challenge, by its SHA-256, so that a
+ * helper start with a challenge that already has a code waiting is refused
+ * ({@link #challengeIssued}).
  * <p>
  * Nothing here logs, and nothing it holds shows in a {@code toString}.
  */
@@ -80,6 +85,9 @@ public class OneTimeCodes {
 	/** By the code's SHA-256, in the order they were issued, which is the order they expire in */
 	private final LinkedHashMap<String, Issued> codes = new LinkedHashMap<>();
 
+	/** The codes' SHA-256, by the SHA-256 of the challenges they were issued with */
+	private final Map<String, String> byChallenge = new HashMap<>();
+
 	/**
 	 * @return the bean in the application context
 	 */
@@ -101,16 +109,33 @@ public class OneTimeCodes {
 	public String issue(long userId, String provider, String refreshToken, String challenge, String redirect) {
 		String code = ApiTokens.randomPart();
 		Issued issued = new Issued(userId, provider, refreshToken, challenge, redirect, clock.instant().plus(LIFETIME));
+		String hash = ApiTokens.hash(code);
 		synchronized (this) {
 			sweep();
 			while (codes.size() >= MAX) {
-				Iterator<String> oldest = codes.keySet().iterator();
-				oldest.next();
+				Iterator<Map.Entry<String, Issued>> oldest = codes.entrySet().iterator();
+				Map.Entry<String, Issued> dropped = oldest.next();
 				oldest.remove();
+				unindex(dropped.getKey(), dropped.getValue());
 			}
-			codes.put(ApiTokens.hash(code), issued);
+			codes.put(hash, issued);
+			if (challenge != null)
+				byChallenge.put(ApiTokens.hash(challenge), hash);
 		}
 		return code;
+	}
+
+	/**
+	 * @param challenge a helper's PKCE challenge, possibly null
+	 * @return true if a code issued with that challenge is waiting, unredeemed
+	 *         and unexpired
+	 */
+	public synchronized boolean challengeIssued(String challenge) {
+		if (challenge == null)
+			return false;
+		String hash = byChallenge.get(ApiTokens.hash(challenge));
+		Issued issued = hash == null ? null : codes.get(hash);
+		return issued != null && clock.instant().isBefore(issued.expires());
 	}
 
 	/**
@@ -129,8 +154,10 @@ public class OneTimeCodes {
 		if (code == null || code.isEmpty())
 			return Optional.empty();
 		Issued issued;
+		String hash = ApiTokens.hash(code);
 		synchronized (this) {
-			issued = codes.remove(ApiTokens.hash(code));
+			issued = codes.remove(hash);
+			unindex(hash, issued);
 		}
 		if (issued == null || !clock.instant().isBefore(issued.expires()))
 			return Optional.empty();
@@ -163,10 +190,18 @@ public class OneTimeCodes {
 		Instant now = clock.instant();
 		Iterator<Map.Entry<String, Issued>> entries = codes.entrySet().iterator();
 		while (entries.hasNext()) {
-			if (now.isBefore(entries.next().getValue().expires()))
+			Map.Entry<String, Issued> entry = entries.next();
+			if (now.isBefore(entry.getValue().expires()))
 				break;
 			entries.remove();
+			unindex(entry.getKey(), entry.getValue());
 		}
+	}
+
+	/** Forgets a code's challenge, if it's still that code's */
+	private void unindex(String hash, Issued issued) {
+		if (issued != null && issued.challenge() != null)
+			byChallenge.remove(ApiTokens.hash(issued.challenge()), hash);
 	}
 
 	/**

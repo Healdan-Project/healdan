@@ -51,16 +51,16 @@ in with a password.
 
 ### When a Provider Sign-In Is Refused
 
-Healdan sends you back to the sign-in page with a message above the buttons. It names your provider as "your
-sign-in provider", whichever one you chose.
+Healdan sends you back to the sign-in page with a message above the buttons. The message doesn't name your
+provider, whichever one you chose.
 
 | The page says | What it means | What to do |
 |---|---|---|
-| Your account at your sign-in provider doesn't give you access to Healdan. Ask an administrator. | The provider signed you in, but none of your groups there gives you a place in Healdan. | Ask an administrator for access to Healdan. |
+| Your account doesn't give you access to Healdan. Ask an administrator. | The provider signed you in, but none of your groups there gives you a place in Healdan. | Ask an administrator for access to Healdan. |
 | Healdan can't tell which account is yours. Ask an administrator. | Your email address at the provider matches an account Healdan can't link you to: more than one account, one that's already linked to someone, or `admin`. | Ask an administrator. |
 | Healdan already has an account with your username. Ask an administrator. | Healdan can't make you an account, as one with your username already exists. | Ask an administrator. |
 | This account can't sign in now. Ask an administrator. | Healdan refused your account: it's disabled, has expired, or is outside the hours it may sign in. | Ask an administrator. |
-| Your sign-in provider couldn't sign you in. Try again, or ask an administrator. | The provider couldn't be reached, turned you down, or sent an answer Healdan didn't accept. | Choose the button again. If it keeps happening, ask an administrator. |
+| The sign-in provider couldn't sign you in. Try again, or ask an administrator. | The provider couldn't be reached, turned you down, or sent an answer Healdan didn't accept. | Choose the button again. If it keeps happening, ask an administrator. |
 | That sign-in took too long or was already used. Start again. | You took more than 10 minutes at the provider, or went back to a sign-in that had already finished. | Choose the button again. |
 
 ## Signing Out

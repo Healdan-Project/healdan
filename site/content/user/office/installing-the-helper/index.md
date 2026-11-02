@@ -339,7 +339,8 @@ this Mac only. That's for a server that's gone for good, or one you're moving aw
 - **Stay Signed In** keeps everything as it was. Choose it if you're only offline, and sign out once Healdan is
   back.
 - **Sign Out on This Computer** removes the sign-in from your Mac's keychain and stops the helper, as Sign Out does.
-  The server still counts this Mac as signed in until the sign-in expires or you change your password.
+  The server still counts this Mac as signed in until the sign-in expires or you change your password. If you sign
+  in through a provider, you have no Healdan password to change: ask your administrator to sign out your devices.
 - **Healdan answers after all?** If the server is back by the time you choose, the helper ends the sign-in there
   too.
 - **Saves that never reached Healdan** stay on your Mac, in the helper's `Copies` folder, and the window says how

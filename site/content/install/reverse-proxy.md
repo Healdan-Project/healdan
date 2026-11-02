@@ -14,6 +14,10 @@ Whichever proxy you use:
   the proxy is one of those. Left unset, that's the Docker networks the app is on, which covers a proxy on the same
   host. A proxy on another machine needs its address there. The sign-in throttle counts failures by that address:
   see [The Sign-In Throttle Behind a Proxy](#the-sign-in-throttle-behind-a-proxy).
+- **The browser's host name.** The proxy passes on the `Host` header the browser sent, as NPM and Caddy do and the
+  nginx example below does (`proxy_set_header Host $host`). A sign-in through a provider that starts on another
+  name than `LOGICALDOC_PUBLIC_URL`'s is sent to that address first, so behind a proxy that puts its own name in
+  `Host`, the sign-in page's provider buttons end in a browser's "too many redirects".
 - **WebSockets and large uploads.** The proxy must forward WebSockets (Healdan pushes live updates at
   `/wk-event`) and allow large uploads and long requests.
 - **The Healdan Helper needs HTTPS.** The helper that brings Healdan into LibreOffice refuses a server at a plain

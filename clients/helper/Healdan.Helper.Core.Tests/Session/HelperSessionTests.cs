@@ -332,7 +332,7 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Equal("https://healdan.test/api/signin/entra", browser.Opened!.GetLeftPart(UriPartial.Path));
         Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]); // an address without a scheme is https
         Assert.Equal(Account, HelperSettings.Load(Paths).Server);
-        Assert.Equal(new Uri($"{Account}/api/signin/done?provider=entra"), await browser.Done!);
+        Assert.Equal(new Uri($"{Account}/api/signin/done"), await browser.Done!);
         Assert.True(File.Exists(Paths.Channel));
         LogIndex("Signed in to healdan.test through entra");
         var exchange = Assert.Single(_http.Exchanges);
@@ -347,13 +347,13 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Theory]
-    [InlineData("no-group", "Your account at Sign In with Microsoft doesn't give you access to Healdan. Ask an administrator.")]
+    [InlineData("no-group", "Your account doesn't give you access to Healdan. Ask an administrator.")]
     [InlineData("email-taken", "Healdan can't tell which account is yours. Ask an administrator.")]
     [InlineData("username-taken", "Healdan already has an account with your username. Ask an administrator.")]
     [InlineData("account", "This account can't sign in now. Ask an administrator.")]
-    [InlineData("provider", "Sign In with Microsoft couldn't sign you in. Try again, or ask an administrator.")]
+    [InlineData("provider", "The sign-in provider couldn't sign you in. Try again, or ask an administrator.")]
     [InlineData("expired", "That sign-in took too long or was already used. Start again.")]
-    [InlineData("a-new-code", "Sign In with Microsoft couldn't sign you in. Try again, or ask an administrator.")]
+    [InlineData("a-new-code", "The sign-in provider couldn't sign you in. Try again, or ask an administrator.")]
     public async Task AProviderRefusalSaysWhatTheWebPageDoes(string code, string message)
     {
         _http.Providers.Add(("entra", "Sign In with Microsoft"));
@@ -370,34 +370,10 @@ public sealed class HelperSessionTests : IDisposable
         await session.StartAsync();
 
         Assert.Equal(message, refusal);
+        Assert.DoesNotContain("Microsoft", refusal); // the provider's label, which no refusal names
         Assert.False(session.Started);
         Assert.Empty(_keychain.Items);
         Assert.Empty(_http.Exchanges);
-    }
-
-    [Theory]
-    [InlineData("provider", null, "Your sign-in provider couldn't sign you in. Try again, or ask an administrator.")]
-    [InlineData("provider", "firm login", "Firm login couldn't sign you in. Try again, or ask an administrator.")]
-    [InlineData("no-group", "firm login", "Your account at firm login doesn't give you access to Healdan. Ask an administrator.")]
-    [InlineData("no-group", " ", "Your account at your sign-in provider doesn't give you access to Healdan. Ask an administrator.")]
-    public void ARefusalNamesTheProviderByItsLabel(string code, string? label, string message) =>
-        Assert.Equal(message, HelperSession.ProviderRefusal(code, label));
-
-    [Fact]
-    public async Task ARefusalFromAServerNotAskedForItsProvidersSaysYourSignInProvider()
-    {
-        _http.Providers.Add(("entra", "Sign In with Microsoft"));
-        _http.RefuseProviderWith = "provider";
-        string? refusal = null;
-        _windows.OnSignIn = async prompt =>
-        {
-            refusal = await prompt.SignInWithProviderAsync(Account, "entra", CancellationToken.None);
-            return false;
-        };
-
-        await Make(browser: new FakeBrowser(_http)).StartAsync();
-
-        Assert.Equal("Your sign-in provider couldn't sign you in. Try again, or ask an administrator.", refusal);
     }
 
     [Fact]

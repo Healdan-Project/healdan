@@ -137,8 +137,65 @@ public class SignInResourceTest extends ApiTestCase {
 		assertNotEquals(cookie, setCookie(again, "hd_signin"));
 
 		// Over HTTPS, the cookie is Secure
+		config().setProperty(SERVER_URL, "https://localhost:8443/");
 		ApiResponse secure = get("/api/signin/fake").server("https", "localhost", 8443).send();
 		assertTrue(setCookie(secure, "hd_signin"), has(setCookie(secure, "hd_signin"), "Secure"));
+	}
+
+	/**
+	 * A start on another name than the public address goes to the public
+	 * address first, path and query whole, before anything is kept or any
+	 * cookie set: the cookie is set on the name the browser asked for, and
+	 * the provider sends it back to the public address, where a cookie set on
+	 * another name would be missing
+	 */
+	@Test
+	public void testStartOnAnotherNameGoesToThePublicAddress() {
+		config().setProperty(SERVER_URL, "https://healdan.example");
+
+		ApiResponse moved = get("/api/signin/fake?a=b%20c&d=e").server("http", "127.0.0.1", 8080).send();
+
+		assertEquals(moved.toString(), 302, moved.status());
+		assertEquals("https://healdan.example/api/signin/fake?a=b%20c&d=e", moved.header("Location"));
+		assertEquals("no-store", moved.header("Cache-Control"));
+		assertNull(moved.header("Set-Cookie"));
+		assertEquals("nothing was asked of the provider", 0, fake.discoveryRequests());
+
+		// Another host is another name
+		assertTrue(get("/api/signin/fake").server("https", "www.healdan.example", 443).send().header("Location")
+				.startsWith("https://healdan.example/api/signin/fake"));
+		assertEquals(0, fake.discoveryRequests());
+
+		/*
+		 * Another scheme or port isn't, as a cookie belongs to the host: behind
+		 * a proxy Tomcat reports the scheme's own port for a public address with
+		 * another, and plain HTTP when the proxy isn't trusted, and sending those
+		 * to the public address would only come back to the same place
+		 */
+		for (String serverUrl : new String[] { "https://healdan.example", "https://HEALDAN.example:443/",
+				"https://healdan.example:8443" }) {
+			config().setProperty(SERVER_URL, serverUrl);
+			for (Object[] request : new Object[][] { { "https", 443 }, { "http", 80 }, { "https", 8443 },
+					{ "http", 8080 } }) {
+				ApiResponse here = get("/api/signin/fake").server((String) request[0], "Healdan.Example",
+						(Integer) request[1]).send();
+				assertTrue(serverUrl + " " + request[0] + " " + request[1] + ": " + here,
+						here.header("Location").startsWith(fake.issuer() + "/authorize?"));
+				assertNotNull(setCookie(here, "hd_signin"));
+			}
+		}
+
+		// With a path, which the address keeps
+		config().setProperty(SERVER_URL, "https://healdan.example:8443/dms/");
+		assertEquals("https://healdan.example:8443/dms/api/signin/fake",
+				get("/api/signin/fake").server("http", "127.0.0.1", 8080).send().header("Location"));
+
+		// Without a public address, the request's own address is the one used, so it's never another
+		config().remove(SERVER_URL);
+		ApiResponse local = get("/api/signin/fake").server("http", "127.0.0.1", 8080).send();
+		assertTrue(local.header("Location"), local.header("Location").startsWith(fake.issuer() + "/authorize?"));
+		assertEquals(URI.create("http://127.0.0.1:8080/api/signin/fake/callback").toString(),
+				query(URI.create(local.header("Location")), "redirect_uri"));
 	}
 
 	@Test
@@ -392,22 +449,29 @@ public class SignInResourceTest extends ApiTestCase {
 		assertEquals("nosniff", done.header("X-Content-Type-Options"));
 		assertEquals("no-store", done.header("Cache-Control"));
 
-		// A refusal, with the provider's label, which the page escapes
+		// A refusal never names the provider, whatever its label holds: the page already shows which button
+		// was clicked. An address that still names the provider is read as if it didn't.
 		SignInProvider p = SignInProviders.get().find("fake").orElseThrow();
 		SignInProviders.get().save(new SignInProvider(p.id(), p.preset(), "Firm <SSO> & \"Co\"", p.enabled(),
 				p.issuer(), p.clientId(), false, p.identityClaim(), p.usernameClaim(), p.emailClaim(), p.groupsClaim(),
 				p.linkByEmail()), null);
 		String refused = get("/api/signin/done?error=no-group&provider=fake").send().text();
-		assertTrue(refused, refused.contains("Your account at Firm &lt;SSO&gt; &amp; &quot;Co&quot; doesn&#39;t give "
-				+ "you access to Healdan. Ask an administrator."));
-		assertFalse(refused, refused.contains("<SSO>"));
+		assertTrue(refused, refused.contains("Your account doesn&#39;t give you access to Healdan. "
+				+ "Ask an administrator."));
+		for (String label : new String[] { "Firm", "SSO", "<SSO>", "&lt;SSO", "&quot;Co&quot;", "\"Co\"" })
+			assertFalse(label + " in " + refused, refused.contains(label));
 		assertFalse(refused, refused.contains("Signed in to Healdan"));
+		String failed = get("/api/signin/done?error=provider&provider=fake").send().text();
+		assertTrue(failed, failed.contains("The sign-in provider couldn&#39;t sign you in. "
+				+ "Try again, or ask an administrator."));
+		for (String label : new String[] { "Firm", "SSO", "<SSO>", "&lt;SSO", "&quot;Co&quot;", "\"Co\"" })
+			assertFalse(label + " in " + failed, failed.contains(label));
 
-		// Without a provider it doesn't know which, and says so
+		// The same without a provider, or with one it doesn't know
 		assertTrue(get("/api/signin/done?error=no-group").send().text()
-				.contains("Your account at your sign-in provider doesn&#39;t give you access to Healdan."));
+				.contains("Your account doesn&#39;t give you access to Healdan. Ask an administrator."));
 		assertTrue(get("/api/signin/done?error=provider&provider=nope").send().text()
-				.contains("Your sign-in provider couldn&#39;t sign you in. Try again, or ask an administrator."));
+				.contains("The sign-in provider couldn&#39;t sign you in. Try again, or ask an administrator."));
 		assertTrue(get("/api/signin/done?error=expired").send().text()
 				.contains("That sign-in took too long or was already used. Start again."));
 

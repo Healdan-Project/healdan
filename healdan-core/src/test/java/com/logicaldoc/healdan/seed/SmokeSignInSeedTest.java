@@ -48,6 +48,8 @@ public class SmokeSignInSeedTest extends AbstractHealdanTestCase {
 		env.put("HEALDAN_SMOKE_SIGNIN_ISSUER", ISSUER);
 		env.put("HEALDAN_SMOKE_SIGNIN_CLIENT_ID", "healdan");
 		env.put("HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET", "smoke-client-secret");
+		// The smoke overlay's, which smoke-test.sh always adds
+		env.put("HEALDAN_SMOKE_FIXTURE", "true");
 		return env;
 	}
 
@@ -106,9 +108,13 @@ public class SmokeSignInSeedTest extends AbstractHealdanTestCase {
 	@Test
 	public void testNothingWithoutTheVariables() throws Exception {
 		SignInTestHooks.allowHttp(true);
+		// The three, and the smoke overlay's HEALDAN_SMOKE_FIXTURE=true, which ties the step to the smoke test's
+		// stack: the three alone, as someone could set them by mistake elsewhere, do nothing
 		List<Map<String, String>> cases = List.of(Map.of(), without("HEALDAN_SMOKE_SIGNIN_ISSUER"),
 				without("HEALDAN_SMOKE_SIGNIN_CLIENT_ID"), without("HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET"),
-				blank("HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET"));
+				blank("HEALDAN_SMOKE_SIGNIN_CLIENT_SECRET"), without("HEALDAN_SMOKE_FIXTURE"),
+				with("HEALDAN_SMOKE_FIXTURE", "false"), with("HEALDAN_SMOKE_FIXTURE", "TRUE"),
+				Map.of("HEALDAN_SMOKE_FIXTURE", "true"));
 		for (Map<String, String> env : cases) {
 			SmokeSignInSeed seed = seed(env);
 			assertFalse(env.toString(), seed.enabled());
@@ -172,8 +178,12 @@ public class SmokeSignInSeedTest extends AbstractHealdanTestCase {
 	}
 
 	private static Map<String, String> blank(String name) {
+		return with(name, "  ");
+	}
+
+	private static Map<String, String> with(String name, String value) {
 		Map<String, String> env = variables();
-		env.put(name, "  ");
+		env.put(name, value);
 		return env;
 	}
 }

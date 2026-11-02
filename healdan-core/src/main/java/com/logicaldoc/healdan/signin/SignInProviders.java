@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -106,6 +107,20 @@ public class SignInProviders {
 
 	/** The width of {@code hd_signin_group.hd_value} */
 	private static final int MAX_GROUP_VALUE = 255;
+
+	/**
+	 * Claims some providers let people change, which can't name the person
+	 * (ruling R34): changing one would hand another person's linked account to
+	 * them. Compared ignoring case.
+	 */
+	static final Set<String> MUTABLE_CLAIMS = Set.of("email", "preferred_username", "upn", "unique_name", "name",
+			"nickname");
+
+	/**
+	 * A recipient a refusal may quote: what a username usually is, and nothing
+	 * the Sign-In tab, which shows a refusal as HTML, could read as markup
+	 */
+	private static final Pattern QUOTABLE_RECIPIENT = Pattern.compile("[A-Za-z0-9._@+-]{1,100}");
 
 	private static final Logger log = LoggerFactory.getLogger(SignInProviders.class);
 
@@ -217,9 +232,12 @@ public class SignInProviders {
 	 * @param newSecret the client secret to keep, sealed; null or blank keeps the
 	 *        one stored, which a new provider doesn't have
 	 * @throws PersistenceException error at data layer
-	 * @throws HealdanRuleException if a value isn't acceptable, or the identity
-	 *         claim would change while accounts are linked; the message names
-	 *         the field, for the person who typed it
+	 * @throws HealdanRuleException if a value isn't acceptable, the identity
+	 *         claim is one people can change (ruling R34), or the identity
+	 *         claim or the issuer would change while accounts are linked
+	 *         (rulings R21 and R33); the message names the field, for the
+	 *         person who typed it, and never quotes the label, which the
+	 *         Sign-In tab would show as HTML
 	 */
 	public synchronized void save(SignInProvider p, String newSecret) throws PersistenceException {
 		String id = p == null ? null : p.id();
@@ -233,18 +251,29 @@ public class SignInProviders {
 		String issuer = checkIssuer(p.issuer());
 		String clientId = required(p.clientId(), "client id", MAX_CLIENT_ID);
 		String identityClaim = required(p.identityClaim(), "identity claim", MAX_CLAIM);
+		String mutable = identityClaim.toLowerCase(Locale.ROOT);
+		if (MUTABLE_CLAIMS.contains(mutable))
+			throw refuse(("The identity claim can't be %s: some providers let people change it, so it could hand one "
+					+ "person's account to another. Use a claim that never changes, such as sub or oid.")
+					.formatted(mutable));
 		String usernameClaim = required(p.usernameClaim(), "username claim", MAX_CLAIM);
 		String emailClaim = required(p.emailClaim(), "email claim", MAX_CLAIM);
 		String groupsClaim = required(p.groupsClaim(), "groups claim", MAX_CLAIM);
 		Preset preset = p.preset() == null ? Preset.OTHER : p.preset();
-		// A changed identity claim would make every linked person a new identity (ruling R21)
 		if (!adding) {
 			SignInProvider current = read(id);
-			if (!identityClaim.equals(current.identityClaim())) {
+			// A changed identity claim would make every linked person a new identity (ruling R21). A link is the
+			// provider's id and the identity, with no issuer, so a new issuer would map the links onto whoever the
+			// new one's identities are (ruling R33); a trailing slash, which the issuer must match exactly, can be
+			// put right.
+			boolean claimChanges = !identityClaim.equals(current.identityClaim());
+			boolean issuerChanges = !withoutTrailingSlash(issuer).equals(withoutTrailingSlash(current.issuer()));
+			if (claimChanges || issuerChanges) {
 				int linked = identities.countLinked(id);
 				if (linked > 0)
-					throw refuse("The identity claim can't change while %s has %s linked. Unlink its accounts first."
-							.formatted(current.label(), linked == 1 ? "1 account" : linked + " accounts"));
+					throw refuse("The %s can't change while the provider %s has %s linked. Unlink its accounts first."
+							.formatted(claimChanges ? "identity claim" : "issuer address", id,
+									linked == 1 ? "1 account" : linked + " accounts"));
 			}
 		}
 		String sealed = sealedSecret(id, newSecret);
@@ -296,7 +325,7 @@ public class SignInProviders {
 			throw refuse("That provider doesn't exist.");
 		int linked = identities.countLinked(id);
 		if (linked > 0)
-			throw refuse("%s still has %s linked. Unlink its accounts first.".formatted(read(id).label(),
+			throw refuse("The provider %s still has %s linked. Unlink its accounts first.".formatted(id,
 					linked == 1 ? "1 account" : linked + " accounts"));
 
 		groupMaps.replace(id, List.of());
@@ -472,7 +501,10 @@ public class SignInProviders {
 				continue;
 			User user = UserDAO.get().getUser(name);
 			if (user == null)
-				throw refuse("'%s' isn't a user, so it can't get the alert.".formatted(name));
+				// Shown as HTML in the Sign-In tab: quoted only if nothing in it could be markup
+				throw refuse(QUOTABLE_RECIPIENT.matcher(name).matches()
+						? "'%s' isn't a user, so it can't get the alert.".formatted(name)
+						: "A recipient isn't a user, so it can't get the alert. Check the recipients' usernames.");
 			if (!names.contains(user.getUsername()))
 				names.add(user.getUsername());
 		}
@@ -595,6 +627,11 @@ public class SignInProviders {
 		if (!https && !(http && httpAllowed()))
 			throw refuse("The issuer address must start with https://.");
 		return issuer;
+	}
+
+	/** @return the issuer address without the slashes it ends with; empty for none */
+	private static String withoutTrailingSlash(String issuer) {
+		return StringUtils.stripEnd(StringUtils.defaultString(issuer), "/");
 	}
 
 	/**

@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Healdan.Helper.Core.Addin;
@@ -64,12 +63,6 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     /// <summary>How long a provider's sign-in waits for the browser: 5 minutes, unless a test shortens it.</summary>
     private readonly TimeSpan _browserTimeout;
-
-    /// <summary>
-    /// The providers' labels the Sign In window was last given, by server and id, so a refusal names the provider as
-    /// its button did.
-    /// </summary>
-    private readonly ConcurrentDictionary<(string Server, string Id), string> _labels = new();
 
     /// <summary>Guards the fields below. Nothing waits or raises an event while holding it.</summary>
     private readonly object _gate = new();
@@ -705,8 +698,6 @@ public sealed class HelperSession : ICycleEvents, IDisposable
                 .Where(p => !string.IsNullOrWhiteSpace(p.Id))
                 .Select(p => string.IsNullOrWhiteSpace(p.Label) ? p with { Label = DefaultProviderLabel } : p)
                 .ToList();
-            foreach (var provider in providers)
-                _labels[(Address(server), provider.Id)] = provider.Label;
             return new ProviderChoice(providers, string.IsNullOrWhiteSpace(info.PasswordLabel) ? DefaultPasswordLabel : info.PasswordLabel);
         }
         catch (Exception e)
@@ -753,7 +744,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         catch (ProviderRefusedException e)
         {
-            return ProviderRefusal(e.Code, _labels.TryGetValue((Address(server), providerId), out var label) ? label : null);
+            return ProviderRefusal(e.Code);
         }
         catch (InvalidOperationException e)
         {
@@ -761,7 +752,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         catch (ApiException e) when (e.Code == "sign-in-failed")
         {
-            return ProviderRefusal("expired", null); // the code came too late, or was used
+            return ProviderRefusal("expired"); // the code came too late, or was used
         }
         catch (ApiException e)
         {
@@ -782,21 +773,16 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         return await AfterSignInAsync(server, api, $"through {providerId}");
     }
 
-    /// <summary>What the web page says for a provider's refusal (M4 spec §5.3), naming the provider by its label, or as "your sign-in provider".</summary>
-    internal static string ProviderRefusal(string code, string? label)
+    /// <summary>What the web page says for a provider's refusal (M4 spec §5.3). None names the provider: the window already shows which button was clicked.</summary>
+    internal static string ProviderRefusal(string code) => code switch
     {
-        var text = code switch
-        {
-            "no-group" => "Your account at {label} doesn't give you access to Healdan. Ask an administrator.",
-            "email-taken" => "Healdan can't tell which account is yours. Ask an administrator.",
-            "username-taken" => "Healdan already has an account with your username. Ask an administrator.",
-            "account" => "This account can't sign in now. Ask an administrator.",
-            "expired" => "That sign-in took too long or was already used. Start again.",
-            _ => "{label} couldn't sign you in. Try again, or ask an administrator."
-        };
-        text = text.Replace("{label}", string.IsNullOrWhiteSpace(label) ? "your sign-in provider" : label.Trim());
-        return char.ToUpperInvariant(text[0]) + text[1..]; // a label that starts the sentence
-    }
+        "no-group" => "Your account doesn't give you access to Healdan. Ask an administrator.",
+        "email-taken" => "Healdan can't tell which account is yours. Ask an administrator.",
+        "username-taken" => "Healdan already has an account with your username. Ask an administrator.",
+        "account" => "This account can't sign in now. Ask an administrator.",
+        "expired" => "That sign-in took too long or was already used. Start again.",
+        _ => "The sign-in provider couldn't sign you in. Try again, or ask an administrator."
+    };
 
     private const string NotHealdan = "That address isn't a Healdan server.";
 

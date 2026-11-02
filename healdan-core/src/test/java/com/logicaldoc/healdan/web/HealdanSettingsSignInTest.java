@@ -444,7 +444,7 @@ public class HealdanSettingsSignInTest extends AbstractHealdanTestCase {
 		GUISignInProvider gui = find(as(boss).loadSignIn(), "other");
 		assertEquals(1, gui.getLinked());
 		gui.setIdentityClaim("oid");
-		assertHolds("identity claim", "The identity claim can't change while Sign In has 1 account linked",
+		assertHolds("identity claim", "The identity claim can't change while the provider other has 1 account linked",
 				() -> as(boss).saveProvider(gui, null));
 		assertEquals("sub", SignInProviders.get().find("other").orElseThrow().identityClaim());
 

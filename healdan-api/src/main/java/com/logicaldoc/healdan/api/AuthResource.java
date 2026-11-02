@@ -166,6 +166,13 @@ public class AuthResource {
 
 		// Sealed before the session opens, so a key that can't be made leaves no session behind
 		String refresh = SecretBox.get().seal(redeemed.refreshToken());
+		if (!ApiTokens.refreshFits(refresh)) {
+			// Ruling R35: refused here, rather than failing on the database or keeping it cut short
+			log.warn("Refused a sign-in with a helper's code through the sign-in provider {}: its refresh token is too "
+					+ "long to keep ({} characters sealed, and a device token holds {})", redeemed.provider(),
+					refresh.length(), ApiTokens.MAX_REFRESH);
+			throw signInFailed();
+		}
 		SessionManager sessions = SessionManager.get();
 		Session session;
 		try {

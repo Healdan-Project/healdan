@@ -45,6 +45,13 @@ public class ApiTokens {
 
 	public static final String UNNAMED = "Unnamed device";
 
+	/**
+	 * The longest sealed refresh token a token row holds: {@code hd_refresh}'s
+	 * width since V7 (ruling R35), {@code text} on MariaDB. Sealed, that's a
+	 * provider's refresh token of up to 49,121 characters.
+	 */
+	public static final int MAX_REFRESH = 65_535;
+
 	static final int MAX_NAME_LENGTH = 100;
 
 	static final int MAX_DEVICE_LENGTH = 64;
@@ -172,6 +179,16 @@ public class ApiTokens {
 		if (!Objects.equals(user.getPassword(), storedPassword(user.getId())))
 			revoke(row);
 		return new Issued(token, row);
+	}
+
+	/**
+	 * @param sealed a provider's refresh token, sealed by {@code SecretBox}, or
+	 *        null for none
+	 * @return true if a token row can hold it: none, or no longer than
+	 *         {@link #MAX_REFRESH}
+	 */
+	public static boolean refreshFits(String sealed) {
+		return sealed == null || sealed.length() <= MAX_REFRESH;
 	}
 
 	/**
@@ -370,29 +387,33 @@ public class ApiTokens {
 	/**
 	 * Revokes a token and closes the session bound to it, and any other
 	 * session the API opened for it: two requests that both found the bound
-	 * session closed each open one, and only one stays bound. Revoking a
-	 * revoked token does nothing.
+	 * session closed each open one, and only one stays bound. The provider's
+	 * sealed refresh token goes from the row, so a copy of the database and
+	 * the secret key together hold no live one. Revoking a revoked token does
+	 * nothing.
 	 * 
 	 * @param token a token row
 	 */
 	public void revoke(ApiToken token) {
 		// The bound session is read from the database: it may have changed since the row was loaded
 		String sid = currentSid(token.getId());
-		update("set deleted = 1 where id = :id and deleted = 0", Map.of("id", token.getId()));
+		update("set deleted = 1, refresh = null where id = :id and deleted = 0", Map.of("id", token.getId()));
 		token.setDeleted(1);
+		token.setRefresh(null);
 		kill(sid);
 		killOpenedSessions(List.of(token.getId()));
 	}
 
 	/**
-	 * Revokes all of a user's tokens and closes their sessions, as
-	 * {@link #revoke(ApiToken)} does.
+	 * Revokes all of a user's tokens and closes their sessions, and clears
+	 * their refresh tokens, as {@link #revoke(ApiToken)} does.
 	 * 
 	 * @param userId the user's id
 	 * @return how many tokens were revoked
 	 */
 	public int revokeAll(long userId) {
-		int revoked = update("set deleted = 1 where userId = :userId and deleted = 0", Map.of("userId", userId));
+		int revoked = update("set deleted = 1, refresh = null where userId = :userId and deleted = 0",
+				Map.of("userId", userId));
 		// Read after the update, so a token stored meanwhile has its sessions closed too
 		List<Object[]> rows;
 		try {

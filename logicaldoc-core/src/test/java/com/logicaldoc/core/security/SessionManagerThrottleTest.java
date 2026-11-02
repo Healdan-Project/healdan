@@ -559,6 +559,43 @@ public class SessionManagerThrottleTest extends AbstractCoreTestCase {
 		assertEquals("unknown", HealdanThrottle.keyLabel("ld-0123456789abcdef0123456789abcdef"));
 	}
 
+	/**
+	 * A database's message is logged as text, never read as a format: one
+	 * holding {} would otherwise take the exception into the message and log it
+	 * without its stack trace
+	 */
+	@Test
+	public void testDataErrorsAreLoggedAsText() throws Exception {
+		ApiKeyDAO failing = mock(ApiKeyDAO.class);
+		when(failing.findByKey(org.mockito.ArgumentMatchers.anyString()))
+				.thenThrow(new PersistenceException("Can't read the row {} of ld_apikey"));
+		List<org.apache.logging.log4j.core.LogEvent> events = new java.util.concurrent.CopyOnWriteArrayList<>();
+		org.apache.logging.log4j.core.Logger logger = (org.apache.logging.log4j.core.Logger) org.apache.logging.log4j.LogManager
+				.getLogger(HealdanThrottle.class);
+		org.apache.logging.log4j.core.appender.AbstractAppender appender = new org.apache.logging.log4j.core.appender.AbstractAppender(
+				"throttle-capture", null, null, true, org.apache.logging.log4j.core.config.Property.EMPTY_ARRAY) {
+			@Override
+			public void append(org.apache.logging.log4j.core.LogEvent event) {
+				events.add(event.toImmutable());
+			}
+		};
+		appender.start();
+		logger.addAppender(appender);
+		try (org.mockito.MockedStatic<Context> context = org.mockito.Mockito.mockStatic(Context.class,
+				org.mockito.Mockito.CALLS_REAL_METHODS)) {
+			context.when(() -> Context.get(ApiKeyDAO.class)).thenReturn(failing);
+
+			assertEquals("unknown", HealdanThrottle.keyLabel("ld-0123456789abcdef0123456789abcdef"));
+		} finally {
+			logger.removeAppender(appender);
+			appender.stop();
+		}
+
+		assertEquals(1, events.size());
+		assertEquals("Can't read the row {} of ld_apikey", events.get(0).getMessage().getFormattedMessage());
+		assertTrue(events.get(0).getThrown() instanceof PersistenceException);
+	}
+
 	@Test
 	public void testOffWhenDisabled() {
 		Context.get().getConfig().setProperty("throttle.enabled", "false");

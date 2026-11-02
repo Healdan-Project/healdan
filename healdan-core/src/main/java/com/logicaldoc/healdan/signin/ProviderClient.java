@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.LongSupplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -85,8 +86,14 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * <b>Nothing is fetched until it's needed.</b> A provider's discovery document
  * is fetched at its first use and kept, with its keys, until
  * {@link #forget}; never at startup, so Healdan runs without its providers
- * (spec section 7.5). A document that couldn't be fetched, or failed its
- * checks, isn't kept, so the next use tries again.
+ * (spec section 7.5). A document that failed its checks isn't kept, so the
+ * next use tries again. One that couldn't be fetched (no connection, a
+ * timeout, an error status or an answer that isn't a discovery document) is
+ * remembered for {@value #FAILED_DISCOVERY_MILLIS} milliseconds: until then,
+ * {@link #start}, {@link #exchange}, {@link #refresh} and {@link #check} fail
+ * at once, as that fetch did, without asking the provider, so that during an
+ * outage a start, which needs no sign-in, can't hold a Tomcat worker for the
+ * timeouts on every call. {@link #forget} forgets the failure too.
  * <p>
  * <b>HTTPS everywhere.</b> The issuer, and every endpoint its discovery
  * document names (authorisation, token and keys), must be {@code https}, with
@@ -106,10 +113,13 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * ({@link #refresh}, ruling R28). At a sign-in it's refused.
  * <p>
  * <b>The client secret</b> goes to the token endpoint the way the provider's
- * discovery document lists: {@code client_secret_basic} (an HTTP Basic header)
- * when it's listed or the list is absent, else {@code client_secret_post} (the
- * form body) when that is listed, else {@code client_secret_basic} again, which
- * {@link #check} reports (ruling R29).
+ * discovery document lists: {@code client_secret_post} (the form body) when
+ * it's listed, else {@code client_secret_basic} (an HTTP Basic header) when
+ * that is listed or the list is absent, else {@code client_secret_basic}
+ * again, which {@link #check} reports (rulings R29 and R32). Post comes first
+ * because Nimbus form-encodes a Basic header's client id and secret (RFC 6749
+ * section 2.3.1), so a secret with a {@code ~}, as Entra ID's generated ones
+ * have, goes as {@code %7E}, which a provider may not decode.
  * <p>
  * <b>Never logged,</b> nor put in a {@link ProviderException}'s message:
  * tokens, codes, the client secret, ID tokens, verifiers, states and nonces.
@@ -127,6 +137,12 @@ public class ProviderClient {
 
 	/** ID tokens are allowed two minutes of clock skew */
 	static final int MAX_CLOCK_SKEW_SECONDS = 120;
+
+	/**
+	 * How long a discovery document that couldn't be fetched is remembered, so
+	 * that every use of the provider fails at once without asking it
+	 */
+	static final long FAILED_DISCOVERY_MILLIS = 30_000L;
 
 	/** The RSA and EC signatures Healdan accepts on an ID token: never none or HMAC */
 	public static final Set<JWSAlgorithm> ALGORITHMS = Set.of(JWSAlgorithm.RS256, JWSAlgorithm.RS384,
@@ -262,6 +278,16 @@ public class ProviderClient {
 	private record Discovered(String issuer, OIDCProviderMetadata metadata, JWKSource<SecurityContext> keys) {
 	}
 
+	/**
+	 * A discovery document that couldn't be fetched for an issuer, and when
+	 *
+	 * @param message the failure's message, which holds no secret
+	 * @param cause the failure underneath, or null
+	 * @param at when it failed, by {@link #clock}
+	 */
+	private record Failed(String issuer, String message, Throwable cause, long at) {
+	}
+
 	private final SignInProviders providers;
 
 	private final int timeout;
@@ -269,6 +295,12 @@ public class ProviderClient {
 	private final ResourceRetriever retriever;
 
 	private final Map<String, Discovered> discovered = new ConcurrentHashMap<>();
+
+	/** The last failed fetch of each provider's discovery document, by the provider's id */
+	private final Map<String, Failed> failed = new ConcurrentHashMap<>();
+
+	/** What the failures' 30 seconds are measured by, in milliseconds; tests move it */
+	volatile LongSupplier clock = System::currentTimeMillis;
 
 	/** The providers whose unsigned refreshed ID tokens have been logged; once for each, for the JVM's life */
 	private final Set<String> unsignedNoted = ConcurrentHashMap.newKeySet();
@@ -331,7 +363,7 @@ public class ProviderClient {
 
 	/**
 	 * Exchanges the code the provider sent back for its tokens, with the client
-	 * secret (as {@code client_secret_basic} or {@code client_secret_post}, by
+	 * secret (as {@code client_secret_post} or {@code client_secret_basic}, by
 	 * what the provider lists) and the verifier, and checks the ID token in full:
 	 * an unsigned one is refused here.
 	 *
@@ -522,7 +554,8 @@ public class ProviderClient {
 
 	/**
 	 * The Sign-In tab's Check (spec section 10.3). It fetches the discovery
-	 * document and the keys afresh, leaving what {@link #start} keeps alone,
+	 * document and the keys afresh, leaving what {@link #start} keeps alone
+	 * (but a failed fetch it remembers, which it reports as it is),
 	 * and confirms the issuer matches, every endpoint is HTTPS, the provider
 	 * signs with an RSA or EC algorithm, offers {@code offline_access}, and
 	 * publishes a key to sign with, that it takes a client secret at its token
@@ -545,16 +578,19 @@ public class ProviderClient {
 	}
 
 	/**
-	 * Drops a provider's discovery document and keys, so that the next use
-	 * fetches them again. Whatever saves or removes a provider calls it after.
-	 * (A changed issuer is noticed without it, as the document is kept with the
-	 * issuer it was fetched for.)
+	 * Drops a provider's discovery document and keys, and a failed fetch of
+	 * them it remembers, so that the next use fetches them again. Whatever
+	 * saves or removes a provider calls it after. (A changed issuer is noticed
+	 * without it, as the document and a failure are kept with the issuer they
+	 * were fetched for.)
 	 *
 	 * @param providerId the provider's id
 	 */
 	public void forget(String providerId) {
-		if (providerId != null)
+		if (providerId != null) {
 			discovered.remove(providerId);
+			failed.remove(providerId);
+		}
 	}
 
 	private void checkInto(SignInProvider p, List<String> problems) {
@@ -568,7 +604,13 @@ public class ProviderClient {
 		OIDCProviderMetadata metadata;
 		try {
 			issuer = issuer(p);
-			metadata = fetch(issuer);
+			Failed recent = recentFailure(p.id(), issuer);
+			if (recent != null) {
+				problems.add(recent.message() + ". Healdan asks the provider again " + FAILED_DISCOVERY_MILLIS / 1000
+						+ " seconds after that failure, or at once when the provider is saved.");
+				return;
+			}
+			metadata = fetch(p.id(), issuer);
 		} catch (ProviderException e) {
 			problems.add(e.getMessage() + ".");
 			return;
@@ -581,7 +623,7 @@ public class ProviderClient {
 			problems.add(problem + ".");
 		if (!takesClientSecret(metadata))
 			problems.add(("The provider doesn't take a client secret at its token endpoint (it lists %s), and Healdan "
-					+ "sends one as client_secret_basic or client_secret_post.").formatted(listed(metadata)));
+					+ "sends one as client_secret_post or client_secret_basic.").formatted(listed(metadata)));
 
 		List<JWSAlgorithm> algorithms = metadata.getIDTokenJWSAlgs();
 		if (algorithms == null || algorithms.stream().noneMatch(ALGORITHMS::contains))
@@ -636,7 +678,10 @@ public class ProviderClient {
 		String issuer = issuer(p);
 		Discovered d = discovered.get(p.id());
 		if (d == null || !d.issuer().equals(issuer)) {
-			OIDCProviderMetadata metadata = fetch(issuer);
+			Failed recent = recentFailure(p.id(), issuer);
+			if (recent != null)
+				throw new ProviderException(recent.message(), recent.cause());
+			OIDCProviderMetadata metadata = fetch(p.id(), issuer);
 			String named = metadata.getIssuer() == null ? null : metadata.getIssuer().getValue();
 			if (!issuer.equals(named))
 				throw new ProviderException(mismatch(named, issuer));
@@ -649,6 +694,36 @@ public class ProviderClient {
 			requireSecureEndpoints(d.metadata());
 		}
 		return d;
+	}
+
+	/**
+	 * @return the provider's failed fetch of the issuer's discovery document,
+	 *         if it failed less than {@value #FAILED_DISCOVERY_MILLIS}
+	 *         milliseconds ago; otherwise null
+	 */
+	private Failed recentFailure(String providerId, String issuer) {
+		Failed last = failed.get(providerId);
+		if (last == null || !last.issuer().equals(issuer))
+			return null;
+		long since = clock.getAsLong() - last.at();
+		// A clock set back forgets it
+		return since >= 0 && since < FAILED_DISCOVERY_MILLIS ? last : null;
+	}
+
+	/**
+	 * Fetches a provider's discovery document, and remembers a failure for
+	 * {@value #FAILED_DISCOVERY_MILLIS} milliseconds, or forgets the last one
+	 * when it works
+	 */
+	private OIDCProviderMetadata fetch(String providerId, String issuer) throws ProviderException {
+		try {
+			OIDCProviderMetadata metadata = fetch(issuer);
+			failed.remove(providerId);
+			return metadata;
+		} catch (ProviderException e) {
+			failed.put(providerId, new Failed(issuer, e.getMessage(), e.getCause(), clock.getAsLong()));
+			throw e;
+		}
 	}
 
 	/**
@@ -780,16 +855,15 @@ public class ProviderClient {
 	}
 
 	/**
-	 * How the client secret goes to the token endpoint (ruling R29): as
-	 * {@code client_secret_basic} when the discovery document lists it or lists
-	 * no methods, else as {@code client_secret_post} when that is listed, else as
-	 * {@code client_secret_basic}, which {@link #check} reports.
+	 * How the client secret goes to the token endpoint (rulings R29 and R32):
+	 * as {@code client_secret_post} when the discovery document lists it, else
+	 * as {@code client_secret_basic} when that is listed or no methods are,
+	 * else as {@code client_secret_basic}, which {@link #check} reports.
 	 */
 	private static ClientAuthentication authentication(OIDCProviderMetadata metadata, ClientID clientId,
 			Secret secret) {
 		List<ClientAuthenticationMethod> methods = metadata.getTokenEndpointAuthMethods();
-		if (methods != null && !methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-				&& methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_POST))
+		if (methods != null && methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_POST))
 			return new ClientSecretPost(clientId, secret);
 		return new ClientSecretBasic(clientId, secret);
 	}

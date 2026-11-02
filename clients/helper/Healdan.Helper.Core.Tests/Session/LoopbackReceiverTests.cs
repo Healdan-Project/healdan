@@ -149,6 +149,49 @@ public sealed class LoopbackReceiverTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task OnlyGetOfTheRootIsTheAnswer()
+    {
+        // A browser's favicon, another method or another path gets a 404 and uses nothing up: the wait goes on until
+        // the browser comes back to the address Healdan was given.
+        var receiver = Start();
+        var waiting = receiver.WaitAsync(Done, Plenty, default);
+        var port = receiver.RedirectUri.Port;
+
+        foreach (var path in new[] { "/favicon.ico", "/callback?code=wrong&state=s", "/a/b" })
+        {
+            using var other = await Get(new Uri($"http://127.0.0.1:{port}{path}"));
+            Assert.Equal(HttpStatusCode.NotFound, other.StatusCode);
+            Assert.Null(other.Headers.Location);
+        }
+        foreach (var method in new[] { HttpMethod.Post, HttpMethod.Put, HttpMethod.Delete, HttpMethod.Head, HttpMethod.Options })
+        {
+            using var http = new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = Plenty };
+            using var answer = await http.SendAsync(new HttpRequestMessage(method, With(receiver, "?code=wrong&state=s")));
+            Assert.Equal(HttpStatusCode.NotFound, answer.StatusCode);
+        }
+        Assert.False(waiting.IsCompleted);
+
+        using var response = await Get(With(receiver, "?code=c&state=s"));
+
+        Assert.Equal(new LoopbackResult("c", "s", null), await waiting);
+        Assert.Equal(Done, response.Headers.Location);
+        await AssertRefused(With(receiver, "?code=other&state=s"));
+    }
+
+    [Fact]
+    public async Task TheWaitsTimeoutCoversTheRequestsThatArentTheAnswer()
+    {
+        var receiver = Start();
+        var waiting = receiver.WaitAsync(Done, TimeSpan.FromMilliseconds(500), default);
+
+        using (var other = await Get(new Uri(receiver.RedirectUri, "/favicon.ico")))
+            Assert.Equal(HttpStatusCode.NotFound, other.StatusCode);
+
+        await Assert.ThrowsAsync<TimeoutException>(() => waiting);
+        await AssertRefused(receiver.RedirectUri);
+    }
+
+    [Fact]
     public async Task DisposeFreesThePort()
     {
         var receiver = Start();

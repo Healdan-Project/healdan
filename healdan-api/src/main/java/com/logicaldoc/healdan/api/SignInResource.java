@@ -82,7 +82,19 @@ import jakarta.ws.rs.core.Response;
  * {@code POST /v1/auth/tokens}. Its refusals go to the helper's address too,
  * as {@code error=<code>} with the helper's state; only a callback whose
  * sign-in is unknown, used or expired, which has no helper address, goes to
- * the sign-in page.
+ * the sign-in page. A helper's start whose challenge another sign-in already
+ * has, waiting or with a code issued, is refused as {@code expired} at its
+ * own address: another local user who read the helper's start address could
+ * otherwise race a sign-in of their own, with the helper's challenge and
+ * address, to the helper's port, and whoever comes second loses.
+ * <p>
+ * <b>A start on another name</b> than the public address, such as
+ * {@code http://127.0.0.1:8080} when {@code server.url} is
+ * {@code https://healdan.example}, is sent to the same path and query at the
+ * public address first, before anything is kept or any cookie set: the
+ * {@code hd_signin} cookie is set on the name the browser asked for, and the
+ * provider sends the browser back to the public address, so a sign-in started
+ * on another name would always come back {@code expired}.
  * <p>
  * Nothing secret is logged: no code, state, nonce, verifier, challenge, token,
  * secret or cookie, and none of the helper's. Each refusal is logged with the
@@ -118,16 +130,16 @@ public class SignInResource {
 
 	static final String SIGNED_IN = "Signed in to Healdan. You can close this tab.";
 
-	/** What stands for the provider's label when the page doesn't know which provider it was */
-	static final String SOME_PROVIDER = "your sign-in provider";
-
-	/** What each refusal says (spec section 5.3); {@code {label}} is the provider's label */
+	/**
+	 * What each refusal says (spec section 5.3). None names the provider: the
+	 * page already shows which button was clicked (owner, 2026-11-02).
+	 */
 	static final Map<String, String> MESSAGES = Map.of(SignInAccounts.NO_GROUP,
-			"Your account at {label} doesn't give you access to Healdan. Ask an administrator.",
+			"Your account doesn't give you access to Healdan. Ask an administrator.",
 			SignInAccounts.EMAIL_TAKEN, "Healdan can't tell which account is yours. Ask an administrator.",
 			SignInAccounts.USERNAME_TAKEN, "Healdan already has an account with your username. Ask an administrator.",
 			ACCOUNT, "This account can't sign in now. Ask an administrator.", PROVIDER,
-			"{label} couldn't sign you in. Try again, or ask an administrator.", EXPIRED,
+			"The sign-in provider couldn't sign you in. Try again, or ask an administrator.", EXPIRED,
 			"That sign-in took too long or was already used. Start again.");
 
 	/** What the page says when the helper's start isn't one Healdan accepts */
@@ -215,11 +227,14 @@ public class SignInResource {
 	 * @param challenge the helper's PKCE challenge
 	 * @param method the helper's PKCE method, which must be {@code S256}
 	 * @param request the request
-	 * @return {@code 302} to the provider, or with a refusal to the sign-in
-	 *         page with {@code signin=provider} or the helper's address with
-	 *         {@code error=provider}, if the provider isn't on and set up or
-	 *         can't be reached; {@code 400} if the helper's request isn't one
-	 *         Healdan accepts; {@code 409} if Healdan has no public address
+	 * @return {@code 302} to the provider; to the same path and query at the
+	 *         public address, if the request came to another; with a refusal
+	 *         to the sign-in page with {@code signin=provider} or the helper's
+	 *         address with {@code error=provider}, if the provider isn't on and
+	 *         set up or can't be reached, or to the helper's address with
+	 *         {@code error=expired} if another sign-in has its challenge;
+	 *         {@code 400} if the helper's request isn't one Healdan accepts;
+	 *         {@code 409} if Healdan has no public address
 	 */
 	@GET
 	@Public
@@ -243,10 +258,28 @@ public class SignInResource {
 		if (address == null)
 			return noAddress(id);
 
+		// The cookie must be set on the name the callback comes back to
+		if (!atPublicAddress(request, address)) {
+			String query = request.getQueryString();
+			URI moved;
+			try {
+				moved = URI.create(address.base() + "/api/signin/" + id + (query != null ? "?" + query : ""));
+			} catch (IllegalArgumentException e) {
+				return refused(address, helper, id, null, PROVIDER, "it came to another name than the public address, "
+						+ "with a query that can't be carried there", false).build();
+			}
+			log.debug("Sent a start through the sign-in provider {} on another name to the public address", id);
+			return redirect(moved).build();
+		}
+
 		SignInProvider provider = usable(id);
 		if (provider == null)
 			return refused(address, helper, id, null, PROVIDER, "no provider with that id is on and set up", false)
 					.build();
+
+		PendingSignIns pending = PendingSignIns.get();
+		if (helper != null && challengeTaken(helper.challenge()))
+			return challengeRefused(address, helper, id);
 
 		ProviderClient.Start start;
 		try {
@@ -256,12 +289,44 @@ public class SignInResource {
 		}
 
 		String browser = ApiTokens.randomPart();
-		PendingSignIns pending = PendingSignIns.get();
-		pending.put(new Pending(id, start.state(), start.nonce(), start.verifier(), ApiTokens.hash(browser),
+		// Kept only if no other start with the helper's challenge got there while the provider was asked
+		if (!pending.put(new Pending(id, start.state(), start.nonce(), start.verifier(), ApiTokens.hash(browser),
 				pending.expiry(), helper != null ? helper.redirect() : null, helper != null ? helper.state() : null,
-				helper != null ? helper.challenge() : null));
+				helper != null ? helper.challenge() : null)))
+			return challengeRefused(address, helper, id);
 		return redirect(start.authorization()).header(HttpHeaders.SET_COOKIE,
 				COOKIE + "=" + browser + cookieAttributes(address, request.isSecure())).build();
+	}
+
+	/**
+	 * @return true if the challenge is a helper's sign-in's that is waiting,
+	 *         or has a code waiting
+	 */
+	private static boolean challengeTaken(String challenge) {
+		return PendingSignIns.get().helperChallengePending(challenge) || OneTimeCodes.get().challengeIssued(challenge);
+	}
+
+	/** A helper's start whose challenge another sign-in has: refused at its own address, naming no challenge */
+	private static Response challengeRefused(Address address, Helper helper, String id) {
+		return refused(address, helper, id, null, EXPIRED,
+				"its code_challenge is another sign-in's, still waiting or with a code waiting", true).build();
+	}
+
+	/**
+	 * @return true if the request came to the public address's host. Only
+	 *         the host is compared, as a cookie belongs to a host whatever the
+	 *         scheme or port: behind a proxy Tomcat reports the scheme's own
+	 *         port, or plain HTTP when the proxy isn't trusted, and comparing
+	 *         those would send the browser round in a loop
+	 */
+	static boolean atPublicAddress(HttpServletRequest request, Address address) {
+		return host(request.getServerName()).equals(host(URI.create(address.origin()).getHost()));
+	}
+
+	/** @return the host in lower case, with a bare IPv6 address in brackets */
+	private static String host(String host) {
+		String h = String.valueOf(host).toLowerCase(Locale.ROOT);
+		return h.indexOf(':') >= 0 && !h.startsWith("[") ? "[" + h + "]" : h;
 	}
 
 	/**
@@ -323,27 +388,22 @@ public class SignInResource {
 	 * The page that tells the person to close the tab, or what went wrong.
 	 *
 	 * @param error a refusal's code; none if the sign-in worked
-	 * @param provider the id of the provider, whose label the message names;
-	 *        without one it names "your sign-in provider"
 	 * @return {@code 200} with the page
 	 */
 	@GET
 	@Public
 	@Path("done")
-	public Response done(@QueryParam("error") String error, @QueryParam("provider") String provider) {
-		return page(Response.Status.OK.getStatusCode(), error == null ? SIGNED_IN : message(error, provider));
+	public Response done(@QueryParam("error") String error) {
+		return page(Response.Status.OK.getStatusCode(), error == null ? SIGNED_IN : message(error));
 	}
 
 	/**
 	 * @param code a refusal's code; one that isn't known says the provider
 	 *        couldn't sign the person in
-	 * @param providerId the provider's id, or null
-	 * @return what the refusal says, with the provider's label
+	 * @return what the refusal says
 	 */
-	static String message(String code, String providerId) {
-		String text = MESSAGES.getOrDefault(code, MESSAGES.get(PROVIDER)).replace("{label}", label(providerId));
-		// At the start of a sentence
-		return text.startsWith(SOME_PROVIDER) ? "Y" + text.substring(1) : text;
+	static String message(String code) {
+		return MESSAGES.getOrDefault(code, MESSAGES.get(PROVIDER));
 	}
 
 	private Response.ResponseBuilder finish(Pending pending, String code, String error, String errorDescription,
@@ -635,12 +695,6 @@ public class SignInResource {
 		return Response.status(status).entity(html.getBytes(StandardCharsets.UTF_8)).type("text/html; charset=UTF-8")
 				.header("Content-Security-Policy", POLICY).header("X-Content-Type-Options", "nosniff")
 				.header(HttpHeaders.CACHE_CONTROL, NO_STORE).header(REFERRER_POLICY, "no-referrer").build();
-	}
-
-	private static String label(String id) {
-		if (id == null || !SignInProviders.ID.matcher(id).matches())
-			return SOME_PROVIDER;
-		return SignInProviders.get().find(id).map(SignInProvider::label).orElse(SOME_PROVIDER);
 	}
 
 	/**

@@ -153,4 +153,27 @@ public class OneTimeCodesTest {
 		assertTrue(codes.redeem(next, VERIFIER, REDIRECT).isPresent());
 		assertTrue(codes.redeem(newest, VERIFIER, REDIRECT).isPresent());
 	}
+
+	/**
+	 * A code is found by the challenge it was issued with while it waits, so a
+	 * helper start with that challenge is refused
+	 */
+	@Test
+	public void testFindsACodesChallenge() {
+		assertFalse(codes.challengeIssued(CHALLENGE));
+		assertFalse(codes.challengeIssued(null));
+		String code = codes.issue(7L, "fake", null, CHALLENGE, REDIRECT);
+		assertTrue(codes.challengeIssued(CHALLENGE));
+		assertFalse(codes.challengeIssued("another-challenge"));
+
+		// Redeemed, even wrongly, it's gone
+		assertTrue(codes.redeem(code, "x".repeat(43), REDIRECT).isEmpty());
+		assertFalse(codes.challengeIssued(CHALLENGE));
+
+		// Expired
+		codes.issue(7L, "fake", null, CHALLENGE, REDIRECT);
+		assertTrue(codes.challengeIssued(CHALLENGE));
+		SignInTestHooks.passCodeTime(OneTimeCodes.LIFETIME);
+		assertFalse(codes.challengeIssued(CHALLENGE));
+	}
 }

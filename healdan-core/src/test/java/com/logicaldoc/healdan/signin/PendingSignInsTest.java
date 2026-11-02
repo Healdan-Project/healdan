@@ -95,4 +95,42 @@ public class PendingSignInsTest {
 			assertFalse(text, text.contains(secret));
 		assertTrue(text, text.contains("fake"));
 	}
+
+	/**
+	 * A helper's sign-in is found by its challenge while it waits, so a second
+	 * start with the challenge is refused, and none is kept for it
+	 */
+	@Test
+	public void testFindsAHelpersChallenge() {
+		Pending helper = helper("s1", "challenge-1");
+		assertTrue(pending.put(helper));
+		assertTrue(pending.helperChallengePending("challenge-1"));
+		assertFalse(pending.helperChallengePending("challenge-2"));
+		assertFalse(pending.helperChallengePending(null));
+		// The web page's sign-ins have none
+		assertTrue(pending.put(pending("w1")));
+
+		assertFalse(pending.put(helper("s2", "challenge-1")));
+		assertTrue(pending.take("s2").isEmpty());
+		assertEquals(2, pending.size());
+
+		// Taken, it's free again
+		assertEquals(helper, pending.take("s1").orElseThrow());
+		assertFalse(pending.helperChallengePending("challenge-1"));
+		assertTrue(pending.put(helper("s3", "challenge-1")));
+		assertTrue(pending.helperChallengePending("challenge-1"));
+
+		// And expired
+		SignInTestHooks.passPendingTime(PendingSignIns.LIFETIME);
+		assertFalse(pending.helperChallengePending("challenge-1"));
+		assertTrue(pending.put(helper("s4", "challenge-1")));
+		assertTrue(pending.take("s3").isEmpty());
+		assertTrue(pending.helperChallengePending("challenge-1"));
+		assertTrue(pending.take("s4").isPresent());
+	}
+
+	private Pending helper(String state, String challenge) {
+		return new Pending("fake", state, "nonce-" + state, "verifier-" + state, "hash-" + state, pending.expiry(),
+				"http://127.0.0.1:50123/", "h-" + state, challenge);
+	}
 }

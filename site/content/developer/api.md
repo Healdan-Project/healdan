@@ -96,12 +96,17 @@ A desktop client, such as the Healdan Helper, signs in through the system browse
    `/api/signin/<id>?client=helper&redirect_uri=http://127.0.0.1:<port>/&state=<state>&code_challenge=<challenge>&code_challenge_method=S256`.
    The `redirect_uri` must be exactly that: `http`, the host `127.0.0.1` or `[::1]`, a port, a path of `/` or
    none, and nothing else. Another address, a challenge that isn't 43 characters of base64url, a method other than
-   `S256`, or a missing or wrong state is `400`, with a page, and the browser goes nowhere.
+   `S256`, or a missing or wrong state is `400`, with a page, and the browser goes nowhere. Make a new verifier for
+   each sign-in: a start whose challenge another sign-in already has, still waiting or with a code waiting, goes
+   to its own `redirect_uri` with `error=expired`, so that another program on the computer that saw the start's
+   address can't race a sign-in of its own to the client's port.
 3. **The person signs in at the provider,** in that browser. Healdan sends the browser to the loopback address with
    `?code=<code>&state=<state>`, or with `?error=<code>&state=<state>` when it refuses, with one of the codes in
    [Sign-In Pages](#sign-in-pages). A provider that isn't on is `error=provider` straight away.
-4. **It checks the state,** then sends the browser on to `/api/signin/done?provider=<id>`, with `&error=<code>`
-   after a refusal. The page tells the person to close the tab, or what went wrong.
+4. **It checks the state,** then sends the browser on to `/api/signin/done`, with `?error=<code>`
+   after a refusal. The page tells the person to close the tab, or what went wrong. Only a `GET` of `/` at the
+   loopback address is the answer: the Healdan Helper answers anything else, such as a browser's `/favicon.ico`,
+   with `404` and goes on waiting.
 5. **It exchanges the code** within 60 seconds:
 
    ```bash
@@ -134,6 +139,9 @@ apart; a blank name is "Unnamed device".
   right-click a key and choose **Delete**. A device token can't make a key, but whoever had the device may have had
   the web page too, and a key outlasts a password change. Then ask an administrator to end your open sessions
   (see [Healdan Settings](../../admin/healdan-settings/#device-sign-ins)).
+- **An account that signs in through a provider** has no password to change, and its API keys never sign in. For
+  a lost device, ask an administrator to disable the account and enable it again, which signs out every device,
+  and to end your open sessions.
 - **Signing out** is `DELETE /auth/tokens/current`, which revokes the token making the request.
 - **Your devices:** `GET /auth/tokens` lists your tokens that still work, newest first, never the tokens themselves.
   `current` marks the one making the request. `DELETE /auth/tokens/{id}` revokes one of them.
@@ -398,7 +406,8 @@ answer with redirects and HTML rather than JSON, and `openapi.yaml` doesn't desc
   no session in the browser: it ends at the helper's loopback address with a one-time code, or a refusal's code. A
   sign-in that's unknown, used or expired has no helper's address, so it goes to the sign-in page.
 - **`/api/signin/done`** is the page that says "Signed in to Healdan. You can close this tab." With
-  `?error=<code>`, it says what went wrong instead, naming the provider given by `&provider=<id>`.
+  `?error=<code>`, it says what went wrong instead. No message names the provider, and a `provider` parameter is
+  ignored.
 
 | Code | When |
 |---|---|
@@ -407,11 +416,15 @@ answer with redirects and HTML rather than JSON, and `openapi.yaml` doesn't desc
 | `username-taken` | A new account's username is taken, or isn't one Healdan can use |
 | `account` | LogicalDOC's sign-in refused the account: disabled, expired or outside its working hours, say |
 | `provider` | The provider couldn't be reached, refused, or what it sent failed a check |
-| `expired` | The sign-in took more than 10 minutes, was already used, or came back to another browser or provider |
+| `expired` | The sign-in took more than 10 minutes, was already used, or came back to another browser or provider; or a client's start whose challenge another sign-in already has |
 
 The addresses are built from the server's public address, as the Office add-in's are: `LOGICALDOC_PUBLIC_URL`
 when it's set, otherwise the address the request came to. It must be `https://`, or plain `http://` on the machine
-itself. Without one, the pages answer `409` with a page that says to set `LOGICALDOC_PUBLIC_URL`.
+itself. Without one, the pages answer `409` with a page that says to set `LOGICALDOC_PUBLIC_URL`. A start that
+comes to another host name than `LOGICALDOC_PUBLIC_URL`'s, such as the server's own name on the office network, is
+sent to the same path and query at the public address first, with nothing kept and no cookie set: the cookie
+belongs to the name the browser asked for, and the provider sends the browser back to the public address. Only
+the host name is compared, as a cookie ignores the scheme and port.
 
 ## Healdan's Own Client
 

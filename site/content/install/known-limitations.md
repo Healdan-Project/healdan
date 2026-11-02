@@ -37,7 +37,8 @@ weight: 11
   Sender Email other than `logicaldoc@acme.com` are set, nothing is sent, and no message in Healdan takes its place.
 - **Providers are reached without LogicalDOC's proxy.** Healdan calls a sign-in provider directly, or through the
   proxy that Java's own settings name (`-Dhttps.proxyHost`, `-Dhttps.proxyPort` and `-Dhttp.nonProxyHosts`, in
-  [`CATALINA_OPTS`](../configuration/)), not the one under **Administration → Settings → Proxy**.
+  [`CATALINA_OPTS`](../configuration/)), not the one under **Administration → Settings → Proxy**. Setting
+  `CATALINA_OPTS` replaces its default, `-Xmx2g`, so keep `-Xmx2g` beside the proxy's flags.
 - **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
   Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
   helper for Ubuntu comes next. Windows comes later.

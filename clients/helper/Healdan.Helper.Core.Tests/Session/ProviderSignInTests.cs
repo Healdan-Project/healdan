@@ -84,7 +84,7 @@ public sealed partial class ProviderSignInTests : IDisposable
         // It kept the token as a password sign-in does, and the browser was sent on to the done page.
         Assert.Equal(new KeptToken(Device().Id, SessionServer.IssuedToken), KeptToken.Read(_keychain.Items[Account]));
         Assert.Equal(SessionServer.IssuedToken, api.Token);
-        Assert.Equal(new Uri($"{Account}/api/signin/done?provider=entra"), await browser.Done!);
+        Assert.Equal(new Uri($"{Account}/api/signin/done"), await browser.Done!);
     }
 
     [Fact]
@@ -144,7 +144,7 @@ public sealed partial class ProviderSignInTests : IDisposable
         Assert.Equal("The sign-in came back for another request. Try again.", e.Message);
         Assert.Empty(_server.Exchanges); // the code was never sent anywhere
         Assert.Empty(_keychain.Items);
-        Assert.Equal(new Uri($"{Account}/api/signin/done?error=expired&provider=entra"), await browser.Done!);
+        Assert.Equal(new Uri($"{Account}/api/signin/done?error=expired"), await browser.Done!);
     }
 
     [Fact]
@@ -156,7 +156,7 @@ public sealed partial class ProviderSignInTests : IDisposable
 
         Assert.Equal("The sign-in came back for another request. Try again.", e.Message);
         Assert.Empty(_server.Exchanges);
-        Assert.Equal(new Uri($"{Account}/api/signin/done?error=expired&provider=entra"), await browser.Done!);
+        Assert.Equal(new Uri($"{Account}/api/signin/done?error=expired"), await browser.Done!);
     }
 
     [Theory]
@@ -179,7 +179,7 @@ public sealed partial class ProviderSignInTests : IDisposable
         Assert.Empty(_server.Exchanges);
         Assert.Empty(_keychain.Items);
         Assert.Null(api.Token);
-        Assert.Equal(new Uri($"{Account}/api/signin/done?error={code}&provider=entra"), await browser.Done!);
+        Assert.Equal(new Uri($"{Account}/api/signin/done?error={code}"), await browser.Done!);
     }
 
     [Fact]
@@ -191,7 +191,7 @@ public sealed partial class ProviderSignInTests : IDisposable
         var e = await Assert.ThrowsAsync<ProviderRefusedException>(() => Make(Api()).SignInWithProviderAsync("entra", browser));
 
         Assert.Equal("provider", e.Code);
-        Assert.Equal(new Uri($"{Account}/api/signin/done?error=provider&provider=entra"), await browser.Done!);
+        Assert.Equal(new Uri($"{Account}/api/signin/done?error=provider"), await browser.Done!);
     }
 
     [Fact]

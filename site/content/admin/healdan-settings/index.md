@@ -44,6 +44,11 @@ key outlasts a password change. Last, end the person's open sessions: under **Ad
 open the **Sessions** tab, right-click each of their sessions and choose **Kill**. Neither a new password, a deleted
 key nor disabling the person closes a web page or key session that's already open.
 
+An account that [signs in through a provider](#sign-in-providers) has no password to change: **Change Password** answers that
+the password is wrong. Disable the account and enable it again instead, under **Administration → Access Control →
+Users**, which signs out every device. Its API keys
+never sign in, so there are none to delete. Then end its open sessions in the same way.
+
 ## The Sign-In Throttle
 
 Healdan limits wrong passwords on every way into it: the web page, the API, WebDAV, CMIS and LogicalDOC's web
@@ -136,12 +141,12 @@ ID, Authentik and others.
 |---|---|
 | Id, Preset | as chosen when the provider was added. The preset fills in the rest to suit the provider |
 | Button Label | the button's words on the sign-in page, such as **Sign In with Microsoft** |
-| Issuer | the provider's issuer address, which starts `https://`: `https://login.microsoftonline.com/<tenant id>/v2.0` for Entra ID, or `https://<authentik>/application/o/<slug>/` for Authentik. It must match the address the provider gives for itself exactly, a slash at the end included |
+| Issuer | the provider's issuer address, which starts `https://`: `https://login.microsoftonline.com/<tenant id>/v2.0` for Entra ID, or `https://<authentik>/application/o/<slug>/` for Authentik. It must match the address the provider gives for itself exactly, a slash at the end included. While any account is linked it can't change, but for that slash: a link is the provider's id and the person's identity, so a new issuer would hand the links to whoever its identities are. Unlink everyone first |
 | Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored |
 | On | off hides the button and stops the provider's sign-ins. See [Turning a Provider Off](#turning-a-provider-off) |
 | Link by Email | whether a first sign-in links to the account that has the person's email. See [Which Account a Sign-In Is](#which-account-a-sign-in-is) |
 | Redirect Address | the address to register at the provider: Healdan's public address, then `/api/signin/<id>/callback`. The icon beside it copies it |
-| Claims | folded away, and filled in by the preset. **Identity Claim** names the person, and never changes at the provider; it can't change here while any account is linked. **Username Claim**, **Email Claim** and **Groups Claim** name where the provider puts a new account's username, the person's email and their groups |
+| Claims | folded away, and filled in by the preset. **Identity Claim** names the person, and never changes at the provider; it can't change here while any account is linked. It can't be one people can change at some providers, which would let one person take over another's account: `email`, `preferred_username`, `upn`, `unique_name`, `name` or `nickname`. Use `sub` or `oid`. **Username Claim**, **Email Claim** and **Groups Claim** name where the provider puts a new account's username, the person's email and their groups |
 
 Click **Save** in the window, which then opens again as saved. The presets fill in:
 
@@ -165,7 +170,7 @@ the provider publishes about itself, and its keys, and confirms that:
 - the issuer it gives is the one set, exactly;
 - every address it gives starts `https://`;
 - it signs with RSA or EC, and publishes a key to sign with;
-- it takes a client secret at its token endpoint, as `client_secret_basic` or `client_secret_post`;
+- it takes a client secret at its token endpoint, as `client_secret_post` or `client_secret_basic`;
 - it offers `offline_access`, without which Healdan can't [check back](#checking-back-with-the-provider) on a
   Healdan Helper's sign-in;
 - a client ID is set, and a client secret Healdan can read.
@@ -174,9 +179,14 @@ It shows the redirect address first, with an icon that copies it, then each prob
 everything checks out. Check doesn't sign anyone in, or try the client secret at the provider: a sign-in through
 the button does.
 
+When Healdan can't fetch what a provider publishes, as when it's down, it doesn't ask again for 30 seconds:
+sign-ins through it fail at once meanwhile, and Check shows the same failure. Saving the provider asks again at
+once.
+
 If Healdan doesn't know its own address, the first problem says so, and the redirect address is only a guess from
-the address you're using. Nobody can sign in through a provider until `LOGICALDOC_PUBLIC_URL` is set to the
-server's `https://` address: see [Configuration](../../install/configuration/).
+the address you're using. Until `LOGICALDOC_PUBLIC_URL` is set to the server's `https://` address, a sign-in
+through a provider works only on a page reached over `https://`, at the address it was reached at: see
+[Configuration](../../install/configuration/).
 
 ### The Group Map and Its Gate
 
@@ -226,8 +236,11 @@ Linking an account, or making one, turns it into a provider account:
 - **It has no password.** Healdan removes it, and refuses to store one by any route: Change Password, **Lost your
   password?**, the user editor and LogicalDOC's web services. So no password signs it in: not the sign-in page's
   form, WebDAV, CMIS or the web services. See [Known Limitations](../../install/known-limitations/).
-- **Its LogicalDOC API keys are deleted,** and the sessions they opened closed, as a key would let it in without the
-  provider. A key made afterwards, under the person icon's **Security → API Keys**, never signs in.
+- **Its LogicalDOC API keys are deleted,** as a key would let it in without the provider. A key made afterwards,
+  under the person icon's **Security → API Keys**, never signs in.
+- **Its open sessions are closed,** in the web page, WebDAV, CMIS and the web services, however they were opened:
+  with its password, with its keys, or by another account's key impersonating it. Only the sign-in through the
+  provider that linked it stays signed in.
 - **Its Healdan Helpers signed in with the old password are signed out,** and ask the person to sign in again,
   through the provider.
 - **Everything else stays:** its user id, and with it its documents, check-outs, history, My Matters, favourites
@@ -279,8 +292,9 @@ can't sign in through it while it's off, and saves once you confirm. While it's 
 
 1. **Turn it off,** so nobody new signs in through it.
 2. **Unlink Everyone,** so each account gets a password.
-3. **Remove it** on the Sign-In tab. Remove refuses while any account is linked, and says to turn the provider off or
-   Unlink Everyone first. Its settings and its group map go. The record of the accounts it linked stays.
+3. **Remove it** on the Sign-In tab. Remove refuses while any account is linked, and says: to stop its sign-ins and
+   keep its links, turn it off; to remove it, open it and Unlink Everyone first. Its settings and its group map go.
+   The record of the accounts it linked stays.
 
 ### `admin`, the Emergency Account
 

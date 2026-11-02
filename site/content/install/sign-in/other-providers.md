@@ -18,10 +18,10 @@ The examples use `healdan.example` for your Healdan server and `idp.firm.example
   character for character, a final slash included.
 - **The authorisation code flow with PKCE.** Healdan sends a PKCE challenge with the `S256` method, asks for the
   response in the query string (`response_mode=query`), and sends a `nonce` and a `state`. The provider must take
-  the client secret at its token endpoint as `client_secret_basic` (in an HTTP Basic header) or `client_secret_post`
-  (in the request's body), whichever its discovery document lists. Healdan uses `client_secret_basic` when the
-  document lists it or lists no methods, and `client_secret_post` when that is the one listed. A provider that lists
-  only other methods, such as `private_key_jwt`, can't be used, and **Check** says so.
+  the client secret at its token endpoint as `client_secret_post` (in the request's body) or `client_secret_basic`
+  (in an HTTP Basic header), whichever its discovery document lists. Healdan uses `client_secret_post` when the
+  document lists it, and `client_secret_basic` when it lists that and not `client_secret_post`, or lists no methods.
+  A provider that lists only other methods, such as `private_key_jwt`, can't be used, and **Check** says so.
 - **ID tokens signed with RSA or EC.** The algorithm is `RS256`, `RS384`, `RS512`, `PS256`, `PS384`, `PS512`,
   `ES256`, `ES384` or `ES512`, and the provider publishes its keys. Healdan refuses an unsigned ID token at a
   sign-in, and one signed with HMAC (`HS256` and the like), which some providers fall back on when they have no

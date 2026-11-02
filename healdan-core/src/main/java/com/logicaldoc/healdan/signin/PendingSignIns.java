@@ -3,6 +3,7 @@ package com.logicaldoc.healdan.signin;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -10,6 +11,7 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Component;
 
+import com.logicaldoc.healdan.token.ApiTokens;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -21,6 +23,12 @@ import com.logicaldoc.util.spring.Context;
  * The map can't grow without end, however many sign-ins are started and never
  * finished: every {@link #put} first drops the ones that have expired, and
  * when {@value #MAX} are still waiting, it drops the oldest.
+ * <p>
+ * A helper's sign-in is also found by its PKCE challenge, by the challenge's
+ * SHA-256, so that a second start with a challenge already waiting is refused
+ * ({@link #helperChallengePending}): another local user who read the helper's
+ * start address could otherwise race a sign-in of their own, with the
+ * helper's challenge, to the helper's port.
  */
 @Component
 public class PendingSignIns {
@@ -36,6 +44,9 @@ public class PendingSignIns {
 
 	/** In the order they were put, which is the order they expire in */
 	private final LinkedHashMap<String, Pending> pending = new LinkedHashMap<>();
+
+	/** The states of the helpers' sign-ins, by the SHA-256 of their challenges */
+	private final Map<String, String> byChallenge = new HashMap<>();
 
 	/**
 	 * A sign-in, started.
@@ -79,18 +90,42 @@ public class PendingSignIns {
 	}
 
 	/**
-	 * Keeps a sign-in until its callback takes it, or it expires.
+	 * Keeps a sign-in until its callback takes it, or it expires; a helper's,
+	 * unless another of the helper's with the same challenge is waiting.
 	 *
 	 * @param p the sign-in
+	 * @return true if it's kept; false, keeping nothing, if it's a helper's and
+	 *         a sign-in with its challenge is already waiting
 	 */
-	public synchronized void put(Pending p) {
+	public synchronized boolean put(Pending p) {
 		sweep();
+		if (p.helperChallenge() != null && pendingNow(p.helperChallenge()))
+			return false;
 		while (pending.size() >= MAX) {
-			Iterator<String> oldest = pending.keySet().iterator();
-			oldest.next();
+			Iterator<Pending> oldest = pending.values().iterator();
+			Pending dropped = oldest.next();
 			oldest.remove();
+			unindex(dropped);
 		}
 		pending.put(p.state(), p);
+		if (p.helperChallenge() != null)
+			byChallenge.put(ApiTokens.hash(p.helperChallenge()), p.state());
+		return true;
+	}
+
+	/**
+	 * @param challenge a helper's PKCE challenge, possibly null
+	 * @return true if a helper's sign-in with that challenge is waiting, unused
+	 *         and unexpired
+	 */
+	public synchronized boolean helperChallengePending(String challenge) {
+		return challenge != null && pendingNow(challenge);
+	}
+
+	private boolean pendingNow(String challenge) {
+		String state = byChallenge.get(ApiTokens.hash(challenge));
+		Pending p = state == null ? null : pending.get(state);
+		return p != null && !expired(p, clock.instant());
 	}
 
 	/**
@@ -105,6 +140,7 @@ public class PendingSignIns {
 		if (state == null)
 			return Optional.empty();
 		Pending p = pending.remove(state);
+		unindex(p);
 		if (p == null || expired(p, clock.instant()))
 			return Optional.empty();
 		return Optional.of(p);
@@ -130,10 +166,18 @@ public class PendingSignIns {
 		Instant now = clock.instant();
 		Iterator<Map.Entry<String, Pending>> entries = pending.entrySet().iterator();
 		while (entries.hasNext()) {
-			if (!expired(entries.next().getValue(), now))
+			Pending p = entries.next().getValue();
+			if (!expired(p, now))
 				break;
 			entries.remove();
+			unindex(p);
 		}
+	}
+
+	/** Forgets a helper's sign-in's challenge, if it's still that sign-in's */
+	private void unindex(Pending p) {
+		if (p != null && p.helperChallenge() != null)
+			byChallenge.remove(ApiTokens.hash(p.helperChallenge()), p.state());
 	}
 
 	private static boolean expired(Pending p, Instant now) {
