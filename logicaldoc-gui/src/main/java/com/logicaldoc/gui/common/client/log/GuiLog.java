@@ -3,6 +3,7 @@ package com.logicaldoc.gui.common.client.log;
 import com.google.gwt.core.client.GWT;
 import com.google.gwt.http.client.RequestTimeoutException;
 import com.logicaldoc.gui.common.client.InvalidSessionServerException;
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.util.LD;
 import com.logicaldoc.gui.common.client.widgets.SessionTimeout;
@@ -46,7 +47,9 @@ public class GuiLog {
 		} else if (caught instanceof InvalidSessionServerException) {
 			SessionTimeout.get().show();
 		} else {
-			GuiLog.error(caught.getMessage(), null, caught);
+			// Healdan: the server's message is text, not HTML: it can name a group, a folder or a file
+			String text = caught.getMessage();
+			GuiLog.error(text != null ? HealdanText.escape(text) : null, null, caught);
 		}
 	}
 
