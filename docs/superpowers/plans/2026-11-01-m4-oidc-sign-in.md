@@ -1596,7 +1596,7 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
 - **What it found,** in the follow-ups below: Check doesn't test the client secret, so a wrong one passed it; the helper gives no reason when a check signs it out; and three docs gaps, which went into the Admin Guide and Installing the Helper the same day (a mapped group given by hand goes at the next sign-in, `admin`'s placeholder address, and the browser's session deciding who the helper signs in as).
 - **Before it,** a local check of the merged M4 on a stack with Keycloak found a refusal naming a group shown as HTML in the old UI's error popup, fixed in [Healdan-Project/healdan#165](https://github.com/Healdan-Project/healdan/pull/165), and passed the rest.
 
-**Fixed after the walkthrough (PR_LINK)**
+**Fixed after the walkthrough ([Healdan-Project/healdan#170](https://github.com/Healdan-Project/healdan/pull/170))**
 
 Two follow-ups that could hurt a live server, and the one beside them.
 
