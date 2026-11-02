@@ -28,7 +28,7 @@ public sealed partial class ProviderSignInTests : IDisposable
 
     public ProviderSignInTests() => _server = new SessionServer(_documents);
 
-    public void Dispose() => Directory.Delete(_dir, true);
+    public void Dispose() => TempFolder.Delete(_dir);
 
     [GeneratedRegex(@"^http://127\.0\.0\.1:\d{4,5}/$")]
     private static partial Regex LoopbackAddress();

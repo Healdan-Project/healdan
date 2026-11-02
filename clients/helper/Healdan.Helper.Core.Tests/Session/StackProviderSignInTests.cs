@@ -34,7 +34,7 @@ public sealed partial class StackProviderSignInTests : IDisposable
 {
     private readonly string _root = Directory.CreateTempSubdirectory("healdan-stack-signin-").FullName;
 
-    public void Dispose() => Directory.Delete(_root, true);
+    public void Dispose() => TempFolder.Delete(_root);
 
     private static string? Env(string name) =>
         Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : null;
