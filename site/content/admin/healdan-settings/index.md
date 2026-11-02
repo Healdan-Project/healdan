@@ -201,7 +201,9 @@ selected row. Save the window to keep them.
   may sign in. A linked account refused like this is also taken out of every mapped group.
 - **Each sign-in syncs the groups.** For each Healdan group in the map, the person is put in it when one of their
   provider groups maps to it, and taken out when none does. Groups outside the map, Everyone and the person's
-  personal group are left alone, so groups you give someone by hand stay.
+  personal group are left alone, so groups you give someone by hand stay. A group in the map is the provider's to
+  decide: given by hand to a linked account, it goes at their next sign-in unless one of their provider groups maps
+  to it. So map groups you don't also give by hand, rather than one such as `author` that you do.
 - **One provider group can map to several Healdan groups,** and several provider groups to one.
 - **Any group can be mapped, `admin` included.** An admin skips every permission check, so see
   [Day-to-Day Accounts Shouldn't Be Admins](../users-and-groups/#day-to-day-accounts-shouldnt-be-admins) first. A
@@ -319,7 +321,9 @@ isn't used anywhere else, keep it offline, and use `admin` only to put things ri
 
 With **Email When admin Signs In with Its Password** ticked, Healdan emails the **Alert Recipients** each time
 `admin` signs in with its password while a provider is on. The recipients are usernames, separated by commas, each
-with an email address in Healdan: `admin` to begin with. The alert is off to begin with.
+with an email address in Healdan: `admin` to begin with. `admin`'s address is LogicalDOC's placeholder,
+`admin@admin.net`, until you change it, so give it a real one or name your own username instead. The alert is off to
+begin with.
 
 - **It needs [outgoing email](../system/outgoing-email/).** Until that's set up, the tab says "Needs outgoing email,
   which isn't set up", nothing is sent, and no message in Healdan takes its place.
