@@ -225,7 +225,7 @@ Click Healdan's icon in the menu bar.
 
 ## Settings
 
-![The Healdan Helper Settings window below its Server group: Open Each Kind of File In, with Documents, Spreadsheets, Presentations and Drawings, each with its file extensions and opening in LibreOffice; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version, 0.3.0, installed on 29 October 2026](settings.png)
+![The Healdan Helper Settings window below its Server group: Open Each Kind of File In, with Documents, Spreadsheets and Presentations opening in Microsoft Office, Drawings in LibreOffice and PDFs in CoffeePDF, each with its file extensions; Microsoft Office, with Set Up Done, and Word, Excel and PowerPoint each paired on 1 November 2026; and This Computer, with Start at Sign-In On and the LibreOffice Extension's version, 0.3.0, installed on 29 October 2026](settings.png)
 
 Settings has four groups (three while your Mac has no Word, Excel or PowerPoint and no app is paired):
 
