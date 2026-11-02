@@ -13,10 +13,13 @@ namespace Healdan.Helper.Windows;
 /// and the password form, which is folded behind the server's link when it has any, as on the web page. A server with
 /// none, or one that can't be reached, gets the password form alone, as before. Signing in is the prompt's, which
 /// checks the server is Healdan and keeps only the token; this window shows its refusals as they are. The password box
-/// is emptied as soon as Sign In is pressed, so the window never holds the password beyond the one call.
-/// <para>The providers are asked for when the window opens and each time the address is changed and left. A provider's
+/// is emptied as soon as the password is sent, so the window never holds the password beyond the one call.
+/// <para>The providers are asked for when the window opens and each time the address is changed and left. An answer
+/// that didn't come (the server couldn't be reached) is asked for again, as a fixed address can't be left by clicking
+/// into it: when the window is shown again, and when Sign In is pressed. Sign In asks first and sends the password
+/// only if the providers still don't come, so a password isn't tried at an account that has none. A provider's
 /// button sends the person to the browser, and the window says to finish there; Cancel, or closing the window, stops
-/// the helper waiting for it.</para>
+/// the helper waiting for it. A refusal leaves the focus on the button that was used.</para>
 /// </summary>
 public partial class SignInWindow : Window
 {
@@ -27,6 +30,9 @@ public partial class SignInWindow : Window
 
     /// <summary>The address the latest ask for providers was for; null before any.</summary>
     private string? _askedFor;
+
+    /// <summary>The latest ask got no answer: the server couldn't be reached, so it is asked again when it can be.</summary>
+    private bool _unanswered;
 
     /// <summary>The address the provider buttons shown belong to; null while none are.</summary>
     private string? _shownFor;
@@ -74,6 +80,7 @@ public partial class SignInWindow : Window
         };
         Opened += (_, _) =>
         {
+            Problem.IsVisible = false; // from before the window was hidden: it is stale now
             (string.IsNullOrEmpty(Server.Text) ? Server : string.IsNullOrEmpty(User.Text) ? User : Password).Focus();
             AskProviders();
         };
@@ -88,21 +95,23 @@ public partial class SignInWindow : Window
     private string Address => (Server.Text ?? "").Trim();
 
     /// <summary>
-    /// Asks for the providers of the address typed, unless they were asked for it already, or it's empty. An address
-    /// that gave no answer is asked again next time: after a refused password the address is fixed, and an account that
-    /// signs in through a provider has no password, so one blip mustn't leave the window without its buttons.
+    /// Asks for the providers of the address typed, unless they were asked for it already (an ask under way counts), or
+    /// it's empty. An address that gave no answer is asked again next time: after a refused password the address is
+    /// fixed, and an account that signs in through a provider has no password, so one blip mustn't leave the window
+    /// without its buttons. Done once the window shows the answer.
     /// </summary>
-    private void AskProviders()
+    private Task AskProviders()
     {
-        if (_prompt is null || _closed || Address == _askedFor)
-            return;
+        if (_prompt is null || _closed || (Address == _askedFor && !_unanswered))
+            return Task.CompletedTask;
         _askedFor = Address;
+        _unanswered = false;
         if (Address.Length == 0)
         {
             Show(null, null);
-            return;
+            return Task.CompletedTask;
         }
-        Loading = AskProvidersAsync(_prompt, Address, ++_ask);
+        return Loading = AskProvidersAsync(_prompt, Address, ++_ask);
     }
 
     private async Task AskProvidersAsync(SignInPrompt prompt, string address, int ask)
@@ -118,8 +127,7 @@ public partial class SignInWindow : Window
         }
         if (ask == _ask && !_closed)
         {
-            if (choice is null && _askedFor == address)
-                _askedFor = null;
+            _unanswered = choice is null && _askedFor == address;
             Show(choice, address);
         }
     }
@@ -157,6 +165,7 @@ public partial class SignInWindow : Window
             IsEnabled = !_busy // an answer that comes while a password sign-in runs
         };
         button.Classes.Add("accent");
+        button.Tag = provider.Id; // to find it again for the focus
         AutomationProperties.SetName(button, provider.Label);
         button.Click += (_, _) => OnProvider(provider.Id);
         return button;
@@ -174,6 +183,16 @@ public partial class SignInWindow : Window
             first.Focus();
     }
 
+    /// <summary>
+    /// Puts the focus on a provider's button, or on the first one, where the person can act: the button they used went
+    /// off while the window waited, and took the focus with it.
+    /// </summary>
+    private void FocusProvider(string? id)
+    {
+        var buttons = ProviderList.Children.OfType<Button>().ToList();
+        (buttons.FirstOrDefault(b => id is not null && b.Tag as string == id) ?? buttons.FirstOrDefault())?.Focus();
+    }
+
     private void Unfold(bool focus = true)
     {
         PasswordForm.IsVisible = SignInButton.IsVisible = true;
@@ -188,7 +207,7 @@ public partial class SignInWindow : Window
             return;
         if (Address != _shownFor)
         {
-            AskProviders(); // the address changed since these buttons came: show the new server's first
+            _ = AskProviders(); // the address changed since these buttons came: show the new server's first
             return;
         }
         var server = Server.Text ?? "";
@@ -223,12 +242,33 @@ public partial class SignInWindow : Window
         if (browser.IsCancellationRequested)
             return; // the person's own cancel needs no reason
         ShowProblem(problem);
+        FocusProvider(id);
     }
 
     private async void OnSignIn(object? sender, RoutedEventArgs e)
     {
-        if (_prompt is null || !SignInButton.IsVisible)
+        if (_prompt is null || _busy || !SignInButton.IsVisible)
             return;
+        if (_unanswered && Address == _askedFor)
+        {
+            // The providers never came, so the person has only the password form. Ask once more before the password
+            // goes anywhere: if they come now, the person sees them, and presses Sign In again if they mean the
+            // password. It stays in its box meanwhile.
+            Problem.IsVisible = false;
+            SetBusy(true, inBrowser: false);
+            await AskProviders();
+            if (_closed)
+                return;
+            SetBusy(false, inBrowser: false);
+            if (_shownFor == Address)
+            {
+                if (SignInButton.IsVisible)
+                    Password.Focus();
+                else
+                    FocusProvider(null);
+                return;
+            }
+        }
         var (server, user, password) = (Server.Text ?? "", User.Text ?? "", Password.Text ?? "");
         Password.Text = "";
         Problem.IsVisible = false;
