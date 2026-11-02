@@ -257,22 +257,32 @@ api_started=$SECONDS
 check "the add-in flow through the API" env BASE="$BASE" bash docker/tests/test-api.sh
 echo "step 5c took $((SECONDS - api_started)) s"
 
-echo "== 5d. the helper's open-save-close cycle (clients/helper, StackCycleTests)"
-# Signs in through /api/v1 as admin with a device id, files a document in the Smoke Matter, and opens it, saves it twice
-# and closes it through the helper's cycle with a fake LibreOffice. It runs after 5c, whose wrong passwords block only
-# other usernames and leave this address well under the throttle's limit. Needs the .NET SDK clients/helper/global.json
-# names, so it runs only with SMOKE_HELPER_TEST=1, which CI sets.
-# dotnet test passes when no test ran, so its summary must show one passed and none skipped.
+echo "== 5d. the helper's stack tests (clients/helper: StackCycleTests, StackProviderSignInTests)"
+# StackCycleTests signs in through /api/v1 as admin with a device id, files a document in the Smoke Matter, and opens
+# it, saves it twice and closes it through the helper's cycle with a fake LibreOffice. StackProviderSignInTests signs
+# in through the stand-in Keycloak as sso-helper2, as the helper does, with a fake browser that sends Keycloak's name to
+# its host port, and checks /me names sso-helper2. It runs after 5c, whose wrong passwords block only other usernames
+# and leave this address well under the throttle's limit, and before 5e, which disables sso-helper, not sso-helper2.
+# Needs the .NET SDK clients/helper/global.json names, so it runs only with SMOKE_HELPER_TEST=1, which CI sets.
+# dotnet test passes when no test ran, so its summaries must add up to two passed and none skipped: a Stack test added
+# here changes the two.
+HELPER_STACK_TESTS=2
 helper_stack_test() {
-  local out
-  out=$(HEALDAN_STACK_URL="$BASE" dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack 2>&1) \
+  local out passed skipped
+  out=$(HEALDAN_STACK_URL="$BASE" HEALDAN_STACK_SIGNIN_PROVIDER=smoke HEALDAN_STACK_SIGNIN_USER=sso-helper2 \
+    HEALDAN_STACK_SIGNIN_PASSWORD='Smoke-Sso-Pw-42!x' HEALDAN_STACK_KEYCLOAK="127.0.0.1:$KEYCLOAK_PORT" \
+    dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack 2>&1) \
     || { tail -40 <<<"$out"; return 1; }
-  grep -E 'Passed!|Failed!' <<<"$out" || true
-  grep -Eq 'Passed: +[1-9]' <<<"$out" && grep -Eq 'Skipped: +0,' <<<"$out"
+  grep -E 'Passed!|Failed!|Skipped!' <<<"$out" || true
+  passed=$(sed -nE 's/.*Passed: +([0-9]+),.*/\1/p' <<<"$out" | awk '{ n += $1 } END { print n + 0 }')
+  skipped=$(sed -nE 's/.*Skipped: +([0-9]+),.*/\1/p' <<<"$out" | awk '{ n += $1 } END { print n + 0 }')
+  [ "$passed" = "$HELPER_STACK_TESTS" ] && [ "$skipped" = 0 ] && return 0
+  echo "  $passed passed and $skipped skipped, not $HELPER_STACK_TESTS passed and none skipped"
+  return 1
 }
 if [ "${SMOKE_HELPER_TEST:-0}" = 1 ]; then
   helper_started=$SECONDS
-  check "the helper's cycle against the stack" helper_stack_test
+  check "the helper's cycle and provider sign-in against the stack" helper_stack_test
   echo "step 5d took $((SECONDS - helper_started)) s"
 else
   echo "skipped: set SMOKE_HELPER_TEST=1 to run it"

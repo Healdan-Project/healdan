@@ -73,7 +73,7 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 | `docker/tests/test-proxies.sh` | which forwarded addresses Tomcat believes with `LOGICALDOC_TRUSTED_PROXIES` unset: a header from the Docker host, but not a private address in the chain or a header sent from inside the app's container. It reads the sign-in throttle's per-address counters, so it needs a running stack: `BASE=http://127.0.0.1:8080 APP_CONTAINER=<id> DB_CONTAINER=<id> docker/tests/test-proxies.sh` |
 | `docker/tests/test-api.sh` | the API through the image's real filter chain, as a new non-admin user: M2's client flow (sign in, find the smoke matter, file a `.docx`, check it out, save twice, download two versions, sign out), the docs page, a session cookie refused without a token, the sign-in throttle, and LogicalDOC's `loginApiKey` refusing the token. Then M3's additions: searching inside the matter, a new folder and a favourite, a stamped `.docx`, a second device refused with `held-elsewhere`, moving the check-out, `ifVersion` and a repeated `saveId`, and the `#1234 v2.1` lookup. Run it against a fresh stack with the smoke overlay: `BASE=http://127.0.0.1:8080 docker/tests/test-api.sh` |
 | `docker/tests/test-signin.sh` | provider sign-in through the stand-in Keycloak (see below), with `curl` and a cookie jar: the web page's sign-in ending at `frontend.jsp` signed in, a local account linked by email losing its password and its device token, the gate refusing someone in none of the mapped groups, the helper's sign-in handing a code to a pretend loopback address and the code exchanged for a device token, and a person disabled at Keycloak losing that token at its next re-check. Run it against a fresh stack with the sign-in overlay: `BASE=http://127.0.0.1:8080 KEYCLOAK=127.0.0.1:18180 docker/tests/test-signin.sh` |
-| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the GUI's loaders sent with `Cache-Control: no-cache` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, M2's client flow through the API (`test-api.sh`, step 5c), the helper's open-save-close cycle (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
+| `docker/smoke-test.sh` | end to end: build, start, REST login, the API answering, the forwarded addresses Tomcat believes (`test-proxies.sh`, step 2b), the GUI's loaders sent with `Cache-Control: no-cache` (step 2), uploads into a seeded matter, thumbnails, Healdan's schema, doc #s and filing rule, M2's client flow through the API (`test-api.sh`, step 5c), the helper's open-save-close cycle and its sign-in through the stand-in Keycloak (step 5d, only with `SMOKE_HELPER_TEST=1` and the .NET SDK), provider sign-in through the stand-in Keycloak (`test-signin.sh`, step 5e), the Office add-in's manifest naming the stack (step 2), and data surviving a restart, which replaces an older image's `cachecontrol` default (step 8). With `SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image>` it tests an existing image instead of building one |
 
 ### The Stand-In Sign-In Provider
 
@@ -83,8 +83,9 @@ The smoke stack signs in through a real OpenID Connect provider, a throwaway Key
 - **runs Keycloak 26.7.5** (`quay.io/keycloak/keycloak`) in development mode, which imports the realm `healdan` from
   `docker/tests/keycloak/healdan-realm.json` each time its container starts. The realm has a confidential client
   `healdan` that requires PKCE `S256` and puts the person's groups in the ID token's `groups` claim, the groups
-  `healdan-users` and `healdan-other`, and three people: `sso-user` and `sso-helper` in `healdan-users`, and
-  `sso-outsider` in `healdan-other`. Their passwords are throwaway ones, in the realm file.
+  `healdan-users` and `healdan-other`, and four people: `sso-user`, `sso-helper` and `sso-helper2` in
+  `healdan-users`, and `sso-outsider` in `healdan-other`. Their passwords are throwaway ones, in the realm file.
+  `sso-helper2` is the helper's stack test's (step 5d), so step 5e disabling `sso-helper` doesn't touch it.
 - **publishes it on `127.0.0.1:18180` only** (`SMOKE_KEYCLOAK_PORT` changes the port). Keycloak names itself
   `http://keycloak:8080` in its discovery document and tokens, the address the app reaches it at on the stack's
   network. `test-signin.sh`'s `curl` sends that name to the published port with
@@ -98,7 +99,9 @@ The smoke stack signs in through a real OpenID Connect provider, a throwaway Key
   `0`, so a device token is checked with Keycloak on every request. Production never sets these variables, and
   without them the step does nothing.
 
-Step 5e times itself, and step 1 prints how long Keycloak took to start, by its own log.
+Step 5e times itself, and step 1 prints how long Keycloak took to start, by its own log. Step 5d's
+`StackProviderSignInTests` signs in through it too, as the helper does (see
+[The Helper's Stack Tests in the Image CI](../continuous-integration/#the-helpers-stack-tests-in-the-image-ci)).
 
 ### When a Smoke Check Fails
 
@@ -134,7 +137,8 @@ and `node --test`, apart from Maven: see [Desktop Clients](../desktop-clients/#t
   `MacOffice` tests skip unless `HEALDAN_MAC_OFFICE=1` is set, apart from `EveryScriptCompiles`, which starts nothing
   and runs without it wherever Word, Excel and PowerPoint are installed, as compiling reads their dictionaries. CI
   has neither, so they skip there.
-- **Against a stack,** the tests marked `Stack` need `HEALDAN_STACK_URL`; `docker/smoke-test.sh` runs them.
+- **Against a stack,** the tests marked `Stack` need `HEALDAN_STACK_URL`, and the provider sign-in's also
+  `HEALDAN_STACK_SIGNIN_PROVIDER`; `docker/smoke-test.sh` runs them.
 
 ## Script and Docs Site Tests
 

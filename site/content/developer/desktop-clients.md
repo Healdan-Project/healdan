@@ -309,6 +309,24 @@ is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in
    browser was given it. The answer is the same as a password's, and the token is kept as `SignInAsync` keeps it.
    A `401 sign-in-failed` means the code was used, came too late or didn't match, and the sign-in starts again.
 
+The Sign In window offers it (`Windows/SignInWindow.axaml`, through `SignInPrompt`). `HelperSession.ProvidersAsync`
+reads `GET /server` when the window opens, and again each time the address is changed and left. A server with
+providers gets a button for each, in its order, and the password form folds behind a link labelled with its
+`passwordLabel`, unless something is typed in the form already. A server with none, an older one, or one the helper
+can't reach or doesn't speak to gets the password form as before, whose Sign In then says why. A button runs
+`HelperSession.TrySignInWithProviderAsync`, which makes the password sign-in's checks before and after (the address,
+another server's copies, the settings) and turns what went wrong into the window's error line:
+
+- **A refusal** says what the web page's done page says for its code (`HelperSession.ProviderRefusal`), naming the
+  provider by the label its button had, or as "your sign-in provider", and a code it doesn't know as `provider`. A
+  `401 sign-in-failed` at the exchange says `expired`'s message.
+- **The browser's five minutes** running out are an `OperationCanceledException` too, but not the person's: its
+  message reaches the error line. The window's Cancel, and closing the window, cancel the token the call was given,
+  and that answer shows nothing. The whole call is bounded at the five minutes plus 30 seconds for each of Healdan's
+  two calls.
+- **Off the UI thread:** the window runs the call with `Task.Run`, as `SystemOpener` waits up to ten seconds for the
+  opener to say whether a browser could be started.
+
 The loopback port is why this needs no hand-over between processes, as a `healdan://` link does on Linux. Another
 program can claim a URL scheme, but not a port the helper is listening on, and PKCE makes a code taken off the
 wire useless without the verifier. The code, the verifier and the state live in memory for that one call. Nothing
@@ -667,8 +685,16 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   challenge and the address, and works once. A fake `IBrowser` plays the person: it asks `SessionServer` to sign in,
   then follows its redirect to the helper's real listener, and records where the listener sent it on. `PkceTests`
   hold the challenge to RFC 7636's appendix B.
-- **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke
-  test's step 5d runs them in CI.
+- **`SignInWindowTests`** drive the Sign In window headless, with a fake prompt: the buttons and the folded form,
+  the wait and its Cancel, a refusal and the browser's time running out on the error line, and the providers asked
+  for again when the address changes. `HelperSessionTests` run `TrySignInWithProviderAsync` with the fake browsers
+  above.
+- **`Category=Stack`** tests run against a real stack, and skip without `HEALDAN_STACK_URL`: `StackCycleTests` the
+  cycle, and `StackProviderSignInTests`, which also needs `HEALDAN_STACK_SIGNIN_PROVIDER`, a sign-in through the
+  smoke stack's stand-in Keycloak. Its fake browser follows the redirects with a cookie jar, fills in Keycloak's login
+  form as `HEALDAN_STACK_SIGNIN_USER` with `HEALDAN_STACK_SIGNIN_PASSWORD`, and sends Keycloak's own name,
+  `keycloak:8080`, to `HEALDAN_STACK_KEYCLOAK` (its `host:port` on this computer) through a `SocketsHttpHandler`'s
+  `ConnectCallback`. The smoke test's step 5d runs both in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
 - **`Category=MacOffice`** tests drive the real Word, Excel and PowerPoint through `MacOfficeScripting`: they open,
   change and close throwaway documents, each test in its own folder inside `healdan-office-tests` in the temporary

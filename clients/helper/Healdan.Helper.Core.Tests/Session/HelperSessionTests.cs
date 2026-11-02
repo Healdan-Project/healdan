@@ -58,11 +58,12 @@ public sealed class HelperSessionTests : IDisposable
     private HelperPaths Paths => HelperPaths.For(_root);
 
     private HelperSession Make(TimeSpan? signOutFlush = null, OfficeApps? apps = null, ICertificateTrust? trust = null,
-        AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null, CycleTimings? timings = null)
+        AddinCertificate? certificate = null, IReadOnlyList<int>? addinPorts = null, CycleTimings? timings = null,
+        IBrowser? browser = null, TimeSpan? browserTimeout = null)
     {
         var device = new DeviceIdentity(FakeApi.HereDevice, FakeApi.HereName);
         var session = new HelperSession(Paths, _keychain, device, apps ?? TestApps.Of(_app), _windows, _notifier, new HelperLog(Paths.Log), _http, timings ?? Fast,
-            signOutFlush, trust, certificate, addinPorts);
+            signOutFlush, trust, certificate, addinPorts, browser ?? new IdleBrowser(), browserTimeout);
         _sessions.Add(session);
         return session;
     }
@@ -250,6 +251,268 @@ public sealed class HelperSessionTests : IDisposable
         Assert.Empty(_keychain.Items);
         Assert.False(session.Started);
         Assert.DoesNotContain(Password, File.ReadAllText(Paths.Log));
+    }
+
+    [Fact]
+    public async Task TheSignInWindowIsGivenTheServersProviders()
+    {
+        _http.Providers.Add(("entra", "Sign In with Microsoft"));
+        _http.Providers.Add(("authentik", ""));
+        var choices = new List<ProviderChoice?>();
+        _windows.OnSignIn = async prompt =>
+        {
+            choices.Add(await prompt.ProvidersAsync("healdan.test"));
+            choices.Add(await prompt.ProvidersAsync("https://other.test")); // not Healdan
+            choices.Add(await prompt.ProvidersAsync("https://newer.test")); // an API this helper doesn't speak
+            choices.Add(await prompt.ProvidersAsync("http://healdan.example")); // not an address the helper signs in to
+            choices.Add(await prompt.ProvidersAsync(" "));
+            return false;
+        };
+        var session = Make();
+
+        await session.StartAsync();
+
+        var choice = choices[0]!;
+        Assert.Equal([new ProviderInfo("entra", "Sign In with Microsoft"), new ProviderInfo("authentik", "Sign In")], choice.Providers);
+        Assert.Equal("Sign In with a Password", choice.PasswordLabel);
+        Assert.Equal([null, null, null, null], choices.Skip(1));
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public async Task AServerWithNoProvidersGivesAnEmptyList()
+    {
+        ProviderChoice? choice = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            choice = await prompt.ProvidersAsync(Account);
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        Assert.Empty(choice!.Providers);
+        Assert.Equal("Sign In with a Password", choice.PasswordLabel);
+    }
+
+    [Fact]
+    public async Task AServerThatCantBeReachedGivesNoProviders()
+    {
+        _server.Down = true;
+        ProviderChoice? choice = new([], "x");
+        _windows.OnSignIn = async prompt =>
+        {
+            choice = await prompt.ProvidersAsync(Account);
+            return false;
+        };
+
+        await Make().StartAsync();
+
+        Assert.Null(choice);
+    }
+
+    [Fact]
+    public async Task SignsInThroughAProviderFromTheWindowThenStarts()
+    {
+        _http.Providers.Add(("entra", "Sign In with Microsoft"));
+        var browser = new FakeBrowser(_http);
+        var refusals = new List<string?>();
+        _windows.OnSignIn = async prompt =>
+        {
+            await prompt.ProvidersAsync("healdan.test");
+            refusals.Add(await prompt.SignInWithProviderAsync("healdan.test", "entra", CancellationToken.None));
+            return refusals[^1] is null;
+        };
+        var session = Make(browser: browser);
+
+        await session.StartAsync();
+
+        Assert.Equal([null], refusals);
+        Assert.True(session.Started);
+        Assert.Equal("https://healdan.test/api/signin/entra", browser.Opened!.GetLeftPart(UriPartial.Path));
+        Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]); // an address without a scheme is https
+        Assert.Equal(Account, HelperSettings.Load(Paths).Server);
+        Assert.Equal(new Uri($"{Account}/api/signin/done?provider=entra"), await browser.Done!);
+        Assert.True(File.Exists(Paths.Channel));
+        LogIndex("Signed in to healdan.test through entra");
+        var exchange = Assert.Single(_http.Exchanges);
+        foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain(SessionServer.IssuedToken, text);
+            Assert.DoesNotContain((string)exchange["code"]!, text);
+            Assert.DoesNotContain((string)exchange["codeVerifier"]!, text);
+            Assert.DoesNotContain(_http.Starts[0].State, text);
+        }
+    }
+
+    [Theory]
+    [InlineData("no-group", "Your account at Sign In with Microsoft doesn't give you access to Healdan. Ask an administrator.")]
+    [InlineData("email-taken", "Healdan can't tell which account is yours. Ask an administrator.")]
+    [InlineData("username-taken", "Healdan already has an account with your username. Ask an administrator.")]
+    [InlineData("account", "This account can't sign in now. Ask an administrator.")]
+    [InlineData("provider", "Sign In with Microsoft couldn't sign you in. Try again, or ask an administrator.")]
+    [InlineData("expired", "That sign-in took too long or was already used. Start again.")]
+    [InlineData("a-new-code", "Sign In with Microsoft couldn't sign you in. Try again, or ask an administrator.")]
+    public async Task AProviderRefusalSaysWhatTheWebPageDoes(string code, string message)
+    {
+        _http.Providers.Add(("entra", "Sign In with Microsoft"));
+        _http.RefuseProviderWith = code;
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            await prompt.ProvidersAsync(Account);
+            refusal = await prompt.SignInWithProviderAsync(Account, "entra", CancellationToken.None);
+            return false;
+        };
+        var session = Make(browser: new FakeBrowser(_http));
+
+        await session.StartAsync();
+
+        Assert.Equal(message, refusal);
+        Assert.False(session.Started);
+        Assert.Empty(_keychain.Items);
+        Assert.Empty(_http.Exchanges);
+    }
+
+    [Theory]
+    [InlineData("provider", null, "Your sign-in provider couldn't sign you in. Try again, or ask an administrator.")]
+    [InlineData("provider", "firm login", "Firm login couldn't sign you in. Try again, or ask an administrator.")]
+    [InlineData("no-group", "firm login", "Your account at firm login doesn't give you access to Healdan. Ask an administrator.")]
+    [InlineData("no-group", " ", "Your account at your sign-in provider doesn't give you access to Healdan. Ask an administrator.")]
+    public void ARefusalNamesTheProviderByItsLabel(string code, string? label, string message) =>
+        Assert.Equal(message, HelperSession.ProviderRefusal(code, label));
+
+    [Fact]
+    public async Task ARefusalFromAServerNotAskedForItsProvidersSaysYourSignInProvider()
+    {
+        _http.Providers.Add(("entra", "Sign In with Microsoft"));
+        _http.RefuseProviderWith = "provider";
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInWithProviderAsync(Account, "entra", CancellationToken.None);
+            return false;
+        };
+
+        await Make(browser: new FakeBrowser(_http)).StartAsync();
+
+        Assert.Equal("Your sign-in provider couldn't sign you in. Try again, or ask an administrator.", refusal);
+    }
+
+    [Fact]
+    public async Task ACodeHealdanWontTakeSaysToStartAgain()
+    {
+        _http.Providers.Add(("entra", "Sign In with Microsoft"));
+        _http.RefuseExchanges = true; // too late, or used
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInWithProviderAsync(Account, "entra", CancellationToken.None);
+            return false;
+        };
+        var session = Make(browser: new FakeBrowser(_http));
+
+        await session.StartAsync();
+
+        Assert.Equal("That sign-in took too long or was already used. Start again.", refusal);
+        Assert.False(session.Started);
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public async Task TheBrowsersFiveMinutesRunningOutReachesTheWindow()
+    {
+        // A timeout is an OperationCanceledException too, but not the person's cancel: its reason reaches the error line.
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            refusal = await prompt.SignInWithProviderAsync(Account, "entra", CancellationToken.None);
+            return false;
+        };
+        var session = Make(browser: new IdleBrowser(), browserTimeout: TimeSpan.FromMilliseconds(100));
+
+        await session.StartAsync();
+
+        Assert.Equal("The sign-in in your browser didn't finish within 5 minutes.", refusal);
+        Assert.False(session.Started);
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public async Task CancellingStopsWaitingForTheBrowser()
+    {
+        var browser = new IdleBrowser();
+        string? refusal = null;
+        _windows.OnSignIn = async prompt =>
+        {
+            using var cancel = new CancellationTokenSource();
+            var signingIn = prompt.SignInWithProviderAsync(Account, "entra", cancel.Token);
+            await Wait.Until(() => browser.Opened is not null, "the browser opened");
+            cancel.Cancel();
+            refusal = await signingIn;
+            return false;
+        };
+        var session = Make(browser: browser);
+
+        await session.StartAsync();
+
+        Assert.NotNull(refusal); // not signed in; the window shows nothing for the person's own cancel
+        Assert.False(session.Started);
+        Assert.Empty(_keychain.Items);
+        Assert.Empty(_http.Exchanges);
+        LogIndex("The sign-in in the browser was cancelled");
+        // The helper stopped listening: the loopback address refuses the browser now.
+        var redirect = new Uri(Uri.UnescapeDataString(System.Web.HttpUtility.ParseQueryString(browser.Opened!.Query)["redirect_uri"]!));
+        using var http = new HttpClient();
+        await Assert.ThrowsAsync<HttpRequestException>(() => http.GetAsync(redirect));
+    }
+
+    [Fact]
+    public async Task AProviderSignInMakesTheSameChecksFirst()
+    {
+        var browser = new IdleBrowser();
+        var refusals = new List<string?>();
+        _windows.OnSignIn = async prompt =>
+        {
+            refusals.Add(await prompt.SignInWithProviderAsync("http://healdan.example", "entra", CancellationToken.None));
+            refusals.Add(await prompt.SignInWithProviderAsync("https://other.test", "entra", CancellationToken.None));
+            refusals.Add(await prompt.SignInWithProviderAsync("", "entra", CancellationToken.None));
+            return false;
+        };
+
+        await Make(browser: browser).StartAsync();
+
+        Assert.Contains("https", refusals[0]);
+        Assert.Equal("That address isn't a Healdan server.", refusals[1]);
+        Assert.Equal("Enter your Healdan server's address.", refusals[2]);
+        Assert.Null(browser.Opened); // no browser for a server the helper can't sign in to
+        Assert.Empty(_keychain.Items);
+    }
+
+    [Fact]
+    public async Task AProviderSignInAfterA401SendsTheSavesThatWaited()
+    {
+        SignedInBefore();
+        _http.Providers.Add(("entra", "Sign In with Microsoft"));
+        var session = Make(browser: new FakeBrowser(_http));
+        await session.StartAsync();
+        var asked = new TaskCompletionSource<SignInPrompt>(TaskCreationOptions.RunContinuationsAsynchronously);
+        string? refusal = "not asked";
+        _windows.OnSignIn = async prompt =>
+        {
+            asked.TrySetResult(prompt);
+            refusal = await prompt.SignInWithProviderAsync(prompt.Server!, "entra", CancellationToken.None);
+            return refusal is null;
+        };
+
+        await session.SignInAgainAsync();
+
+        var prompt = await asked.Task;
+        Assert.True(prompt.ServerFixed);
+        Assert.Null(refusal);
+        Assert.True(session.SignedIn);
+        Assert.Equal(KeptHere(SessionServer.IssuedToken), _keychain.Items[Account]);
     }
 
     [Fact]

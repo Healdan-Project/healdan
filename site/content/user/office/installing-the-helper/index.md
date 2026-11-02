@@ -14,7 +14,9 @@ for the Healdan tab in Word, Excel and PowerPoint. Install it on each Mac you wo
   Healdan tab as well: see [The Healdan Tab](#the-healdan-tab).
 - **Your Healdan server's address,** such as `https://docs.example.org`: the web page's address, without anything
   after the server's name.
-- **Your Healdan username and password,** the ones you use in the web page.
+- **How you sign in to Healdan:** your username and password, the ones you use in the web page, or, if your firm
+  signs you in through a provider such as Microsoft, your account there. Signing in through a provider needs
+  Healdan Helper 0.6.0 or later.
 - **A Mac with Apple silicon,** running macOS 26 or later.
 
 ## Installing on macOS
@@ -60,7 +62,9 @@ The helper for Ubuntu isn't ready yet. Until it is, Healdan works in LibreOffice
 
 ![The Sign In to Healdan window: Healdan's mark above the title and a line saying the helper keeps a sign-in in the keychain, never your password; then Server Address https://healdan.example, empty Username and Password fields, and the Cancel and Sign In buttons](sign-in.png)
 
-Type the server's address, your username and your password, and choose **Sign In**.
+Type the server's address. If your firm signs people in through a provider, such as Microsoft, the window then
+shows its button: see [Signing In Through the Browser](#signing-in-through-the-browser). Otherwise it looks as in
+the picture: type your username and password, and choose **Sign In**.
 
 - **The address** is your server's, such as `docs.example.org`. The helper adds `https://` if you leave it out, and
   refuses `http://`: your password and documents only travel encrypted. (`http://localhost` works, for a server on
@@ -73,8 +77,39 @@ Type the server's address, your username and your password, and choose **Sign In
   administrator.
 
 The helper stays signed in until you sign out or change your password, or it goes unused for 30 days, and for a
-year at most: your administrator can change both. It then asks for your password again, and anything you save
-meanwhile waits on your Mac until you sign in.
+year at most: your administrator can change both. It then asks you to sign in again, and anything you save
+meanwhile waits on your Mac until you do.
+
+### Signing In Through the Browser
+
+{{< callout type="info" >}}
+Healdan Helper 0.6.0 is the first that signs in through a provider. An earlier one asks only for a password, which
+an account that signs in through a provider doesn't have: install the latest.
+{{< /callout >}}
+
+When your administrator has set up a sign-in provider, the window shows a button for each, such as **Sign In with
+Microsoft**, once it has found your server. They're the web page's buttons, with the same words.
+
+1. Choose the button. The helper opens a tab in your usual browser at the provider, and the window says "Finish
+   signing in in your browser…".
+2. Sign in at the provider in that tab, as you do there for anything else. If you're signed in there already, it
+   may not ask you anything.
+3. The tab says "Signed in to Healdan. You can close this tab." Close it. The helper is signed in, and its window
+   goes.
+
+- **Your password at the provider** never reaches the helper or Healdan. The helper gets a sign-in of its own from
+  Healdan, as it does with a password, and keeps it in your Mac's keychain.
+- **The helper waits five minutes** for you to finish in the browser. If you take longer, the window says so: choose
+  the button again. **Cancel** stops the wait without closing the window, so you can choose again; choose it once
+  more to close the window.
+- **If the sign-in is refused,** the window and the tab both say why, as in
+  [When a Provider Sign-In Is Refused](../../getting-started/signing-in/#when-a-provider-sign-in-is-refused), naming
+  the provider by its button.
+- **The password form** is folded away behind a link under the buttons, **Sign In with a Password** unless your
+  administrator has worded it otherwise. Choose it for an account that doesn't sign in through the provider, such as
+  `admin`. An account that does has no password.
+- **Healdan checks with the provider** from time to time. Once your account there is turned off, the helper's
+  sign-in ends, and it asks you to sign in again.
 
 ## Adding Healdan to LibreOffice
 
@@ -291,7 +326,8 @@ Choose **Sign Out** in the helper's menu.
 - **Your saves go first.** The helper sends anything still waiting, and waits up to half a minute for it. If
   Healdan can't take it by then, you stay signed in, and a notice says so. If Healdan doesn't answer at all, see
   [If Healdan Can't Be Reached](#if-healdan-cant-be-reached).
-- **Signing out ends this Mac's sign-in** on the server too, and removes it from the keychain.
+- **Signing out ends this Mac's sign-in** on the server too, and removes it from the keychain. If you signed in
+  through a provider, it doesn't sign you out of the provider in your browser.
 - **While you're signed out,** LibreOffice's Open and Save show LibreOffice's own boxes, with a notice that the
   helper isn't running.
 

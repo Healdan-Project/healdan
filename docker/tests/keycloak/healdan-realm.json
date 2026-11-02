@@ -76,6 +76,17 @@
       "groups": ["/healdan-users"]
     },
     {
+      "username": "sso-helper2",
+      "enabled": true,
+      "email": "sso-helper2@smoke.example",
+      "emailVerified": true,
+      "firstName": "Sso",
+      "lastName": "Helper Two",
+      "credentials": [{ "type": "password", "value": "Smoke-Sso-Pw-42!x", "temporary": false }],
+      "realmRoles": ["default-roles-healdan"],
+      "groups": ["/healdan-users"]
+    },
+    {
       "username": "sso-outsider",
       "enabled": true,
       "email": "sso-outsider@smoke.example",
