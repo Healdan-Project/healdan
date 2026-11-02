@@ -21,6 +21,7 @@ import com.logicaldoc.gui.frontend.client.healdan.services.HealdanSettingsServic
 import com.smartgwt.client.types.HeaderControls;
 import com.smartgwt.client.types.ListGridEditEvent;
 import com.smartgwt.client.types.Overflow;
+import com.smartgwt.client.types.ReadOnlyDisplayAppearance;
 import com.smartgwt.client.types.SelectionStyle;
 import com.smartgwt.client.types.TitleOrientation;
 import com.smartgwt.client.util.SC;
@@ -147,6 +148,8 @@ public class ProviderDialog extends Window {
 		setHeight(provider.isAdding() ? 640 : 760);
 		setCanDragResize(true);
 		centerInPage();
+		// Gone when closed, so a secret typed and not saved doesn't stay in a hidden field
+		addCloseClickHandler(event -> destroy());
 
 		VLayout content = new VLayout();
 		content.setMargin(10);
@@ -270,6 +273,8 @@ public class ProviderDialog extends Window {
 
 		ListGridField group = new ListGridField(GROUP_ID, "Healdan Group", 260);
 		SelectItem picker = new SelectItem();
+		// Group names are anyone's who can edit groups: shown as text, never as HTML
+		picker.setEscapeHTML(true);
 		picker.setValueMap(mappable);
 		group.setEditorProperties(picker);
 		group.setRequired(true);
@@ -432,6 +437,7 @@ public class ProviderDialog extends Window {
 		Window window = new Window();
 		window.setHeaderControls(HeaderControls.HEADER_LABEL, HeaderControls.CLOSE_BUTTON);
 		window.setTitle("Check of " + SafeHtmlUtils.htmlEscape(provider.getLabel()));
+		window.addCloseClickHandler(event -> window.destroy());
 		window.setIsModal(true);
 		window.setShowModalMask(true);
 		window.setWidth(600);
@@ -628,6 +634,8 @@ public class ProviderDialog extends Window {
 		form.setNumCols(1);
 		TextAreaItem item = ItemFactory.newTextAreaItem("copyable", title, text);
 		item.setCanEdit(false);
+		// A read-only text area, whose usernames are its value and never HTML
+		item.setReadOnlyDisplay(ReadOnlyDisplayAppearance.READONLY);
 		item.setWidth("100%");
 		item.setHeight(Math.max(1, rows) * 18 + 10);
 		item.setShouldSaveValue(false);

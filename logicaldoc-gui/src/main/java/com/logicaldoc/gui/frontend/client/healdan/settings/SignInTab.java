@@ -243,6 +243,7 @@ public class SignInTab extends Tab {
 		id.setValidators(idRule);
 
 		SelectItem preset = ItemFactory.newSelectItem(PRESET, "Preset");
+		preset.setEscapeHTML(true);
 		preset.setValueMap(new LinkedHashMap<>(PRESETS));
 		preset.setValue("entra");
 		preset.setRequired(true);
