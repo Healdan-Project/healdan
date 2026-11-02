@@ -1,5 +1,6 @@
 package com.logicaldoc.gui.common.client.grid.formatters;
 
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.smartgwt.client.widgets.grid.CellFormatter;
 import com.smartgwt.client.widgets.grid.ListGridRecord;
 
@@ -16,6 +17,8 @@ public class UserCellFormatter implements CellFormatter {
 	public String format(Object value, ListGridRecord rec, int rowNum, int colNum) {
 		if (value == null)
 			return null;
+		// Healdan: names, and a user's groups, are text, not HTML
+		value = HealdanText.escape(value);
 		if (rec.getAttributeAsBoolean("guest") != null && Boolean.TRUE.equals(rec.getAttributeAsBoolean("guest"))) {
 			if (Boolean.TRUE.equals(rec.getAttributeAsBoolean("eenabled")))
 				return "<span style='color: #888888;'>" + value + CLOSE_SPAN;

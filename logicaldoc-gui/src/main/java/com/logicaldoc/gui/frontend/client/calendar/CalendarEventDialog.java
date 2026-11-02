@@ -21,6 +21,7 @@ import com.logicaldoc.gui.common.client.grid.DateListGridField;
 import com.logicaldoc.gui.common.client.grid.FileNameListGridField;
 import com.logicaldoc.gui.common.client.grid.IdListGridField;
 import com.logicaldoc.gui.common.client.grid.UserListGridField;
+import com.logicaldoc.gui.common.client.healdan.HealdanText;
 import com.logicaldoc.gui.common.client.i18n.I18N;
 import com.logicaldoc.gui.common.client.preview.PreviewPopup;
 import com.logicaldoc.gui.common.client.util.AwesomeFactory;
@@ -439,7 +440,8 @@ public class CalendarEventDialog extends Window {
 				exit.getGrid().cancelEditing();
 		});
 		name.setCellFormatter((value, rec, rowNum, colNum) -> {
-			String val = value != null ? value.toString() : "";
+			// Healdan: an attendee's name, a group's among them, is text, not HTML
+			String val = HealdanText.escape(value);
 			if (rec.getAttributeAsString("id").equals(Long.toString(calendarEvent.getOrganizerId())))
 				return val + " (" + I18N.message("organizer") + ")";
 			else
