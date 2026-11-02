@@ -80,7 +80,14 @@ public final class PublicAddress {
 				&& !PLACEHOLDER.equalsIgnoreCase(configured.trim().replaceAll("/+$", ""));
 	}
 
-	private static String requested(HttpServletRequest request) {
+	/**
+	 * @param request the request being answered
+	 * @return the address the request was made to, with the install's path: what
+	 *         {@link #of} falls back to when no public address is set, and the
+	 *         Sign-In tab's best guess at the redirect address when there is no
+	 *         address Healdan can use
+	 */
+	static String requested(HttpServletRequest request) {
 		String scheme = request.getScheme();
 		String host = request.getServerName();
 		// A bare IPv6 address needs its brackets in a URL

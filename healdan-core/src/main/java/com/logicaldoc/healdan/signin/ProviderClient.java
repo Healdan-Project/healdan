@@ -55,7 +55,10 @@ import com.nimbusds.oauth2.sdk.ResponseMode;
 import com.nimbusds.oauth2.sdk.ResponseType;
 import com.nimbusds.oauth2.sdk.Scope;
 import com.nimbusds.oauth2.sdk.TokenRequest;
+import com.nimbusds.oauth2.sdk.auth.ClientAuthentication;
+import com.nimbusds.oauth2.sdk.auth.ClientAuthenticationMethod;
 import com.nimbusds.oauth2.sdk.auth.ClientSecretBasic;
+import com.nimbusds.oauth2.sdk.auth.ClientSecretPost;
 import com.nimbusds.oauth2.sdk.auth.Secret;
 import com.nimbusds.oauth2.sdk.http.HTTPRequest;
 import com.nimbusds.oauth2.sdk.http.HTTPResponse;
@@ -97,7 +100,16 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * exactly the configured issuer; {@code aud} holding the client id, with
  * {@code azp} required when there are other audiences and, when present, the
  * client id; {@code exp}, {@code iat} and, when present, {@code nbf}, with two
- * minutes of clock skew; and the sign-in's {@code nonce}.
+ * minutes of clock skew; and the sign-in's {@code nonce}. One exception, which
+ * loosens none of that: an ID token that comes with a refresh and is unsigned
+ * ({@code alg: none}) is ignored, as if none came, and its claims are never read
+ * ({@link #refresh}, ruling R28). At a sign-in it's refused.
+ * <p>
+ * <b>The client secret</b> goes to the token endpoint the way the provider's
+ * discovery document lists: {@code client_secret_basic} (an HTTP Basic header)
+ * when it's listed or the list is absent, else {@code client_secret_post} (the
+ * form body) when that is listed, else {@code client_secret_basic} again, which
+ * {@link #check} reports (ruling R29).
  * <p>
  * <b>Never logged,</b> nor put in a {@link ProviderException}'s message:
  * tokens, codes, the client secret, ID tokens, verifiers, states and nonces.
@@ -220,7 +232,8 @@ public class ProviderClient {
 	 *
 	 * @param outcome what the provider said
 	 * @param claims the claims of the ID token that came with an accepted
-	 *        refresh; null when none came, or for any other outcome
+	 *        refresh; null when none came, when it was unsigned and so ignored
+	 *        (ruling R28), or for any other outcome
 	 * @param refreshToken the new refresh token, if one came, which replaces
 	 *        the old; null otherwise. It also comes with an {@code UNREACHABLE}
 	 *        outcome whose ID token failed its checks, as the provider may have
@@ -256,6 +269,9 @@ public class ProviderClient {
 	private final ResourceRetriever retriever;
 
 	private final Map<String, Discovered> discovered = new ConcurrentHashMap<>();
+
+	/** The providers whose unsigned refreshed ID tokens have been logged; once for each, for the JVM's life */
+	private final Set<String> unsignedNoted = ConcurrentHashMap.newKeySet();
 
 	@Autowired
 	public ProviderClient(SignInProviders providers) {
@@ -315,8 +331,9 @@ public class ProviderClient {
 
 	/**
 	 * Exchanges the code the provider sent back for its tokens, with the client
-	 * secret ({@code client_secret_basic}) and the verifier, and checks the ID
-	 * token in full.
+	 * secret (as {@code client_secret_basic} or {@code client_secret_post}, by
+	 * what the provider lists) and the verifier, and checks the ID token in full:
+	 * an unsigned one is refused here.
 	 *
 	 * @param p the provider
 	 * @param redirect the redirect address the sign-in started with
@@ -389,10 +406,19 @@ public class ProviderClient {
 	 * <li>{@code UNREACHABLE} too for a discovery document that can't be
 	 * fetched or fails its checks, a client secret that can't be read, or an
 	 * answer that can't be read.</li>
-	 * <li>{@code UNREACHABLE} too for an answer whose ID token fails its checks,
-	 * logged as a warning: a bad answer isn't an explicit refusal, and only an
-	 * explicit refusal revokes. The new refresh token comes back with it, if
-	 * one came.</li>
+	 * <li>{@code UNREACHABLE} too for an answer whose signed ID token fails its
+	 * checks, logged as a warning: a bad answer isn't an explicit refusal, and
+	 * only an explicit refusal revokes. The new refresh token comes back with it,
+	 * if one came. An ID token signed with HMAC or by a key the provider doesn't
+	 * publish is such a one.</li>
+	 * <li>{@code ACCEPTED} with no claims for an ID token that is unsigned
+	 * ({@code alg: none}, Nimbus's {@code PlainJWT}), as Microsoft's
+	 * documentation describes an Entra ID refresh's (ruling R28). It is ignored,
+	 * as if no ID token came, and nothing in it is read, so the caller updates no
+	 * names or groups and applies no gate. The new refresh token comes back, if
+	 * one came. It is logged at info once for each provider, for as long as the
+	 * JVM runs. Only {@code none} is ignored, and only here: a sign-in's ID token
+	 * (see {@link #exchange}) is still refused.</li>
 	 * <li>{@code ACCEPTED} otherwise, with the claims of the ID token if one
 	 * came. Its nonce isn't checked, as a refresh has none of its own;
 	 * everything else is.</li>
@@ -471,9 +497,13 @@ public class ProviderClient {
 		}
 		String next = tokens.getRefreshToken() == null ? null : tokens.getRefreshToken().getValue();
 		IdClaims claims = null;
-		if (tokens.getIDToken() != null)
+		JWT idToken = tokens.getIDToken();
+		if (idToken instanceof PlainJWT)
+			// Ignored, and not read: no claim of an unsigned token is believed (ruling R28)
+			noteUnsigned(p);
+		else if (idToken != null)
 			try {
-				claims = verify(p, d, tokens.getIDToken(), null);
+				claims = verify(p, d, idToken, null);
 			} catch (ProviderException e) {
 				log.warn("Sign-in provider {} answered a refresh with an ID token Healdan refused, which counts as "
 						+ "unreachable, not as a refusal. {}", p.id(), e.getMessage());
@@ -483,13 +513,20 @@ public class ProviderClient {
 		return new Refreshed(Outcome.ACCEPTED, claims, next);
 	}
 
+	/** Logs, once for each provider for the JVM's life, that its refreshed ID tokens come unsigned */
+	private void noteUnsigned(SignInProvider p) {
+		if (unsignedNoted.add(p.id()))
+			log.info("Sign-in provider {}: its refreshed ID tokens are unsigned, so re-checks can't update names or "
+					+ "groups. Healdan ignores them, and a person's details follow at each sign-in.", p.id());
+	}
+
 	/**
 	 * The Sign-In tab's Check (spec section 10.3). It fetches the discovery
 	 * document and the keys afresh, leaving what {@link #start} keeps alone,
 	 * and confirms the issuer matches, every endpoint is HTTPS, the provider
 	 * signs with an RSA or EC algorithm, offers {@code offline_access}, and
-	 * publishes a key to sign with, and that a client id and a secret that can
-	 * be read are set.
+	 * publishes a key to sign with, that it takes a client secret at its token
+	 * endpoint, and that a client id and a secret that can be read are set.
 	 *
 	 * @param p the provider
 	 * @param redirect the redirect address to register, which comes back in the
@@ -542,6 +579,9 @@ public class ProviderClient {
 			problems.add(mismatch(named, issuer) + ".");
 		for (String problem : endpointProblems(metadata))
 			problems.add(problem + ".");
+		if (!takesClientSecret(metadata))
+			problems.add(("The provider doesn't take a client secret at its token endpoint (it lists %s), and Healdan "
+					+ "sends one as client_secret_basic or client_secret_post.").formatted(listed(metadata)));
 
 		List<JWSAlgorithm> algorithms = metadata.getIDTokenJWSAlgs();
 		if (algorithms == null || algorithms.stream().noneMatch(ALGORITHMS::contains))
@@ -730,13 +770,43 @@ public class ProviderClient {
 	private HTTPResponse send(Discovered d, ClientID clientId, Secret secret, AuthorizationGrant grant)
 			throws IOException {
 		TokenRequest request = new TokenRequest.Builder(d.metadata().getTokenEndpointURI(),
-				new ClientSecretBasic(clientId, secret), grant).build();
+				authentication(d.metadata(), clientId, secret), grant).build();
 		HTTPRequest http = request.toHTTPRequest();
 		http.setConnectTimeout(timeout);
 		http.setReadTimeout(timeout);
 		// It carries the secret, so it goes nowhere it's redirected to
 		http.setFollowRedirects(false);
 		return http.send();
+	}
+
+	/**
+	 * How the client secret goes to the token endpoint (ruling R29): as
+	 * {@code client_secret_basic} when the discovery document lists it or lists
+	 * no methods, else as {@code client_secret_post} when that is listed, else as
+	 * {@code client_secret_basic}, which {@link #check} reports.
+	 */
+	private static ClientAuthentication authentication(OIDCProviderMetadata metadata, ClientID clientId,
+			Secret secret) {
+		List<ClientAuthenticationMethod> methods = metadata.getTokenEndpointAuthMethods();
+		if (methods != null && !methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+				&& methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_POST))
+			return new ClientSecretPost(clientId, secret);
+		return new ClientSecretBasic(clientId, secret);
+	}
+
+	/** @return false if the discovery document lists methods and neither is one a client secret goes by */
+	private static boolean takesClientSecret(OIDCProviderMetadata metadata) {
+		List<ClientAuthenticationMethod> methods = metadata.getTokenEndpointAuthMethods();
+		return methods == null || methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+				|| methods.contains(ClientAuthenticationMethod.CLIENT_SECRET_POST);
+	}
+
+	/** @return the methods the discovery document lists, as text from outside: quoted, and not believed */
+	private static String listed(OIDCProviderMetadata metadata) {
+		List<ClientAuthenticationMethod> methods = metadata.getTokenEndpointAuthMethods();
+		if (methods == null || methods.isEmpty())
+			return "nothing";
+		return methods.stream().map(method -> quote(method.getValue())).collect(Collectors.joining(", "));
 	}
 
 	/** @return the tokens, or null if the answer can't be read; its faults aren't quoted, as it holds tokens */
