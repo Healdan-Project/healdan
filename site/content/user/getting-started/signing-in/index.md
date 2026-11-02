@@ -34,6 +34,8 @@ administrator has set one up, the sign-in page shows a button for each, above th
 2. Sign in at the provider, as you do there for anything else. Healdan never sees your password.
 3. The provider sends you back, and Healdan opens.
 
+![Healdan's sign-in box with a provider set up: the Sign In with Microsoft button, and beneath it the Sign In with a Password link, which unfolds the password form](sign-in-provider.png)
+
 The first time, Healdan either finds your account or makes one for you, and puts you in the groups your
 administrator has matched to yours at the provider. You don't set a password. An account that signs in through a
 provider has none, so **Change password** and **Lost your password?** don't apply to it.

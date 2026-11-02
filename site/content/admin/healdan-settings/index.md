@@ -7,7 +7,7 @@ Healdan's own settings are under **Administration → Healdan → Settings**. Cl
 Clients are saved from their own window, without Save. Signing in through a provider, such as Microsoft Entra ID,
 is set up on the **Sign-In** tab beside them: see [Sign-In Providers](#sign-in-providers).
 
-![The Healdan settings panel: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
+![The Healdan settings panel, with the Sign-In tab beside it: matter labels, numbering, default Class, the Recent Matters window, the next doc #, the two device sign-in limits, API origins allowed (CORS), and the client list with Add client and Edit, holding seven clients from 998 Ashcombe Reeve LLP to 1006 Oliver and Grace Pemberton](healdan-settings.png)
 
 | Setting | What it does |
 |---|---|
@@ -113,6 +113,8 @@ ID, Authentik and others.
 
 ### The Sign-In Tab
 
+![The Sign-In tab: Add, Edit, Remove, Move Up and Move Down above the list of providers, which holds Sign In with Microsoft, id entra, preset Microsoft Entra ID, on, with no accounts linked; below it the options, with the password link's label, the admin alert and its recipients, and Outgoing Email saying it needs outgoing email, which isn't set up](sign-in-tab.png)
+
 | Part | What it does |
 |---|---|
 | Providers | each provider, with its label, id and preset, whether it's on, and how many accounts are linked to it, in the order of their buttons on the sign-in page |
@@ -127,6 +129,8 @@ ID, Authentik and others.
 **Save**, under the options, saves the password link's label and the alert. A provider is saved from its own window.
 
 ### A Provider's Settings
+
+![The Sign In with Microsoft provider's window: id entra and preset Microsoft Entra ID, the button label, an Entra ID issuer and client ID, an empty Client Secret marked Set, On and Link by Email ticked, the redirect address with its copy icon, the folded Claims, and a group map from two Entra ID group object ids to Fee Earners and Partners](provider-window.png)
 
 | Setting | What it holds |
 |---|---|
