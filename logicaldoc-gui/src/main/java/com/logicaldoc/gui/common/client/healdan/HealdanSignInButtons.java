@@ -20,6 +20,7 @@ import com.smartgwt.client.util.JSOHelper;
 import com.smartgwt.client.widgets.Canvas;
 import com.smartgwt.client.widgets.HTMLFlow;
 import com.smartgwt.client.widgets.IButton;
+import com.smartgwt.client.widgets.layout.LayoutSpacer;
 import com.smartgwt.client.widgets.layout.VLayout;
 
 /**
@@ -157,11 +158,11 @@ public final class HealdanSignInButtons {
 			panel.addMember(button(provider));
 
 		HTMLFlow link = passwordLink(passwordLabel);
-		link.addClickHandler(event -> showPasswordForm(credentialsPanel, link));
+		link.addClickHandler(event -> showPasswordForm(panel, credentialsPanel, link));
 		link.addKeyPressHandler(event -> {
 			String key = event.getKeyName();
 			if ("Enter".equalsIgnoreCase(key) || "Space".equalsIgnoreCase(key))
-				showPasswordForm(credentialsPanel, link);
+				showPasswordForm(panel, credentialsPanel, link);
 		});
 		panel.addMember(link);
 
@@ -256,9 +257,12 @@ public final class HealdanSignInButtons {
 		return link;
 	}
 
-	private static void showPasswordForm(VLayout credentialsPanel, HTMLFlow link) {
+	private static void showPasswordForm(VLayout panel, VLayout credentialsPanel, HTMLFlow link) {
 		credentialsPanel.setVisible(true);
-		link.setVisible(false);
+		// The link kept the last button off the form. In its place a spacer does, with the panel's margin above it.
+		LayoutSpacer gap = new LayoutSpacer();
+		gap.setHeight(1);
+		panel.replaceMember(link, gap);
 	}
 
 	/**
