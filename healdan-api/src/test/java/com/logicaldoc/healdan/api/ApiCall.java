@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.mock.web.MockHttpSession;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 
@@ -46,11 +47,14 @@ public class ApiCall {
 
 	private String remote = "127.0.0.1";
 
-	private String scheme;
+	private MockHttpSession session;
 
-	private String serverName;
+	/* The test context's server.url, http://localhost:8080, unless a test names another */
+	private String scheme = "http";
 
-	private int serverPort;
+	private String serverName = "localhost";
+
+	private int serverPort = 8080;
 
 	private String contentType;
 
@@ -92,6 +96,19 @@ public class ApiCall {
 	}
 
 	/**
+	 * Sends the request in an HTTP session, as a browser with a
+	 * {@code JSESSIONID} cookie would. Without one, the request has no session
+	 * until the server makes one.
+	 *
+	 * @param session the session, which the server may change, such as by
+	 *        giving it a new id; null for none
+	 */
+	public ApiCall session(MockHttpSession session) {
+		this.session = session;
+		return this;
+	}
+
+	/**
 	 * @param address the client's IP address, 127.0.0.1 by default
 	 */
 	public ApiCall remote(String address) {
@@ -102,8 +119,9 @@ public class ApiCall {
 	/**
 	 * Names the address the request was made to, as Tomcat reads it from the
 	 * {@code Host} header and the connector (after {@code RemoteIpValve} has
-	 * applied {@code X-Forwarded-Proto}). The default is {@code http://localhost}
-	 * on port 80.
+	 * applied {@code X-Forwarded-Proto}). The default is
+	 * {@code http://localhost:8080}, the test context's {@code server.url}, so a
+	 * request comes to the public address unless a test says otherwise.
 	 *
 	 * @param scheme {@code http} or {@code https}
 	 * @param name the host's name
@@ -189,11 +207,11 @@ public class ApiCall {
 		// Like Tomcat's, the path info is decoded and the request URI isn't
 		request.setPathInfo(pathInfo.isEmpty() ? null : URLDecoder.decode(pathInfo.replace("+", "%2B"), StandardCharsets.UTF_8));
 		request.setRemoteAddr(remote);
-		if (serverName != null) {
-			request.setScheme(scheme);
-			request.setServerName(serverName);
-			request.setServerPort(serverPort);
-		}
+		if (session != null)
+			request.setSession(session);
+		request.setScheme(scheme);
+		request.setServerName(serverName);
+		request.setServerPort(serverPort);
 		if (query != null) {
 			request.setQueryString(query);
 			for (String pair : query.split("&")) {

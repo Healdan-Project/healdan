@@ -14,6 +14,8 @@
 	<packaging>jar</packaging>
 	<properties>
 		<flyway.version>13.10.3</flyway.version>
+		<nimbus-oidc.version>11.38.2</nimbus-oidc.version>
+		<nimbus-jose.version>10.10</nimbus-jose.version>
 	</properties>
 	<dependencies>
 		<!-- Flyway ships inside the plugin zip (see assemblyplugin.xml) -->
@@ -31,6 +33,25 @@
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-hsqldb</artifactId>
 			<version>${flyway.version}</version>
+		</dependency>
+		<!-- The OpenID Connect client (M4's provider sign-in); ships inside the plugin zip (see assemblyplugin.xml).
+			Apache License 2.0. json-smart brings accessors-smart and asm, which the WAR already ships at another
+			version, so asm is left out -->
+		<dependency>
+			<groupId>com.nimbusds</groupId>
+			<artifactId>oauth2-oidc-sdk</artifactId>
+			<version>${nimbus-oidc.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.ow2.asm</groupId>
+					<artifactId>asm</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		<dependency>
+			<groupId>com.nimbusds</groupId>
+			<artifactId>nimbus-jose-jwt</artifactId>
+			<version>${nimbus-jose.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>net.sf.jpf</groupId>
@@ -183,7 +204,29 @@
 			<artifactId>spring-context-support</artifactId>
 			<scope>test</scope>
 		</dependency>
-		
+		<!-- CE's Spring Security sign-in (LDAuthenticationProvider), which ProviderPasswordListenerTest drives with
+			spring-test's servlet mocks; the WAR already ships them all -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-core</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-web</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-web</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
 		<dependency>
 			<groupId>org.infinispan</groupId>
 			<artifactId>infinispan-core</artifactId>
@@ -197,6 +240,17 @@
 	</dependencies>
 	<build>
 		<plugins>
+			<!-- SecretBox makes its key file on the first secret it seals. A test that seals through the Spring bean must
+				not make one in the home folder of whoever runs it -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<systemPropertyVariables>
+						<healdan.secretKey>${project.build.directory}/healdan-secret.key</healdan.secretKey>
+					</systemPropertyVariables>
+				</configuration>
+			</plugin>
 			<!-- healdan-api's tests reuse the base test case and fixtures -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

@@ -5,7 +5,7 @@ name: Docker image
 #
 # - Every pull request and push that changes more than docs: per architecture, the init tool's unit tests
 #   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml. Its step 5d
-#   runs the helper's stack test (clients/helper) against the smoke stack, with the .NET SDK set up beforehand.
+#   runs the helper's stack tests (clients/helper) against the smoke stack, with the .NET SDK set up beforehand.
 #   A docs-only pull request runs the test job with those steps skipped, so it still reports the required checks.
 #   The Maven build gets its dependencies from an actions/cache copy instead of downloading them each time.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
@@ -151,8 +151,9 @@ jobs:
           # pull request that changed code rebuilds the Maven stage even if it only touches docker/.
           cache-to: ${{ github.event_name == 'push' && format('type=gha,scope={0},mode=max,ignore-error=true', matrix.arch) || '' }}
 
-      # The smoke test's step 5d runs the helper's stack test (clients/helper, StackCycleTests) against the smoke stack
-      # while it's up, as smoke-test.sh removes the stack when it ends. Built first so a build failure shows on its own.
+      # The smoke test's step 5d runs the helper's stack tests (clients/helper, StackCycleTests and
+      # StackProviderSignInTests) against the smoke stack while it's up, as smoke-test.sh removes the stack when it
+      # ends. Built first so a build failure shows on its own.
       - name: Set up .NET
         if: steps.changes.outputs.code == 'true'
         uses: actions/setup-dotnet@v5

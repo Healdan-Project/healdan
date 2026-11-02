@@ -1,6 +1,6 @@
 ---
 title: Upgrading
-weight: 7
+weight: 8
 ---
 
 {{< callout type="info" >}}

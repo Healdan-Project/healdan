@@ -24,6 +24,23 @@ Everything about your own account is under **Account** in the top bar:
 
 Your username can't be changed here. Ask your administrator.
 
+## If You Sign In Through a Provider
+
+If you sign in with a button such as **Sign In with Microsoft** (see
+[Signing In Through a Provider](../signing-in/#signing-in-through-a-provider)), your account has no Healdan
+password. Your password is your account's at the provider, and you change it there. So, under
+**Account → Security**:
+
+- **Change password** isn't for you: whatever you type, it says the password is wrong.
+- **Allowed Impersonators** stays empty: Healdan won't add anyone, as nobody may sign in with their own password
+  and act in your name.
+- **API Keys** you make never sign in.
+- **Last Logins** still lists your sign-ins. If you see one that wasn't you, change your password at the provider
+  and tell your administrator.
+
+The [Healdan Helper](../../office/installing-the-helper/) signs in through the provider's button too, in your
+browser.
+
 ## Changing Your Password
 
 1. Choose **Account → Security → Change password**.
@@ -68,7 +85,8 @@ is done as you. Leave the list empty unless your firm works that way.
 ## API Keys
 
 **Account → Security → API Keys** makes keys that let a program use LogicalDOC's web services as you. Healdan's own
-programs don't need them: the [Healdan Helper](../../office/installing-the-helper/) signs in with your password once
-and keeps a sign-in of its own. Make a key only if your administrator asks you to.
+programs don't need them: the [Healdan Helper](../../office/installing-the-helper/) signs in with your password, or
+through your provider, once and keeps a sign-in of its own. Make a key only if your administrator asks you to. If
+you sign in through a provider, a key never signs in.
 
 A key keeps working after you change your password. To stop one, right-click it and choose **Delete**.

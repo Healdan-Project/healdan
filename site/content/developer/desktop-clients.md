@@ -18,6 +18,7 @@ person's computer, and **Healdan's LibreOffice extension**. They build apart fro
 | The Office add-in in Word, Excel and PowerPoint | The helper | [The add-in's port](#the-add-ins-port): HTTPS on `127.0.0.1`, from the server's own pages, with a paired key |
 | A second helper | The running helper | The channel's `/v1/link`, for a link macOS gave another copy of the app (below) |
 | The helper | Healdan | The [API](../api/) under `/api/v1`, with a device token |
+| The helper | The system browser, and back | A provider's sign-in at Healdan's `/api/signin/<id>`, which ends at a port the helper listens on, on `127.0.0.1` (below) |
 
 The extension and the add-in hold no token and call no server. The helper does the work, and draws every window, once
 for every app.
@@ -272,6 +273,66 @@ file's contents.
   before this check, so everyone signs in once after the update, and a `device.json` that was lost or remade.
 - **A helper with its files elsewhere** (`HEALDAN_HELPER_DEV_ROOT`) uses the service `Healdan Helper (<root>)`
   (`HelperPaths.KeychainService`), so it never takes the installed helper's token, nor the installed helper its.
+
+### Signing In Through a Provider
+
+When an administrator has turned on a sign-in provider, such as Microsoft Entra ID, the helper can sign in through the
+system browser instead of asking for a password. It ends where a password sign-in does: a device token, kept in the
+keychain as above. The flow is RFC 8252's loopback redirect with PKCE (RFC 7636). The server's side is in the API
+page's [Signing In Through a Provider](../api/#signing-in-through-a-provider), and the design is §6 of the M4 spec,
+`docs/superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md`.
+
+`GET /server` says which providers there are: `providers` (each with an `id` and the `label` of its button) and
+`passwordLabel`. A server older than the providers sends neither, so `ServerInfo.Providers` is null and the password
+is all there is. `SignIn.SignInWithProviderAsync` then takes these steps, all in `Healdan.Helper.Core/Session/`:
+
+1. **It checks the server,** as a password sign-in does: it must be Healdan, speaking API `v1`.
+2. **It gets ready.** `Pkce.Make` makes a verifier (32 random bytes in base64url) and its `S256` challenge, and
+   `Pkce.NewState` a state the same way. `LoopbackReceiver.Start` listens on `http://127.0.0.1:<port>/`, and on
+   nothing else. It finds the port by binding port 0 and letting it go, and tries again, up to three times, if
+   another program takes it first.
+3. **It opens the system browser** (`IBrowser`; `SystemBrowser` goes through `SystemOpener`, which hands the address
+   over as one argument) at `<server>/api/signin/<id>?client=helper&redirect_uri=…&state=…&code_challenge=…&code_challenge_method=S256`,
+   each value URL-encoded.
+4. **It waits for the browser, for at most five minutes.** The receiver takes the first `GET` of `/` at the port and
+   answers it with a `302` to Healdan's done page, which tells the person to close the tab. Then it stops
+   listening, so a second request finds nothing there. Any other method or path, such as a browser's
+   `/favicon.ico`, gets a `404` and uses nothing up. The page is `<server>/api/signin/done`; after
+   a refusal it is `…/done?error=<code>`, and after a state that isn't the helper's, `error=expired`.
+5. **It checks the state** with a constant-time comparison. Another state, or none, fails the sign-in with "The
+   sign-in came back for another request. Try again." and nothing is exchanged, so the code goes nowhere. An
+   `error` is a `ProviderRefusedException` that carries the server's code (`no-group`, `email-taken`,
+   `username-taken`, `account`, `provider` or `expired`); a code of any other form is taken for `provider`. No
+   answer in five minutes is an `OperationCanceledException`: "The sign-in in your browser didn't finish within 5
+   minutes." A wait the caller cancels is an ordinary cancellation.
+6. **It exchanges the code** within its 60 seconds (`HealdanApi.ExchangeCodeAsync`): `POST /auth/tokens` with
+   `{code, codeVerifier, redirectUri, name, device}`, where `redirectUri` is the receiver's address exactly as the
+   browser was given it. The answer is the same as a password's, and the token is kept as `SignInAsync` keeps it.
+   A `401 sign-in-failed` means the code was used, came too late or didn't match, and the sign-in starts again.
+
+The Sign In window offers it (`Windows/SignInWindow.axaml`, through `SignInPrompt`). `HelperSession.ProvidersAsync`
+reads `GET /server` when the window opens, and again each time the address is changed and left, or just left
+after an answer that didn't come. A server with
+providers gets a button for each, in its order, and the password form folds behind a link labelled with its
+`passwordLabel`, unless something is typed in the form already. A server with none, an older one, or one the helper
+can't reach or doesn't speak to gets the password form as before, whose Sign In then says why. A button runs
+`HelperSession.TrySignInWithProviderAsync`, which makes the password sign-in's checks before and after (the address,
+another server's copies, the settings) and turns what went wrong into the window's error line:
+
+- **A refusal** says what the web page's done page says for its code (`HelperSession.ProviderRefusal`), and a code
+  it doesn't know as `provider`. No refusal names the provider: the window already shows which button was clicked. A
+  `401 sign-in-failed` at the exchange says `expired`'s message.
+- **The browser's five minutes** running out are an `OperationCanceledException` too, but not the person's: its
+  message reaches the error line. The window's Cancel, and closing the window, cancel the token the call was given,
+  and that answer shows nothing. The whole call is bounded at the five minutes plus 30 seconds for each of Healdan's
+  two calls.
+- **Off the UI thread:** the window runs the call with `Task.Run`, as `SystemOpener` waits up to ten seconds for the
+  opener to say whether a browser could be started.
+
+The loopback port is why this needs no hand-over between processes, as a `healdan://` link does on Linux. Another
+program can claim a URL scheme, but not a port the helper is listening on, and PKCE makes a code taken off the
+wire useless without the verifier. The code, the verifier and the state live in memory for that one call. Nothing
+logs them or the token: the log says which provider and how the sign-in ended, and no more.
 
 ## The Channel
 
@@ -620,8 +681,22 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   the test opens rather than for a fixed time.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.
-- **`Category=Stack`** tests run the cycle against a real stack, and skip without `HEALDAN_STACK_URL`. The smoke
-  test's step 5d runs them in CI.
+- **`LoopbackReceiverTests` and `ProviderSignInTests`** run the receiver on real sockets, at ports the system gives, so
+  parallel tests and the Ubuntu runner never meet. `SessionServer` plays Healdan's two ends: `/api/signin/<id>`
+  sends the browser back with a one-time code (or with `error`), and the exchange checks the verifier against the
+  challenge and the address, and works once. A fake `IBrowser` plays the person: it asks `SessionServer` to sign in,
+  then follows its redirect to the helper's real listener, and records where the listener sent it on. `PkceTests`
+  hold the challenge to RFC 7636's appendix B.
+- **`SignInWindowTests`** drive the Sign In window headless, with a fake prompt: the buttons and the folded form,
+  the wait and its Cancel, a refusal and the browser's time running out on the error line, and the providers asked
+  for again when the address changes. `HelperSessionTests` run `TrySignInWithProviderAsync` with the fake browsers
+  above.
+- **`Category=Stack`** tests run against a real stack, and skip without `HEALDAN_STACK_URL`: `StackCycleTests` the
+  cycle, and `StackProviderSignInTests`, which also needs `HEALDAN_STACK_SIGNIN_PROVIDER`, a sign-in through the
+  smoke stack's stand-in Keycloak. Its fake browser follows the redirects with a cookie jar, fills in Keycloak's login
+  form as `HEALDAN_STACK_SIGNIN_USER` with `HEALDAN_STACK_SIGNIN_PASSWORD`, and sends Keycloak's own name,
+  `keycloak:8080`, to `HEALDAN_STACK_KEYCLOAK` (its `host:port` on this computer) through a `SocketsHttpHandler`'s
+  `ConnectCallback`. The smoke test's step 5d runs both in CI.
 - **`Category=MacKeychain`** tests use your real keychain, so they run only when you ask.
 - **`Category=MacOffice`** tests drive the real Word, Excel and PowerPoint through `MacOfficeScripting`: they open,
   change and close throwaway documents, each test in its own folder inside `healdan-office-tests` in the temporary

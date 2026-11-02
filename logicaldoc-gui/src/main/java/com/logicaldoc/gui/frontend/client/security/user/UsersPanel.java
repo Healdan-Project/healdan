@@ -314,6 +314,9 @@ public class UsersPanel extends AdminPanel {
 			case 2:
 				rec.setAttribute(SOURCE, "SAML");
 				break;
+			case 3: // Healdan: an account linked to a sign-in provider (M4 spec section 15.1)
+				rec.setAttribute(SOURCE, "OIDC");
+				break;
 			default:
 				rec.setAttribute(SOURCE, "DEFAULT");
 		}

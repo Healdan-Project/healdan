@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-weight: 9
+weight: 10
 ---
 
 Start with the app's log:

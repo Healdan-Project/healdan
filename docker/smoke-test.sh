@@ -10,6 +10,8 @@ cd "$(dirname "$0")/.."
 PROJECT=logicaldoc-smoke
 PORT=${SMOKE_PORT:-18080}
 BASE="http://127.0.0.1:$PORT"
+# The stand-in sign-in provider's host port (docker/tests/compose.signin.yaml), on 127.0.0.1 only.
+KEYCLOAK_PORT=${SMOKE_KEYCLOAK_PORT:-18180}
 WORK=$(mktemp -d)
 ENV_FILE=$WORK/smoke.env
 # Awkward on purpose: exercises .env quoting, context.properties escaping and the JDBC login.
@@ -19,7 +21,11 @@ PW='sm0ke,p=a\ss $x #1 é:! '
 export TZ=UTC
 
 # docker/tests/compose.smoke.yaml makes Healdan seed a Store, template, client and matter to upload into.
-compose() { docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml "$@"; }
+# docker/tests/compose.signin.yaml adds a stand-in sign-in provider, Keycloak, and makes Healdan seed its setup.
+compose() {
+  docker compose -p "$PROJECT" --env-file "$ENV_FILE" -f compose.yaml -f docker/tests/compose.smoke.yaml \
+    -f docker/tests/compose.signin.yaml "$@"
+}
 # The app writes its warnings to dms.log in the repository volume, not to stdout, and step 8 replaces the container
 # but keeps the volume, so the log covers the whole run. docker cp reads it from a stopped container too.
 show_server_log() {
@@ -49,6 +55,8 @@ cleanup() {
   if [ "$status" != 0 ]; then
     echo "== the app container's last 150 lines of output"
     compose logs --no-log-prefix --tail 150 app
+    echo "== Keycloak's last 40 lines of output"
+    compose logs --no-log-prefix --tail 40 keycloak
     show_server_log
   fi
   compose down -v --remove-orphans >/dev/null 2>&1
@@ -56,7 +64,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\n" "$PW" "$PORT" > "$ENV_FILE"
+printf "DB_PASSWORD='%s'\nLOGICALDOC_PORT=%s\nSMOKE_KEYCLOAK_PORT=%s\n" "$PW" "$PORT" "$KEYCLOAK_PORT" > "$ENV_FILE"
 
 # Fixtures: a 16x16 PNG and a one-page PDF with a correct xref table.
 python3 - "$WORK" <<'PY'
@@ -101,6 +109,11 @@ LOADER=$BASE/login/login.nocache.js
 echo "== 1. build and start"
 if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -d --build; fi
 check "app healthy" wait_healthy "$(compose ps -q app)" 900
+# Keycloak starts beside the app and takes far less time, so this rarely waits.
+check "Keycloak healthy" wait_healthy "$(compose ps -q keycloak)" 300
+# Not head: under pipefail, the SIGPIPE'd compose logs would fail the line.
+kc_started=$(compose logs --no-log-prefix keycloak 2>&1 | sed -n 's/.* started in \([0-9.]*\)s\..*/\1/p' || true)
+echo "Keycloak started in ${kc_started%%$'\n'*} s"
 [ "$FAILED" = 0 ] || exit 1
 
 echo "== 2. login page and the API"
@@ -170,6 +183,8 @@ check "seed.profile and seed.everyone recorded" test \
   "$(db_query "select count(*) from hd_setting where name in ('seed.profile', 'seed.everyone')")" = 2
 check "smoke-fixture seed recorded" test \
   "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-fixture'")" = 1
+check "smoke-signin seed recorded" test \
+  "$(db_query "select count(*) from hd_setting where name = 'seed.smoke-signin'")" = 1
 # doc_ids is "<pdf id> <png id>", uploaded in that order: doc #s 1 and 2
 n=1
 for id in $doc_ids; do
@@ -242,26 +257,45 @@ api_started=$SECONDS
 check "the add-in flow through the API" env BASE="$BASE" bash docker/tests/test-api.sh
 echo "step 5c took $((SECONDS - api_started)) s"
 
-echo "== 5d. the helper's open-save-close cycle (clients/helper, StackCycleTests)"
-# Signs in through /api/v1 as admin with a device id, files a document in the Smoke Matter, and opens it, saves it twice
-# and closes it through the helper's cycle with a fake LibreOffice. It runs after 5c, whose wrong passwords block only
-# other usernames and leave this address well under the throttle's limit. Needs the .NET SDK clients/helper/global.json
-# names, so it runs only with SMOKE_HELPER_TEST=1, which CI sets.
-# dotnet test passes when no test ran, so its summary must show one passed and none skipped.
+echo "== 5d. the helper's stack tests (clients/helper: StackCycleTests, StackProviderSignInTests)"
+# StackCycleTests signs in through /api/v1 as admin with a device id, files a document in the Smoke Matter, and opens
+# it, saves it twice and closes it through the helper's cycle with a fake LibreOffice. StackProviderSignInTests signs
+# in through the stand-in Keycloak as sso-helper2, as the helper does, with a fake browser that sends Keycloak's name to
+# its host port, and checks /me names sso-helper2. It runs after 5c, whose wrong passwords block only other usernames
+# and leave this address well under the throttle's limit, and before 5e, which disables sso-helper, not sso-helper2.
+# Needs the .NET SDK clients/helper/global.json names, so it runs only with SMOKE_HELPER_TEST=1, which CI sets.
+# dotnet test passes when no test ran, so its summaries must add up to two passed and none skipped: a Stack test added
+# here changes the two.
+HELPER_STACK_TESTS=2
 helper_stack_test() {
-  local out
-  out=$(HEALDAN_STACK_URL="$BASE" dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack 2>&1) \
+  local out passed skipped
+  out=$(HEALDAN_STACK_URL="$BASE" HEALDAN_STACK_SIGNIN_PROVIDER=smoke HEALDAN_STACK_SIGNIN_USER=sso-helper2 \
+    HEALDAN_STACK_SIGNIN_PASSWORD='Smoke-Sso-Pw-42!x' HEALDAN_STACK_KEYCLOAK="127.0.0.1:$KEYCLOAK_PORT" \
+    dotnet test clients/helper/Healdan.Helper.sln --filter Category=Stack 2>&1) \
     || { tail -40 <<<"$out"; return 1; }
-  grep -E 'Passed!|Failed!' <<<"$out" || true
-  grep -Eq 'Passed: +[1-9]' <<<"$out" && grep -Eq 'Skipped: +0,' <<<"$out"
+  grep -E 'Passed!|Failed!|Skipped!' <<<"$out" || true
+  passed=$(sed -nE 's/.*Passed: +([0-9]+),.*/\1/p' <<<"$out" | awk '{ n += $1 } END { print n + 0 }')
+  skipped=$(sed -nE 's/.*Skipped: +([0-9]+),.*/\1/p' <<<"$out" | awk '{ n += $1 } END { print n + 0 }')
+  [ "$passed" = "$HELPER_STACK_TESTS" ] && [ "$skipped" = 0 ] && return 0
+  echo "  $passed passed and $skipped skipped, not $HELPER_STACK_TESTS passed and none skipped"
+  return 1
 }
 if [ "${SMOKE_HELPER_TEST:-0}" = 1 ]; then
   helper_started=$SECONDS
-  check "the helper's cycle against the stack" helper_stack_test
+  check "the helper's cycle and provider sign-in against the stack" helper_stack_test
   echo "step 5d took $((SECONDS - helper_started)) s"
 else
   echo "skipped: set SMOKE_HELPER_TEST=1 to run it"
 fi
+
+echo "== 5e. provider sign-in through the stand-in Keycloak (M4 spec section 16.1)"
+# Signs in through Keycloak as the web page does and as the helper does, with curl and a cookie jar, and checks linking
+# by email, the gate, and a person disabled at Keycloak losing their device token; its output carries its own PASS/FAIL
+# lines. Its one wrong password is sso-user's, and leaves this address well under the throttle's limit.
+signin_started=$SECONDS
+check "provider sign-in through the stand-in" env BASE="$BASE" KEYCLOAK="127.0.0.1:$KEYCLOAK_PORT" \
+  bash docker/tests/test-signin.sh
+echo "step 5e took $((SECONDS - signin_started)) s"
 
 echo "== 6. webservice schema present"
 check "ld_webservicecall exists" compose exec -T db sh -c \

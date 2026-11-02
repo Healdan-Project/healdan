@@ -77,6 +77,36 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testIssueKeepsTheProviderAndItsRefreshToken() throws Exception {
+		User jane = fx.user("jane");
+		long before = System.currentTimeMillis();
+		ApiTokens.Issued issued = tokens().issue(jane, "Helper on Mac", "mac-1", null, "fake", "v1:c2VhbGVk");
+		long after = System.currentTimeMillis();
+
+		// Read back through Hibernate, as the re-check will (spec section 9)
+		ApiToken stored = ApiTokenDAO.get().findById(issued.row().getId());
+		assertEquals("fake", stored.getProvider());
+		assertEquals("v1:c2VhbGVk", stored.getRefresh());
+		assertEquals("mac-1", stored.getDevice());
+		// The sign-in itself was the provider's say-so, so the first re-check is due an interval later
+		assertTrue(String.valueOf(stored.getChecked()), stored.getChecked().getTime() >= before - 1000
+				&& stored.getChecked().getTime() <= after + 1000);
+		assertTrue(tokens().find(issued.token()).isPresent());
+
+		// A provider that gave no refresh token
+		ApiToken noRefresh = ApiTokenDAO.get().findById(tokens().issue(jane, "Helper", null, null, "fake", null).row()
+				.getId());
+		assertEquals("fake", noRefresh.getProvider());
+		assertEquals(null, noRefresh.getRefresh());
+
+		// A password sign-in's token has neither, and no check
+		ApiToken password = ApiTokenDAO.get().findById(tokens().issue(jane, "Laptop", null).row().getId());
+		assertEquals(null, password.getProvider());
+		assertEquals(null, password.getRefresh());
+		assertEquals(null, password.getChecked());
+	}
+
+	@Test
 	public void testFind() throws Exception {
 		User clerk = fx.user("clerk");
 		ApiTokens.Issued issued = tokens().issue(clerk, "Laptop", null);
@@ -385,6 +415,60 @@ public class ApiTokensTest extends AbstractHealdanTestCase {
 			SessionManager.get().kill(two);
 			SessionManager.get().kill(bosses);
 		}
+	}
+
+	/**
+	 * A revoked token keeps no refresh token, so a copy of the database and
+	 * the secret key together hold no live one
+	 */
+	@Test
+	public void testRevokingClearsTheRefreshToken() throws Exception {
+		User jane = fx.user("jane");
+		User boss = fx.user("boss");
+		ApiToken one = tokens().issue(jane, "Helper", null, null, "fake", "v1:b25l").row();
+		ApiToken two = tokens().issue(jane, "Helper 2", null, null, "fake", "v1:dHdv").row();
+		ApiToken three = tokens().issue(jane, "Helper 3", null, null, "fake", "v1:dGhyZWU=").row();
+		ApiToken bosses = tokens().issue(boss, "Helper", null, null, "fake", "v1:Ym9zcw==").row();
+
+		tokens().revoke(one);
+		assertEquals(null, refresh(one));
+		assertEquals("v1:dHdv", refresh(two));
+
+		assertEquals(2, tokens().revokeAll(jane.getId()));
+		assertEquals(null, refresh(two));
+		assertEquals(null, refresh(three));
+		// Another account's is its own
+		assertEquals("v1:Ym9zcw==", refresh(bosses));
+		assertEquals(Optional.empty(), tokens().recheckState(two.getId()));
+	}
+
+	/**
+	 * Ruling R35: the column holds a sealed refresh token of up to 65,535
+	 * characters, where V6's held 4,000; V7 widened it
+	 */
+	@Test
+	public void testLongRefreshTokensRoundTrip() throws Exception {
+		assertEquals(65_535, ApiTokens.MAX_REFRESH);
+		User jane = fx.user("jane");
+		String sealed = "v1:" + "A".repeat(ApiTokens.MAX_REFRESH - 3);
+		ApiToken token = tokens().issue(jane, "Helper", null, null, "fake", sealed).row();
+		assertEquals(sealed, refresh(token));
+		assertEquals(sealed, ApiTokenDAO.get().findById(token.getId()).getRefresh());
+		assertEquals(sealed, tokens().recheckState(token.getId()).orElseThrow().refresh());
+
+		String next = "v1:" + "B".repeat(10_000);
+		tokens().recordRecheck(token, null, next);
+		assertEquals(next, tokens().recheckState(token.getId()).orElseThrow().refresh());
+
+		// What fits, by the sealed length
+		assertTrue(ApiTokens.refreshFits(null));
+		assertTrue(ApiTokens.refreshFits(sealed));
+		assertFalse(ApiTokens.refreshFits(sealed + "A"));
+	}
+
+	private String refresh(ApiToken token) {
+		return jdbc().queryForObject("select hd_refresh from hd_api_token where ld_id = ?", String.class,
+				token.getId());
 	}
 
 	@Test
