@@ -192,6 +192,23 @@ public class SignInProviders {
 	}
 
 	/**
+	 * Checks an id a new provider could be added under, as {@link #save} does
+	 * when it adds one. The Sign-In tab's Add calls it, so that it refuses an id
+	 * before the form is filled in, and refuses an id a provider already has
+	 * rather than change that provider.
+	 *
+	 * @param id the id, possibly null
+	 * @throws HealdanRuleException if it isn't an id, or a provider, a setting
+	 *         or a page already uses it
+	 */
+	public synchronized void checkNewId(String id) throws HealdanRuleException {
+		checkId(id);
+		if (ids().contains(id))
+			throw alreadyUsed(id);
+		checkUnused(id);
+	}
+
+	/**
 	 * Adds a provider, if no provider has its id, or else changes it. Every
 	 * value is checked before any is written, so a refusal changes nothing. A
 	 * new provider starts with no group map, whatever rows are under its id.
@@ -206,14 +223,11 @@ public class SignInProviders {
 	 */
 	public synchronized void save(SignInProvider p, String newSecret) throws PersistenceException {
 		String id = p == null ? null : p.id();
-		if (id == null || !ID.matcher(id).matches())
-			throw refuse("A provider's id can have only lower-case letters, digits and hyphens, and at most "
-					+ "32 characters.");
+		checkId(id);
 		List<String> ids = ids();
 		boolean adding = !ids.contains(id);
-		// An id is also where its settings are, and the address of the pages around the providers'
-		if (adding && (RESERVED_IDS.contains(id) || !settings.names(prefix(id)).isEmpty()))
-			throw refuse("The id '%s' is already used. Choose another.".formatted(id));
+		if (adding)
+			checkUnused(id);
 
 		String label = required(p.label(), "label", MAX_LABEL);
 		String issuer = checkIssuer(p.issuer());
@@ -347,6 +361,32 @@ public class SignInProviders {
 		// this from running between the steps of remove
 		if (id == null || !ids().contains(id))
 			throw refuse("That provider doesn't exist.");
+		List<GroupMapping> clean = checkGroups(mappings);
+
+		List<SignInGroup> rows = new ArrayList<>();
+		for (GroupMapping mapping : clean) {
+			SignInGroup row = new SignInGroup();
+			row.setValue(mapping.value());
+			row.setGroupId(mapping.groupId());
+			rows.add(row);
+		}
+		groupMaps.replace(id, rows);
+	}
+
+	/**
+	 * Checks a group map as {@link #saveGroups} does, without saving it, so a
+	 * caller that saves a provider and its map together can refuse a bad map
+	 * before it saves anything.
+	 *
+	 * @param mappings the map
+	 * @return the map as it would be saved: its values stripped, and a repeated
+	 *         row kept once
+	 * @throws PersistenceException error at data layer
+	 * @throws HealdanRuleException if the map is missing, a value is blank, too
+	 *         long or can't be stored, or a group doesn't exist or is a
+	 *         person's own group
+	 */
+	public List<GroupMapping> checkGroups(List<GroupMapping> mappings) throws PersistenceException {
 		if (mappings == null)
 			throw refuse("The group map is missing.");
 
@@ -366,15 +406,7 @@ public class SignInProviders {
 			}
 			clean.add(new GroupMapping(value, mapping.groupId()));
 		}
-
-		List<SignInGroup> rows = new ArrayList<>();
-		for (GroupMapping mapping : clean) {
-			SignInGroup row = new SignInGroup();
-			row.setValue(mapping.value());
-			row.setGroupId(mapping.groupId());
-			rows.add(row);
-		}
-		groupMaps.replace(id, rows);
+		return List.copyOf(clean);
 	}
 
 	/**
@@ -462,6 +494,22 @@ public class SignInProviders {
 
 	private static HealdanRuleException refuse(String message) {
 		return new HealdanRuleException(message);
+	}
+
+	private static void checkId(String id) throws HealdanRuleException {
+		if (id == null || !ID.matcher(id).matches())
+			throw refuse("A provider's id can have only lower-case letters, digits and hyphens, and at most "
+					+ "32 characters.");
+	}
+
+	/** An id is also where its settings are, and the address of the pages around the providers' */
+	private void checkUnused(String id) throws HealdanRuleException {
+		if (RESERVED_IDS.contains(id) || !settings.names(prefix(id)).isEmpty())
+			throw alreadyUsed(id);
+	}
+
+	private static HealdanRuleException alreadyUsed(String id) {
+		return refuse("The id '%s' is already used. Choose another.".formatted(id));
 	}
 
 	/** The ids in {@code signin.providers}, in order, leaving out any that aren't ids */
