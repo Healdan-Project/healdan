@@ -289,6 +289,8 @@ jobs:
   # Attaches the notarised disk image to the tag's GitHub release, making the release if there's none yet: only for a
   # push of a helper-v* tag, so a run by hand (even on such a tag) attaches nothing. Kept apart from package-mac so
   # only this short job, which builds nothing and sees no signing secret, can write to the repository.
+  # Only official releases stay downloadable: 1.2.3's release deletes 1.2.3-rc1's and its other pre-releases (their
+  # tags stay, as the record of what was tested), and a pre-release of a version already released isn't published.
   release-mac:
     name: Release (macOS)
     needs: package-mac
@@ -312,6 +314,11 @@ jobs:
           VERSION: ${{ needs.package-mac.outputs.version }}
         run: |
           dmg="$RUNNER_TEMP/package/Healdan-Helper-$VERSION.dmg"
+          final="${VERSION%%-*}"
+          if [ "$final" != "$VERSION" ] && gh release view "helper-v$final" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::Healdan Helper $final is released, so its pre-release $VERSION isn't published"
+            exit 1
+          fi
           if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             prerelease=()
             if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
@@ -320,3 +327,17 @@ jobs:
               "${prerelease[@]}"
           fi
           gh release upload "$TAG" "$dmg" --repo "$GITHUB_REPOSITORY" --clobber
+
+      - name: Delete the version's pre-releases
+        if: ${{ !contains(needs.package-mac.outputs.version, '-') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.package-mac.outputs.version }}
+        run: |
+          tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name')
+          for tag in $tags; do
+            if [[ "$tag" == "helper-v$VERSION-"* ]]; then
+              gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes
+              echo "Deleted the release $tag; the tag stays"
+            fi
+          done
