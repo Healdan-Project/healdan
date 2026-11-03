@@ -188,6 +188,37 @@ public class ProviderRecheckTest extends ApiTestCase {
 		assertEquals(0, deleted(token));
 	}
 
+	/*
+	 * A last check in the future, as after the clock was set back, doesn't hold
+	 * the checks off until the clock catches up: one more than a minute ahead
+	 * is due at once
+	 */
+	@Test
+	public void testCheckedInTheFutureIsDue() throws Exception {
+		String token = helperToken();
+		int asked = fake.tokenRequests();
+
+		// Within a minute, as servers' clocks may differ: not due
+		SignInTestHooks.passRecheckTime(Duration.ofSeconds(-50));
+		assertEquals(200, me(token).status());
+		assertEquals("nothing was asked of the provider", asked, fake.tokenRequests());
+
+		// The clock went back two hours: due now, not in ten
+		SignInTestHooks.passRecheckTime(Duration.ofHours(-2));
+		assertEquals(200, me(token).status());
+		assertEquals("one refresh", asked + 1, fake.tokenRequests());
+		assertEquals(0, deleted(token));
+
+		// and "checked" is now, so the next is 8 hours from now
+		assertEquals(200, me(token).status());
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(479));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 1, fake.tokenRequests());
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(2));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 2, fake.tokenRequests());
+	}
+
 	@Test
 	public void testRefusalRevokes() throws Exception {
 		String token = helperToken();
