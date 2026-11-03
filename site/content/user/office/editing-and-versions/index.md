@@ -84,8 +84,11 @@ PowerPoint), to see or change the document's properties without leaving the app.
 
 ![The Properties window for #32: a header with the document's icon, Subscription Agreement – Draft.docx, and #32 · v2.0, then Client / Matter 1003.1 – Series A Investment from the matter, with the client Kestrel Software Ltd under it, Author Helen Ashcombe, Typist Chris Doyle, Class Agreements, Subclass Draft, Comments and Legacy doc #, with Cancel and Save](properties.png)
 
+- **The header** gives the document's doc #, version and size, as in `#32 · v2.0 · 48.2 KB`.
 - **Client / Matter,** marked "from the matter", shows the matter, with its client's name under it. It can't be
   changed here.
+- **A date,** such as a filed email's Sent, is in your Mac's region's order: "Mar 3, 2026" in the US, "3 Mar 2026" in
+  the UK.
 - **Save** stores your changes in Healdan straight away. It's on once something has changed.
 - **If you may not edit the document,** the properties are shown read-only.
 - **On a document that isn't in Healdan yet,** Properties opens Save to Healdan instead.

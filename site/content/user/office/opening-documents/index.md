@@ -45,10 +45,15 @@ in the Start Center, and **Healdan › Open from Healdan…**. So does **Open fr
 - **On the right:** the selected document's details. A header names it, with its doc # and version, as in
   `#1234 · v2.1`. Its star adds the document to your Favorites, or takes it off. Two tabs sit under the header:
   - **Properties,** where each Open window starts, shows a small preview of the first page, when Healdan has made
-    one, and the document's main properties, with the matter's client under the matter.
+    one, and the document's main properties: its matter, with the matter's client under it, its folder, author,
+    typist, Class and Subclass, when it was filed and last saved, its size, and who has it checked out. A legacy
+    doc #, and a filed email's From, Subject and Sent, show when the document has them. A check-out or lock says
+    since when if it was taken after the document was last saved, so you can tell one that's been forgotten.
   - **Versions** lists the document's versions, the number of them in brackets.
 
   The tab stays as you left it while you choose other documents. Before you choose a document, the pane asks you to.
+- **Dates and times** follow your Mac's region, which you set in System Settings › General › Language & Region:
+  "Oct 12" and "10:42 AM" in the US, "12 Oct" and "10:42" in the UK.
 - **To find a document,** type in the search box: it searches documents, unless you choose another scope beside it.
   `#1234` and Enter shows document 1234, and `#1234 v2.1` selects that version. That's what the box's hint, ", or
   type #1234", means. It shows while you search documents, but a typed doc # works from any scope.
@@ -61,6 +66,9 @@ At the bottom:
 - **An older version** always opens read-only: choose **Versions** above the details, then the version in the list.
   The header then shows that version, with the warning **Older version: opens read-only**, and Open Read-Only is
   ticked for you. Choosing another document goes back to its current version.
+- **A document you may not edit** opens read-only too, because you don't have permission to edit it, or it's archived
+  or can't be changed. The header says **Opens read-only: you can't edit this document**, and Open Read-Only is
+  ticked for you.
 - **Open from Local Computer…** shows LibreOffice's own Open box, for a file on your Mac.
 
 ## Opening in Word, Excel and PowerPoint
@@ -101,7 +109,7 @@ it once.
 A document opens as a read-only copy when:
 
 - someone else has it checked out, or it's locked in the web page;
-- you may read it but not edit it;
+- you may read it but not edit it, which Open from Healdan says before you open it;
 - you ticked Open Read-Only, or chose an older version.
 
 Its title ends in "(read-only)", and a notice says why, such as "Opened read-only: Jamie Clarke has it checked out."

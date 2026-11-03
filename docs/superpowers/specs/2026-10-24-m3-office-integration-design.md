@@ -191,8 +191,8 @@ The name "Healdan Helper" is a call; the owner may rename it.
 
 - **C# on .NET, with Avalonia for its windows (owner).** .NET 10, the current long-term release, and Avalonia 12, the current one; the trial built with .NET 10 and Avalonia 12.1.4 for macOS (arm64) and Linux (x64 and arm64). The plan pins both (call).
 - **Runs in the menu bar (macOS) or the top bar's tray (Ubuntu)**, from sign-in to the computer until quit. (changed in the build: on macOS the helper registers itself as a login item, with `SMAppService`, after its first successful sign-in. It doesn't while it runs from the disk image or from where macOS runs a downloaded app until it's moved (App Translocation), and re-registers if macOS has lost it. Settings shows whether it's on. R21.)
-  - **Its menu:** who is signed in, the documents open, any saves waiting to be sent, Open from Healdan, Settings, Sign Out and Quit (call).
-  - **On macOS it stays out of the Dock,** and after each of its windows closes it hands the focus back to the app the user was in (the trial).
+  - **Its menu:** who is signed in, the documents open, any saves waiting to be sent, Open from Healdan, Settings, Sign Out and Quit (call). (changed after the build, #143: a line at the top for each window waiting for an answer, such as **Save as New Document…**, brings it up, and **Sign In…** brings an open Sign In window up rather than doing nothing.)
+  - **On macOS it stays out of the Dock,** and after each of its windows closes it hands the focus back to the app the user was in (the trial). (changed after the build, #143: **while one of its windows is open it's in the Dock and ⌘Tab,** a regular app (`setActivationPolicy:`), so a window that went behind another app's is found as any app's is. The last window to close makes it an accessory again, in the menu bar only, after handing the focus back. While it's in front, macOS shows its app menu, which is its own: About Healdan Helper, Settings… (⌘,), Hide Healdan Helper (⌘H) and Quit Healdan Helper (⌘Q), which quits as the menu bar icon's Quit does. Avalonia's own, with About Avalonia, is turned off.)
 - **One server per helper** (call). A person with two Healdan servers isn't a case M3 serves.
 - **Quiet when things work.** It speaks up only when something needs the user: a read-only open, a save waiting for the server, a check-out that moved, a crash, an error.
   - It speaks through the system's native notifications, or its own window when it needs an answer, as after a crash.
@@ -308,7 +308,7 @@ Both the check-in and the release are refused if this computer no longer holds t
 
 ### 5.8 The windows (owner: drawn by the helper)
 
-Each window is an Avalonia window that comes to the front over the app, and hands the focus back when it closes (§5.1). The mockups the owner reviewed are in [`2026-10-24-m3-mockups/`](2026-10-24-m3-mockups/README.md), with what changed after the review.
+Each window is an Avalonia window that comes to the front over the app, and hands the focus back when it closes (§5.1). (changed after the build, #143: once the user clicks another app's window, the helper's goes behind it. Modal reaches only the helper's own windows on macOS, and always on top would float Settings, or a Save left open while the user looks something up, over every app, so the windows stay at the usual level, apart from the pairing code (M3.5 spec §5.9). Instead the helper is in the Dock and ⌘Tab while one is open (§5.1), the menu has a line for each window that waits, which brings it up, and the menu bar icon shows its dot, **Waiting for Your Answer**, while one waits (polish spec §7.2).) (changed after the build: every date and time the windows show follows the computer's region, which .NET reads from macOS: "Oct 12" and "today at 10:42 AM" in the US, "12 Oct" and "today at 10:42" in the UK. A date alone, such as when a document was filed, has the month in full: "March 3, 2026", or "3 March 2026". The words around them stay English.) The mockups the owner reviewed are in [`2026-10-24-m3-mockups/`](2026-10-24-m3-mockups/README.md), with what changed after the review.
 
 **Save to Healdan** (mockup reviewed 2026-10-24, modelled on iManage's):
 
@@ -333,9 +333,11 @@ Each window is an Avalonia window that comes to the front over the app, and hand
 - **Left pane:** Recent Documents, Checked Out to Me, Favorites (folders and documents), then Recent Matters, My Matters and Recent Folders for browsing.
 - **Middle pane:** Title, Doc #, Version, Matter and Edited columns, and under the title who has the document checked out, or "checked out to you on MacBook".
 - **Right pane:** a thumbnail (§9.8), the main properties, and the version list. Picking an older version opens it read-only (call; `GET …/content?version=`).
+  - (changed after the build, #146: **the main properties** are Doc #, then Legacy doc #, Matter, Client, Folder, Author, Typist, Class, Subclass, a filed email's From, Subject and Sent, Filed, Last Saved, Size, who has the document checked out or locked, and Comments. A property has a row only when it has a value. Size is the current file's, beside the Doc # row, in 1024-byte units to one decimal place, as the web page gives it ("48.2 KB"). Filed and Sent are dates in the region's order. The check-out says since when only when it was taken after the last save (§9.10).)
+  - (changed after the build, #146: **when the user may not edit the document** (no Write permission, immutable or archived; `canEdit` false) and nobody holds it, a line under the header says "Opens read-only: you can't edit this document", Read-Only is ticked and greyed out, and the document opens read-only. A hold has its own row instead.)
 - **Bottom:** "Open from local computer", "Open read-only", Cancel, Open.
 
-**Properties:** the same form as Save's right pane, for the open document.
+**Properties:** the same form as Save's right pane, for the open document. (changed after the build, #146: the subtitle gives the file's size as Open does: `#32 · v2.0 · 48.2 KB`.)
 
 **Checked out on another computer** (mockup reviewed, §5.10).
 
@@ -565,7 +567,7 @@ The JSON part of `POST …/versions` takes two optional preconditions. The helpe
 | The footer's number comes from `version`; `ifVersion` is M3's call | The server stamps the number it stores the file as (§9.7), and `ifVersion` refuses a save that started from an older version (§9.5) |
 | Browser clients send `name` | The helper sends `name` with every save too, because the local copy's file name carries the doc # and version (§5.4) |
 | `type: date` values are instants | The helper treats a date property as a calendar date: it shows the UTC date and sends midnight UTC, so a value the helper set reads the same anywhere. The old web page's day-before display west of UTC is pre-existing and recorded in Known Limitations (call) |
-| `hold.since` moves on every save | The helper never shows "checked out since". It shows when the document was last saved, from the versions (call) |
+| `hold.since` moves on every save | The helper never shows "checked out since". It shows when the document was last saved, from the versions (call). (changed after the build, #146: Open's Properties tab says since when for a hold taken more than a minute after the last save, when `since` is the moment it was taken, so a check-out taken and forgotten shows its date. A hold kept through a save has its `since` moved to the save, which the Last Saved row already gives, so it says nothing more.) |
 | Tokens work only at `/api` | The helper uses only `/api`, so no allowance is needed anywhere else |
 
 ## 10. Security (calls)
