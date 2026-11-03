@@ -848,11 +848,10 @@ public class LDRepository {
             // Healdan addition: a document's own DELETE too (R70)
             HealdanCmisChecks.deletable(object, getSessionUser(context));
 
-            // Healdan: an alias holds nothing itself; findByParentId() lists
-            // the folder it points to
-            if (object instanceof Folder folder && folder.getType() != Folder.TYPE_ALIAS) {
+            if (object instanceof Folder folder) {
                 List<Document> docs = documentDao.findByFolder(folder.getId(), 2);
-                List<Folder> folders = folderDao.findByParentId(folder.getId());
+                // Healdan: the folder's own subfolders, not an alias's folder's
+                List<Folder> folders = HealdanCmisChecks.children(folder);
 
                 // check if it is a folder and if it is empty
                 if (!docs.isEmpty() || !folders.isEmpty())
@@ -884,7 +883,6 @@ public class LDRepository {
 
         boolean cof = continueOnFailure != null && continueOnFailure.booleanValue();
 
-        // get the document or folder
         // Healdan addition: a document's own DELETE too (R70)
         HealdanCmisChecks.deletable(object, getSessionUser(context));
 
@@ -1735,15 +1733,6 @@ public class LDRepository {
     private boolean deleteFolder(Folder folder, boolean continueOnFailure, FailedToDeleteDataImpl ftd)
             throws PersistenceException {
         boolean success = true;
-        // Healdan: an alias is deleted as itself. findChildren() lists the
-        // children of the folder it points to, so CE deleted those
-        if (folder.getType() == Folder.TYPE_ALIAS) {
-            if (delete(folder))
-                return true;
-            ftd.getIds().add(getId(folder));
-            return false;
-        }
-
         for (Document doc : documentDao.findByFolder(folder.getId(), null)) {
             if (!delete(doc)) {
                 ftd.getIds().add(getId(doc));
@@ -1754,7 +1743,9 @@ public class LDRepository {
             }
         }
 
-        for (Folder fld : folderDao.findChildren(folder.getId(), null)) {
+        // Healdan: the folder's own subfolders. findChildren() lists those of
+        // the folder an alias points to, which no check had looked at
+        for (Folder fld : HealdanCmisChecks.children(folder)) {
             if (!deleteFolder(fld, continueOnFailure, ftd)) {
                 if (!continueOnFailure) {
                     return false;

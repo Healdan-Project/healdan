@@ -143,7 +143,8 @@ public class LDRepositoryGapsTest extends AbstractCmisTestCase {
         assertNotNull(folderDao.findById(outside.getId()));
         assertNotNull(folderDao.findById(inner.getId()));
 
-        // The folder isn't empty, so deleteObject refused the alias
+        // An alias holds nothing itself, so deleteObject deletes it though its
+        // folder isn't empty
         Folder forObject = alias(Folder.DEFAULTWORKSPACEID, outside);
         asAdmin.deleteObject(null, "fld." + forObject.getId());
         assertNull(folderDao.findById(forObject.getId()));
@@ -166,6 +167,32 @@ public class LDRepositoryGapsTest extends AbstractCmisTestCase {
         assertNotNull(folderDao.findById(inner.getId()));
     }
 
+    @Test
+    public void testDeletingAPlainFolderWithAReferenceLeavesTheFolderItPointsTo() throws PersistenceException {
+        // A folder of type default can keep a reference to another, as CE's
+        // copy of an alias does, and findChildren() follows it whatever the
+        // folder's type
+        Folder outside = folder("outside", Folder.DEFAULTWORKSPACEID);
+        Folder inner = folder("inner", outside.getId());
+
+        Folder forTree = folder("forTree", Folder.DEFAULTWORKSPACEID);
+        Folder own = folder("own", forTree.getId());
+        refer(forTree, outside);
+        asAdmin.deleteTree(null, "fld." + forTree.getId(), false);
+        assertNull(folderDao.findById(forTree.getId()));
+        assertNull(folderDao.findById(own.getId()));
+        assertNotNull(folderDao.findById(outside.getId()));
+        assertNotNull(folderDao.findById(inner.getId()));
+
+        // It holds nothing itself, so deleteObject deletes it
+        Folder forObject = folder("forObject", Folder.DEFAULTWORKSPACEID);
+        refer(forObject, outside);
+        asAdmin.deleteObject(null, "fld." + forObject.getId());
+        assertNull(folderDao.findById(forObject.getId()));
+        assertNotNull(folderDao.findById(outside.getId()));
+        assertNotNull(folderDao.findById(inner.getId()));
+    }
+
     private Folder folder(String name, long parentId) throws PersistenceException {
         Folder folder = new Folder(name);
         folder.setTenantId(Tenant.DEFAULT_ID);
@@ -174,6 +201,14 @@ public class LDRepositoryGapsTest extends AbstractCmisTestCase {
 
     private Folder alias(long parentId, Folder target) throws PersistenceException {
         return folderDao.createAlias(parentId, target.getId(), adminTransaction());
+    }
+
+    /** Gives a folder of type default a reference to another, as SOAP's update can */
+    private void refer(Folder folder, Folder target) throws PersistenceException {
+        Folder stored = folderDao.findById(folder.getId(), true);
+        stored.setFoldRef(target.getId());
+        folderDao.store(stored);
+        assertEquals(Folder.TYPE_DEFAULT, folderDao.findById(folder.getId()).getType());
     }
 
     private static FolderHistory adminTransaction() throws PersistenceException {

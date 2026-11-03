@@ -3,6 +3,9 @@
 
 package com.logicaldoc.cmis;
 
+import java.util.List;
+import java.util.Map;
+
 import org.apache.chemistry.opencmis.commons.exceptions.CmisPermissionDeniedException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisStorageException;
 
@@ -11,6 +14,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.authorization.PermissionException;
@@ -82,6 +86,24 @@ final class HealdanCmisChecks {
 		} catch (NumberFormatException | PersistenceException e) {
 			return null;
 		}
+	}
+
+	/**
+	 * The subfolders stored in a folder. CE's {@code findChildren} and
+	 * {@code findByParentId} list those of the folder an alias points to, for
+	 * any folder with a reference, an alias's copy of type default among them,
+	 * so a delete walking them would delete a tree it never checked. An alias
+	 * holds nothing itself, so it gets none and is deleted as itself.
+	 *
+	 * @param folder the folder
+	 *
+	 * @return its subfolders, by name
+	 *
+	 * @throws PersistenceException error in the database
+	 */
+	static List<Folder> children(Folder folder) throws PersistenceException {
+		return FolderDAO.get().findByWhere("_entity.parentId = :parentId and _entity.id != _entity.parentId",
+				Map.of("parentId", folder.getId()), "_entity.name", null);
 	}
 
 	private static void check(Document document, User user, Permission permission) {
