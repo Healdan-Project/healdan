@@ -163,9 +163,9 @@ The arm64 runner hasn't run short, so its job doesn't.
   swap them for Free icons in the sync PR itself.
 - **Links to LogicalDOC's docs.** `.github/scripts/check-logicaldoc-doc-links.py` runs next to the icon check and
   fails `build` on any tracked file that links to docs, wiki, help or forums.logicaldoc.com, naming the file and line.
-  When a sync brings one in, point it at docs.healdan.com in the sync PR. The docs site's interim pages are checked
-  by `check-site-sources.py` instead, and the script's `ALLOWED` list holds the few exact lines Healdan leaves
-  alone, each with its reason.
+  When a sync brings one in, point it at docs.healdan.com in the sync PR. Its `ALLOWED` list holds the few exact
+  lines Healdan leaves alone, each with its reason. The docs site's pages are checked by `check-site-sources.py`
+  instead, which allows no such link.
 - **LogicalDOC's servers.** Healdan never contacts LogicalDOC. CE posted usage statistics to `stat.logicaldoc.com`
   and tested the proxy against `activation.logicaldoc.com`, and a sync can bring a call like those back.
   `.github/scripts/check-logicaldoc-hosts.py` runs after the doc-links check and fails `build` on any host, URL or

@@ -77,7 +77,7 @@ class CheckSiteSourcesTest(unittest.TestCase):
             """)
         self.assertEqual([], self.problems())
 
-    def test_logicaldoc_doc_link_outside_interim_reported(self):
+    def test_logicaldoc_doc_link_reported(self):
         self.page("admin/e.md", """
             ---
             title: Stores
@@ -87,26 +87,27 @@ class CheckSiteSourcesTest(unittest.TestCase):
         problems = self.problems()
         self.assertEqual(1, len(problems), problems)
         self.assertIn("content/admin/e.md:4:", problems[0])
-        self.assertIn("interim", problems[0])
+        self.assertIn("Healdan's own page", problems[0])
+        self.assertNotIn("interim", problems[0])
 
-    def test_interim_and_other_logicaldoc_hosts_are_fine(self):
-        self.page("admin/f.md", """
-            ---
-            title: Stores
-            ---
-            {{< interim href="https://docs.logicaldoc.com/en/installation" title="Installation Guide" >}}
-
-            Healdan is based on [LogicalDOC](https://www.logicaldoc.com). Its SOAP namespace is http://ws.logicaldoc.com.
-            """)
-        self.assertEqual([], self.problems())
-
-    def test_escaped_interim_example_is_fine(self):
-        # The Writing Docs page shows the shortcode escaped, so Hugo prints it instead of running it
+    def test_retired_interim_shortcode_allows_no_link(self):
+        # Every page is written, so the interim shortcode is gone, and neither it nor its escaped form excuses a link
         self.page("developer/writing.md", """
             ---
             title: Writing Docs
             ---
+            {{< interim href="https://docs.logicaldoc.com/en/installation" title="Installation Guide" >}}
             {{</* interim href="https://docs.logicaldoc.com/en/working-with-documents/versioning" title="Versioning" */>}}
+            """)
+        self.assertEqual(["content/developer/writing.md:4:", "content/developer/writing.md:5:"],
+                         [problem.split(" ", 1)[0] for problem in self.problems()])
+
+    def test_other_logicaldoc_hosts_are_fine(self):
+        self.page("admin/f.md", """
+            ---
+            title: Stores
+            ---
+            Healdan is based on [LogicalDOC](https://www.logicaldoc.com). Its SOAP namespace is http://ws.logicaldoc.com.
             """)
         self.assertEqual([], self.problems())
 
@@ -120,6 +121,27 @@ class CheckSiteSourcesTest(unittest.TestCase):
             https://forums.logicaldoc.com
             """)
         self.assertEqual(3, len(self.problems()))
+
+    def test_scheme_relative_link_reported(self):
+        self.page("user/j.md", """
+            ---
+            title: Versions
+            ---
+            See LogicalDOC's [Versioning](//docs.logicaldoc.com/en/working-with-documents/versioning).
+            """)
+        problems = self.problems()
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("content/user/j.md:4:", problems[0])
+
+    def test_host_named_without_a_link_is_fine(self):
+        # Writing Docs names the hosts the check refuses, as prose
+        self.page("developer/k.md", """
+            ---
+            title: Writing Docs
+            ---
+            The check fails on a link to docs, wiki, help or forums.logicaldoc.com.
+            """)
+        self.assertEqual([], self.problems())
 
     def test_clean_site_exits_zero(self):
         self.page("install/h.md", """

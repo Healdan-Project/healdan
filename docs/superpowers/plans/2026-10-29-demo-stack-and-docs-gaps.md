@@ -15,7 +15,7 @@
 
 **Spec:** [`docs/superpowers/specs/2026-10-29-demo-stack-and-docs-gaps-design.md`](../specs/2026-10-29-demo-stack-and-docs-gaps-design.md), approved by the owner on 2026-10-29. Every § below points into it. Where the two disagree, the spec wins, except for "Spec corrections and calls this plan makes".
 
-**Status:** PR 1 (Tasks 1 to 6, the demo stack) is built, not yet merged. PRs 2 to 4 are not started.
+**Status:** done. PR 1 (Tasks 1 to 6, Healdan-Project/healdan#116), PR 2 (Tasks 7 and 8, #120), PR 3 (Tasks 9 to 12, #118, which closed #56) and PR 4 (Tasks 13 and 14, #117) all merged on 2026-10-30. Task 15 is a pull request of its own, Healdan-Project/healdan#171 (Decision Log). The steps were ticked on 2026-11-03 from what merged: each task's commit, its files and the checks its pull request ran. Two kinds of step leave nothing to check, and are ticked with their task: a test run before the code that makes it pass, and Task 6 Step 5's first look at the stack by the owner, which no pull request records. The owner's second look, at PR 2's 16 images, is in #120.
 
 ## Global Constraints
 
@@ -101,7 +101,7 @@ This branch (`claude/docs-gaps-demo-seed-aa8579`) already holds the spec. PR 1 a
 **Interfaces:**
 - Produces: `DemoManifest` with nested records `GroupSpec`, `UserSpec`, `ClassSpec`, `StoreSpec`, `FolderSpec`, `SearchFolderSpec`, `TemplateSpec`, `ClientSpec`, `MatterSpec`, `Step`; `static DemoManifest read(Path file) throws IOException`. `DemoClock(LocalDate today, ZoneId zone)`, `Date at(int day, String time)`.
 
-- [ ] **Step 1: Declare Jackson.** It's already in the WAR through `logicaldoc-core`'s `geoip2`, and `logicaldoc-parent` manages its version (`${jackson.version}`, ~1500). Add to `healdan-core/pom.xml`, after the `logicaldoc-core` dependency:
+- [x] **Step 1: Declare Jackson.** It's already in the WAR through `logicaldoc-core`'s `geoip2`, and `logicaldoc-parent` manages its version (`${jackson.version}`, ~1500). Add to `healdan-core/pom.xml`, after the `logicaldoc-core` dependency:
 
 ```xml
 		<dependency>
@@ -111,7 +111,7 @@ This branch (`claude/docs-gaps-demo-seed-aa8579`) already holds the spec. PR 1 a
 		</dependency>
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `DemoManifestTest.java`:
 
@@ -240,12 +240,12 @@ public class DemoClockTest {
 }
 ```
 
-- [ ] **Step 3: Run them to make sure they fail**
+- [x] **Step 3: Run them to make sure they fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='DemoManifestTest,DemoClockTest'`
 Expected: compilation failure, `DemoManifest` and `DemoClock` not found.
 
-- [ ] **Step 4: Write `DemoManifest`**
+- [x] **Step 4: Write `DemoManifest`**
 
 ```java
 package com.logicaldoc.healdan.seed.demo;
@@ -375,7 +375,7 @@ public record DemoManifest(List<GroupSpec> groups, List<UserSpec> users, List<Cl
 }
 ```
 
-- [ ] **Step 5: Write `DemoClock`**
+- [x] **Step 5: Write `DemoClock`**
 
 ```java
 package com.logicaldoc.healdan.seed.demo;
@@ -420,12 +420,12 @@ public final class DemoClock {
 }
 ```
 
-- [ ] **Step 6: Run the tests to make sure they pass**
+- [x] **Step 6: Run the tests to make sure they pass**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='DemoManifestTest,DemoClockTest'`
 Expected: PASS, 9 tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add healdan-core/pom.xml healdan-core/src/main/java/com/logicaldoc/healdan/seed/demo healdan-core/src/test/java/com/logicaldoc/healdan/seed/demo
@@ -446,9 +446,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: nothing from Task 1.
 - Produces: `Backdater(JdbcTemplate jdbc)`, `void stamp(Date when)`, `void touch(long docId, Date when, boolean newFile)`; `EmailDates.restamp(byte[] eml, Date filed): byte[]`, with `SENT_BEFORE = Duration.ofMinutes(25)` and `RECEIVED_BEFORE = Duration.ofMinutes(5)`.
 
-- [ ] **Step 1: Check the tables and columns.** Confirm each table and date column in `Backdater.TABLES` (Step 4) against `logicaldoc-core/src/main/resources/sql/logicaldoc-core.sql` and `healdan-core/src/main/resources/healdan/db/migration/hsqldb/V1__*.sql`, and that each table's key is `ld_id`. Fix the map, not the SQL, if one differs, and note it in the decision log.
+- [x] **Step 1: Check the tables and columns.** Confirm each table and date column in `Backdater.TABLES` (Step 4) against `logicaldoc-core/src/main/resources/sql/logicaldoc-core.sql` and `healdan-core/src/main/resources/healdan/db/migration/hsqldb/V1__*.sql`, and that each table's key is `ld_id`. Fix the map, not the SQL, if one differs, and note it in the decision log.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 `BackdaterTest.java`:
 
@@ -588,12 +588,12 @@ public class EmailDatesTest {
 
 If `jakarta.mail` isn't on `healdan-core`'s test classpath, use the package `EmailFields` imports (`healdan-core/.../email/EmailFields.java`) and say so in the decision log.
 
-- [ ] **Step 3: Run them to make sure they fail**
+- [x] **Step 3: Run them to make sure they fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='BackdaterTest,EmailDatesTest'`
 Expected: compilation failure, `Backdater` and `EmailDates` not found.
 
-- [ ] **Step 4: Write `Backdater`**
+- [x] **Step 4: Write `Backdater`**
 
 ```java
 package com.logicaldoc.healdan.seed.demo;
@@ -689,7 +689,7 @@ public final class Backdater {
 }
 ```
 
-- [ ] **Step 5: Write `EmailDates`**
+- [x] **Step 5: Write `EmailDates`**
 
 ```java
 package com.logicaldoc.healdan.seed.demo;
@@ -751,12 +751,12 @@ final class EmailDates {
 }
 ```
 
-- [ ] **Step 6: Run the tests to make sure they pass**
+- [x] **Step 6: Run the tests to make sure they pass**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='BackdaterTest,EmailDatesTest'`
 Expected: PASS, 4 tests.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add healdan-core/src/main/java/com/logicaldoc/healdan/seed/demo healdan-core/src/test/java/com/logicaldoc/healdan/seed/demo
@@ -778,7 +778,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: `DemoManifest`, `DemoClock`, `Backdater` (Tasks 1–2).
 - Produces: `DemoFirm(DemoManifest manifest, String password)`, `DemoFirm build() throws Exception`, `User user(String username)`, `User admin()`, `Folder workspace(String ref)`, `Folder folder(String ref, String path)`; `DemoFixtureSeed(UnaryOperator<String> env, Supplier<LocalDate> today)`, constants `ENV`, `DIR_ENV`, `PASSWORD_ENV`. Task 4 adds the timeline call to `DemoFixtureSeed.run`.
 
-- [ ] **Step 1: Write the test manifest's structure**
+- [x] **Step 1: Write the test manifest's structure**
 
 `healdan-core/src/test/resources/demo/manifest.json`:
 
@@ -825,7 +825,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 Check `SearchFolderRule`'s validation for `days` (`healdan-core/.../searchfolder/SearchFolderRule.java`, `SearchFolderService.create`): if 14 isn't allowed, use the nearest allowed value here and in Task 5.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 `DemoFixtureSeedTest.java` (in the `seed` package, beside `SmokeFixtureSeedTest`, so it can reach the package-private constructor and `SeedRunner.ORDER`):
 
@@ -990,12 +990,12 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 
 `tempDir` is `AbstractTestCase`'s (a `File` under `target/tmp`); if it's a `Path` there, drop `.toPath()`.
 
-- [ ] **Step 3: Run it to make sure it fails**
+- [x] **Step 3: Run it to make sure it fails**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=DemoFixtureSeedTest`
 Expected: compilation failure, `DemoFixtureSeed` not found.
 
-- [ ] **Step 4: Write `DemoFirm`**
+- [x] **Step 4: Write `DemoFirm`**
 
 ```java
 package com.logicaldoc.healdan.seed.demo;
@@ -1278,7 +1278,7 @@ public final class DemoFirm {
 
 If `Permission.all()` returns something other than a `Set<Permission>`, adapt the call to `grantPermissions`; if `User.setLanguage` takes a `Locale`, pass `Locale.ENGLISH`. Record either in the decision log.
 
-- [ ] **Step 5: Write `DemoFixtureSeed`**
+- [x] **Step 5: Write `DemoFixtureSeed`**
 
 ```java
 package com.logicaldoc.healdan.seed;
@@ -1390,7 +1390,7 @@ public class DemoFixtureSeed implements SeedStep {
 }
 ```
 
-- [ ] **Step 6: Add the step to `SeedRunner.ORDER`,** last, after `smoke-fixture`:
+- [x] **Step 6: Add the step to `SeedRunner.ORDER`,** last, after `smoke-fixture`:
 
 ```java
 	static final List<String> ORDER = List.of("settings", "everyone", "profile", "templates-store", "columns",
@@ -1399,12 +1399,12 @@ public class DemoFixtureSeed implements SeedStep {
 			"apikey-counters", "profile-comments", "queue-drawing-previews", "smoke-fixture", "demo-fixture");
 ```
 
-- [ ] **Step 7: Run the test to make sure it passes**
+- [x] **Step 7: Run the test to make sure it passes**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='DemoFixtureSeedTest,SeedsTest,SmokeFixtureSeedTest'`
 Expected: PASS. If `SeedsTest` pins `ORDER` or its last step, update it to the new list.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add healdan-core/src
@@ -1449,7 +1449,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 | `ticket` | `doc` | | DOWNLOAD | `DocumentManager.createTicket`, expiring 30 days after the real today |
 | `grant` | `doc`, `to` (one username) | | SECURITY | adds a READ entry for that user's personal group to the document |
 
-- [ ] **Step 1: Write the test timeline and files**
+- [x] **Step 1: Write the test timeline and files**
 
 `files/letter.txt`: "Dear Sirs, We act for Saltmarsh Shipping Ltd in the matter of MV Northern Star. Yours faithfully, Ashcombe Reeve LLP". `files/letter-v2.txt`: the same with a second paragraph "We look forward to your reply by Friday." `files/memo.txt`: "Attendance note: call with the owners' P&I club about laytime." `files/reply.eml`:
 
@@ -1501,7 +1501,7 @@ The test manifest's `timeline`:
   ]
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Add to `DemoFixtureSeedTest` (imports: `java.time.ZoneId`, `java.util.Date`, `java.util.HashSet`, `com.logicaldoc.core.document.Document`, `DocumentDAO`, `DocumentStatus`, `com.logicaldoc.healdan.navigation.MyMatters`, `com.logicaldoc.healdan.seed.demo.DemoClock`):
 
@@ -1675,12 +1675,12 @@ public class DemoTimelineTest extends AbstractHealdanTestCase {
 
 For the last test, `DemoTimeline.file` treats a null `folder` as the workspace itself, so Healdan's filing rule is what refuses it.
 
-- [ ] **Step 3: Run them to make sure they fail**
+- [x] **Step 3: Run them to make sure they fail**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='DemoFixtureSeedTest,DemoTimelineTest'`
 Expected: compilation failure, `DemoTimeline` not found.
 
-- [ ] **Step 4: Write `DemoTimeline`**
+- [x] **Step 4: Write `DemoTimeline`**
 
 ```java
 package com.logicaldoc.healdan.seed.demo;
@@ -2079,7 +2079,7 @@ public final class DemoTimeline {
 
 Adjust to the real APIs where the compiler disagrees, keeping the behaviour: the package of `IndexingStatus`, `FileUtil.getExtension`, `Document.getStatus()`'s type, `Message.Type`. If indexing fails in the test context because it has no search engine, pass `(id, history) -> {}` as the `Indexing` in both tests, and record it in the decision log; the stack check (Task 6) then covers indexing.
 
-- [ ] **Step 5: Play the timeline in the step.** In `DemoFixtureSeed.run`, keep the firm and add the timeline after the structure's stamp:
+- [x] **Step 5: Play the timeline in the step.** In `DemoFixtureSeed.run`, keep the firm and add the timeline after the structure's stamp:
 
 ```java
 		Backdater backdater = new Backdater(jdbc);
@@ -2090,17 +2090,17 @@ Adjust to the real APIs where the compiler disagrees, keeping the behaviour: the
 		new DemoTimeline(firm, dir.resolve("files"), clock, backdater, DemoTimeline::index).run(manifest.timeline());
 ```
 
-- [ ] **Step 6: Run the tests to make sure they pass**
+- [x] **Step 6: Run the tests to make sure they pass**
 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest='DemoFixtureSeedTest,DemoTimelineTest,DemoManifestTest,DemoClockTest,BackdaterTest,EmailDatesTest'`
 Expected: PASS. Where an assertion fails because CE behaves differently from what the test assumed (for example the email's renamed file name), check the behaviour in the code, fix the test to the real behaviour, and note it in the decision log. Never weaken the date, permission or guard assertions.
 
-- [ ] **Step 7: Run all of `healdan-core`'s tests,** since the step is in `ORDER` and runs in every test that runs pending seeds (it's off without the flag):
+- [x] **Step 7: Run all of `healdan-core`'s tests,** since the step is in `ORDER` and runs in every test that runs pending seeds (it's off without the flag):
 
 Run: `mvn -B -ntp -pl healdan-core test`
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add healdan-core/src
@@ -2119,7 +2119,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Consumes: the manifest format (Task 1) and the actions (Task 4).
 - Produces: `docker/demo/manifest.json` and `docker/demo/files/`, which Task 6's overlay mounts.
 
-- [ ] **Step 1: Write the failing test** for the real manifest, in `DemoFixtureSeedTest`:
+- [x] **Step 1: Write the failing test** for the real manifest, in `DemoFixtureSeedTest`:
 
 ```java
 	@Test
@@ -2150,7 +2150,7 @@ Use the status value CE stores for `DocumentStatus.CHECKEDOUT` (its ordinal, 1, 
 Run: `mvn -B -ntp -pl healdan-core test -Dtest=DemoFixtureSeedTest#testTheRealManifest`
 Expected: FAIL, "No demo manifest at ../docker/demo/manifest.json".
 
-- [ ] **Step 2: Write `build.py`**
+- [x] **Step 2: Write `build.py`**
 
 ```python
 #!/usr/bin/env python3
@@ -2302,9 +2302,9 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 3: Try the pipeline on three documents first.** Build the image (`docker build -t healdan-demo:local .`). Write `letterhead.css` and one source of each of `.html`, `.fodt` and `.fods`, a temporary `manifest.json` naming their outputs, and run `python3 docker/demo/build.py`. Open each output in LibreOffice and look at it. If the HTML import loses the letterhead's layout badly, write letters as `.fodt` instead, and record the call in the decision log. Check `.dockerignore` keeps `docker/demo/` out of the image's context (Task 6 adds the line; add it now if the build is slow).
+- [x] **Step 3: Try the pipeline on three documents first.** Build the image (`docker build -t healdan-demo:local .`). Write `letterhead.css` and one source of each of `.html`, `.fodt` and `.fods`, a temporary `manifest.json` naming their outputs, and run `python3 docker/demo/build.py`. Open each output in LibreOffice and look at it. If the HTML import loses the letterhead's layout badly, write letters as `.fodt` instead, and record the call in the decision log. Check `.dockerignore` keeps `docker/demo/` out of the image's context (Task 6 adds the line; add it now if the build is slow).
 
-- [ ] **Step 4: Write the firm.** `docker/demo/manifest.json`'s structure, exactly:
+- [x] **Step 4: Write the firm.** `docker/demo/manifest.json`'s structure, exactly:
 
 ```json
 {
@@ -2388,7 +2388,7 @@ if __name__ == "__main__":
 
 Give each matter a one-sentence `description`. If Docs is listed and already exists, `DemoFirm` skips it (Task 3).
 
-- [ ] **Step 5: Write the documents and the timeline.** About 60 documents, over days -42 to -1, in the mix of spec §4.5:
+- [x] **Step 5: Write the documents and the timeline.** About 60 documents, over days -42 to -1, in the mix of spec §4.5:
 
 | Format | Count | Must include |
 |---|---|---|
@@ -2420,7 +2420,7 @@ Most documents go in the three busy matters (1001.1, 1002.1, 1003.1); every othe
 
 Each user acts only where their groups allow: `pnair` can't file in 998.3 or a Privileged folder, and the seed's permission check refuses it if the timeline tries. Content follows spec §6.3: invented, British English, `.example` domains, 01632 960xxx numbers.
 
-- [ ] **Step 6: Build the files and run the real-manifest test**
+- [x] **Step 6: Build the files and run the real-manifest test**
 
 ```bash
 python3 docker/demo/build.py
@@ -2429,7 +2429,7 @@ mvn -B -ntp -pl healdan-core test -Dtest=DemoFixtureSeedTest
 
 Expected: `Built 60 files` (about), then PASS.
 
-- [ ] **Step 7: Check the size and the content rules**
+- [x] **Step 7: Check the size and the content rules**
 
 ```bash
 du -sh docker/demo
@@ -2442,7 +2442,7 @@ python3 .github/scripts/check-logicaldoc-doc-links.py && python3 .github/scripts
 
 Expected: under 5 MB; the four `grep`s print nothing (every address and link ends in `.example`, no IP address, no phone number outside 01632 960xxx); both checks pass. Also search the sources for the owner's real names and hosts, which the session knows, without writing them into any file.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add docker/demo healdan-core/src/test
@@ -2460,7 +2460,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: Tasks 1–5.
 
-- [ ] **Step 1: Write the overlay**
+- [x] **Step 1: Write the overlay**
 
 `docker/demo/compose.demo.yaml`:
 
@@ -2492,7 +2492,7 @@ docker/demo
 
 Add `docker/demo/compose.demo.yaml` to `compose.yaml`'s comment listing the overlays (line 2).
 
-- [ ] **Step 2: Start the demo stack and look** (Review Focus 1–3)
+- [x] **Step 2: Start the demo stack and look** (Review Focus 1–3)
 
 ```bash
 LOGICALDOC_IMAGE=healdan-demo:local LOGICALDOC_PORT=8091 docker compose -p healdan-demo -f compose.yaml -f docker/demo/compose.demo.yaml up -d --build
@@ -2508,7 +2508,7 @@ Wait for `Running seed step demo-fixture` and the app to answer on `http://local
 
 Sign-in problems (a forced password change, missing menus) are fixed in `DemoFirm`, with a test, before going on.
 
-- [ ] **Step 3: Write the docs.** In `development-stack.md`, after "A Matter to Upload Into", a new section:
+- [x] **Step 3: Write the docs.** In `development-stack.md`, after "A Matter to Upload Into", a new section:
 
 ````markdown
 ## A Demo Firm for Screenshots
@@ -2565,7 +2565,7 @@ In `docs/ROADMAP.md:546`, add after the interim pages' sentence: "The [demo stac
 
 In the spec, set the status line to say PR 1 is built, and fold plan calls 1–6 into §5.2–§5.3 and §4.6, each marked "(changed in the plan)".
 
-- [ ] **Step 4: Run the site's checks and the docs-site tests**
+- [x] **Step 4: Run the site's checks and the docs-site tests**
 
 ```bash
 hugo --source site --gc --minify --panicOnWarning
@@ -2575,7 +2575,7 @@ python3 .github/scripts/check-site-sources.py
 
 Expected: all pass.
 
-- [ ] **Step 5: Commit, and show the owner the stack** (spec §8: the owner's first look)
+- [x] **Step 5: Commit, and show the owner the stack** (spec §8: the owner's first look)
 
 ```bash
 git add docker/demo .dockerignore compose.yaml site/content/developer CLAUDE.md docs
@@ -2598,13 +2598,13 @@ Needs PR 1 merged. A new branch from `master`. Can run alongside PRs 3 and 4.
 - Modify (replace the PNG, keep its name): `site/content/user/getting-started/signing-in/sign-in.png`, `user/getting-started/getting-around/documents-screen.png`, `user/finding-documents/searching/scopes.png`, `user/finding-documents/finding-by-doc-number/doc-number-lookup.png`, `user/documents/previews/markup.png`, `user/working-with-matters/properties/ext-properties.png`, `admin/clients-and-matters/new-matter.png`, `admin/healdan-settings/healdan-settings.png`, `admin/workspace-templates/templates-store.png`
 - Modify: each of those pages' `index.md` (alt text, and any example naming the old worlds)
 
-- [ ] **Step 1: Start the demo stack** (Task 6's command) and wait for previews.
-- [ ] **Step 2: Write the capture script** in the scratchpad (never committed): headless Chrome over its DevTools protocol, at a true 1280 × 800, light mode, signing in through the login form, navigating by clicks at fixed coordinates or by GWT's element ids, and saving a PNG per shot, cropped to the part the old screenshot showed. Sign in as `pnair` for the User Guide's shots and `sokafor` for the Admin Guide's.
-- [ ] **Step 3: Take each shot,** matching what the old one shows, with the demo firm: the Documents screen in 1001.1's Correspondence; the scope picker; a `#` lookup of a 1001.1 letter; the lease's preview with its tracked changes (1002.1); a document's Ext. Properties with Author, Typist, Class and Subclass; the New Matter dialog filled in for a new matter under 1004 by `sokafor`, not saved; Healdan Settings; the Templates Store with Litigation open.
-- [ ] **Step 4: Look at every image** at full size (Review Focus 4): no hostname, IP address, path, real name or real email; the browser's address bar isn't in the crop.
-- [ ] **Step 5: Rewrite the alt text** and any example in those pages that names the old data ("Smoke", "Smoke template", "Harbour Shipping", "Fuel Quality Claim", "Alex Morgan").
-- [ ] **Step 6: Check** with Task 6 Step 4's commands, and `grep -rnE "Smoke|Harbour Shipping|Alex Morgan" site/content --include=*.md` finds only `developer/` pages about the smoke test.
-- [ ] **Step 7: Commit:** "Retake the web app's screenshots from the demo firm".
+- [x] **Step 1: Start the demo stack** (Task 6's command) and wait for previews.
+- [x] **Step 2: Write the capture script** in the scratchpad (never committed): headless Chrome over its DevTools protocol, at a true 1280 × 800, light mode, signing in through the login form, navigating by clicks at fixed coordinates or by GWT's element ids, and saving a PNG per shot, cropped to the part the old screenshot showed. Sign in as `pnair` for the User Guide's shots and `sokafor` for the Admin Guide's.
+- [x] **Step 3: Take each shot,** matching what the old one shows, with the demo firm: the Documents screen in 1001.1's Correspondence; the scope picker; a `#` lookup of a 1001.1 letter; the lease's preview with its tracked changes (1002.1); a document's Ext. Properties with Author, Typist, Class and Subclass; the New Matter dialog filled in for a new matter under 1004 by `sokafor`, not saved; Healdan Settings; the Templates Store with Litigation open.
+- [x] **Step 4: Look at every image** at full size (Review Focus 4): no hostname, IP address, path, real name or real email; the browser's address bar isn't in the crop.
+- [x] **Step 5: Rewrite the alt text** and any example in those pages that names the old data ("Smoke", "Smoke template", "Harbour Shipping", "Fuel Quality Claim", "Alex Morgan").
+- [x] **Step 6: Check** with Task 6 Step 4's commands, and `grep -rnE "Smoke|Harbour Shipping|Alex Morgan" site/content --include=*.md` finds only `developer/` pages about the smoke test.
+- [x] **Step 7: Commit:** "Retake the web app's screenshots from the demo firm".
 
 ### Task 8: The Helper's Screenshots
 
@@ -2612,12 +2612,12 @@ Needs PR 1 merged. A new branch from `master`. Can run alongside PRs 3 and 4.
 - Modify (replace the PNG): `site/content/user/office/installing-the-helper/settings.png`, `installing-the-helper/sign-in.png`, `opening-documents/open-from-healdan.png`, `opening-documents/checked-out-on-another-computer.png`, `saving-to-healdan/save-to-healdan.png`, `editing-and-versions/properties.png`, `when-things-go-wrong/after-a-crash.png`
 - Modify: their pages' alt text and examples ("998.1 – Healdan Demo", "Healdan", "Robert Example", "Jane Smith", "MacBook"); `site/content/developer/api.md`'s examples (`jsmith`, "Jane Smith", `jane@example.org`) to demo users; `docs/superpowers/plans/2026-10-24-m3-office-integration.md`'s follow-up on the renders (mark it done)
 
-- [ ] **Step 1: Decide how the address reads `healdan.example`.** The helper shows its server's address. Ask the owner to add `127.0.0.1 healdan.example` to the Mac's `/etc/hosts` for the session, and sign the helper in to `http://healdan.example:8091`, if the helper accepts plain HTTP for it; otherwise crop the address out of Settings. Ask the owner too what the Mac's computer name shows as in "checked out to you on …", and use a neutral name or crop it.
-- [ ] **Step 2: Take the shots.** Sign the helper in as `pnair`. If this session has computer use, take them with it (window captures, light mode); otherwise give the owner a numbered shot list naming each window, its state and the demo document to use, and wait for the files. For "checked out on another computer", `jclarke`'s checked-out document from the timeline is the one. For After a Crash, follow the When Things Go Wrong page's own steps to cause it.
-- [ ] **Step 3: Look at every image** (Review Focus 4), as Task 7 Step 4.
-- [ ] **Step 4: Rewrite alt text and examples,** then the API page's examples, keeping their JSON valid against `openapi.yaml`'s shapes.
-- [ ] **Step 5: Check** with Task 6 Step 4's commands, and `grep -rnE "Healdan Demo|Robert Example|Jane Smith|jsmith|MacBook" site/content` finds nothing.
-- [ ] **Step 6: Commit:** "Retake the helper's screenshots from the demo firm". Show the owner the 16 images before the PR merges (spec §8: the second look).
+- [x] **Step 1: Decide how the address reads `healdan.example`.** The helper shows its server's address. Ask the owner to add `127.0.0.1 healdan.example` to the Mac's `/etc/hosts` for the session, and sign the helper in to `http://healdan.example:8091`, if the helper accepts plain HTTP for it; otherwise crop the address out of Settings. Ask the owner too what the Mac's computer name shows as in "checked out to you on …", and use a neutral name or crop it.
+- [x] **Step 2: Take the shots.** Sign the helper in as `pnair`. If this session has computer use, take them with it (window captures, light mode); otherwise give the owner a numbered shot list naming each window, its state and the demo document to use, and wait for the files. For "checked out on another computer", `jclarke`'s checked-out document from the timeline is the one. For After a Crash, follow the When Things Go Wrong page's own steps to cause it.
+- [x] **Step 3: Look at every image** (Review Focus 4), as Task 7 Step 4.
+- [x] **Step 4: Rewrite alt text and examples,** then the API page's examples, keeping their JSON valid against `openapi.yaml`'s shapes.
+- [x] **Step 5: Check** with Task 6 Step 4's commands, and `grep -rnE "Healdan Demo|Robert Example|Jane Smith|jsmith|MacBook" site/content` finds nothing.
+- [x] **Step 6: Commit:** "Retake the helper's screenshots from the demo firm". Show the owner the 16 images before the PR merges (spec §8: the second look).
 
 ---
 
@@ -2641,7 +2641,7 @@ Needs PR 1 merged. A new branch from `master`. Can run alongside PRs 2 and 4.
 - Delete: `site/content/user/documents/dropbox.md`
 - Modify: `site/content/user/documents/downloading-documents.md` (front matter `aliases: [/user/documents/dropbox/]`; Task 10 writes the page)
 
-- [ ] **Step 1: Write the failing test.** The GUI takes the session's menus from `MenuDAO.findMenuIdByUserId(userId, true)` (`SecurityServiceImpl.java:243`). For an admin, `HibernateMenuDAO` returns every menu (~77, ~279, ~444), whatever `ld_menu_acl` says, so withdrawing the ACL alone wouldn't hide Dropbox from admins. The step also marks the menu deleted, which every menu query leaves out. The test database doesn't load `logicaldoc-dropbox.sql`, so the test inserts its rows first.
+- [x] **Step 1: Write the failing test.** The GUI takes the session's menus from `MenuDAO.findMenuIdByUserId(userId, true)` (`SecurityServiceImpl.java:243`). For an admin, `HibernateMenuDAO` returns every menu (~77, ~279, ~444), whatever `ld_menu_acl` says, so withdrawing the ACL alone wouldn't hide Dropbox from admins. The step also marks the menu deleted, which every menu query leaves out. The test database doesn't load `logicaldoc-dropbox.sql`, so the test inserts its rows first.
 
 `HideDropboxSeedTest.java`:
 
@@ -2725,8 +2725,8 @@ public class HideDropboxSeedTest extends AbstractHealdanTestCase {
 }
 ```
 
-- [ ] **Step 2: Run it to make sure it fails.** `mvn -B -ntp -pl healdan-core test -Dtest=HideDropboxSeedTest`. Expected: compilation failure, `HideDropboxSeed` not found.
-- [ ] **Step 3: Write the step,** and add `hide-dropbox` to `SeedRunner.ORDER` before `smoke-fixture`:
+- [x] **Step 2: Run it to make sure it fails.** `mvn -B -ntp -pl healdan-core test -Dtest=HideDropboxSeedTest`. Expected: compilation failure, `HideDropboxSeed` not found.
+- [x] **Step 3: Write the step,** and add `hide-dropbox` to `SeedRunner.ORDER` before `smoke-fixture`:
 
 ```java
 package com.logicaldoc.healdan.seed;
@@ -2765,10 +2765,10 @@ public class HideDropboxSeed implements SeedStep {
 ```
 
 If the admin still sees the menu, read `HibernateMenuDAO.findMenuIdByUserIdAndPermission` for what it filters on, add that, and record it in the decision log. Menus are cached in the second-level cache: if the test still sees the menu after the update, evict it (`MenuDAO`'s or the session factory's cache) and say so in the step's Javadoc.
-- [ ] **Step 4: Run the test, and `healdan-core`'s whole suite.** Expected: PASS.
-- [ ] **Step 5: Check on the demo stack** (rebuilt): Dropbox doesn't show for `pnair` or `sokafor`.
-- [ ] **Step 6: Delete `dropbox.md`,** and give `downloading-documents.md` the alias. `hugo --source site --panicOnWarning` and `check-site-links.py` must pass with the alias page.
-- [ ] **Step 7: Commit:** "Hide Dropbox, which Healdan doesn't support".
+- [x] **Step 4: Run the test, and `healdan-core`'s whole suite.** Expected: PASS.
+- [x] **Step 5: Check on the demo stack** (rebuilt): Dropbox doesn't show for `pnair` or `sokafor`.
+- [x] **Step 6: Delete `dropbox.md`,** and give `downloading-documents.md` the alias. `hugo --source site --panicOnWarning` and `check-site-links.py` must pass with the alias page.
+- [x] **Step 7: Commit:** "Hide Dropbox, which Healdan doesn't support".
 
 ### Task 10: Copying, Moving and Deleting; the Trash; History; Downloading
 
@@ -2787,8 +2787,8 @@ If the admin still sees the menu, read `HibernateMenuDAO.findMenuIdByUserIdAndPe
 
 **Screenshots:** the right-click menu on a 1001.1 document; the trash with the demo's deleted items; a History tab with several events.
 
-- [ ] **Step 1–5:** as "How each page task runs".
-- [ ] **Step 6: Commit:** "Write the Copying, Trash, History and Downloading pages".
+- [x] **Step 1–5:** as "How each page task runs".
+- [x] **Step 6: Commit:** "Write the Copying, Trash, History and Downloading pages".
 
 ### Task 11: Links, Locking, Notes, Tags, Sharing and Aliases
 
@@ -2808,8 +2808,8 @@ If the admin still sees the menu, read `HibernateMenuDAO.findMenuIdByUserIdAndPe
 
 **Screenshots:** the Links tab with the letter and its reply; the Notes tab; a ticket's dialog with its link (check the link shows `localhost:8091`; crop it or note it, never a real host).
 
-- [ ] **Step 1–5:** as "How each page task runs".
-- [ ] **Step 6: Commit:** "Write the Links, Locking, Notes, Tags, Sharing and Aliases pages".
+- [x] **Step 1–5:** as "How each page task runs".
+- [x] **Step 6: Commit:** "Write the Links, Locking, Notes, Tags, Sharing and Aliases pages".
 
 ### Task 12: Messages, and Your Profile and Password
 
@@ -2823,8 +2823,8 @@ If the admin still sees the menu, read `HibernateMenuDAO.findMenuIdByUserIdAndPe
 
 **Screenshots:** the Dashboard's Messages with the demo's messages, signed in as `pnair`; the change-password dialog.
 
-- [ ] **Step 1–5:** as "How each page task runs". Remove `test_site_build.py`'s use of an interim User page here only if this task makes it fail.
-- [ ] **Step 6: Commit:** "Write the Messages and Profile pages".
+- [x] **Step 1–5:** as "How each page task runs". Remove `test_site_build.py`'s use of an interim User page here only if this task makes it fail.
+- [x] **Step 6: Commit:** "Write the Messages and Profile pages".
 
 ---
 
@@ -2848,8 +2848,8 @@ Needs PR 1 merged. A new branch from `master`. Can run alongside PRs 2 and 3. Si
 
 **Screenshots:** the profile template's attributes; the Reports menu with one report open.
 
-- [ ] **Step 1–5:** as "How each page task runs".
-- [ ] **Step 6: Commit:** "Write the Interface, Email, Property Templates and Reports pages".
+- [x] **Step 1–5:** as "How each page task runs".
+- [x] **Step 6: Commit:** "Write the Interface, Email, Property Templates and Reports pages".
 
 ### Task 14: Scheduled Tasks, Search and Indexing, System Information, and WebDAV, CMIS and Web Services
 
@@ -2867,9 +2867,9 @@ Needs PR 1 merged. A new branch from `master`. Can run alongside PRs 2 and 3. Si
 
 **Screenshots:** the Scheduled Tasks list; the Search and Indexing screen.
 
-- [ ] **Step 1: Point `test_interim_box_renders` at a page that's still interim,** or, if none is left after PR 3, leave it to Task 15. Run `python3 -m unittest discover -s .github/scripts/tests -v` after each page.
-- [ ] **Step 2–6:** as "How each page task runs".
-- [ ] **Step 7: Commit:** "Write the Scheduled Tasks, Search, System and Protocols pages".
+- [x] **Step 1: Point `test_interim_box_renders` at a page that's still interim,** or, if none is left after PR 3, leave it to Task 15. Run `python3 -m unittest discover -s .github/scripts/tests -v` after each page.
+- [x] **Step 2–6:** as "How each page task runs".
+- [x] **Step 7: Commit:** "Write the Scheduled Tasks, Search, System and Protocols pages".
 
 ### Task 15: Retire the Interim Shortcode
 
@@ -2888,10 +2888,10 @@ Runs in whichever of PR 3 and PR 4 merges last (spec §8). Before starting, `gre
 - Modify: `docs/ROADMAP.md:546` (the docs site has no interim pages left; #56 closed)
 - Modify: the spec's status line
 
-- [ ] **Step 1: Change the tests first** (`test_check_site_sources.py`, `test_site_build.py`) to expect no interim support, and run them: `python3 -m unittest discover -s .github/scripts/tests -v`. Expected: FAIL where the scripts still allow the shortcode.
-- [ ] **Step 2: Make the changes** in the files above.
-- [ ] **Step 3: Run everything:** the unittest discovery, the strict Hugo build, `check-site-sources.py`, `check-site-links.py` on the built site, `check-logicaldoc-doc-links.py` and `check-logicaldoc-hosts.py`. Expected: all pass, and `grep -rn "interim" site .github CLAUDE.md` finds only unrelated words.
-- [ ] **Step 4: Commit:** "Retire the docs site's interim pages" with "Closes #56." in the body, so the PR closes the issue when it merges.
+- [x] **Step 1: Change the tests first** (`test_check_site_sources.py`, `test_site_build.py`) to expect no interim support, and run them: `python3 -m unittest discover -s .github/scripts/tests -v`. Expected: FAIL where the scripts still allow the shortcode.
+- [x] **Step 2: Make the changes** in the files above.
+- [x] **Step 3: Run everything:** the unittest discovery, the strict Hugo build, `check-site-sources.py`, `check-site-links.py` on the built site, `check-logicaldoc-doc-links.py` and `check-logicaldoc-hosts.py`. Expected: all pass, and `grep -rn "interim" site .github CLAUDE.md` finds only unrelated words.
+- [x] **Step 4: Commit:** "Retire the docs site's interim pages" with "Closes #56." in the body, so the PR closes the issue when it merges.
 
 ---
 
@@ -2928,6 +2928,14 @@ Runs in whichever of PR 3 and PR 4 merges last (spec §8). Before starting, `gre
 | 2026-10-30 | 13, 14 | The pages say where the stack and the code's defaults differ: WebDAV's Use cache is on (`WebDAVPlugin.install` sets it), Max Text shows 0 (no limit) where `context.properties` has -1, and turning a protocol off takes effect at once though the screen asks for a restart. | The stack wins. CMIS answered 302 as soon as it was saved off, and 200 again once it was saved on. |
 | 2026-10-30 | 14 | WebDAV, CMIS and Web Services says recording web service calls needs **Save API calls** on the Default run level as well as **Record calls**. | `WebserviceInterceptor.recordWebserviceCall` checks both, and the Default run level has the aspect off. |
 | 2026-10-30 | 14 | System Information warns that the Environment tab shows the database password. | The tab lists the container's environment, `DB_PASSWORD` among it, in plain text. |
+| 2026-10-30 | 7, 8 | The demo overlay runs the app and the database in `Europe/London`, and Writing Docs says to start headless Chrome and the helper with `TZ=Europe/London`. | In UTC a 09:00 step showed as 10:00 during British Summer Time, and the browser pane showed the Mac's own zone. |
+| 2026-10-30 | 7 | The screenshot stack first started on 2026-10-30, a day after the date the letters assume, so every printed date a picture shows was checked against its filing. | The only one, the letter of 23 September, was filed on 24 September, which reads naturally. |
+| 2026-10-30 | 8 | Six of the helper's pictures were taken with Avalonia's Developer Tools (`avdt mcp`), from the helper run from source and signed in to the demo stack as `pnair`, not with computer use or a shot list (Step 2, spec §7). `AvaloniaUI.DiagnosticsSupport` was in a local build only, and the channel's routes opened the windows. | The tools find, click, type in and capture each window, so neither was needed. Nothing of them is committed. |
+| 2026-10-30 | 8 | Settings is the owner's installed helper, cropped below its Server group. | A helper run from source shows "Not in This Build" for Start at Sign-In and the extension, and the Server group named a real server. |
+| 2026-10-30 | 8 | The two pictures that name a computer say "Office PC": a device `pnair` signed in through the API, with #54 checked out on it. | Step 1's neutral name. |
+| 2026-10-30 | 14 | `test_interim_box_renders` was dropped, not pointed at another page or left to Task 15 (Step 1). | With PR 3's pages on master no page held the shortcode, so it had nothing to render. |
+| 2026-11-03 | 15 | Task 15 is a pull request of its own (#171), after PRs 2 to 4 had merged, and its commit refers to #56 instead of closing it. | #118 closed #56 on 2026-10-30, once no page held the shortcode. |
+| 2026-11-03 | 15 | `test_site_build.py`'s launch-page tests check each page's title, and a new test checks that no built page or stylesheet holds the shortcode's box or links to LogicalDOC's docs, with `check-site-sources.py`'s pattern. That pattern now also matches a scheme-relative link (`//docs.logicaldoc.com/…`). Writing Docs' rule against copying LogicalDOC's docs also says not to link to them. | Without the shortcode, `healdan-interim` can't mark a page as unwritten, and the title is what the other written-page tests check. With no exception left, the site's check should catch every working link. The deleted Pages Not Written Yet section was the only place Writing Docs said the site may not link to LogicalDOC's docs. |
 
 ## Follow-Ups
 
@@ -2935,10 +2943,10 @@ Left by the final review of PR 1, for the pull request that can use each. The le
 
 ### PR 2: Screenshots
 
-- **Time zone.** Run headless Chrome in the time zone `Europe/London` (for example with `Emulation.setTimezoneOverride`). The browser pane showed times in the Mac's zone, so a screenshot taken there shows other times than the stack's.
-- **Printed dates.** The letters print dates that assume a first start on 2026-10-29. On a stack first started after midnight UTC on the 30th they are a day off, and they drift further for each later build. Build the screenshot stack on the day the files assume, or check each printed date against its filing before a screenshot shows it.
-- **The lease, before `previews/markup.png`.** The engrossment, the counterpart and the draft never grant parking spaces 7 and 8 or attach the lease plan that the correspondence promises. The inserted clause 6.2's number sits outside its tracked insertion. Fix both in the sources and rebuild.
-- **The Saltmarsh settlement letter** should be marked "Without prejudice save as to costs".
+- ~~**Time zone.** Run headless Chrome in the time zone `Europe/London` (for example with `Emulation.setTimezoneOverride`). The browser pane showed times in the Mac's zone, so a screenshot taken there shows other times than the stack's.~~ Done in #120 (Decision Log).
+- ~~**Printed dates.** The letters print dates that assume a first start on 2026-10-29. On a stack first started after midnight UTC on the 30th they are a day off, and they drift further for each later build. Build the screenshot stack on the day the files assume, or check each printed date against its filing before a screenshot shows it.~~ Checked in #120 (Decision Log).
+- ~~**The lease, before `previews/markup.png`.** The engrossment, the counterpart and the draft never grant parking spaces 7 and 8 or attach the lease plan that the correspondence promises. The inserted clause 6.2's number sits outside its tracked insertion. Fix both in the sources and rebuild.~~ Done in #120.
+- ~~**The Saltmarsh settlement letter** should be marked "Without prejudice save as to costs".~~ Done in #120, and the particulars of claim no longer plead its offer.
 - **Other content polish,** only where a screenshot shows it: the costs schedule's grade for Priya and its counsel timing; "pilot station" against "harbour" in 1001.1; the 14:22 quote in `brightwell-client-reply.eml`; the licence terms' cl 5.3 against the 5.5 table.
 
 ### Dates the demo leaves at today (PRs 2 to 4: keep them out of a screenshot)
