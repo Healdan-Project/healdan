@@ -114,7 +114,7 @@ password. The **Sign-In** tab, beside Healdan's settings, sets providers up. Cha
 restart. If a change stops people signing in, `admin` signs in with its password and puts it right: see
 [`admin`, the Emergency Account](#admin-the-emergency-account). The Install manual's
 [Sign-In Providers](../../install/sign-in/) has what to plan for, and the steps at the provider for Microsoft Entra
-ID, Authentik and others.
+ID, Authentik and others. Entra ID's is experimental, as it hasn't been tried against a real Entra tenant yet.
 
 ### The Sign-In Tab
 

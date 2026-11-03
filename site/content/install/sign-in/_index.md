@@ -7,7 +7,8 @@ Healdan can sign people in through a service your firm already signs them in wit
 Authentik, so they need no Healdan password. This section is for whoever runs the server. It says how that works,
 what to plan for, and how to set up [Microsoft Entra ID](entra-id/), [Authentik](authentik/) and
 [any other OpenID Connect provider](other-providers/). The settings are in Healdan Settings' **Sign-In** tab, which
-the Admin Guide describes under [Sign-In Providers](../../admin/healdan-settings/#sign-in-providers).
+the Admin Guide describes under [Sign-In Providers](../../admin/healdan-settings/#sign-in-providers). Entra ID's
+setup is experimental, as it hasn't been tried against a real Entra tenant yet.
 
 {{< callout type="info" >}}
 Provider accounts need Healdan Helper 0.6.0 or later. An earlier helper can only ask for a password, and a provider
