@@ -191,7 +191,7 @@ own:
    refuses every sign-in, telling people their account doesn't give them access to Healdan.
 
    The mapping sends `given_name` and `family_name` only for a person who has both attributes. For everyone else it
-   leaves `given_name` out, and Healdan splits `name`.
+   sends neither, not the whole name as `given_name`, and Healdan splits `name`.
 4. Open the provider, and in **Scopes**, take out the default profile mapping and add yours. Authentik runs every
    mapping in the list for the scope, in no set order, so with both there the default one could send the whole name
    over yours.
