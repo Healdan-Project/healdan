@@ -13,11 +13,13 @@
     through `psql`;
   - Healdan's Flyway scripts through Flyway 13.10.3, configured as `HealdanMigrator` configures it;
   - a small Hibernate 7.4.4.Final probe with one entity mapped the way CE maps its entities;
+  - every native statement in Healdan's Java, through Spring's `JdbcTemplate` and a copy of CE's
+    `NamedParameterStatement` (§4);
   - MariaDB 10.11.14 (Ubuntu's package; the stack runs 11.4) holding CE's `.mariadb` schema and Healdan's tables, and
     pgloader 3.6.10, for the data move.
 - **What wasn't.** Healdan itself never ran on PostgreSQL. The full Maven build needs `maven.healdan.com`, which this
   container couldn't reach, so no Healdan test, smoke test or Docker image ran against PostgreSQL. Each finding says
-  how it was checked; where it says *read*, it comes from the code alone.
+  whether it was run or read from the code.
 
 ## 1. Summary
 
@@ -33,7 +35,11 @@
 3. **Healdan's Flyway scripts need four kinds of change** (the table options, `datetime`, one inline index and one
    `modify`). Translated, all seven apply on 16 and 18. Flyway needs its `flyway-database-postgresql` module, which
    Healdan doesn't ship, and `HealdanMigrator` refuses PostgreSQL by name (§3).
-4. **Healdan's own SQL in Java:** see §4.
+4. **Healdan's own SQL in Java is nearly all portable.** All 175 runs of its native statements on PostgreSQL, with
+   the Java types the code binds, passed. What fails is the recovery SQL in `HealdanMigrator`'s message and one HQL
+   query, on the boolean issue. One insert relies on carrying on after a duplicate key, which PostgreSQL doesn't allow
+   inside a transaction. The rest are behaviour differences: trailing spaces, the order of NULLs, `lower()` and
+   sorting under the database's locale, and timestamp precision (§4).
 5. **The container is MariaDB throughout:** `DockerInit` and `ConfigPlan` hard-code its driver, URL, port, dialect
    and the SQLSTATE they read a missing table by, and `compose.yaml`, the backup and restore steps, six test scripts
    and twelve docs pages name MariaDB (§5).
@@ -105,10 +111,12 @@ Comparing the two schemas column by column (`information_schema.columns` on each
   both. Sorting isn't the same: `utf8_bin` sorts by code point, as PostgreSQL's `C` collation does, while the
   `postgres` image creates its databases in `en_US.utf8`, which sorts as a dictionary does (checked on 18.6):
 
-  | Collation | `order by` of apple, Banana, banana, Zebra, éclair |
-  |---|---|
-  | MariaDB `utf8_bin`, PostgreSQL `C` | Banana Zebra apple banana éclair |
-  | PostgreSQL `en_US.utf8` (the image's default) | apple banana Banana éclair Zebra |
+  | Collation | `order by` of apple, Banana, banana, Zebra, éclair | `lower('École ÆØÅ')` |
+  |---|---|---|
+  | MariaDB `utf8_bin` | Banana Zebra apple banana éclair | école æøå |
+  | PostgreSQL `C` | Banana Zebra apple banana éclair | École ÆØÅ (only ASCII is lowered) |
+  | PostgreSQL `C.UTF-8` (glibc), and 18's built-in `pg_c_utf8` | Banana Zebra apple banana éclair | école æøå |
+  | PostgreSQL `en_US.utf8` (the image's default) | apple banana Banana éclair Zebra | école æøå |
 
 ### 2.4 PostgreSQL in CE's Java
 
@@ -253,7 +261,94 @@ the other six differ (§5.8).
 
 ## 4. Healdan's SQL in Java
 
-(The audit of `healdan-core` and `healdan-api` is still running; its findings go here.)
+48 of the 236 source files in `healdan-core/src/main/java` and `healdan-api/src/main/java` send SQL. Each native
+statement was copied into a harness and run on the combined schema of §2 and §3 (CE's generic tables and the
+translated `hd_` tables) with the Java types the code binds. The harness used Spring's `JdbcTemplate`, a copy of
+CE's `NamedParameterStatement` and its typed reads, and raw JDBC where the code uses it. Writes ran in transactions
+that were rolled back. The same statements ran on MariaDB for comparison. HQL was run through Hibernate 7.4.4 where
+it looked database-sensitive, and read otherwise. A delegated audit did this; the findings below marked *checked*
+were then reproduced by hand.
+
+### 4.1 What Fails
+
+| Where | What | On PostgreSQL | Smallest fix |
+|---|---|---|---|
+| `healdan-core/.../db/HealdanMigrator.java:159-176`, `healdan-core/pom.xml:22-36` | the product check and Flyway's modules | §3.3: refused, then "No Flyway database plugin found" | a `postgresql` branch and folder, and `flyway-database-postgresql` |
+| `healdan-core/.../db/HealdanMigrator.java:51-53` | the recovery SQL in the message, `success = 0` | `operator does not exist: boolean = integer` (*checked*) | `success = false`, which works on both: MariaDB's column is `tinyint(1)` |
+| `healdan-api/.../api/UserResource.java:50-58` | HQL `_entity.enabled = :enabled` bound to `Boolean.TRUE`, on CE's `User.enabled` | `operator does not exist: integer = boolean`. No HQL spelling avoids it: `= true` fails the same way, a bare `_entity.enabled` gives `argument of WHERE must be type boolean, not type integer`, and `= 1` fails in Hibernate | §2.5's Hibernate setting, with which it passes. The rest of the query is portable: Hibernate renders `concat` as `||` and the limit as `fetch first ? rows only` |
+
+Every native statement in the code passed: 175 runs, including `DocNumberCounter`'s `select … for update`
+on a kept connection, `limit ?` and `limit … offset …`, `escape '!'` and `insert … select` with parameters.
+
+### 4.2 A Failed Statement Ends the Transaction
+
+On PostgreSQL an error inside a transaction aborts it: every later statement fails with `25P02: current transaction
+is aborted, commands ignored until end of transaction block`, and a commit rolls everything back. MariaDB carries on
+(*checked*: after a duplicate key inside a transaction, MariaDB still held the first row, and PostgreSQL refused the
+next `select`).
+
+- **`PreviewJobs.add`** (`healdan-core/.../preview/PreviewJobs.java:70-78`) inserts a job and catches
+  `DuplicateKeyException` as "Already queued". Spring maps PostgreSQL's `23505` to the same exception, so the catch
+  still fires, but if a transaction surrounds the call, that transaction is lost. Outside one it's harmless.
+  `OfficeThumbnailBuilder.queue` (`:80-84`) expects duplicates. It's reached from `ThumbnailServlet`,
+  `DocumentServiceImpl` and the SOAP document service, which the audit believes run without a Spring transaction.
+  `PreviewDocumentListener.afterFileStore` (`:47-54`) runs in its caller's transaction, such as `MatterService.create`'s,
+  where the document ids are new. No path was found that is both inside a transaction and meets an existing row.
+  The portable fix is `insert … select … where not exists (…)`, which passed on both databases (HSQLDB not tried).
+  PostgreSQL's own is `on conflict (hd_docid, hd_fileversion) do nothing`.
+- **`TokenUserListener`** (`healdan-core/.../token/TokenUserListener.java:42-61`) and **`PreviewDocumentListener`**
+  (`:47-68`) log and swallow a failure inside CE's transactional user and document saves. Every statement they run
+  passed. Only an unexpected failure would now cost the whole save on PostgreSQL, where MariaDB carries on.
+- Not affected: `ProviderRecheck` and `SignInAccounts` run their own transactions or retry whole ones, and
+  `CheckoutResource`'s retries are on Hibernate's stale-row exceptions, outside any transaction.
+
+### 4.3 What Behaves Differently
+
+- **Trailing spaces.** MariaDB's `utf8_bin` ignores trailing spaces in `=`, and PostgreSQL doesn't (*checked*:
+  `ld_name = 'admin '` finds the group on MariaDB and nothing on PostgreSQL). Unique indexes follow the same rule.
+  Healdan compares text that may arrive untrimmed in `LegacyDocNumbers.java:27-28`, `StoredRows.java:266`,
+  `SearchFolderService.java:343-344`, `MatterService.java:409`, `PermissionRules.java:887`,
+  `HealdanSettings.java:84`, `:95`, `:106`, `HibernateSignInIdentityDAO.java:36` and `SignInAccounts.java:246`, `:694`.
+- **NULLs in `order by`.** PostgreSQL sorts NULLs last when ascending and first when descending, and MariaDB does
+  the opposite (*checked*). The nullable keys are `UserResource.java:58` (first name, name), `_entity.date desc` with
+  one row in `DeviceHolds.java:305`, `ApiViews.java:221` and `DocumentResource.java:479`, where a NULL date would
+  become the latest, and `VersionResource.java:121`. CE fills those fields when it creates the rows, so it's latent.
+  Adding `nulls last` or `nulls first` makes them the same.
+- **`lower()` and sorting follow the database's locale** (§2.3). `lower()` serves the case-insensitive searches in
+  `MatterSearch.java:117`, `ClientSearch.java:23`, `CommentsMatch.java:77`, `SearchFolderService.java:315-316`,
+  `SignInAccounts.java:246`, `:694`, `UserResource.java:51-53` and the seeds. Text sorts in `HealdanSettings.java:116`,
+  `HibernateSignInIdentityDAO.java:49`, `HibernateSignInGroupDAO.java:32` and `UserResource.java:58`.
+- **Timestamps keep milliseconds** on PostgreSQL where MariaDB's `datetime` drops them: `hd_api_token.hd_lastused`
+  came back 123 ms apart. `VersionResource.java:117`'s comment assumes ties within a second. Nothing failed.
+- **Isolation.** PostgreSQL's default is `READ COMMITTED` and MariaDB's `REPEATABLE READ`. Nothing in `context.xml` or
+  `context.properties` sets it. The audit found no Healdan statement that needs a repeatable snapshot, but didn't
+  prove it.
+- **Rows without an `order by`** come back in another order (`Propagation.java:304`, `AclMath.java:92`,
+  `PermissionRules.java:735`, `:897`, `StoredProfile.java:58`). Each result goes into a map or set, so nothing changes.
+
+### 4.4 The Same on Both
+
+- **Update counts.** The MariaDB URL (`ConfigPlan.java:96`) doesn't set `useAffectedRows`, so MariaDB's driver
+  reports matched rows, as PostgreSQL does. An update to the same value returned 1 on both. Code that reads the count
+  (`HealdanSettings`, `SearchFolderRuleDAO`, `Propagation`, `PreviewJobs`, `ConversionPages`, `DocNumberCounter`,
+  `ApiTokens`) behaves the same.
+- **No SQLSTATE or vendor error code** is read anywhere in Healdan's Java, and pgjdbc sets the session's time zone to
+  the JVM's.
+- **None of the usual MariaDB-isms** is in Healdan's native SQL: no sequences, `ON DUPLICATE KEY`, `INSERT IGNORE`,
+  `REPLACE`, backticks, double-quoted strings, `LIMIT a, b`, `IFNULL`, `IF()`, date arithmetic, `length()`, integer
+  division, or `GROUP BY` and `DISTINCT … ORDER BY` that PostgreSQL would refuse.
+
+### 4.5 Traps for New Code
+
+- **CE's typed reads are stricter on PostgreSQL.** CE's helpers read with `ResultSet.getObject(1, type)`, and pgjdbc
+  refuses a `Long` from an `int` column (`conversion to class java.lang.Long from int4 not supported`) and an
+  `Integer` from `count(*)`, which is `bigint`. MariaDB's driver converts both. Every current call asks for the right
+  type.
+- **`::` casts.** CE's `NamedParameterStatement` would read PostgreSQL's `x::text` as a parameter named `text`, so
+  SQL given to CE's helpers needs `cast(x as text)`.
+
+Not tested: a start of the whole application, the HQL that only binds ints, longs, strings, dates and lists (read
+instead), CE's own SQL that Healdan calls, and the `not exists` fix on HSQLDB.
 
 ## 5. Around the Database
 
@@ -432,9 +527,11 @@ Whatever moves the data, the stack's `TZ` should be the same on both sides (Mari
 4. **Q4. How does an install get PostgreSQL:** a variable in `.env` (`DB_TYPE`, say) that `DockerInit`, `ConfigPlan`
    and `compose.yaml` read, a compose overlay that swaps the `db` service, or a separate compose file? And when, if
    ever, does PostgreSQL become the default for new installs?
-5. **Q5. Which collation?** `C` sorts as MariaDB's `utf8_bin` does today, by code point; `en_US.utf8`, the image's
-   default, or an ICU locale such as `en-GB`, sorts as people expect. glibc collations can change with an operating
-   system upgrade and need their indexes rebuilt; `C` and ICU are steadier.
+5. **Q5. Which collation?** `C.UTF-8`, or PostgreSQL 17 and later's built-in `pg_c_utf8`, sorts by code point as
+   MariaDB's `utf8_bin` does today and still lower-cases accented letters; plain `C` doesn't, which would break the
+   case-insensitive searches of §4.3. `en_US.utf8`, the image's default, or an ICU locale such as `en-GB`, sorts as
+   people expect. glibc collations can change with an operating system upgrade and then need their indexes rebuilt;
+   the built-in provider and ICU are steadier.
 6. **Q6. Does Healdan keep replacing characters beyond the Basic Multilingual Plane on PostgreSQL?** Keeping it makes
    both databases hold the same text, and a move back possible; dropping it keeps emoji in subjects and names.
 7. **Q7. Who owns `jdbc.driver`, `jdbc.dbms` and `hibernate.dialect`** in `context.properties`: still seeded once, or
@@ -451,6 +548,12 @@ Whatever moves the data, the stack's `TZ` should be the same on both sides (Mari
     long?
 11. **Q11. What do the backup and restore pages say** during the overlap: both databases' steps, in tabs, or one page
     for each?
+12. **Q12. Does Healdan make its SQL behave the same on both databases where §4 found it doesn't:** trim text before
+    it's compared or stored (trailing spaces), say `nulls last` or `nulls first` where a key can be NULL, and set an
+    isolation level? Or does it accept PostgreSQL's behaviour once it's the first-class database?
+13. **Q13. How does `PreviewJobs.add` queue a job without relying on a failed insert:** the portable `insert … select
+    … where not exists`, a branch with PostgreSQL's `on conflict do nothing`, or a guarantee that it never runs
+    inside a transaction?
 
 ## 7. Reproducing This
 
