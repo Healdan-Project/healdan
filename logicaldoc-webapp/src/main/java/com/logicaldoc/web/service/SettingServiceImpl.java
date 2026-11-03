@@ -4,11 +4,13 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang.StringUtils;
@@ -351,10 +353,9 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     /**
      * Healdan: refuses the whole save unless the user may write every key. A
-     * key needs the menu of a screen that writes it, and Settings > Parameters
-     * writes the keys it lists. Any other key needs an administrator: only
-     * LogicalDOC's paid screens write them, and only administrators open
-     * those.
+     * key needs the menu of a screen that writes it. Any other key needs an
+     * administrator: Settings > Parameters saves only for administrators, and
+     * only they open LogicalDOC's paid screens, which write the rest.
      *
      * @param session the current session
      * @param settings the settings to save
@@ -366,30 +367,44 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
             return;
 
         MenuDAO dao = MenuDAO.get();
-        Set<String> parameters = null;
+        // Each menu is asked once: a screen's keys all need the same one
+        Map<Long, Boolean> held = new HashMap<>();
+        Predicate<String> writable = key -> settingWriteMenus(key, session.getTenantName()).stream()
+                .anyMatch(menuId -> held.computeIfAbsent(menuId, id -> dao.isReadAllowed(id, session.getUserId())));
         for (GUIParameter setting : settings) {
             // saveSetting() skips these
             if (setting == null || StringUtils.isEmpty(setting.getName()))
                 continue;
 
+            // The name, and the key saveSetting() saves it as
             String name = setting.getName();
-            boolean allowed = settingWriteMenus(name, session.getTenantName()).stream()
-                    .anyMatch(menuId -> dao.isReadAllowed(menuId, session.getUserId()));
-            if (!allowed && dao.isReadAllowed(Menu.PARAMETERS, session.getUserId())) {
-                if (parameters == null)
-                    parameters = loadSettings().stream().map(GUIParameter::getName).collect(Collectors.toSet());
-                allowed = parameters.contains(name);
-            }
-
-            if (!allowed)
+            if (!writable.test(name) || !writable.test(savedKey(name, session.getTenantName())))
                 throw new AccessDeniedException(
                         "User %s cannot write the setting %s".formatted(session.getUsername(), name));
         }
     }
 
     /**
+     * Healdan: the key {@link #saveSetting} writes for a name. It stores any
+     * name ending in {@code gui.welcome} or {@code gui.tag.vocabulary} as the
+     * tenant's own setting, whatever comes before.
+     *
+     * @param name the name saved
+     * @param tenantName the tenant of the user saving it
+     *
+     * @return the key written
+     */
+    private static String savedKey(String name, String tenantName) {
+        if (name.endsWith(GUI_WELCOME))
+            return "%s.%s".formatted(tenantName, GUI_WELCOME);
+        if (name.endsWith(GUI_TAG_VOCABULARY))
+            return "%s.%s".formatted(tenantName, GUI_TAG_VOCABULARY);
+        return name;
+    }
+
+    /**
      * Healdan: the menus of the screens Healdan shows that write the key
-     * through {@link #saveSettings(List)}, Parameters aside
+     * through {@link #saveSettings(List)}
      *
      * @param name the key
      * @param tenantName the tenant of the user saving it
@@ -420,7 +435,7 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
             menus.add(RUNLEVEL_MENU);
         // The keys TagService.getSettings() gives, and the vocabulary
         if (tenantKey.startsWith("tag.") || tenantKey.startsWith("tagcloud.")
-                || tenantKey.equals("gui.tag.vocabulary"))
+                || tenantKey.equals(GUI_TAG_VOCABULARY))
             menus.add(METADATA_MENU);
         return menus;
     }

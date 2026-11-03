@@ -255,19 +255,41 @@ public class SettingServiceImplAuthorizationTest extends AbstractWPTestCase {
     }
 
     @Test
-    public void testSaveSettingsLetsParametersWriteTheKeysItLists() throws Exception {
+    public void testSaveSettingsDoesntLetParametersWriteForANonAdmin() throws Exception {
+        // Parameters saves only for administrators, so its menu writes nothing
+        AuthorMenus.revoke(GUI_SETTINGS);
         AuthorMenus.grant(ADMINISTRATION);
         AuthorMenus.grant(PARAMETERS);
         prepareSession("author", "admin");
 
         List<String> listed = names(testSubject.loadSettings());
-        assertFalse(listed.isEmpty());
-        save(listed);
-
-        // Parameters lists neither the database's settings nor a new key
-        assertFalse(listed.contains("jdbc.url"));
-        for (String key : List.of("jdbc.url", "made.up.key"))
+        assertTrue(listed.contains("server.url"));
+        for (String key : listed)
             assertThrows(key, AccessDeniedException.class, () -> save(List.of(key)));
+    }
+
+    @Test
+    public void testSaveSettingsChecksTheKeyAWelcomeOrAVocabularyIsSavedAs() throws Exception {
+        // saveSetting() saves any name ending in gui.welcome as the tenant's
+        // welcome message, which only GUI settings writes, whatever its prefix
+        AuthorMenus.revoke(GUI_SETTINGS);
+        AuthorMenus.grant(ADMINISTRATION);
+        for (long menu : List.of(METADATA, STORES, PROTOCOLS))
+            AuthorMenus.grant(menu);
+        prepareSession("author", "admin");
+        for (String key : List.of("default.tag.gui.welcome", "store.gui.welcome", "webservice.gui.welcome"))
+            assertThrows(key, AccessDeniedException.class, () -> testSubject
+                    .saveSettings(List.of(new GUIParameter(key, "<img src=x onerror=alert(1)>"))));
+
+        // and the vocabulary, which Document metadata writes too
+        AuthorMenus.revoke(METADATA);
+        for (String key : List.of("store.gui.tag.vocabulary", "webdav.gui.tag.vocabulary"))
+            assertThrows(key, AccessDeniedException.class,
+                    () -> testSubject.saveSettings(List.of(new GUIParameter(key, "free"))));
+        AuthorMenus.grant(METADATA);
+        AuthorMenus.revoke(STORES);
+        AuthorMenus.revoke(PROTOCOLS);
+        save(List.of("default.tag.gui.tag.vocabulary"));
     }
 
     @Test
