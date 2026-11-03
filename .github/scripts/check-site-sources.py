@@ -19,7 +19,8 @@ import pathlib
 import re
 import sys
 
-LOGICALDOC_DOCS = re.compile(r"https?://(docs|wiki|help|forums)\.logicaldoc\.com")
+# The scheme is optional: a scheme-relative link (//docs.logicaldoc.com/…) works as well
+LOGICALDOC_DOCS = re.compile(r"(https?:)?//(docs|wiki|help|forums)\.logicaldoc\.com")
 FRONT_MATTER_VALUE = re.compile(r"^\s*[A-Za-z_][\w-]*:\s+(?P<value>\S.*)$")
 HEADING = re.compile(r"^#{1,6}\s")
 FENCE = re.compile(r"^\s*(```|~~~)")

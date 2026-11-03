@@ -2,7 +2,7 @@
 
 - **Tracking issue:** [Healdan-Project/healdan#56](https://github.com/Healdan-Project/healdan/issues/56)
 - **Date:** 2026-10-29
-- **Status:** design approved by the owner on 2026-10-29, section by section, and built. §8's four PRs all merged on 2026-10-30: the demo stack (Healdan-Project/healdan#116), the retaken screenshots (#120), the User Guide's 13 pages with Dropbox hidden (#118, which closed #56) and the Admin Guide's 8 System pages (#117). PR 4's cleanup, the `interim` shortcode's removal, came in a pull request of its own on 2026-11-03, as the plan's Task 15. §14's follow-up merged in #122. Where the plan or the build changed the design, the text says "(changed in the plan)" or "(changed in the build)", and the plan's decision log has the reasons.
+- **Status:** design approved by the owner on 2026-10-29, section by section, and built. §8's four PRs all merged on 2026-10-30: the demo stack (Healdan-Project/healdan#116), the retaken screenshots (#120), the User Guide's 13 pages with Dropbox hidden (#118, which closed #56) and the Admin Guide's 8 System pages (#117). PR 4's cleanup, the `interim` shortcode's removal, is a pull request of its own, Healdan-Project/healdan#171, as the plan's Task 15. §14's follow-up merged in #122. Where the plan or the build changed the design, the text says "(changed in the plan)" or "(changed in the build)", and the plan's decision log has the reasons.
 - **Follows:** the [docs site's spec](2026-10-23-docs-site-design.md), whose §6.2 created the interim pages, whose §6.4 took screenshots from the smoke fixture, and whose §13 left "the demo data for screenshots" to the builder.
 - **Inputs:**
   - a design conversation with the owner on 2026-10-29;

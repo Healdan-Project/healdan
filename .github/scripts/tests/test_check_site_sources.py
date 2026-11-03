@@ -122,6 +122,27 @@ class CheckSiteSourcesTest(unittest.TestCase):
             """)
         self.assertEqual(3, len(self.problems()))
 
+    def test_scheme_relative_link_reported(self):
+        self.page("user/j.md", """
+            ---
+            title: Versions
+            ---
+            See LogicalDOC's [Versioning](//docs.logicaldoc.com/en/working-with-documents/versioning).
+            """)
+        problems = self.problems()
+        self.assertEqual(1, len(problems), problems)
+        self.assertIn("content/user/j.md:4:", problems[0])
+
+    def test_host_named_without_a_link_is_fine(self):
+        # Writing Docs names the hosts the check refuses, as prose
+        self.page("developer/k.md", """
+            ---
+            title: Writing Docs
+            ---
+            The check fails on a link to docs, wiki, help or forums.logicaldoc.com.
+            """)
+        self.assertEqual([], self.problems())
+
     def test_clean_site_exits_zero(self):
         self.page("install/h.md", """
             ---

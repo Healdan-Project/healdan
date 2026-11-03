@@ -340,25 +340,34 @@ class SiteBuild(unittest.TestCase):
 
     # Task 10
 
-    USER_LAUNCH_PAGES = (
-        "getting-started/signing-in", "getting-started/getting-around", "getting-started/clearing-your-browsers-cache",
-        "working-with-matters/stores-and-matter-workspaces", "working-with-matters/filing-a-document",
-        "working-with-matters/properties", "working-with-matters/emails", "working-with-matters/document-permissions",
-        "finding-documents/searching", "finding-documents/finding-by-doc-number", "finding-documents/search-folders",
-        "finding-documents/my-matters-and-recent-matters", "documents/versions", "documents/previews")
+    USER_LAUNCH_PAGES = {
+        "getting-started/signing-in": "Signing In", "getting-started/getting-around": "Getting Around",
+        "getting-started/clearing-your-browsers-cache": "Clearing Your Browser's Cache",
+        "working-with-matters/stores-and-matter-workspaces": "Stores and Matter Workspaces",
+        "working-with-matters/filing-a-document": "Filing a Document", "working-with-matters/properties": "Properties",
+        "working-with-matters/emails": "Emails", "working-with-matters/document-permissions": "Document Permissions",
+        "finding-documents/searching": "Searching",
+        "finding-documents/finding-by-doc-number": "Finding a Document by Doc #",
+        "finding-documents/search-folders": "Search Folders",
+        "finding-documents/my-matters-and-recent-matters": "My Matters and Recent Matters",
+        "documents/versions": "Versions", "documents/previews": "Previews"}
 
     def test_user_launch_pages_written(self):
-        missing = [page for page in self.USER_LAUNCH_PAGES if not (self.public / f"user/{page}/index.html").is_file()]
-        self.assertEqual([], missing)
+        for slug, title in self.USER_LAUNCH_PAGES.items():
+            self.assertEqual(f"{title} – Healdan Documentation",
+                             self.text(self.html(f"/user/{slug}/"), "title"), slug)
 
     # Task 11
 
-    ADMIN_LAUNCH_PAGES = ("stores", "clients-and-matters", "workspace-templates", "top-level-folders",
-                          "users-and-groups", "permissions", "healdan-settings", "office-previews")
+    ADMIN_LAUNCH_PAGES = {"stores": "Stores", "clients-and-matters": "Clients and Matters",
+                          "workspace-templates": "Workspace Templates", "top-level-folders": "Top-Level Folders",
+                          "users-and-groups": "Users and Groups", "permissions": "Permissions",
+                          "healdan-settings": "Healdan Settings", "office-previews": "Office Previews"}
 
     def test_admin_launch_pages_written(self):
-        missing = [page for page in self.ADMIN_LAUNCH_PAGES if not (self.public / f"admin/{page}/index.html").is_file()]
-        self.assertEqual([], missing)
+        for slug, title in self.ADMIN_LAUNCH_PAGES.items():
+            self.assertEqual(f"{title} – Healdan Documentation",
+                             self.text(self.html(f"/admin/{slug}/"), "title"), slug)
 
     # The demo stack and docs gaps, PR 4
 
@@ -376,13 +385,13 @@ class SiteBuild(unittest.TestCase):
     # The demo stack and docs gaps, Task 15
 
     def test_interim_pages_retired(self):
-        # Every page is written, so the interim shortcode and its box are gone, and no page links to LogicalDOC's docs
-        self.assertFalse((SITE / "layouts/_shortcodes/interim.html").exists())
+        # Every page is written, so the interim shortcode's box is gone, and no page links to LogicalDOC's docs
+        logicaldoc_docs = _scripts.load("check-site-sources").LOGICALDOC_DOCS
         for path in self.public.rglob("*"):
             if path.suffix in (".html", ".css"):
                 built = path.read_text(encoding="utf-8")
                 self.assertNotIn("healdan-interim", built, path)
-                self.assertNotRegex(built, r"https?://(docs|wiki|help|forums)\.logicaldoc\.com", path)
+                self.assertNotRegex(built, logicaldoc_docs, path)
 
     # Task 17
 
