@@ -279,6 +279,31 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertTrue(providers().find("entra").orElseThrow().hasSecret());
 	}
 
+	/*
+	 * The limit is on the bytes that are sealed, not the characters typed: 1000
+	 * characters of a script that takes three bytes each would overflow the
+	 * setting's 4000 characters once sealed, part-way through the save
+	 */
+	@Test
+	public void testSecretLimitCountsTheBytesSealed() throws Exception {
+		// Three bytes each in UTF-8; written without the source's encoding
+		String wide = "\u5BC6";
+		assertSaveRefused("secret", valid("entra"), wide.repeat(1000));
+		assertSaveRefused("secret", valid("entra"), wide.repeat(334));
+		assertSaveRefused("secret", valid("entra"), "xx" + wide.repeat(333));
+		assertEquals(List.of(), providers().all());
+
+		providers().save(valid("entra"), wide.repeat(333));
+		assertEquals(wide.repeat(333), providers().secret("entra"));
+		providers().save(valid("entra"), "x".repeat(1000));
+		assertEquals("x".repeat(1000), providers().secret("entra"));
+		assertTrue(settings().get("signin.entra.clientSecret").length() <= 4000);
+
+		// And a refused new secret keeps the one stored
+		assertSaveRefused("secret", valid("entra"), wide.repeat(1000));
+		assertEquals("x".repeat(1000), providers().secret("entra"));
+	}
+
 	@Test
 	public void testOrder() throws Exception {
 		providers().save(entra(), SECRET_ONE);
@@ -417,6 +442,25 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		// and "entra-2" isn't "entra"
 		providers().save(valid("entra-2"), SECRET_ONE);
 		assertEquals("entra,entra-2", settings().get("signin.providers"));
+	}
+
+	/*
+	 * The ids of Healdan's own options stay reserved while their rows are
+	 * missing: a provider under one would take the option over once its row
+	 * came back
+	 */
+	@Test
+	public void testOptionIdsReservedWithoutTheirSettings() throws Exception {
+		settings().delete("signin.password.label");
+		settings().delete("signin.recheck.minutes");
+
+		for (String id : List.of("password", "recheck", "done")) {
+			assertRefused("already used", () -> providers().checkNewId(id));
+			assertSaveRefused("already used", valid(id), SECRET_ONE);
+		}
+		assertEquals(List.of(), providers().all());
+		assertEquals(List.of(), settings().names("signin.password."));
+		assertEquals(List.of(), settings().names("signin.recheck."));
 	}
 
 	@Test
