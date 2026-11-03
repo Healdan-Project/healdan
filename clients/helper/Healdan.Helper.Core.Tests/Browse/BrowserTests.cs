@@ -25,7 +25,7 @@ public class BrowserTests
     }
 
     private Browser Make(BrowseMode mode) =>
-        new(new HealdanApi(new Uri("https://healdan.test"), _api) { Token = "hd_test" }, mode, TimeZoneInfo.Utc, () => Now);
+        new(new HealdanApi(new Uri("https://healdan.test"), _api) { Token = "hd_test" }, mode, TimeZoneInfo.Utc, () => Now, new System.Globalization.CultureInfo("en-GB"));
 
     [Theory]
     [InlineData(PlaceKind.RecentFolders, "GET /v1/folders/recent")]

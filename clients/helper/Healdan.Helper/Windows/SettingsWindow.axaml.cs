@@ -1,4 +1,3 @@
-using System.Globalization;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -236,7 +235,7 @@ public partial class SettingsWindow : Window
         name.Children.Add(new TextBlock { Text = paired.App });
         name.Children.Add(new TextBlock
         {
-            Text = "Paired on " + paired.Paired.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture),
+            Text = "Paired on " + When.Date(paired.Paired),
             Classes = { "muted" },
             FontSize = 11
         });
