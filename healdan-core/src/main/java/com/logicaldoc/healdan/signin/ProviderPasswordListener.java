@@ -39,8 +39,8 @@ import com.logicaldoc.core.security.user.UserSource;
  */
 public class ProviderPasswordListener implements UserListener {
 
-	/** Set while {@link #unlinking} runs its work, on that thread only */
-	private static final ThreadLocal<Boolean> UNLINKING = new ThreadLocal<>();
+	/** The id of the account {@link #unlinking} is unlinking, while it runs its work, on that thread only */
+	private static final ThreadLocal<Long> UNLINKING = new ThreadLocal<>();
 
 	public ProviderPasswordListener() {
 		// Instantiated by CE
@@ -48,21 +48,23 @@ public class ProviderPasswordListener implements UserListener {
 
 	/**
 	 * Runs work that unlinks an account (Task 10's unlink, spec section 7.7): its
-	 * saves may move the account off OIDC with a temporary password, which this
-	 * listener otherwise refuses. Nothing else may call it.
+	 * saves of that account may move it off OIDC with a temporary password,
+	 * which this listener otherwise refuses. Any other account the work saves
+	 * is checked as ever. Nothing else may call it.
 	 *
 	 * @param <T> what the work returns
+	 * @param userId the id of the account being unlinked
 	 * @param work the unlinking
 	 * @return what the work returns
 	 * @throws Exception what the work throws
 	 */
-	public static <T> T unlinking(Callable<T> work) throws Exception {
-		Boolean outer = UNLINKING.get();
-		UNLINKING.set(Boolean.TRUE);
+	public static <T> T unlinking(long userId, Callable<T> work) throws Exception {
+		Long outer = UNLINKING.get();
+		UNLINKING.set(userId);
 		try {
 			return work.call();
 		} finally {
-			// Whatever the work did, the thread is allowed again only while an outer unlinking still runs
+			// Whatever the work did, the thread goes back to the outer unlinking's account, if one still runs
 			if (outer == null)
 				UNLINKING.remove();
 			else
@@ -87,7 +89,8 @@ public class ProviderPasswordListener implements UserListener {
 
 	@Override
 	public void beforeSave(User user, UserHistory transaction, Map<String, Object> dictionary) {
-		if (UNLINKING.get() != null)
+		Long unlinked = UNLINKING.get();
+		if (unlinked != null && user.getId() != 0 && unlinked == user.getId())
 			return;
 		boolean provider = user.getSource() == UserSource.OIDC;
 		boolean wasProvider = user.getId() != 0 && storedSource(user.getId()) == UserSource.OIDC.ordinal();
