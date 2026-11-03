@@ -45,9 +45,9 @@ one of its windows is open.
 
 A dot on the icon means the helper needs you: you're signed out, it couldn't start, one of its windows is waiting for
 your answer, a document closed unexpectedly, a copy is Not Yet in Healdan, or LibreOffice's extension isn't installed or
-needs updating. Point at the icon to see which, such as "Waiting for Your Answer" or "LibreOffice Extension Needs
-Updating". The extension's dot goes by itself a few seconds after you
-accept the extension in LibreOffice.
+needs updating. Click the icon to see which: each has its line in the menu, such as the waiting window's at the top,
+"(closed unexpectedly)" after a document's title, or **Install the LibreOffice Extension…**. The extension's dot goes
+by itself a few seconds after you accept the extension in LibreOffice.
 
 ### Sign In
 
