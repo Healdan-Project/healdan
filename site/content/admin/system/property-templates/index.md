@@ -60,9 +60,9 @@ details belong to one document.
 
 - **The profile's name.** Don't rename the template or the attribute set, or delete the template. Healdan finds the
   profile by its name when it upgrades it, and every document and folder in a matter needs it.
-- **The attribute set's Class and Subclass.** Healdan refuses to delete the **Healdan profile** attribute set, or to
-  take **docclass** or **docsubclass** out of it, to everyone, administrators included: either would empty the Class
-  and Subclass lists.
+- **The attribute set's Class and Subclass.** Healdan refuses to delete the attribute set the **Healdan profile**
+  template takes **docclass** or **docsubclass** from, the **Healdan profile** set as Healdan ships, or to take that
+  property out of it, to everyone, administrators included: either would empty the Class or Subclass list.
 - **Healdan's own properties.** Don't delete them, rename them or change their type: Healdan's rules, its search and
   its API use them. The Matter property's label comes from the matter label in
   [Healdan Settings](../../healdan-settings/), which sets it again each time they're saved.

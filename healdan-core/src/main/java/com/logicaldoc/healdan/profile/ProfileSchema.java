@@ -71,20 +71,28 @@ public class ProfileSchema {
 	 *         while there is no profile template
 	 */
 	public boolean holdsTheLists(long setId) {
-		if (HealdanSettings.get().profileTemplateId() == null)
-			return false;
+		return !listsIn(setId).isEmpty();
+	}
+
+	/**
+	 * @param setId an attribute set
+	 * @return the profile's lists, Class and Subclass, that the template takes
+	 *         from the set; none while there is no profile template
+	 */
+	public Set<String> listsIn(long setId) {
 		Template template;
 		try {
 			template = template();
 		} catch (IllegalStateException e) {
-			return false;
+			return Set.of();
 		}
+		Set<String> lists = new HashSet<>();
 		for (String name : List.of(HealdanConstants.ATTR_DOCCLASS, HealdanConstants.ATTR_DOCSUBCLASS)) {
 			Attribute attribute = template.getAttribute(name);
-			if (attribute != null && attribute.getSetId() != null && attribute.getSetId() == setId)
-				return true;
+			if (attribute != null && Long.valueOf(setId).equals(attribute.getSetId()))
+				lists.add(name);
 		}
-		return false;
+		return lists;
 	}
 
 	/**

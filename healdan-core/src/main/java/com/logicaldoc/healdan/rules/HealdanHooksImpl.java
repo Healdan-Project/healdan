@@ -271,14 +271,16 @@ public class HealdanHooksImpl implements HealdanHooks {
 
 	/**
 	 * CE deletes the options of an attribute a stored set no longer has, so
-	 * taking Class or Subclass out of the profile's set empties its list
+	 * taking Class or Subclass out of the set the profile takes it from
+	 * empties its list. Only those it takes from the set are kept.
 	 */
 	@Override
 	public void beforeAttributeSetStore(AttributeSet set) throws PersistenceException {
-		if (set != null && set.getId() != 0 && ProfileSchema.get().holdsTheLists(set.getId())
-				&& (set.getAttribute(HealdanConstants.ATTR_DOCCLASS) == null
-						|| set.getAttribute(HealdanConstants.ATTR_DOCSUBCLASS) == null))
-			throw new HealdanRuleException(PROFILE_SET_ATTRIBUTES);
+		if (set == null || set.getId() == 0)
+			return;
+		for (String list : ProfileSchema.get().listsIn(set.getId()))
+			if (set.getAttribute(list) == null)
+				throw new HealdanRuleException(PROFILE_SET_ATTRIBUTES);
 	}
 
 	/**
