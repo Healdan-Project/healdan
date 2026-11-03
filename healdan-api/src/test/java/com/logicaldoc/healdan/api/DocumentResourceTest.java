@@ -125,10 +125,23 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertTrue(doc.path("lastModified").textValue().endsWith("Z"));
 		assertTrue(doc.path("hold").toString(), doc.path("hold").isNull());
 		assertTrue(doc.path("canEdit").booleanValue());
+		assertTrue(doc.path("canOpen").booleanValue());
 
-		// Reader has READ alone
-		assertFalse(get("/api/v1/documents/" + number(d)).token(signIn(reader)).send().json().path("canEdit")
-				.booleanValue());
+		// Reader has READ alone: no Write to edit, and no Download to open
+		JsonNode read = get("/api/v1/documents/" + number(d)).token(signIn(reader)).send().json();
+		assertFalse(read.path("canEdit").booleanValue());
+		assertFalse(read.path("canOpen").booleanValue());
+	}
+
+	@Test
+	public void testHoldDoesntStopOpening() throws Exception {
+		Document d = file("a.docx", "Lease draft");
+		checkout(d, boss);
+
+		JsonNode doc = get("/api/v1/documents/" + number(d)).token(signIn(clerk)).send().json();
+
+		assertFalse(doc.path("canEdit").booleanValue());
+		assertTrue(doc.path("canOpen").booleanValue()); // read-only, as the content route serves it
 	}
 
 	@Test
@@ -378,8 +391,11 @@ public class DocumentResourceTest extends ApiTestCase {
 		assertEquals(0, jdbc().queryForObject(
 				"select count(*) from ld_history where ld_event = 'event.downloaded' and ld_docid = ?", Integer.class,
 				d.getId()).intValue());
-		// The metadata is still shown
-		assertEquals(200, get("/api/v1/documents/" + number(d)).token(token).send().status());
+		// The metadata is still shown, and says it can't be opened or edited
+		ApiResponse shown = get("/api/v1/documents/" + number(d)).token(token).send();
+		assertEquals(shown.toString(), 200, shown.status());
+		assertFalse(shown.json().path("canOpen").booleanValue());
+		assertFalse(shown.json().path("canEdit").booleanValue());
 	}
 
 	@Test

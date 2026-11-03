@@ -11,8 +11,8 @@ using Healdan.Helper.Platform;
 namespace Healdan.Helper;
 
 /// <summary>
-/// Starts the helper: one per user, in the menu bar and out of the Dock (spec §5.1). A second start hands the running
-/// helper any link it was started for, and quits.
+/// Starts the helper: one per user, in the menu bar, and in the Dock only while one of its windows is open (spec §5.1,
+/// #143). A second start hands the running helper any link it was started for, and quits.
 /// </summary>
 internal static class Program
 {
@@ -61,7 +61,8 @@ internal static class Program
         AppBuilder.Configure<TApp>()
             .UsePlatformDetect()
             .UseSystemFontShaper()
-            .With(new MacOSPlatformOptions { ShowInDock = false })
+            // Out of the Dock until a window opens (MacPlatform.ShowInDock); then the app menu is App's own (AppMenu).
+            .With(new MacOSPlatformOptions { ShowInDock = false, DisableDefaultApplicationMenuItems = true })
             .LogToTrace();
 
     /// <summary>A Debug build run by hand can keep its files apart from the real helper's.</summary>

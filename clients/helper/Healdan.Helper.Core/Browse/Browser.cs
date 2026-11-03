@@ -30,6 +30,7 @@ public sealed class Browser : IDisposable
 
     private readonly HealdanApi _api;
     private readonly TimeZoneInfo? _zone;
+    private readonly System.Globalization.CultureInfo? _culture;
     private readonly Func<DateTimeOffset> _now;
     private readonly CancellationTokenSource _closed = new();
     private readonly List<View> _history = [];
@@ -42,11 +43,14 @@ public sealed class Browser : IDisposable
 
     /// <param name="zone">The time zone times are shown in; the computer's by default.</param>
     /// <param name="now">The clock, for the tests.</param>
-    public Browser(HealdanApi api, BrowseMode mode, TimeZoneInfo? zone = null, Func<DateTimeOffset>? now = null)
+    /// <param name="culture">The region times are written for; the computer's by default.</param>
+    public Browser(HealdanApi api, BrowseMode mode, TimeZoneInfo? zone = null, Func<DateTimeOffset>? now = null,
+        System.Globalization.CultureInfo? culture = null)
     {
         _api = api;
         Mode = mode;
         _zone = zone;
+        _culture = culture;
         _now = now ?? (() => DateTimeOffset.Now);
         _scope = DefaultScope;
     }
@@ -360,7 +364,7 @@ public sealed class Browser : IDisposable
     private async Task LoadEditedAsync(IReadOnlyList<Entry> entries, int generation)
     {
         foreach (var entry in entries.Where(e => e.Matter?.LastChange is not null))
-            entry.Edited = When.Short(entry.Matter!.LastChange, _now(), _zone);
+            entry.Edited = When.Short(entry.Matter!.LastChange, _now(), _zone, _culture);
         using var gate = new SemaphoreSlim(VersionReads);
         await Task.WhenAll(entries.Where(e => e.Document is not null).Select(async entry =>
         {
@@ -373,7 +377,7 @@ public sealed class Browser : IDisposable
                 var doc = entry.Document!;
                 var versions = await _api.VersionsAsync(doc.DocNumber, VersionLimit, call.Token);
                 if (generation == _generation)
-                    entry.Edited = When.Short(Versions.LastSaved(versions.Items, doc.FileVersion), _now(), _zone);
+                    entry.Edited = When.Short(Versions.LastSaved(versions.Items, doc.FileVersion), _now(), _zone, _culture);
             }
             catch (Exception e) when (Expected(e))
             {

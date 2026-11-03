@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+using System.Globalization;
 using Healdan.Helper.Core.Browse;
 
 namespace Healdan.Helper.Core.Ui;
@@ -10,12 +11,12 @@ public static class Warnings
 {
     /// <param name="deviceName">The device's name as the hold has it, such as <c>Healdan Helper on MacBook</c>.</param>
     public static HeldElsewhereWarning HeldElsewhere(long docNumber, string deviceName, string? app, DateTimeOffset? lastSaved,
-        DateTimeOffset now, TimeZoneInfo? zone = null)
+        DateTimeOffset now, TimeZoneInfo? zone = null, CultureInfo? culture = null)
     {
         var device = DeviceNames.Short(deviceName);
         return new HeldElsewhereWarning(
             $"#{docNumber} is checked out to you on {device}" + (string.IsNullOrWhiteSpace(app) ? "" : $" ({app})"),
-            lastSaved is { } at ? $"It was last saved to Healdan {When.InSentence(at, now, zone)}." : null,
+            lastSaved is { } at ? $"It was last saved to Healdan {When.InSentence(at, now, zone, culture)}." : null,
             $"Edits on {device} that haven't reached Healdan won't be in this copy.",
             $"If {device} was offline or still has unsaved changes, editing here means working without them. "
             + $"{device} keeps its copy, and you can file it later as a new document.");

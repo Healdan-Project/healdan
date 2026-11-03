@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -11,7 +12,10 @@ namespace Healdan.Helper.Windows;
 /// Pairing (M3.5 spec §5.9): Word, Excel or PowerPoint asked to connect, and this is the only place its code shows, in
 /// large digits, three and three. The user types it in the app's Healdan pane. It closes once the app has paired, or a
 /// newer pairing replaces it (<see cref="EndQuietly"/>), when the code expires, and at Cancel, the Escape key or a close,
-/// which end the pairing (<see cref="Cancelled"/>).
+/// which end the pairing (<see cref="Cancelled"/>). Office centres its own Pair window and gives no way to move it, so
+/// this one opens at the top right of the main screen, under the menu bar icon (#142), and floats over other apps'
+/// windows, so clicking in the app's to type the code doesn't hide it (#143). The helper's other windows are centred and
+/// at the usual level.
 /// </summary>
 public partial class PairingWindow : Window
 {
@@ -29,6 +33,8 @@ public partial class PairingWindow : Window
         CodeText.Text = Spaced(code);
         AutomationProperties.SetName(CodeText, "Code " + string.Join(' ', code.ToCharArray())); // read out digit by digit
         DetailText.Text = $"Type this code in the Healdan pane in {app}. It expires in 2 minutes.";
+        if (Screens.Primary is { } screen)
+            Position = TopRight(screen.WorkingArea, DesktopScaling, Width);
         CancelButton.Click += (_, _) => Close();
         Opened += (_, _) =>
         {
@@ -50,6 +56,16 @@ public partial class PairingWindow : Window
         _ended = true;
         Close();
     }
+
+    /// <summary>
+    /// Where the window's top left goes so its top right is <see cref="Inset"/> in from the screen's, below the menu bar.
+    /// The working area and the position are in the screen's pixels, the width in points, as Avalonia centres a window.
+    /// </summary>
+    internal static PixelPoint TopRight(PixelRect workingArea, double scaling, double width) =>
+        new(workingArea.Right - (int)Math.Ceiling((width + Inset) * scaling), workingArea.Y + (int)Math.Round(Inset * scaling));
+
+    /// <summary>The space between the window and the screen's top right corner, in points.</summary>
+    private const double Inset = 12;
 
     /// <summary>Six digits as two groups of three, as people read them out.</summary>
     internal static string Spaced(string code) => code.Length == 6 ? $"{code[..3]} {code[3..]}" : code;

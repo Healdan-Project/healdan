@@ -40,8 +40,10 @@ for every app.
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
-  notifications, login item, extension install and text layout (`Platform/`). It stays out of the Dock
-  (`LSUIElement`) and hands the focus back after each window.
+  notifications, login item, extension install and text layout (`Platform/`). It starts out of the Dock
+  (`LSUIElement`), and is in the Dock and ⌘Tab only while one of its windows is open (`MacPlatform.ShowInDock`), with
+  its own app menu (`AppMenu`; Avalonia's default items are off). It hands the focus back once the last window
+  closes. Each window waiting for an answer has a line in the menu bar icon's menu (`OpenWindows.WaitingWindows`).
   - **The look** (polish spec, `docs/superpowers/specs/2026-10-27-helper-ui-polish-design.md`): the tokens and
     control styles are in `Windows/HelperStyles.axaml`, over Fluent. The icons are Tabler's, in
     `Windows/HelperIcons.axaml`, which `python3 clients/icons/write-helper-icons.py` writes from
@@ -747,6 +749,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   shapes, or when the SVGs aren't the spec's list, `SpecNames`. After adding or changing an icon, run
   `python3 clients/icons/write-helper-icons.py`, and add a new one to `SpecNames`.
 - **`AttentionTests`** pin when the menu bar icon shows its dot, and the reason its tooltip gives.
+- **Dates and times** follow the computer's region (`CultureInfo.CurrentCulture`, which .NET reads from macOS), so a
+  test of `When`, `DocumentDetails`, `Browser` or `Warnings` names its culture as it names its time zone, en-GB or
+  en-US. ICU puts a narrow no-break space (U+202F) before AM and PM.
 - **`SystemFontTests`** lay San Francisco out at each size the helper uses, Regular and SemiBold, and fail when a
   width is more than 0.2% from CoreText's own layout of the same text. They run on macOS and skip elsewhere.
 - **The extension's tests** cover `healdan_logic.py` (the notices' headlines and details included) with fakes for
@@ -780,7 +785,7 @@ to the tag's GitHub release. [Releasing the macOS Helper](../continuous-integrat
 the steps and the secrets.
 
 - **The bundle** is `com.healdan.helper`: one self-contained file for Apple silicon, with `healdan.oxt` in
-  `Contents/Resources`. It registers `healdan:` and stays out of the Dock.
+  `Contents/Resources`. It registers `healdan:` and starts out of the Dock (`LSUIElement`).
 - **The hardened runtime** has two exceptions (`clients/helper/packaging/mac/entitlements.plist`): `allow-jit`, for
   .NET's JIT, and `automation.apple-events`, which lets the helper drive Word, Excel and PowerPoint with AppleScript.
   `Info.plist`'s `NSAppleEventsUsageDescription` is what macOS's Automation prompt says. The bundle's native libraries

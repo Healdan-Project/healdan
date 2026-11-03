@@ -7,6 +7,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Browse;
 using Healdan.Helper.Core.Forms;
 
 namespace Healdan.Helper.Windows;
@@ -223,14 +224,17 @@ internal sealed class PropertiesForm
         return box;
     }
 
-    /// <summary>A calendar date: shown as the server's UTC date and sent as that day at midnight UTC (spec §9.10).</summary>
+    /// <summary>
+    /// A calendar date: shown as the server's UTC date, in the region's order ("Mar 3, 2026" in the US), and sent as that
+    /// day at midnight UTC (spec §9.10).
+    /// </summary>
     private Control Date(FormField field)
     {
         var picker = new CalendarDatePicker
         {
             SelectedDate = field.Date?.ToDateTime(TimeOnly.MinValue),
             SelectedDateFormat = CalendarDatePickerFormat.Custom,
-            CustomDateFormatString = "d MMM yyyy",
+            CustomDateFormatString = When.ShortDatePattern(),
             PlaceholderText = "Choose a date",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             FirstDayOfWeek = DayOfWeek.Monday

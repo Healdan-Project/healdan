@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-using System.Globalization;
+using Healdan.Helper.Core.Browse;
 
 namespace Healdan.Helper.Core.Settings;
 
@@ -57,5 +57,5 @@ public sealed record ExtensionRecord
         return installed ?? "Not installed yet.";
     }
 
-    private string On() => At is { } at ? " on " + at.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture) : "";
+    private string On() => At is { } at ? " on " + When.Date(at) : "";
 }

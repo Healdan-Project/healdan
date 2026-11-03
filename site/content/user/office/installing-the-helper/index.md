@@ -40,12 +40,14 @@ itself to start when you sign in to your Mac.
 macOS asks whether you want to open an app downloaded from the internet: choose **Open**. The helper is signed, and
 checked by Apple, so macOS doesn't warn about it otherwise.
 
-Healdan's icon appears in the menu bar. The helper has no Dock icon, and shows a window only when it needs you.
+Healdan's icon appears in the menu bar. The helper shows a window only when it needs you, and is in the Dock only while
+one of its windows is open.
 
-A dot on the icon means the helper needs you: you're signed out, it couldn't start, a document closed unexpectedly, a
-copy is Not Yet in Healdan, or LibreOffice's extension isn't installed or needs updating. Point at the icon to see
-which, such as "LibreOffice Extension Needs Updating". The extension's dot goes by itself a few seconds after you
-accept the extension in LibreOffice.
+A dot on the icon means the helper needs you: you're signed out, it couldn't start, one of its windows is waiting for
+your answer, a document closed unexpectedly, a copy is Not Yet in Healdan, or LibreOffice's extension isn't installed or
+needs updating. Click the icon to see which: each has its line in the menu, such as the waiting window's at the top,
+"(closed unexpectedly)" after a document's title, or **Install the LibreOffice Extension…**. The extension's dot goes
+by itself a few seconds after you accept the extension in LibreOffice.
 
 ### Sign In
 
@@ -202,8 +204,9 @@ other things macOS asks for later. You do it once, however many of the three app
 The first time you press a Healdan button in Word, Excel or PowerPoint, the app pairs with the helper, so that only
 your own add-in can use it.
 
-1. A Healdan window opens in the app and says it isn't paired yet, and the helper shows a window of its own: "Word
-   wants to connect to Healdan Helper", with a six-digit code in large digits.
+1. A Healdan window opens in the app and says it isn't paired yet, and the helper shows a window of its own at the top
+   right of your screen, under its menu bar icon: "Word wants to connect to Healdan Helper", with a six-digit code in
+   large digits. It stays on top of the app's window while you type the code there.
 2. Type the code in the field in the Healdan window, and choose **Pair**. The space in the middle doesn't matter.
 3. The helper's window closes, and the app is paired. The Healdan window says to close it and press the button
    again.
@@ -247,6 +250,7 @@ Click Healdan's icon in the menu bar.
 
 | Item | What it does |
 |---|---|
+| A window waiting for you, such as Save as New Document… | Only while one of the helper's windows waits for your answer. Choose it to bring that window to the front, if it's gone behind another app's |
 | Signed in as … on … | Who you are, and the server. "Not signed in" when you aren't |
 | A notice | When notifications are off, the helper's latest notice. Choose it to clear it |
 | The documents you have open | Each by its title, such as `Lease agreement #1234 v2.1`. Choose one to bring its window to the front. "(closed unexpectedly)" after a crash: see [When Things Go Wrong](../when-things-go-wrong/) |
@@ -258,9 +262,14 @@ Click Healdan's icon in the menu bar.
 | Install the LibreOffice Extension… | Only while the extension isn't installed, or an older version is |
 | Set Up Microsoft Office… | Only while Word, Excel or PowerPoint is installed and the helper's certificate isn't trusted yet, or is nearly out of date: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
 | Settings… | See [Settings](#settings) |
-| Sign Out, or Sign In… | See [Signing Out](#signing-out) |
+| Sign Out, or Sign In… | See [Signing Out](#signing-out). If the Sign In window is open already, Sign In… brings it to the front |
 | About Healdan Helper | The helper's version, and the server's: see [About Healdan Helper](#about-healdan-helper) |
 | Quit Healdan Helper | Stops the helper. The documents you have open stay checked out to you, and what you save meanwhile waits on your Mac until it starts again |
+
+While one of the helper's windows is open, the helper is in the Dock and in the ⌘Tab switcher, which bring its windows
+to the front as for any app. While it's in front, its own menu, **Healdan Helper**, is in the menu bar, with About
+Healdan Helper, Settings… (⌘,), Hide Healdan Helper (⌘H) and Quit Healdan Helper (⌘Q). It leaves the Dock once its last
+window closes.
 
 ## Settings
 

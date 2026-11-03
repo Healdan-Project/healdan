@@ -8,6 +8,7 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Healdan.Helper.Core;
 using Healdan.Helper.Core.Addin;
+using Healdan.Helper.Core.Browse;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Platform;
@@ -272,7 +273,7 @@ public sealed class SettingsWindowTests : IDisposable
         var texts = Texts(list);
         Assert.Contains("Word", texts);
         Assert.Contains("PowerPoint", texts);
-        Assert.Contains($"Paired on {Paired.ToLocalTime():d MMMM yyyy}", texts);
+        Assert.Contains($"Paired on {When.Date(Paired)}", texts); // in the region's order
         var forgets = list.GetVisualDescendants().OfType<Button>().ToList();
         Assert.Equal(["Forget", "Forget"], forgets.Select(b => b.Content));
         Assert.Equal(["Forget Word", "Forget PowerPoint"], forgets.Select(AutomationProperties.GetName));

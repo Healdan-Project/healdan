@@ -103,6 +103,7 @@ public partial class App : Application
             activatable.Activated += OnActivated;
 
         _tray = new TrayMenu(this, session, notifier, windows, extension.Check, () => desktop.Shutdown());
+        NativeMenu.SetMenu(this, AppMenu.Build(windows.ShowAbout, windows.ShowSettings, MacPlatform.GiveBackFocus, () => desktop.Shutdown()));
         desktop.Exit += (_, _) => Stop();
         foreach (var signal in new[] { PosixSignal.SIGTERM, PosixSignal.SIGINT })
             _signals.Add(PosixSignalRegistration.Create(signal, context =>

@@ -8,12 +8,16 @@ namespace Healdan.Helper.Platform;
 /// <summary>
 /// The few AppKit calls the helper makes, through the Objective-C runtime, so the build needs no Xcode toolchain. A
 /// window that opens takes the focus (<c>activateIgnoringOtherApps:</c>), and once the last one closes the focus goes
-/// back to the app the user was in (<c>[NSApp hide:nil]</c>), as the trial did (spec §5.1). Main thread only, which is
-/// Avalonia's UI thread on macOS; elsewhere these do nothing.
+/// back to the app the user was in (<c>[NSApp hide:nil]</c>), as the trial did (spec §5.1). While a window is open the
+/// helper is in the Dock and ⌘Tab (<see cref="ShowInDock"/>, #143). Main thread only, which is Avalonia's UI thread on
+/// macOS; elsewhere these do nothing.
 /// </summary>
 internal static class MacPlatform
 {
     private const string ObjC = "/usr/lib/libobjc.A.dylib";
+
+    /// <summary><c>NSApplicationActivationPolicyRegular</c> and <c>…Accessory</c>.</summary>
+    private const nint Regular = 0, Accessory = 1;
 
     private static readonly Lazy<string?> Bundle = new(ReadBundlePath);
 
@@ -22,6 +26,17 @@ internal static class MacPlatform
     {
         if (OperatingSystem.IsMacOS())
             Send(SharedApplication(), Selector("activateIgnoringOtherApps:"), 1);
+    }
+
+    /// <summary>
+    /// A regular app while one of the helper's windows is open, in the Dock and ⌘Tab with its app menu, so a window that
+    /// went behind another app's can be found again (#143); an accessory, in the menu bar only, once the last one has
+    /// closed, as the bundle's <c>LSUIElement</c> starts it.
+    /// </summary>
+    public static void ShowInDock(bool show)
+    {
+        if (OperatingSystem.IsMacOS())
+            Send(SharedApplication(), Selector("setActivationPolicy:"), show ? Regular : Accessory);
     }
 
     /// <summary>Hands the focus back to the app the user was in, once the helper's last window has closed.</summary>

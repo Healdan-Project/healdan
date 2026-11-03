@@ -45,6 +45,10 @@ public sealed record DeviceView(string Id, string Name, string? App);
 [Schema("HoldView")]
 public sealed record HoldView(string Kind, UserRef? By, DateTimeOffset? Since, DeviceView? Device);
 
+/// <summary>
+/// A document. <see cref="CanOpen"/> is false when Healdan won't give the helper its file (#146: no Download permission,
+/// or protected by a password); true from a server older than it, which opened as before.
+/// </summary>
 [Schema("DocumentView")]
 public sealed record DocumentView(
     string Type,
@@ -59,7 +63,8 @@ public sealed record DocumentView(
     DateTimeOffset DateFiled,
     DateTimeOffset LastModified,
     HoldView? Hold,
-    bool CanEdit);
+    bool CanEdit,
+    bool CanOpen = true);
 
 [Schema("SignedIn")]
 public sealed record SignedIn(string Token, long Id, string Name, DateTimeOffset ExpiresAt, UserView User);

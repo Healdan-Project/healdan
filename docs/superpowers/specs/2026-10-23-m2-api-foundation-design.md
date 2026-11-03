@@ -334,6 +334,7 @@ A document is:
 - `reference` is the footer form without the `#`: doc #, then `fileVersion`.
 - `hold` is `null` when the document is free. Otherwise its `kind` is `checkout` or `lock` (§3.1), with who holds it and since when. M3's "others get a read-only copy and see who has it" reads it. (the final review: `since` is the latest check-out or lock event, so a save with `keepCheckedOut`, which checks the document in and out again, moves it, and `/me/checkouts` is ordered by it. The contract says so. A "checked out since" label in M3 would show the last save.)
 - `canEdit` says whether the user may check it out and save to it.
+- (changed after the build, #146) `canOpen` says whether the user may download its file, as the content and the thumbnail decide: the Download permission, and not protected by a password, which the API always refuses. Without it the helper's Open from Healdan said such a document "opens read-only", then failed with a `403`. Both come from one read of the user's permissions on the document.
 
 ### 6.5 Filing a new document
 

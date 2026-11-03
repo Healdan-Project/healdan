@@ -8,6 +8,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
@@ -42,7 +44,6 @@ import com.logicaldoc.healdan.matter.FolderPosition;
 import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.matter.MatterLocator;
-import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.healdan.token.DeviceHolds;
 
 /**
@@ -102,8 +103,9 @@ public final class ApiViews {
 	/**
 	 * @param d a document the caller may read
 	 * @param caller the signed-in user, with its groups
-	 * @return the document's view; {@code canEdit} also asks that the current
-	 *         request's session may open the document ({@link #opens})
+	 * @return the document's view; {@code canEdit} and {@code canOpen} also ask
+	 *         that the current request's session may open the document
+	 *         ({@link #opens})
 	 * @throws PersistenceException error at data layer
 	 */
 	public static DocumentView document(Document d, User caller) throws PersistenceException {
@@ -124,16 +126,21 @@ public final class ApiViews {
 		long folderId = d.getFolder().getId();
 		HoldView hold = hold(d, caller);
 		Caller current = Caller.current();
+		// One lookup for both, as CE's check of one permission reads them all
+		Set<Permission> allowed = DocumentDAO.get().getAllowedPermissions(d.getId(), caller.getId());
+		boolean unprotected = opens(d, current.session());
 		// As the check-out and the save decide: no one else's hold, no lock at all (spec correction 10), and not
 		// the caller's on another device (M3 spec section 9.4)
-		boolean canEdit = AccessChecks.allowed(caller, Permission.WRITE, d) && !d.isImmutable()
+		boolean canEdit = allowed.contains(Permission.WRITE) && !d.isImmutable()
 				&& d.getStatus() != DocumentStatus.ARCHIVED
-				&& (hold == null || checkedOutBy(d, caller) && heldHere(hold, current)) && opens(d, current.session());
+				&& (hold == null || checkedOutBy(d, caller) && heldHere(hold, current)) && unprotected;
+		// As the content and the thumbnail decide
+		boolean canOpen = allowed.contains(Permission.DOWNLOAD) && unprotected;
 		long docNumber = Long.parseLong(d.getCustomId());
 		return new DocumentView("document", docNumber, d.getFileName(), d.getFileSize(), d.getVersion(),
 				d.getFileVersion(), docNumber + "." + d.getFileVersion(),
 				new FolderRef(folderId, d.getFolder().getName(), folderKind), matter, d.getCreation(),
-				d.getLastModified(), hold, canEdit);
+				d.getLastModified(), hold, canEdit, canOpen);
 	}
 
 	/**

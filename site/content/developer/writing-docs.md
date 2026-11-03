@@ -79,7 +79,8 @@ Hextra's shortcodes cover most needs: `callout` (with `type="info"` or `type="wa
 - Take them at a true 1280 × 800, with headless Chrome: the browser pane scales the page down. Start Chrome with
   `TZ=Europe/London`, the demo stack's time zone, so the times it shows are the firm's, not your computer's.
 - The Healdan Helper's windows come from a [helper run from source](../desktop-clients/#running-the-helper-from-source),
-  started with `TZ=Europe/London` and signed in to the demo stack as `pnair`. For the pictures only, add the
+  started with `TZ=Europe/London` and `LANG=en_GB.UTF-8` and signed in to the demo stack as `pnair`. The helper writes
+  dates and times in the Mac's region's order, and `LANG` makes it the UK's, as the firm's, whatever your Mac's is. For the pictures only, add the
   `AvaloniaUI.DiagnosticsSupport` package and `this.AttachDeveloperTools(o => o.EnableDiscovery = true)` to a local
   build, without committing them. Avalonia's Developer Tools (`avdt mcp`) then find each window, click and type in it,
   and save it as a PNG. The channel's routes open the windows the menu bar doesn't (see

@@ -16,13 +16,14 @@ namespace Healdan.Helper.Tray;
 
 /// <summary>
 /// The menu-bar icon, the mark in one colour with a dot while the helper needs the user (polish spec §7), and its menu
-/// (spec §5.1): who is signed in, the documents open, any saves waiting to be sent,
+/// (spec §5.1): a line for each window waiting for the user's answer, which brings it up (#143), who is signed in, the
+/// documents open, any saves waiting to be sent,
 /// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), a line for each server with copies
 /// waiting (spec §5.4: set aside), Open from Healdan (once the helper has started), Open Healdan in Browser (once
 /// there's a server, signed in or not: #87), Install the LibreOffice Extension while it isn't installed (spec §5.12,
 /// R22), Set Up Microsoft Office while Word, Excel or PowerPoint is installed and the certificate isn't trusted (M3.5 spec
 /// §5.13), Settings, Sign In or Sign Out, About (#89) and Quit. When native notifications can't be shown, the last notice
-/// is the menu's status line. The menu is rebuilt when it opens and whenever the session changes.
+/// is the menu's status line. The menu is rebuilt when it opens, whenever the session changes, and as windows open and close.
 /// </summary>
 internal sealed class TrayMenu : IDisposable
 {
@@ -64,6 +65,7 @@ internal sealed class TrayMenu : IDisposable
         session.Changed += Refresh;
         notifier.StatusChanged += Refresh;
         extension.Changed += Refresh;
+        windows.WindowsChanged += Refresh;
         _registry.Tick += (_, _) => _extension.Refresh(); // a change raises Changed, which rebuilds the menu
         Build();
     }
@@ -73,6 +75,7 @@ internal sealed class TrayMenu : IDisposable
         _session.Changed -= Refresh;
         _notifier.StatusChanged -= Refresh;
         _extension.Changed -= Refresh;
+        _windows.WindowsChanged -= Refresh;
         _registry.Stop();
         _icon.IsVisible = false;
         _icon.Dispose();
@@ -84,13 +87,20 @@ internal sealed class TrayMenu : IDisposable
     {
         var missing = _extension.Refresh(); // reads LibreOffice's registry, so the item goes once the user has accepted it
         var copies = _session.OpenCopies();
-        var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, copies.Any(_session.HasCrashed), _session.KeptCopies().Count, missing,
-            _extension.Older is not null);
+        var waitingWindows = _windows.WaitingWindows;
+        var reason = Attention.Reason(_session.SignedIn, _session.StartFailed, _windows.Waiting, copies.Any(_session.HasCrashed), _session.KeptCopies().Count,
+            missing, _extension.Older is not null);
         ShowDot(reason);
         _registry.IsEnabled = missing && OperatingSystem.IsMacOS();
 
         var items = _menu.Items;
         items.Clear();
+        if (waitingWindows.Count > 0)
+        {
+            foreach (var window in waitingWindows)
+                items.Add(Item(window.MenuLine, window.Bring));
+            items.Add(new NativeMenuItemSeparator());
+        }
         items.Add(Label(Who()));
         if (_notifier.Status is { } status)
             items.Add(Item(status.Length <= MaxStatus ? status : status[..MaxStatus] + "…", _notifier.ClearStatus));
@@ -137,7 +147,7 @@ internal sealed class TrayMenu : IDisposable
         items.Add(Item("Settings…", _windows.ShowSettings));
         items.Add(_session.SignedIn
             ? Item("Sign Out", () => Run(_session.SignOutAsync))
-            : Item("Sign In…", () => Run(_session.SignInAgainAsync)));
+            : Item("Sign In…", SignIn));
         items.Add(new NativeMenuItemSeparator());
         items.Add(Item("About Healdan Helper", _windows.ShowAbout));
         items.Add(Item("Quit Healdan Helper", _quit));
@@ -153,6 +163,13 @@ internal sealed class TrayMenu : IDisposable
         _icon.Icon = reason is null ? _plain : _attention;
         if (OperatingSystem.IsMacOS())
             MacOSProperties.SetIsTemplateIcon(_icon, true);
+    }
+
+    /// <summary>Brings the Sign In window up if it's open, which the session's sign-in would leave where it is (#143).</summary>
+    private void SignIn()
+    {
+        if (!_windows.BringSignIn())
+            Run(_session.SignInAgainAsync);
     }
 
     private void InstallExtension() => _ = Task.Run(() =>

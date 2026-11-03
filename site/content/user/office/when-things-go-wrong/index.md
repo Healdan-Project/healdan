@@ -79,9 +79,16 @@ over the document with the reason. Close it when you've read it. It's the same f
 ## A Button Seems to Do Nothing
 
 The helper may have a window open that you can't see, such as Save to Healdan, Open from Healdan or Properties, behind
-your other windows. The button waits for as long as that window is open. Look for it behind the app, or in Mission
-Control, and finish or cancel it. Word, Excel and PowerPoint may also be showing a prompt for access to the helper's `Copies`
-folder: see [The First Save in Each App](../saving-to-healdan/#the-first-save-in-each-app).
+your other windows. The button waits for as long as that window is open. When one is waiting, the helper's icon in the
+menu bar shows its dot, and the helper is in the Dock. Bring the window back and finish or cancel it, in any of these
+ways:
+
+- Choose the window's line at the top of the helper's menu, such as **Save as New Document…**.
+- Click the helper's icon in the Dock.
+- Choose the helper with ⌘Tab.
+
+Word, Excel and PowerPoint may also be showing a prompt for access to the helper's `Copies` folder: see
+[The First Save in Each App](../saving-to-healdan/#the-first-save-in-each-app).
 
 ## Pairing Again
 

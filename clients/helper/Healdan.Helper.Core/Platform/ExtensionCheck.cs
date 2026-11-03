@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-using System.Globalization;
+using Healdan.Helper.Core.Browse;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Settings;
 using Healdan.Helper.Core.Ui;
@@ -144,7 +144,7 @@ public sealed class ExtensionCheck(IExtensionTools tools, HelperPaths paths, INo
                 : "Adds Healdan's menu and toolbar to LibreOffice.", true,
                 $"Not installed. To add Healdan's menu and toolbar to LibreOffice, choose {MenuItem} in the Healdan Helper menu.");
         return record.Version is { } version
-            ? new(version, record.At is { } at ? "Installed on " + at.ToLocalTime().ToString("d MMMM yyyy", CultureInfo.InvariantCulture) : "Installed",
+            ? new(version, record.At is { } at ? "Installed on " + When.Date(at) : "Installed",
                 false, record.Describe())
             : new("Not Installed", null, false, record.Describe());
     }
