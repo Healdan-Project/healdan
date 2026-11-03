@@ -1628,7 +1628,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **Accounts and linking**
 
-- `signInLinked` doesn't refuse a link that points at `admin` or a system account. A stray row, which only a hand edit of the database could make, would have the repair strip `admin`'s password and delete its API keys. Refuse it, as linking by email does. (Tasks 5 and 7b)
+- **Fixed** on 2026-11-03. `signInLinked` didn't refuse a link that points at `admin` or a system account. A stray row, which only a hand edit of the database could make, would have the repair strip `admin`'s password and delete its API keys. It's now refused as linking by email refuses it, before anything changes, the gate's group removal included (`SignInAccountsTest.testALinkToAdminOrASystemAccountIsRefused`). (Tasks 5 and 7b)
 - An enabled, unexpired account past CE's maximum inactivity is linked by email, then refused by the chain: R16 named only disabled and expired accounts. A direct `validateUser` also doesn't turn an inactive account to disabled, as the chain's checks do. (Tasks 7 and 8)
 - `ProviderPasswordListener.unlinking` exempts every save on the thread while it runs. Keep it to the account being unlinked. (Task 5)
 - Stray `ld_impersonator` rows for a provider account, which only a JDBC write or a restore could make, block CE's own stores of it until its next sign-in, and dropping them logs nothing. (Task 5)
@@ -1691,5 +1691,5 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 - `LoginThrottle.recordFailure` throws a `NullPointerException` for a refused sign-in with no client. (Task 5)
 - `SessionFilter`'s own key sign-in, an `X-API-KEY` with no open session, reaches `AuthenticationChain` with no username, which throws a `NullPointerException`, so a local key there gets a `500`. (Task 7b)
-- `LDAuthenticationProvider` logs the raw key at debug level, which is off as shipped. (Task 7b)
+- **Fixed** on 2026-11-03. `LDAuthenticationProvider` logged the raw key at debug level, which is off as shipped. It logs whether a key came (`LDAuthenticationProviderLogTest`; the capability map's §6). (Task 7b)
 - CE's "View the mobile web version" links to `login-mobile.jsp`, which CE doesn't ship, and every page logs a Content Security Policy error for `http://server:port/`. (Task 13c)

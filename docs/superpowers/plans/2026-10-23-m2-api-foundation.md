@@ -1444,7 +1444,7 @@ Left open when the owner accepted M2 on 2026-10-24. None blocks M3.
 - A revoked token's API session opened in the same moment can stay open until it idles out; no client can reach it. Fix: `bind` reports whether it updated a row, and `openSession` kills the session if not. `killOpenedSessions` could take a set.
 - A token issued while its user's password changes relies on MariaDB's default REPEATABLE READ to be revoked; nothing sets the isolation level.
 - `429` answers give the configured wait, not the time left, and no `Retry-After`.
-- CE: `SecurityServiceImpl.deleteApiKey` deletes any key id with no owner check (upstream, pre-existing).
+- **Fixed** on 2026-11-03. CE: `SecurityServiceImpl.deleteApiKey` deleted any key id with no owner check (upstream, pre-existing), and `updateApiKey` renamed any. Both now take only the key's owner (`SecurityServiceImplAuthorizationTest`; the capability map's §6).
 
 **Rules outside the API (pre-existing, recorded in the capability map)**
 - Healdan's listeners don't enforce required properties on create, so SOAP, REST and WebDAV can file without them; only the API checks.
