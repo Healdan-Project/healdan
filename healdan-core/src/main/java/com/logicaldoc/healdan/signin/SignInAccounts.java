@@ -706,26 +706,33 @@ public class SignInAccounts {
 
 	/**
 	 * The parts of the name the claims carry: {@code given_name} and
-	 * {@code family_name}, and for whichever is missing, {@code name} split at
-	 * its last space (the words before it are the first name, the word after
-	 * it the last name; one word is the first name, with an empty last name).
-	 * A {@code given_name} that's the whole {@code name}, with no
-	 * {@code family_name}, counts as missing: Authentik's default mapping sends
-	 * the full name as the given name. Null for a part they don't carry.
+	 * {@code family_name}, and for whichever is missing, the rest of
+	 * {@code name} once the other is taken off its start or end. Where it
+	 * doesn't start or end with the other, or both are missing, {@code name} is
+	 * split at its last space (the words before it are the first name, the word
+	 * after it the last name; one word is the first name, with an empty last
+	 * name). A {@code given_name} that's the whole {@code name} counts as
+	 * missing, as Authentik's default mapping sends the full name as the given
+	 * name, unless a {@code family_name} comes that the name doesn't end with.
+	 * Null for a part they don't carry.
 	 */
 	static Names names(IdClaims claims) {
 		String first = text(claims.givenName());
 		String last = text(claims.familyName());
 		String full = text(claims.name());
-		if (last == null && first != null && first.equals(full))
+		if (full == null)
+			return new Names(first, last);
+		if (full.equals(first) && (last == null || full.endsWith(" " + last)))
 			first = null;
-		if (full != null && (first == null || last == null)) {
-			int space = full.lastIndexOf(' ');
-			if (first == null)
-				first = space < 0 ? full : full.substring(0, space).strip();
-			if (last == null)
-				last = space < 0 ? "" : full.substring(space + 1).strip();
-		}
+		int space = full.lastIndexOf(' ');
+		if (first == null && last != null && full.endsWith(" " + last))
+			first = full.substring(0, full.length() - last.length()).strip();
+		else if (first == null)
+			first = space < 0 ? full : full.substring(0, space).strip();
+		if (last == null && full.startsWith(first + " "))
+			last = full.substring(first.length()).strip();
+		else if (last == null)
+			last = space < 0 ? "" : full.substring(space + 1).strip();
 		return new Names(first, last);
 	}
 
