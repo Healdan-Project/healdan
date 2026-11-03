@@ -202,8 +202,8 @@ public class SignInAccounts {
 	 * @param claims what the provider's new ID token says
 	 * @return false when the gate refuses, after taking the account out of every
 	 *         mapped group; false too, changing nothing, when the identity isn't
-	 *         linked to this account, or the account no longer exists. True
-	 *         otherwise.
+	 *         linked to this account, the account no longer exists, or it is
+	 *         {@code admin} or a system account. True otherwise.
 	 * @throws PersistenceException error at data layer
 	 * @throws IllegalArgumentException if the claims have no identity
 	 * @throws IllegalStateException if it's called inside a transaction
@@ -390,6 +390,13 @@ public class SignInAccounts {
 		User user = UserDAO.get().findById(userId, true);
 		if (user == null)
 			return false;
+		// As signInLinked() refuses, for a token issued before it did
+		String why = adminOrSystem(user);
+		if (why != null) {
+			journal.warn("Refused a re-check through the provider {} for {}: its identity is linked to the account {}, "
+					+ "which {}", p.id(), printable(claims.username()), printable(user.getUsername()), why);
+			return false;
+		}
 
 		List<GroupMapping> map = providers.groups(p.id());
 		Set<Long> granted = claims.groupsOverage() ? Set.of() : GroupSync.mapped(map, claims.groups());

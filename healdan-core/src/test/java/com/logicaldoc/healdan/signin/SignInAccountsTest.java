@@ -212,6 +212,12 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 		refused("account", accounts().decide(entra, claims("oid-system", "_system", null, "g-lit")));
 		// Nor does the gate take admin's groups away
 		refused("account", accounts().decide(entra, claims("oid-admin", "admin", null, "g-other")));
+		// Nor does the re-check of a device token issued before the refusal
+		for (String group : List.of("g-lit", "g-other"))
+			assertFalse(group, accounts().refresh(UserDAO.get().findById(User.USERID_ADMIN), entra,
+					claims("oid-admin", "admin", null, group)));
+		assertFalse(accounts().refresh(UserDAO.get().findById(User.USERID_SYSTEM), entra,
+				claims("oid-system", "_system", null, "g-lit")));
 
 		before.assertUnchanged();
 		assertEquals(password, storedPassword(User.USERID_ADMIN));

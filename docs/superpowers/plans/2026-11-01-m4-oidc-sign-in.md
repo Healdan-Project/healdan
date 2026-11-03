@@ -1628,7 +1628,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **Accounts and linking**
 
-- **Fixed** on 2026-11-03. `signInLinked` didn't refuse a link that points at `admin` or a system account. A stray row, which only a hand edit of the database could make, would have the repair strip `admin`'s password and delete its API keys. It's now refused as linking by email refuses it, before anything changes, the gate's group removal included (`SignInAccountsTest.testALinkToAdminOrASystemAccountIsRefused`). (Tasks 5 and 7b)
+- **Fixed** on 2026-11-03. `signInLinked` didn't refuse a link that points at `admin` or a system account. A stray row, which only a hand edit of the database could make, would have the repair strip `admin`'s password and delete its API keys. It's now refused as linking by email refuses it, before anything changes, the gate's group removal included, and so is the re-check of a device token issued before the refusal (`SignInAccountsTest.testALinkToAdminOrASystemAccountIsRefused`). (Tasks 5 and 7b)
 - An enabled, unexpired account past CE's maximum inactivity is linked by email, then refused by the chain: R16 named only disabled and expired accounts. A direct `validateUser` also doesn't turn an inactive account to disabled, as the chain's checks do. (Tasks 7 and 8)
 - `ProviderPasswordListener.unlinking` exempts every save on the thread while it runs. Keep it to the account being unlinked. (Task 5)
 - Stray `ld_impersonator` rows for a provider account, which only a JDBC write or a restore could make, block CE's own stores of it until its next sign-in, and dropping them logs nothing. (Task 5)
