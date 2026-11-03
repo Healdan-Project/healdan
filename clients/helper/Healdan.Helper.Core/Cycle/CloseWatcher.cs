@@ -88,7 +88,7 @@ internal sealed class CloseWatcher : IDisposable
     /// written since <paramref name="crashWritten"/>, when the crash left it (<see cref="IOfficeApp.LockWritten"/>), or
     /// back after it went, or the app's process running again. Neither its close nor a crash is looked for meanwhile.
     /// Watched again with the same time after a save back that failed, a lock file written since is found again at the
-    /// next look.
+    /// next look; watched with the time it has now, only its being written again counts.
     /// </summary>
     /// <param name="lookIfRunning">
     /// The app's process running at the first look counts, as just after the crash or once the app was started for the
@@ -99,6 +99,14 @@ internal sealed class CloseWatcher : IDisposable
         lock (_lock)
             _entries[path] = new Entry(path, app, false, false) { Crashed = true, CrashWritten = crashWritten, LookIfRunning = lookIfRunning };
     }
+
+    /// <summary>
+    /// Whether the app's lock file on the copy is there and was written at another time than <paramref name="written"/>:
+    /// for a crashed copy, the app may have it open again (M3.5 spec §5.14). A lock file whose time the app can't tell
+    /// (<see cref="IOfficeApp.LockWritten"/> null) isn't counted, and is looked at again at the next poll.
+    /// </summary>
+    internal static bool LockWrittenSince(IOfficeApp app, string path, DateTime? written) =>
+        app.LockWritten(path) is { } now && now != written;
 
     /// <summary>Whether the copy is watched and its lock file has been seen.</summary>
     public bool LockSeen(string path)
@@ -136,7 +144,7 @@ internal sealed class CloseWatcher : IDisposable
                     {
                         if (!entry.App.LockExists(entry.Path))
                             entry.LockGoneSinceCrash = true;
-                        else if (entry.LockGoneSinceCrash || entry.App.LockWritten(entry.Path) != entry.CrashWritten)
+                        else if (entry.LockGoneSinceCrash || LockWrittenSince(entry.App, entry.Path, entry.CrashWritten))
                             reopened.Add(entry);
                     }
                     else if (entry.App.LockExists(entry.Path))

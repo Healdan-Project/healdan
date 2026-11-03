@@ -137,14 +137,15 @@ public sealed class CopyCycle : IDisposable
         public DateTime? CrashWritten { get; set; }
 
         /// <summary>
-        /// The crashed copy's program has it open again: the save-back found its window by its path (M3.5 spec §5.14), and
-        /// is saving it back, or will try again.
+        /// The crashed copy's program has it open again (M3.5 spec §5.14): its owner file was written again since the
+        /// crash, or the save-back found its window by its path, and is saving it back, or will try again.
         /// </summary>
         public bool Reopened { get; set; }
 
         /// <summary>
-        /// The save-back found the window, and is saving it, which takes the program's owner file away until the save is
-        /// done.
+        /// Until the save-back's look returns, the copy is its program's window, whatever its owner file says: the owner
+        /// file was back as the look started or came back during it, or the look found the window and is saving it, which
+        /// takes the program's owner file away until the save is done.
         /// </summary>
         public bool SavingBack { get; set; }
 
@@ -153,7 +154,8 @@ public sealed class CopyCycle : IDisposable
 
         /// <summary>
         /// Reopen asked for the crashed copy, and its program was started rather than handed the file
-        /// (<see cref="Reopen"/>): if the save-back doesn't find the copy, it's opened as last saved.
+        /// (<see cref="Reopen"/>): if the save-back doesn't find the copy, and the program hasn't written its owner file
+        /// again, it's opened as last saved.
         /// </summary>
         public bool OpenIfNotFound { get; set; }
 
@@ -389,7 +391,8 @@ public sealed class CopyCycle : IDisposable
             }
             if (!running)
             {
-                s.Crashed = true;
+                lock (_gate)
+                    (s.Crashed, s.CrashWritten) = (true, app.LockWritten(path));
                 WatchForRecovery(s);
                 Raise(ev => ev.Crashed(path));
             }
@@ -552,19 +555,27 @@ public sealed class CopyCycle : IDisposable
     /// there now; or the save-back is in its own look after the owner file came back, or saving the window it found (the
     /// program removes the owner file while it saves a window over the copy). Checked in then, the copy would be deleted
     /// from under that window. Once the save-back gives up, a window closed before it found it no longer counts. The
-    /// program merely running doesn't count, as it may not have the copy at all.
+    /// program merely running doesn't count, as it may not have the copy at all. Word runs before it writes its owner file
+    /// again, so the close watcher may see it running first, and the owner file come back only once the save-back is
+    /// looking: it counts all the same.
     /// </summary>
     public bool IsOpenAgain(string path)
     {
-        string? reopened = null;
+        string copy;
+        bool reopened, readOnly;
+        DateTime? crashWritten;
         lock (_gate)
-            if (Find(path) is { Crashed: true, Reopened: true } s)
-            {
-                if (s.SavingBack)
-                    return true;
-                reopened = s.Path;
-            }
-        return reopened is not null && AppOf(reopened).LockExists(reopened);
+        {
+            if (Find(path) is not { Crashed: true } s)
+                return false;
+            if (s.SavingBack)
+                return true;
+            (copy, reopened, readOnly, crashWritten) = (s.Path, s.Reopened, s.ReadOnly, s.CrashWritten);
+        }
+        var app = AppOf(copy);
+        if (reopened)
+            return app.LockExists(copy);
+        return !readOnly && OfficeAfterSave.Driver(app, copy) is not null && CloseWatcher.LockWrittenSince(app, copy, crashWritten);
     }
 
     /// <summary>The copy's state; <paramref name="pending"/> null works it out, which reads the file.</summary>
@@ -1023,7 +1034,7 @@ public sealed class CopyCycle : IDisposable
                 _sessions[Name(path)] = s;
             }
             (s.HoldBy, s.Adopting, s.Ended, s.Crashed, s.Reopened, s.SavingBack, s.NextKind) = (holdBy, adopting, false, false, false, false, null);
-            (s.OpenIfNotFound, s.LookBriefly) = (false, false);
+            (s.OpenIfNotFound, s.LookBriefly, s.CrashWritten) = (false, false, null);
         }
         if (!readOnly)
             _saves.Watch(path);
@@ -1535,13 +1546,15 @@ public sealed class CopyCycle : IDisposable
 
     private void OnCrashed(string path)
     {
+        var app = AppOf(path);
         Session? s;
         lock (_gate)
         {
             s = Find(path);
             if (s is null)
                 return;
-            s.Crashed = true;
+            // With the owner file's time, at once: IsOpenAgain reads them together.
+            (s.Crashed, s.CrashWritten) = (true, app.LockWritten(s.Path));
         }
         WatchForRecovery(s);
         Raise(ev => ev.Crashed(s.Path));
@@ -1724,16 +1737,19 @@ public sealed class CopyCycle : IDisposable
     }
 
     /// <summary>
-    /// M3.5 spec §5.14: a crashed copy of Word's, Excel's or PowerPoint's is watched for its program to have it open again.
+    /// M3.5 spec §5.14: a crashed copy of Word's, Excel's or PowerPoint's is watched for its program to have it open again,
+    /// against the time of the owner file the crash left (<see cref="Session.CrashWritten"/>, set with
+    /// <see cref="Session.Crashed"/>).
     /// </summary>
     private void WatchForRecovery(Session s)
     {
         var app = AppOf(s.Path);
         if (s.ReadOnly || OfficeAfterSave.Driver(app, s.Path) is null)
             return;
+        DateTime? crashWritten;
         lock (_gate)
-            s.CrashWritten = app.LockWritten(s.Path);
-        _closes.WatchCrashed(s.Path, app, s.CrashWritten);
+            crashWritten = s.CrashWritten;
+        _closes.WatchCrashed(s.Path, app, crashWritten);
     }
 
     /// <summary>
@@ -1786,17 +1802,31 @@ public sealed class CopyCycle : IDisposable
             var open = false;
             var unwatched = false;
             TimeSpan wait;
+            DateTime? crashWritten;
+            bool saving;
             lock (_gate)
             {
                 wait = s.LookBriefly ? _timings.CrashPoll * 2 : _timings.RecoveryWait;
-                // Its owner file written again says the program has it open: until the look returns, that owner file says
-                // nothing, as the program removes it while it saves a window over the copy, so Send and Check In is refused.
-                s.SavingBack = s.Reopened;
+                // Its owner file written again, and there now, says the program has it open: until the look returns, that
+                // owner file says nothing, as the program removes it while it saves a window over the copy, so Send and
+                // Check In is refused. Gone since, as when the window was closed before an earlier look gave up, it counts
+                // again only once it's back.
+                saving = s.SavingBack = s.Reopened && app.LockExists(s.Path);
+                crashWritten = s.CrashWritten;
             }
             try
             {
                 outcome = await _office.SaveRecoveredAsync(driver.Scripting, driver.Program, s.Path, wait, _timings.CrashPoll,
-                    () => IsClosing(s), () =>
+                    _timings.Clock, () => IsClosing(s), () =>
+                    {
+                        // The look started as the program ran again, before it wrote its owner file, as Word does: the owner
+                        // file back now says the same as if the close watcher had seen it first.
+                        if (saving || !CloseWatcher.LockWrittenSince(app, s.Path, crashWritten))
+                            return;
+                        lock (_gate)
+                            if (IsLiveCrash(s))
+                                (s.Reopened, s.SavingBack, saving) = (true, true, true);
+                    }, () =>
                     {
                         // Found: from now on the crash window's Send and Check In would delete it from under the window, and
                         // until the save returns, the program's owner file says nothing.
@@ -1815,7 +1845,7 @@ public sealed class CopyCycle : IDisposable
                     }, _stop.Token);
                 lock (_gate)
                 {
-                    if (s.Closing || !s.Crashed || Find(s.Path) != s)
+                    if (!IsLiveCrash(s))
                         return; // checked in meanwhile, from the crash window
                     if (outcome == Recovery.Saved)
                     {
@@ -1824,10 +1854,17 @@ public sealed class CopyCycle : IDisposable
                     }
                     else if (outcome == Recovery.NotFound && s.OpenIfNotFound)
                     {
-                        // Reopen asked, and the program brought nothing back: opened as last saved, as any open copy.
-                        (s.Crashed, s.Reopened, s.OpenIfNotFound, s.LookBriefly) = (false, false, false, false);
-                        _closes.Watch(s.Path, app);
-                        open = true;
+                        // Reopen asked, and the program brought nothing back: opened as last saved, as any open copy. Its
+                        // owner file written again says it has the copy open all the same, under another name: handed the
+                        // file, it would open it again beside that window (§5.2), so the copy stays crashed, to be looked for
+                        // again.
+                        (s.OpenIfNotFound, s.LookBriefly) = (false, false);
+                        if (!CloseWatcher.LockWrittenSince(app, s.Path, s.CrashWritten))
+                        {
+                            (s.Crashed, s.Reopened) = (false, false);
+                            _closes.Watch(s.Path, app);
+                            open = true;
+                        }
                     }
                 }
             }
@@ -1868,18 +1905,19 @@ public sealed class CopyCycle : IDisposable
                 // Found, but not saved: tried again at the next look.
                 await Task.Delay(_timings.CrashPoll, _stop.Token);
                 lock (_gate)
-                    if (s.Crashed && !s.Closing && Find(s.Path) == s)
+                    if (IsLiveCrash(s))
                         _closes.WatchCrashed(s.Path, app, s.CrashWritten);
                 return;
             }
             // Not found: looked for again as soon as the program starts again or writes its owner file, and while it runs
-            // only after a while, so it isn't asked every few seconds while it runs without the copy.
+            // only after a while, so it isn't asked every few seconds while it runs without the copy, or with an owner file
+            // the look counted already, which counts again only once it's written again.
             lock (_gate)
-                if (s.Crashed && !s.Closing && Find(s.Path) == s)
-                    _closes.WatchCrashed(s.Path, app, s.CrashWritten, lookIfRunning: false);
+                if (IsLiveCrash(s))
+                    _closes.WatchCrashed(s.Path, app, s.Reopened ? app.LockWritten(s.Path) : s.CrashWritten, lookIfRunning: false);
             await Task.Delay(_timings.RecoveryWait, _stop.Token);
             lock (_gate)
-                if (s.Crashed && !s.Closing && !s.LookingBack && Find(s.Path) == s)
+                if (IsLiveCrash(s) && !s.LookingBack)
                     _closes.WatchCrashed(s.Path, app, s.CrashWritten);
         }
         catch (OperationCanceledException) when (_stop.IsCancellationRequested)
@@ -1887,6 +1925,9 @@ public sealed class CopyCycle : IDisposable
             // Shutting down: the next start finds the crash again.
         }
     }
+
+    /// <summary>Under the gate: the copy still counts as crashed, isn't being checked in, and is still this session's.</summary>
+    private bool IsLiveCrash(Session s) => s.Crashed && !s.Closing && Find(s.Path) == s;
 
     /// <summary>
     /// A crashed Word or Excel copy about to be opened as last saved: a save confirmed while it counted as crashed wasn't
