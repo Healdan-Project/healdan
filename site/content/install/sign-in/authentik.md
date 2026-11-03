@@ -49,7 +49,8 @@ about it.
 ### Check the Groups
 
 The default `profile` scope sends the person's groups in `groups`, by name, so leave the profile mapping in the
-list. In Healdan's group map, a provider group is an Authentik group's name, spelt exactly as Authentik spells it,
+list, or one that sends `groups` as it does (see [Keeping First and Last Names Apart](#keeping-first-and-last-names-apart)).
+In Healdan's group map, a provider group is an Authentik group's name, spelt exactly as Authentik spells it,
 capitals included.
 
 ### Limit Who Can Use the Application
@@ -113,12 +114,129 @@ username or email, a person's `sub` changes, and Healdan takes their next sign-i
 Healdan reads `given_name` and `family_name` for the names, and `name` where they're missing. Authentik keeps one
 name for each person, and by default sends all of it as `given_name`, with no `family_name`. Healdan takes a
 `given_name` like that for a missing one, and splits `name` at its last space: Jane Doe gets the first name Jane
-and the last name Doe. A last name of more than one word, such as de la Cruz, splits in the wrong place. From
-Authentik 2026.8, the default mapping sends a person's own `given_name` and `family_name` attributes where they have
-them, so add both to that person's attributes in Authentik. The names follow Authentik at each sign-in, and so does
-the email, so put a name right in Authentik, not in Healdan, which changes it back at the next sign-in.
+and the last name Doe. A last name of more than one word, such as de la Cruz, splits in the wrong place. For those,
+give the person their first and last names apart in Authentik, as
+[Keeping First and Last Names Apart](#keeping-first-and-last-names-apart) says. The names follow Authentik at each
+sign-in, and so does the email, so put a name right in Authentik, not in Healdan, which changes it back at the next
+sign-in.
 
 Leave the provider's **Issuer mode** at its default, where each provider has its own issuer, based on the
 application's slug. Healdan fetches the discovery document at the issuer followed by
 `/.well-known/openid-configuration`, and Authentik publishes it under each application's slug, so the mode that
 gives every provider the same issuer doesn't work with Healdan.
+
+## Keeping First and Last Names Apart
+
+A person's name in Authentik is one piece of text, and nothing in it says where the first name ends. To get every
+name right, keep each person's first and last names as Authentik attributes, `given_name` and `family_name`, and
+have the `profile` scope send them as the claims of the same names. For anyone without them, Healdan splits `name`,
+as above.
+
+### Give People Their Names
+
+In Authentik's admin interface, go to **Directory → Users**, edit the person, and add both names to
+**Attributes**, after anything already there:
+
+```yaml
+given_name: "Maria"
+family_name: "de la Cruz"
+```
+
+Keep the quotation marks, so YAML reads every name as text, even one such as 't Hooft. Set both for each person.
+With only one, Healdan works the other out from `name`, which is right only where `name` starts with the first name
+you set, or ends with the last name you set. There are other ways to fill them in:
+
+- **From Authentik 2026.8,** you can turn on the **Given Name** and **Family Name** definitions under
+  **Directory → Object attributes**, and the user form then has a field for each. Once they're on, change names in
+  the fields, not in **Attributes**: when you save the user, what the fields hold replaces those two keys there, even
+  when a field is blank. Authentik calls object attributes a preview.
+- **People synced from a directory** through an LDAP source, such as Active Directory or OpenLDAP, have their names
+  there as `givenName` and `sn`. Authentik's own Active Directory mappings copy them under those names, which no
+  profile mapping reads, and its OpenLDAP ones don't copy them at all. Copy them to `given_name` and `family_name`
+  with a mapping of your own: in **Customization → Property Mappings**, choose **Create**, then **LDAP Source
+  Property Mapping**, name it, and give it this expression:
+
+  ```python
+  return {
+      "attributes": {
+          "given_name": list_flatten(ldap.get("givenName")),
+          "family_name": list_flatten(ldap.get("sn")),
+      },
+  }
+  ```
+
+  Then add it to the source's **User Property Mappings**, under **Directory → Federation and Social login**. The
+  next sync fills the names in, and every sync takes them from the directory again, so put a name right in the
+  directory.
+- **A prompt field** with the field key `attributes.given_name` or `attributes.family_name` stores what's typed in
+  it as that attribute, when a User Write stage follows its Prompt stage. Add the fields to an enrollment flow to ask
+  people their names as they sign up.
+
+  To let people change their own, put the fields in a Prompt stage of your own, and bind it to the user settings
+  flow, `default-user-settings-flow`, between its `default-user-settings` stage (order 20) and its User Write stage
+  (order 100), such as at 30. People then see their names on a second page. Give each field the initial value
+  `return user.attributes.get("given_name", "")` (or `"family_name"`), with **Interpret initial value as
+  expression** on, so the form opens with the person's names. Don't add the fields to `default-user-settings`
+  itself: Authentik makes that stage from a blueprint, which puts its fields back as they were whenever an upgrade
+  changes the flow.
+
+  **Allow users to change name** in **System → Settings** doesn't cover these fields, so with them in the user
+  settings flow, people can change the names Healdan shows for them even where that setting is off. Add them there
+  only if that's acceptable.
+
+### Send Them to Healdan
+
+**From Authentik 2026.8,** the default profile mapping sends a person's `given_name` and `family_name` attributes,
+and the whole name as `given_name` for anyone without a `given_name` attribute, so there's nothing to change.
+
+**Before 2026.8,** the default mapping sends only the whole name, so the provider needs a profile mapping of your
+own. Test it before it goes on the provider. A profile mapping without the person's groups does more than refuse
+every sign-in: each linked person is taken out of the Healdan groups the map gave them when they next sign in, or
+when their helper next [checks back](../#checking-back-with-the-provider), which also asks the helper to sign in
+again.
+
+1. Go to **Customization → Property Mappings**, open **authentik default OAuth Mapping: OpenID 'profile'**, and copy
+   its expression.
+2. Choose **Create**, then **Scope Mapping**. Name the mapping, such as **Healdan profile**, and set **Scope name**
+   to `profile`.
+3. Paste your copy as the expression, and change it to read like this:
+
+   ```python
+   claims = {
+       "name": request.user.name,
+       "preferred_username": request.user.username,
+       "nickname": request.user.username,
+       "groups": [group.name for group in request.user.ak_groups.all()],
+   }
+   given = request.user.attributes.get("given_name")
+   family = request.user.attributes.get("family_name")
+   if given:
+       claims["given_name"] = given
+   if family:
+       claims["family_name"] = family
+   return claims
+   ```
+
+   Keep the `groups` line as your copy has it. Before Authentik 2026.2 it reads `request.user.ak_groups`, as here.
+   From 2026.2 it reads `request.user.groups`, and `ak_groups` still works there, with a deprecation warning. Never
+   use `request.user.groups` before 2026.2: it's another list there, normally empty, so Healdan finds no group for
+   anyone and refuses every sign-in, telling people their account doesn't give them access to Healdan.
+
+   The mapping sends whichever of the two names a person has as attributes. For anyone with neither, it sends only
+   `name`, not the whole name as `given_name`, and Healdan splits it.
+4. Back in **Customization → Property Mappings**, choose **Test** on your mapping's row, pick a person who has both
+   attributes as the **User**, and run it. Check that the **Result** has their `given_name` and `family_name`, and
+   `groups` with their group names in it, not an empty list.
+5. Open the provider, and in **Scopes**, take out the default profile mapping and add yours. Authentik runs every
+   mapping in the list for the scope, in no set order, so with both there the default one could send the whole name
+   over yours.
+6. On the provider's **Preview** tab, choose the same person, and check that the JWT payload has the same
+   `given_name`, `family_name` and `groups`.
+
+When you upgrade Authentik to 2026.8 or later, put the default profile mapping back in place of yours. It then sends
+the names itself, and Authentik keeps it in step with its own changes. Don't leave yours in place: if it reads
+`ak_groups`, it fails once Authentik removes that, which Authentik means to do after 2026, and a mapping that fails
+sends none of its claims, so Healdan would refuse everyone, as above.
+
+Healdan changes a person's names at their next sign-in, and when it next
+[checks back](../#checking-back-with-the-provider) on their helper's sign-in.
