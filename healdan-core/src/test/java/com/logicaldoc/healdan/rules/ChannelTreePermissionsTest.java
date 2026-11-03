@@ -164,6 +164,44 @@ public class ChannelTreePermissionsTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testCmisDeleteTreeLeavesWhatAnAliasInItPointsTo() throws Exception {
+		// A tree Alice may delete, outside the Stores, holding an alias of Old,
+		// in which she may only read Sealed. CE's deleteFolder listed the
+		// alias's children through findChildren, which resolves the alias, so
+		// it deleted Sealed and sealed.txt, which the tree check never saw.
+		Folder tree = fx.folder(loose, "Tree");
+		setAcl(tree, ace(Permission.values()));
+		Folder alias = fx.legacyAlias(tree, "Old's alias", old);
+		awaitAsyncWork();
+
+		allowed(() -> cmisDeleteTree(tree));
+
+		assertNull(folderDao.findById(tree.getId()));
+		assertNull(folderDao.findById(alias.getId()));
+		assertNotNull(folderDao.findById(sealed.getId()));
+		assertNotNull(documentDao.findById(inSealed.getId()));
+	}
+
+	@Test
+	public void testCmisDeleteTreeLeavesWhatAPlainFolderWithAReferencePointsTo() throws Exception {
+		// A folder of type default that Alice may delete, outside the Stores,
+		// with a reference to Old, as CE's copy of an alias has. findChildren
+		// follows the reference whatever the folder's type, so the CMIS delete
+		// checked the folder's own tree and deleted Sealed and sealed.txt.
+		Folder plain = fx.folder(loose, "Link");
+		setAcl(plain, ace(Permission.values()));
+		Folder link = fx.refer(plain, old);
+		assertEquals(Folder.TYPE_DEFAULT, link.getType());
+		awaitAsyncWork();
+
+		allowed(() -> cmisDeleteTree(link));
+
+		assertNull(folderDao.findById(link.getId()));
+		assertNotNull(folderDao.findById(sealed.getId()));
+		assertNotNull(documentDao.findById(inSealed.getId()));
+	}
+
+	@Test
 	public void testFolderDeleteChecksEveryRoute() throws Exception {
 		// The DAO itself, as any route that calls it
 		assertRefused(DELETE_TREE, () -> folderDao.deleteTree(old.getId(), folderHistory(alice)));

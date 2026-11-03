@@ -377,36 +377,16 @@ public class FolderAccessControlEntry extends ExtendedAccessControlEntry {
 
     @Override
     public int hashCode() {
-        final int prime = 31;
-        int result = super.hashCode();
-        result = prime * result + ((ace == null) ? 0 : ace.hashCode());
-        result = prime * result + (add ? 1231 : 1237);
-        result = prime * result + (export ? 1231 : 1237);
-        result = prime * result + (iimport ? 1231 : 1237);
-        result = prime * result + (store ? 1231 : 1237);
-        return result;
+        // Healdan: by group, as equals()
+        return Long.hashCode(getGroupId());
     }
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj)
-            return true;
-        if (!super.equals(obj))
-            return false;
-        if (getClass() != obj.getClass())
-            return false;
-        FolderAccessControlEntry other = (FolderAccessControlEntry) obj;
-        if (ace == null) {
-            if (other.ace != null)
-                return false;
-        } else if (!ace.equals(other.ace))
-            return false;
-        if (add != other.add)
-            return false;
-        if (export != other.export)
-            return false;
-        if (iimport != other.iimport)
-            return false;
-        return store == other.store;
+        // Healdan: equal by group, as ld_folder_acl's key and
+        // DocumentAccessControlEntry are. CE also compared the permissions and
+        // the unmapped fields the group id constructor writes, so
+        // Folder.addAccessControlEntry() added a second entry for a group
+        return obj instanceof FolderAccessControlEntry other && getGroupId() == other.getGroupId();
     }
 }
