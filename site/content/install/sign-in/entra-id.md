@@ -8,6 +8,16 @@ can register applications and assign people to them, such as a Cloud Application
 address set as [Sign-In Providers](../) says. Microsoft renames things from time to time, so the names below are
 today's, and the ideas are what to look for.
 
+{{< callout type="warning" >}}
+**Experimental.** Healdan's sign-in through Entra ID hasn't been tried against a real Entra tenant yet. It's the same
+sign-in that Healdan's tests run against a stand-in provider and that has been tried on a real server with Authentik,
+so it's likely to work, but three things are unconfirmed: whether Entra accepts the client secret as Healdan sends
+it, in the body of the token request; whether it signs the ID tokens it sends with a refresh (see
+[Groups Between Sign-Ins](#groups-between-sign-ins)); and whether it checks the client secret before the code, which
+**Check**'s test of the secret needs. Before people rely on it, sign in with the button yourself and check that
+`admin` still signs in with its password. If a sign-in fails, Healdan's log says what Entra answered.
+{{< /callout >}}
+
 The examples use `healdan.example` for your Healdan server and `entra` as the provider's id.
 
 {{% steps %}}
@@ -97,8 +107,14 @@ On the Sign-In tab of **Administration → Healdan → Settings**, choose **Add*
 | Client Secret | the secret's **Value** |
 | Group map | a row for each provider group: its object id (or role value), and the Healdan group it maps to |
 
-**Save**, then **Check**. Check confirms the issuer, that Entra signs with RSA, and that it offers `offline_access`,
-and shows the redirect address to compare with the one you registered.
+**Save**, then **Check**. Check confirms the issuer, that Entra signs with RSA, takes a client secret at its token
+endpoint and offers `offline_access`, tries the client ID and secret there, and shows the redirect address to compare
+with the one you registered. If it says Entra refused the client secret, copy the secret's **Value** again, not its
+**Secret ID**.
+
+Check's test of the secret works only if Entra checks the secret before the code Check makes up, which hasn't been
+confirmed. Until it is, a Check that passes doesn't prove the secret is right: sign in once through the button, as in
+[Try It Before You Tell Anyone](../#try-it-before-you-tell-anyone), before anyone else relies on it.
 
 {{% /steps %}}
 

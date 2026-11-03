@@ -39,7 +39,7 @@ public sealed class SignInWindowTests
 
         public ConcurrentQueue<(string Server, string User, string Password)> PasswordSignIns { get; } = new();
 
-        public SignInPrompt Make(string? server = "healdan.example", bool serverFixed = false) => new(server, serverFixed,
+        public SignInPrompt Make(string? server = "healdan.example", bool serverFixed = false, string? notice = null) => new(server, serverFixed,
             (s, u, p) =>
             {
                 PasswordSignIns.Enqueue((s, u, p));
@@ -54,7 +54,8 @@ public sealed class SignInWindowTests
             {
                 ProviderSignIns.Enqueue((s, id));
                 return OnProvider(s, id, ct);
-            });
+            },
+            notice);
     }
 
     /// <summary>Makes the window and shows it on the UI thread, runs <paramref name="test"/> there, and closes it.</summary>
@@ -710,6 +711,40 @@ public sealed class SignInWindowTests
             Assert.Equal("The username or password is wrong.", problem.Text);
             Assert.True(window.IsVisible);
             Assert.Equal("Sign In", Find<Button>(window, "SignInButton").Content);
+        });
+    }
+
+    [MacFact]
+    public Task ANoticeSaysWhyTheWindowAsks()
+    {
+        var prompt = new FakePrompt { OnPassword = (_, _, _) => Task.FromResult<string?>("The username or password is wrong.") };
+        return Run(prompt.Make(serverFixed: true, notice: SignInPrompt.Ended), async window =>
+        {
+            await window.Loading;
+            var notice = Find<TextBlock>(window, "NoticeText");
+            Assert.True(Shown(notice));
+            Assert.Equal("Your sign-in ended. Sign in again.", notice.Text); // the User Guide quotes it
+
+            // It stays up through a refusal, which has the error line, and through the window being shown again.
+            Find<TextBox>(window, "User").Text = "admin";
+            Find<TextBox>(window, "Password").Text = "wrong";
+            Click(Find<Button>(window, "SignInButton"));
+            await Until(() => Shown(Find<TextBlock>(window, "Problem")));
+            Assert.True(Shown(notice));
+            window.Hide();
+            window.Show();
+            Assert.True(Shown(notice));
+        });
+    }
+
+    [MacFact]
+    public Task NoNoticeShowsNoLine()
+    {
+        var prompt = new FakePrompt();
+        return Run(prompt.Make(), async window =>
+        {
+            await window.Loading;
+            Assert.False(Shown(Find<Border>(window, "NoticeBox")));
         });
     }
 }

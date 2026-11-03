@@ -603,6 +603,14 @@ public class HealdanSettingsSignInTest extends AbstractHealdanTestCase {
 			assertEquals(2, lines.length);
 			assertEquals(BASE + "/api/signin/fake/callback", lines[0]);
 			assertTrue(lines[1], lines[1].contains("offline_access"));
+
+			// So does a client secret the provider refuses
+			fake.discovery("scopes_supported", List.of("openid", "offline_access"));
+			SignInProviders.get().save(SignInProviders.get().find("fake").orElseThrow(), "not-the-secret");
+			lines = as(boss).checkProvider("fake");
+			assertEquals(Arrays.toString(lines), 2, lines.length);
+			assertEquals(BASE + "/api/signin/fake/callback", lines[0]);
+			assertTrue(lines[1], lines[1].startsWith("The provider refused the client secret"));
 		}
 
 		assertHolds("unknown provider", "doesn't exist", () -> as(boss).checkProvider("nobody"));
@@ -626,5 +634,25 @@ public class HealdanSettingsSignInTest extends AbstractHealdanTestCase {
 		assertTrue(lines.length > 2);
 		assertEquals("https://office.firm.example:8443/dms/api/signin/entra/callback",
 				find(as(boss).loadSignIn(), "entra").getRedirect());
+	}
+
+	/**
+	 * With only a guess at the redirect address, Check doesn't test the client
+	 * secret: Authentik refuses the client for an address it doesn't have, so a
+	 * right secret would show as refused.
+	 */
+	@Test
+	public void testCheckWithNoPublicAddressDoesntTestTheSecret() throws Exception {
+		try (FakeProvider fake = FakeProvider.start()) {
+			fake.asProvider("fake");
+			// Not a plain address, so Healdan has none it can use
+			config().setProperty(SERVER_URL, "https://healdan.example/?not-plain");
+
+			String[] lines = as(boss).checkProvider("fake");
+			assertEquals(Arrays.toString(lines), 3, lines.length);
+			assertTrue(lines[1], lines[1].contains("LOGICALDOC_PUBLIC_URL"));
+			assertTrue(lines[2], lines[2].startsWith("Healdan didn't test the client secret"));
+			assertEquals(0, fake.tokenRequests());
+		}
 	}
 }

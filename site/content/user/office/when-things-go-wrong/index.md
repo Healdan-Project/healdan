@@ -170,14 +170,20 @@ next save then starts from a version Healdan has moved past.
 
 ## Signed Out or Signed In Again
 
-When your sign-in stops working (you changed your password, or the helper wasn't used for a long time), the helper
-says "Sign in to Healdan again. Your saves wait on this computer until you do", and shows the Sign In window. The
-documents you have open stay checked out to this Mac.
+When your sign-in stops working (you changed your password, the helper wasn't used for a long time, or your account
+at your firm's sign-in provider was turned off), the helper says "Sign in to Healdan again. Your saves wait on this
+computer until you do", and shows the Sign In window, which says "Your sign-in ended. Sign in again." If the helper
+wasn't running when the sign-in ended, the Sign In window says so the next time it starts. If you then quit the
+helper without signing in, it doesn't say so again. The documents you have open stay checked out to this Mac.
+
+Healdan doesn't tell the helper why the sign-in ended, so the window doesn't say either. If you can't sign in again,
+ask your administrator.
 
 The helper also shows the Sign In window, once, when the sign-in in your keychain wasn't made for it: the first time
 an updated helper starts, if the sign-in is from a version that didn't record which copy of the helper it belongs to,
 or after the helper's files were deleted from your Mac. It never uses such a sign-in, as Healdan would then take this
-Mac's check-outs for another computer's, and it signs it out.
+Mac's check-outs for another computer's, and it signs it out. That window doesn't say your sign-in ended, as Healdan
+didn't end it.
 
 ## A Link Didn't Open
 

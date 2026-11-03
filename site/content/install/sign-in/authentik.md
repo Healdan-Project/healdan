@@ -87,7 +87,10 @@ On the Sign-In tab of **Administration → Healdan → Settings**, choose **Add*
 | Group map | a row for each Authentik group that may sign in: its name, and the Healdan group it maps to |
 
 **Save**, then **Check**. Check confirms the issuer, that Authentik signs with RSA or EC, and that it offers
-`offline_access`, and shows the redirect address to compare with the one you registered.
+`offline_access`, tries the client ID and secret at Authentik's token endpoint, and shows the redirect address to
+compare with the one you registered. If it says Authentik refused the client secret, copy the **Client Secret**
+again, and compare the redirect address with the one under **Redirect URIs**: Authentik refuses the client for
+either.
 
 {{% /steps %}}
 

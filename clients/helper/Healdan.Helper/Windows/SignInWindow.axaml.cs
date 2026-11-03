@@ -13,7 +13,8 @@ namespace Healdan.Helper.Windows;
 /// and the password form, which is folded behind the server's link when it has any, as on the web page. A server with
 /// none, or one that can't be reached, gets the password form alone, as before. Signing in is the prompt's, which
 /// checks the server is Healdan and keeps only the token; this window shows its refusals as they are. The password box
-/// is emptied as soon as the password is sent, so the window never holds the password beyond the one call.
+/// is emptied as soon as the password is sent, so the window never holds the password beyond the one call. The
+/// prompt's notice, such as Healdan having ended the sign-in, stays above the fields while the window is up.
 /// <para>The providers are asked for when the window opens and each time the address is changed and left. An answer
 /// that didn't come (the server couldn't be reached) is asked for again, as a fixed address can't be left by clicking
 /// into it: when the window is shown again, and when Sign In is pressed. Sign In asks first and sends the password
@@ -55,6 +56,7 @@ public partial class SignInWindow : Window
     public SignInWindow(SignInPrompt prompt) : this()
     {
         _prompt = prompt;
+        (NoticeText.Text, NoticeBox.IsVisible) = (prompt.Notice, prompt.Notice is not null);
         Server.Text = prompt.Server;
         Server.IsReadOnly = prompt.ServerFixed;
         if (prompt.ServerFixed)

@@ -32,33 +32,42 @@ public sealed class SignIn(HealdanApi api, IKeychain keychain, DeviceIdentity de
 
     /// <summary>
     /// Takes the token from the keychain and checks it with <c>/me</c>. A <c>401</c> means it expired or was revoked:
-    /// it is removed and the answer is false, so the caller asks for the password. Other failures (no network)
-    /// propagate and keep the token. A token issued to another device id, or kept without one by an older helper, is
-    /// never used: the server would record this computer's check-outs under that device, and this computer would then
-    /// read them as another's. It's revoked and removed, and the answer is false.
+    /// it is removed (or left, if the keychain refuses) and the answer is <see cref="Resume.Refused"/>, so the caller
+    /// asks for the sign-in and says it ended. Other failures (no network) propagate and keep the token. A token issued to another device id, or kept
+    /// without one by an older helper, is never used: the server would record this computer's check-outs under that
+    /// device, and this computer would then read them as another's. It's revoked and removed, and the answer is
+    /// <see cref="Resume.None"/>, as when none was kept.
     /// </summary>
-    public async Task<bool> TryResumeAsync(CancellationToken ct = default)
+    public async Task<Resume> TryResumeAsync(CancellationToken ct = default)
     {
         var secret = keychain.Load(Account);
-        if (secret is null) return false;
+        if (secret is null) return Resume.None;
         var kept = KeptToken.Read(secret);
         if (kept?.Device != device.Id)
         {
             await DiscardAsync(kept?.Token ?? secret,
                 kept is null ? "was kept without its device id" : $"was issued to device {kept.Device}, not this computer's {device.Id}", ct);
-            return false;
+            return Resume.None;
         }
         api.Token = kept.Token;
         try
         {
             await api.GetJsonAsync("v1/me", ct);
-            return true;
+            return Resume.Resumed;
         }
         catch (ApiException e) when (e.Status == 401)
         {
             api.Token = null;
-            keychain.Delete(Account);
-            return false;
+            try
+            {
+                keychain.Delete(Account);
+            }
+            catch (InvalidOperationException d)
+            {
+                // Still refused: the next start finds it refused again.
+                log?.Warn($"The keychain kept the sign-in Healdan refused for {Account}: {d.Message}");
+            }
+            return Resume.Refused;
         }
     }
 
