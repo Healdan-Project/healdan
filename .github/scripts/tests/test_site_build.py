@@ -280,9 +280,8 @@ class SiteBuild(unittest.TestCase):
     # Task 3
 
     def test_api_page_written(self):
-        # M2 replaced the API page's interim box with Healdan's own API; RestAuthService's key hint links here
+        # Healdan's own API, which M2 documented; RestAuthService's key hint links here
         page = self.html("/developer/api/")
-        self.assertNotIn("healdan-interim", page)
         self.assertEqual("API – Healdan Documentation", self.text(page, "title"))
         self.assertIn("/api/v1/openapi.yaml", page)
 
@@ -349,9 +348,8 @@ class SiteBuild(unittest.TestCase):
         "finding-documents/my-matters-and-recent-matters", "documents/versions", "documents/previews")
 
     def test_user_launch_pages_written(self):
-        unwritten = [page for page in self.USER_LAUNCH_PAGES
-                     if "healdan-interim" in self.html(f"/user/{page}/")]
-        self.assertEqual([], unwritten)
+        missing = [page for page in self.USER_LAUNCH_PAGES if not (self.public / f"user/{page}/index.html").is_file()]
+        self.assertEqual([], missing)
 
     # Task 11
 
@@ -359,8 +357,8 @@ class SiteBuild(unittest.TestCase):
                           "users-and-groups", "permissions", "healdan-settings", "office-previews")
 
     def test_admin_launch_pages_written(self):
-        unwritten = [page for page in self.ADMIN_LAUNCH_PAGES if "healdan-interim" in self.html(f"/admin/{page}/")]
-        self.assertEqual([], unwritten)
+        missing = [page for page in self.ADMIN_LAUNCH_PAGES if not (self.public / f"admin/{page}/index.html").is_file()]
+        self.assertEqual([], missing)
 
     # The demo stack and docs gaps, PR 4
 
@@ -374,7 +372,17 @@ class SiteBuild(unittest.TestCase):
         for slug, title in self.ADMIN_SYSTEM_PAGES.items():
             page = self.html(f"/admin/system/{slug}/")
             self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
-            self.assertNotIn("healdan-interim", page, slug)
+
+    # The demo stack and docs gaps, Task 15
+
+    def test_interim_pages_retired(self):
+        # Every page is written, so the interim shortcode and its box are gone, and no page links to LogicalDOC's docs
+        self.assertFalse((SITE / "layouts/_shortcodes/interim.html").exists())
+        for path in self.public.rglob("*"):
+            if path.suffix in (".html", ".css"):
+                built = path.read_text(encoding="utf-8")
+                self.assertNotIn("healdan-interim", built, path)
+                self.assertNotRegex(built, r"https?://(docs|wiki|help|forums)\.logicaldoc\.com", path)
 
     # Task 17
 
@@ -397,9 +405,10 @@ class SiteBuild(unittest.TestCase):
         for slug, title in self.OFFICE_PAGES.items():
             page = self.html(f"/user/office/{slug}")
             self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
-            self.assertNotIn("healdan-interim", page, slug)
-        for page in ("documents/checking-out-and-checking-in", "documents/bookmarks"):
-            self.assertNotIn("healdan-interim", self.html(f"/user/{page}/"), page)
+        for slug, title in (("checking-out-and-checking-in", "Checking Out and Checking In"),
+                            ("bookmarks", "Bookmarks")):
+            self.assertEqual(f"{title} – Healdan Documentation",
+                             self.text(self.html(f"/user/documents/{slug}/"), "title"), slug)
 
     # The demo stack and docs gaps spec, PR 3
 
@@ -415,7 +424,6 @@ class SiteBuild(unittest.TestCase):
         for slug, title in self.USER_GAP_PAGES.items():
             page = self.html(f"/user/{slug}/")
             self.assertEqual(f"{title} – Healdan Documentation", self.text(page, "title"), slug)
-            self.assertNotIn("healdan-interim", page, slug)
 
     def test_dropbox_page_redirects_to_downloading(self):
         # Healdan hides Dropbox (the hide-dropbox seed), and old links to its page land on Downloading Documents

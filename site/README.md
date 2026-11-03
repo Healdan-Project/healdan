@@ -20,8 +20,8 @@ Run these from the repository's root. The preview server doesn't version its CSS
 
 ## Writing pages
 
-The writing rules, interim pages, screenshots and the rule that docs change in the same pull request as the code
-are on the Developer Guide's [Writing Docs](https://docs.healdan.com/developer/writing-docs/) page
+The writing rules, screenshots and the rule that docs change in the same pull request as the code are on the
+Developer Guide's [Writing Docs](https://docs.healdan.com/developer/writing-docs/) page
 (`content/developer/writing-docs.md`).
 
 ## Upgrading Hextra
