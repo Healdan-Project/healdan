@@ -24,12 +24,13 @@ public sealed record CycleTimings(
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(60)]);
 
     /// <summary>
-    /// The clock a <see cref="Settle"/> is timed on. Tests pass one they can stop, so whether two writes are one save
-    /// never depends on how quickly the runner gets from one to the other.
+    /// The clock a <see cref="Settle"/> and the save back's <see cref="RecoveryWait"/> are timed on. Tests pass one they
+    /// can stop, so whether two writes are one save, or whether the save back is still looking, never depends on how
+    /// quickly the runner gets from one step to the next.
     /// </summary>
     internal TimeProvider Clock { get; init; } = TimeProvider.System;
 
-    /// <summary>How long the save back after a crash looks for the restored window by its path (M3.5 spec §5.14).</summary>
+    /// <summary>How long the save back after a crash looks for the restored window by its path (M3.5 spec §5.14), on <see cref="Clock"/>.</summary>
     public TimeSpan RecoveryWait { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>The wait before retry number <paramref name="attempt"/> (from 0).</summary>

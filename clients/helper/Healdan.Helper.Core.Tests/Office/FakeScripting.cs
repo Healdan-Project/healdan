@@ -127,6 +127,9 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>When set, no document is ever found by its path, as when the program lists a restored window under another name.</summary>
     public bool NeverListed { get; set; }
 
+    /// <summary>When set, a look for a document by its path answers only once this is done, as a busy program does.</summary>
+    public Task? IsOpenHold { get; set; }
+
     /// <summary>How many times the cycle looked for a document by its path.</summary>
     public int IsOpenAsked => Volatile.Read(ref _isOpenAsked);
 
@@ -244,12 +247,21 @@ public sealed class FakeScripting : IOfficeScripting
     }
 
     /// <summary>
-    /// As <see cref="Recover"/>, but writing the owner file beside the copy again, as Word did in the trial. The write
-    /// time moves on by a second, so the clock's resolution can't hide the new file.
+    /// As <see cref="Recover"/>, but writing the owner file beside the copy again, as Word did in the trial. Like Word, it
+    /// runs before it writes the owner file, so the cycle may see either first.
     /// </summary>
     public void RecoverWritingTheOwnerFile(OfficeProgram p, string path)
     {
         SetRunning(p, true);
+        WriteOwnerFileAgain(p, path);
+    }
+
+    /// <summary>
+    /// The program writes its owner file beside the copy again, as Word does once it has restored the window. The write
+    /// time moves on by a second, so the clock's resolution can't hide the new file.
+    /// </summary>
+    public static void WriteOwnerFileAgain(OfficeProgram p, string path)
+    {
         var owner = OwnerPath(p, path);
         var before = File.Exists(owner) ? File.GetLastWriteTimeUtc(owner) : DateTime.UtcNow;
         File.Delete(owner);
@@ -268,12 +280,14 @@ public sealed class FakeScripting : IOfficeScripting
     /// <summary>
     /// Found by its path: the answers the test gave, then whether the program is running with its owner file beside it.
     /// </summary>
-    public Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
+    public async Task<bool> IsOpenAsync(OfficeProgram p, string path, CancellationToken ct = default)
     {
         Interlocked.Increment(ref _isOpenAsked);
+        if (IsOpenHold is { } hold)
+            await hold.WaitAsync(ct);
         if (_isOpenAnswers.TryDequeue(out var answer))
-            return Task.FromResult(answer);
-        return Task.FromResult(!NeverListed && IsRunning(OfficePrograms.ProcessName(p)) && File.Exists(OwnerPath(p, path)));
+            return answer;
+        return !NeverListed && IsRunning(OfficePrograms.ProcessName(p)) && File.Exists(OwnerPath(p, path));
     }
 
     public Task<bool?> HasUnsavedChangesAsync(OfficeProgram p, string path, CancellationToken ct = default) =>

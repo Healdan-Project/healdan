@@ -1598,6 +1598,29 @@ public sealed class HelperSessionTests : IDisposable
     }
 
     [Fact]
+    public async Task SendAndCheckInIsRefusedWhenWordWritesItsOwnerFileAfterItRunsAgain()
+    {
+        // Word runs before it writes its owner file again, so the close watcher can see it running first, and the
+        // save-back starts looking before the owner file is back (CI's Ubuntu runs, 2026-11-02 and 11-03). The owner file
+        // coming back then says the copy is Word's window all the same, before the look has seen it too: Word hasn't
+        // answered it yet.
+        var answer = new TaskCompletionSource();
+        var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true, IsOpenHold = answer.Task };
+        var (session, crashed, path) = await WordCrashedAsync(scripting);
+        scripting.SetRunning(OfficeProgram.Word, true);
+        await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back asking Word for its window");
+        FakeScripting.WriteOwnerFileAgain(OfficeProgram.Word, path);
+
+        session.SendAndCheckIn(crashed);
+
+        answer.SetResult();
+        Assert.Contains("open again", _notifier.All);
+        Assert.Equal(0, _server.Count("DELETE /documents/5/checkout"));
+        Assert.True(File.Exists(path));
+        Assert.NotNull(_server.Doc(5).Hold);
+    }
+
+    [Fact]
     public async Task SendAndCheckInIsRefusedWhileTheSaveBackSavesWordsWindowAndItsOwnerFileIsGone()
     {
         // The final review's residuals: Word saving its window over the copy removes its owner file until the save is
@@ -1626,14 +1649,23 @@ public sealed class HelperSessionTests : IDisposable
     public async Task SendAndCheckInIsntRefusedOnceTheSaveBackGivesUp()
     {
         // Word's recovered window was closed before the save-back found it, so the copy is nobody's window: once the
-        // save-back has given up, the crash window's Send and Check In must work, or the copy is stuck for good.
+        // save-back has given up, the crash window's Send and Check In must work, or the copy is stuck for good. Word runs
+        // before it writes its owner file again, so the look starts first and finds the owner file back on a later look.
+        // The look is timed on the test's clock, so it can't give up before the test has seen it still going.
+        var clock = new PausableClock();
         var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true };
-        var (session, crashed, path) = await WordCrashedAsync(scripting, Fast with { RecoveryWait = TimeSpan.FromSeconds(1) });
-        scripting.RecoverWritingTheOwnerFile(OfficeProgram.Word, path);
+        var (session, crashed, path) = await WordCrashedAsync(scripting, Fast with { RecoveryWait = TimeSpan.FromSeconds(1), Clock = clock });
+        clock.Pause();
+        scripting.SetRunning(OfficeProgram.Word, true);
         await Wait.Until(() => scripting.IsOpenAsked > 0, "the save-back looking for Word's window");
+        FakeScripting.WriteOwnerFileAgain(OfficeProgram.Word, path);
+        var asked = scripting.IsOpenAsked;
+        // The next look starts after the write, and the one after it only once that look is done with.
+        await Wait.Until(() => scripting.IsOpenAsked >= asked + 2, "a whole look since the owner file came back");
         FakeScripting.Close(OfficeProgram.Word, path);
         Assert.True(session.Cycle!.IsOpenAgain(path)); // still looking: the copy isn't free yet
 
+        clock.Resume();
         await Wait.Until(() => !session.Cycle!.IsOpenAgain(path), "the save-back given up");
         session.SendAndCheckIn(crashed);
 

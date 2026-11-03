@@ -137,8 +137,8 @@ public sealed class CopyCycle : IDisposable
         public DateTime? CrashWritten { get; set; }
 
         /// <summary>
-        /// The crashed copy's program has it open again: the save-back found its window by its path (M3.5 spec §5.14), and
-        /// is saving it back, or will try again.
+        /// The crashed copy's program has it open again (M3.5 spec §5.14): its owner file was written again since the
+        /// crash, or the save-back found its window by its path, and is saving it back, or will try again.
         /// </summary>
         public bool Reopened { get; set; }
 
@@ -552,20 +552,35 @@ public sealed class CopyCycle : IDisposable
     /// there now; or the save-back is in its own look after the owner file came back, or saving the window it found (the
     /// program removes the owner file while it saves a window over the copy). Checked in then, the copy would be deleted
     /// from under that window. Once the save-back gives up, a window closed before it found it no longer counts. The
-    /// program merely running doesn't count, as it may not have the copy at all.
+    /// program merely running doesn't count, as it may not have the copy at all. Word runs before it writes its owner file
+    /// again, so the close watcher may see it running first, and the owner file come back only once the save-back is
+    /// looking: it counts all the same.
     /// </summary>
     public bool IsOpenAgain(string path)
     {
-        string? reopened = null;
+        string copy;
+        bool reopened, readOnly;
+        DateTime? crashWritten;
         lock (_gate)
-            if (Find(path) is { Crashed: true, Reopened: true } s)
-            {
-                if (s.SavingBack)
-                    return true;
-                reopened = s.Path;
-            }
-        return reopened is not null && AppOf(reopened).LockExists(reopened);
+        {
+            if (Find(path) is not { Crashed: true } s)
+                return false;
+            if (s.SavingBack)
+                return true;
+            (copy, reopened, readOnly, crashWritten) = (s.Path, s.Reopened, s.ReadOnly, s.CrashWritten);
+        }
+        var app = AppOf(copy);
+        if (reopened)
+            return app.LockExists(copy);
+        return !readOnly && OfficeAfterSave.Driver(app, copy) is not null && OwnerFileBack(app, copy, crashWritten);
     }
+
+    /// <summary>
+    /// Whether a crashed copy's program has written its owner file again since the crash (<paramref name="crashWritten"/>),
+    /// and it's there now, which says it has the copy open again (M3.5 spec §5.14).
+    /// </summary>
+    private static bool OwnerFileBack(IOfficeApp app, string path, DateTime? crashWritten) =>
+        app.LockExists(path) && app.LockWritten(path) != crashWritten;
 
     /// <summary>The copy's state; <paramref name="pending"/> null works it out, which reads the file.</summary>
     private CopyState StateOf(string path, bool? pending)
@@ -1786,17 +1801,28 @@ public sealed class CopyCycle : IDisposable
             var open = false;
             var unwatched = false;
             TimeSpan wait;
+            DateTime? crashWritten;
             lock (_gate)
             {
                 wait = s.LookBriefly ? _timings.CrashPoll * 2 : _timings.RecoveryWait;
                 // Its owner file written again says the program has it open: until the look returns, that owner file says
                 // nothing, as the program removes it while it saves a window over the copy, so Send and Check In is refused.
                 s.SavingBack = s.Reopened;
+                crashWritten = s.CrashWritten;
             }
             try
             {
                 outcome = await _office.SaveRecoveredAsync(driver.Scripting, driver.Program, s.Path, wait, _timings.CrashPoll,
-                    () => IsClosing(s), () =>
+                    _timings.Clock, () => IsClosing(s), () =>
+                    {
+                        // The look started as the program ran again, before it wrote its owner file, as Word does: the owner
+                        // file back now says the same as if the close watcher had seen it first.
+                        if (!OwnerFileBack(app, s.Path, crashWritten))
+                            return;
+                        lock (_gate)
+                            if (s.Crashed && !s.Closing && Find(s.Path) == s)
+                                (s.Reopened, s.SavingBack) = (true, true);
+                    }, () =>
                     {
                         // Found: from now on the crash window's Send and Check In would delete it from under the window, and
                         // until the save returns, the program's owner file says nothing.
