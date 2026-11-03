@@ -698,7 +698,8 @@ public class LDRepository {
     public String createFolder(CallContext context, Properties properties, String folderId) {
         debug("createFolder %s".formatted(folderId));
 
-        validatePermission(folderId, context, Permission.WRITE);
+        // Healdan: ADD, as the GUI and the web services ask
+        validatePermission(folderId, context, Permission.ADD);
 
         try {
 
@@ -818,7 +819,8 @@ public class LDRepository {
 
     public void deleteObjectOrCancelCheckOut(CallContext context, String objectId) {
         // get the file or folder
-        PersistentObject object = getObject(objectId);
+        // Healdan: a shortcut or a folder alias itself, not what it points to
+        PersistentObject object = getObjectItself(objectId);
 
         if (object instanceof Document document) {
             if (document.getStatus() != DocumentStatus.UNLOCKED)
@@ -837,15 +839,17 @@ public class LDRepository {
      */
     public void deleteObject(CallContext context, String objectId) {
         debug("deleteObject %s".formatted(objectId));
-        validatePermission(objectId, context, Permission.DELETE);
+        // Healdan: a shortcut or a folder alias itself, not what it points to
+        PersistentObject object = getObjectItself(objectId);
+        validatePermission(object, objectId, context, Permission.DELETE);
 
         try {
-            // get the file or folder
-            PersistentObject object = getObject(objectId);
             // Healdan addition: a document's own DELETE too (R70)
             HealdanCmisChecks.deletable(object, getSessionUser(context));
 
-            if (object instanceof Folder folder) {
+            // Healdan: an alias holds nothing itself; findByParentId() lists
+            // the folder it points to
+            if (object instanceof Folder folder && folder.getType() != Folder.TYPE_ALIAS) {
                 List<Document> docs = documentDao.findByFolder(folder.getId(), 2);
                 List<Folder> folders = folderDao.findByParentId(folder.getId());
 
@@ -873,12 +877,13 @@ public class LDRepository {
      */
     public FailedToDeleteData deleteTree(CallContext context, String folderId, Boolean continueOnFailure) {
         debug("deleteTree %s".formatted(folderId));
-        validatePermission(folderId, context, Permission.DELETE);
+        // Healdan: a shortcut or a folder alias itself, not what it points to
+        PersistentObject object = getObjectItself(folderId);
+        validatePermission(object, folderId, context, Permission.DELETE);
 
         boolean cof = continueOnFailure != null && continueOnFailure.booleanValue();
 
         // get the document or folder
-        PersistentObject object = getObject(folderId);
         // Healdan addition: a document's own DELETE too (R70)
         HealdanCmisChecks.deletable(object, getSessionUser(context));
 
@@ -1729,6 +1734,15 @@ public class LDRepository {
     private boolean deleteFolder(Folder folder, boolean continueOnFailure, FailedToDeleteDataImpl ftd)
             throws PersistenceException {
         boolean success = true;
+        // Healdan: an alias is deleted as itself. findChildren() lists the
+        // children of the folder it points to, so CE deleted those
+        if (folder.getType() == Folder.TYPE_ALIAS) {
+            if (delete(folder))
+                return true;
+            ftd.getIds().add(getId(folder));
+            return false;
+        }
+
         for (Document doc : documentDao.findByFolder(folder.getId(), null)) {
             if (!delete(doc)) {
                 ftd.getIds().add(getId(doc));
@@ -2824,7 +2838,13 @@ public class LDRepository {
 
     private void validatePermission(String objectId, CallContext context, Permission permission)
             throws CmisPermissionDeniedException {
-        if (!checkPermission(objectId != null ? getObject(objectId) : null, context, permission)) {
+        // Healdan: the check is the overload's, which the deletes call with the object itself
+        validatePermission(objectId != null ? getObject(objectId) : null, objectId, context, permission);
+    }
+
+    private void validatePermission(PersistentObject object, String objectId, CallContext context,
+            Permission permission) throws CmisPermissionDeniedException {
+        if (!checkPermission(object, context, permission)) {
             CmisPermissionDeniedException exception = new CmisPermissionDeniedException(
                     "Permission %s not granted on %s".formatted(permission != null ? permission.name() : "", objectId));
             if (log.isDebugEnabled())
@@ -2856,6 +2876,16 @@ public class LDRepository {
             return ID_PREFIX_VER + object.getId();
         else
             return ID_PREFIX_FLD + object.getId();
+    }
+
+    /**
+     * Healdan addition: the instance the given objectId names, a shortcut or a
+     * folder alias itself where {@link #getObject(String)} gives what it
+     * points to
+     */
+    private PersistentObject getObjectItself(String objectId) {
+        PersistentObject itself = HealdanCmisChecks.itself(objectId);
+        return itself != null ? itself : getObject(objectId);
     }
 
     /**

@@ -10,6 +10,8 @@ import com.logicaldoc.core.HealdanTreeChecks;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.user.User;
@@ -55,6 +57,31 @@ final class HealdanCmisChecks {
 	 */
 	static void downloadable(Document document, User user) {
 		check(document, user, Permission.DOWNLOAD);
+	}
+
+	/**
+	 * The document or folder an object ID names as it is stored: a shortcut or a
+	 * folder alias itself, where CE's {@code getObject} resolves it to what it
+	 * points to. A listing shows a shortcut or an alias under its own ID, so a
+	 * delete given that ID deletes it, as the GUI does, and not what it points
+	 * to.
+	 *
+	 * @param objectId the object ID
+	 *
+	 * @return the document or folder, null for a version or an ID that names
+	 *         neither
+	 */
+	static PersistentObject itself(String objectId) {
+		try {
+			if (objectId.startsWith("doc."))
+				return DocumentDAO.get().findById(Long.parseLong(objectId.substring(4)), true);
+			if (objectId.startsWith("ver."))
+				return null;
+			return FolderDAO.get()
+					.findById(Long.parseLong(objectId.startsWith("fld.") ? objectId.substring(4) : objectId), true);
+		} catch (NumberFormatException | PersistenceException e) {
+			return null;
+		}
 	}
 
 	private static void check(Document document, User user, Permission permission) {
