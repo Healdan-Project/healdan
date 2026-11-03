@@ -7,25 +7,34 @@ public sealed class AttentionTests
 {
     [Fact]
     public void NothingNeedsYouWhenAllIsWell() =>
-        Assert.Null(Attention.Reason(signedIn: true, startFailed: false, crashed: false, kept: 0, extensionMissing: false, extensionOutdated: false));
+        Assert.Null(Attention.Reason(signedIn: true, startFailed: false, waiting: false, crashed: false, kept: 0, extensionMissing: false,
+            extensionOutdated: false));
 
     [Theory]
-    [InlineData(false, false, false, 0, false, false, "Not Signed In")]
-    [InlineData(true, true, false, 0, false, false, "Couldn't Start")]
-    [InlineData(true, false, true, 0, false, false, "A Document Closed Unexpectedly")]
-    [InlineData(true, false, false, 2, false, false, "Not Yet in Healdan")]
-    [InlineData(true, false, false, 0, true, false, "LibreOffice Extension Not Installed")]
-    [InlineData(true, false, false, 0, true, true, "LibreOffice Extension Needs Updating")]
-    public void EachReasonShowsTheDot(bool signedIn, bool startFailed, bool crashed, int kept, bool missing, bool outdated, string reason) =>
-        Assert.Equal(reason, Attention.Reason(signedIn, startFailed, crashed, kept, missing, outdated));
+    [InlineData(false, false, false, false, 0, false, false, "Not Signed In")]
+    [InlineData(true, true, false, false, 0, false, false, "Couldn't Start")]
+    [InlineData(true, false, true, false, 0, false, false, "Waiting for Your Answer")]
+    [InlineData(true, false, false, true, 0, false, false, "A Document Closed Unexpectedly")]
+    [InlineData(true, false, false, false, 2, false, false, "Not Yet in Healdan")]
+    [InlineData(true, false, false, false, 0, true, false, "LibreOffice Extension Not Installed")]
+    [InlineData(true, false, false, false, 0, true, true, "LibreOffice Extension Needs Updating")]
+    public void EachReasonShowsTheDot(bool signedIn, bool startFailed, bool waiting, bool crashed, int kept, bool missing, bool outdated, string reason) =>
+        Assert.Equal(reason, Attention.Reason(signedIn, startFailed, waiting, crashed, kept, missing, outdated));
 
     [Fact]
     public void TheFirstReasonIsNamed() =>
-        Assert.Equal("Not Signed In", Attention.Reason(signedIn: false, startFailed: true, crashed: true, kept: 3, extensionMissing: true, extensionOutdated: true));
+        Assert.Equal("Not Signed In", Attention.Reason(signedIn: false, startFailed: true, waiting: true, crashed: true, kept: 3, extensionMissing: true,
+            extensionOutdated: true));
+
+    [Fact]
+    public void AWaitingWindowComesBeforeEverythingButSigningInAndStarting() =>
+        Assert.Equal("Waiting for Your Answer", Attention.Reason(signedIn: true, startFailed: false, waiting: true, crashed: true, kept: 3,
+            extensionMissing: true, extensionOutdated: true));
 
     [Fact]
     public void AnOlderExtensionComesAfterTheCopies() =>
-        Assert.Equal("Not Yet in Healdan", Attention.Reason(signedIn: true, startFailed: false, crashed: false, kept: 1, extensionMissing: true, extensionOutdated: true));
+        Assert.Equal("Not Yet in Healdan", Attention.Reason(signedIn: true, startFailed: false, waiting: false, crashed: false, kept: 1, extensionMissing: true,
+            extensionOutdated: true));
 
     [Fact]
     public void TheToolTipSaysWhy()

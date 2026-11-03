@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Browse;
@@ -9,6 +10,8 @@ namespace Healdan.Helper.Core.Tests.Browse;
 public class HoldsAndTimesTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-10-25T12:00:00Z");
+    private static readonly CultureInfo Gb = new("en-GB");
+    private static readonly CultureInfo Us = new("en-US");
 
     private static HoldView Hold(long byId, string? byName, string? deviceName = null, string? app = null, string kind = "checkout") =>
         new(kind, new UserRef(byId, byName), DateTimeOffset.Parse("2026-10-25T11:59:00Z"),
@@ -58,11 +61,21 @@ public class HoldsAndTimesTests
     public void EditedReadsLikeTheMockup()
     {
         var utc = TimeZoneInfo.Utc;
-        Assert.Equal("10:42", When.Short(DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc));
-        Assert.Equal("Monday", When.Short(DateTimeOffset.Parse("2026-10-19T10:42:00Z"), Now, utc));
-        Assert.Equal("18 Oct", When.Short(DateTimeOffset.Parse("2026-10-18T10:42:00Z"), Now, utc));
-        Assert.Equal("12 Oct 2025", When.Short(DateTimeOffset.Parse("2025-10-12T10:42:00Z"), Now, utc));
-        Assert.Equal("", When.Short(null, Now, utc));
+        Assert.Equal("10:42", When.Short(DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc, Gb));
+        Assert.Equal("Monday", When.Short(DateTimeOffset.Parse("2026-10-19T10:42:00Z"), Now, utc, Gb));
+        Assert.Equal("18 Oct", When.Short(DateTimeOffset.Parse("2026-10-18T10:42:00Z"), Now, utc, Gb));
+        Assert.Equal("12 Oct 2025", When.Short(DateTimeOffset.Parse("2025-10-12T10:42:00Z"), Now, utc, Gb));
+        Assert.Equal("", When.Short(null, Now, utc, Gb));
+    }
+
+    [Fact]
+    public void EditedFollowsTheComputersRegion()
+    {
+        var utc = TimeZoneInfo.Utc;
+        Assert.Equal("10:42 AM", When.Short(DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc, Us)); // ICU's narrow space
+        Assert.Equal("Monday", When.Short(DateTimeOffset.Parse("2026-10-19T10:42:00Z"), Now, utc, Us));
+        Assert.Equal("Oct 18", When.Short(DateTimeOffset.Parse("2026-10-18T10:42:00Z"), Now, utc, Us));
+        Assert.Equal("Oct 12, 2025", When.Short(DateTimeOffset.Parse("2025-10-12T10:42:00Z"), Now, utc, Us));
     }
 
     [Fact]
@@ -70,24 +83,51 @@ public class HoldsAndTimesTests
     {
         var tokyo = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
         // 23:30 UTC on the 24th is 08:30 on the 25th in Tokyo: today there.
-        Assert.Equal("08:30", When.Short(DateTimeOffset.Parse("2026-10-24T23:30:00Z"), Now, tokyo));
+        Assert.Equal("08:30", When.Short(DateTimeOffset.Parse("2026-10-24T23:30:00Z"), Now, tokyo, Gb));
     }
 
     [Fact]
     public void ATimeInASentence()
     {
         var utc = TimeZoneInfo.Utc;
-        Assert.Equal("today at 10:42", When.InSentence(DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc));
-        Assert.Equal("yesterday at 16:05", When.InSentence(DateTimeOffset.Parse("2026-10-24T16:05:00Z"), Now, utc));
-        Assert.Equal("on 12 Oct at 09:00", When.InSentence(DateTimeOffset.Parse("2026-10-12T09:00:00Z"), Now, utc));
-        Assert.Equal("on 12 Oct 2025 at 09:00", When.InSentence(DateTimeOffset.Parse("2025-10-12T09:00:00Z"), Now, utc));
+        Assert.Equal("today at 10:42", When.InSentence(DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc, Gb));
+        Assert.Equal("yesterday at 16:05", When.InSentence(DateTimeOffset.Parse("2026-10-24T16:05:00Z"), Now, utc, Gb));
+        Assert.Equal("on 12 Oct at 09:00", When.InSentence(DateTimeOffset.Parse("2026-10-12T09:00:00Z"), Now, utc, Gb));
+        Assert.Equal("on 12 Oct 2025 at 09:00", When.InSentence(DateTimeOffset.Parse("2025-10-12T09:00:00Z"), Now, utc, Gb));
+
+        Assert.Equal("today at 10:42 AM", When.InSentence(DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc, Us));
+        Assert.Equal("on Oct 12 at 9:00 AM", When.InSentence(DateTimeOffset.Parse("2026-10-12T09:00:00Z"), Now, utc, Us));
+        Assert.Equal("on Oct 12, 2025 at 9:00 AM", When.InSentence(DateTimeOffset.Parse("2025-10-12T09:00:00Z"), Now, utc, Us));
     }
+
+    [Fact]
+    public void ADateInTheRegionsOwnOrder()
+    {
+        var utc = TimeZoneInfo.Utc;
+        var filed = DateTimeOffset.Parse("2026-03-03T09:14:00Z");
+        Assert.Equal("March 3, 2026", When.Date(filed, utc, Us));
+        Assert.Equal("3 March 2026", When.Date(filed, utc, Gb));
+        Assert.Equal("3. März 2026", When.Date(filed, utc, new CultureInfo("de-DE")));
+        Assert.Equal("2026年3月3日", When.Date(filed, utc, new CultureInfo("ja-JP"))); // the weekday goes from the end too
+    }
+
+    [Fact]
+    public void ADateIsTheDayWhereTheComputerIs()
+    {
+        var tokyo = TimeZoneInfo.FindSystemTimeZoneById("Asia/Tokyo");
+        // 23:30 UTC on the 2nd is the 3rd in Tokyo.
+        Assert.Equal("3 March 2026", When.Date(DateTimeOffset.Parse("2026-03-02T23:30:00Z"), tokyo, Gb));
+    }
+
+    [Fact]
+    public void ACalendarDateIsShownAsItIs() =>
+        Assert.Equal("March 3, 2026", When.Date(new DateOnly(2026, 3, 3), Us)); // a date property: no time zone (spec §9.10)
 
     [Fact]
     public void CheckedOutOnAnotherComputerInTheOwnersWords()
     {
         var utc = TimeZoneInfo.Utc;
-        var warning = Warnings.HeldElsewhere(1234, "Healdan Helper on MacBook", "LibreOffice", DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc);
+        var warning = Warnings.HeldElsewhere(1234, "Healdan Helper on MacBook", "LibreOffice", DateTimeOffset.Parse("2026-10-25T10:42:00Z"), Now, utc, Gb);
 
         Assert.Equal("#1234 is checked out to you on MacBook (LibreOffice)", warning.Title);
         Assert.Equal("It was last saved to Healdan today at 10:42.", warning.LastSaved);
@@ -95,7 +135,7 @@ public class HoldsAndTimesTests
         Assert.Equal("If MacBook was offline or still has unsaved changes, editing here means working without them. "
             + "MacBook keeps its copy, and you can file it later as a new document.", warning.Detail);
 
-        var unknown = Warnings.HeldElsewhere(1234, "Healdan Helper on MacBook", null, null, Now, utc);
+        var unknown = Warnings.HeldElsewhere(1234, "Healdan Helper on MacBook", null, null, Now, utc, Gb);
         Assert.Equal("#1234 is checked out to you on MacBook", unknown.Title);
         Assert.Null(unknown.LastSaved);
     }
@@ -121,11 +161,12 @@ public class HoldsAndTimesTests
             hold: Views.Hold(1, "Robert Example", "MacBook", "LibreOffice")).ToJsonString(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
         var properties = new Core.Forms.FormModel(Tests.Forms.Forms.Form());
 
-        var rows = DocumentDetails.RowsFor(doc, properties, DateTimeOffset.Parse("2026-10-25T10:42:00Z"), me: 1, Now, TimeZoneInfo.Utc);
+        var rows = DocumentDetails.RowsFor(doc, properties, DateTimeOffset.Parse("2026-10-25T10:42:00Z"), me: 1, Now, TimeZoneInfo.Utc, Gb);
 
         Assert.Equal(
-            ["Doc # = 1234 v2.1", "Matter = 998.1 – Healdan Demo", "Client = Northwind Properties", "Folder = Documents", "Author = Robert Example", "Class = Docs",
-             "Subclass = Draft", "Last Saved = today at 10:42", "Checked Out = to you on MacBook"],
+            ["Doc # = 1234 v2.1", "Matter = 998.1 – Healdan Demo", "Client = Northwind Properties", "Folder = Documents", "Author = Robert Example",
+             "Typist = Robert Example", "Class = Docs", "Subclass = Draft", "Filed = 1 October 2026", "Last Saved = today at 10:42", "Size = 100 bytes",
+             "Checked Out = to you on MacBook, since 25 October 2026"], // checked out at 10:50, after the save
             rows.Select(r => $"{r.Label} = {r.Value}"));
     }
 }

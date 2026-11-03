@@ -1731,7 +1731,7 @@ components:
     DocumentView:
       type: object
       additionalProperties: false
-      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, dateFiled, lastModified, hold, canEdit]
+      required: [type, docNumber, name, size, version, fileVersion, reference, folder, matter, dateFiled, lastModified, hold, canEdit, canOpen]
       properties:
         type:
           type: string
@@ -1792,6 +1792,16 @@ components:
             It isn't the test for changing the properties, which an
             administrator may do to an immutable document: see
             `ProfileField.editable`.
+        canOpen:
+          type: boolean
+          description: |
+            Whether the caller may download the document's file, as
+            `getDocumentContent` and `getDocumentThumbnail` decide: the
+            Download permission, and not protected by a password (always
+            refused through the API). A document the caller can read but not
+            open still has its properties and versions, and a client can say
+            so before asking for the file rather than finding out from a
+            `403`.
     VersionView:
       type: object
       description: |

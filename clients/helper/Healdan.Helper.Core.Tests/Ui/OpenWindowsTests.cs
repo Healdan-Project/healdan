@@ -61,4 +61,48 @@ public class OpenWindowsTests
 
         Assert.Equal(["held", "save"], brought);
     }
+
+    [Fact]
+    public void TheMenuHasALineForEachWaitingWindowByItsTitle()
+    {
+        var windows = new OpenWindows();
+        var brought = new List<string>();
+        var save = windows.Show(() => { }, waits: true, bring: () => brought.Add("save"), title: "Save as New Document");
+        windows.Show(() => { }, waits: false, bring: () => brought.Add("crash"), title: "Closed Unexpectedly"); // asks nothing the user started
+        windows.Show(() => { }, waits: true, bring: () => brought.Add("sign out"), title: "Sign Out on This Computer Only?");
+
+        Assert.Equal(["Save as New Document…", "Sign Out on This Computer Only?"], windows.WaitingWindows.Select(w => w.MenuLine));
+        windows.WaitingWindows[0].Bring();
+        Assert.Equal(["save"], brought);
+
+        save();
+        Assert.Equal(["Sign Out on This Computer Only?"], windows.WaitingWindows.Select(w => w.MenuLine));
+    }
+
+    [Fact]
+    public void AWaitingWindowWithoutATitleOrAWayToBringItUpHasNoLine()
+    {
+        var windows = new OpenWindows();
+        windows.Show(() => { }, waits: true, bring: () => { });
+        windows.Show(() => { }, waits: true, title: "Open from Healdan");
+
+        Assert.Empty(windows.WaitingWindows);
+        Assert.True(windows.Waiting); // links still wait for them
+    }
+
+    [Fact]
+    public void TheMenuHearsWhenAWindowOpensOrCloses()
+    {
+        var windows = new OpenWindows();
+        var changes = 0;
+        windows.Changed += () => changes++;
+
+        var close = windows.Show(() => { }, waits: true, title: "Open from Healdan");
+        Assert.Equal(1, changes);
+        close();
+        close(); // closing twice changes nothing
+        Assert.Equal(2, changes);
+        Assert.Throws<InvalidOperationException>(() => windows.Show(() => throw new InvalidOperationException("no display"), waits: true));
+        Assert.Equal(2, changes); // a window that failed to show was never open
+    }
 }

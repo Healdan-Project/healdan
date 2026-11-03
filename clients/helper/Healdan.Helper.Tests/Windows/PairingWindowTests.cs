@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -87,4 +88,22 @@ public sealed class PairingWindowTests
 
         Assert.False(window.Cancelled);
     });
+
+    [MacFact]
+    public Task ItStaysOnTopOfTheAppsWindow() => Run("Word", "123456", InTwoMinutes, window =>
+    {
+        // The user reads the code while typing it in Word's window (#143), so clicking there mustn't put it behind.
+        Assert.True(window.Topmost);
+        Assert.Equal(WindowStartupLocation.Manual, window.WindowStartupLocation);
+        return Task.CompletedTask;
+    });
+
+    [Fact]
+    public void ItOpensAtTheTopRightOfTheScreenClearOfOfficesWindow()
+    {
+        // #142: Office centres its own Pair window, so this one goes under the menu bar icon, 12 pt in from the corner.
+        Assert.Equal(new PixelPoint(1100, 37), PairingWindow.TopRight(new PixelRect(0, 25, 1512, 957), scaling: 1, width: 400));
+        Assert.Equal(new PixelPoint(2200, 74), PairingWindow.TopRight(new PixelRect(0, 50, 3024, 1914), scaling: 2, width: 400));
+        Assert.Equal(new PixelPoint(-412, 37), PairingWindow.TopRight(new PixelRect(-1920, 25, 1920, 1055), scaling: 1, width: 400)); // left of the main screen
+    }
 }

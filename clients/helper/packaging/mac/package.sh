@@ -16,8 +16,8 @@
 # The steps: a self-contained, single-file .NET publish for osx-arm64 with no .pdb, since any file in Contents/MacOS
 # that isn't native code breaks the bundle's signature (the trial); the bundle, with healdan.oxt from
 # clients/libreoffice/build.sh and AppIcon.icns, which make-icon.swift draws from the docs site's favicon.svg, in
-# Contents/Resources; signing inside-out (each native library, the binary, then the bundle) with the hardened runtime
-# and a timestamp; codesign's strict check; notarising and stapling; the disk image, with a link to Applications,
+# Contents/Resources; signing inside-out (each native library, the binary, then the bundle), with the hardened runtime
+# and a timestamp for a Developer ID; codesign's strict check; notarising and stapling; the disk image, with a link to Applications,
 # signed (and notarised) too. Any failure stops it.
 set -euo pipefail
 
@@ -59,11 +59,16 @@ fi
 if [ -n "$identity" ]; then
   signer=$identity
   timestamp=--timestamp
+  runtime=(--options runtime)
   say "Signing with $identity"
 else
   signer=-
   timestamp=--timestamp=none
-  warn "NOT SIGNED with a Developer ID: SIGN_IDENTITY is unset. The app gets an ad-hoc signature only, so Gatekeeper refuses it on any other Mac, and it isn't notarised."
+  # No hardened runtime: its library validation loads only libraries signed by the app's own team, and an ad-hoc
+  # signature has none, so macOS refused libSkiaSharp.dylib ("different Team IDs") and the app quit at start. An ad-hoc
+  # build runs only on this Mac and is never notarised, which is what needs the hardened runtime.
+  runtime=()
+  warn "NOT SIGNED with a Developer ID: SIGN_IDENTITY is unset. The app gets an ad-hoc signature only, without the hardened runtime, so Gatekeeper refuses it on any other Mac, and it isn't notarised."
 fi
 notarise=false
 if [ -n "${NOTARY_KEY:-}" ] && [ -n "${NOTARY_KEY_ID:-}" ] && [ -n "${NOTARY_ISSUER:-}" ]; then
@@ -118,7 +123,7 @@ xattr -cr "$app" 2>/dev/null || true # Finder info or a resource fork would make
 # --- Signing, inside out --------------------------------------------------------------------------------------------
 
 sign() {
-  codesign --force --options runtime "$timestamp" --sign "$signer" ${keychain[@]+"${keychain[@]}"} "$@"
+  codesign --force ${runtime[@]+"${runtime[@]}"} "$timestamp" --sign "$signer" ${keychain[@]+"${keychain[@]}"} "$@"
 }
 for library in "$app/Contents/MacOS"/*.dylib; do
   [ -e "$library" ] || continue

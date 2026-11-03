@@ -11,9 +11,14 @@ public static class Attention
     /// An older version of it is (<c>ExtensionCheck.Older</c>), so its reason is that it needs updating, not that it
     /// isn't installed (changed in the build).
     /// </param>
-    public static string? Reason(bool signedIn, bool startFailed, bool crashed, int kept, bool extensionMissing, bool extensionOutdated) =>
+    /// <param name="waiting">
+    /// A window waits for the user's answer (#143), and may have gone behind another app's: the menu has a line that
+    /// brings it up. It comes before the rest, as the app's button that opened it waits too.
+    /// </param>
+    public static string? Reason(bool signedIn, bool startFailed, bool waiting, bool crashed, int kept, bool extensionMissing, bool extensionOutdated) =>
         !signedIn ? "Not Signed In"
         : startFailed ? "Couldn't Start"
+        : waiting ? "Waiting for Your Answer"
         : crashed ? "A Document Closed Unexpectedly"
         : kept > 0 ? "Not Yet in Healdan"
         : extensionOutdated ? "LibreOffice Extension Needs Updating"

@@ -22,6 +22,16 @@ public class HealdanApiTests : IDisposable
         new(new Uri("https://healdan.example"), _handler) { Token = token };
 
     [Fact]
+    public async Task AServerThatDoesntSayWhetherADocumentOpensOpensItAsBefore()
+    {
+        _handler.Enqueue(HttpStatusCode.OK, DocJson); // no canOpen, as a server older than it sends
+        Assert.True((await Api().DocumentAsync(1234)).CanOpen);
+
+        _handler.Enqueue(HttpStatusCode.OK, DocJson.Replace("\"canEdit\":true}", "\"canEdit\":false,\"canOpen\":false}", StringComparison.Ordinal));
+        Assert.False((await Api().DocumentAsync(1234)).CanOpen);
+    }
+
+    [Fact]
     public async Task SendsBearerToken()
     {
         _handler.Enqueue(HttpStatusCode.OK, DocJson);

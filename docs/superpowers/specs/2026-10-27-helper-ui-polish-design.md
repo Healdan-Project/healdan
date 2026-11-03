@@ -249,12 +249,13 @@ The text sits on the window's colours in both themes (no near-black panel) and d
 - **When it shows:** while any of these is true:
   - the helper isn't signed in;
   - the start failed;
+  - (changed after the build, #143) one of its windows waits for an answer, which may have gone behind another app's; the menu has a line that brings it up;
   - a copy closed unexpectedly;
   - a copy is Not Yet in Healdan;
   - the extension isn't installed, or an older version is (changed in the build: see below).
   
   Saves waiting to be sent don't count, since they clear by themselves.
-- **The tooltip** names the first reason, for example **Healdan Helper: Not Signed In**. (changed in the build) An older extension's reason is **LibreOffice Extension Needs Updating**, not **LibreOffice Extension Not Installed**, which stays for an extension that isn't there at all (§6.5).
+- **The tooltip** names the first reason, for example **Healdan Helper: Not Signed In**. (changed after the build, #143) A waiting window's reason is **Waiting for Your Answer**, which comes after Not Signed In and Couldn't Start, before the rest, as the app's button that opened the window waits too. (found after the build, 2026-11-03: **macOS doesn't show the tooltip.** Avalonia sets it on the status item's button (`setToolTip:`), but on the owner's Mac running macOS 27 it never appeared, for any reason, with a window open or not. The tooltip stays, for Ubuntu's tray and in case macOS shows it again, but the user guide no longer sends people to it: each reason already has its line in the menu, which it points to instead.) (changed in the build) An older extension's reason is **LibreOffice Extension Needs Updating**, not **LibreOffice Extension Not Installed**, which stays for an extension that isn't there at all (§6.5).
 - **The rule** is a pure function in `Healdan.Helper.Core` (`Ui/Attention.cs`), with tests. `TrayMenu` swaps the icon whenever it rebuilds.
 - (changed in the build) **The extension's dot clears by itself.** LibreOffice's registry was read again only as the menu opened, so after the user accepted the extension the dot stayed until they opened the menu. On macOS, while the extension is missing or older, `TrayMenu` reads the registry every 5 seconds, and rebuilds on `ExtensionCheck.Changed`, so the dot goes, or its reason changes, a few seconds after the user acts in LibreOffice.
 

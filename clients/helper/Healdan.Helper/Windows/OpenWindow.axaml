@@ -100,6 +100,15 @@
                 <local:IconView Data="{StaticResource Icon.eye}" Width="12" Height="12" Foreground="{DynamicResource HdCautionBrush}" />
                 <TextBlock Text="Older version: opens read-only" FontSize="11" Foreground="{DynamicResource HdCautionTextBrush}" />
               </StackPanel>
+              <StackPanel x:Name="NoEditLine" Orientation="Horizontal" Spacing="3" IsVisible="False">
+                <local:IconView Data="{StaticResource Icon.eye}" Width="12" Height="12" Foreground="{DynamicResource HdCautionBrush}" />
+                <TextBlock Text="Opens read-only: you can't edit this document" FontSize="11" Foreground="{DynamicResource HdCautionTextBrush}" />
+              </StackPanel>
+              <!-- No Download permission, or protected by a password: Healdan won't give the helper the file (#146). -->
+              <StackPanel x:Name="NoOpenLine" Orientation="Horizontal" Spacing="3" IsVisible="False">
+                <local:IconView Data="{StaticResource Icon.lock}" Width="12" Height="12" Foreground="{DynamicResource HdCautionBrush}" />
+                <TextBlock Text="You can't open this document here" FontSize="11" Foreground="{DynamicResource HdCautionTextBrush}" />
+              </StackPanel>
             </StackPanel>
             <Button x:Name="DocStarButton" Grid.Column="2" Classes="tool" VerticalAlignment="Top" IsVisible="False" AutomationProperties.Name="Add to Favorites">
               <local:IconView x:Name="DocStarIcon" Classes="star" Data="{StaticResource Icon.star}" />
@@ -119,8 +128,9 @@
         <TextBlock x:Name="DetailsNote" DockPanel.Dock="Top" Classes="muted" TextWrapping="Wrap" TextAlignment="Center"
                    Margin="0,40,0,0" Text="Choose a document to see its properties and versions." />
         <Panel Margin="0,10,0,0">
+          <!-- The 12 pt keeps wrapped values clear of the scroll bar, which shows once the rows overflow (#146). -->
           <ScrollViewer x:Name="PropertiesTab" HorizontalScrollBarVisibility="Disabled" IsVisible="False">
-            <StackPanel Spacing="10">
+            <StackPanel Spacing="10" Margin="0,0,12,0">
               <Border x:Name="ThumbnailFrame" Classes="thumbnail" MaxHeight="140" HorizontalAlignment="Center" IsVisible="False">
                 <Image x:Name="Thumbnail" Stretch="Uniform" />
               </Border>

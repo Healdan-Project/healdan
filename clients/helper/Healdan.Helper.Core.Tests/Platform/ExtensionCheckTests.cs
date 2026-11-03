@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Healdan.Helper.Core.Browse;
 using Healdan.Helper.Core.Logging;
 using Healdan.Helper.Core.Platform;
 using Healdan.Helper.Core.Settings;
@@ -365,10 +366,11 @@ public sealed class ExtensionCheckTests : IDisposable
         _tools.Registry = new InstalledExtension("0.2.0", true); // the user clicked OK
         var installed = check.Summary();
         Assert.Equal("0.2.0", installed.Value);
-        Assert.StartsWith("Installed on ", installed.Note);
+        var on = When.Date(HelperSettings.Load(_paths).Extension!.At!.Value); // in the region's order
+        Assert.Equal("Installed on " + on, installed.Note);
         Assert.False(installed.CanInstall);
         Assert.Equal(check.Describe(), installed.Tip);
-        Assert.StartsWith("Version 0.2.0, installed in LibreOffice on ", installed.Tip);
+        Assert.StartsWith("Version 0.2.0, installed in LibreOffice on " + on, installed.Tip);
     }
 
     [Fact]
@@ -498,9 +500,9 @@ public sealed class ExtensionCheckTests : IDisposable
     public void SettingsSayWhichWayWorked()
     {
         var at = new DateTimeOffset(new DateTime(2026, 10, 25, 12, 0, 0, DateTimeKind.Local)); // shown in local time
-        Assert.Equal("Version 0.2.0, installed by Healdan Helper on 25 October 2026.",
+        Assert.Equal($"Version 0.2.0, installed by Healdan Helper on {When.Date(at)}.",
             new ExtensionRecord { Version = "0.2.0", Way = "unopkg", At = at }.Describe());
-        Assert.Equal("Version 0.2.0, installed in LibreOffice on 25 October 2026.",
+        Assert.Equal($"Version 0.2.0, installed in LibreOffice on {When.Date(at)}.",
             new ExtensionRecord { Version = "0.2.0", Way = "LibreOffice", At = at }.Describe());
         Assert.Equal("Version 0.2.0, installed.", new ExtensionRecord { Version = "0.2.0", Way = "found", At = at }.Describe());
         Assert.Equal("Waiting for you to accept version 0.3.0 in LibreOffice. Version 0.2.0 is installed.",
@@ -511,7 +513,7 @@ public sealed class ExtensionCheckTests : IDisposable
 
     /// <summary>The dot's reason as the menu bar icon gives it on each rebuild, with all else well.</summary>
     private static string? Reason(ExtensionCheck check) =>
-        Attention.Reason(signedIn: true, startFailed: false, crashed: false, kept: 0, check.Missing, check.Older is not null);
+        Attention.Reason(signedIn: true, startFailed: false, waiting: false, crashed: false, kept: 0, check.Missing, check.Older is not null);
 
     private ExtensionCheck Linux(string? oxt, Func<bool>? waiting = null) =>
         new(_tools, _paths, _notifier, _log, Helper, ExtensionRoute.Unopkg, oxt, waiting ?? (() => false), poll: TimeSpan.FromMilliseconds(10));
