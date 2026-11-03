@@ -470,6 +470,14 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		began = System.nanoTime();
 		assertEquals(Outcome.UNREACHABLE, quick.refresh(p, t.refreshToken()).outcome());
 		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2500)) < 0);
+
+		// And Check's test of the secret, which says it couldn't make it
+		began = System.nanoTime();
+		Check check = quick.check(p, REDIRECT);
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2500)) < 0);
+		assertFalse(check.ok());
+		assertTrue(check.problems().toString(), mentions(check, "couldn't test the client secret"));
+		assertTrue(check.problems().toString(), mentions(check, "SocketTimeoutException"));
 	}
 
 	@Test
@@ -770,9 +778,12 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		}
 
 		fake.tokenEndpointAuthMethods(List.of("private_key_jwt", "tls_client_auth"));
+		int tokens = fake.tokenRequests();
 		Check check = client.check(p, REDIRECT);
 		assertFalse(check.ok());
+		// That one problem: the secret isn't tried where it isn't taken
 		assertEquals(check.problems().toString(), 1, check.problems().size());
+		assertEquals(tokens, fake.tokenRequests());
 		String problem = check.problems().get(0);
 		assertTrue(problem,
 				problem.startsWith("The provider doesn't take a client secret at its token endpoint (it lists "));
@@ -791,6 +802,138 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertFalse(quoted.ok());
 		assertTrue(quoted.problems().toString(), quoted.problems().stream().noneMatch(line -> line.contains("\n")));
 		assertTrue(quoted.problems().toString(), quoted.problems().stream().allMatch(line -> line.length() < 500));
+	}
+
+	/**
+	 * Check tries the client id and secret at the token endpoint, as a sign-in
+	 * sends them, with a code it makes up: invalid_grant means the provider
+	 * took them and refused only the code, and invalid_client that it refused
+	 * them. The owner's walkthrough found a wrong secret passing Check.
+	 */
+	@Test
+	public void testCheckTestsTheClientSecret() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Check right = client.check(p, REDIRECT);
+		assertTrue(right.problems().toString(), right.ok());
+		assertEquals(1, fake.tokenRequests());
+		assertEquals("client_secret_basic", fake.lastClientAuthentication());
+
+		try (LogCapture log = LogCapture.of(ProviderClient.class)) {
+			// A secret the provider refuses: the problem never holds it, or its encoding
+			SignInProviders.get().save(p, "another=secret&5d1e");
+			Check wrong = client.check(p, REDIRECT);
+			assertFalse(wrong.ok());
+			assertEquals(REDIRECT, wrong.redirect());
+			assertEquals(wrong.problems().toString(), 1, wrong.problems().size());
+			String problem = wrong.problems().get(0);
+			assertTrue(problem, problem.startsWith("The provider refused the client secret"));
+			assertTrue(problem, problem.contains("HTTP 401, invalid_client"));
+			// Authentik answers invalid_client for a redirect address it doesn't have, too
+			assertTrue(problem, problem.contains("redirect address"));
+			// The provider quoted the secret, as it is and encoded, and both were taken out
+			assertTrue(problem, problem.contains("[hidden] ([hidden])"));
+			for (String secret : List.of("another=secret&5d1e", "another%3Dsecret%265d1e", FakeProvider.SECRET)) {
+				assertFalse(problem, problem.contains(secret));
+				for (String line : log.lines())
+					assertFalse(line, line.contains(secret));
+			}
+
+			// Sent as a sign-in sends it: by client_secret_post when the provider lists it
+			fake.tokenEndpointAuthMethods(List.of("client_secret_basic", "client_secret_post"));
+			assertTrue(mentions(client.check(p, REDIRECT), "refused the client secret"));
+			assertEquals("client_secret_post", fake.lastClientAuthentication());
+			SignInProviders.get().save(p, FakeProvider.SECRET);
+			Check post = client.check(p, REDIRECT);
+			assertTrue(post.problems().toString(), post.ok());
+			assertEquals("client_secret_post", fake.lastClientAuthentication());
+		}
+
+		// A client id the provider doesn't know is refused the same way, as providers can't tell them apart
+		SignInProvider other = new SignInProvider(p.id(), p.preset(), p.label(), true, p.issuer(), "someone-else",
+				false, p.identityClaim(), p.usernameClaim(), p.emailClaim(), p.groupsClaim(), p.linkByEmail());
+		SignInProviders.get().save(other, null);
+		assertTrue(mentions(client.check(SignInProviders.get().find("fake").orElseThrow(), REDIRECT),
+				"refused the client secret"));
+
+		// The made-up code was never one the provider gave, so a real sign-in still works
+		SignInProviders.get().save(p, null);
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+	}
+
+	/**
+	 * Any answer to Check's made-up code but invalid_grant, invalid_client, or a
+	 * 401 with no error code or unauthorized_client, and no answer, says the
+	 * secret wasn't tested, and never passes. A 5xx or 429 says so whatever it
+	 * holds.
+	 */
+	@Test
+	public void testCheckSaysWhenItCouldntTestTheClientSecret() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+
+		// A 401 with no error code Healdan can read is a refusal too, and so is invalid_client at 400, as Authentik
+		// answers a wrong secret
+		fake.answerCode(401, null);
+		Check unreadable = client.check(p, REDIRECT);
+		assertFalse(unreadable.ok());
+		assertTrue(unreadable.problems().toString(), mentions(unreadable, "refused the client secret"));
+		assertTrue(unreadable.problems().toString(), mentions(unreadable, "HTTP 401"));
+		fake.answerCode(400, "invalid_client");
+		Check authentik = client.check(p, REDIRECT);
+		assertFalse(authentik.ok());
+		assertTrue(authentik.problems().toString(), mentions(authentik, "refused the client secret"));
+		assertTrue(authentik.problems().toString(), mentions(authentik, "HTTP 400, invalid_client"));
+		// The provider quoted the made-up code, the verifier and the secret, and each was taken out
+		assertTrue(authentik.problems().toString(),
+				mentions(authentik, "code [hidden], verifier [hidden], secret [hidden] ([hidden])"));
+		assertFalse(authentik.problems().toString(), mentions(authentik, FakeProvider.SECRET));
+		// Keycloak 26.7.5 answers a wrong secret with unauthorized_client, at 401
+		fake.answerCode(401, "unauthorized_client");
+		Check keycloak = client.check(p, REDIRECT);
+		assertFalse(keycloak.ok());
+		assertTrue(keycloak.problems().toString(), mentions(keycloak, "refused the client secret"));
+		assertTrue(keycloak.problems().toString(), mentions(keycloak, "HTTP 401, unauthorized_client"));
+		// A 401 with invalid_grant took the client and refused only the code
+		fake.answerCode(401, "invalid_grant");
+		Check grant = client.check(p, REDIRECT);
+		assertTrue(grant.problems().toString(), grant.ok());
+
+		// Down or busy, whatever it says, isn't a refusal; nor is a 401 with another error code, as from something
+		// in front of the provider
+		for (Object[] answer : new Object[][] { { 400, "invalid_request" }, { 400, "unauthorized_client" },
+				{ 400, "unsupported_grant_type" }, { 400, null }, { 403, "access_denied" }, { 429, null },
+				{ 500, "invalid_grant" }, { 503, null }, { 503, "invalid_client" }, { 429, "invalid_client" },
+				{ 401, "invalid_request" } }) {
+			int status = (Integer) answer[0];
+			String error = (String) answer[1];
+			fake.answerCode(status, error);
+			Check check = client.check(p, REDIRECT);
+			String what = status + " " + error + ": " + check.problems();
+			assertFalse(what, check.ok());
+			assertEquals(what, 1, check.problems().size());
+			String problem = check.problems().get(0);
+			assertTrue(what, problem.startsWith("Healdan couldn't test the client secret"));
+			assertTrue(what, problem.contains("HTTP " + status));
+			if (error != null)
+				assertTrue(what, problem.contains(error));
+		}
+
+		// A made-up code accepted is something wrong at the provider, not a pass
+		fake.answerCode(200, null);
+		Check accepted = client.check(p, REDIRECT);
+		assertFalse(accepted.ok());
+		assertTrue(accepted.problems().toString(), mentions(accepted, "accepted a code Healdan made up"));
+
+		// No answer at all
+		fake.discovery("token_endpoint", "http://127.0.0.1:1/token");
+		Check unreachable = client.check(p, REDIRECT);
+		assertFalse(unreachable.ok());
+		assertEquals(unreachable.problems().toString(), 1, unreachable.problems().size());
+		assertTrue(unreachable.problems().toString(), mentions(unreachable, "couldn't test the client secret"));
+		assertTrue(unreachable.problems().toString(), mentions(unreachable, "couldn't be reached"));
+		fake.discovery("token_endpoint", fake.issuer() + "/token");
+
+		// And with the provider answering as it should again, Check passes
+		assertTrue(client.check(p, REDIRECT).ok());
 	}
 
 	@Test
@@ -816,9 +959,11 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertTrue(ok.problems().toString(), ok.ok());
 		assertEquals(List.of(), ok.problems());
 		assertEquals(REDIRECT, ok.redirect());
-		// It fetched the document and the keys
+		// It fetched the document and the keys, and tried the client secret at the token endpoint
 		assertEquals(1, fake.discoveryRequests());
 		assertEquals(1, fake.keyRequests());
+		assertEquals(1, fake.tokenRequests());
+		assertEquals("client_secret_basic", fake.lastClientAuthentication());
 
 		fake.signWith("HS256");
 		Check hmac = client.check(p, REDIRECT);
@@ -836,11 +981,14 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		fake.discovery("scopes_supported", List.of("openid", "offline_access"));
 		assertTrue(client.check(p, REDIRECT).ok());
 
+		// A document a sign-in wouldn't use isn't sent the secret either
+		int tokens = fake.tokenRequests();
 		fake.discovery("issuer", "https://other.example/realm");
 		Check mismatch = client.check(p, REDIRECT);
 		assertFalse(mismatch.ok());
 		assertTrue(mismatch.problems().toString(), mismatch.problems().stream()
 				.anyMatch(line -> line.contains("https://other.example/realm") && line.contains(fake.issuer())));
+		assertEquals(tokens, fake.tokenRequests());
 		fake.discovery("issuer", fake.issuer());
 
 		fake.discovery("jwks_uri", fake.issuer() + "/nothing-here");
@@ -851,9 +999,12 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 
 		// A secret that can't be opened, as after the key was lost
 		HealdanSettings.get().set("signin.fake.clientSecret", "v1:AAAA");
+		tokens = fake.tokenRequests();
 		Check secret = client.check(p, REDIRECT);
 		assertFalse(secret.ok());
+		assertEquals(secret.problems().toString(), 1, secret.problems().size());
 		assertTrue(secret.problems().toString(), mentions(secret, "secret"));
+		assertEquals(tokens, fake.tokenRequests());
 
 		fake.close();
 		fake = null;
@@ -917,6 +1068,8 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 			Check check = client.check(p, REDIRECT);
 			assertFalse(check.ok());
 			assertTrue(check.problems().toString(), mentions(check, plain + endpoint.getValue()));
+			// Nor does Check send the secret, as a sign-in wouldn't
+			assertEquals(tokens, fake.tokenRequests());
 			fake.discovery(endpoint.getKey(), fake.issuer() + endpoint.getValue());
 		}
 	}
