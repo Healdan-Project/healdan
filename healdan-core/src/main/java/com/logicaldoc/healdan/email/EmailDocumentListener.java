@@ -21,14 +21,24 @@ import com.logicaldoc.healdan.HealdanConstants;
  * Sets the Date filed of every new document to now, whatever came with it, and
  * fills the email fields of a new {@code .eml} or {@code .msg} from the file,
  * its Message-ID among them (spec §6.8; M5 spec §6.1). The document is named
- * after the subject. It runs after the profile listener, which has added the
- * email attributes with the template's definitions. It never refuses anything:
- * an email that can't be read is filed with blank fields and its own name. CE
- * creates it by reflection, hence the public no-arg constructor.
+ * after the subject. Once it is stored, the Message-ID the listener read from
+ * the file goes into {@link EmailIndex} (M5 spec §6.2), the index the
+ * once-per-matter rule and the lookups use. It runs after the profile listener,
+ * which has added the email attributes with the template's definitions. It
+ * never refuses anything: an email that can't be read is filed with blank
+ * fields and its own name, and an index row that can't be added is logged (the
+ * index worker mends it). CE creates it by reflection, hence the public no-arg
+ * constructor.
  */
 public class EmailDocumentListener implements DocumentListener {
 
 	private static final Logger log = LoggerFactory.getLogger(EmailDocumentListener.class);
+
+	/**
+	 * Where {@code beforeStore} leaves the Message-ID it read from a new email's
+	 * file for {@code afterStore}, which runs once the document has its id
+	 */
+	private static final String MESSAGE_ID = EmailDocumentListener.class.getName();
 
 	public EmailDocumentListener() {
 		// Instantiated by CE
@@ -43,14 +53,14 @@ public class EmailDocumentListener implements DocumentListener {
 		document.setCreation(new Date());
 
 		try {
-			fillEmail(document, transaction);
+			fillEmail(document, transaction, dictionary);
 		} catch (Throwable t) {
 			// Review Focus 1: a messy email never blocks an upload
 			log.warn("Cannot read the email fields of {}: {}", document.getFileName(), t.toString());
 		}
 	}
 
-	private static void fillEmail(Document document, DocumentHistory transaction) {
+	private static void fillEmail(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		String fileName = document.getFileName();
 		if (fileName == null)
 			return;
@@ -66,6 +76,8 @@ public class EmailDocumentListener implements DocumentListener {
 		String named = FileNames.keep(fileName);
 		if (extracted.isPresent()) {
 			EmailFields fields = extracted.get();
+			if (fields.messageId() != null)
+				dictionary.put(MESSAGE_ID, fields.messageId());
 			set(document, HealdanConstants.ATTR_EMAILFROM, fields.from());
 			set(document, HealdanConstants.ATTR_EMAILTO, fields.to());
 			set(document, HealdanConstants.ATTR_EMAILCC, fields.cc());
@@ -91,7 +103,16 @@ public class EmailDocumentListener implements DocumentListener {
 
 	@Override
 	public void afterStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
-		// Nothing to do
+		// Only a new email left a Message-ID in the dictionary
+		Object messageId = dictionary.get(MESSAGE_ID);
+		if (!(messageId instanceof String id))
+			return;
+		try {
+			EmailIndex.get().put(document.getId(), id);
+		} catch (Throwable t) {
+			// The listener never refuses; the index worker mends a missing row
+			log.warn("Cannot index the Message-ID of document {}: {}", document.getId(), t.toString());
+		}
 	}
 
 	@Override

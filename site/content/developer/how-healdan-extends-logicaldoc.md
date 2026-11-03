@@ -63,6 +63,14 @@ learn from.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.
+  - `hd_email` indexes email: a row for each email document, with its Message-ID and the SHA-256 of it that
+    lookups search by. `EmailDocumentListener` adds the row when an email is filed, from the Message-ID it read
+    from the file, and `EmailIndex` answers which documents are copies of a message, comparing the Message-ID
+    exactly. The index, not the Message-ID property, is what Healdan trusts, as LogicalDOC's own screens can edit
+    the property.
+  - The row holds no matter. A message has few copies, so whoever asks finds each copy's matter afresh. A lookup
+    joins `ld_document`, so it leaves out deleted documents. The row of a document deleted for good stays, and no
+    lookup sees it.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.
