@@ -150,10 +150,11 @@ you set, or ends with the last name you set. There are other ways to fill them i
   **Directory → Object attributes**, and the user form then has a field for each. Once they're on, change names in
   the fields, not in **Attributes**: when you save the user, what the fields hold replaces those two keys there, even
   when a field is blank. Authentik calls object attributes a preview.
-- **People synced from a directory** through an LDAP source, such as Active Directory, already have their names in
-  Authentik, but as the attributes `givenName` and `sn`. Copy them to `given_name` and `family_name` with a mapping
-  of your own: in **Customization → Property Mappings**, choose **Create**, then **LDAP Source Property Mapping**,
-  name it, and give it this expression:
+- **People synced from a directory** through an LDAP source, such as Active Directory or OpenLDAP, have their names
+  there as `givenName` and `sn`. Authentik's own Active Directory mappings copy them under those names, which no
+  profile mapping reads, and its OpenLDAP ones don't copy them at all. Copy them to `given_name` and `family_name`
+  with a mapping of your own: in **Customization → Property Mappings**, choose **Create**, then **LDAP Source
+  Property Mapping**, name it, and give it this expression:
 
   ```python
   return {
