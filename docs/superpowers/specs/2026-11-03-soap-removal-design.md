@@ -1,7 +1,8 @@
 # Removing LogicalDOC's SOAP services: design
 
 - **Date:** 2026-11-03
-- **Status:** approved (owner, 2026-11-03), after a design session the same day.
+- **Status:** approved (owner, 2026-11-03), after a design session the same day. Built in
+  Healdan-Project/healdan#187 the same day.
 
 As in the roadmap, **(owner)** marks what the owner decided, and **(call)** marks Claude's proposal.
 
