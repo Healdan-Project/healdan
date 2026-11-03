@@ -35,6 +35,8 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
+import com.logicaldoc.core.security.apikey.ApiKey;
+import com.logicaldoc.core.security.apikey.ApiKeyDAO;
 import com.logicaldoc.core.security.spring.LDAuthenticationProvider;
 import com.logicaldoc.core.security.spring.LDAuthenticationToken;
 import com.logicaldoc.core.security.user.Group;
@@ -192,6 +194,28 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 		assertEquals(author.getId(), user.getId());
 		assertEquals("author", user.getUsername());
 		assertEquals(1, count("hd_signin_identity"));
+	}
+
+	@Test
+	public void testALinkToAdminOrASystemAccountIsRefused() throws Exception {
+		// Only a hand edit of the database makes these links. Following one
+		// would make the account a provider account, with no password and no
+		// API keys, as linking by email refuses to.
+		link("entra", "oid-admin", User.USERID_ADMIN);
+		link("entra", "oid-system", User.USERID_SYSTEM);
+		ApiKey key = new ApiKey(User.USERID_ADMIN, "admin's");
+		ApiKeyDAO.get().store(key);
+		String password = storedPassword(User.USERID_ADMIN);
+		DbSnapshot before = snapshot();
+
+		refused("account", accounts().decide(entra, claims("oid-admin", "admin", null, "g-lit")));
+		refused("account", accounts().decide(entra, claims("oid-system", "_system", null, "g-lit")));
+		// Nor does the gate take admin's groups away
+		refused("account", accounts().decide(entra, claims("oid-admin", "admin", null, "g-other")));
+
+		before.assertUnchanged();
+		assertEquals(password, storedPassword(User.USERID_ADMIN));
+		assertNotNull(ApiKeyDAO.get().findById(key.getId()));
 	}
 
 	@Test

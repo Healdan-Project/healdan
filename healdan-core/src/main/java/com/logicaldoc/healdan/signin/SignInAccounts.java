@@ -278,6 +278,15 @@ public class SignInAccounts {
 
 	private Decision signInLinked(User user, SignInIdentity link, SignInProvider p, IdClaims claims,
 			List<GroupMapping> map, Set<Long> granted, Journal journal) throws PersistenceException {
+		// Only a hand edit of the database links these: following the link would strip the account's password and
+		// delete its keys, so it's refused as linking by email refuses them
+		String why = adminOrSystem(user);
+		if (why != null) {
+			journal.warn("Refused a sign-in through the provider {} for {}: its identity is linked to the account {}, "
+					+ "which {}", p.id(), printable(claims.username()), printable(user.getUsername()), why);
+			return new Refused(ACCOUNT);
+		}
+
 		if (granted.isEmpty()) {
 			// Nothing it held through the map stays
 			List<Change> changes = GroupSync.changes(user, map, Set.of());
@@ -576,12 +585,23 @@ public class SignInAccounts {
 	 * @return why the account can't be linked by email, or null if it can
 	 */
 	private String unlinkable(User user) throws PersistenceException {
+		String why = adminOrSystem(user);
+		if (why != null)
+			return why;
+		if (identities.findLinkedByUser(user.getId()).isPresent())
+			return "is already linked";
+		return null;
+	}
+
+	/**
+	 * @return why the account can never be linked, as {@code admin} or a system
+	 *         account, or null if it can be
+	 */
+	private static String adminOrSystem(User user) {
 		if (user.getId() == User.USERID_ADMIN || ADMIN.equalsIgnoreCase(user.getUsername()))
 			return "is admin";
 		if (user.getType() == User.Type.SYSTEM || user.getId() < 0)
 			return "is a system account";
-		if (identities.findLinkedByUser(user.getId()).isPresent())
-			return "is already linked";
 		return null;
 	}
 
