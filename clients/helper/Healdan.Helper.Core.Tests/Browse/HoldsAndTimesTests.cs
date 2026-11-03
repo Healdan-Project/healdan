@@ -164,8 +164,9 @@ public class HoldsAndTimesTests
         var rows = DocumentDetails.RowsFor(doc, properties, DateTimeOffset.Parse("2026-10-25T10:42:00Z"), me: 1, Now, TimeZoneInfo.Utc, Gb);
 
         Assert.Equal(
-            ["Doc # = 1234 v2.1", "Matter = 998.1 – Healdan Demo", "Client = Northwind Properties", "Folder = Documents", "Author = Robert Example", "Class = Docs",
-             "Subclass = Draft", "Last Saved = today at 10:42", "Checked Out = to you on MacBook"],
+            ["Doc # = 1234 v2.1", "Matter = 998.1 – Healdan Demo", "Client = Northwind Properties", "Folder = Documents", "Author = Robert Example",
+             "Typist = Robert Example", "Class = Docs", "Subclass = Draft", "Filed = 1 October 2026", "Last Saved = today at 10:42", "Size = 100 bytes",
+             "Checked Out = to you on MacBook, since 25 October 2026"], // checked out at 10:50, after the save
             rows.Select(r => $"{r.Label} = {r.Value}"));
     }
 }

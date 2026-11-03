@@ -4,7 +4,8 @@ namespace Healdan.Helper.Core.Browse;
 
 /// <summary>
 /// Who has a document, as Open's middle pane says it under the title (spec §5.8): "checked out to you on MacBook", or
-/// "checked out to Jane Smith". Never since when: <c>hold.since</c> moves on every save (spec §9.10).
+/// "checked out to Jane Smith". Never since when here: <c>hold.since</c> moves on every save (spec §9.10). Open's Properties
+/// tab says it only for a hold taken after the last save (<see cref="DocumentDetails.RowsFor"/>).
 /// </summary>
 public static class Holds
 {

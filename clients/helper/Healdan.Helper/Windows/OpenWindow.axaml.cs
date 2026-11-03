@@ -187,6 +187,7 @@ public partial class OpenWindow : Window
         DocTitle.Text = doc.Name;
         DocSubtitle.Text = $"#{doc.DocNumber} · v{version ?? doc.FileVersion}";
         OlderLine.IsVisible = version is not null && version != doc.FileVersion;
+        NoEditLine.IsVisible = !OlderLine.IsVisible && DocumentDetails.MayNotEdit(doc); // #146: said before it opens, not after
     }
 
     private void ClearDetails(string note)
@@ -236,15 +237,15 @@ public partial class OpenWindow : Window
     }
 
     /// <summary>
-    /// An older version opens read-only, as does a file that opens in the default app (M3.6 spec §5.2); the header says which
-    /// version (polish spec §6.2).
+    /// An older version opens read-only, as does a file that opens in the default app (M3.6 spec §5.2) and one the user may
+    /// not edit (#146); the header says which version (polish spec §6.2), or that it can't be edited.
     /// </summary>
     private void VersionChanged()
     {
         var older = SelectedVersion();
         if (_details is { } d)
             ShowHeader(d.Document, older);
-        SetReadOnly(forced: older is not null || (_details is { } e && _opensReadOnly(e.Document.Name)));
+        SetReadOnly(forced: older is not null || (_details is { } e && (_opensReadOnly(e.Document.Name) || DocumentDetails.MayNotEdit(e.Document))));
     }
 
     private void SetReadOnly(bool forced)
@@ -270,7 +271,7 @@ public partial class OpenWindow : Window
         if (_controls?.SelectedEntry?.Document is not { } doc)
             return;
         var version = _details?.Document.DocNumber == doc.DocNumber ? SelectedVersion() : null;
-        var readOnly = ReadOnlyBox.IsChecked == true || version is not null || _opensReadOnly(doc.Name);
+        var readOnly = ReadOnlyBox.IsChecked == true || version is not null || _opensReadOnly(doc.Name) || DocumentDetails.MayNotEdit(doc);
         Chosen = (doc.DocNumber, readOnly, version);
         Finish(WindowAnswers.Opened());
     }

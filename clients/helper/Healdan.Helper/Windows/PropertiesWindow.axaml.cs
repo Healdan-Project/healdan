@@ -44,7 +44,7 @@ public partial class PropertiesWindow : Window
             var d = await doc;
             var matter = d.Matter;
             DocTitle.Text = d.Name;
-            Subtitle.Text = $"#{d.DocNumber} · v{d.FileVersion}";
+            Subtitle.Text = $"#{d.DocNumber} · v{d.FileVersion} · {FileSizes.Text(d.Size)}"; // the size as Open shows it (#146)
             DocIcon.Data = Icons.Get(FileIcons.For(d.Name));
             var editable = form.Fields.Any(f => f.Editable);
             NoteText.IsVisible = !editable;
