@@ -1192,6 +1192,185 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		}
 	}
 
+	/*
+	 * A discovery document kept from when plain HTTP was allowed is checked
+	 * again at each use: once HTTP is off, its http:// endpoint refuses the
+	 * sign-in, without the document being fetched again
+	 */
+	@Test
+	public void testKeptDiscoveryIsCheckedForHttpsAtEachUse() throws Exception {
+		fake.close();
+		fake = FakeProvider.startTls().trust();
+		SignInTestHooks.allowHttp(true);
+		fake.discovery("authorization_endpoint", "http://login.firm.example/authorize");
+		SignInProvider p = fake.asProvider("tls");
+		assertNotNull(client.start(p, REDIRECT, false));
+		int asked = fake.discoveryRequests();
+
+		SignInTestHooks.allowHttp(false);
+		ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(e.getMessage(), e.getMessage().contains("authorisation endpoint"));
+		assertTrue(e.getMessage(), e.getMessage().contains("isn't an https address"));
+		assertEquals("the kept document, not a new one", asked, fake.discoveryRequests());
+	}
+
+	/*
+	 * The token endpoint's requests carry the secret, so a redirect isn't
+	 * followed, whatever its status: the code is refused, the refresh is
+	 * unreachable, and Check reports it
+	 */
+	@Test
+	public void testTokenRequestsAreNotRedirected() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		for (int status : new int[] { 301, 302, 303, 307, 308 }) {
+			fake.redirectToken("/elsewhere", status);
+			ProviderException e = refused(p);
+			assertTrue(e.getMessage(), e.getMessage().contains("HTTP " + status));
+			assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+			assertFalse(client.check(p, REDIRECT).ok());
+		}
+		assertEquals(0, fake.requests("/elsewhere"));
+
+		fake.redirectToken(null, 0);
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());
+	}
+
+	/*
+	 * An ID token with no kid is checked against each key kept for its
+	 * algorithm, so it passes when one of them signed it, and fails when none
+	 * did. With no kid it can't name a key the kept ones lack, so a rotated
+	 * key is found only once the keys are fetched again: when they're 5
+	 * minutes old, or after forget. Every provider Healdan names sends a kid.
+	 */
+	@Test
+	public void testIdTokenWithoutKeyId() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		fake.omitKeyId();
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+
+		// Signed with the second of two published keys, once the keys are fetched again
+		fake.rotateKey();
+		ProviderException kept = refused(p);
+		assertTrue(kept.getMessage(), kept.getMessage().contains("its signature doesn't match the provider's key"));
+		client.forget("fake");
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+
+		// Signed with a key it doesn't publish
+		fake.signWithAnotherKey();
+		ProviderException e = refused(p);
+		assertTrue(e.getMessage(), e.getMessage().contains("its signature doesn't match the provider's key"));
+	}
+
+	/* An encrypted ID token (a JWE) isn't one Healdan reads: refused at a sign-in, unreachable at a refresh */
+	@Test
+	public void testEncryptedIdTokenRefused() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		fake.encryptIdTokens(true);
+
+		ProviderException e = refused(p);
+		assertTrue(e.getMessage(), e.getMessage().contains("encrypted"));
+		Refreshed r = client.refresh(p, t.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, r.outcome());
+		assertNull(r.claims());
+		// The provider turned the refresh token over, so the new one is kept
+		assertNotNull(r.refreshToken());
+	}
+
+	/*
+	 * A key the ID token's header carries (jwk) or points to (jku, x5u) is never
+	 * used, nor fetched: the token is checked against the provider's published
+	 * keys only, under its own kid or the kid of a published key
+	 */
+	@Test
+	public void testKeysInTheTokensHeaderAreIgnored() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		for (String header : List.of("jwk", "jku", "x5u")) {
+			// A client of its own each time: an unknown kid fetches the keys again, at most twice in 30 seconds
+			ProviderClient fresh = new ProviderClient(SignInProviders.get());
+			fake.signWithKeyIn(header, "attacker");
+			ProviderException unknown = refused(fresh, p);
+			assertTrue(header + ": " + unknown.getMessage(),
+					unknown.getMessage().contains("none of the keys the provider publishes is the one it names"));
+			fake.signWithKeyIn(header, "k1");
+			ProviderException forged = refused(fresh, p);
+			assertTrue(header + ": " + forged.getMessage(),
+					forged.getMessage().contains("its signature doesn't match the provider's key"));
+		}
+		assertEquals(0, fake.requests("/attacker-keys"));
+		assertEquals(0, fake.requests("/attacker-cert"));
+
+		fake.signWithKeyIn(null, null);
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+	}
+
+	/* Every EC signature Healdan accepts works, each with its curve */
+	@Test
+	public void testEllipticCurveSignatures() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		for (String algorithm : List.of("ES256", "ES384", "ES512")) {
+			fake.signWith(algorithm);
+			client.forget("fake");
+			assertEquals(algorithm, "s-1001", signIn(p, true).claims().identity());
+			assertTrue(algorithm, client.check(p, REDIRECT).ok());
+		}
+	}
+
+	/*
+	 * A provider's own words about an error are quoted with what Healdan sent
+	 * it taken out, as it is and form-encoded: the code, the verifier and the
+	 * secret for a code, the refresh token and the secret for a refresh
+	 */
+	@Test
+	public void testProvidersErrorDescriptionsAreRedacted() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+
+		Start s = client.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		fake.answerCode(400, "invalid_request");
+		ProviderException e = assertThrows(ProviderException.class,
+				() -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertTrue(e.getMessage(), e.getMessage().contains("HTTP 400, invalid_request"));
+		assertTrue(e.getMessage(), e.getMessage().contains("code [hidden], verifier [hidden], secret [hidden] ([hidden])"));
+		for (String secret : List.of(code, s.verifier(), FakeProvider.SECRET))
+			assertFalse(e.getMessage(), e.getMessage().contains(secret));
+
+		try (LogCapture log = LogCapture.of(ProviderClient.class)) {
+			fake.answerRefresh(400, "invalid_request");
+			assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(line -> line.contains("Not a refresh token issued here: [hidden] ([hidden])")));
+			for (String line : log.lines()) {
+				assertFalse(line, line.contains(t.refreshToken()));
+				assertFalse(line, line.contains(FakeProvider.SECRET));
+			}
+		}
+	}
+
+	/* The client secret goes in a header or the form's body, never in an address's query */
+	@Test
+	public void testSecretNeverInAQueryString() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		List<List<String>> methods = Arrays.asList(List.of("client_secret_basic"), List.of("client_secret_post"), null);
+		for (List<String> listed : methods) {
+			fake.tokenEndpointAuthMethods(listed);
+			client.forget("fake");
+			Tokens t = signIn(p, true);
+			client.refresh(p, t.refreshToken());
+			client.check(p, REDIRECT);
+		}
+		assertTrue(fake.requests("/token") >= 9);
+		String encoded = java.net.URLEncoder.encode(FakeProvider.SECRET, java.nio.charset.StandardCharsets.UTF_8);
+		for (String request : fake.requests()) {
+			assertFalse(request, request.contains(FakeProvider.SECRET));
+			assertFalse(request, request.contains(encoded));
+			// Nothing Healdan sends a provider has a query
+			assertFalse(request, request.contains("?"));
+		}
+	}
+
 	@Test
 	public void testNothingSecretIsLogged() throws Exception {
 		String name = ProviderClient.class.getName();
@@ -1291,9 +1470,13 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 
 	/* A sign-in through the provider as it is now, which must be refused */
 	private ProviderException refused(SignInProvider p) throws ProviderException {
-		Start s = client.start(p, REDIRECT, false);
+		return refused(client, p);
+	}
+
+	private ProviderException refused(ProviderClient c, SignInProvider p) throws ProviderException {
+		Start s = c.start(p, REDIRECT, false);
 		String code = fake.authorize(s.authorization());
-		return assertThrows(ProviderException.class, () -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		return assertThrows(ProviderException.class, () -> c.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
 	}
 
 	private static boolean mentions(Check check, String text) {

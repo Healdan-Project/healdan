@@ -41,11 +41,15 @@ import com.logicaldoc.healdan.signin.Preset;
 import com.logicaldoc.healdan.signin.SignInProvider;
 import com.logicaldoc.healdan.signin.SignInProviders;
 import com.logicaldoc.healdan.signin.SignInTestHooks;
+import com.nimbusds.jose.EncryptionMethod;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JOSEObjectType;
+import com.nimbusds.jose.JWEAlgorithm;
+import com.nimbusds.jose.JWEHeader;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
 import com.nimbusds.jose.crypto.ECDSASigner;
+import com.nimbusds.jose.crypto.RSAEncrypter;
 import com.nimbusds.jose.crypto.RSASSASigner;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
@@ -57,6 +61,7 @@ import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
 import com.nimbusds.jose.util.Base64URL;
 import com.nimbusds.jose.util.JSONObjectUtils;
+import com.nimbusds.jwt.EncryptedJWT;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.PlainJWT;
 import com.nimbusds.jwt.SignedJWT;
@@ -133,6 +138,15 @@ public final class FakeProvider implements AutoCloseable {
 
 	private final ECKey ecKey;
 
+	/** For ES384 */
+	private final ECKey ecKey384;
+
+	/** For ES512 */
+	private final ECKey ecKey521;
+
+	/** Every request's path and raw query, as {@code path?query} or the path alone, in order */
+	private final List<String> requests = new CopyOnWriteArrayList<>();
+
 	private final Map<String, Pending> codes = new ConcurrentHashMap<>();
 
 	private final Map<String, Map<String, Object>> refreshTokens = new ConcurrentHashMap<>();
@@ -157,6 +171,23 @@ public final class FakeProvider implements AutoCloseable {
 
 	/** How each path's answer is spread out, when it is */
 	private final Map<String, Trickle> trickles = new ConcurrentHashMap<>();
+
+	/** Where the token endpoint sends every request, with {@link #tokenRedirectStatus}, when set */
+	private volatile String tokenRedirect;
+
+	private volatile int tokenRedirectStatus;
+
+	/** Whether the ID tokens leave out their kid */
+	private volatile boolean omitKeyId;
+
+	/** Whether the ID tokens are encrypted, as a JWE, rather than signed */
+	private volatile boolean encryptIdTokens;
+
+	/** The header that carries a key of the ID tokens' own, signed by it, when set: jwk, jku or x5u */
+	private volatile String keyHeader;
+
+	/** The kid of the ID tokens that carry their own key */
+	private volatile String keyHeaderKid;
 
 	private final AtomicInteger tokenRequests = new AtomicInteger();
 
@@ -254,6 +285,8 @@ public final class FakeProvider implements AutoCloseable {
 		try {
 			signingKey = new RSAKeyGenerator(2048).keyID("k1").keyUse(KeyUse.SIGNATURE).generate();
 			ecKey = new ECKeyGenerator(Curve.P_256).keyID("e1").keyUse(KeyUse.SIGNATURE).generate();
+			ecKey384 = new ECKeyGenerator(Curve.P_384).keyID("e2").keyUse(KeyUse.SIGNATURE).generate();
+			ecKey521 = new ECKeyGenerator(Curve.P_521).keyID("e3").keyUse(KeyUse.SIGNATURE).generate();
 		} catch (JOSEException e) {
 			server.stop(0);
 			throw new IllegalStateException(e);
@@ -492,10 +525,76 @@ public final class FakeProvider implements AutoCloseable {
 	}
 
 	/**
+	 * @param path where the token endpoint sends every request from now on, on
+	 *        this provider, such as {@code /elsewhere}, which it doesn't serve;
+	 *        null to answer them again
+	 * @param status the redirect's status, such as {@code 307}
+	 * @return this provider
+	 */
+	public FakeProvider redirectToken(String path, int status) {
+		tokenRedirectStatus = status;
+		tokenRedirect = path;
+		return this;
+	}
+
+	/**
+	 * @return this provider, whose ID tokens have no {@code kid} from now on
+	 */
+	public FakeProvider omitKeyId() {
+		omitKeyId = true;
+		return this;
+	}
+
+	/**
+	 * @param encrypt whether the ID tokens are encrypted from now on, as a JWE,
+	 *        rather than signed
+	 * @return this provider
+	 */
+	public FakeProvider encryptIdTokens(boolean encrypt) {
+		encryptIdTokens = encrypt;
+		return this;
+	}
+
+	/**
+	 * Signs the ID tokens from now on with a key of their own that the
+	 * provider doesn't publish, and points to it from the token's header, as
+	 * an attacker would: {@code jwk} carries the key itself, {@code jku} an
+	 * address of a key set ({@code /attacker-keys}, which it doesn't serve), and
+	 * {@code x5u} an address of a certificate ({@code /attacker-cert}).
+	 *
+	 * @param header {@code jwk}, {@code jku} or {@code x5u}; null to sign as
+	 *        before
+	 * @param kid the kid to name, such as the published {@code k1}, or another
+	 * @return this provider
+	 */
+	public FakeProvider signWithKeyIn(String header, String kid) {
+		keyHeader = header;
+		keyHeaderKid = kid;
+		return this;
+	}
+
+	/**
+	 * @param path a path, such as {@code /token}
+	 * @return how many requests came to it
+	 */
+	public int requests(String path) {
+		return (int) requests.stream().filter(r -> r.equals(path) || r.startsWith(path + "?")).count();
+	}
+
+	/**
+	 * @return every request's path, with its raw query when it had one, in
+	 *         order
+	 */
+	public List<String> requests() {
+		return List.copyOf(requests);
+	}
+
+	/**
 	 * @param algorithm what to sign ID tokens with from now on: {@code RS256}
 	 *        (the default), {@code RS384}, {@code RS512}, {@code PS256},
-	 *        {@code PS384}, {@code PS512}, {@code ES256}, {@code HS256} (with
-	 *        the client secret), {@code HS384}, {@code HS512} or {@code none}.
+	 *        {@code PS384}, {@code PS512}, {@code ES256}, {@code ES384},
+	 *        {@code ES512}, {@code HS256} (with the client secret),
+	 *        {@code HS384}, {@code HS512} or {@code none}.
 	 *        The discovery document then names it alone in
 	 *        {@code id_token_signing_alg_values_supported}.
 	 * @return this provider
@@ -763,6 +862,8 @@ public final class FakeProvider implements AutoCloseable {
 	private void handle(HttpExchange exchange) {
 		try {
 			String path = exchange.getRequestURI().getPath();
+			String query = exchange.getRequestURI().getRawQuery();
+			requests.add(query == null ? path : path + "?" + query);
 			Duration delay = delays.get(path);
 			if (delay != null)
 				try {
@@ -787,6 +888,8 @@ public final class FakeProvider implements AutoCloseable {
 					keyRequests.incrementAndGet();
 					List<JWK> keys = new ArrayList<>(rsaKeys);
 					keys.add(ecKey);
+					keys.add(ecKey384);
+					keys.add(ecKey521);
 					send(exchange, 200, JSON, new JWKSet(keys).toString(true));
 				}
 				case "/token" -> {
@@ -839,6 +942,12 @@ public final class FakeProvider implements AutoCloseable {
 			send(exchange, 405, "text/plain", "POST only");
 			return;
 		}
+		String redirect = tokenRedirect;
+		if (redirect != null) {
+			exchange.getResponseHeaders().set("Location", issuer + redirect);
+			send(exchange, tokenRedirectStatus, "text/plain", "Moved");
+			return;
+		}
 		Map<String, List<String>> form;
 		try (InputStream in = exchange.getRequestBody()) {
 			form = URLUtils.parseParameters(new String(in.readAllBytes(), StandardCharsets.UTF_8));
@@ -874,7 +983,8 @@ public final class FakeProvider implements AutoCloseable {
 			}
 			Answer answer = nextRefresh.getAndSet(null);
 			if (answer != null) {
-				answer(exchange, answer, null);
+				answer(exchange, answer, "Not a refresh token issued here: %s, secret %s"
+						.formatted(echo(one(form, "refresh_token")), echo(sentSecret(exchange, form))));
 				return;
 			}
 			Raw raw = nextRawRefresh.getAndSet(null);
@@ -1018,14 +1128,24 @@ public final class FakeProvider implements AutoCloseable {
 		JWTClaimsSet set = builder.build();
 
 		try {
+			if (encryptIdTokens) {
+				EncryptedJWT jwt = new EncryptedJWT(new JWEHeader(JWEAlgorithm.RSA_OAEP_256, EncryptionMethod.A128GCM),
+						set);
+				jwt.encrypt(new RSAEncrypter(new RSAKeyGenerator(2048).generate()));
+				return jwt.serialize();
+			}
 			if ("none".equals(algorithm))
 				return new PlainJWT(set).serialize();
 			if (algorithm.startsWith("HS"))
 				return hmac(algorithm, set);
 			JWSAlgorithm jws = JWSAlgorithm.parse(algorithm);
-			if (jws.equals(JWSAlgorithm.ES256)) {
-				SignedJWT jwt = new SignedJWT(header(jws, ecKey.getKeyID()), set);
-				jwt.sign(new ECDSASigner(ecKey));
+			if (keyHeader != null)
+				return signedWithOwnKey(set);
+			ECKey ec = jws.equals(JWSAlgorithm.ES256) ? ecKey
+					: jws.equals(JWSAlgorithm.ES384) ? ecKey384 : jws.equals(JWSAlgorithm.ES512) ? ecKey521 : null;
+			if (ec != null) {
+				SignedJWT jwt = new SignedJWT(header(jws, ec.getKeyID()), set);
+				jwt.sign(new ECDSASigner(ec));
 				return jwt.serialize();
 			}
 			RSAKey key = stranger != null ? stranger : signingKey;
@@ -1037,8 +1157,24 @@ public final class FakeProvider implements AutoCloseable {
 		}
 	}
 
-	private static JWSHeader header(JWSAlgorithm algorithm, String kid) {
-		return new JWSHeader.Builder(algorithm).keyID(kid).type(JOSEObjectType.JWT).build();
+	private JWSHeader header(JWSAlgorithm algorithm, String kid) {
+		return new JWSHeader.Builder(algorithm).keyID(omitKeyId ? null : kid).type(JOSEObjectType.JWT).build();
+	}
+
+	/** Signs with a key of the token's own, which its header carries or points to, as {@link #signWithKeyIn} says */
+	private String signedWithOwnKey(JWTClaimsSet set) throws JOSEException {
+		RSAKey own = new RSAKeyGenerator(2048).keyID(keyHeaderKid).keyUse(KeyUse.SIGNATURE).generate();
+		JWSHeader.Builder header = new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(keyHeaderKid)
+				.type(JOSEObjectType.JWT);
+		switch (keyHeader) {
+			case "jwk" -> header.jwk(own.toPublicJWK());
+			case "jku" -> header.jwkURL(URI.create(issuer + "/attacker-keys"));
+			case "x5u" -> header.x509CertURL(URI.create(issuer + "/attacker-cert"));
+			default -> throw new IllegalStateException("No such key header: " + keyHeader);
+		}
+		SignedJWT jwt = new SignedJWT(header.build(), set);
+		jwt.sign(new RSASSASigner(own));
+		return jwt.serialize();
 	}
 
 	/* By hand, as Nimbus's MACSigner refuses a secret shorter than 256 bits, which real providers don't */
