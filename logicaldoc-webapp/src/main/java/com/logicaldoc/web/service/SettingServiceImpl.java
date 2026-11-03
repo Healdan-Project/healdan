@@ -103,6 +103,30 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     // saveExtensionAliases()
     private static final long FORMAT_CONVERTERS_MENU = 1750L;
 
+    // Healdan: Settings > Protocols
+    private static final long PROTOCOLS_MENU = 3L;
+
+    // Healdan: Settings > GUI settings
+    private static final long GUI_SETTINGS_MENU = 102L;
+
+    // Healdan: System > General > Run level
+    private static final long RUNLEVEL_MENU = 73L;
+
+    // Healdan: Document metadata, whose Tags screen writes the tag settings
+    private static final long METADATA_MENU = 25L;
+
+    // Healdan: the tenant's keys Settings > GUI settings writes besides its
+    // gui.* keys
+    private static final Set<String> GUI_SETTINGS_KEYS = Set.of("upload.maxsize", "upload.disallow",
+            "session.timeout", "session.heartbeat", "downloadticket.behavior", "charset", "search.extattr",
+            "search.hits");
+
+    // Healdan: the keys Settings > Auditing writes besides the tenant's
+    // history.events
+    private static final Set<String> AUDITING_KEYS = Set.of("history.document.ttl", "history.folder.ttl",
+            "history.user.ttl", "history.importfolder.ttl", "history.workflow.ttl", "history.ocr.ttl",
+            "webservice.call.ttl");
+
     // Healdan: the settings loadSettingsByNames() gives the screens Healdan
     // shows that read them, to the holders of each screen's menu. Any other
     // name, and any prefix ending in *, needs an administrator: only
@@ -120,7 +144,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public GUIEmailSettings loadEmailSettings() throws ServerException {
-        Session session = checkMenu(getThreadLocalRequest(), Menu.SETTINGS);
+        // Healdan: Settings > Outgoing email, the screen it opens
+        Session session = checkMenu(getThreadLocalRequest(), OUTGOING_EMAIL_MENU);
 
         GUIEmailSettings emailSettings = new GUIEmailSettings();
         try {
@@ -168,7 +193,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public void saveEmailSettings(GUIEmailSettings settings) throws ServerException {
-        checkMenu(getThreadLocalRequest(), Menu.SETTINGS);
+        // Healdan: Settings > Outgoing email, whose Save button calls it
+        checkMenu(getThreadLocalRequest(), OUTGOING_EMAIL_MENU);
 
         try {
             setTenantSetting(SMTP_PROTOCOL, settings.getProtocol());
@@ -212,7 +238,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public List<GUIParameter> loadSettings() throws ServerException {
-        checkMenu(getThreadLocalRequest(), Menu.SETTINGS);
+        // Healdan: Settings > Parameters, the screen that lists them
+        checkMenu(getThreadLocalRequest(), Menu.PARAMETERS);
 
         TreeSet<String> sortedSet = new TreeSet<>();
         ContextProperties conf = Context.get().getConfig();
@@ -258,7 +285,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public List<GUIParameter> loadProtocolSettings() throws ServerException {
-        checkMenu(getThreadLocalRequest(), Menu.SETTINGS);
+        // Healdan: Settings > Protocols, the screen that shows them
+        checkMenu(getThreadLocalRequest(), PROTOCOLS_MENU);
 
         ContextProperties conf = Context.get().getConfig();
         List<GUIParameter> params = new ArrayList<>();
@@ -273,6 +301,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
     @Override
     public void saveSettings(List<GUIParameter> settings) throws ServerException {
         Session session = checkMenu(getThreadLocalRequest(), Menu.ADMINISTRATION);
+        // Healdan: each key needs the menu of a screen that writes it
+        checkSettingWriteMenus(session, settings);
 
         try {
             GenericDAO genericDao = GenericDAO.get();
@@ -319,6 +349,82 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
         }
     }
 
+    /**
+     * Healdan: refuses the whole save unless the user may write every key. A
+     * key needs the menu of a screen that writes it, and Settings > Parameters
+     * writes the keys it lists. Any other key needs an administrator: only
+     * LogicalDOC's paid screens write them, and only administrators open
+     * those.
+     *
+     * @param session the current session
+     * @param settings the settings to save
+     *
+     * @throws ServerException a key the user may not write
+     */
+    private void checkSettingWriteMenus(Session session, List<GUIParameter> settings) throws ServerException {
+        if (settings == null || session.getUser().isAdmin())
+            return;
+
+        MenuDAO dao = MenuDAO.get();
+        Set<String> parameters = null;
+        for (GUIParameter setting : settings) {
+            // saveSetting() skips these
+            if (setting == null || StringUtils.isEmpty(setting.getName()))
+                continue;
+
+            String name = setting.getName();
+            boolean allowed = settingWriteMenus(name, session.getTenantName()).stream()
+                    .anyMatch(menuId -> dao.isReadAllowed(menuId, session.getUserId()));
+            if (!allowed && dao.isReadAllowed(Menu.PARAMETERS, session.getUserId())) {
+                if (parameters == null)
+                    parameters = loadSettings().stream().map(GUIParameter::getName).collect(Collectors.toSet());
+                allowed = parameters.contains(name);
+            }
+
+            if (!allowed)
+                throw new AccessDeniedException(
+                        "User %s cannot write the setting %s".formatted(session.getUsername(), name));
+        }
+    }
+
+    /**
+     * Healdan: the menus of the screens Healdan shows that write the key
+     * through {@link #saveSettings(List)}, Parameters aside
+     *
+     * @param name the key
+     * @param tenantName the tenant of the user saving it
+     *
+     * @return the menus, each enough on its own
+     */
+    private static List<Long> settingWriteMenus(String name, String tenantName) {
+        String tenantKey = name.startsWith(tenantName + ".") ? name.substring(tenantName.length() + 1) : "";
+        List<Long> menus = new ArrayList<>();
+        // Stores' folders and Proxy's settings, which the screens read
+        // through loadSettingsByNames()
+        if (SETTING_MENUS.containsKey(name))
+            menus.add(SETTING_MENUS.get(name));
+        // Stores' storage backends, through saveStoreSettings()
+        if (name.startsWith("store."))
+            menus.add(STORES_MENU);
+        if (AUDITING_KEYS.contains(name) || tenantKey.equals("history.events"))
+            menus.add(Menu.AUDITING);
+        // GUI settings, with its Grids tab
+        if (tenantKey.startsWith("gui.") || GUI_SETTINGS_KEYS.contains(tenantKey))
+            menus.add(GUI_SETTINGS_MENU);
+        // The keys loadProtocolSettings() gives
+        if (name.startsWith("webservice.") || name.startsWith("webdav.") || name.startsWith("cmis.")
+                || name.startsWith("ftp."))
+            menus.add(PROTOCOLS_MENU);
+        if (name.equals("runlevel") || name.equals("runlevel.back")
+                || name.matches("aspect\\.[^.]+\\.(default|bulkload|slave|devel|demo)"))
+            menus.add(RUNLEVEL_MENU);
+        // The keys TagService.getSettings() gives, and the vocabulary
+        if (tenantKey.startsWith("tag.") || tenantKey.startsWith("tagcloud.")
+                || tenantKey.equals("gui.tag.vocabulary"))
+            menus.add(METADATA_MENU);
+        return menus;
+    }
+
     @Override
     public void saveFirewallSettings(List<GUIParameter> settings) throws ServerException {
         saveSettings(settings);
@@ -341,7 +447,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public List<String> removeStore(int storeId) throws ServerException {
-        Session session = checkMenu(getThreadLocalRequest(), Menu.ADMINISTRATION);
+        // Healdan: Settings > Stores, whose Remove item calls it
+        Session session = checkMenu(getThreadLocalRequest(), STORES_MENU);
 
         try {
             ContextProperties config = Context.get().getConfig();
@@ -429,7 +536,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
 
     @Override
     public List<GUIParameter> loadGUISettings() throws ServerException {
-        Session session = checkMenu(getThreadLocalRequest(), Menu.SETTINGS);
+        // Healdan: Settings > GUI settings, the screen that shows them
+        Session session = checkMenu(getThreadLocalRequest(), GUI_SETTINGS_MENU);
         String tenantName = session.getTenantName();
 
         ContextProperties conf = Context.get().getConfig();
@@ -589,7 +697,8 @@ public class SettingServiceImpl extends AbstractRemoteService implements Setting
         Session session = validateSession();
 
         try {
-            checkMenu(getThreadLocalRequest(), Menu.SETTINGS);
+            // Healdan: Settings > Protocols, whose Web services tab shows them
+            checkMenu(getThreadLocalRequest(), PROTOCOLS_MENU);
 
             List<GUIParameter> params = new ArrayList<>();
 
