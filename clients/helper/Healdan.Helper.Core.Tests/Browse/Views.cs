@@ -53,7 +53,8 @@ public static class Views
         ["type"] = "document", ["docNumber"] = n, ["name"] = name, ["size"] = 100, ["version"] = version ?? fileVersion,
         ["fileVersion"] = fileVersion, ["reference"] = $"{n}.{fileVersion}", ["folder"] = Ref(folder, folder == 12 ? "Drafts" : "Documents", "folder"),
         ["matter"] = MatterRef(),
-        ["dateFiled"] = "2026-10-01T09:00:00Z", ["lastModified"] = "2026-10-25T10:50:00Z", ["hold"] = hold, ["canEdit"] = hold is null
+        ["dateFiled"] = "2026-10-01T09:00:00Z", ["lastModified"] = "2026-10-25T10:50:00Z", ["hold"] = hold, ["canEdit"] = hold is null,
+        ["canOpen"] = true
     };
 
     public static JsonObject MatterView(long id, long folderId, string? lastChange = null) => new()

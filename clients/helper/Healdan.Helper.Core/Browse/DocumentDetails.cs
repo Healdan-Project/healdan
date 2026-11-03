@@ -74,10 +74,11 @@ public sealed record DocumentDetails(DocumentView Document, IReadOnlyList<Detail
     }
 
     /// <summary>
-    /// The user may not check the document out (no Write permission, immutable or archived), and nobody holds it, so it
-    /// opens read-only. A hold has its own row saying who has it.
+    /// The user may open the document but not check it out (no Write permission, immutable or archived), and nobody
+    /// holds it, so it opens read-only. A hold has its own row saying who has it, and a document the helper can't open
+    /// at all (<see cref="DocumentView.CanOpen"/>) opens neither way.
     /// </summary>
-    public static bool MayNotEdit(DocumentView doc) => !doc.CanEdit && doc.Hold is null;
+    public static bool MayNotEdit(DocumentView doc) => doc.CanOpen && !doc.CanEdit && doc.Hold is null;
 
     /// <summary>A row for each of these properties that has a value, under the profile's label; a date in the region's order.</summary>
     private static void AddProperties(List<Detail> rows, FormModel properties, CultureInfo? culture, params string[] names)

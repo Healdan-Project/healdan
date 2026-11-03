@@ -69,6 +69,9 @@ At the bottom:
 - **A document you may not edit** opens read-only too, because you don't have permission to edit it, or it's archived
   or can't be changed. The header says **Opens read-only: you can't edit this document**, and Open Read-Only is
   ticked for you.
+- **A document you can't open from here,** because you may not download it or it's protected by a password, says
+  **You can't open this document here**, and Open is off. Open a password-protected one in Healdan's web page, which
+  asks for its password.
 - **Open from Local Computer…** shows LibreOffice's own Open box, for a file on your Mac.
 
 ## Opening in Word, Excel and PowerPoint

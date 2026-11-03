@@ -105,8 +105,9 @@ public partial class OpenWindow : Window
         _loadingFor = doc.DocNumber;
         var load = ++_detailLoad;
         _details = null;
-        OpenButton.IsEnabled = true;
+        OpenButton.IsEnabled = doc.CanOpen;
         ShowHeader(doc);
+        SetReadOnly(forced: ForcedReadOnly(doc, null)); // this document's, not the last one's, while its details load
         VersionsTab.Content = "Versions"; // not the last document's count, while this one's load, or if it fails
         DocStarButton.IsVisible = false; // ShowStar shows it once the details are here and the star can act on them
         (DetailsNote.Text, DetailsNote.IsVisible, DetailsNote.Margin) = ("Loading…", true, new Avalonia.Thickness(0, 12, 0, 0));
@@ -136,6 +137,7 @@ public partial class OpenWindow : Window
     {
         _details = details;
         var doc = details.Document;
+        OpenButton.IsEnabled = doc.CanOpen; // as the details say now, which are newer than the list's
         DetailsNote.IsVisible = false;
         KindNote.IsVisible = _opensReadOnly(doc.Name);
         KindNote.Text = PdfFiles.Is(doc.Name)
@@ -186,8 +188,10 @@ public partial class OpenWindow : Window
         DocIcon.Data = Icons.Get(FileIcons.For(doc.Name));
         DocTitle.Text = doc.Name;
         DocSubtitle.Text = $"#{doc.DocNumber} · v{version ?? doc.FileVersion}";
-        OlderLine.IsVisible = version is not null && version != doc.FileVersion;
-        NoEditLine.IsVisible = !OlderLine.IsVisible && DocumentDetails.MayNotEdit(doc); // #146: said before it opens, not after
+        // #146: said before it opens, not after. A document the helper can't open has no version it can open either.
+        NoOpenLine.IsVisible = !doc.CanOpen;
+        OlderLine.IsVisible = doc.CanOpen && version is not null && version != doc.FileVersion;
+        NoEditLine.IsVisible = !OlderLine.IsVisible && DocumentDetails.MayNotEdit(doc);
     }
 
     private void ClearDetails(string note)
@@ -242,11 +246,15 @@ public partial class OpenWindow : Window
     /// </summary>
     private void VersionChanged()
     {
+        if (_details is not { } d)
+            return; // ShowDetailsAsync and ClearDetails set the box meanwhile
         var older = SelectedVersion();
-        if (_details is { } d)
-            ShowHeader(d.Document, older);
-        SetReadOnly(forced: older is not null || (_details is { } e && (_opensReadOnly(e.Document.Name) || DocumentDetails.MayNotEdit(e.Document))));
+        ShowHeader(d.Document, older);
+        SetReadOnly(forced: ForcedReadOnly(d.Document, older));
     }
+
+    /// <summary>Whether the document opens read-only whatever the box says: an older version, a file for the default app, or one the user may not edit.</summary>
+    private bool ForcedReadOnly(DocumentView doc, string? older) => older is not null || _opensReadOnly(doc.Name) || DocumentDetails.MayNotEdit(doc);
 
     private void SetReadOnly(bool forced)
     {
@@ -268,10 +276,14 @@ public partial class OpenWindow : Window
 
     private void OpenChosen()
     {
-        if (_controls?.SelectedEntry?.Document is not { } doc)
+        if (_controls?.SelectedEntry?.Document is not { } listed)
             return;
+        // The details once they're here, which are newer than the list's
+        var doc = _details?.Document is { } shown && shown.DocNumber == listed.DocNumber ? shown : listed;
+        if (!doc.CanOpen)
+            return; // a double-click or Enter, with Open off: the header says why
         var version = _details?.Document.DocNumber == doc.DocNumber ? SelectedVersion() : null;
-        var readOnly = ReadOnlyBox.IsChecked == true || version is not null || _opensReadOnly(doc.Name) || DocumentDetails.MayNotEdit(doc);
+        var readOnly = ReadOnlyBox.IsChecked == true || ForcedReadOnly(doc, version);
         Chosen = (doc.DocNumber, readOnly, version);
         Finish(WindowAnswers.Opened());
     }

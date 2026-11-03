@@ -20,8 +20,10 @@ import java.util.Date;
  * @param hold who has the document checked out or locked, or null if it's
  *        free
  * @param canEdit whether the caller may check the document out and save to it
+ * @param canOpen whether the caller may download the document's file, as
+ *        its content and thumbnail ask
  */
 public record DocumentView(String type, long docNumber, String name, long size, String version, String fileVersion,
 		String reference, FolderRef folder, MatterRef matter, Date dateFiled, Date lastModified, HoldView hold,
-		boolean canEdit) {
+		boolean canEdit, boolean canOpen) {
 }

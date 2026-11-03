@@ -14,10 +14,11 @@ public class DocumentDetailsTests
     private static readonly DateTimeOffset LastSaved = DateTimeOffset.Parse("2026-10-03T09:00:00Z");
     private static readonly CultureInfo Gb = new("en-GB");
 
-    private static DocumentView Doc(JsonObject? hold = null, bool? canEdit = null, long size = 100)
+    private static DocumentView Doc(JsonObject? hold = null, bool? canEdit = null, long size = 100, bool canOpen = true)
     {
         var json = Views.Doc(1234, "Lease agreement.docx", "2.1", hold: hold);
         json["size"] = size;
+        json["canOpen"] = canOpen;
         if (canEdit is { } can)
             json["canEdit"] = can;
         return JsonSerializer.Deserialize<DocumentView>(json.ToJsonString(), new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
@@ -120,4 +121,9 @@ public class DocumentDetailsTests
         Assert.False(DocumentDetails.MayNotEdit(Doc()));
         Assert.False(DocumentDetails.MayNotEdit(Doc(Hold("2026-10-12T15:00:00Z"), canEdit: false))); // its Checked Out row says why
     }
+
+    [Fact]
+    public void ADocumentTheHelperCantOpenDoesntSayItOpensReadOnly() =>
+        // No Download permission, or protected by a password: the server refuses its file too, so it opens neither way
+        Assert.False(DocumentDetails.MayNotEdit(Doc(canEdit: false, canOpen: false)));
 }
