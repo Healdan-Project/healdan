@@ -231,8 +231,7 @@ public class SignInProviders {
 	 *         13).
 	 */
 	public List<SignInProvider> enabled() {
-		return all().stream().filter(p -> p.enabled() && p.issuer() != null && p.clientId() != null && p.hasSecret())
-				.toList();
+		return all().stream().filter(SignInProvider::usable).toList();
 	}
 
 	/**

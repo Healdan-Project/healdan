@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -33,6 +34,8 @@ import com.logicaldoc.healdan.api.model.TokenView;
 import com.logicaldoc.healdan.signin.OneTimeCodes;
 import com.logicaldoc.healdan.signin.OneTimeCodes.Redeemed;
 import com.logicaldoc.healdan.signin.SecretBox;
+import com.logicaldoc.healdan.signin.SignInProvider;
+import com.logicaldoc.healdan.signin.SignInProviders;
 import com.logicaldoc.healdan.signin.SignIns;
 import com.logicaldoc.healdan.token.ApiToken;
 import com.logicaldoc.healdan.token.ApiTokens;
@@ -79,6 +82,9 @@ public class AuthResource {
 
 	/** What separates the two users of an impersonation in CE's sign-in */
 	private static final String IMPERSONATION = ">";
+
+	/** A PKCE verifier (RFC 7636 section 4.1), as {@code openapi.yaml}'s {@code CodeSignIn} has it */
+	private static final Pattern CODE_VERIFIER = Pattern.compile("[A-Za-z0-9._~-]{43,128}");
 
 	private static final Logger log = LoggerFactory.getLogger(AuthResource.class);
 
@@ -189,6 +195,13 @@ public class AuthResource {
 					refresh.length(), ApiTokens.MAX_REFRESH);
 			throw signInFailed();
 		}
+		// The code was issued up to a minute ago: the provider may have been turned off or removed since. After the
+		// seal, so that a missing key file, which also leaves the client secret unopened, is told as such
+		if (SignInProviders.get().find(redeemed.provider()).filter(SignInProvider::usable).isEmpty()) {
+			log.info("Refused a sign-in with a helper's code through the sign-in provider {}: the provider isn't on "
+					+ "and set up any more", redeemed.provider());
+			throw signInFailed();
+		}
 		SessionManager sessions = SessionManager.get();
 		Session session;
 		try {
@@ -296,6 +309,10 @@ public class AuthResource {
 			errors.add(new FieldError("code", REQUIRED, "Give the one-time code."));
 		if (StringUtils.isEmpty(credentials.codeVerifier()))
 			errors.add(new FieldError("codeVerifier", REQUIRED, "Give the code's verifier."));
+		else if (!CODE_VERIFIER.matcher(credentials.codeVerifier()).matches())
+			// Refused before the code is redeemed, so a helper that sent it wrong can send it again
+			errors.add(new FieldError("codeVerifier", "invalid",
+					"A code's verifier is 43 to 128 letters, digits, hyphens, full stops, underscores and tildes."));
 		if (StringUtils.isEmpty(credentials.redirectUri()))
 			errors.add(new FieldError("redirectUri", REQUIRED, "Give the redirect address the sign-in started with."));
 	}

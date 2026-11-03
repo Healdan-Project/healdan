@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -181,6 +182,13 @@ public class SignInResource {
 	private static final int MAX_QUOTED = 200;
 
 	private static final Logger log = LoggerFactory.getLogger(SignInResource.class);
+
+	/** LogicalDOC's checks of an account, as its sign-in chain runs them */
+	static final Consumer<User> CE_CHECKS = user -> com.logicaldoc.util.spring.Context.get(DefaultAuthenticator.class)
+			.validateUser(user);
+
+	/** How a helper's sign-in checks its account before handing it a code; tests replace it */
+	static volatile Consumer<User> accountChecks = CE_CHECKS;
 
 	/**
 	 * The helper's side of its sign-in, checked at the start.
@@ -451,10 +459,14 @@ public class SignInResource {
 		// (disabled, expired, outside working hours, legals unconfirmed) is told so here, not given a code
 		if (helper != null) {
 			try {
-				com.logicaldoc.util.spring.Context.get(DefaultAuthenticator.class).validateUser(user);
+				accountChecks.accept(user);
 			} catch (AuthenticationException e) {
 				return refused(address, helper, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in would refuse "
 						+ "the account " + quote(user.getUsername()) + " (" + e.getClass().getSimpleName() + ")", false);
+			} catch (RuntimeException e) {
+				// Only its class: its message could quote the account's row. Refused at the helper's address, not a 500
+				return refused(address, helper, id, claims.identity(), ACCOUNT, "LogicalDOC's checks of the account "
+						+ quote(user.getUsername()) + " failed on " + e.getClass().getName(), true);
 			}
 			return handToHelper(helper, user, id, tokens.refreshToken());
 		}

@@ -118,12 +118,14 @@ A desktop client, such as the Healdan Helper, signs in through the system browse
    The answer is `201`, as for a password.
 
 - **The code works once,** for 60 seconds, with the verifier of the challenge the sign-in started with and the same
-  `redirectUri`, character for character. Anything else is `401 sign-in-failed`, as a wrong password is, and a
-  wrong verifier or address uses the code up. A sign-in the server can't keep, as when its secret key file is
-  missing, is `500 server-error`, whose `detail` says so; the code is used up, and the helper starts again.
+  `redirectUri`, character for character, while its provider is still on. Anything else is `401 sign-in-failed`, as
+  a wrong password is, and a wrong verifier or address, or a provider turned off since the code was issued, uses the
+  code up. A sign-in the server can't keep, as when its secret key file is missing, is `500 server-error`, whose
+  `detail` says so; the code is used up, and the helper starts again.
 - **A body has a password or a code, never both.** One with fields of each is `422 validation`, and so is a code
-  without its `codeVerifier` or `redirectUri` (`required`). `name` and `device` are checked as for a password,
-  before the code is used.
+  without its `codeVerifier` or `redirectUri` (`required`), or with a `codeVerifier` that isn't 43 to 128 letters,
+  digits, `-`, `.`, `_` and `~`, as RFC 7636 has it (`invalid`). `name` and `device` are checked as for a password.
+  All of these are checked before the code is used, so it still works with a body put right.
 - **The token is a device token like any other,** with the same limits and the same routes to sign it out. Healdan
   keeps the provider's refresh token with it, encrypted, and never sends it to the client.
 
