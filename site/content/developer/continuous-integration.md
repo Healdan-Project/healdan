@@ -256,7 +256,7 @@ Developer ID. Each is set with `gh secret set <name> --env helper-release --repo
 
 The job imports the certificate into a keychain of its own, which it deletes at the end, and decodes the key into
 the runner's temporary folder, which it also clears. On a branch, or without the first three secrets (as on a fork),
-the app gets only an ad-hoc signature, and without the last three it isn't notarised. Either way the job says so,
+the app gets only an ad-hoc signature, without the hardened runtime, and without the last three it isn't notarised. Either way the job says so,
 uploads the disk image as its artifact, and attaches nothing to the release.
 
 On a Mac with the Developer ID certificate in the login keychain, the same script builds a signed package
