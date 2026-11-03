@@ -66,6 +66,28 @@ public class ProfileSchema {
 	}
 
 	/**
+	 * @param setId an attribute set
+	 * @return true if the set holds the profile's Class or Subclass list; false
+	 *         while there is no profile template
+	 */
+	public boolean holdsTheLists(long setId) {
+		if (HealdanSettings.get().profileTemplateId() == null)
+			return false;
+		Template template;
+		try {
+			template = template();
+		} catch (IllegalStateException e) {
+			return false;
+		}
+		for (String name : List.of(HealdanConstants.ATTR_DOCCLASS, HealdanConstants.ATTR_DOCSUBCLASS)) {
+			Attribute attribute = template.getAttribute(name);
+			if (attribute != null && attribute.getSetId() != null && attribute.getSetId() == setId)
+				return true;
+		}
+		return false;
+	}
+
+	/**
 	 * @return the attributes that always come from the workspace
 	 */
 	public Set<String> fixed() {
