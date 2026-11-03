@@ -64,8 +64,9 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
     /// <summary>
     /// Spec §5.14: the program may have the crashed copy open again, as Word's "Recovered" window, where Save opens Save
     /// As. Looks for the copy by its path, which never takes the front window (<see cref="IOfficeScripting.IsOpenAsync"/>),
-    /// every <paramref name="every"/> for up to <paramref name="wait"/> on <paramref name="clock"/>, as the program may be
-    /// running before it lists the document, and tells <paramref name="missed"/> after each look that didn't find it; only
+    /// every <paramref name="every"/> (real time) for up to <paramref name="wait"/> on <paramref name="clock"/>, as the
+    /// program may be running before it lists the document, and tells <paramref name="missed"/> after each look that didn't
+    /// find it, before it looks again; only
     /// once it's found, tells <paramref name="found"/>, then saves that window over the copy's own path, so the cycle's
     /// folder watcher sends what was recovered. <see cref="Recovery.NotFound"/> when the copy wasn't found, or
     /// <paramref name="stop"/> said to stop looking, and <see cref="Recovery.Failed"/> when the save failed or
@@ -93,13 +94,13 @@ public sealed class OfficeAfterSave(CopiesNotice? notice = null, HelperLog? log 
             }
             if (listed)
                 break;
-            missed();
             if (clock.GetElapsedTime(since) >= wait)
             {
                 if (FirstMiss(path))
                     log?.Warn($"{name} didn't find {file} by its path after it closed unexpectedly, so nothing was saved over it");
                 return Recovery.NotFound;
             }
+            missed();
             await Task.Delay(every, ct);
         }
         found();

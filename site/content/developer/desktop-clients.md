@@ -184,7 +184,8 @@ size the helper uses, the widths then match CoreText's.
   over the copy (`SaveAsAsync`), and the folder watcher, which lets go of the copy while it's saved, sends it once that
   returns. The copy stays crashed until the save over it works. A failure is tried again at the next look, and
   anything the program wrote meanwhile waits for the save that works; a miss when the program restarts or writes its
-  owner file, and while it runs only after another 30 seconds. Then the crash window closes itself
+  owner file (one the look counted already, only once it's written again), and while it runs only after another 30
+  seconds. Then the crash window closes itself
   (`IWindows.DismissCrashed`), and its Send and Check In and Reopen, and the menu, go by the copy as it is now
   (`CopyCycle.Current`), found by its document once it's renamed: a copy that's open again is brought up, never
   checked in. Send and Check In is refused once the owner file comes back, or the window is found, and while the
@@ -192,12 +193,13 @@ size the helper uses, the widths then match CoreText's.
   save (`CopyCycle.IsOpenAgain`); the program merely running doesn't refuse it. Word runs before it writes its owner
   file, so the close watcher may see it running first and the owner file come back only while the save-back looks:
   Send and Check In and each of the save-back's looks check for the owner file themselves, so it counts the same.
-  Once the save-back has given up, it's refused only while the owner file is there, so a window closed before it was
-  found doesn't strand the copy. Reopen, Open from Healdan and a link on a crashed Office copy start its program
+  Once the save-back has given up, it's refused only while the owner file is there, and a later look refuses it only
+  once the owner file is there, so a window closed before it was found doesn't strand the copy. Reopen, Open from Healdan and a link on a crashed Office copy start its program
   without a file (`IOfficeScripting.StartAsync`), which restores what it recovered: handed the file, Word opened it
   again beside its recovered window. The save-back looks at once, for the whole 30 seconds if the program had to
   start, or for two process checks if it was running, and if it doesn't find the copy, the copy is opened as last
-  saved. A save confirmed while the copy counted as crashed couldn't rename it, so before it opens, a Word or Excel
+  saved, unless the program wrote its owner file again: it has the copy under another name then, and handed the file,
+  it would open it beside that window, so the copy stays crashed. A save confirmed while the copy counted as crashed couldn't rename it, so before it opens, a Word or Excel
   copy takes its confirmed version's name (`CopyCycle.CatchUpName`).
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,

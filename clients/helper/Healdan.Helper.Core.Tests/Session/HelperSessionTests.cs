@@ -1604,7 +1604,7 @@ public sealed class HelperSessionTests : IDisposable
         // save-back starts looking before the owner file is back (CI's Ubuntu runs, 2026-11-02 and 11-03). The owner file
         // coming back then says the copy is Word's window all the same, before the look has seen it too: Word hasn't
         // answered it yet.
-        var answer = new TaskCompletionSource();
+        var answer = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var scripting = new FakeScripting { WindowText = "the work Word recovered", NeverListed = true, IsOpenHold = answer.Task };
         var (session, crashed, path) = await WordCrashedAsync(scripting);
         scripting.SetRunning(OfficeProgram.Word, true);
@@ -1667,6 +1667,11 @@ public sealed class HelperSessionTests : IDisposable
 
         clock.Resume();
         await Wait.Until(() => !session.Cycle!.IsOpenAgain(path), "the save-back given up");
+        // Word still runs, so the save-back looks again after a while: with the owner file gone, that look doesn't refuse
+        // it either.
+        asked = scripting.IsOpenAsked;
+        await Wait.Until(() => scripting.IsOpenAsked > asked, "the save-back looking again while Word runs");
+        Assert.False(session.Cycle!.IsOpenAgain(path));
         session.SendAndCheckIn(crashed);
 
         await Wait.Until(() => !File.Exists(path), "the copy checked in and deleted");

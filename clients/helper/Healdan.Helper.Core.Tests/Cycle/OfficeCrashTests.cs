@@ -130,6 +130,26 @@ public sealed class OfficeCrashTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task ReopenDoesntOpenTheCopyBesideAWindowWordHasUnderAnotherName()
+    {
+        // Word restored its window and wrote its owner file again, but the look didn't find the window by its path: Word
+        // has the copy all the same, and handed the file, it would open it again beside that window.
+        var (cycle, path) = await OpenAsync(timings: Fast with { RecoveryWait = TimeSpan.FromMilliseconds(400) });
+        await CrashAsync(path);
+        Scripting.NeverListed = true;
+        Scripting.WindowText = "the work Word recovered";
+
+        await cycle.OpenAsync(5, false);
+        FakeScripting.WriteOwnerFileAgain(OfficeProgram.Word, path);
+
+        await Wait.Until(() => Log.Contains("by its path after it closed unexpectedly"), "the look given up");
+        Assert.True(cycle.IsCrashed(path));
+        Scripting.NeverListed = false; // a later look finds it
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        Assert.Single(Scripting.Opened); // never handed the file
+    }
+
+    [Fact]
     public async Task AnOwnerFileWrittenAgainIsSeenToo()
     {
         // As Word did in the trial.
