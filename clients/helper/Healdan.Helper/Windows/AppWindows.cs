@@ -472,6 +472,8 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         catch (Exception e)
         {
             log.Error($"The {window.Title} window couldn't be shown", e);
+            if (_open.Count == 0)
+                MacPlatform.ShowInDock(false); // it joined the Dock for a window that never showed
             return false;
         }
         window.Closed += (_, _) =>
