@@ -581,6 +581,121 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 				new ProviderClient(SignInProviders.get()).refresh(p, bare.refreshToken()).outcome());
 	}
 
+	/*
+	 * A refresh answered 200 with a new refresh token, in an answer Nimbus can't
+	 * read in full, keeps the new token: a provider that turns them over has
+	 * retired the old one, which it refuses at the next check
+	 */
+	@Test
+	public void testTurnedOverRefreshTokenKeptWhenTheAnswerCantBeRead() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		String json = "application/json";
+
+		// No access token or token type, which a token response must have
+		fake.answerRefreshWith(json, "{\"refresh_token\":\"rt-kept-1\",\"id_token\":\"x\"}");
+		assertKept("rt-kept-1", client.refresh(p, t.refreshToken()));
+		// JSON, but not said to be
+		fake.answerRefreshWith("text/plain",
+				"{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"refresh_token\":\"rt-kept-2\"}");
+		assertKept("rt-kept-2", client.refresh(p, t.refreshToken()));
+		// An ID token that isn't a JWT
+		fake.answerRefreshWith(json, "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"id_token\":\"not-a-jwt\","
+				+ "\"refresh_token\":\"rt-kept-3\"}");
+		assertKept("rt-kept-3", client.refresh(p, t.refreshToken()));
+
+		// No refresh token to keep: none in the answer, one that isn't a string, or no JSON at all
+		fake.answerRefreshWith(json, "{\"id_token\":\"x\"}");
+		assertKept(null, client.refresh(p, t.refreshToken()));
+		fake.answerRefreshWith(json, "{\"refresh_token\":42}");
+		assertKept(null, client.refresh(p, t.refreshToken()));
+		fake.answerRefreshWith("text/html", "<html><body>Signed in</body></html>");
+		assertKept(null, client.refresh(p, t.refreshToken()));
+
+		// The old token wasn't spent by those answers, and still refreshes
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());
+	}
+
+	private static void assertKept(String refreshToken, Refreshed r) {
+		assertEquals(Outcome.UNREACHABLE, r.outcome());
+		assertNull(r.claims());
+		assertEquals(refreshToken, r.refreshToken());
+	}
+
+	/*
+	 * A discovery document or a token answer may weigh at most a mebibyte, so a
+	 * provider can't fill the server's memory; a call past it fails as if the
+	 * provider couldn't be reached
+	 */
+	@Test
+	public void testAnswersAreCappedInSize() throws Exception {
+		int max = 1_048_576;
+		SignInProvider p = fake.asProvider("fake");
+
+		fake.discovery("padding", "x".repeat(max));
+		ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(e.getMessage(), e.getMessage().contains("larger than 1048576 bytes"));
+		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
+		fake.discovery("padding", null);
+		client.forget("fake");
+		Tokens t = signIn(p, true);
+
+		// A token answer past it: the code is refused, and the refresh is unreachable
+		fake.tokenAnswerMember("padding", "x".repeat(max));
+		ProviderException code = refused(p);
+		assertTrue(code.getMessage(), code.getMessage().contains("larger than 1048576 bytes"));
+		assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+
+		// One within it is fine
+		fake.tokenAnswerMember("padding", "x".repeat(max - 50_000));
+		Tokens big = signIn(p, true);
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, big.refreshToken()).outcome());
+	}
+
+	/*
+	 * The timeout bounds a call's whole answer, not only each read: a provider
+	 * that trickles an answer, each byte within the read timeout, can't hold a
+	 * sign-in, a refresh or a fetch of the keys for longer
+	 */
+	@Test
+	public void testAWholeAnswerWithinTheTimeout() throws Exception {
+		ProviderClient quick = new ProviderClient(SignInProviders.get(), 500);
+		SignInProvider p = fake.asProvider("fake");
+		// 30 bytes 100 milliseconds apart: 3 seconds in all, each gap well within the read timeout
+		Duration gap = Duration.ofMillis(100);
+
+		fake.trickle("/.well-known/openid-configuration", 30, gap);
+		long began = System.nanoTime();
+		ProviderException e = assertThrows(ProviderException.class, () -> quick.start(p, REDIRECT, false));
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2000)) < 0);
+		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof SocketTimeoutException);
+		fake.trickle("/.well-known/openid-configuration", 0, gap);
+		quick.forget("fake");
+		Tokens t = signIn(quick, p, true);
+
+		// The token endpoint, for a code and for a refresh
+		fake.trickle("/token", 30, gap);
+		Start s = quick.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		began = System.nanoTime();
+		ProviderException exchanged = assertThrows(ProviderException.class,
+				() -> quick.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2000)) < 0);
+		assertTrue(exchanged.getMessage(), exchanged.getMessage().contains("SocketTimeoutException"));
+		began = System.nanoTime();
+		assertEquals(Outcome.UNREACHABLE, quick.refresh(p, t.refreshToken()).outcome());
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2000)) < 0);
+		fake.trickle("/token", 0, gap);
+
+		// The keys, fetched afresh after forget
+		quick.forget("fake");
+		fake.trickle("/keys", 30, gap);
+		began = System.nanoTime();
+		ProviderException keys = assertThrows(ProviderException.class, () -> signIn(quick, p, false));
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2500)) < 0);
+		assertTrue(keys.getMessage(), keys.getMessage().contains("keys couldn't be fetched"));
+	}
+
 	// Ruling R28: Microsoft's documentation describes the ID token in a refresh answer as unsigned (alg none). It's
 	// ignored, as if none came, and its claims are never read.
 	@Test

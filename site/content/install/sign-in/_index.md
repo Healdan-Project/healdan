@@ -43,7 +43,8 @@ account has none.
   for the server goes to that address first. Give people that one address for the web page and the helper.
 - **The server reaches the provider.** Healdan calls the provider's issuer address and every address it publishes,
   all of which must start `https://`, directly or through the proxy that Java's own settings name: see
-  [Known Limitations](../known-limitations/). Each call gives up after 10 seconds.
+  [Known Limitations](../known-limitations/). Each call gives up if its whole answer hasn't come within 10
+  seconds, or is larger than 1 MB.
 - **A way back in.** `admin` keeps its password: see [Break Glass](#break-glass).
 - **A plan for the groups.** Decide which provider groups may sign in, and which Healdan group each maps to. Any
   Healdan group can be mapped, `admin` included, but an admin skips every permission check: see

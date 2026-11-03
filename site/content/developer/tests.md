@@ -37,7 +37,8 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 - **It can misbehave on purpose:** a bad signature, the wrong issuer or audience, an expired token, a refused or
   unanswered refresh, ID tokens on a refresh that are signed differently from a sign-in's (or not at all, as
   Microsoft's documentation describes Entra ID's), a discovery document it answers with an error, refresh tokens
-  longer than a device token holds, and the like, for the checks Healdan makes.
+  longer than a device token holds, a refresh answered with a body a test gives, answers padded past the size cap
+  or trickled out a byte at a time, and the like, for the checks Healdan makes.
 - **Plain HTTP.** While it runs it allows providers over plain HTTP, which only the smoke stack's overlay allows
   outside the tests. `SignInTestHooks` sets that by hand, and moves the clocks that time pending sign-ins, the
   helper's codes and the re-checks. A test that uses it resets it when it ends, or the setting leaks into the next

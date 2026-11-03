@@ -92,11 +92,12 @@ import com.sun.net.httpserver.HttpsServer;
  * ({@link #startTls}) it doesn't, and {@link #trust} makes the client trust its
  * certificate. Close it in an {@code @After} method.
  * <p>
- * The settings that make it misbehave, {@link #claimsOnRefresh} and
- * {@link #signRefreshesWith}, last until changed, apart from
- * {@link #refuseRefresh}, {@link #downForRefresh} and {@link #answerRefresh},
- * which answer one refresh each, and {@link #answerCode}, which answers one
- * code.
+ * The settings that make it misbehave, such as {@link #claimsOnRefresh},
+ * {@link #signRefreshesWith}, {@link #tokenAnswerMember} and {@link #trickle},
+ * last until changed, apart from {@link #refuseRefresh},
+ * {@link #downForRefresh}, {@link #answerRefresh} and
+ * {@link #answerRefreshWith}, which answer one refresh each, and
+ * {@link #answerCode}, which answers one code.
  */
 public final class FakeProvider implements AutoCloseable {
 
@@ -147,6 +148,15 @@ public final class FakeProvider implements AutoCloseable {
 	private final AtomicReference<Answer> nextRefresh = new AtomicReference<>();
 
 	private final AtomicReference<Answer> nextCode = new AtomicReference<>();
+
+	/** The next refresh's answer, as it is, when set */
+	private final AtomicReference<Raw> nextRawRefresh = new AtomicReference<>();
+
+	/** Members added to every token answer, beside the tokens */
+	private final Map<String, Object> extraTokenMembers = new ConcurrentHashMap<>();
+
+	/** How each path's answer is spread out, when it is */
+	private final Map<String, Trickle> trickles = new ConcurrentHashMap<>();
 
 	private final AtomicInteger tokenRequests = new AtomicInteger();
 
@@ -213,6 +223,12 @@ public final class FakeProvider implements AutoCloseable {
 	}
 
 	private record Answer(int status, String error) {
+	}
+
+	private record Raw(String contentType, String body) {
+	}
+
+	private record Trickle(int bytes, Duration gap) {
 	}
 
 	private FakeProvider(boolean https) throws IOException {
@@ -284,6 +300,7 @@ public final class FakeProvider implements AutoCloseable {
 		}
 		HTTPRequest.setDefaultSSLSocketFactory(tls.trusting);
 		HttpsURLConnection.setDefaultSSLSocketFactory(tls.trusting);
+		SignInTestHooks.providerTls(tls.client);
 		return this;
 	}
 
@@ -416,6 +433,48 @@ public final class FakeProvider implements AutoCloseable {
 	 */
 	public FakeProvider answerRefresh(int status, String error) {
 		nextRefresh.set(new Answer(status, error));
+		return this;
+	}
+
+	/**
+	 * @param contentType the content type to answer the next refresh with
+	 * @param body the body to answer it with, as it is, with {@code 200}
+	 * @return this provider
+	 */
+	public FakeProvider answerRefreshWith(String contentType, String body) {
+		nextRawRefresh.set(new Raw(contentType, body));
+		return this;
+	}
+
+	/**
+	 * @param member a member to add to every token answer from now on, beside
+	 *        the tokens, such as a long one to make the answer large
+	 * @param value its value; null leaves it out again
+	 * @return this provider
+	 */
+	public FakeProvider tokenAnswerMember(String member, Object value) {
+		if (value == null)
+			extraTokenMembers.remove(member);
+		else
+			extraTokenMembers.put(member, value);
+		return this;
+	}
+
+	/**
+	 * Spreads out the answers of a path from now on, as a provider that
+	 * trickles them: its headers at once, then the first bytes of its body one
+	 * at a time, each after a gap, then the rest.
+	 *
+	 * @param path a path it serves, such as {@code /token}
+	 * @param bytes how many bytes go one at a time; 0 to answer at once again
+	 * @param gap the wait before each of them
+	 * @return this provider
+	 */
+	public FakeProvider trickle(String path, int bytes, Duration gap) {
+		if (bytes <= 0)
+			trickles.remove(path);
+		else
+			trickles.put(path, new Trickle(bytes, gap));
 		return this;
 	}
 
@@ -712,6 +771,9 @@ public final class FakeProvider implements AutoCloseable {
 					Thread.currentThread().interrupt();
 					return;
 				}
+			Trickle trickle = trickles.get(path);
+			if (trickle != null)
+				exchange.setStreams(null, new TricklingStream(exchange.getResponseBody(), trickle));
 			switch (path) {
 				case "/.well-known/openid-configuration" -> {
 					discoveryRequests.incrementAndGet();
@@ -813,6 +875,11 @@ public final class FakeProvider implements AutoCloseable {
 			Answer answer = nextRefresh.getAndSet(null);
 			if (answer != null) {
 				answer(exchange, answer, null);
+				return;
+			}
+			Raw raw = nextRawRefresh.getAndSet(null);
+			if (raw != null) {
+				send(exchange, 200, raw.contentType(), raw.body());
 				return;
 			}
 			Map<String, Object> granted = refreshTokens.remove(String.valueOf(one(form, "refresh_token")));
@@ -926,6 +993,7 @@ public final class FakeProvider implements AutoCloseable {
 			refreshTokens.put(next, granted);
 			answer.put("refresh_token", next);
 		}
+		answer.putAll(extraTokenMembers);
 		exchange.getResponseHeaders().add("Cache-Control", "no-store");
 		send(exchange, 200, JSON, JSONObjectUtils.toJSONString(answer));
 	}
@@ -1029,6 +1097,42 @@ public final class FakeProvider implements AutoCloseable {
 	private static void require(boolean condition, String problem) {
 		if (!condition)
 			throw new IllegalArgumentException("The fake provider refuses the sign-in: " + problem);
+	}
+
+	/** Writes its first bytes one at a time, each after a gap, then the rest at once */
+	private static final class TricklingStream extends java.io.FilterOutputStream {
+
+		private final Trickle trickle;
+
+		private int written;
+
+		TricklingStream(OutputStream out, Trickle trickle) {
+			super(out);
+			this.trickle = trickle;
+		}
+
+		@Override
+		public void write(int b) throws IOException {
+			if (written < trickle.bytes()) {
+				try {
+					Thread.sleep(trickle.gap().toMillis());
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					throw new IOException("Stopped", e);
+				}
+				out.write(b);
+				out.flush();
+			} else {
+				out.write(b);
+			}
+			written++;
+		}
+
+		@Override
+		public void write(byte[] b, int off, int len) throws IOException {
+			for (int i = 0; i < len; i++)
+				write(b[off + i]);
+		}
 	}
 
 	private static String random() {

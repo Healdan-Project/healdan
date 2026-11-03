@@ -41,11 +41,15 @@ final class FakeTls {
 	final SSLContext server;
 
 	/** For the client: trusts the fake provider's certificate only */
+	final SSLContext client;
+
+	/** The client's, as a socket factory */
 	final SSLSocketFactory trusting;
 
-	private FakeTls(SSLContext server, SSLSocketFactory trusting) {
+	private FakeTls(SSLContext server, SSLContext client) {
 		this.server = server;
-		this.trusting = trusting;
+		this.client = client;
+		this.trusting = client.getSocketFactory();
 	}
 
 	static FakeTls create() {
@@ -81,7 +85,7 @@ final class FakeTls {
 			SSLContext client = SSLContext.getInstance("TLS");
 			client.init(null, trustManagers.getTrustManagers(), null);
 
-			return new FakeTls(server, client.getSocketFactory());
+			return new FakeTls(server, client);
 		} catch (Exception e) {
 			throw new IllegalStateException("The fake provider's certificate couldn't be made", e);
 		}
