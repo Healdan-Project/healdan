@@ -513,7 +513,7 @@ public sealed class ExtensionCheckTests : IDisposable
 
     /// <summary>The dot's reason as the menu bar icon gives it on each rebuild, with all else well.</summary>
     private static string? Reason(ExtensionCheck check) =>
-        Attention.Reason(signedIn: true, startFailed: false, crashed: false, kept: 0, check.Missing, check.Older is not null);
+        Attention.Reason(signedIn: true, startFailed: false, waiting: false, crashed: false, kept: 0, check.Missing, check.Older is not null);
 
     private ExtensionCheck Linux(string? oxt, Func<bool>? waiting = null) =>
         new(_tools, _paths, _notifier, _log, Helper, ExtensionRoute.Unopkg, oxt, waiting ?? (() => false), poll: TimeSpan.FromMilliseconds(10));

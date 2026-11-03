@@ -18,7 +18,9 @@ namespace Healdan.Helper.Windows;
 
 /// <summary>
 /// The helper's windows (spec §5.8). Each comes to the front over the app (<see cref="MacPlatform.Activate"/>), and
-/// once the last one closes the focus goes back to the app (<see cref="MacPlatform.GiveBackFocus"/>).
+/// once the last one closes the focus goes back to the app (<see cref="MacPlatform.GiveBackFocus"/>). While any is open
+/// the helper is in the Dock and ⌘Tab (<see cref="MacPlatform.ShowInDock"/>), and each that waits has a line in the
+/// menu (<see cref="WaitingWindows"/>), so one that went behind another app's can be found again (#143).
 /// <para>A window that asks what the user started (Sign In, Sign Out on This Computer Only?, Save, Open, Properties,
 /// Checked Out on Another Computer) waits for an answer: links are dropped meanwhile (spec §5.3), and a dropped link
 /// brings it to the front. One the user didn't ask for, After a Crash, and Settings, which asks nothing, hold no links
@@ -48,6 +50,19 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
 
     public bool Waiting => _open.Waiting;
 
+    /// <summary>The windows waiting for an answer, for the menu's lines that bring them up (#143).</summary>
+    public IReadOnlyList<WaitingWindow> WaitingWindows => _open.WaitingWindows;
+
+    /// <summary>A window opened or closed, on the UI thread: the menu and its dot follow.</summary>
+    public event Action? WindowsChanged
+    {
+        add => _open.Changed += value;
+        remove => _open.Changed -= value;
+    }
+
+    /// <summary>The menu's Sign In… while the Sign In window is open (#143): UI thread; brings it up, or returns false.</summary>
+    public bool BringSignIn() => Bring("sign-in");
+
     public void BringWaiting() => Dispatcher.UIThread.Post(_open.BringWaiting);
 
     // --- Sign In ---------------------------------------------------------------------------------------------------
@@ -58,8 +73,16 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             return open;
         var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         var window = new SignInWindow(prompt);
-        if (!Show(window, waits: true, () => done.TrySetResult(window.SignedIn)))
+        _single["sign-in"] = window;
+        if (!Show(window, waits: true, () =>
+            {
+                _single.Remove("sign-in");
+                done.TrySetResult(window.SignedIn);
+            }))
+        {
+            _single.Remove("sign-in");
             return Task.FromResult(false);
+        }
         log.Info("Sign In window shown");
         return _signIn = done.Task;
     });
@@ -425,8 +448,9 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     }
 
     /// <summary>
-    /// UI thread: shows a window over the app, and hands the focus back once the last one closes. A window is counted
-    /// only once it's shown; one that fails to show is logged, counts for nothing, and returns false.
+    /// UI thread: shows a window over the app, with the helper in the Dock, and hands the focus back and leaves the Dock
+    /// once the last one closes. A window is counted only once it's shown; one that fails to show is logged, counts for
+    /// nothing, and returns false.
     /// </summary>
     private bool Show(Window window, bool waits, Action closed)
     {
@@ -435,6 +459,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
         {
             close = _open.Show(() =>
             {
+                MacPlatform.ShowInDock(true); // before the window takes the focus, so the app menu comes with it
                 MacPlatform.Activate();
                 window.Show();
                 window.Activate();
@@ -442,7 +467,7 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             {
                 MacPlatform.Activate();
                 window.Activate();
-            });
+            }, title: window.Title);
         }
         catch (Exception e)
         {
@@ -462,7 +487,10 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
                 log.Error($"After the {window.Title} window closed", e);
             }
             if (last)
+            {
                 MacPlatform.GiveBackFocus();
+                MacPlatform.ShowInDock(false);
+            }
         };
         return true;
     }
