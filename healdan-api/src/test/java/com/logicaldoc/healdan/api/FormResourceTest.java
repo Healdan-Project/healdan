@@ -70,7 +70,7 @@ public class FormResourceTest extends ApiTestCase {
 
 		assertEquals(response.toString(), 200, response.status());
 		JsonNode page = response.json();
-		assertEquals(14, page.path("total").asInt());
+		assertEquals(15, page.path("total").asInt());
 		JsonNode items = page.path("items");
 		for (JsonNode field : items)
 			assertEquals(field.toString(), MEMBERS, names(field));
@@ -139,11 +139,11 @@ public class FormResourceTest extends ApiTestCase {
 	@Test
 	public void testTypes() throws Exception {
 		Template profile = TemplateDAO.get().findById(ProfileSchema.get().template().getId(), true);
-		addAttribute(profile, "pages", Attribute.Type.INTEGER, 14);
-		addAttribute(profile, "fee", Attribute.Type.DOUBLE, 15);
-		addAttribute(profile, "urgent", Attribute.Type.BOOLEAN, 16);
-		addAttribute(profile, "box", Attribute.Type.FOLDER, 17);
-		addAttribute(profile, "related", Attribute.Type.DOCUMENT, 18);
+		addAttribute(profile, "pages", Attribute.Type.INTEGER, 15);
+		addAttribute(profile, "fee", Attribute.Type.DOUBLE, 16);
+		addAttribute(profile, "urgent", Attribute.Type.BOOLEAN, 17);
+		addAttribute(profile, "box", Attribute.Type.FOLDER, 18);
+		addAttribute(profile, "related", Attribute.Type.DOCUMENT, 19);
 		TemplateDAO.get().store(profile);
 
 		// Values set on Documents pass down
@@ -160,7 +160,8 @@ public class FormResourceTest extends ApiTestCase {
 		JsonNode items = get(form(sub)).token(signIn(clerk)).send().json().path("items");
 
 		assertEquals(List.of("string", "string", "user", "user", "string", "string", "string", "string", "string",
-				"string", "string", "string", "date", "date", "integer", "decimal", "boolean", "folder", "document"), types(items));
+				"string", "string", "string", "date", "date", "string", "integer", "decimal", "boolean", "folder",
+				"document"), types(items));
 		assertEquals(3, field(items, "pages").path("value").intValue());
 		assertTrue(field(items, "pages").path("value").isIntegralNumber());
 		assertEquals(1.5, field(items, "fee").path("value").doubleValue(), 0.0);

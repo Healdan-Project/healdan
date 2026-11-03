@@ -73,6 +73,8 @@ public final class HealdanConstants {
 
 	public static final String ATTR_EMAILRECEIVED = "emailreceived";
 
+	public static final String ATTR_EMAILMESSAGEID = "emailmessageid";
+
 	public static final int SEARCH_DOC_NUMBER = 101;
 
 	public static final int SEARCH_MATTERS = 102;

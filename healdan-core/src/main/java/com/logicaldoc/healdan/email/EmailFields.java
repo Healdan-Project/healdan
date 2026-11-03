@@ -17,6 +17,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.auxilii.msgparser.MsgParser;
 import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.communication.Recipient;
@@ -40,8 +41,13 @@ import jakarta.mail.internet.MimeMessage;
  * @param subject the subject
  * @param sent when it was sent
  * @param received when it was received
+ * @param messageId the Message-ID without its angle brackets
+ *        ({@link MessageIds#normalize}); null when the message has none. An
+ *        {@code msg} already read by CE ({@link #fromMsg(EMail)}) always gives
+ *        null, as CE's reader drops it
  */
-public record EmailFields(String from, String to, String cc, String subject, Date sent, Date received) {
+public record EmailFields(String from, String to, String cc, String subject, Date sent, Date received,
+		String messageId) {
 
 	private static final Logger log = LoggerFactory.getLogger(EmailFields.class);
 
@@ -87,7 +93,8 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		String from = safe("from", () -> join(message.getFrom() == null ? null : List.of(message.getFrom())));
 		String to = safe("to", () -> join(recipients(message, Message.RecipientType.TO)));
 		String cc = safe("cc", () -> join(recipients(message, Message.RecipientType.CC)));
-		return of(from, to, cc, subject, sent, received);
+		String messageId = safe("Message-ID", () -> MessageIds.normalize(message.getMessageID()));
+		return of(from, to, cc, subject, sent, received, messageId);
 	}
 
 	private static Collection<Address> recipients(MimeMessage message, Message.RecipientType type) throws Exception {
@@ -125,7 +132,14 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 	}
 
 	private static EmailFields fromMsg(File file) throws Exception {
-		return fromMsg(MailUtil.msgToMail(file, false));
+		EmailFields fields = fromMsg(MailUtil.msgToMail(file, false));
+		// CE's reader drops the Message-ID, so the file is parsed once more for it
+		String messageId = safe("Message-ID", () -> MessageIds.normalize(new MsgParser().parseMsg(file).getMessageId()));
+		return fields.withMessageId(messageId);
+	}
+
+	private EmailFields withMessageId(String id) {
+		return new EmailFields(from, to, cc, subject, sent, received, id);
 	}
 
 	/**
@@ -140,7 +154,7 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		Date received = mail.getReceivedDate() != null ? mail.getReceivedDate() : sent;
 		return of(safe("from", () -> join(mail.getFrom() == null ? null : List.of(mail.getFrom()))),
 				safe("to", () -> joinRecipients(mail.getRecipients())),
-				safe("cc", () -> joinRecipients(mail.getRecipientsCC())), subject, sent, received);
+				safe("cc", () -> joinRecipients(mail.getRecipientsCC())), subject, sent, received, null);
 	}
 
 	private static String joinRecipients(Collection<Recipient> recipients) {
@@ -176,8 +190,9 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 			joiner.add(name.trim());
 	}
 
-	private static EmailFields of(String from, String to, String cc, String subject, Date sent, Date received) {
-		return new EmailFields(text(from), text(to), text(cc), text(subject), sent, received);
+	private static EmailFields of(String from, String to, String cc, String subject, Date sent, Date received,
+			String messageId) {
+		return new EmailFields(text(from), text(to), text(cc), text(subject), sent, received, messageId);
 	}
 
 	/*

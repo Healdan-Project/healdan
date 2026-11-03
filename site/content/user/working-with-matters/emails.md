@@ -14,6 +14,9 @@ When an email is filed, Healdan fills in its properties from the message:
 - **Subject.**
 - **Sent and Received.** For a `.eml` file without a Received time, Healdan uses its delivery date. A `.msg` file
   keeps only one date, so its Received is the same as its Sent.
+- **Message-ID.** The identifier the sender's mail program gave the message, which tells one message from
+  another. Healdan keeps it without its angle brackets. A message with no Message-ID, or one too long to keep (over
+  998 characters), has this property empty.
 
 ## Its Name
 

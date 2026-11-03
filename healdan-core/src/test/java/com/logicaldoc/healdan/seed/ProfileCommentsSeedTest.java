@@ -48,7 +48,7 @@ public class ProfileCommentsSeedTest extends AbstractHealdanTestCase {
 
 		Template after = template();
 		assertEquals("Notes", after.getAttribute(HealdanConstants.ATTR_COMMENTS).getLabel());
-		assertEquals(14, after.getTemplateAttributes().size());
+		assertEquals(15, after.getTemplateAttributes().size());
 		assertEquals(7, after.getAttribute(HealdanConstants.ATTR_LEGACYDOCNUM).getPosition());
 		assertTrue(after.getAttribute(HealdanConstants.ATTR_EMAILRECEIVED).getPosition() == 13);
 	}

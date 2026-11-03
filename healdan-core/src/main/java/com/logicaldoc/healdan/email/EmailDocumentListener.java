@@ -19,12 +19,12 @@ import com.logicaldoc.healdan.HealdanConstants;
 
 /**
  * Sets the Date filed of every new document to now, whatever came with it, and
- * fills the email fields of a new {@code .eml} or {@code .msg} from the file
- * (spec §6.8). The document is named after the subject. It runs after the
- * profile listener, which has added the email attributes with the template's
- * definitions. It never refuses anything: an email that can't be read is filed
- * with blank fields and its own name. CE creates it by reflection, hence the
- * public no-arg constructor.
+ * fills the email fields of a new {@code .eml} or {@code .msg} from the file,
+ * its Message-ID among them (spec §6.8; M5 spec §6.1). The document is named
+ * after the subject. It runs after the profile listener, which has added the
+ * email attributes with the template's definitions. It never refuses anything:
+ * an email that can't be read is filed with blank fields and its own name. CE
+ * creates it by reflection, hence the public no-arg constructor.
  */
 public class EmailDocumentListener implements DocumentListener {
 
@@ -72,6 +72,7 @@ public class EmailDocumentListener implements DocumentListener {
 			set(document, HealdanConstants.ATTR_EMAILSUBJECT, fields.subject());
 			set(document, HealdanConstants.ATTR_EMAILSENT, fields.sent());
 			set(document, HealdanConstants.ATTR_EMAILRECEIVED, fields.received());
+			set(document, HealdanConstants.ATTR_EMAILMESSAGEID, fields.messageId());
 			named = FileNames.fromSubject(fields.subject(), extension, fileName);
 		}
 

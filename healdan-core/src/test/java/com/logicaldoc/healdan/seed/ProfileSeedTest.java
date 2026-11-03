@@ -37,7 +37,7 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 
 	private static final List<String> NAMES = List.of("client", "matter", "author", "typist", "docclass",
 			"docsubclass", "comments", "legacydocnum", "emailfrom", "emailto", "emailcc", "emailsubject", "emailsent",
-			"emailreceived");
+			"emailreceived", "emailmessageid");
 
 	private JdbcTemplate jdbc() {
 		return new JdbcTemplate(Context.get(DataSource.class));
@@ -58,11 +58,11 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testTemplateHasFourteenAttributesInOrder() throws Exception {
+	public void testTemplateHasFifteenAttributesInOrder() throws Exception {
 		Template t = template();
 		assertNotNull(t);
 		assertEquals(t.getId(), HealdanSettings.get().profileTemplateId().longValue());
-		assertEquals(14, t.getTemplateAttributes().size());
+		assertEquals(15, t.getTemplateAttributes().size());
 		for (int i = 0; i < NAMES.size(); i++)
 			assertEquals(NAMES.get(i), nameAt(t, i));
 
@@ -101,6 +101,8 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 		assertEquals("Received", at(t, 13).getLabel());
 		assertEquals(Attribute.Type.DATE, at(t, 12).getType());
 		assertEquals(Attribute.Type.DATE, at(t, 13).getType());
+		assertEquals("Message-ID", at(t, 14).getLabel());
+		assertEquals(Attribute.Type.STRING, at(t, 14).getType());
 	}
 
 	@Test
@@ -127,13 +129,13 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 		Attribute extra = new Attribute();
 		extra.setType(Attribute.Type.STRING);
 		extra.setLabel("Office");
-		extra.setPosition(14);
+		extra.setPosition(15);
 		t.getTemplateAttributes().put("office", extra);
 		TemplateDAO.get().store(t);
 		assertTrue(schema.inheritable().contains("office"));
 		assertEquals(Set.of("client", "matter", "docclass", "docsubclass", "office"),
 				schema.inheritable().stream().collect(Collectors.toSet()));
-		assertEquals(15, schema.template().getTemplateAttributes().size());
+		assertEquals(16, schema.template().getTemplateAttributes().size());
 	}
 
 	@Test
@@ -167,7 +169,7 @@ public class ProfileSeedTest extends AbstractHealdanTestCase {
 				"select count(*) from ld_extoption where ld_attribute = 'docclass' and ld_value = 'Docs'",
 				Integer.class).intValue());
 		assertEquals(id, HealdanSettings.get().profileTemplateId().longValue());
-		assertEquals(14, template().getTemplateAttributes().size());
+		assertEquals(15, template().getTemplateAttributes().size());
 	}
 
 	@Test

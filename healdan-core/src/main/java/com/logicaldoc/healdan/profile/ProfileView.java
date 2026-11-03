@@ -42,7 +42,8 @@ public class ProfileView {
 	/** The fields that come from an email message, never typed in (M1 spec section 6.8) */
 	private static final Set<String> FROM_MESSAGE = Set.of(HealdanConstants.ATTR_EMAILFROM,
 			HealdanConstants.ATTR_EMAILTO, HealdanConstants.ATTR_EMAILCC, HealdanConstants.ATTR_EMAILSUBJECT,
-			HealdanConstants.ATTR_EMAILSENT, HealdanConstants.ATTR_EMAILRECEIVED);
+			HealdanConstants.ATTR_EMAILSENT, HealdanConstants.ATTR_EMAILRECEIVED,
+			HealdanConstants.ATTR_EMAILMESSAGEID);
 
 	/** Where a value comes from */
 	public enum Source {

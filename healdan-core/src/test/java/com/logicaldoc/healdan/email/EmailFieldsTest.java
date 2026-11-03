@@ -1,0 +1,80 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+package com.logicaldoc.healdan.email;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Optional;
+
+import org.junit.Test;
+
+import com.auxilii.msgparser.MsgParser;
+
+/**
+ * Spec §6.1: the Message-ID is read from an {@code eml}'s header and from a
+ * {@code msg}'s properties, and an unreadable file costs nothing else.
+ */
+public class EmailFieldsTest {
+
+	private static File resource(String name) {
+		return new File("src/test/resources/email/" + name);
+	}
+
+	@Test
+	public void testEmlMessageId() {
+		Optional<EmailFields> fields = EmailFields.extract(resource("healdan-cc.eml"), "eml");
+		assertTrue(fields.isPresent());
+		assertEquals("1@example.com", fields.get().messageId());
+		assertEquals("Ann Smith <ann@example.com>", fields.get().from());
+	}
+
+	@Test
+	public void testEmlWithoutAMessageId() throws Exception {
+		File eml = File.createTempFile("nomsgid", ".eml");
+		try {
+			Files.writeString(eml.toPath(),
+					"From: ann@example.com\r\nTo: bob@example.com\r\nSubject: Nothing\r\nMIME-Version: 1.0\r\n"
+							+ "Content-Type: text/plain\r\n\r\nNo Message-ID.\r\n",
+					StandardCharsets.US_ASCII);
+			Optional<EmailFields> fields = EmailFields.extract(eml, "eml");
+			assertTrue(fields.isPresent());
+			assertNull(fields.get().messageId());
+			assertEquals("Nothing", fields.get().subject());
+		} finally {
+			eml.delete();
+		}
+	}
+
+	@Test
+	public void testMsgMessageId() throws Exception {
+		File msg = resource("test.msg");
+		String expected = MessageIds.normalize(new MsgParser().parseMsg(msg).getMessageId());
+
+		Optional<EmailFields> fields = EmailFields.extract(msg, "msg");
+
+		assertTrue(fields.isPresent());
+		assertEquals(expected, fields.get().messageId());
+		assertEquals("18293115.12305.1420447910189.JavaMail.open-xchange@srvmaox.olig.ch", fields.get().messageId());
+		assertNotNull(fields.get().subject());
+	}
+
+	@Test
+	public void testAMsgAlreadyReadHasNoMessageId() throws Exception {
+		assertNull(EmailFields.fromMsg(com.logicaldoc.core.communication.MailUtil.msgToMail(resource("test.msg"), false))
+				.messageId());
+	}
+
+	@Test
+	public void testCorruptMsgGivesNothingAndNoException() {
+		// Today's behaviour: no fields at all, so the listener files it blank, under its own name
+		assertFalse(EmailFields.extract(resource("corrupt.msg"), "msg").isPresent());
+	}
+}

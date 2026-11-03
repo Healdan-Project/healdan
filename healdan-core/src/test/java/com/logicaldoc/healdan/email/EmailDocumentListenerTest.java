@@ -22,6 +22,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.auxilii.msgparser.MsgParser;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentManager;
@@ -108,6 +109,24 @@ public class EmailDocumentListenerTest extends AbstractHealdanTestCase {
 		assertEquals("Re: Demo plan \u2013 caf\u00e9", doc.getValue(HealdanConstants.ATTR_EMAILSUBJECT));
 		assertEquals(utc("2025-10-14 07:29:00"), doc.getValue(HealdanConstants.ATTR_EMAILSENT));
 		assertEquals(utc("2025-10-14 07:30:05"), doc.getValue(HealdanConstants.ATTR_EMAILRECEIVED));
+		assertEquals("1@example.com", doc.getValue(HealdanConstants.ATTR_EMAILMESSAGEID));
+	}
+
+	@Test
+	public void testMsgMessageIdIsWhatTheFileHas() throws Exception {
+		String expected = MessageIds.normalize(new MsgParser().parseMsg(new File("src/test/resources/email/test.msg"))
+				.getMessageId());
+		Document doc = file("test.msg", "upload.msg");
+		assertEquals(expected, doc.getValue(HealdanConstants.ATTR_EMAILMESSAGEID));
+	}
+
+	@Test
+	public void testADocumentHasNoMessageId() throws Exception {
+		Document doc = fx.upload(documents, "a.docx", "text", admin);
+		awaitAsyncWork();
+		Document stored = DocumentDAO.get().findById(doc.getId(), true);
+		// Like the other email fields, the attribute is on every document, empty
+		assertNull(stored.getValue(HealdanConstants.ATTR_EMAILMESSAGEID));
 	}
 
 	@Test
