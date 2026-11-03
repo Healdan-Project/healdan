@@ -78,7 +78,8 @@ the picture: type your username and password, and choose **Sign In**.
 
 The helper stays signed in until you sign out or change your password, or it goes unused for 30 days, and for a
 year at most: your administrator can change both. It then asks you to sign in again, and anything you save
-meanwhile waits on your Mac until you do.
+meanwhile waits on your Mac until you do. When the sign-in ends without your signing out, the Sign In window says
+"Your sign-in ended. Sign in again." It doesn't say that the first time you sign in, or after you've signed out.
 
 ### Signing In Through the Browser
 
@@ -112,7 +113,7 @@ Microsoft**, once it has found your server. They're the web page's buttons, with
   administrator has worded it otherwise. Choose it for an account that doesn't sign in through the provider, such as
   `admin`. An account that does has no password.
 - **Healdan checks with the provider** from time to time. Once your account there is turned off, the helper's
-  sign-in ends, and it asks you to sign in again.
+  sign-in ends, and it asks you to sign in again, with "Your sign-in ended" in its Sign In window.
 
 ## Adding Healdan to LibreOffice
 

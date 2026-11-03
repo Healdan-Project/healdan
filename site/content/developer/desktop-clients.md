@@ -273,6 +273,14 @@ file's contents.
   computer's id in `device.json`. Otherwise it revokes the token (`DELETE /auth/tokens/current`, which may fail when
   Healdan can't be reached), removes it, and the helper asks for the sign-in. That covers a bare token kept by a helper
   before this check, so everyone signs in once after the update, and a `device.json` that was lost or remade.
+- **A token Healdan refuses** gets `401 unauthenticated`, whether it expired, was revoked or the provider's check
+  refused the person, and the API doesn't say which. `RefusedTokenHandler` notices one on any call that carried the
+  token while the helper runs, and `TryResumeAsync` answers `Resume.Refused` for one at the start. Either way the Sign
+  In window says "Your sign-in ended. Sign in again." (`SignInPrompt.Notice`), each time it's shown, until a sign-in
+  works or the helper quits. The helper keeps that in memory only: a token refused while it runs stays in the
+  keychain, so the next start finds it refused and says it again, but `TryResumeAsync` removes one it finds refused,
+  so the start after that says nothing. A first sign-in, the person's own Sign Out and a token the helper discards
+  itself (`Resume.None`) say nothing.
 - **A helper with its files elsewhere** (`HEALDAN_HELPER_DEV_ROOT`) uses the service `Healdan Helper (<root>)`
   (`HelperPaths.KeychainService`), so it never takes the installed helper's token, nor the installed helper its.
 
@@ -703,9 +711,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   hold the challenge to RFC 7636's appendix B.
 - **`SignInWindowTests`** drive the Sign In window headless, with a fake prompt: the buttons and the folded form,
   the wait and its Cancel, a refusal and the browser's time running out on the error line and the focus it leaves,
-  and the providers asked for again when the address changes, when the window is shown again and when Sign In is
-  pressed. `HelperSessionTests` run `TrySignInWithProviderAsync` with the fake browsers
-  above.
+  the providers asked for again when the address changes, when the window is shown again and when Sign In is
+  pressed, and the notice of a sign-in that ended. `HelperSessionTests` run `TrySignInWithProviderAsync` with the
+  fake browsers above.
 - **`Category=Stack`** tests run against a real stack, and skip without `HEALDAN_STACK_URL`: `StackCycleTests` the
   cycle, and `StackProviderSignInTests`, which also needs `HEALDAN_STACK_SIGNIN_PROVIDER`, a sign-in through the
   smoke stack's stand-in Keycloak. Its fake browser follows the redirects with a cookie jar, fills in Keycloak's login

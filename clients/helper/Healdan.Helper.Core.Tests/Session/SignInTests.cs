@@ -95,26 +95,38 @@ public sealed class SignInTests : IDisposable
         _keychain.Items[Account] = KeptHere(Token);
         _handler.Enqueue(HttpStatusCode.OK, """{"id":1,"username":"ann","name":"Ann","admin":false}""");
         var api = Api();
-        Assert.True(await Make(api).TryResumeAsync());
+        Assert.Equal(Resume.Resumed, await Make(api).TryResumeAsync());
         Assert.Equal($"Bearer {Token}", _handler.Requests[0].Authorization);
         Assert.EndsWith("/api/v1/me", _handler.Requests[0].Uri.AbsolutePath);
     }
 
     [Fact]
-    public async Task ResumeWithNoTokenIsFalseAndAsksNothing()
+    public async Task ResumeWithNoTokenFindsNoneAndAsksNothing()
     {
-        Assert.False(await Make(Api()).TryResumeAsync());
+        Assert.Equal(Resume.None, await Make(Api()).TryResumeAsync());
         Assert.Empty(_handler.Requests);
     }
 
     [Fact]
-    public async Task ResumeWith401ClearsToken()
+    public async Task ResumeWith401SaysHealdanRefusedTheTokenAndClearsIt()
     {
         _keychain.Items[Account] = KeptHere(Token);
-        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthorized","detail":"Sign in again."}""");
+        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthenticated","detail":"This device token doesn't work any more. Sign in again."}""");
         var api = Api();
-        Assert.False(await Make(api).TryResumeAsync());
+        Assert.Equal(Resume.Refused, await Make(api).TryResumeAsync());
         Assert.Empty(_keychain.Items);
+        Assert.Null(api.Token);
+    }
+
+    [Fact]
+    public async Task ResumeWith401SaysHealdanRefusedTheTokenWhenTheKeychainKeepsIt()
+    {
+        _keychain.Items[Account] = KeptHere(Token);
+        _keychain.RefuseDelete = true;
+        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthenticated","detail":"This device token doesn't work any more. Sign in again."}""");
+        var api = Api();
+        Assert.Equal(Resume.Refused, await Make(api).TryResumeAsync());
+        Assert.Equal(KeptHere(Token), _keychain.Items[Account]); // the next start finds it refused again
         Assert.Null(api.Token);
     }
 
@@ -134,7 +146,7 @@ public sealed class SignInTests : IDisposable
         _handler.Enqueue(HttpStatusCode.NoContent, "");
         var api = Api();
 
-        Assert.False(await Make(api).TryResumeAsync());
+        Assert.Equal(Resume.None, await Make(api).TryResumeAsync());
 
         var revoke = Assert.Single(_handler.Requests);
         Assert.Equal(HttpMethod.Delete, revoke.Method);
@@ -151,7 +163,7 @@ public sealed class SignInTests : IDisposable
         _handler.Enqueue(HttpStatusCode.NoContent, "");
         var api = Api();
 
-        Assert.False(await Make(api).TryResumeAsync());
+        Assert.Equal(Resume.None, await Make(api).TryResumeAsync());
 
         var revoke = Assert.Single(_handler.Requests);
         Assert.Equal(HttpMethod.Delete, revoke.Method);
@@ -168,7 +180,7 @@ public sealed class SignInTests : IDisposable
         var log = new HelperLog(Path.Combine(_dir, "helper.log"));
         var api = Api();
 
-        Assert.False(await new SignIn(api, _keychain, Device(), log: log).TryResumeAsync());
+        Assert.Equal(Resume.None, await new SignIn(api, _keychain, Device(), log: log).TryResumeAsync());
 
         Assert.Empty(_keychain.Items);
         Assert.Null(api.Token);
@@ -181,9 +193,9 @@ public sealed class SignInTests : IDisposable
     public async Task ResumeForgetsAnotherDevicesTokenHealdanAlreadyRefuses()
     {
         _keychain.Items[Account] = new KeptToken("00d0aa76-other-device", Token).ToSecret();
-        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthorized","detail":"Sign in again."}""");
+        _handler.Enqueue(HttpStatusCode.Unauthorized, """{"code":"unauthenticated","detail":"This device token doesn't work any more. Sign in again."}""");
 
-        Assert.False(await Make(Api()).TryResumeAsync());
+        Assert.Equal(Resume.None, await Make(Api()).TryResumeAsync()); // the helper's own refusal, not Healdan's
 
         Assert.Empty(_keychain.Items);
     }
