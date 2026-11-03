@@ -66,6 +66,18 @@ Open the application's **Policy / Group / User Bindings** tab, and bind the grou
 Healdan. With nothing bound, every Authentik user can sign in to it. Healdan's group map still refuses anyone it
 gives no group, but Authentik should refuse first.
 
+### Give It Healdan's Icon
+
+This step is optional. People's **My applications** page in Authentik shows Healdan as a tile, with the first
+letter of the application's name until it has an icon.
+
+1. Save Healdan's icon, [favicon.svg](/favicon.svg), or a [512-pixel PNG](/android-chrome-512x512.png) if your
+   Authentik won't take an SVG.
+2. Go to **Customization → Files** and upload it.
+3. Open the application, edit it, and under **UI settings**, pick the file in **Icon**.
+
+On a release without **Files**, upload the icon in the application's **Icon** field instead.
+
 ### Stop People Changing Their Own Email
 
 The Authentik preset leaves **Link by Email** off. Link by Email links a person to the Healdan account that has their
