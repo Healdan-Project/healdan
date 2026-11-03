@@ -233,6 +233,11 @@ The helper has versions of its own, such as `1.2.3` or `1.2.3-rc1`. Pushing the 
    `xcrun stapler validate` has found the disk image's notarisation ticket. It's the only job with write access to
    the repository, and it sees no signing secret.
 
+Only official releases stay on GitHub. Once `1.2.3`'s disk image is attached, `Release (macOS)` deletes the
+releases of `1.2.3-rc1` and the version's other pre-releases, with their disk images. Their tags stay, as the record
+of what was tested. It also refuses to publish a pre-release of a version that's already released, so re-running an
+old `helper-v1.2.3-rc1` run attaches nothing.
+
 `package.sh` tries `hdiutil` and each staple three times, as both have failed for a moment on CI's runners (a stapler
 lost its connection to Apple on 0.4.0-rc3). A run that still fails can be run again with "Re-run failed jobs", which
 builds, signs and notarises from the start.
