@@ -35,7 +35,7 @@ import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.util.plugin.PluginException;
 
 /**
- * CMIS gaps the capability map listed: {@code createFolder} asked WRITE on the
+ * CMIS gaps the capability map listed: folder creation asked WRITE on the
  * parent where the GUI and the web services ask ADD, and {@code getObject}
  * resolves a shortcut to the document it points to, and a folder alias to its
  * folder, so deleting one deleted what it points to.
@@ -95,6 +95,20 @@ public class LDRepositoryGapsTest extends AbstractCmisTestCase {
         Folder created = folderDao.findById(Long.parseLong(id.substring(4)));
         assertEquals("allowed", created.getName());
         assertEquals(PARENT, created.getParentId());
+    }
+
+    @Test
+    public void testCreateNeedsAddNotWriteForAFolder() throws PersistenceException {
+        // AtomPub, the binding Healdan serves, creates folders through create()
+        String parent = "fld." + PARENT;
+        authorOnly(PARENT, Permission.READ, Permission.WRITE);
+        assertThrows(CmisPermissionDeniedException.class,
+                () -> asAuthor.create(null, folderProperties("refused"), parent, null, null));
+        assertTrue(folderDao.findByName(folderDao.findById(PARENT), "refused", Tenant.DEFAULT_ID, true).isEmpty());
+
+        authorOnly(PARENT, Permission.READ, Permission.ADD);
+        asAuthor.create(null, folderProperties("allowed"), parent, null, null);
+        assertEquals(1, folderDao.findByName(folderDao.findById(PARENT), "allowed", Tenant.DEFAULT_ID, true).size());
     }
 
     @Test

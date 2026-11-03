@@ -519,7 +519,8 @@ public class LDRepository {
             ContentStream contentStream,
             ObjectInfoHandler objectInfos) {
         debug("create %s".formatted(folderId));
-        validatePermission(folderId, context, Permission.WRITE);
+        // Healdan: each branch checks the parent, createDocument() for WRITE
+        // and createFolder() for ADD, as the GUI and the web services ask
 
         String typeId = getTypeId(properties);
 
