@@ -21,6 +21,7 @@ import com.logicaldoc.core.security.user.UserHistoryDAO;
 import com.logicaldoc.core.security.user.UserSource;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.util.crypt.Encrypter;
 import com.logicaldoc.util.spring.Context;
 
@@ -41,7 +42,7 @@ public class SmokeApiUserSeedTest extends AbstractHealdanTestCase {
 		runner().runPending(List.of(seed));
 		assertEquals("done", HealdanSettings.get().get(MARKER));
 
-		// As SOAP's storeUser made it in docker/tests/test-api.sh
+		// The fields test-api.sh's old SOAP storeUser call set
 		User user = UserDAO.get().findByUsername("apiuser", true);
 		assertNotNull(user);
 		assertEquals("Api", user.getName());
@@ -59,6 +60,25 @@ public class SmokeApiUserSeedTest extends AbstractHealdanTestCase {
 		// And never again
 		runner().runPending(List.of(new SmokeApiUserSeed(() -> "true")));
 		assertEquals(1, UserDAO.get().findByWhere("_entity.username = 'apiuser'", null, null).size());
+	}
+
+	@Test
+	public void testLeavesAnExistingApiUserAlone() throws Exception {
+		// A stack upgraded in place already has the user, which test-api.sh made over SOAP
+		User before = new HealdanFixtures().user("apiuser");
+		long id = before.getId();
+		String password = before.getPassword();
+		assertNotNull(password);
+
+		runner().runPending(List.of(new SmokeApiUserSeed(() -> "true")));
+
+		// The step counts as done, so it never runs again
+		assertEquals("done", HealdanSettings.get().get(MARKER));
+		assertEquals(1, UserDAO.get().findByWhere("_entity.username = 'apiuser'", null, null).size());
+		User after = UserDAO.get().findByUsername("apiuser", true);
+		assertEquals(id, after.getId());
+		assertEquals(password, after.getPassword());
+		assertFalse(Encrypter.encryptSHA256(SmokeApiUserSeed.PASSWORD).equals(after.getPassword()));
 	}
 
 	@Test

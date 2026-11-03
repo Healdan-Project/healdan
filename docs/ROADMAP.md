@@ -491,7 +491,7 @@ The signed, notarised Healdan Helper 0.5.0 was released the same day ([`helper-v
 
 **Design.** Settled in the [M4 design spec](superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md), which the owner approved on 2026-11-01, with its [plan](superpowers/plans/2026-11-01-m4-oidc-sign-in.md), approved the same day. The owner decided:
 
-- **Passwords.** Once a provider is on, only accounts that aren't linked to it keep a password: `admin`, and any local account an admin keeps on purpose. Provider accounts have no password on any route, so they don't use WebDAV, CMIS or REST with one.
+- **Passwords.** Once a provider is on, only accounts that aren't linked to it keep a password: `admin`, and any local account an admin keeps on purpose. Provider accounts have no password on any route, so they don't use WebDAV, CMIS, SOAP or REST with one. (2026-11-03: Healdan has since removed SOAP; see the [SOAP removal spec](superpowers/specs/2026-11-03-soap-removal-design.md).)
 - **Linking.** A first sign-in links to an existing account by email, where the provider's emails can be trusted (on in the Entra preset, off in Authentik's), never to `admin`. Otherwise it makes a new account.
 - **Groups.** An explicit map from provider groups to Healdan groups, synced at every sign-in. A sign-in that maps to no Healdan group is refused.
 - **Leavers.** Healdan keeps the provider's refresh token for a helper sign-in, and checks with the provider when the token's session reopens and at least every 8 hours. A refusal revokes the token; an outage signs nobody out.

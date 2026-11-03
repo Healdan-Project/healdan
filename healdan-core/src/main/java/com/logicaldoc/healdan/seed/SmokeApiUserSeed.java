@@ -5,6 +5,8 @@ package com.logicaldoc.healdan.seed;
 
 import java.util.function.Supplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -22,11 +24,17 @@ import com.logicaldoc.core.security.user.UserSource;
  * the same way: no groups of its own, and the {@code CREATED} history row that
  * storing a new user writes.
  * <p>
+ * A stack upgraded in place may already have {@code apiuser}, made by that
+ * script over SOAP. The step then leaves it exactly as it is, changing nothing
+ * about it, and still counts as done, so startup goes on.
+ * <p>
  * Without the variable the step does nothing and writes no marker, so it can
  * run on a later start.
  */
 @Component
 public class SmokeApiUserSeed implements SeedStep {
+
+	private static final Logger log = LoggerFactory.getLogger(SmokeApiUserSeed.class);
 
 	static final String USERNAME = "apiuser";
 
@@ -60,6 +68,11 @@ public class SmokeApiUserSeed implements SeedStep {
 
 	@Override
 	public void run() throws Exception {
+		if (UserDAO.get().findByUsername(USERNAME) != null) {
+			log.info("The user {} already exists and is left as it is", USERNAME);
+			return;
+		}
+
 		User user = new User();
 		user.setTenantId(Tenant.DEFAULT_ID);
 		user.setUsername(USERNAME);
