@@ -7,7 +7,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
@@ -15,6 +17,10 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.Assume;
@@ -89,7 +95,13 @@ public class SecretBoxTest {
 		assertFalse(first.hasKey());
 		assertFalse(Files.exists(keyFile));
 
-		String sealed = first.seal("s3cret");
+		String sealed;
+		try (LogCapture log = LogCapture.of(SecretBox.class)) {
+			sealed = first.seal("s3cret");
+			// The folder synced after the move, with nothing to warn of
+			assertEquals(List.of("INFO Made the secret key file " + keyFile + ". Back it up with the database."),
+					log.lines());
+		}
 
 		assertTrue(first.hasKey());
 		assertEquals(32, Files.size(keyFile));
@@ -145,8 +157,10 @@ public class SecretBoxTest {
 		SecretBox box = new SecretBox(keyFile(), () -> 3L);
 
 		try (LogCapture log = LogCapture.of(SecretBox.class)) {
-			IllegalStateException e = assertThrows(IllegalStateException.class, () -> box.seal("s3cret-value"));
+			SecretBox.KeyMissingException e = assertThrows(SecretBox.KeyMissingException.class,
+					() -> box.seal("s3cret-value"));
 
+			assertEquals(3L, e.sealed());
 			assertFalse(e.toString() + e.getCause(), (e.toString() + e.getCause()).contains("s3cret-value"));
 			assertFalse(Files.exists(keyFile()));
 			assertFalse(Files.exists(keyFile().getParent()));
@@ -159,12 +173,12 @@ public class SecretBoxTest {
 			assertTrue(line, line.contains(keyFile().toString()));
 			assertTrue(line, line.contains("3 stored values are sealed"));
 			assertTrue(line, line.contains("Restore the key file from a backup"));
-			assertTrue(line, line.contains("enter each sign-in provider's client secret again"));
+			assertTrue(line, line.contains("make a new key when it asks"));
 			assertFalse(line, line.contains("s3cret-value"));
 		}
 
 		// Each time
-		assertThrows(IllegalStateException.class, () -> box.seal("s3cret-value"));
+		assertThrows(SecretBox.KeyMissingException.class, () -> box.seal("s3cret-value"));
 		assertFalse(Files.exists(keyFile()));
 		// Nothing to seal needs no key
 		assertNull(box.seal(null));
@@ -199,14 +213,14 @@ public class SecretBoxTest {
 	}
 
 	@Test
-	public void testAnEnteredSecretMakesANewKeyAfterALoss() throws IOException {
+	public void testANewKeyIsMadeWhenConfirmedAfterALoss() throws IOException {
 		String sealed = box(keyFile()).seal("s3cret");
 		Files.delete(keyFile());
 		SecretBox box = new SecretBox(keyFile(), () -> 3L);
 
 		try (LogCapture log = LogCapture.of(SecretBox.class)) {
-			// An administrator entering a client secret again is how a lost key is put right
-			String entered = box.sealEntered("new-s3cret-value");
+			// An administrator entering a client secret again, and confirming a new key, is how a lost key is put right
+			String entered = box.sealWithNewKey("new-s3cret-value");
 
 			assertEquals("new-s3cret-value", box.open(entered));
 			assertEquals(32, Files.size(keyFile()));
@@ -222,16 +236,17 @@ public class SecretBoxTest {
 	}
 
 	@Test
-	public void testAnEnteredSecretUsesTheKeyThatsThere() throws IOException {
+	public void testANewKeyIsMadeOnlyWhenThereIsNone() throws IOException {
 		SecretBox box = new SecretBox(keyFile(), () -> 3L);
 		String sealed = box(keyFile()).seal("s3cret");
 		byte[] key = Files.readAllBytes(keyFile());
 
-		assertEquals("entered", box.open(box.sealEntered("entered")));
+		// As when the key was restored while the administrator was deciding
+		assertEquals("entered", box.open(box.sealWithNewKey("entered")));
 
 		assertTrue(Arrays.equals(key, Files.readAllBytes(keyFile())));
 		assertEquals("s3cret", box.open(sealed));
-		assertNull(box.sealEntered(null));
+		assertNull(box.sealWithNewKey(null));
 	}
 
 	@Test
@@ -255,7 +270,7 @@ public class SecretBoxTest {
 
 		box.seal("s3cret");
 		box.seal("s3cret");
-		box.sealEntered("s3cret");
+		box.sealWithNewKey("s3cret");
 
 		assertEquals(1, asked.get());
 	}
@@ -348,6 +363,87 @@ public class SecretBoxTest {
 				assertFalse(line, line.contains("s3cret-value"));
 				assertFalse(line, line.contains(sealed));
 			}
+		}
+	}
+
+	@Test
+	public void testWarnsAgainWhenTheKeyGoesAgain() throws IOException {
+		SecretBox box = box(keyFile());
+		String sealed = box.seal("s3cret-value");
+		byte[] key = Files.readAllBytes(keyFile());
+
+		try (LogCapture log = LogCapture.of(SecretBox.class)) {
+			Files.delete(keyFile());
+			assertNull(box.open(sealed));
+			assertNull(box.open(sealed));
+			// Restored from a backup, with nothing restarted, then gone again
+			Files.write(keyFile(), key);
+			assertEquals("s3cret-value", box.open(sealed));
+			Files.delete(keyFile());
+			assertNull(box.open(sealed));
+
+			assertEquals(log.lines().toString(), 2, log.lines().size());
+			for (String line : log.lines()) {
+				assertTrue(line, line.startsWith("WARN ") && line.contains(keyFile() + " is missing"));
+				assertFalse(line, line.contains("s3cret-value"));
+			}
+		}
+	}
+
+	@Test
+	public void testAValueAnotherKeySealedWarnsOnce() throws IOException {
+		String foreign = box(folder.getRoot().toPath().resolve("other.key")).seal("other");
+		SecretBox box = box(keyFile());
+		String sealed = box.seal("s3cret");
+
+		try (LogCapture log = LogCapture.of(SecretBox.class)) {
+			for (int i = 0; i < 3; i++) {
+				assertNull(box.open(foreign));
+				assertEquals("s3cret", box.open(sealed));
+			}
+
+			assertEquals(log.lines().toString(), 1, log.lines().size());
+			assertTrue(log.lines().get(0), log.lines().get(0).contains("another key sealed it"));
+		}
+	}
+
+	/**
+	 * Another server sharing the configuration folder, in a process of its
+	 * own, is making the key: this one waits for it and uses its key, rather
+	 * than putting one of its own over it, even over the empty file a dead
+	 * start left
+	 */
+	@Test
+	public void testAKeyAnotherServerIsMakingIsWaitedFor() throws Exception {
+		Files.createDirectories(keyFile().getParent());
+		Files.createFile(keyFile());
+		Path lockFile = keyFile().resolveSibling("healdan-secret.key.lock");
+		Process other = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(), "-cp",
+				Path.of(KeyLockHolder.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString(),
+				KeyLockHolder.class.getName(), lockFile.toString(), keyFile().toString())
+				.redirectError(ProcessBuilder.Redirect.INHERIT).start();
+		try {
+			BufferedReader out = new BufferedReader(new InputStreamReader(other.getInputStream(), StandardCharsets.UTF_8));
+			String line;
+			while ((line = out.readLine()) != null && !line.equals(KeyLockHolder.LOCKED))
+				continue;
+			assertEquals(KeyLockHolder.LOCKED, line);
+
+			SecretBox box = box(keyFile());
+			CompletableFuture<String> sealing = CompletableFuture.supplyAsync(() -> box.seal("s3cret"));
+			// It waits for the other server, and puts no key of its own in place meanwhile
+			assertThrows(TimeoutException.class, () -> sealing.get(500, TimeUnit.MILLISECONDS));
+			assertEquals(0, Files.size(keyFile()));
+
+			other.getOutputStream().write('\n');
+			other.getOutputStream().flush();
+			String sealed = sealing.get(10, TimeUnit.SECONDS);
+
+			assertEquals(0, other.waitFor());
+			assertTrue(Arrays.equals(KeyLockHolder.KEY, Files.readAllBytes(keyFile())));
+			assertEquals("s3cret", box.open(sealed));
+		} finally {
+			other.destroyForcibly();
 		}
 	}
 

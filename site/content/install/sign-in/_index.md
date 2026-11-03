@@ -171,7 +171,8 @@ without its key reads those secrets as unset, and each provider needs its client
 
 Healdan makes the key when it first seals a secret, and never makes another on its own once secrets are sealed. If
 the file goes missing, providers count as off until you restore it, and nothing sealed is lost. If it's lost for
-good, entering a provider's client secret again makes a new key.
+good, enter a provider's client secret again: Healdan says the key file is missing and asks before it makes a new
+key.
 [Backup and Restore](../backup-and-restore/#the-key-for-sign-in-secrets) says more.
 
 ## When a Sign-In Is Refused

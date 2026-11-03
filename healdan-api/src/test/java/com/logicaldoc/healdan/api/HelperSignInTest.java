@@ -10,6 +10,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,6 +23,7 @@ import java.util.Set;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.config.Configurator;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -290,6 +293,43 @@ public class HelperSignInTest extends ApiTestCase {
 		ApiToken row = ApiTokens.get().find(response.json().path("token").textValue()).orElseThrow();
 		assertEquals(ApiTokens.MAX_REFRESH, row.getRefresh().length());
 		assertEquals(49_121, SecretBox.get().open(row.getRefresh()).length());
+	}
+
+	/**
+	 * The key file went between the provider's answer and the exchange: the
+	 * refresh token can't be sealed, as values are sealed with the missing
+	 * key, so the exchange says so, opens no session and issues no token. The
+	 * code is spent, and the helper starts again.
+	 */
+	@Test
+	public void testExchangeWithTheKeyMissing() throws Exception {
+		String property = System.getProperty(SecretBox.KEY_PROPERTY);
+		// Only the build's own key file, never the one in the home folder of whoever runs it
+		Assume.assumeNotNull(property);
+		Path keyFile = Path.of(property.trim());
+		String code = code(LOOPBACK);
+		byte[] key = Files.readAllBytes(keyFile);
+		Files.delete(keyFile);
+		try {
+			ApiResponse response;
+			try (LogCapture log = LogCapture.of(AuthResource.class)) {
+				response = exchange(code, VERIFIER, LOOPBACK);
+				assertTrue(String.join("\n", log.lines()), log.lines().stream().anyMatch(
+						line -> line.startsWith("WARN ") && line.contains("fake") && line.contains("secret key file")));
+			}
+
+			assertEquals(response.toString(), 500, response.status());
+			assertEquals("server-error", response.code());
+			assertEquals(AuthResource.KEY_MISSING, response.json().path("detail").textValue());
+			assertFalse(Files.exists(keyFile));
+			assertEquals(0, ApiTokens.get().list(jane.getId()).size());
+			assertEquals(0, SessionManager.get().countOpened("jane"));
+			assertSignInFailed(exchange(code, VERIFIER, LOOPBACK));
+		} finally {
+			// The build's key, for the tests after this one
+			Files.write(keyFile, key);
+		}
+		assertEquals(201, exchange(code(LOOPBACK), VERIFIER, LOOPBACK).status());
 	}
 
 	/**

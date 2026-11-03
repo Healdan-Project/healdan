@@ -490,6 +490,9 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertEquals(0L, sealed.getAsLong());
 		providers().save(entra(), SECRET_ONE);
 		assertEquals(1L, sealed.getAsLong());
+		// Only client secrets are sealed, whatever another setting starts with
+		settings().set("signin.entra.label", "v1: Staging");
+		assertEquals(1L, sealed.getAsLong());
 		// A helper's refresh token counts too, and a token with none doesn't
 		User clerk = fx.user("clerk");
 		ApiTokens.get().issue(clerk, "Laptop", null, null, "entra", SecretBox.get().seal("a-refresh-token"));
@@ -508,8 +511,21 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		lost.save(entra(), null);
 		assertFalse(Files.exists(gone));
 
-		// Entering the secret again does: it's how an administrator puts a lost key right
-		lost.save(entra(), SECRET_TWO);
+		// Nor does a typed secret on its own: the file may be gone only for a while, so the admin is asked first, and
+		// nothing is saved meanwhile
+		SignInProvider e = entra();
+		SignInProvider relabelled = new SignInProvider(e.id(), e.preset(), "Relabelled", e.enabled(), e.issuer(),
+				e.clientId(), false, e.identityClaim(), e.usernameClaim(), e.emailClaim(), e.groupsClaim(),
+				e.linkByEmail());
+		SignInProviders.SecretKeyMissing refused = assertThrows(SignInProviders.SecretKeyMissing.class,
+				() -> lost.save(relabelled, SECRET_TWO));
+		assertEquals(2L, refused.sealed());
+		assertTrue(refused.getMessage(), refused.getMessage().contains("2 stored values are sealed"));
+		assertFalse(Files.exists(gone));
+		assertNotEquals("Relabelled", lost.find("entra").orElseThrow().label());
+
+		// Entering the secret again with the admin's word does: it's how an administrator puts a lost key right
+		lost.save(entra(), SECRET_TWO, true);
 		assertTrue(Files.exists(gone));
 		assertEquals(SECRET_TWO, lost.secret("entra"));
 		assertEquals("a-refresh-token-2", box.open(box.seal("a-refresh-token-2")));

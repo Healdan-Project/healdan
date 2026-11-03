@@ -82,6 +82,9 @@ public class SignInProviders {
 
 	private static final String CLIENT_SECRET = "clientSecret";
 
+	/** The names of the settings that hold a client secret, sealed, as an SQL pattern */
+	static final String SECRET_SETTINGS = "signin.%." + CLIENT_SECRET;
+
 	private static final String IDENTITY_CLAIM = "claim.identity";
 
 	private static final String USERNAME_CLAIM = "claim.username";
@@ -123,6 +126,31 @@ public class SignInProviders {
 	private static final Pattern QUOTABLE_RECIPIENT = Pattern.compile("[A-Za-z0-9._@+-]{1,100}");
 
 	private static final Logger log = LoggerFactory.getLogger(SignInProviders.class);
+
+	/**
+	 * Refuses a typed client secret while Healdan's secret key file is missing
+	 * and stored values are sealed with it, until the administrator confirms a
+	 * new key (ruling R37). Nothing is saved.
+	 */
+	public static final class SecretKeyMissing extends HealdanRuleException {
+
+		private static final long serialVersionUID = 1L;
+
+		private final long sealed;
+
+		SecretKeyMissing(long sealed, Throwable cause) {
+			super("Healdan's secret key file is missing, and %s sealed with it. Restore it from a backup and save again, or make a new key."
+					.formatted(sealed == 1 ? "1 stored value is" : sealed + " stored values are"), cause);
+			this.sealed = sealed;
+		}
+
+		/**
+		 * @return how many stored values are sealed with the missing key
+		 */
+		public long sealed() {
+			return sealed;
+		}
+	}
 
 	private final HealdanSettings settings;
 
@@ -237,9 +265,29 @@ public class SignInProviders {
 	 *         claim or the issuer would change while accounts are linked
 	 *         (rulings R21 and R33); the message names the field, for the
 	 *         person who typed it, and never quotes the label, which the
-	 *         Sign-In tab would show as HTML
+	 *         Sign-In tab would show as HTML; a {@link SecretKeyMissing} if a
+	 *         new secret can't be sealed with no key while stored values are
+	 *         sealed
 	 */
-	public synchronized void save(SignInProvider p, String newSecret) throws PersistenceException {
+	public void save(SignInProvider p, String newSecret) throws PersistenceException {
+		save(p, newSecret, false);
+	}
+
+	/**
+	 * Adds or changes a provider, as {@link #save(SignInProvider, String)}
+	 * does
+	 *
+	 * @param p the provider; {@code hasSecret} is ignored
+	 * @param newSecret the client secret to keep, sealed; null or blank keeps
+	 *        the one stored
+	 * @param newKey whether the administrator confirmed making a new key for
+	 *        the new secret, should the key file be missing while stored values
+	 *        are sealed with it (ruling R37)
+	 * @throws PersistenceException error at data layer
+	 * @throws HealdanRuleException as {@link #save(SignInProvider, String)}
+	 *         refuses
+	 */
+	public synchronized void save(SignInProvider p, String newSecret, boolean newKey) throws PersistenceException {
 		String id = p == null ? null : p.id();
 		checkId(id);
 		List<String> ids = ids();
@@ -276,7 +324,7 @@ public class SignInProviders {
 									linked == 1 ? "1 account" : linked + " accounts"));
 			}
 		}
-		String sealed = sealedSecret(id, newSecret);
+		String sealed = sealedSecret(id, newSecret, newKey);
 
 		// A new provider starts with no group map. Rows already under its id belong to nobody (the provider
 		// they were saved for is gone), and the map is the gate and the grant, so they must not be adopted.
@@ -635,10 +683,14 @@ public class SignInProviders {
 	}
 
 	/**
+	 * @param newKey whether the administrator confirmed a new key, should there
+	 *        be none while stored values are sealed
 	 * @return the new secret sealed; null to keep the one stored
-	 * @throws HealdanRuleException if there is neither
+	 * @throws HealdanRuleException if there is neither; a
+	 *         {@link SecretKeyMissing} if there is no key, stored values are
+	 *         sealed, and {@code newKey} is false
 	 */
-	private String sealedSecret(String id, String newSecret) throws HealdanRuleException {
+	private String sealedSecret(String id, String newSecret, boolean newKey) throws HealdanRuleException {
 		if (StringUtils.isBlank(newSecret)) {
 			if (StringUtils.isBlank(settings.get(key(id, CLIENT_SECRET))))
 				throw refuse("The client secret can't be empty.");
@@ -648,8 +700,11 @@ public class SignInProviders {
 		if (secret.length() > MAX_SECRET)
 			throw refuse("The client secret can't be longer than %d characters.".formatted(MAX_SECRET));
 		try {
-			// An administrator's entry may make a new key after a lost one, which putting a lost key right needs
-			return box.sealEntered(secret);
+			// Only an administrator who confirmed it makes a new key over sealed values: the file may only be missing
+			// for a while, and a new key would leave every other value unreadable (ruling R37)
+			return newKey ? box.sealWithNewKey(secret) : box.seal(secret);
+		} catch (SecretBox.KeyMissingException e) {
+			throw new SecretKeyMissing(e.sealed(), e);
 		} catch (IllegalStateException e) {
 			// The message holds no secret, and neither does this one
 			throw new HealdanRuleException("The client secret couldn't be kept, because Healdan couldn't read or "

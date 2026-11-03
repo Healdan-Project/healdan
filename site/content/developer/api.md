@@ -119,7 +119,8 @@ A desktop client, such as the Healdan Helper, signs in through the system browse
 
 - **The code works once,** for 60 seconds, with the verifier of the challenge the sign-in started with and the same
   `redirectUri`, character for character. Anything else is `401 sign-in-failed`, as a wrong password is, and a
-  wrong verifier or address uses the code up.
+  wrong verifier or address uses the code up. A sign-in the server can't keep, as when its secret key file is
+  missing, is `500 server-error`, whose `detail` says so; the code is used up, and the helper starts again.
 - **A body has a password or a code, never both.** One with fields of each is `422 validation`, and so is a code
   without its `codeVerifier` or `redirectUri` (`required`). `name` and `device` are checked as for a password,
   before the code is used.
