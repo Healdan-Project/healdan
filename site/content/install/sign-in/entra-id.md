@@ -8,6 +8,16 @@ can register applications and assign people to them, such as a Cloud Application
 address set as [Sign-In Providers](../) says. Microsoft renames things from time to time, so the names below are
 today's, and the ideas are what to look for.
 
+{{< callout type="warning" >}}
+**Experimental.** Healdan's sign-in through Entra ID hasn't been tried against a real Entra tenant yet. It's the same
+sign-in that Healdan's tests run against a stand-in provider and that has been tried on a real server with Authentik,
+so it's likely to work, but three things are unconfirmed: whether Entra accepts the client secret as Healdan sends
+it, in the body of the token request; whether it signs the ID tokens it sends with a refresh (see
+[Groups Between Sign-Ins](#groups-between-sign-ins)); and whether it checks the client secret before the code, which
+**Check**'s test of the secret needs. Before people rely on it, sign in with the button yourself and check that
+`admin` still signs in with its password. If a sign-in fails, Healdan's log says what Entra answered.
+{{< /callout >}}
+
 The examples use `healdan.example` for your Healdan server and `entra` as the provider's id.
 
 {{% steps %}}

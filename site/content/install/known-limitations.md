@@ -15,6 +15,8 @@ weight: 11
   API keys the person doesn't recognise, under the person icon, **Security → API Keys**: a key outlasts a password
   change. Sessions already open in the web page or with a key stay open until an administrator kills them. See
   [Healdan Settings](../../admin/healdan-settings/#device-sign-ins).
+- **Microsoft Entra ID is experimental.** Signing in through Entra ID hasn't been tried against a real Entra tenant
+  yet, only through Authentik and a stand-in provider. See [Microsoft Entra ID](../sign-in/entra-id/).
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
   has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's SOAP and
   REST web services. Unlinking the account from its provider gives it a password again.
