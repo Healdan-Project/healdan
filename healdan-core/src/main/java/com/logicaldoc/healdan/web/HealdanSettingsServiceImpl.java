@@ -22,6 +22,7 @@ import com.logicaldoc.gui.frontend.client.healdan.beans.GUILinkedAccount;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUISignInOptions;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUISignInProvider;
 import com.logicaldoc.gui.frontend.client.healdan.services.HealdanSettingsService;
+import com.logicaldoc.gui.frontend.client.healdan.services.SecretKeyMissingException;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.docnumber.DocNumberCounter;
@@ -209,8 +210,11 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 				// Checked first, so that a refused map doesn't leave the provider saved without it
 				List<GroupMapping> map = providers.checkGroups(SignInBeans.mappings(provider.getGroups()));
 				try {
-					providers.save(SignInBeans.fromGUI(provider), secret);
+					providers.save(SignInBeans.fromGUI(provider), secret, provider.isNewKey());
 					providers.saveGroups(id, map);
+				} catch (SignInProviders.SecretKeyMissing e) {
+					// Nothing saved: the tab asks the admin, and saves again with newKey if they make a new key
+					throw new SecretKeyMissingException(e.getMessage(), e.sealed());
 				} finally {
 					// The next sign-in fetches the discovery document again, for the provider as it now is
 					ProviderClient.get().forget(id);

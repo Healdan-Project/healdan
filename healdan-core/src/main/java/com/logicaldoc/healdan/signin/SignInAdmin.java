@@ -6,12 +6,14 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -24,6 +26,7 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.Recipient;
 import com.logicaldoc.core.security.TenantDAO;
+import com.logicaldoc.core.security.authentication.PasswordWeakException;
 import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.security.user.UserDAO;
 import com.logicaldoc.core.security.user.UserEvent;
@@ -72,6 +75,12 @@ public class SignInAdmin {
 	private static final String EMAIL_POOL = "Email";
 
 	private static final Logger log = LoggerFactory.getLogger(SignInAdmin.class);
+
+	/** CE's generator of a password for a tenant, by its name, under the tenant's password settings */
+	static final Function<String, String> CE_GENERATOR = PasswordGenerator::generate;
+
+	/** How temporary passwords are made; {@code SignInTestHooks} puts it back to {@link #CE_GENERATOR} */
+	static volatile Function<String, String> generator = CE_GENERATOR;
 
 	private final SignInAccounts accounts;
 
@@ -153,8 +162,10 @@ public class SignInAdmin {
 	 * @param userId the account's id
 	 * @param by the admin who unlinks it
 	 * @return the temporary password when it wasn't emailed: outgoing email
-	 *         isn't set up, the account has no email, or the mail server didn't
-	 *         take it within {@link #EMAIL_WAIT_MILLIS}; else null
+	 *         isn't set up or LogicalDOC doesn't send
+	 *         ({@link OutgoingEmail#isSetUp}), the account has no email, the
+	 *         email couldn't be started, or the mail server didn't take it
+	 *         within {@link #EMAIL_WAIT_MILLIS}; else null
 	 * @throws PersistenceException error at data layer
 	 * @throws HealdanRuleException if the account isn't linked, or doesn't exist
 	 */
@@ -201,22 +212,26 @@ public class SignInAdmin {
 		Objects.requireNonNull(by, "by");
 		SignInIdentity link = identities.findLinkedByUser(userId).orElseThrow(SignInAdmin::notLinked);
 		long linkId = link.getId();
+		User account = UserDAO.get().findById(userId);
+		if (account == null)
+			throw noAccount();
+		String password = temporaryPassword(account.getTenantId());
 		return accounts.lockedOnce(link.getProvider(), link.getIdentity(),
-				journal -> unlinkNow(userId, linkId, by, journal));
+				journal -> unlinkNow(userId, linkId, by, password, journal));
 	}
 
 	/** In the transaction, under the identity's lock */
-	private Temporary unlinkNow(long userId, long linkId, User by, Journal journal) throws PersistenceException {
+	private Temporary unlinkNow(long userId, long linkId, User by, String password, Journal journal)
+			throws PersistenceException {
 		// Read again under the lock: a sign-in or another admin may have got there first
 		SignInIdentity link = identities.findLinkedByUser(userId).filter(row -> row.getId() == linkId)
 				.orElseThrow(SignInAdmin::notLinked);
 		User user = UserDAO.get().findById(userId, true);
 		if (user == null)
-			throw new HealdanRuleException("That account doesn't exist.");
+			throw noAccount();
 		String provider = link.getProvider();
 
 		// As CE's admin Change Password leaves an account, in one store: CE refuses a DEFAULT account with no password
-		String password = PasswordGenerator.generate(TenantDAO.get().getTenantName(user.getTenantId()));
 		user.setSource(UserSource.DEFAULT);
 		try {
 			user.setDecodedPassword(password);
@@ -250,6 +265,47 @@ public class SignInAdmin {
 		return new Temporary(user, provider, password);
 	}
 
+	/**
+	 * Makes a temporary password the tenant's password rules accept. CE's
+	 * generator reads {@code password.sequence} as 4 when it isn't set, where
+	 * the rules read it as 3, so it can make a password with a sequence of 4,
+	 * such as {@code abcd}, which the rules refuse: about one in 10,000. Storing
+	 * it would roll the unlinking back, so it gets a second try.
+	 * <p>
+	 * It runs before the unlinking's transaction: CE's check refuses with a
+	 * runtime exception, which would mark that transaction for rollback. It
+	 * checks a stand-in account of the tenant, as CE checks a ticket's password
+	 * ({@code DocumentManager.createTicket}).
+	 *
+	 * @param tenantId the account's tenant
+	 * @return the password
+	 * @throws PersistenceException if neither try passes the rules; it never
+	 *         says the password or what the rules found in it
+	 */
+	private static String temporaryPassword(long tenantId) throws PersistenceException {
+		String tenant = TenantDAO.get().getTenantName(tenantId);
+		User standIn = new User();
+		standIn.setId(-1);
+		standIn.setUsername("dummy");
+		standIn.setTenantId(tenantId);
+		standIn.setLocale(Locale.ENGLISH);
+		for (int tries = 1;; tries++) {
+			String password = generator.apply(tenant);
+			try {
+				standIn.setDecodedPassword(password);
+				UserDAO.get().checkPasswordCompliance(standIn);
+				return password;
+			} catch (NoSuchAlgorithmException e) {
+				throw new PersistenceException("Couldn't make a temporary password", e);
+			} catch (PasswordWeakException e) {
+				// Its message quotes what the rules found, part of the password
+				if (tries == 2)
+					throw new PersistenceException(
+							"Couldn't make a temporary password that the password rules accept, in two tries");
+			}
+		}
+	}
+
 	private static void storeUnlinking(User user, UserHistory history) throws PersistenceException {
 		try {
 			ProviderPasswordListener.unlinking(() -> {
@@ -265,6 +321,10 @@ public class SignInAdmin {
 
 	private static HealdanRuleException notLinked() {
 		return new HealdanRuleException("That account isn't linked to a sign-in provider.");
+	}
+
+	private static HealdanRuleException noAccount() {
+		return new HealdanRuleException("That account doesn't exist.");
 	}
 
 	/**
@@ -344,10 +404,18 @@ public class SignInAdmin {
 			return null;
 		}
 
-		Future<Object> future = ThreadPools.get().execute(() -> {
-			OutgoingEmail.send(email);
+		Future<Object> future;
+		try {
+			future = ThreadPools.get().execute(() -> {
+				OutgoingEmail.send(email);
+				return null;
+			}, EMAIL_POOL);
+		} catch (RuntimeException e) {
+			// Caught, so the passwords of the accounts unlinked with this one are kept all the same
+			log.warn("Couldn't email the temporary password of the account {}: the email pool didn't take it ({})",
+					username, e.getClass().getSimpleName());
 			return null;
-		}, EMAIL_POOL);
+		}
 		if (future == null)
 			log.warn("Couldn't email the temporary password of the account {}: the email pool has stopped", username);
 		return future;

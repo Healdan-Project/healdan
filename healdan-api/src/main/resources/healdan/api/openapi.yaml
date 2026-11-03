@@ -74,8 +74,10 @@ paths:
         60 seconds, and only with the verifier of that challenge and the
         same `redirectUri`. A code that's unknown, used or expired, or
         doesn't match the verifier or the address, is `401 sign-in-failed`,
-        as a wrong password is. Those sign-in pages aren't JSON API, so this
-        file leaves them out.
+        as a wrong password is. A sign-in the server can't keep, as when its
+        secret key file is missing, is `500 server-error`, whose `detail`
+        says so; the code is used up, and the helper starts again. Those
+        sign-in pages aren't JSON API, so this file leaves them out.
 
         The token is shown only in this answer; send it as
         `Authorization: Bearer <token>`. It works only here, under `/api`:

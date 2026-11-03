@@ -60,6 +60,10 @@ public class AuthResource {
 
 	static final String SIGN_IN_FAILED = "The username or password is wrong, or this account can't sign in.";
 
+	/** A provider's sign-in the server can't keep, as its secret key file is missing */
+	static final String KEY_MISSING = "The server can't keep this sign-in: its secret key file is missing or can't be "
+			+ "read. Ask whoever runs Healdan to restore it, then sign in again.";
+
 	static final String PASSWORD_EXPIRED = "Your password has expired. Change it in Healdan's web page, then sign in again.";
 
 	/** The field of a sign-in's device id, in a validation problem */
@@ -165,7 +169,16 @@ public class AuthResource {
 		}
 
 		// Sealed before the session opens, so a key that can't be made leaves no session behind
-		String refresh = SecretBox.get().seal(redeemed.refreshToken());
+		String refresh;
+		try {
+			refresh = SecretBox.get().seal(redeemed.refreshToken());
+		} catch (IllegalStateException e) {
+			// SecretBox has logged why, when the key file is missing; the code is spent, and the helper starts again
+			log.warn("Refused a sign-in with a helper's code through the sign-in provider {}: its refresh token "
+					+ "couldn't be sealed, as Healdan's secret key file is missing or can't be read or made ({})",
+					redeemed.provider(), e.getClass().getSimpleName());
+			throw new ApiProblem(500, "server-error", KEY_MISSING);
+		}
 		if (!ApiTokens.refreshFits(refresh)) {
 			// Ruling R35: refused here, rather than failing on the database or keeping it cut short
 			log.warn("Refused a sign-in with a helper's code through the sign-in provider {}: its refresh token is too "

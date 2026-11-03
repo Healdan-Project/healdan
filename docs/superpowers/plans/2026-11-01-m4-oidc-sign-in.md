@@ -1603,6 +1603,18 @@ The final review (R30) found nothing Critical. The controller's rulings for its 
   - What real providers answer: Keycloak 26.7.5, tried with `curl` against the smoke realm, answers a made-up code with the right secret `400 invalid_grant` ("Code not valid"), and a wrong secret `401 unauthorized_client`, which is why a `401` with that code, or with none, counts. Authentik, from its source (`authentik/providers/oauth2/token/base.py` and `authorization_code.py`), checks the secret, then the redirect address, then the code: a wrong secret is `400 invalid_client`, and so is a redirect address it doesn't have, which the refusal's words say. Whether Entra checks the client before the code is unproven (Follow-ups).
   - If wrong: a provider that checks the code first passes a wrong secret, as before, or answers something Check reports as not tested. Nothing a sign-in does changed.
 
+**Fixed after the walkthrough ([Healdan-Project/healdan#170](https://github.com/Healdan-Project/healdan/pull/170))**
+
+Two follow-ups that could hurt a live server, and the one beside them.
+
+- **R37: once anything stored is sealed, only an admin who confirms it makes a key.** `SecretBox.seal` makes a key only while no provider's client secret (`signin.<id>.clientSecret`) is sealed and no device token holds a refresh token, which it asks only when there's no key. Otherwise it fails with `KeyMissingException`, and logs at error level the key file, how many values are sealed and what to do: restore the file from a backup (no restart), or enter a provider's client secret again and make a new key. A typed secret on the Sign-In tab is refused the same way, saving nothing, and the tab says the key file is missing and asks whether to make a new key; only then does the save call `sealWithNewKey`, which makes one over sealed values, logging at warning level that they can't be opened.
+  - Why: spec §13 and Backup and Restore have the admin enter the secrets again after a lost key, so that must still make one. But an admin changing one provider's secret while the file is missing for a while would otherwise lose every other sealed value without a word. A re-check or a helper's exchange is never the admin's decision; an exchange that can't seal its refresh token answers `500 server-error` saying so, and its code is spent.
+  - A key is made under a lock file, `healdan-secret.key.lock`, so two servers sharing the configuration folder make one key. It's written to `healdan-secret.key.new`, made with mode 600, moved into place (over an empty file left by an older start), and the folder is synced, so a crash can't lose the move after the database has kept values sealed with the key. So a start that dies leaves no empty key file, and the next clears the `.new`. That settles Task 2's follow-up.
+  - Opening warns that there's no key once each time the key goes, as a key restored from a backup works with nothing restarted, and once that a value didn't open with the key that's there.
+  - If wrong: an admin who makes a new key while the file was only missing for a while has to enter every provider's secret again, and helpers sign in again.
+- **R38: unlinking keeps every temporary password it couldn't email.** `OutgoingEmail.isSetUp` is false under `smtp.nosend` or with CE's sending messages aspect off, which CE's sender reports (`Sender.sends`); it fails rather than drop an email if either is switched off after the check. An email pool that throws when handed the email, as one that refuses a task does, puts that password in the admin's list, and Unlink Everyone goes on. A temporary password is checked against the tenant's rules before the unlinking's transaction, as CE's check refuses with a runtime exception that would mark it for rollback, on a stand-in account as CE checks a ticket's, and one the rules refuse gets a second try. The refusal never quotes CE's message, which names the sequence it found.
+  - If wrong: an admin with `smtp.nosend` set on purpose passes each password on by hand, and the `admin` alert is off.
+
 ## Follow-ups
 
 Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. Each is a gap in a narrow case or for later, none of which blocks the walkthrough; the reviews' style points and the tests' wording are left out. The task in brackets found it.
@@ -1633,11 +1645,9 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **The re-check, the provider and the key**
 
-- If the key file goes during a re-check, `SecretBox.seal` makes a new key, and every other helper's refresh token then fails to open and is revoked at its next check. `seal` shouldn't make a key once sealed values exist. (Task 9)
 - A `checked` in the future, after the clock went back, holds off the 8-hourly checks until it passes. (Task 9)
 - A turned-over refresh token is lost when Nimbus can't parse the answer, or something fails after a `200`. Reading `refresh_token` from the JSON first would keep it; with a strict provider, that helper is otherwise revoked at its next check. (Task 4)
 - Discovery and token answers have no size cap (the keys are capped at 50 KB). The 10-second timeout is per read, so a provider that trickles its answer can hold a request longer, and a key fetch waits up to 15 seconds. (Task 4)
-- `SecretBox` fills an empty key file that a start dying mid-way left, after it was made but before its mode was set, and there's no lock across processes (Healdan runs one app container). (Task 2)
 
 **Settings and the Sign-In tab**
 
@@ -1651,8 +1661,7 @@ Filled in from the build's reviews, and left open once Tasks 1 to 16 were done. 
 
 **Unlinking and the alert**
 
-- A temporary password can be lost after the commit when CE quietly doesn't send (`smtp.nosend`, or its sending aspect off) or its email pool refuses the task; Unlink Everyone would lose them all. `OutgoingEmail.isSetUp` should be false under `smtp.nosend`, and each send's failure should put its password in the list for the admin. A timed-out email isn't cancelled. (Task 10)
-- `PasswordGenerator`'s default allows a sequence of 4 where the password rules refuse 3, so about one temporary password in 10,000 fails them and rolls the unlink back. Try again once. (Task 10)
+- A timed-out email isn't cancelled: it may still go, with the password the admin was shown. (Task 10)
 - A failure reading the session pool, while linking closes the account's sessions, logs its cause only at debug. (Task 7b)
 - Linking closes the account's sessions, but not a session it opened as another account's impersonator with its old password (`jane>bob`), which lasts until 30 idle minutes. Matching the session's impersonator too would close it. (The final review)
 - Device tokens that expire without being revoked keep their sealed refresh token. (The final review)

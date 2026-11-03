@@ -54,6 +54,13 @@ public class GUISignInProvider implements Serializable {
 	 */
 	private boolean adding;
 
+	/**
+	 * True once the administrator confirmed making a new secret key for the
+	 * client secret they typed, as the key file is missing while values are
+	 * sealed with it (ruling R37)
+	 */
+	private boolean newKey;
+
 	public String getId() {
 		return id;
 	}
@@ -180,5 +187,13 @@ public class GUISignInProvider implements Serializable {
 
 	public void setAdding(boolean adding) {
 		this.adding = adding;
+	}
+
+	public boolean isNewKey() {
+		return newKey;
+	}
+
+	public void setNewKey(boolean newKey) {
+		this.newKey = newKey;
 	}
 }

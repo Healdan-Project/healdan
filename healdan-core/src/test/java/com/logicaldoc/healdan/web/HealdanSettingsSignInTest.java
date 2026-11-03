@@ -13,12 +13,15 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.function.ThrowingRunnable;
 import org.springframework.mock.web.MockHttpServletRequest;
@@ -37,12 +40,14 @@ import com.logicaldoc.gui.frontend.client.healdan.beans.GUIGroupMapping;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUILinkedAccount;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUISignInOptions;
 import com.logicaldoc.gui.frontend.client.healdan.beans.GUISignInProvider;
+import com.logicaldoc.gui.frontend.client.healdan.services.SecretKeyMissingException;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.setting.HealdanSettings;
 import com.logicaldoc.healdan.signin.GroupMapping;
 import com.logicaldoc.healdan.signin.IdClaims;
 import com.logicaldoc.healdan.signin.Preset;
 import com.logicaldoc.healdan.signin.ProviderClient;
+import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.signin.SignInAccounts;
 import com.logicaldoc.healdan.signin.SignInAccounts.Allowed;
 import com.logicaldoc.healdan.signin.SignInIdentityDAO;
@@ -318,6 +323,44 @@ public class HealdanSettingsSignInTest extends AbstractHealdanTestCase {
 		assertHolds("no secret", "secret can't be empty", () -> as(boss).saveProvider(added("authentik",
 				Preset.AUTHENTIK), null));
 		assertTrue(SignInProviders.get().find("authentik").isEmpty());
+	}
+
+	/**
+	 * Ruling R37: with the key file missing while values are sealed with it, a
+	 * typed secret is refused, saving nothing, until the admin confirms a new
+	 * key, as the file may be missing only for a while
+	 */
+	@Test
+	public void testANewKeyOnlyWhenTheAdminSaysSo() throws Exception {
+		String property = System.getProperty(SecretBox.KEY_PROPERTY);
+		// Only the build's own key file, never the one in the home folder of whoever runs it
+		Assume.assumeNotNull(property);
+		Path keyFile = Path.of(property.trim());
+		GUISignInProvider saved = as(boss).saveProvider(added("entra", Preset.ENTRA), SECRET);
+		byte[] key = Files.readAllBytes(keyFile);
+		Files.delete(keyFile);
+		try {
+			saved.setLabel("Sign In with Entra");
+			SecretKeyMissingException e = assertThrows(SecretKeyMissingException.class,
+					() -> as(boss).saveProvider(saved, ANOTHER_SECRET));
+			assertEquals(1L, e.getSealed());
+			assertFalse(e.getMessage(), e.getMessage().contains(ANOTHER_SECRET));
+			assertFalse(Files.exists(keyFile));
+			assertEquals("Sign In with Microsoft", SignInProviders.get().find("entra").orElseThrow().label());
+
+			// The tab asks, and the admin makes a new key
+			saved.setNewKey(true);
+			GUISignInProvider again = as(boss).saveProvider(saved, ANOTHER_SECRET);
+
+			assertTrue(again.isHasSecret());
+			assertFalse(again.isNewKey());
+			assertTrue(Files.exists(keyFile));
+			assertEquals(ANOTHER_SECRET, SignInProviders.get().secret("entra"));
+			assertEquals("Sign In with Entra", SignInProviders.get().find("entra").orElseThrow().label());
+		} finally {
+			// The build's key, for the tests after this one
+			Files.write(keyFile, key);
+		}
 	}
 
 	@Test

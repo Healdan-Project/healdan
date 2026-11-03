@@ -142,7 +142,7 @@ ID, Authentik and others. Entra ID's is experimental, as it hasn't been tried ag
 | Id, Preset | as chosen when the provider was added. The preset fills in the rest to suit the provider |
 | Button Label | the button's words on the sign-in page, such as **Sign In with Microsoft** |
 | Issuer | the provider's issuer address, which starts `https://`: `https://login.microsoftonline.com/<tenant id>/v2.0` for Entra ID, or `https://<authentik>/application/o/<slug>/` for Authentik. It must match the address the provider gives for itself exactly, a slash at the end included. While any account is linked it can't change, but for that slash: a link is the provider's id and the person's identity, so a new issuer would hand the links to whoever its identities are. Unlink everyone first |
-| Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored |
+| Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored. If Healdan's secret key file is missing, Save asks before it makes a new key, which leaves every other provider's secret to enter again: see the Install manual's [Backup and Restore](../../install/backup-and-restore/#if-the-key-file-goes-missing) |
 | On | off hides the button and stops the provider's sign-ins. See [Turning a Provider Off](#turning-a-provider-off) |
 | Link by Email | whether a first sign-in links to the account that has the person's email. See [Which Account a Sign-In Is](#which-account-a-sign-in-is) |
 | Redirect Address | the address to register at the provider: Healdan's public address, then `/api/signin/<id>/callback`. The icon beside it copies it |
@@ -280,10 +280,10 @@ Unlinking an account:
 - **keeps the account** and its user id, so it keeps its documents, check-outs, history, My Matters, favourites,
   grants and groups. Its groups are managed in Healdan from then on;
 - **gives it a random temporary password,** which the person changes when they next sign in. Healdan emails it to
-  them when [outgoing email](../system/outgoing-email/) is set up and the account has an email address. Otherwise,
-  or if the mail server doesn't take it, the window shows it once, for you to pass on: nothing shows it again. Unlink
-  Everyone lists each password it couldn't email, beside its username. You can also give an unlinked account a
-  password of your own in the user editor;
+  them when [outgoing email is set up](../system/outgoing-email/#when-email-counts-as-set-up) and the account has an
+  email address. Otherwise, or if the email can't be sent or the mail server doesn't take it within 15 seconds, the
+  window shows it once, for you to pass on: nothing shows it again. Unlink Everyone lists each password it couldn't
+  email, beside its username. You can also give an unlinked account a password of your own in the user editor;
 - **signs out its Healdan Helpers,** and deletes its LogicalDOC API keys;
 - **keeps the link as a record,** marked unlinked, with when and by whom.
 
@@ -336,8 +336,8 @@ with an email address in Healdan: `admin` to begin with. `admin`'s address is Lo
 `admin@admin.net`, until you change it, so give it a real one or name your own username instead. The alert is off to
 begin with.
 
-- **It needs [outgoing email](../system/outgoing-email/).** Until that's set up, the tab says "Needs outgoing email,
-  which isn't set up", nothing is sent, and no message in Healdan takes its place.
+- **It needs [outgoing email](../system/outgoing-email/#when-email-counts-as-set-up).** Until that's set up, the tab
+  says "Needs outgoing email, which isn't set up", nothing is sent, and no message in Healdan takes its place.
 - **With no provider on,** `admin`'s password is an ordinary sign-in, and nothing is sent.
 
 ### Checking Back with the Provider
