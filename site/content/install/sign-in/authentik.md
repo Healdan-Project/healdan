@@ -46,6 +46,13 @@ that asks for `offline_access`, and only if the provider has that mapping. Witho
 a helper's sign-in with, so helpers can't be [checked back](../#checking-back-with-the-provider), and **Check** warns
 about it.
 
+### Keep the Claims in the ID Token
+
+Under the provider's **Advanced protocol settings**, leave **Include claims in id_token** on, as it is to begin
+with. Healdan reads a person's groups, names and email from the ID token, and never asks Authentik's userinfo
+endpoint for them. With the option off, the ID token carries nothing the scope mappings send, so Healdan finds no
+group for anyone and refuses every sign-in.
+
 ### Check the Groups
 
 The default `profile` scope sends the person's groups in `groups`, by name, so leave the profile mapping in the
