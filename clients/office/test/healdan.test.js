@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 // The Office add-in's logic (M3.5 spec §6), run with Node's built-in runner and nothing installed:
 //
 //   node --test 'clients/office/test/*.test.js'

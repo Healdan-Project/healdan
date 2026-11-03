@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 package com.logicaldoc.healdan.web;
 
 import org.slf4j.Logger;

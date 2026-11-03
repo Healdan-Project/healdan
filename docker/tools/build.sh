@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Compiles the container init tool against the WAR's libraries, runs its tests and packages it.
 # Usage: build.sh <WEB-INF/lib dir> <default context.properties> <output jar>
 set -euo pipefail

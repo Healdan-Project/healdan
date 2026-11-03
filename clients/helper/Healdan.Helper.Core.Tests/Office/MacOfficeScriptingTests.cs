@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 using System.Text.RegularExpressions;
 using Healdan.Helper.Core.Office;
 
@@ -573,7 +576,8 @@ internal sealed class FakeOsaRunner : IOsaRunner
 
     public Task<string> RunAsync(string script, IReadOnlyList<string> args, TimeSpan timeout, CancellationToken ct)
     {
-        if (Regex.Match(script, @"^-- (\w+)\.Ask:") is { Success: true } ask)
+        // An Ask script's description line follows its licence header.
+        if (Regex.Match(script, @"^-- (\w+)\.Ask:", RegexOptions.Multiline) is { Success: true } ask)
         {
             Asks.Add(new AskCall(ask.Groups[1].Value, timeout));
             return AskFailure is null ? Task.FromResult(AskAnswer) : Task.FromException<string>(AskFailure);

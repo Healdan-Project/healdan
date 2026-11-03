@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Checks that nothing in the repository links to LogicalDOC's docs (docs, wiki, help or forums.logicaldoc.com).
 # Healdan's docs are https://docs.healdan.com, and an upstream sync can bring LogicalDOC's links back, as it can Font

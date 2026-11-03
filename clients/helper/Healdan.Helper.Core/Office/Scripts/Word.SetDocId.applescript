@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Word.SetDocId: sets the document property Healdan Doc ID, updates the footer fields showing it and, if the
 -- document was saved and its text is the same as before, leaves it saved. Word takes keystrokes between the Apple
 -- events that update the fields, so a document typed in meanwhile is left with unsaved changes, and Word asks about

@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- PowerPoint.SaveAs: saves a presentation under a new path, kept off Open Recent where PowerPoint allows.
 -- Looks for the presentation as locate does, but never takes the front one, which would save another presentation as the copy.
 -- Fingerprints the content just before the save and again after it, finding the presentation by its new name, as

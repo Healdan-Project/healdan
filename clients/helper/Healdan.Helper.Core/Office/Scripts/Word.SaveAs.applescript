@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Word.SaveAs: saves a document under a new path, kept off Open Recent where Word allows.
 -- Looks for the document as locate does, but never takes the front one, which would save another document as the copy.
 -- Fingerprints the content just before the save and again after it, finding the document by its new name, as Rename does.

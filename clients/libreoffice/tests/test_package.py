@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """Checks the healdan.oxt that build.sh makes: it holds what its manifest declares, its XML parses, and its parts agree.
 
 LibreOffice says little when an extension's XML is wrong (a menu is missing, a job never runs), so these catch it here.

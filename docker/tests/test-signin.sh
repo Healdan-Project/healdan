@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Provider sign-in through the stand-in Keycloak in the real Docker image (M4 spec section 16.1): the web page's flow
 # with a cookie jar, linking by email, the gate, the helper's flow with a pretend loopback address and its code's
 # exchange, and a person disabled at the provider losing their device token at its next re-check.

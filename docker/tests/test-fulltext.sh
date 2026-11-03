@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Full-text check for Office and email files (M1 spec §9). Uploads a .docx and an .eml, each holding a nonsense
 # token, asks the server to index them and searches for the tokens. CE doesn't extract text from these formats, so
 # on a stack without Healdan's parsers both checks FAIL; they pass once the Healdan parsers are in.

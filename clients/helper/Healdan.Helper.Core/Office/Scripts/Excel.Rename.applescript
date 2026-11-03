@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Excel.Rename: saves the workbook under a new name, only if it has no unsaved changes, kept off the recently used list.
 -- Answers missing, unsaved, renamed, renamed-changed (its content changed meanwhile) or renamed-but-lost.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,

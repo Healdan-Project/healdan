@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Session;
 
 /// <summary>What became of the sign-in kept in the keychain at a start (<see cref="SignIn.TryResumeAsync"/>).</summary>

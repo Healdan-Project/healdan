@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """
 Writes clients/helper/Healdan.Helper/Windows/HelperIcons.axaml from the Tabler SVGs in tabler/ (polish spec 4.4):
 each icon's 24-unit outline drawing, its paths joined, without Tabler's invisible box.

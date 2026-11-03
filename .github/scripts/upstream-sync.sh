@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Merges upstream LogicalDOC Community into a pull request against this fork's
 # master. Run by .github/workflows/upstream-sync.yml, which documents the token.

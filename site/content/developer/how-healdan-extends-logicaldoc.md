@@ -69,6 +69,17 @@ learn from.
 - **`HealdanHooks`** in `logicaldoc-core` lets the few places in LogicalDOC that write without telling its
   listeners ask Healdan first. Every refusal throws `HealdanVetoException`, which the document and folder DAOs roll
   back on.
+- **Licence headers.** Every source file Healdan writes opens with two SPDX lines in its own comment syntax, with
+  the year the file was created:
+
+  ```java
+  // SPDX-FileCopyrightText: 2026 The Healdan Project
+  // SPDX-License-Identifier: LGPL-3.0-only
+  ```
+
+  They go below a shebang, the `Dockerfile`'s `# syntax=` line and an HTML page's doctype. LogicalDOC's files never
+  get them, and nor do Healdan's files copied from LogicalDOC or Hextra, or its Flyway migrations: a new line
+  changes a script's checksum, and an existing database then refuses to start.
 - **Upstream edits** are kept small, and each milestone's design spec lists every upstream file it edits, with the
   reason. Signing in through a provider edits three of LogicalDOC's files, one in its user code and two in its GUI:
   - `UserSource` has a fourth value, `OIDC`, for an account linked to a sign-in provider. It's appended after `SAML`,

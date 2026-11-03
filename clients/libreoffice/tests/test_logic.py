@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """Tests for healdan_logic: the extension's commands, paths, channel client and flows, with no LibreOffice."""
 
 import contextlib

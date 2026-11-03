@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 // The ribbon's six buttons (clients/office/web/commands.js), run with Node's built-in runner:
 //
 //   node --test 'clients/office/test/*.test.js'

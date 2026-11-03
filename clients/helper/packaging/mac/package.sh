@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Builds Healdan Helper for Apple silicon (spec §5.12): Healdan Helper.app, carrying the LibreOffice extension, signed
 # and, when the notary's key is given, notarised, in Healdan-Helper-<version>.dmg.
 #

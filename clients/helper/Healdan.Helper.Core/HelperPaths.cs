@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core;
 
 /// <summary>Where the helper keeps its files (plan: "The helper's files"). Tests pass a <c>root</c> so they never touch the real folders.</summary>

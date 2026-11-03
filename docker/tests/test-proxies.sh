@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Which forwarded addresses Tomcat believes (server.xml's RemoteIpValve, fed by DockerInit's TrustedProxies). With
 # LOGICALDOC_TRUSTED_PROXIES unset, only the Docker networks the app is on are trusted: the Docker host's own
 # requests, which arrive from the network's gateway, but not a private address in the chain or a request from inside

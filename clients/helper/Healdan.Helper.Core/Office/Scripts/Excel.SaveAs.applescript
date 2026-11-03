@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Excel.SaveAs: saves a workbook under a new path, kept off Open Recent where Excel allows.
 -- Looks for the workbook as locate does, but never takes the front one, which would save another workbook as the copy.
 -- Fingerprints the content just before the save and again after it, finding the workbook by its new name, as Rename does.

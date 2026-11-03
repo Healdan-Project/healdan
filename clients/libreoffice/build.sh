@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Builds the LibreOffice extension, healdan.oxt: the files in healdan/, with healdan_logic.py in pythonpath/, where
 # LibreOffice's Python loader finds it beside healdan.py.
 #

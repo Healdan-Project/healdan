@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """Runs code-changed.sh on a throwaway git repository and checks what it tells the CI workflows."""
 
 import os

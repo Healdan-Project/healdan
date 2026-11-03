@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 /*
  * Healdan's Microsoft Office add-in: the pane (M3.5 spec section 6).
  *

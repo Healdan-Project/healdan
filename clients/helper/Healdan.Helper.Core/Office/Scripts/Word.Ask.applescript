@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Word.Ask: whether Word answers the helper. No arguments. Run once before Word's first script since the helper
 -- started, as macOS may first ask the user whether Healdan Helper may control Word (Automation), and every other
 -- script but those that wait for Grant File Access gives up after 20 seconds while it asks.

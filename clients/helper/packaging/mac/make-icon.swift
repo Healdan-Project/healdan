@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 // Draws Healdan Helper's app icon: Healdan's mark (the docs site's favicon.svg) on macOS's rounded square, at each
 // size an .iconset holds. package.sh runs it, and iconutil turns the .iconset into the bundle's AppIcon.icns.
 //

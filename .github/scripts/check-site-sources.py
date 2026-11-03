@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Checks the docs site's Markdown sources for mistakes that build without an
 # error but publish something wrong. Run by .github/workflows/docs-site.yml.
