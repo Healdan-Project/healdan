@@ -82,7 +82,7 @@ Choose where it goes, change what you need to, and save. Then:
 Choose **Healdan › Properties…**, or **Properties** on the Healdan toolbar (the Healdan tab, in Word, Excel and
 PowerPoint), to see or change the document's properties without leaving the app. They're the properties of the Ext. Properties tab in the web page.
 
-![The Properties window for #32: a header with the document's icon, Subscription Agreement – Draft.docx, and #32 · v2.0, then Client / Matter 1003.1 – Series A Investment from the matter, with the client Kestrel Software Ltd under it, Author Helen Ashcombe, Typist Chris Doyle, Class Agreements, Subclass Draft, Comments and Legacy doc #, with Cancel and Save](properties.png)
+![The Properties window for #32: a header with the document's icon, Subscription Agreement – Draft.docx, and #32 · v2.0 · 12.6 KB, then Client / Matter 1003.1 – Series A Investment from the matter, with the client Kestrel Software Ltd under it, Author Helen Ashcombe, Typist Chris Doyle, Class Agreements, Subclass Draft, Comments and Legacy doc #, with Cancel and Save](properties.png)
 
 - **The header** gives the document's doc #, version and size, as in `#32 · v2.0 · 48.2 KB`.
 - **Client / Matter,** marked "from the matter", shows the matter, with its client's name under it. It can't be
