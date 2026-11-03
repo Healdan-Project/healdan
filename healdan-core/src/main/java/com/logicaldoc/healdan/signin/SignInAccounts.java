@@ -709,12 +709,16 @@ public class SignInAccounts {
 	 * {@code family_name}, and for whichever is missing, {@code name} split at
 	 * its last space (the words before it are the first name, the word after
 	 * it the last name; one word is the first name, with an empty last name).
-	 * Null for a part they don't carry.
+	 * A {@code given_name} that's the whole {@code name}, with no
+	 * {@code family_name}, counts as missing: Authentik's default mapping sends
+	 * the full name as the given name. Null for a part they don't carry.
 	 */
 	static Names names(IdClaims claims) {
 		String first = text(claims.givenName());
 		String last = text(claims.familyName());
 		String full = text(claims.name());
+		if (last == null && first != null && first.equals(full))
+			first = null;
 		if (full != null && (first == null || last == null)) {
 			int space = full.lastIndexOf(' ');
 			if (first == null)

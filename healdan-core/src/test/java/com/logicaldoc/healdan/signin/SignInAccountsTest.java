@@ -479,6 +479,29 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testGivenNameThatIsTheWholeNameIsSplit() throws Exception {
+		// Authentik's default mapping sends the full name as given_name, with no family_name
+		User user = allowed(accounts().decide(authentik,
+				named("sub-6", "jane.doe", "jane@firm.example", "Jane Doe", null, "Jane Doe", "g-lit")), true, true);
+		User stored = UserDAO.get().findById(user.getId(), true);
+		assertEquals("Jane", stored.getFirstName());
+		assertEquals("Doe", stored.getName());
+
+		// An account named the old way is put right at its next sign-in
+		stored.setFirstName("Jane Doe");
+		UserDAO.get().store(stored);
+		allowed(accounts().decide(authentik,
+				named("sub-6", "jane.doe", "jane@firm.example", "Jane Doe", null, "Jane Doe", "g-lit")), false, false);
+		assertEquals("Jane", UserDAO.get().findById(user.getId(), true).getFirstName());
+
+		// With a family name, the given name is kept whole
+		User both = allowed(accounts().decide(authentik,
+				named("sub-7", "mary", "mary@firm.example", "Mary Ann", "Smith", "Mary Ann", "g-lit")), true, true);
+		assertEquals("Mary Ann", UserDAO.get().findById(both.getId(), true).getFirstName());
+		assertEquals("Smith", UserDAO.get().findById(both.getId(), true).getName());
+	}
+
+	@Test
 	public void testNewAccountTakesTheServersDefaultLanguage() throws Exception {
 		// What the setup wizard's default language leaves: every account it found, _system included, has it
 		jdbc().update("update ld_user set ld_language = 'it' where ld_id = ?", User.USERID_SYSTEM);

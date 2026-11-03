@@ -62,7 +62,8 @@ The **Other** preset fills in the claims below, and you can change them under **
 | Groups | `groups` | the person's groups, as a list of text values, or a single value. Each is compared, capitals and all, with the **Provider Group** column of the group map |
 
 Healdan also reads `given_name` and `family_name` for a new account's first and last name, and `name` where they're
-missing. The names and email follow the provider at each sign-in.
+missing, split at its last space. A `given_name` that's the whole `name`, with no `family_name`, counts as missing,
+as some providers send the full name that way. The names and email follow the provider at each sign-in.
 
 **Link by email is off in the preset,** because it makes Healdan trust the email claim to name an account. Healdan
 doesn't read `email_verified`. Turn **Link by Email** on only where administrators set people's emails, or the
