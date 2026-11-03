@@ -108,9 +108,15 @@ The preset fills in these, which you can leave as they are:
 | Link by Email | off | people may be able to change their own email: see above |
 
 Leave the provider's subject setting at its default. If it's changed to something that can change, such as the
-username or email, a person's `sub` changes, and Healdan takes their next sign-in for a new person. Healdan reads
-`given_name` and `family_name` for the names, and `name` where they're missing. They follow Authentik at each
-sign-in, and so does the email.
+username or email, a person's `sub` changes, and Healdan takes their next sign-in for a new person.
+
+Healdan reads `given_name` and `family_name` for the names, and `name` where they're missing. Authentik keeps one
+name for each person, and by default sends all of it as `given_name`, with no `family_name`. Healdan takes a
+`given_name` like that for a missing one, and splits `name` at its last space: Jane Doe gets the first name Jane
+and the last name Doe. A last name of more than one word, such as de la Cruz, splits in the wrong place. From
+Authentik 2026.8, the default mapping sends a person's own `given_name` and `family_name` attributes where they have
+them, so add both to that person's attributes in Authentik. The names follow Authentik at each sign-in, and so does
+the email, so put a name right in Authentik, not in Healdan, which changes it back at the next sign-in.
 
 Leave the provider's **Issuer mode** at its default, where each provider has its own issuer, based on the
 application's slug. Healdan fetches the discovery document at the issuer followed by

@@ -43,6 +43,7 @@ import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.signin.SignInAccounts.Allowed;
 import com.logicaldoc.healdan.signin.SignInAccounts.Decision;
+import com.logicaldoc.healdan.signin.SignInAccounts.Names;
 import com.logicaldoc.healdan.signin.SignInAccounts.Refused;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
@@ -476,6 +477,62 @@ public class SignInAccountsTest extends AbstractHealdanTestCase {
 		assertEquals("Cher", UserDAO.get().findById(one.getId()).getFirstName());
 		assertEquals("", UserDAO.get().findById(one.getId()).getName());
 		assertEquals("", UserDAO.get().findById(one.getId()).getEmail());
+	}
+
+	@Test
+	public void testGivenNameThatIsTheWholeNameIsSplit() throws Exception {
+		// Authentik's default mapping sends the full name as given_name, with no family_name
+		IdClaims janeDoe = named("sub-6", "jane.doe", "jane@firm.example", "Jane Doe", null, "Jane Doe", "g-lit");
+		User user = allowed(accounts().decide(authentik, janeDoe), true, true);
+		User stored = UserDAO.get().findById(user.getId(), true);
+		assertEquals("Jane", stored.getFirstName());
+		assertEquals("Doe", stored.getName());
+
+		// An account named the old way is put right at its next sign-in
+		stored.setFirstName("Jane Doe");
+		UserDAO.get().store(stored);
+		allowed(accounts().decide(authentik, janeDoe), false, false);
+		stored = UserDAO.get().findById(user.getId(), true);
+		assertEquals("Jane", stored.getFirstName());
+		assertEquals("Doe", stored.getName());
+
+		// And at a helper's re-check
+		stored.setFirstName("Jane Doe");
+		UserDAO.get().store(stored);
+		assertTrue(accounts().refresh(stored, authentik, janeDoe));
+		stored = UserDAO.get().findById(user.getId(), true);
+		assertEquals("Jane", stored.getFirstName());
+		assertEquals("Doe", stored.getName());
+
+		// With a family name the name doesn't end with, the given name is kept whole
+		User both = allowed(accounts().decide(authentik,
+				named("sub-7", "mary", "mary@firm.example", "Mary Ann", "Smith", "Mary Ann", "g-lit")), true, true);
+		assertEquals("Mary Ann", UserDAO.get().findById(both.getId(), true).getFirstName());
+		assertEquals("Smith", UserDAO.get().findById(both.getId(), true).getName());
+	}
+
+	@Test
+	public void testMissingPartOfTheNameIsTheRestOfTheName() {
+		// A given name the name starts with: the last name is all that follows it
+		assertEquals(new Names("Jane", "de la Cruz"), namesOf("Jane", null, "Jane de la Cruz"));
+		// A family name the name ends with: the first name is all before it
+		assertEquals(new Names("Mary Ann", "de la Cruz"), namesOf(null, "de la Cruz", "Mary Ann de la Cruz"));
+		// The whole name as the given name, and a family name it ends with
+		assertEquals(new Names("Jane", "de la Cruz"), namesOf("Jane de la Cruz", "de la Cruz", "Jane de la Cruz"));
+		// The whole name as the given name, and a family name it doesn't end with
+		assertEquals(new Names("Mary Ann", "Smith"), namesOf("Mary Ann", "Smith", "Mary Ann"));
+		// A given name the name doesn't start with: the last word
+		assertEquals(new Names("Annie", "Jones"), namesOf("Annie", null, "Ann Jones"));
+		// Neither, or the whole name as the given name: the name split at its last space
+		assertEquals(new Names("Jane de la", "Cruz"), namesOf(null, null, "Jane de la Cruz"));
+		assertEquals(new Names("Jane de la", "Cruz"), namesOf("Jane de la Cruz", null, "Jane de la Cruz"));
+		assertEquals(new Names("Cher", ""), namesOf("Cher", null, "Cher"));
+		// No name: only what the claims carry
+		assertEquals(new Names("Jane", null), namesOf("Jane", null, null));
+	}
+
+	private static Names namesOf(String given, String family, String name) {
+		return SignInAccounts.names(named("sub-1", "jane", null, given, family, name));
 	}
 
 	@Test

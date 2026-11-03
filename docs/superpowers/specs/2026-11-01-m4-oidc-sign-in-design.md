@@ -242,7 +242,7 @@ The browser moves from Healdan's HTTPS page to `http://127.0.0.1` as a top-level
 4. **Otherwise, a new account.**
    - Its username is the username claim's value: the UPN in Entra's preset.
    - It's refused (`username-taken`) if that username exists, is `admin`, contains `>` (CE's impersonation separator) or is something CE can't store.
-   - First name, last name and email come from `given_name`, `family_name` and `email`, falling back to `name` for the names. The language is the server's default, and the account is an ordinary one, not read-only. (changed in the build: CE has no default language (§3.1), so a new account takes `_system`'s, which the setup wizard set, else `en`.)
+   - First name, last name and email come from `given_name`, `family_name` and `email`, falling back to `name` for the names. (changed after the build: a missing name is the rest of `name` once the other is taken off its start or end, else `name` split at its last space. A `given_name` that's the whole `name` counts as missing, as Authentik's default mapping sends the full name as `given_name`, unless a `family_name` comes that `name` doesn't end with.) The language is the server's default, and the account is an ordinary one, not read-only. (changed in the build: CE has no default language (§3.1), so a new account takes `_system`'s, which the setup wizard set, else `en`.)
    - (changed in the build) "Taken" counts every account's username, deleted accounts' included, ignoring case.
 
 An admin who wants someone's account ready before their first sign-in makes it by hand, with a password and the person's email, and the first sign-in links it by email (§7.3).
