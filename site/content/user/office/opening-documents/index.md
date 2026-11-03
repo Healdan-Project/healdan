@@ -86,6 +86,14 @@ files in them, and in LibreOffice when it doesn't.
 - **From inside the app,** choose **Open from Healdan** on the **Healdan** tab. It shows the same window as above,
   where you can search for `#1234`. **Word's own Open** and **File › Open** stay Office's own, and show files on your
   Mac.
+- **With no document open,** Word, Excel and PowerPoint show no ribbon, so there's no Healdan tab to press. Open a
+  Healdan document another way:
+  - **Open from Healdan…** in the helper's menu, under Healdan's icon in the menu bar (see
+    [The Helper's Menu](../installing-the-helper/#the-helpers-menu)). It shows the same window, and opens the document
+    in the app you chose for its kind of file, as Open in App does.
+  - **Open in App** on the web page: see [From the Web Page](#from-the-web-page-open-in-app).
+  - **A new blank document,** then **Open from Healdan** on its Healdan tab. The blank document stays open, so close it
+    afterwards.
 - **OpenDocument files** (`.odt`, `.ods`, `.odp` and `.odg` drawings) open in LibreOffice, whatever you've chosen,
   while it's installed. Office turns the Healdan tab off in a window holding one.
 - **The first time** the helper opens a copy in an app, macOS asks whether Healdan Helper may control it, and the

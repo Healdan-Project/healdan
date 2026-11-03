@@ -50,6 +50,10 @@ weight: 11
 - **Office's own Save, Save As and Open aren't taken over.** LibreOffice's are, but Word, Excel and PowerPoint keep
   theirs, and Healdan's buttons are on the Healdan tab. **⌘S** on a document that isn't in Healdan yet saves it on the
   Mac, as before; use Save to Healdan to file it.
+- **No Healdan tab while no document is open.** Word, Excel and PowerPoint show no ribbon then, so the tab's Open from
+  Healdan can't be pressed. Use **Open from Healdan…** in the helper's menu, **Open in App** on the web page, or a new
+  blank document: see
+  [Opening in Word, Excel and PowerPoint](../../user/office/opening-documents/#opening-in-word-excel-and-powerpoint).
 - **Word for the web isn't supported.** The Healdan tab's buttons need the helper on the Mac, which a web browser
   can't reach, so they say they work in the desktop apps only.
 - **The Healdan tab needs Healdan.** Office loads the tab's buttons from the Healdan server, so while it can't be
