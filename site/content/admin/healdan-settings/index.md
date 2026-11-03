@@ -123,7 +123,7 @@ ID, Authentik and others. Entra ID's is experimental, as it hasn't been tried ag
 | Part | What it does |
 |---|---|
 | Providers | each provider, with its label, id and preset, whether it's on, and how many accounts are linked to it, in the order of their buttons on the sign-in page |
-| Add | asks for the new provider's **Id** and **Preset**, then opens its window. The id is lower-case letters, digits and hyphens, at most 32, such as `entra`. It's part of the redirect address, so it can't change |
+| Add | asks for the new provider's **Id** and **Preset**, then opens its window. The id is lower-case letters, digits and hyphens, at most 32, such as `entra`, and not `done`, `password` or `recheck`, which are Healdan's own. It's part of the redirect address, so it can't change |
 | Edit | opens the selected provider's window. So does double-clicking it |
 | Remove | removes the selected provider, once no account is linked to it. See [Taking a Provider Away](#taking-a-provider-away) |
 | Move Up, Move Down | move the selected provider's button up or down the sign-in page |
@@ -142,13 +142,14 @@ ID, Authentik and others. Entra ID's is experimental, as it hasn't been tried ag
 | Id, Preset | as chosen when the provider was added. The preset fills in the rest to suit the provider |
 | Button Label | the button's words on the sign-in page, such as **Sign In with Microsoft** |
 | Issuer | the provider's issuer address, which starts `https://`: `https://login.microsoftonline.com/<tenant id>/v2.0` for Entra ID, or `https://<authentik>/application/o/<slug>/` for Authentik. It must match the address the provider gives for itself exactly, a slash at the end included. While any account is linked it can't change, but for that slash: a link is the provider's id and the person's identity, so a new issuer would hand the links to whoever its identities are. Unlink everyone first |
-| Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored. If Healdan's secret key file is missing, Save asks before it makes a new key, which leaves every other provider's secret to enter again: see the Install manual's [Backup and Restore](../../install/backup-and-restore/#if-the-key-file-goes-missing) |
+| Client ID, Client Secret | from Healdan's registration at the provider. The secret is never shown again: its field is empty, with **Set** or **Not Set** beside it. Type a new one to replace it, or leave it empty to keep the one stored. A secret has at most 1000 characters, fewer in a script that takes more than one byte a character. If Healdan's secret key file is missing, Save asks before it makes a new key, which leaves every other provider's secret to enter again: see the Install manual's [Backup and Restore](../../install/backup-and-restore/#if-the-key-file-goes-missing) |
 | On | off hides the button and stops the provider's sign-ins. See [Turning a Provider Off](#turning-a-provider-off) |
 | Link by Email | whether a first sign-in links to the account that has the person's email. See [Which Account a Sign-In Is](#which-account-a-sign-in-is) |
 | Redirect Address | the address to register at the provider: Healdan's public address, then `/api/signin/<id>/callback`. The icon beside it copies it |
 | Claims | folded away, and filled in by the preset. **Identity Claim** names the person, and never changes at the provider; it can't change here while any account is linked. It can't be one people can change at some providers, which would let one person take over another's account: `email`, `preferred_username`, `upn`, `unique_name`, `name` or `nickname`. Use `sub` or `oid`. **Username Claim**, **Email Claim** and **Groups Claim** name where the provider puts a new account's username, the person's email and their groups |
 
-Click **Save** in the window, which then opens again as saved. The presets fill in:
+Click **Save** in the window, which then opens again as saved. The provider and its group map are saved together:
+if either can't be, neither is, and a new provider isn't added. The presets fill in:
 
 | | Entra ID | Authentik | Other |
 |---|---|---|---|

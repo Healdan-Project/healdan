@@ -60,7 +60,8 @@ account has none.
 ### Choose an Id
 
 Each provider has an id of 1 to 32 lower-case letters, digits and hyphens, such as `entra` or `authentik`. It's part
-of the redirect address, so it can't change once the provider is added.
+of the redirect address, so it can't change once the provider is added. `done`, `password` and `recheck` are Healdan's
+own, and can't be a provider's.
 
 ### Register Healdan at the Provider
 
