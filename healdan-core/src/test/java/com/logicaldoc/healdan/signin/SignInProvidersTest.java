@@ -530,6 +530,54 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertEquals(1, providers().enabled().size());
 	}
 
+	/*
+	 * Listing the providers, as the public GET /server does, opens each client
+	 * secret once while neither it nor the key file changes, not on every
+	 * call; a key file that goes, comes back or changes is still noticed at
+	 * once
+	 */
+	@Test
+	public void testListingOpensEachSecretOnce() throws Exception {
+		Path keyFile = folder.getRoot().toPath().resolve("listing.key");
+		int[] opened = { 0 };
+		SecretBox box = new SecretBox(keyFile, () -> 0L) {
+			@Override
+			public String open(String sealed) {
+				opened[0]++;
+				return super.open(sealed);
+			}
+		};
+		SignInProviders listing = new SignInProviders(settings(), box, SignInIdentityDAO.get(), SignInGroupDAO.get());
+		listing.save(entra(), SECRET_ONE);
+		listing.save(configured("authentik", Preset.AUTHENTIK, AUTHENTIK_ISSUER, "c2"), SECRET_TWO);
+		opened[0] = 0;
+
+		for (int i = 0; i < 10; i++)
+			assertEquals(2, listing.enabled().size());
+		assertEquals(2, opened[0]);
+
+		// A new secret is opened again, once
+		listing.save(entra(), SECRET_TWO);
+		assertEquals(2, listing.enabled().size());
+		assertEquals(2, listing.enabled().size());
+		assertEquals(3, opened[0]);
+		// and the provider client still gets it
+		assertEquals(SECRET_TWO, listing.secret("entra"));
+
+		// The key file gone: both off at once; restored, both on again
+		byte[] key = Files.readAllBytes(keyFile);
+		Files.delete(keyFile);
+		assertEquals(List.of(), listing.enabled());
+		Files.write(keyFile, key);
+		assertEquals(2, listing.enabled().size());
+
+		// Another key in its place: both off
+		Files.delete(keyFile);
+		new SecretBox(keyFile, () -> 0L).seal("makes another key");
+		assertEquals(List.of(), listing.enabled());
+		assertFalse(listing.find("entra").orElseThrow().hasSecret());
+	}
+
 	@Test
 	public void testNoKeyIsMadeOverStoredSecrets() throws Exception {
 		LongSupplier sealed = SecretBox.sealedIn(Context.get(DataSource.class));

@@ -671,8 +671,9 @@ public class SignInProviders {
 
 	private SignInProvider read(String id) {
 		Preset preset = Preset.of(settings.get(key(id, PRESET)));
+		// Whether the secret opens, not the secret: listing providers, as the public GET /server does, opens none
 		return new SignInProvider(id, preset, setting(id, LABEL, preset.label()), flag(id, ENABLED, true),
-				optional(id, ISSUER), optional(id, CLIENT_ID), secret(id) != null,
+				optional(id, ISSUER), optional(id, CLIENT_ID), box.opens(settings.get(key(id, CLIENT_SECRET))),
 				setting(id, IDENTITY_CLAIM, preset.identityClaim()), setting(id, USERNAME_CLAIM, preset.usernameClaim()),
 				setting(id, EMAIL_CLAIM, preset.emailClaim()), setting(id, GROUPS_CLAIM, preset.groupsClaim()),
 				flag(id, LINK_BY_EMAIL, preset.linkByEmail()));
