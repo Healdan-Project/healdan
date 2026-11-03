@@ -16,11 +16,16 @@ menu, are Healdan's version and the installation ID; give both when you report a
 | Plugins | the parts Healdan is built from, with their versions |
 | Run level | which of LogicalDOC's features run, such as saving history and running tasks. Leave it on **Default** |
 | Log | the server's log, `dms.log`, with **Download the logs** |
-| Environment | the settings the server runs with, the container's environment among them |
+| Environment | the settings the server runs with, the container's environment among them, with secrets masked |
+
+The **Environment** tab shows `********` in place of anything that looks secret: a variable or setting whose name
+has *password*, *secret*, *token*, *credential*, *API key* or *access key* in it, such as `DB_PASSWORD`, a `-D`
+option named that way inside another value, such as `CATALINA_OPTS`, and the password in an address, such as a
+proxy's. An empty value still shows as empty, so you can see whether it's set.
 
 {{< callout type="warning" >}}
-The **Environment** tab shows the database password from your `.env` file, in plain text. Don't share a screenshot
-of it.
+A secret under some other name still shows in plain text. Check a screenshot of the **Environment** tab before you
+share it.
 {{< /callout >}}
 
 ## Signing Someone Out
