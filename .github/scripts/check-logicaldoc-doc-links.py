@@ -6,8 +6,8 @@
 #
 # Checks every file git tracks, except:
 #   - docs/, whose specs and plans discuss these links;
-#   - site/content/, which check-site-sources.py checks (links only inside the interim shortcode), and the vendored
-#     theme in site/_vendor/. The rest of site/ is checked here;
+#   - site/content/, which check-site-sources.py checks, and the vendored theme in site/_vendor/. The rest of site/
+#     is checked here;
 #   - .github/scripts/tests/, whose tests hold example links;
 #   - upstream's release history, two test fixtures, and check-logicaldoc-hosts.py, whose allow-list quotes the
 #     lines below (SKIPPED_FILES);

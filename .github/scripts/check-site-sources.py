@@ -9,9 +9,8 @@
 #   - a heading that ends in "#" ends in "\#". Markdown reads a trailing # as
 #     closing the heading, so `## Legacy Doc #` publishes as "Legacy Doc".
 #     Headings inside fenced code blocks aren't checked;
-#   - links to LogicalDOC's docs (docs, wiki, help or forums.logicaldoc.com)
-#     appear only in the `interim` shortcode, which marks a page Healdan hasn't
-#     written yet.
+#   - nothing links to LogicalDOC's docs (docs, wiki, help or forums.logicaldoc.com):
+#     every page is Healdan's own.
 #
 # Usage: check-site-sources.py [site dir]
 # Exit status: 0 when nothing is wrong, 1 otherwise.
@@ -20,9 +19,8 @@ import pathlib
 import re
 import sys
 
-LOGICALDOC_DOCS = re.compile(r"https?://(docs|wiki|help|forums)\.logicaldoc\.com")
-# The shortcode, or its escaped form {{</* interim … */>}}, which a page about writing docs shows as an example
-INTERIM = re.compile(r"\{\{<(/\*)?\s*interim\s")
+# The scheme is optional: a scheme-relative link (//docs.logicaldoc.com/…) works as well
+LOGICALDOC_DOCS = re.compile(r"(https?:)?//(docs|wiki|help|forums)\.logicaldoc\.com")
 FRONT_MATTER_VALUE = re.compile(r"^\s*[A-Za-z_][\w-]*:\s+(?P<value>\S.*)$")
 HEADING = re.compile(r"^#{1,6}\s")
 FENCE = re.compile(r"^\s*(```|~~~)")
@@ -47,8 +45,8 @@ def check_file(path, relative):
         elif not in_fence and HEADING.match(line) and line.rstrip().endswith("#") \
                 and not line.rstrip().endswith("\\#"):
             problems.append(f"{where}: Markdown drops a heading's closing '#'. End it with '\\#'")
-        if LOGICALDOC_DOCS.search(line) and not INTERIM.search(line):
-            problems.append(f"{where}: links to LogicalDOC's docs. Use the interim shortcode, or link to Healdan's own page")
+        if LOGICALDOC_DOCS.search(line):
+            problems.append(f"{where}: links to LogicalDOC's docs. Link to Healdan's own page instead")
     return problems
 
 

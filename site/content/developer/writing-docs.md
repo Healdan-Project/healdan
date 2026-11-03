@@ -50,7 +50,8 @@ force-reload the page or restart the server.
   word, it says so.
 - **Describe Healdan as it is on `master`,** and only what Healdan does. Nothing about features that aren't built,
   and nothing about LogicalDOC Enterprise.
-- **Write every page fresh.** Don't copy text or screenshots from LogicalDOC's docs.
+- **Write every page fresh.** Don't copy text or screenshots from LogicalDOC's docs, and don't link to them:
+  `.github/scripts/check-site-sources.py` fails on a link to docs, wiki, help or forums.logicaldoc.com.
 
 ### The `#` Traps
 
@@ -68,18 +69,6 @@ The doc # puts `#` in a lot of titles and headings, and two tools drop it withou
 Hextra's shortcodes cover most needs: `callout` (with `type="info"` or `type="warning"`), `steps`, `tabs` and
 `tab`, and `cards` and `card`. Give each tab its name with `{{</* tab name="Caddy" */>}}`. The older
 `{{</* tabs items="…" */>}}` fails the strict build.
-
-## Pages Not Written Yet
-
-A page that isn't written yet holds one shortcode, which links to LogicalDOC's nearest page in the meantime:
-
-```text
-{{</* interim href="https://docs.logicaldoc.com/en/working-with-documents/versioning" title="Versioning" */>}}
-```
-
-It's the only place `site/content/` may link to LogicalDOC's docs. To write the page, replace the shortcode with
-the page, keeping the file where it is so its address doesn't change. `grep -rl 'interim href' site/content` lists
-what's left.
 
 ## Screenshots
 

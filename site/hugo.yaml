@@ -11,7 +11,7 @@ module:
 markup:
   goldmark:
     renderer:
-      # The landing page and the interim shortcode write HTML
+      # The landing page writes HTML
       unsafe: true
   highlight:
     noClasses: false
