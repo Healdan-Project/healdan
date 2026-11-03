@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Copies;
 
 /// <summary>One server's copies set aside beside <c>Copies</c> (spec §5.4).</summary>

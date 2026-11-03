@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """The Healdan extension for LibreOffice (spec 6): Open, Save and Save As go through Healdan Helper.
 
 A thin layer over healdan_logic, which decides everything that doesn't need UNO and is tested on its own:

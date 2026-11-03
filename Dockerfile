@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
 
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Healdan (LogicalDOC Community fork): build from source, run on Tomcat 11.
 # See docker/README.md for usage and docs/superpowers/specs/2026-10-15-docker-compose-stack-design.md for the design.
 

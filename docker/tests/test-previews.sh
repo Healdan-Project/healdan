@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Office preview checks (M1.5 spec §11.1). Uploads Word, Excel, PowerPoint and OpenDocument files, a Draw drawing
 # among them, into a matter folder, each holding a nonsense token, and checks that:
 # - the background worker converts them ahead of time, before anyone asks for a preview;

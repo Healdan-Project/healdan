@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Word.Rename: saves the document under a new name, only if it has no unsaved changes, kept off Open Recent.
 -- Answers missing, unsaved, renamed, renamed-changed (its content changed meanwhile) or renamed-but-lost.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,

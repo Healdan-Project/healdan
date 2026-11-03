@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """Checks test-shards.py's plan on a throwaway reactor, and the times it reads from Surefire reports."""
 
 import contextlib

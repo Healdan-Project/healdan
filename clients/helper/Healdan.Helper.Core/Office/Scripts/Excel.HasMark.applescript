@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Excel.HasMark: does an open workbook carry the add-in's mark (the custom document property HealdanMark)?
 -- Answers yes or no.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,

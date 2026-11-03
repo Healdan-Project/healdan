@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Checks that nothing Healdan builds or runs names one of LogicalDOC's servers. Healdan never contacts LogicalDOC: CE
 # posted usage statistics to stat.logicaldoc.com and tested the proxy against activation.logicaldoc.com, and an

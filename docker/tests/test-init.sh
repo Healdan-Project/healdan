@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Integration test for DockerInit against a throwaway MariaDB: validation, waiting for a late database,
 # schema creation, idempotent re-runs, config-loss warning and credential errors (spec §6, §9).
 set -euo pipefail

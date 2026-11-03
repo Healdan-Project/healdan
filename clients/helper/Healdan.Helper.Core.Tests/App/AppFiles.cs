@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Tests.App;
 
 /// <summary>Where the app's own files are, for the tests that read them: the repository's root and the app's project.</summary>

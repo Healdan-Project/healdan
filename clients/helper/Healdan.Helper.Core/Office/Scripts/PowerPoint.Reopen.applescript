@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- PowerPoint.Reopen: closes a saved presentation and opens it again from its file, so that PowerPoint saves it in
 -- place afterwards. Answers reopened, unsaved (left open: closing it would lose changes) or missing. It may meet
 -- Grant File Access, which waits for the user.

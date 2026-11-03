@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Splits the tests CI's build check runs into shards that run side by side, and records how long each test class took,
 # so the next run can balance the shards. Run by .github/workflows/build-logicaldoc.yml.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Settings;
 
 /// <summary>Spec §5.11's kinds. Each opens in LibreOffice or Microsoft Office (<see cref="AppChooser"/>); other files open read-only in the system's default app.</summary>

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """Builds site/ with Hugo and checks what readers get: the landing page, the nav, the footer and the branding.
 
 Needs hugo on the PATH. Without it the tests skip, unless CI is set, when they fail.

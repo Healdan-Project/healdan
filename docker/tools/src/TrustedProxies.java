@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 import java.io.File;
 import java.io.IOException;
 import java.net.Inet4Address;

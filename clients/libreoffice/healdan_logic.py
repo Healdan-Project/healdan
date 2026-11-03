@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 """What the Healdan extension for LibreOffice decides without UNO (spec 6), so it can be tested anywhere.
 
 healdan.py, inside LibreOffice, is a thin layer over this: it intercepts LibreOffice's commands, and hands each one

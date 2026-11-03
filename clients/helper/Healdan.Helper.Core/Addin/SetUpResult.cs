@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Addin;
 
 /// <summary>How Set Up Microsoft Office's trusting of the certificate ended (<see cref="OfficeSetUp.TrustAsync"/>).</summary>

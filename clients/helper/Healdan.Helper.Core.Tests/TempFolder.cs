@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Tests;
 
 /// <summary>A test's own temporary folder, which the test class makes when it starts and deletes when it's disposed.</summary>

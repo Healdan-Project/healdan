@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Cycle;
 
 /// <summary>The app a copy opens in, as far as the cycle needs it: open a file, and tell whether it's still there.</summary>

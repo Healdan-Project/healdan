@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Forms;
 
 /// <summary>The name a new document is filed under, checked as the API checks it, so Save says why before it's pressed.</summary>

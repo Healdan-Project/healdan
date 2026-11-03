@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- PowerPoint.Fingerprint: a text that summarises the presentation's content, to tell whether an edit landed between two
 -- moments. Looks for the presentation as locate does, ending at the front one. Answers the text (it always starts with #),
 -- or nothing if no presentation was found.

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Image-level checks with plain docker (spec §4, §6, §9): entrypoint guard, prompt stop during init, ownership
 # repair, uid, /setup block, Admin > Restart, settings persistence and config-loss handling.
 set -euo pipefail

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 // The add-in's pane and message window (clients/office/web/taskpane.js and taskpane.html), run with Node's built-in
 // runner and a fake page:
 //

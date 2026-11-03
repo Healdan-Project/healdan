@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 // The Office.js glue (clients/office/web/office-glue.js), run with Node's built-in runner and a fake Office:
 //
 //   node --test 'clients/office/test/*.test.js'

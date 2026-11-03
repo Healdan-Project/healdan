@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Excel.Save: saves the workbook where it is. Answers saved or missing.
 -- Arguments: the finder (1 POSIX path, 2 the same path with /private added or taken off, 3 file name, 4 Copies folder,
 -- 5 the same with /private added or taken off, 6 mark, 7 window name; any may be empty)

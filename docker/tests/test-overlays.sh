@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Checks compose.dev.yaml and compose.proxy.yaml: the rendered config, then a live stack with each.
 set -euo pipefail
 cd "$(dirname "$0")/../.."

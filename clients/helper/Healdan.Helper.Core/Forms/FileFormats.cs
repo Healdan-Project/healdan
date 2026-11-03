@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Forms;
 
 /// <summary>The formats a new document can be saved in (spec §5.6), by the names people know them by.</summary>

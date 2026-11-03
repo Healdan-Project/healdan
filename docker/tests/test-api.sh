@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # The Office add-in's flow against the JSON API in the real Docker image (M2 spec §14.1): sign in, find a matter,
 # file a document, check it out, save twice, read it back, then M3's additions (search within a folder, creating a
 # folder, favorites, doc ID stamping, a second device, save preconditions, the #<n> v<m> lookup), hit the sign-in

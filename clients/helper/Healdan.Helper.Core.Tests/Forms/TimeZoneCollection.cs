@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Tests.Forms;
 
 /// <summary>Tests that change the process's time zone run alone, so no other test sees it.</summary>

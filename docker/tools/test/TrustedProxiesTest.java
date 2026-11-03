@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;

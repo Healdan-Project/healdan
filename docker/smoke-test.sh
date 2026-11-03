@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # End-to-end acceptance test for the compose stack (spec §10). Runs as its own compose project with its own
 # env file and removes everything it created on exit. Usage: docker/smoke-test.sh
 # SMOKE_BUILD=0 LOGICALDOC_IMAGE=<image> docker/smoke-test.sh tests an existing image instead of building one

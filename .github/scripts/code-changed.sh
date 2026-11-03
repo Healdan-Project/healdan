@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Writes two step outputs so the CI workflows can skip their build steps and still report the checks master's ruleset
 # requires.
 #   code=false    when a pull request changes only docs (docs/, the docs site in site/, and Markdown files outside

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
+
 # Container entrypoint: repairs volume ownership, seeds config from the image defaults, runs DockerInit
 # (container-managed config keys, wait for the DB, first-boot schema) and then replaces itself with tini, which
 # runs Tomcat, both as the logicaldoc user.

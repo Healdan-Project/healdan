@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Healdan Project
+-- SPDX-License-Identifier: LGPL-3.0-only
+
 -- Excel.FrontDocument: the front workbook. No arguments.
 -- Answers three names separated by character id 31: its POSIX path (empty if it was never saved), its own
 -- name and its window's name (the same until the workbook is saved). Answers nothing if no workbook is open.

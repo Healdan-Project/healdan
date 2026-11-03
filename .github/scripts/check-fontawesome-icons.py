@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Checks that every Font Awesome icon the GWT client asks for exists in the
 # Font Awesome Free bundle under logicaldoc-gui/war/fontawesome. Upstream

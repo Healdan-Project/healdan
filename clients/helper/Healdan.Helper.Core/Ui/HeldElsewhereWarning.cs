@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
 namespace Healdan.Helper.Core.Ui;
 
 /// <summary>Checked Out on Another Computer's words (spec §5.10), with the owner's warning about edits not yet in Healdan.</summary>

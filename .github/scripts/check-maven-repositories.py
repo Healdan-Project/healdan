@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Checks that no build can get artifacts from LogicalDOC's Maven repositories. Builds get the artifacts only
 # LogicalDOC's repository has from Healdan's copies at https://maven.healdan.com/, through a mirror of the logicaldoc

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 The Healdan Project
+# SPDX-License-Identifier: LGPL-3.0-only
 #
 # Checks that Healdan neither ships nor offers Oracle or SQL Server. Healdan supports only open-source databases
 # (Healdan-Project/healdan#110): the WAR ships neither driver and the setup wizard doesn't offer them, and an upstream
