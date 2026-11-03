@@ -132,8 +132,8 @@ An account that signs in through a provider is a provider account from then on, 
 alone:
 
 - **It has no password,** on any route. Healdan removes it when the account is linked or made, and refuses to store
-  one afterwards, so no password signs it in: not the sign-in page's form, WebDAV, CMIS, or LogicalDOC's SOAP and REST
-  web services. A scanner, a script or a WebDAV mount that signs in with a password needs an account that isn't linked.
+  one afterwards, so no password signs it in: not the sign-in page's form, WebDAV, CMIS, or LogicalDOC's REST web
+  services. A scanner, a script or a WebDAV mount that signs in with a password needs an account that isn't linked.
 - **It can't use LogicalDOC's API keys.** Linking an account deletes the keys it had and closes the sessions they
   opened, and a key made afterwards, under the person icon's **Security → API Keys**, never signs in.
 
