@@ -438,8 +438,9 @@ The answer is `201`, with the email's address as `Location`.
   answer, so the answer is either everything filed or nothing filed.
 - **`409 already-filed`** means the matter already holds this message, by its Message-ID; the problem's `document`
   is the copy. A client that repeats a filing whose answer it lost meets this, naming the copy its first try made,
-  and can take it as done. The same refusal comes from `POST /documents`, the web page and every other way a copy of
-  the message could reach the matter.
+  and can take it as done. A repeat that arrives while the first try is still filing waits for it to end, then meets
+  this, or files the email if the first try was taken back. The same refusal comes from `POST /documents`, the web
+  page and every other way a copy of the message could reach the matter.
 
 ## Doc IDs in Word and LibreOffice Files
 

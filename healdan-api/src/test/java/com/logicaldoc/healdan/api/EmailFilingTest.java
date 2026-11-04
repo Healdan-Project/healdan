@@ -21,6 +21,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -34,8 +40,10 @@ import org.junit.Test;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.HealdanVetoException;
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderEvent;
@@ -57,6 +65,7 @@ import com.logicaldoc.healdan.api.model.NewEmail;
 import com.logicaldoc.healdan.docnumber.DocNumberCounter;
 import com.logicaldoc.healdan.email.MessageParts;
 import com.logicaldoc.healdan.matter.ClientDAO;
+import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.util.config.ContextProperties;
@@ -112,6 +121,8 @@ public class EmailFilingTest extends ApiTestCase {
 
 	private Folder documents;
 
+	private Matter matter;
+
 	@Override
 	protected List<Object> extraBeans() {
 		return List.of(doubled);
@@ -132,8 +143,8 @@ public class EmailFilingTest extends ApiTestCase {
 		store = fx.store("Client Work");
 		fx.grant(store, clerk.getUserGroup(), Permission.READ, Permission.WRITE, Permission.DOWNLOAD);
 		fx.grant(store, reader.getUserGroup(), Permission.READ);
-		workspace = FolderDAO.get()
-				.findById(fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents").getFolderId());
+		matter = fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents");
+		workspace = FolderDAO.get().findById(matter.getFolderId());
 		documents = FolderDAO.get().findByName(workspace, "Documents", Tenant.DEFAULT_ID, true).get(0);
 
 		AttributeSet set = AttributeSetDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID,
@@ -144,6 +155,7 @@ public class EmailFilingTest extends ApiTestCase {
 
 	@Override
 	public void tearDown() throws IOException {
+		EmailFiling.afterEmailStored = null;
 		ContextProperties config = Context.get().getConfig();
 		savedSettings.forEach((key, value) -> {
 			if (value == null)
@@ -367,6 +379,131 @@ public class EmailFilingTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testARepeatWaitsForAFilingThatFails() throws Exception {
+		Held held = holdTheFirstFiling(true);
+		String repeatToken = signIn(clerk);
+		ExecutorService threads = Executors.newFixedThreadPool(2);
+		try {
+			Future<ApiResponse> first = threads.submit(() -> fileEmail(held.token, request(documents, null,
+					List.of(1, 2)), eml(FIXTURE)));
+			assertTrue("The first filing didn't store its email", held.reached.await(60, TimeUnit.SECONDS));
+			Future<ApiResponse> repeat = threads.submit(() -> fileEmail(repeatToken, request(documents, null,
+					List.of(1, 2)), eml(FIXTURE)));
+			awaitWaiting();
+			held.go.countDown();
+
+			ApiResponse refused = first.get(120, TimeUnit.SECONDS);
+			assertEquals(refused.toString(), 409, refused.status());
+			assertEquals("Refused by the test.", refused.json().path("detail").textValue());
+			// The repeat found nothing of the first, which was undone, so it filed
+			ApiResponse filed = repeat.get(120, TimeUnit.SECONDS);
+			assertEquals(filed.toString(), 201, filed.status());
+			assertEquals(2, filed.json().path("attachments").size());
+		} finally {
+			held.go.countDown();
+			threads.shutdownNow();
+		}
+		assertEquals(3, liveDocuments(documents));
+		assertEquals(0, MessageLocks.inUse());
+	}
+
+	@Test
+	public void testARepeatWaitsForAFilingThatSucceeds() throws Exception {
+		Held held = holdTheFirstFiling(false);
+		String repeatToken = signIn(clerk);
+		ExecutorService threads = Executors.newFixedThreadPool(2);
+		try {
+			Future<ApiResponse> first = threads.submit(() -> fileEmail(held.token, request(documents, null,
+					List.of(1, 2)), eml(FIXTURE)));
+			assertTrue("The first filing didn't store its email", held.reached.await(60, TimeUnit.SECONDS));
+			Future<ApiResponse> repeat = threads.submit(() -> fileEmail(repeatToken, request(documents, null,
+					List.of(1, 2)), eml(FIXTURE)));
+			awaitWaiting();
+			held.go.countDown();
+
+			ApiResponse filed = first.get(120, TimeUnit.SECONDS);
+			assertEquals(filed.toString(), 201, filed.status());
+			long docNumber = filed.json().path("email").path("docNumber").asLong();
+			// The repeat waited for the first to end, then found its email
+			ApiResponse again = repeat.get(120, TimeUnit.SECONDS);
+			assertEquals(again.toString(), 409, again.status());
+			assertEquals("already-filed", again.code());
+			assertEquals(docNumber, again.json().path("document").path("docNumber").asLong());
+		} finally {
+			held.go.countDown();
+			threads.shutdownNow();
+		}
+		assertEquals(3, liveDocuments(documents));
+		assertEquals(0, MessageLocks.inUse());
+	}
+
+	/** Holds the first filing once its email is stored, until {@code go}; then it fails, or goes on */
+	private record Held(String token, CountDownLatch reached, CountDownLatch go) {
+	}
+
+	private Held holdTheFirstFiling(boolean fail) {
+		Held held = new Held(signIn(clerk), new CountDownLatch(1), new CountDownLatch(1));
+		AtomicBoolean first = new AtomicBoolean(true);
+		EmailFiling.afterEmailStored = email -> {
+			if (!first.getAndSet(false))
+				return;
+			held.reached().countDown();
+			try {
+				if (!held.go().await(60, TimeUnit.SECONDS))
+					throw new IllegalStateException("The test didn't let the first filing go on");
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException(e);
+			}
+			if (fail)
+				throw new IllegalStateException("Can't file a document", new HealdanVetoException("Refused by the test."));
+		};
+		return held;
+	}
+
+	/** Until the repeat waits for the first filing's lock */
+	private void awaitWaiting() throws InterruptedException {
+		long deadline = System.currentTimeMillis() + 60000L;
+		while (!MessageLocks.waitedFor(matter.getId(), "attached-1@example.com")) {
+			if (System.currentTimeMillis() > deadline)
+				fail("The repeat didn't wait for the first filing");
+			Thread.sleep(20L);
+		}
+	}
+
+	@Test
+	public void testAttachmentSizes() throws Exception {
+		String token = signIn(clerk);
+		String eml = ("From: Ann Smith <ann@example.com>\r\nSubject: Empty\r\nMessage-ID: <empty-1@example.com>\r\n"
+				+ "MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\n"
+				+ "Content-Type: text/plain\r\n\r\nNothing attached, nearly.\r\n--b\r\nContent-Type: text/plain\r\n"
+				+ "Content-Disposition: attachment; filename=\"empty.txt\"\r\n\r\n\r\n--b--\r\n");
+		DbSnapshot before = snapshot();
+
+		ApiResponse empty = fileEmail(token, request(documents, null, List.of(0)), eml.getBytes(StandardCharsets.UTF_8));
+
+		assertEquals(List.of("attachments empty"), fields(empty));
+		assertEquals("Attachment 0 (empty.txt): The file is empty.",
+				empty.json().path("fields").get(0).path("detail").textValue());
+		before.assertUnchanged();
+
+		// An attachment is never larger than the email it came in, which the limit has passed: the rule is the same
+		Context.get().getConfig().setProperty(MAX_SIZE, "1");
+		List<com.logicaldoc.healdan.api.model.FieldError> errors = new ArrayList<>();
+		EmailFiling.checkAttachment(new MessageParts.Part(3, "Big.pdf", "application/pdf", 1024L * 1024L + 1L, false,
+				null), errors);
+		assertEquals(1, errors.size());
+		assertEquals("attachments", errors.get(0).field());
+		assertEquals("too-large", errors.get(0).code());
+		assertEquals("Attachment 3 (Big.pdf): The file is larger than the upload limit of 1 MB.",
+				errors.get(0).detail());
+		errors.clear();
+		EmailFiling.checkAttachment(new MessageParts.Part(3, "Big.pdf", "application/pdf", 1024L * 1024L, false, null),
+				errors);
+		assertEquals(List.of(), errors);
+	}
+
+	@Test
 	public void testAlreadyFiled() throws Exception {
 		String token = signIn(clerk);
 		ApiResponse first = fileEmail(token, request(documents, null, List.of(1)), eml(FIXTURE));
@@ -493,6 +630,37 @@ public class EmailFilingTest extends ApiTestCase {
 		assertEquals("The email wasn't filed: one of its documents wasn't stored completely, so nothing of the "
 				+ "filing was kept. File it again.", unrecorded.json().path("detail").textValue());
 		assertUndone(3);
+
+		// The second document is stored, then CE's create fails
+		doubled.filer.mode = FailingFiler.Mode.AFTER_COMMIT;
+		doubled.filer.calls = 0;
+		ApiResponse afterCommit = post("/api/v1/test/emails").token(token)
+				.part("email", request(documents, null, List.of(1, 2))).file("file", "message.eml", eml).send();
+
+		assertEquals(afterCommit.toString(), 500, afterCommit.status());
+		assertEquals(EmailFiling.INCOMPLETE, afterCommit.json().path("detail").textValue());
+		assertUndone(5);
+
+		// Everything is stored, links included, then reading it back fails
+		doubled.filer.mode = FailingFiler.Mode.NONE;
+		List<String> linksSeen = new ArrayList<>();
+		doubled.filing = new EmailFiling(doubled.filer) {
+			@Override
+			com.logicaldoc.healdan.api.model.DocumentView view(Document document, User user)
+					throws PersistenceException {
+				linksSeen.addAll(liveLinks());
+				throw new IllegalStateException("Can't read a document back, in the test");
+			}
+		};
+		ApiResponse unread = post("/api/v1/test/emails").token(token)
+				.part("email", request(documents, null, List.of(1, 2))).file("file", "message.eml", eml).send();
+
+		assertEquals(unread.toString(), 500, unread.status());
+		assertEquals("server-error", unread.code());
+		assertEquals(2, linksSeen.size());
+		assertUndone(8);
+		assertEquals(2, jdbc().queryForObject("select count(*) from ld_link where ld_deleted <> 0", Integer.class)
+				.intValue());
 
 		// Nothing undone counts as a copy: the email files afterwards
 		ApiResponse filed = fileEmail(token, request(documents, null, List.of(1, 2)), eml);
@@ -694,13 +862,14 @@ public class EmailFilingTest extends ApiTestCase {
 
 	/**
 	 * A filer that fails on its second document: refused as it's stored, as by
-	 * a rule; or stored, with its version not recorded, as CE leaves a
-	 * document whose version record couldn't be written
+	 * a rule; stored, with its version not recorded, as CE leaves a document
+	 * whose version record couldn't be written; or stored, then CE's create
+	 * failing, as it can after it commits the record
 	 */
 	static final class FailingFiler extends Filer {
 
 		enum Mode {
-			NONE, VETO, UNRECORDED
+			NONE, VETO, UNRECORDED, AFTER_COMMIT
 		}
 
 		Mode mode = Mode.NONE;
@@ -714,6 +883,8 @@ public class EmailFilingTest extends ApiTestCase {
 				return super.file(folder, name, properties, upload, caller, stored);
 			if (mode == Mode.VETO)
 				throw new IllegalStateException("Can't file a document", new HealdanVetoException("Refused by the test."));
+			if (mode == Mode.AFTER_COMMIT)
+				return super.file(folder, name, properties, upload, caller, stored);
 			// CE writes the version record after it stores the document, and only logs a failure (as in FilingTest)
 			var jdbc = new org.springframework.jdbc.core.JdbcTemplate(Context.get(javax.sql.DataSource.class));
 			jdbc.execute("alter table ld_version add constraint test_unrecorded check (ld_filename <> '"
@@ -724,6 +895,14 @@ public class EmailFilingTest extends ApiTestCase {
 				jdbc.execute("alter table ld_version drop constraint test_unrecorded");
 			}
 		}
+
+		@Override
+		Document create(File upload, Document vo, DocumentHistory transaction) throws PersistenceException {
+			Document created = super.create(upload, vo, transaction);
+			if (mode == Mode.AFTER_COMMIT && calls == 2)
+				throw new PersistenceException("Failed after the commit, in the test");
+			return created;
+		}
 	}
 
 	/** {@code POST /v1/emails}, filed with a {@link FailingFiler} */
@@ -733,12 +912,15 @@ public class EmailFilingTest extends ApiTestCase {
 
 		final FailingFiler filer = new FailingFiler();
 
+		/** What files, which a test can replace */
+		EmailFiling filing = new EmailFiling(filer);
+
 		@POST
 		@Consumes(MediaType.MULTIPART_FORM_DATA)
 		public Response file(@Multipart(value = "email", required = false) String email,
 				@Multipart(value = "file", required = false) Attachment file,
 				@jakarta.ws.rs.core.Context UriInfo uri) {
-			return EmailResource.fileWith(email, file, uri, new EmailFiling(filer));
+			return EmailResource.fileWith(email, file, uri, filing);
 		}
 	}
 }

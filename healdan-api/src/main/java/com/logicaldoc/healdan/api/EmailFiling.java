@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.StringJoiner;
+import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -47,6 +48,8 @@ import com.logicaldoc.healdan.email.FileNames;
 import com.logicaldoc.healdan.email.MessageParts;
 import com.logicaldoc.healdan.email.MessageParts.Part;
 import com.logicaldoc.healdan.email.OncePerMatter;
+import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.security.AccessChecks;
 import com.logicaldoc.util.spring.Context;
 
@@ -110,6 +113,12 @@ public class EmailFiling {
 			HealdanConstants.ATTR_EMAILSENT, HealdanConstants.ATTR_EMAILRECEIVED,
 			HealdanConstants.ATTR_EMAILMESSAGEID);
 
+	/**
+	 * For tests only: told of the email once it is stored, before its
+	 * attachments, so a test can hold a filing there; null otherwise
+	 */
+	static volatile Consumer<Document> afterEmailStored;
+
 	private final Filer filer;
 
 	/**
@@ -135,6 +144,9 @@ public class EmailFiling {
 		final String name;
 
 		final File file;
+
+		/** For an attachment the email listener reads as an email, its Message-ID; null otherwise */
+		String messageId;
 
 		/** The copy the matter holds, for an attachment that is an email: then it isn't filed */
 		Optional<Document> copy = Optional.empty();
@@ -176,6 +188,11 @@ public class EmailFiling {
 	 * ({@code 422}).</li>
 	 * </ol>
 	 * An attachment that is an email the matter holds is skipped, not refused.
+	 * <p>
+	 * From the once-per-matter check to the last store, or the undo, the
+	 * filing holds the {@link MessageLocks} of the messages it files into the
+	 * matter, so a repeat of it waits, then finds this one's email or, when
+	 * this one was undone, nothing.
 	 *
 	 * @param eml the email's file, which the caller made and deletes
 	 * @param request the folder, the properties and the indexes ticked
@@ -195,21 +212,30 @@ public class EmailFiling {
 
 			MimeMessage message = EmailResource.read(eml);
 			List<Part> parts = MessageParts.list(message);
-			// Before the fields: a repeat after a lost answer is answered as done (spec §6.8)
-			OncePerMatter.get().check(EmailFields.fromEml(message).messageId(), folderId, 0L, user);
+			String messageId = EmailFields.fromEml(message).messageId();
 
 			List<FieldError> errors = new ArrayList<>();
 			Uploads.checkName(EMAIL_NAME, FILE, errors);
 			List<Part> chosen = choose(request.attachments(), parts, errors);
-			if (!errors.isEmpty())
-				throw ApiProblem.validation(errors);
+			List<String> messageIds = new ArrayList<>();
+			messageIds.add(messageId);
+			for (Part part : chosen) {
+				Ticked attachment = writeOut(message, part);
+				ticked.add(attachment);
+				attachment.messageId = messageIdOf(attachment);
+				messageIds.add(attachment.messageId);
+			}
 
-			for (Part part : chosen)
-				ticked.add(writeOut(message, part));
-			for (Ticked attachment : ticked)
-				attachment.copy = copyInMatter(attachment, folderId, user);
-
-			return store(eml, request, ticked, caller);
+			Matter matter = MatterLocator.get().locate(folder).matter();
+			try (MessageLocks.Held held = MessageLocks.lock(matter != null ? matter.getId() : null, messageIds)) {
+				// Before the fields: a repeat after a lost answer is answered as done (spec §6.8)
+				OncePerMatter.get().check(messageId, folderId, 0L, user);
+				if (!errors.isEmpty())
+					throw ApiProblem.validation(errors);
+				for (Ticked attachment : ticked)
+					attachment.copy = OncePerMatter.get().copyIn(attachment.messageId, folderId, 0L, user);
+				return store(eml, request, ticked, caller);
+			}
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't file an email", e);
 		} catch (IOException | MessagingException e) {
@@ -252,8 +278,13 @@ public class EmailFiling {
 		return chosen;
 	}
 
-	/** The upload rules, for an attachment: each error names it by its index and name */
-	private static void checkAttachment(Part part, List<FieldError> errors) {
+	/**
+	 * The upload rules, for an attachment: each error names it by its index and
+	 * name. An attachment's decoded content is never larger than the email it
+	 * came in, which has passed the limit already; its size is checked all the
+	 * same, as for any upload.
+	 */
+	static void checkAttachment(Part part, List<FieldError> errors) {
 		List<FieldError> found = new ArrayList<>();
 		Uploads.checkName(filingName(part), ATTACHMENTS, found);
 		if (part.size() > Uploads.maxBytes())
@@ -291,18 +322,15 @@ public class EmailFiling {
 
 	/**
 	 * @return for an attachment the email listener reads as an email (an
-	 *         attached message, or an {@code eml} or {@code msg} file), the copy
-	 *         of its message that the folder's matter holds and the user can
-	 *         read; empty otherwise
+	 *         attached message, or an {@code eml} or {@code msg} file), its
+	 *         Message-ID; null otherwise, or when it has none
 	 */
-	private static Optional<Document> copyInMatter(Ticked attachment, long folderId, User user)
-			throws PersistenceException {
+	private static String messageIdOf(Ticked attachment) {
 		String extension = Uploads.extension(attachment.name).toLowerCase(Locale.ROOT);
 		if (!HealdanConstants.EMAIL_EXTENSIONS.contains(extension))
-			return Optional.empty();
-		String messageId = attachment.part.attachedMessage() ? attachment.part.messageId()
+			return null;
+		return attachment.part.attachedMessage() ? attachment.part.messageId()
 				: EmailFields.extract(attachment.file, extension).map(EmailFields::messageId).orElse(null);
-		return OncePerMatter.get().copyIn(messageId, folderId, 0L, user);
 	}
 
 	/**
@@ -318,6 +346,9 @@ public class EmailFiling {
 		List<DocumentLink> links = new ArrayList<>();
 		try {
 			Document email = file(folderId, EMAIL_NAME, request.properties(), eml, caller, stored);
+			Consumer<Document> hook = afterEmailStored;
+			if (hook != null)
+				hook.accept(email);
 
 			List<Document> filed = new ArrayList<>();
 			List<FiledEmail.Skipped> skipped = new ArrayList<>();
@@ -339,6 +370,10 @@ public class EmailFiling {
 			return new FiledEmail(view(email, user), List.copyOf(attachments), List.copyOf(skipped));
 		} catch (RuntimeException | PersistenceException e) {
 			throw undo(e, stored, links, caller);
+		} catch (Error e) {
+			// Such as running out of memory while stamping: nothing is left half filed, and the error goes on
+			undo(e, stored, links, caller);
+			throw e;
 		}
 	}
 
@@ -404,7 +439,8 @@ public class EmailFiling {
 		return link;
 	}
 
-	private static DocumentView view(Document document, User user) throws PersistenceException {
+	/** The document as stored, for the answer; a test can make it fail after the links are stored */
+	DocumentView view(Document document, User user) throws PersistenceException {
 		return ApiViews.document(DocumentDAO.get().findById(document.getId()), user);
 	}
 
@@ -416,7 +452,7 @@ public class EmailFiling {
 	 *         stored, whose problem would say it was filed, or something
 	 *         couldn't be taken back
 	 */
-	private static RuntimeException undo(Exception failure, List<Document> stored, List<DocumentLink> links,
+	private static RuntimeException undo(Throwable failure, List<Document> stored, List<DocumentLink> links,
 			Caller caller) {
 		for (int i = links.size() - 1; i >= 0; i--) {
 			try {
@@ -445,6 +481,9 @@ public class EmailFiling {
 			log.warn("Filing an email failed ({}); took back documents {}", cause(failure).getClass().getName(),
 					undone);
 
+		if (left.length() > 0 || failure instanceof StoredIncompletely)
+			// The answer is a problem of its own, which nothing else logs
+			log.debug("Filing an email failed", cause(failure));
 		if (left.length() > 0)
 			return new ApiProblem(500, "server-error",
 					"The email was filed only in part, and documents %s couldn't be taken back. Delete them, then file the email again."
@@ -456,7 +495,7 @@ public class EmailFiling {
 		return new IllegalStateException("Can't file an email", failure);
 	}
 
-	private static Throwable cause(Exception failure) {
+	private static Throwable cause(Throwable failure) {
 		return failure instanceof StoredIncompletely && failure.getCause() != null ? failure.getCause() : failure;
 	}
 

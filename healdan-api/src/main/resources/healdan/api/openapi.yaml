@@ -575,7 +575,9 @@ paths:
            message, by its Message-ID, with the copy as `document` (when the
            caller can read it). A repeat after an answer that was lost meets
            this, naming the copy it made, so the call is safe to repeat for a
-           message with a Message-ID.
+           message with a Message-ID. A repeat that arrives while the first
+           call is still filing waits for it to end, then meets this, or files
+           the email when the first call was undone.
         8. `422 validation` listing every field that is wrong: `file` with
            `disallowed` when the `upload.disallow` setting lists `eml`; and
            `attachments` for each index ticked that isn't one of the email's

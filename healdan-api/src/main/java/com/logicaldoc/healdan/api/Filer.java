@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
@@ -142,7 +143,11 @@ public class Filer {
 			Document created;
 			// A create that fails leaves a gap in the doc #s, as a deleted document does
 			try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(docNumber)) {
-				created = DocumentManager.get().create(upload, vo, transaction).getDocument();
+				created = create(upload, vo, transaction);
+			} catch (Throwable failure) {
+				// CE commits the record before it makes the first version, which can fail
+				reportStored(docNumber, user.getTenantId(), stored);
+				throw failure;
 			}
 			stored.accept(created);
 			if (stamped && !docId.equals(DocIdStamper.value(Long.parseLong(created.getCustomId()),
@@ -153,6 +158,31 @@ public class Filer {
 			return created;
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't file a document", e);
+		}
+	}
+
+	/**
+	 * CE's create, and the wait for its first version. A test can make it fail
+	 * after CE has stored the document.
+	 *
+	 * @return the document, stored
+	 */
+	Document create(File upload, Document vo, DocumentHistory transaction) throws PersistenceException {
+		return DocumentManager.get().create(upload, vo, transaction).getDocument();
+	}
+
+	/**
+	 * Tells the caller of a document CE stored before its create failed: the
+	 * live document with the doc # reserved for it, if there is one
+	 */
+	private static void reportStored(long docNumber, long tenantId, Consumer<Document> stored) {
+		try {
+			Document document = DocumentDAO.get().findByCustomId(Long.toString(docNumber), tenantId);
+			if (document != null && document.getDeleted() == 0)
+				stored.accept(document);
+		} catch (PersistenceException | RuntimeException e) {
+			log.warn("Can't tell whether document #{} was stored: {}", docNumber, e.getClass().getName());
+			log.debug("Can't tell whether document #{} was stored", docNumber, e);
 		}
 	}
 
