@@ -257,14 +257,21 @@ jobs:
           OUT_DIR: ${{ runner.temp }}/package
         run: clients/helper/packaging/mac/package.sh "$VERSION"
 
-      # What release-mac trusts: the disk image's own stapled ticket, not which secrets were set.
+      # What release-mac trusts: the disk image's own stapled ticket, not which secrets were set. stapler.sh tries again
+      # while Apple's ticket server drops the connection, and one that never answers fails the job (68), so a run that
+      # couldn't check the ticket isn't taken for one without a ticket.
       - name: Check the disk image is notarised
         id: stapled
         env:
           DMG: ${{ runner.temp }}/package/Healdan-Helper-${{ steps.version.outputs.version }}.dmg
         run: |
-          if xcrun stapler validate "$DMG"; then
+          status=0
+          clients/helper/packaging/mac/stapler.sh validate "$DMG" || status=$?
+          if [ "$status" -eq 0 ]; then
             echo "notarised=true" >> "$GITHUB_OUTPUT"
+          elif [ "$status" -eq 68 ]; then
+            echo "::error::Apple's ticket server kept dropping the connection, so the disk image's ticket wasn't checked; re-run the failed jobs"
+            exit 1
           else
             echo "::warning::The disk image isn't notarised, so it isn't attached to any release"
             echo "notarised=false" >> "$GITHUB_OUTPUT"
