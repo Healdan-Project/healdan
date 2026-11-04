@@ -462,6 +462,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public GUIUser getUser(long userId) throws ServerException {
         Session session = validateSession();
+        // Healdan: the user's own, or Access control
+        HealdanRpcChecks.userRead(session, userId);
 
         UserDAO userDao = UserDAO.get();
 
@@ -502,7 +504,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
                 guiUser.setCertExpire(user.getCertExpire());
                 guiUser.setCertDN(user.getCertDN());
                 guiUser.setSecondFactor(user.getSecondFactor());
-                guiUser.setKey(user.getKey());
+                // Healdan: only the user's own key
+                guiUser.setKey(HealdanRpcChecks.readKey(session, user));
                 guiUser.setType(user.getType().ordinal());
                 guiUser.setDocsGrid(user.getDocsGrid());
                 guiUser.setHitsGrid(user.getHitsGrid());
@@ -702,7 +705,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
             user.setSessionsQuota(guiUser.getSessionsQuota());
             user.setQuotaThreshold(guiUser.getQuotaThreshold());
             user.setSecondFactor(StringUtils.isEmpty(guiUser.getSecondFactor()) ? null : guiUser.getSecondFactor());
-            user.setKey(guiUser.getKey());
+            // Healdan: another user's key is never sent, so theirs is kept
+            user.setKey(HealdanRpcChecks.savedKey(session, guiUser, user));
             user.setType(guiUser.getType());
             user.setDocsGrid(guiUser.getDocsGrid());
             user.setHitsGrid(guiUser.getHitsGrid());

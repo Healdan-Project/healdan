@@ -38,12 +38,14 @@ import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.authorization.PermissionException;
 import com.logicaldoc.core.security.menu.Menu;
 import com.logicaldoc.core.security.menu.MenuDAO;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.core.ticket.TicketDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIDocumentNote;
 import com.logicaldoc.gui.common.client.beans.GUIMenu;
+import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.util.CollectionUtil;
 
 /**
@@ -768,6 +770,53 @@ public final class HealdanRpcChecks {
     public static void userChange(Session session, long userId) throws AccessDeniedException {
         if (userId != session.getUserId())
             menu(session, Menu.ACCESS_CONTROL);
+    }
+
+    /**
+     * Refuses to read another user's account unless the user may open Access
+     * control, whose Users screen is the only one that reads other users. The
+     * user's own, which loading the session reads, needs nothing. CE let any
+     * signed-in user read any account, with its contact details, groups, IP
+     * lists, impersonators and second factor's key.
+     *
+     * @param session the user's session
+     * @param userId the user whose account is read
+     *
+     * @throws AccessDeniedException the refusal
+     */
+    public static void userRead(Session session, long userId) throws AccessDeniedException {
+        userChange(session, userId);
+    }
+
+    /**
+     * The second factor's secret goes only to its own user, so another user's
+     * account is read without it, by administrators too. The Users screen's
+     * two-factor dialog, the only one that shows another user's, needs a
+     * feature Healdan doesn't declare.
+     *
+     * @param session the user's session
+     * @param user the user whose account is read
+     *
+     * @return the user's key, or null for another user's
+     */
+    public static String readKey(Session session, User user) {
+        return user.getId() == session.getUserId() ? user.getKey() : null;
+    }
+
+    /**
+     * The second factor's secret saved with an account: the one sent, for the
+     * user's own, and for another user's the stored one. The Users screen
+     * saves back the account it read, which {@link #readKey} leaves without
+     * it, so taking what is sent would wipe it.
+     *
+     * @param session the user's session
+     * @param guiUser the account as sent
+     * @param user the account as stored, or a new one
+     *
+     * @return the key to save
+     */
+    public static String savedKey(Session session, GUIUser guiUser, User user) {
+        return guiUser.getId() == session.getUserId() ? guiUser.getKey() : user.getKey();
     }
 
     /**

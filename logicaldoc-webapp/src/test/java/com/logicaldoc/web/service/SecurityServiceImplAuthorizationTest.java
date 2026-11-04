@@ -37,6 +37,7 @@ import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIAccessControlEntry;
 import com.logicaldoc.gui.common.client.beans.GUIMenu;
 import com.logicaldoc.gui.common.client.beans.GUISequence;
+import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.io.FileUtil;
 import com.logicaldoc.util.spring.Context;
@@ -57,6 +58,9 @@ import com.logicaldoc.web.UploadServlet;
  * force prevention menu, and a trusted device is changed only by its owner.
  * An API key is changed or deleted only by its owner, as Account > API keys
  * lists only the user's own.
+ * <p>
+ * Reading another user's account needs Access control, and never gives their
+ * second factor's key, which saving their account then keeps.
  */
 public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
 
@@ -351,6 +355,43 @@ public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
         assertEquals(1, dao.findById(AUTHOR_ID, true).getWorkingTimes().size());
     }
 
+    @Test
+    public void testReadingAnotherUserNeedsAccessControl() throws ServerException, PersistenceException {
+        setKey(ADMIN_ID, "admin's key");
+        setKey(AUTHOR_ID, "author's key");
+
+        // Only Access control's Users screen reads other users
+        prepareSession("author", "admin");
+        assertThrows(AccessDeniedException.class, () -> testSubject.getUser(ADMIN_ID));
+
+        // The user's own account, as loading the session reads it, comes with its key
+        assertEquals("author's key", guiSession.getUser().getKey());
+        assertEquals("author's key", testSubject.getUser(AUTHOR_ID).getKey());
+
+        AuthorMenus.grant(Menu.ACCESS_CONTROL);
+        GUIUser admin = testSubject.getUser(ADMIN_ID);
+        assertEquals("admin@admin.net", admin.getEmail());
+        // Another user's second factor secret stays on the server
+        assertNull(admin.getKey());
+    }
+
+    @Test
+    public void testSavingAnotherUserKeepsTheirKey() throws ServerException, PersistenceException {
+        setKey(AUTHOR_ID, "author's key");
+
+        // The Users screen saves back the account it read, which has no key
+        GUIUser author = testSubject.getUser(AUTHOR_ID);
+        author.setCity("Carpi");
+        testSubject.saveUser(author, guiSession.getInfo());
+        assertEquals("Carpi", UserDAO.get().findById(AUTHOR_ID).getCity());
+        assertEquals("author's key", UserDAO.get().findById(AUTHOR_ID).getKey());
+
+        // Nor does one sent with it replace it
+        author.setKey("another key");
+        testSubject.saveUser(author, guiSession.getInfo());
+        assertEquals("author's key", UserDAO.get().findById(AUTHOR_ID).getKey());
+    }
+
     /**
      * Adds Custom actions' menu (1300), the custom actions' parent, which
      * LogicalDOC's paid edition has and CE's database lacks
@@ -379,6 +420,17 @@ public class SecurityServiceImplAuthorizationTest extends AbstractWPTestCase {
         GUIAccessControlEntry ace = new GUIAccessControlEntry();
         ace.setEntityId(groupId);
         return ace;
+    }
+
+    /**
+     * Gives the user a second factor's secret, as only an administrator typing
+     * one does in CE
+     */
+    private static void setKey(long userId, String key) throws PersistenceException {
+        UserDAO dao = UserDAO.get();
+        User user = dao.findById(userId, true);
+        user.setKey(key);
+        dao.store(user);
     }
 
     private static Device device(long userId, String label) throws PersistenceException {
