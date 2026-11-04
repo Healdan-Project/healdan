@@ -8,11 +8,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -37,7 +37,6 @@ import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.model.DocumentView;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.FiledEmail;
@@ -118,13 +117,14 @@ public class EmailFiling {
 	static final String INCOMPLETE = "The email wasn't filed: one of its documents wasn't stored completely, so "
 			+ "nothing of the filing was kept. File it again.";
 
-	private static final String EML = "eml";
+	/**
+	 * The answer when the copy that refused an attachment was gone a moment
+	 * later, which the filing then took back
+	 */
+	static final String ATTACHMENT_MOVED = "The email wasn't filed: one of its attachments was filed into the "
+			+ "matter, or taken out of it, at the same moment, so nothing of the filing was kept. File it again.";
 
-	/** The fields the email listener reads from an email's file, which its attachments don't take */
-	private static final Set<String> EMAIL_FIELDS = Set.of(HealdanConstants.ATTR_EMAILFROM,
-			HealdanConstants.ATTR_EMAILTO, HealdanConstants.ATTR_EMAILCC, HealdanConstants.ATTR_EMAILSUBJECT,
-			HealdanConstants.ATTR_EMAILSENT, HealdanConstants.ATTR_EMAILRECEIVED,
-			HealdanConstants.ATTR_EMAILMESSAGEID);
+	private static final String EML = "eml";
 
 	/**
 	 * For tests only: told of the email once it is stored, before its
@@ -201,11 +201,16 @@ public class EmailFiling {
 	 * ({@code 422}).</li>
 	 * </ol>
 	 * An attachment that is an email the matter holds is skipped, not refused.
+	 * Only once the checks have passed are the attachments ticked written out
+	 * and read.
 	 * <p>
-	 * From the once-per-matter check to the last store, or the undo, the
-	 * filing holds the {@link MessageLocks} of the messages it files into the
-	 * matter, so a repeat of it waits, then finds this one's email or, when
-	 * this one was undone, nothing.
+	 * For the once-per-matter check, and from the second one, made once the
+	 * attachments are read, to the last store or the undo, the filing holds
+	 * the {@link MessageLocks} of the messages it files into the matter, so a
+	 * repeat of it waits, then finds this one's email or, when this one was
+	 * undone, nothing. A filing that can't have them within
+	 * {@link MessageLocks#waitMillis} is answered {@code 409
+	 * filing-in-progress}.
 	 *
 	 * @param eml the email's file, which the caller made and deletes
 	 * @param request the folder, the properties and the indexes ticked
@@ -226,25 +231,31 @@ public class EmailFiling {
 			MimeMessage message = EmailResource.read(eml);
 			List<Part> parts = MessageParts.list(message);
 			String messageId = EmailFields.fromEml(message).messageId();
+			Matter matter = MatterLocator.get().locate(folder).matter();
+			Long matterId = matter != null ? matter.getId() : null;
 
+			// Before the fields, and before any attachment is written out: a repeat after a lost answer is answered
+			// as done (spec §6.8)
+			try (MessageLocks.Held held = MessageLocks.lock(matterId, Collections.singletonList(messageId))) {
+				OncePerMatter.get().check(messageId, folderId, 0L, user);
+			}
 			List<FieldError> errors = new ArrayList<>();
 			Uploads.checkName(EMAIL_NAME, FILE, errors);
 			List<Part> chosen = choose(request.attachments(), parts, errors);
+			if (!errors.isEmpty())
+				throw ApiProblem.validation(errors);
+
+			writeOut(message, chosen, ticked);
 			List<String> messageIds = new ArrayList<>();
 			messageIds.add(messageId);
-			for (Part part : chosen) {
-				Ticked attachment = writeOut(message, part);
-				ticked.add(attachment);
+			for (Ticked attachment : ticked) {
 				attachment.messageId = messageIdOf(attachment);
 				messageIds.add(attachment.messageId);
 			}
 
-			Matter matter = MatterLocator.get().locate(folder).matter();
-			try (MessageLocks.Held held = MessageLocks.lock(matter != null ? matter.getId() : null, messageIds)) {
-				// Before the fields: a repeat after a lost answer is answered as done (spec §6.8)
+			// The locks were let go while the attachments were written out, so the message is looked for again
+			try (MessageLocks.Held held = MessageLocks.lock(matterId, messageIds)) {
 				OncePerMatter.get().check(messageId, folderId, 0L, user);
-				if (!errors.isEmpty())
-					throw ApiProblem.validation(errors);
 				for (Ticked attachment : ticked)
 					attachment.copy = OncePerMatter.get().copyIn(attachment.messageId, folderId, 0L, user);
 				return store(eml, request, ticked, caller);
@@ -321,17 +332,24 @@ public class EmailFiling {
 		return FileNames.fromFileName(name + "." + EML, name);
 	}
 
-	/** Writes the part to a file of its own: filing stamps some files, so no two documents share one */
-	private static Ticked writeOut(MimeMessage message, Part part) throws IOException, MessagingException {
-		File file = File.createTempFile("healdan-upload-", ".tmp");
-		Ticked attachment = new Ticked(part, filingName(part), file);
-		try (OutputStream out = new FileOutputStream(file)) {
-			MessageParts.write(message, part.index(), out);
-		} catch (IOException | MessagingException | RuntimeException e) {
-			FileUtils.deleteQuietly(file);
-			throw e;
-		}
-		return attachment;
+	/**
+	 * Writes each part to a file of its own, walking the message once: filing
+	 * stamps some files, so no two documents share one. Each file is in
+	 * {@code ticked} from the moment it exists, for the caller to delete.
+	 */
+	private static void writeOut(MimeMessage message, List<Part> parts, List<Ticked> ticked)
+			throws IOException, MessagingException {
+		Map<Integer, Part> byIndex = new LinkedHashMap<>();
+		for (Part part : parts)
+			byIndex.put(part.index(), part);
+		MessageParts.write(message, byIndex.keySet(), (index, content) -> {
+			Part part = byIndex.get(index);
+			Ticked attachment = new Ticked(part, filingName(part), File.createTempFile("healdan-upload-", ".tmp"));
+			ticked.add(attachment);
+			try (OutputStream out = new FileOutputStream(attachment.file)) {
+				content.transferTo(out);
+			}
+		});
 	}
 
 	/**
@@ -340,11 +358,8 @@ public class EmailFiling {
 	 *         Message-ID; null otherwise, or when it has none
 	 */
 	private static String messageIdOf(Ticked attachment) {
-		String extension = Uploads.extension(attachment.name).toLowerCase(Locale.ROOT);
-		if (!HealdanConstants.EMAIL_EXTENSIONS.contains(extension))
-			return null;
 		return attachment.part.attachedMessage() ? attachment.part.messageId()
-				: EmailFields.extract(attachment.file, extension).map(EmailFields::messageId).orElse(null);
+				: Filer.messageIdOf(attachment.file, attachment.name);
 	}
 
 	/**
@@ -355,10 +370,10 @@ public class EmailFiling {
 			throws PersistenceException {
 		User user = caller.user();
 		long folderId = request.folderId();
-		Map<String, JsonNode> attachmentProperties = withoutEmailFields(request.properties());
 		List<Document> stored = new ArrayList<>();
 		List<DocumentLink> links = new ArrayList<>();
 		try {
+			// The email fields can't be sent (they are read-only), so the properties suit the attachments as well
 			Document email = file(folderId, EMAIL_NAME, request.properties(), eml, caller, stored);
 			Consumer<Document> hook = afterEmailStored;
 			if (hook != null)
@@ -368,15 +383,19 @@ public class EmailFiling {
 			List<FiledEmail.Skipped> skipped = new ArrayList<>();
 			for (Ticked attachment : ticked) {
 				if (attachment.copy.isEmpty())
-					attachment.copy = fileAttachment(attachment, folderId, attachmentProperties, caller, stored,
+					attachment.copy = fileAttachment(attachment, folderId, request.properties(), caller, stored,
 							filed);
-				if (attachment.copy.isPresent())
+				if (attachment.copy.isPresent()) {
+					// A copy from before Healdan, with no doc #, is one the API doesn't show
+					Document copy = attachment.copy.get();
 					skipped.add(new FiledEmail.Skipped(attachment.part.index(), ALREADY_FILED,
-							ApiViews.document(attachment.copy.get(), user)));
+							ApiViews.shows(copy) ? ApiViews.document(copy, user) : null));
+				}
 			}
 
+			Document first = DocumentDAO.get().findById(email.getId());
 			for (Document attachment : filed)
-				links.add(link(email, attachment));
+				links.add(link(first, attachment));
 
 			List<DocumentView> attachments = new ArrayList<>();
 			for (Document attachment : filed)
@@ -398,6 +417,8 @@ public class EmailFiling {
 	 * had found it.
 	 *
 	 * @return the copy that made it skipped; empty when it was filed
+	 * @throws ApiProblem {@code 409 filing-in-progress} when the copy that
+	 *         refused it can't be read a moment later
 	 */
 	private Optional<Document> fileAttachment(Ticked attachment, long folderId,
 			Map<String, JsonNode> properties, Caller caller, List<Document> stored, List<Document> filed)
@@ -409,12 +430,14 @@ public class EmailFiling {
 			// The rule refuses before anything is stored: this one was stored
 			throw e;
 		} catch (RuntimeException e) {
-			AlreadyFiledException refusal = alreadyFiled(e);
-			Optional<Document> copy = refusal != null
-					? AccessChecks.readableDocument(DocumentDAO.get().findById(refusal.copyId()), caller.user())
-					: Optional.empty();
-			if (copy.isEmpty())
+			AlreadyFiledException refusal = ProblemMapper.find(e, AlreadyFiledException.class);
+			if (refusal == null)
 				throw e;
+			Optional<Document> copy = AccessChecks.readableDocument(DocumentDAO.get().findById(refusal.copyId()),
+					caller.user());
+			if (copy.isEmpty())
+				// Gone again: already-filed would say the email is filed, though it is taken back
+				throw ApiProblem.conflict(MessageLocks.IN_PROGRESS, ATTACHMENT_MOVED);
 			log.debug("Attachment {} of an email is already filed as document {}", attachment.part.index(),
 					refusal.copyId());
 			return copy;
@@ -446,7 +469,7 @@ public class EmailFiling {
 	private static DocumentLink link(Document email, Document attachment) throws PersistenceException {
 		DocumentLink link = new DocumentLink();
 		link.setType(LINK_TYPE);
-		link.setDocument1(DocumentDAO.get().findById(email.getId()));
+		link.setDocument1(email);
 		link.setDocument2(DocumentDAO.get().findById(attachment.getId()));
 		link.setTenantId(email.getTenantId());
 		DocumentLinkDAO.get().store(link);
@@ -483,6 +506,10 @@ public class EmailFiling {
 			Document document = stored.get(i);
 			try {
 				DocumentDAO.get().delete(document.getId(), history(caller));
+				// CE's delete leaves an immutable document as it is, saying nothing, unless an admin deletes it
+				Document after = DocumentDAO.get().findById(document.getId());
+				if (after != null && after.getDeleted() == 0)
+					throw new IllegalStateException("The document wasn't deleted");
 				undone.add("#" + document.getCustomId());
 			} catch (PersistenceException | RuntimeException e) {
 				log.error("Can't take back document #{} (id {}) of a failed email filing: {}",
@@ -520,30 +547,5 @@ public class EmailFiling {
 		history.setEvent(DocumentEvent.DELETED);
 		history.setComment(UNDONE);
 		return history;
-	}
-
-	/**
-	 * @return the properties sent, but for the email fields, which each
-	 *         attachment leaves to its own file (plan correction 4)
-	 */
-	private static Map<String, JsonNode> withoutEmailFields(Map<String, JsonNode> properties) {
-		if (properties == null)
-			return null;
-		Map<String, JsonNode> kept = new LinkedHashMap<>(properties);
-		kept.keySet().removeAll(EMAIL_FIELDS);
-		return kept;
-	}
-
-	/**
-	 * @return the once-per-matter refusal, if the failure is one or was caused
-	 *         by one
-	 */
-	private static AlreadyFiledException alreadyFiled(Throwable failure) {
-		Throwable t = failure;
-		// Bounded, in case of a loop of causes
-		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
-			if (t instanceof AlreadyFiledException refusal)
-				return refusal;
-		return null;
 	}
 }

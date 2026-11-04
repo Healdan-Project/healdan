@@ -14,6 +14,8 @@ import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.HealdanHooks;
 import com.logicaldoc.core.PersistenceException;
@@ -31,6 +33,7 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.rules.AbstractRulesTestCase;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.util.CacheEvictor;
+import com.logicaldoc.util.spring.Context;
 
 /**
  * M5 spec §6.4: a matter holds a message once. Filing it again into the same
@@ -306,6 +309,47 @@ public class OncePerMatterTest extends AbstractRulesTestCase {
 		awaitAsyncWork();
 		before.assertUnchanged();
 		assertEquals(List.of(hidden.getId(), current.getId()), copies());
+	}
+
+	@Test
+	public void testFolderRestoreRefusesTwoCopiesComingBack() throws Exception {
+		Folder letters = fx.folder(documents, "Letters");
+		Document trashed = fileEmail(letters, alice);
+		documentDao.delete(trashed.getId(), documentHistory(alice));
+		// The trash doesn't count
+		Document later = fileEmail(letters, alice);
+		folderDao.deleteTree(letters.getId(), folderHistory(alice));
+		awaitAsyncWork();
+
+		// CE's restore brings back both, the one deleted on its own too
+		assertRefused(alreadyIn("998.1", trashed),
+				() -> folderDao.restore(letters.getId(), documents.getId(), folderHistory(alice)), trashed.getId(),
+				later.getId());
+	}
+
+	@Test
+	public void testASecondMergeInOneTransactionIsCheckedToo() throws Exception {
+		Document first = fileEmail(documents, alice);
+		Folder inbox = fx.folder(otherDocuments, "Inbox");
+		fileEmail("healdan-emoji.eml", inbox, documentHistory(alice));
+		Folder other = fx.folder(otherDocuments, "Other");
+		fileEmail(other, alice);
+
+		// The first merge's checked tree doesn't stand for the second's
+		try {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				try {
+					folderDao.merge(reload(inbox), reload(correspondence), folderHistory(alice));
+					folderDao.merge(reload(other), reload(correspondence), folderHistory(alice));
+				} catch (Exception e) {
+					throw new IllegalStateException(e);
+				}
+			});
+			fail("Not refused");
+		} catch (IllegalStateException e) {
+			assertEquals(alreadyIn("998.1", first), ruleIn(e).getMessage());
+		}
+		awaitAsyncWork();
 	}
 
 	@Test

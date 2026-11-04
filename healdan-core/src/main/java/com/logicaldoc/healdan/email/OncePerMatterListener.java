@@ -11,7 +11,6 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.user.User;
-import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.rules.StoredRows;
@@ -29,9 +28,10 @@ import com.logicaldoc.healdan.rules.Vetoes;
  * writes before any store.
  * <p>
  * A new document's Message-ID is the one {@link EmailDocumentListener} (130)
- * read from its file, since {@code hd_email} rows, not the attribute that CE's
- * screens can edit, say what is a copy; the attribute stands in only when the
- * file gave none. It runs before the doc # listener (140), so a refusal takes
+ * leaves for its index row: read from its file, since {@code hd_email} rows,
+ * not the attribute that CE's screens can edit, say what is a copy, and the
+ * attribute only when the file gave none. So what is checked is what is
+ * indexed. It runs before the doc # listener (140), so a refusal takes
  * no number, unless one was reserved before the store, as the API reserves
  * it. CE creates it by reflection, hence the public no-arg constructor.
  */
@@ -52,8 +52,7 @@ public class OncePerMatterListener implements DocumentListener {
 		User actor = FilingRules.actor(transaction);
 		try (MatterLocator.Remembering remembering = MatterLocator.remember(dictionary)) {
 			if (document.getId() == 0L) {
-				String messageId = messageIdOf(document, dictionary);
-				if (messageId != null)
+				if (dictionary.get(EmailDocumentListener.MESSAGE_ID) instanceof String messageId)
 					Vetoes.check(Vetoes.ids(folder.getId()), Vetoes.ids(),
 							() -> OncePerMatter.get().check(messageId, folder.getId(), 0L, actor));
 				return;
@@ -65,18 +64,6 @@ public class OncePerMatterListener implements DocumentListener {
 				Vetoes.check(Vetoes.ids(folder.getId(), stored), Vetoes.ids(document.getId()),
 						() -> OncePerMatter.get().checkMove(document.getId(), stored, folder.getId(), actor));
 		}
-	}
-
-	/**
-	 * @return what {@link EmailDocumentListener} read from the file, else the
-	 *         attribute's value, normalised; null if neither gives one
-	 */
-	private static String messageIdOf(Document document, Map<String, Object> dictionary) {
-		if (dictionary.get(EmailDocumentListener.MESSAGE_ID) instanceof String read)
-			return read;
-		return document.getValue(HealdanConstants.ATTR_EMAILMESSAGEID) instanceof String value
-				? MessageIds.normalize(value)
-				: null;
 	}
 
 	@Override

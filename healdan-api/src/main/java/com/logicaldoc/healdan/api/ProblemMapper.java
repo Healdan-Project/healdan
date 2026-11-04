@@ -114,7 +114,7 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	 * @return the exception of that type, if the exception is one or was
 	 *         caused by one
 	 */
-	private static <T extends Throwable> T find(Throwable exception, Class<T> type) {
+	static <T extends Throwable> T find(Throwable exception, Class<T> type) {
 		// Bounded, in case of a loop of causes
 		Throwable t = exception;
 		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())

@@ -21,7 +21,8 @@ public record FiledEmail(DocumentView email, List<DocumentView> attachments, Lis
 	 *
 	 * @param index the attachment's index
 	 * @param code why, {@code already-filed}
-	 * @param document the copy the matter holds
+	 * @param document the copy the matter holds; null for one from before
+	 *        Healdan, which has no doc #
 	 */
 	public record Skipped(int index, String code, DocumentView document) {
 	}

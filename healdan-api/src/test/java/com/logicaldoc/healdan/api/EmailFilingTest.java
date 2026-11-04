@@ -43,6 +43,7 @@ import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
@@ -156,6 +157,7 @@ public class EmailFilingTest extends ApiTestCase {
 	@Override
 	public void tearDown() throws IOException {
 		EmailFiling.afterEmailStored = null;
+		MessageLocks.waitMillis = MessageLocks.WAIT_MILLIS;
 		ContextProperties config = Context.get().getConfig();
 		savedSettings.forEach((key, value) -> {
 			if (value == null)
@@ -437,6 +439,60 @@ public class EmailFilingTest extends ApiTestCase {
 		assertEquals(0, MessageLocks.inUse());
 	}
 
+	@Test
+	public void testARepeatWaitsOnlySoLong() throws Exception {
+		Held held = holdTheFirstFiling(false);
+		String repeatToken = signIn(clerk);
+		MessageLocks.waitMillis = 500L;
+		ExecutorService threads = Executors.newSingleThreadExecutor();
+		try {
+			Future<ApiResponse> first = threads.submit(() -> fileEmail(held.token, request(documents, null,
+					List.of(1, 2)), eml(FIXTURE)));
+			assertTrue("The first filing didn't store its email", held.reached.await(60, TimeUnit.SECONDS));
+
+			ApiResponse busy = fileEmail(repeatToken, request(documents, null, List.of(1, 2)), eml(FIXTURE));
+			assertEquals(busy.toString(), 409, busy.status());
+			assertEquals(MessageLocks.IN_PROGRESS, busy.code());
+
+			held.go.countDown();
+			ApiResponse filed = first.get(120, TimeUnit.SECONDS);
+			assertEquals(filed.toString(), 201, filed.status());
+		} finally {
+			held.go.countDown();
+			threads.shutdownNow();
+		}
+		assertEquals(3, liveDocuments(documents));
+		assertEquals(0, MessageLocks.inUse());
+	}
+
+	@Test
+	public void testAnUploadWaitsForAFiling() throws Exception {
+		Held held = holdTheFirstFiling(true);
+		String uploadToken = signIn(clerk);
+		ExecutorService threads = Executors.newFixedThreadPool(2);
+		try {
+			Future<ApiResponse> first = threads.submit(() -> fileEmail(held.token, request(documents, null,
+					List.of(1, 2)), eml(FIXTURE)));
+			assertTrue("The first filing didn't store its email", held.reached.await(60, TimeUnit.SECONDS));
+			Future<ApiResponse> upload = threads.submit(() -> post("/api/v1/documents").token(uploadToken)
+					.part("document", "{\"folderId\": %d}".formatted(documents.getId()))
+					.file("file", "message.eml", eml(FIXTURE)).send());
+			awaitWaiting();
+			held.go.countDown();
+
+			ApiResponse refused = first.get(120, TimeUnit.SECONDS);
+			assertEquals(refused.toString(), 409, refused.status());
+			// The upload waited for the filing, which was undone, so it filed rather than meet already-filed
+			ApiResponse filed = upload.get(120, TimeUnit.SECONDS);
+			assertEquals(filed.toString(), 201, filed.status());
+		} finally {
+			held.go.countDown();
+			threads.shutdownNow();
+		}
+		assertEquals(1, liveDocuments(documents));
+		assertEquals(0, MessageLocks.inUse());
+	}
+
 	/** Holds the first filing once its email is stored, until {@code go}; then it fails, or goes on */
 	private record Held(String token, CountDownLatch reached, CountDownLatch go) {
 	}
@@ -668,6 +724,47 @@ public class EmailFilingTest extends ApiTestCase {
 		assertEquals(2, filed.json().path("attachments").size());
 		assertEquals(3, liveDocuments(documents));
 		assertEquals(2, liveLinks().size());
+	}
+
+	@Test
+	public void testAnUndoThatCantDeleteSaysSo() throws Exception {
+		String token = signIn(clerk);
+		EmailFiling.afterEmailStored = email -> {
+			// CE's delete leaves an immutable document as it is, saying nothing, for anyone but an admin
+			jdbc().update("update ld_document set ld_immutable = 1 where ld_id = ?", email.getId());
+			DocumentDAO.get().evict(Document.class, email.getId());
+			throw new IllegalStateException("Can't go on, in the test");
+		};
+
+		ApiResponse response = fileEmail(token, request(documents, null, List.of(1, 2)), eml(FIXTURE));
+
+		assertEquals(response.toString(), 500, response.status());
+		String left = jdbc().queryForObject(
+				"select ld_customid from ld_document where ld_folderid = ? and ld_deleted = 0", String.class,
+				documents.getId());
+		assertEquals("The email was filed only in part, and documents #" + left
+				+ " couldn't be taken back. Delete them, then file the email again.",
+				response.json().path("detail").textValue());
+	}
+
+	@Test
+	public void testACopyWithoutADocNumberIsSkipped() throws Exception {
+		String token = signIn(clerk);
+		byte[] eml = eml(FIXTURE);
+		// As an email filed before Healdan, with no doc #
+		Document copy = fx.upload(documents, "forwarded.eml", part(eml, 2), boss);
+		awaitAsyncWork();
+		jdbc().update("update ld_document set ld_customid = 'ABC' where ld_id = ?", copy.getId());
+		DocumentDAO.get().evict(Document.class, copy.getId());
+
+		ApiResponse filed = fileEmail(token, request(documents, null, List.of(1, 2)), eml);
+
+		assertEquals(filed.toString(), 201, filed.status());
+		assertEquals(1, filed.json().path("attachments").size());
+		JsonNode skipped = filed.json().path("skipped");
+		assertEquals(1, skipped.size());
+		assertEquals(2, skipped.get(0).path("index").asInt());
+		assertTrue(skipped.toString(), skipped.get(0).path("document").isNull());
 	}
 
 	@Test

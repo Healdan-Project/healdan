@@ -66,8 +66,9 @@ learn from.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.
   - `hd_email` indexes email: a row for each email document, with its Message-ID and the SHA-256 of it that
     lookups search by. `EmailDocumentListener` adds the row when an email is filed, from the Message-ID it read
-    from the file, and `EmailIndex` answers which documents are copies of a message, comparing the Message-ID
-    exactly. The index, not the Message-ID property, is what Healdan trusts, as LogicalDOC's own screens can edit
+    from the file, or from the Message-ID property the document came with when the file gives none. A check-in
+    replaces it with the new version's, and takes it away when the new version is no message. `EmailIndex` answers
+    which documents are copies of a message, comparing the Message-ID exactly. The index, not the Message-ID property, is what Healdan trusts, as LogicalDOC's own screens can edit
     the property.
   - The row holds no matter. A message has few copies, so whoever asks finds each copy's matter afresh. A lookup
     joins `ld_document`, so it leaves out deleted documents. The row of a document deleted for good stays, and no

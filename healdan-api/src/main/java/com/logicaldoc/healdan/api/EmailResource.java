@@ -22,7 +22,6 @@ import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.document.Document;
@@ -203,7 +202,8 @@ public class EmailResource {
 	 * {@link Filer} of its own
 	 */
 	static Response fileWith(String email, Attachment file, UriInfo uri, EmailFiling filing) {
-		NewEmail request = parse(email);
+		// EmailFiling refuses one with no folderId
+		NewEmail request = ApiJson.part(email, NewEmail.class, EMAIL, "the filing's details");
 		if (file == null)
 			throw ApiProblem.badRequest("Send the email in a part named file.");
 		File upload = null;
@@ -219,27 +219,6 @@ public class EmailResource {
 		} finally {
 			FileUtils.deleteQuietly(upload);
 		}
-	}
-
-	/**
-	 * @return the {@code email} part
-	 * @throws ApiProblem {@code 400} if it's missing, isn't the JSON expected
-	 *         or doesn't say which folder
-	 */
-	private static NewEmail parse(String email) {
-		if (email == null)
-			throw ApiProblem.badRequest("Send the filing's details as JSON in a part named email.");
-		NewEmail request;
-		try {
-			request = ApiJson.mapper().readValue(email, NewEmail.class);
-		} catch (JsonProcessingException e) {
-			throw ApiProblem.badRequest(ProblemMapper.describe(e));
-		}
-		if (request == null)
-			throw ApiProblem.badRequest("The email part must be a JSON object.");
-		if (request.folderId() == null)
-			throw ApiProblem.badRequest("Say which folder to file the email into with folderId.");
-		return request;
 	}
 
 	/**
@@ -306,11 +285,10 @@ public class EmailResource {
 	}
 
 	/**
-	 * @return the address the web page is at: the public address, or, when
-	 *         there is none Healdan can use, the one this request was made to
+	 * @return the address the web page is at: the public address, whatever its
+	 *         scheme, or, when none is set, the one this request was made to
 	 */
 	private static String base(HttpServletRequest request) {
-		return PublicAddress.of(request).map(PublicAddress.Address::base)
-				.orElseGet(() -> PublicAddress.requested(request));
+		return PublicAddress.forLinks(request);
 	}
 }

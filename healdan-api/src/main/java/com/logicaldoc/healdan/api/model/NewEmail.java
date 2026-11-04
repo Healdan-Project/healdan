@@ -13,8 +13,9 @@ import com.fasterxml.jackson.databind.JsonNode;
  *
  * @param folderId the folder to file the email, and its attachments, into
  * @param properties property values, by name, as {@link NewDocument} takes
- *        them; they apply to the email and to each attachment filed with it,
- *        but for the email fields
+ *        them; they apply to the email and to each attachment filed with it.
+ *        The email fields can't be sent: each document takes its own from its
+ *        file
  * @param attachments the indexes, as {@code POST /v1/emails/inspect} gave
  *        them, of the attachments to file as documents of their own; null or
  *        empty for none

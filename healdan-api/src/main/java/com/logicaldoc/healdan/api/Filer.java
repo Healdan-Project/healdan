@@ -5,7 +5,9 @@ package com.logicaldoc.healdan.api;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -23,8 +25,12 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
+import com.logicaldoc.healdan.email.EmailFields;
+import com.logicaldoc.healdan.matter.Matter;
+import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.profile.Inheritance;
 import com.logicaldoc.healdan.profile.ProfileView;
 import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
@@ -46,6 +52,9 @@ public class Filer {
 	private static final String NAME = "name";
 
 	private static final String FILE = "file";
+
+	/** CE's {@code Version.DEFAULT_START_VERSION} */
+	private static final String DEFAULT_FIRST_VERSION = "1.0";
 
 	/**
 	 * @return the filer
@@ -75,6 +84,10 @@ public class Filer {
 	 * stamped with it and version 1.0 before CE's create stores it (M3 spec
 	 * section 9.7). The stamp rewrites the upload file. A create that fails then
 	 * leaves a gap in the doc #s, as a deleted document does.
+	 * <p>
+	 * An email ({@code eml} or {@code msg}) with a Message-ID is filed holding
+	 * its {@link MessageLocks}, so it waits for a filing of its message into the
+	 * matter to end, as a repeat of that filing does.
 	 *
 	 * @param folder the folder to file into
 	 * @param name the name to file the document under
@@ -84,12 +97,18 @@ public class Filer {
 	 * @return the document, stored
 	 * @throws ApiProblem {@code 413} for a file over the upload limit,
 	 *         {@code 422} for a name, an empty file or properties that are
-	 *         wrong
+	 *         wrong, {@code 409 filing-in-progress} for an email whose message
+	 *         another filing holds too long
 	 */
 	public Document file(Folder folder, String name, Map<String, JsonNode> properties, File upload, Caller caller) {
-		return file(folder, name, properties, upload, caller, stored -> {
-			// The answer says what was stored
-		});
+		// A file the checks will refuse isn't read
+		String messageId = upload.length() > 0L && upload.length() <= Uploads.maxBytes()
+				? messageIdOf(upload, StringUtils.strip(name))
+				: null;
+		try (MessageLocks.Held held = MessageLocks.lock(messageId != null ? matterOf(folder) : null,
+				Collections.singletonList(messageId))) {
+			return file(folder, name, properties, upload, caller, null);
+		}
 	}
 
 	/**
@@ -105,7 +124,7 @@ public class Filer {
 	 * @param upload the content, in a file the caller made and deletes
 	 * @param caller who files it
 	 * @param stored told of the document once CE has stored it, before the
-	 *        version record is checked
+	 *        version record is checked; null for nobody
 	 * @return the document, stored
 	 */
 	public Document file(Folder folder, String name, Map<String, JsonNode> properties, File upload, Caller caller,
@@ -138,7 +157,7 @@ public class Filer {
 
 			// Every check has passed: the number is taken now, so that the file can carry it (M3 spec section 9.7)
 			long docNumber = DocNumberListener.reserveNext();
-			String docId = DocIdStamper.value(docNumber, DocumentResource.firstVersion());
+			String docId = DocIdStamper.value(docNumber, firstVersion());
 			boolean stamped = DocIdStamper.stamp(upload.toPath(), Uploads.extension(fileName), docId);
 			Document created;
 			// A create that fails leaves a gap in the doc #s, as a deleted document does
@@ -146,16 +165,60 @@ public class Filer {
 				created = create(upload, vo, transaction);
 			} catch (Throwable failure) {
 				// CE commits the record before it makes the first version, which can fail
-				reportStored(docNumber, user.getTenantId(), stored);
+				if (stored != null)
+					reportStored(docNumber, user.getTenantId(), stored);
 				throw failure;
 			}
-			stored.accept(created);
+			if (stored != null)
+				stored.accept(created);
 			if (stamped && !docId.equals(DocIdStamper.value(Long.parseLong(created.getCustomId()),
 					created.getFileVersion())))
 				log.warn("Document #{} v{} was stamped {}", created.getCustomId(), created.getFileVersion(), docId);
 			// CE swallows a failed write of the version record, as it does on a save
 			VersionResource.confirmStored(created.getId(), Long.parseLong(created.getCustomId()), null, user);
 			return created;
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't file a document", e);
+		}
+	}
+
+	/**
+	 * @return the version CE gives a new document, from
+	 *         {@code document.startversion} as CE reads it (its own reader
+	 *         isn't public): {@code 1.0} by default
+	 */
+	static String firstVersion() {
+		String start = Context.get().getConfig().getString("document.startversion", DEFAULT_FIRST_VERSION);
+		try {
+			String[] parts = start.split("\\.");
+			return start.contains(".") ? "%d.%d".formatted(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]))
+					: "%d.0".formatted(Integer.parseInt(start));
+		} catch (RuntimeException e) {
+			return DEFAULT_FIRST_VERSION;
+		}
+	}
+
+	/**
+	 * @param upload a file
+	 * @param name the name it is filed under, or null
+	 * @return its Message-ID, for a file the email listener reads as an email
+	 *         ({@code eml} or {@code msg}); null for any other, or one with
+	 *         none
+	 */
+	static String messageIdOf(File upload, String name) {
+		if (name == null)
+			return null;
+		String extension = Uploads.extension(name).toLowerCase(Locale.ROOT);
+		if (!HealdanConstants.EMAIL_EXTENSIONS.contains(extension))
+			return null;
+		return EmailFields.extract(upload, extension).map(EmailFields::messageId).orElse(null);
+	}
+
+	/** @return the id of the matter the folder is in; null outside one */
+	private static Long matterOf(Folder folder) {
+		try {
+			Matter matter = MatterLocator.get().locate(folder).matter();
+			return matter != null ? matter.getId() : null;
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't file a document", e);
 		}

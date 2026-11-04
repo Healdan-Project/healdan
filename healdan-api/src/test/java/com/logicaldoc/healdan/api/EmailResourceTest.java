@@ -341,6 +341,9 @@ public class EmailResourceTest extends ApiTestCase {
 		// With a public address, its path included
 		config().setProperty(SERVER_URL, "https://dms.example.com/healdan/");
 		assertEquals("https://dms.example.com/healdan/frontend.jsp?docId=" + copy.getId(), address(token, null));
+		// over plain HTTP too, as a link only shows it
+		config().setProperty(SERVER_URL, "http://dms.example.com/healdan");
+		assertEquals("http://dms.example.com/healdan/frontend.jsp?docId=" + copy.getId(), address(token, null));
 
 		// With none, the address the request was made to, whatever its scheme
 		config().setProperty(SERVER_URL, "http://server:port");

@@ -3,6 +3,8 @@
 
 package com.logicaldoc.healdan.email;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -10,6 +12,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -18,14 +21,19 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.bouncycastle.cms.CMSException;
+import org.bouncycastle.cms.CMSSignedData;
+import org.bouncycastle.cms.CMSTypedData;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.internet.ContentType;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeUtility;
+import jakarta.mail.internet.ParseException;
 
 /**
  * Healdan's own walk of an {@code eml}'s MIME parts (M5 spec §6.6). CE's
@@ -36,13 +44,16 @@ import jakarta.mail.internet.MimeUtility;
  * <p>
  * The walk goes depth first from the message. {@code multipart/signed} is
  * walked into its first part only, which is the content; the signature isn't
- * an attachment. A part that is encrypted ({@code multipart/encrypted},
- * {@code application/pkcs7-mime}, {@code application/x-pkcs7-mime}) or
- * rights-protected (Outlook's {@code application/x-microsoft-rpmsg-message},
- * usually named {@code message.rpmsg}) has nothing readable and contributes
- * nothing, so a message that is one lists nothing. A {@code message/rfc822}
- * part is one attached message and isn't walked into. Any other multipart is
- * walked in order.
+ * an attachment. Opaque-signed S/MIME ({@code application/pkcs7-mime} or
+ * {@code application/x-pkcs7-mime} with {@code smime-type=signed-data}) is
+ * walked into the content its signature wraps. A part that is encrypted
+ * ({@code multipart/encrypted}, any other {@code application/pkcs7-mime} or
+ * {@code application/x-pkcs7-mime}) or rights-protected (Outlook's
+ * {@code application/x-microsoft-rpmsg-message}, usually named
+ * {@code message.rpmsg}) has nothing readable and contributes nothing, so a
+ * message that is one lists nothing. A {@code message/rfc822} part is one
+ * attached message and isn't walked into; it is named as an {@code eml}. Any
+ * other multipart is walked in order.
  * <p>
  * A leaf is <em>inline</em> when its disposition is {@code inline} and it has
  * a Content-ID, or when an HTML part of the message names its Content-ID as a
@@ -60,7 +71,10 @@ public final class MessageParts {
 
 	private static final String MESSAGE = "message/rfc822";
 
-	/** Parts whose content is encrypted or rights-protected: nothing in them can be read, so nothing is listed */
+	/**
+	 * Parts whose content is encrypted or rights-protected: nothing in them can be read, so nothing is listed. An
+	 * opaque-signed pkcs7-mime is walked into before these are looked at
+	 */
 	private static final List<String> UNREADABLE = List.of("multipart/encrypted", "application/pkcs7-mime",
 			"application/x-pkcs7-mime", "application/x-microsoft-rpmsg-message");
 
@@ -104,6 +118,18 @@ public final class MessageParts {
 		}
 	}
 
+	/** Takes each part's content, as {@link MessageParts#write(MimeMessage, Collection, Writer)} reads it */
+	@FunctionalInterface
+	public interface Writer {
+
+		/**
+		 * @param index the part's index
+		 * @param content its decoded content, which the walk closes
+		 * @throws IOException if it can't be written
+		 */
+		void write(int index, InputStream content) throws IOException;
+	}
+
 	/** A part the walk found, with what {@link #write} needs to read it again */
 	private record Found(String name, String type, boolean inline, String messageId, jakarta.mail.Part source) {
 	}
@@ -145,12 +171,32 @@ public final class MessageParts {
 	 * @throws MessagingException if the message can't be walked
 	 */
 	public static void write(MimeMessage message, int index, OutputStream out) throws IOException, MessagingException {
+		write(message, List.of(index), (i, content) -> content.transferTo(out));
+	}
+
+	/**
+	 * Writes several parts' content, walking the message once.
+	 *
+	 * @param message the message
+	 * @param indexes the parts' indexes, as {@link #list} gave them, in the
+	 *        order to write them
+	 * @param writer given each part's decoded content in turn; an attached
+	 *        message as its {@code eml} bytes
+	 * @throws IllegalArgumentException if the message has no such part; then
+	 *         nothing is written
+	 * @throws IOException if a part can't be read or written
+	 * @throws MessagingException if the message can't be walked
+	 */
+	public static void write(MimeMessage message, Collection<Integer> indexes, Writer writer)
+			throws IOException, MessagingException {
 		List<Found> found = scan(Objects.requireNonNull(message));
-		if (index < 0 || index >= found.size())
-			throw new IllegalArgumentException("The message has no part " + index);
-		try (InputStream in = found.get(index).source().getInputStream()) {
-			in.transferTo(out);
-		}
+		for (int index : indexes)
+			if (index < 0 || index >= found.size())
+				throw new IllegalArgumentException("The message has no part " + index);
+		for (int index : indexes)
+			try (InputStream in = found.get(index).source().getInputStream()) {
+				writer.write(index, in);
+			}
 	}
 
 	/** The decoded length, read once */
@@ -195,6 +241,10 @@ public final class MessageParts {
 		void visit(jakarta.mail.Part part, int depth) throws MessagingException, IOException {
 			if (depth > MAX_DEPTH)
 				throw new MessagingException("Nested too deeply");
+			if (opaqueSigned(part)) {
+				visit(signedContent(part), depth + 1);
+				return;
+			}
 			for (String unreadable : UNREADABLE)
 				if (part.isMimeType(unreadable))
 					return;
@@ -223,6 +273,35 @@ public final class MessageParts {
 		if (part.getContent() instanceof Multipart multipart)
 			return multipart;
 		throw new MessagingException("Not a multipart");
+	}
+
+	/** True for opaque-signed S/MIME, which is signed, not encrypted */
+	private static boolean opaqueSigned(jakarta.mail.Part part) throws MessagingException {
+		if (!part.isMimeType("application/pkcs7-mime") && !part.isMimeType("application/x-pkcs7-mime"))
+			return false;
+		try {
+			return "signed-data".equalsIgnoreCase(new ContentType(part.getContentType()).getParameter("smime-type"));
+		} catch (ParseException e) {
+			return false;
+		}
+	}
+
+	/** The MIME entity an opaque signature wraps, read whole, as the signed content is a few attachments at most */
+	private static jakarta.mail.Part signedContent(jakarta.mail.Part part) throws MessagingException, IOException {
+		byte[] signature;
+		try (InputStream in = part.getInputStream()) {
+			signature = in.readAllBytes();
+		}
+		ByteArrayOutputStream content = new ByteArrayOutputStream();
+		try {
+			CMSTypedData signed = new CMSSignedData(signature).getSignedContent();
+			if (signed == null)
+				throw new MessagingException("No signed content");
+			signed.write(content);
+		} catch (CMSException e) {
+			throw new MessagingException("Not signed data", e);
+		}
+		return new MimeBodyPart(new ByteArrayInputStream(content.toByteArray()));
 	}
 
 	/** An HTML part's text; its bytes read as Latin-1 when the JVM lacks its charset, as references are ASCII */
@@ -260,6 +339,9 @@ public final class MessageParts {
 			log.debug("Cannot read an attached message", e);
 		}
 		String name = name(part);
+		// Filed as an eml, it must end like one for its email fields to be read
+		if (name != null && !name.toLowerCase(Locale.ROOT).endsWith(".eml"))
+			name = FileNames.fromFileName(name + ".eml", ATTACHED_MESSAGE_NAME);
 		return new Found(name != null ? name : FileNames.fromSubject(subject, "eml", ATTACHED_MESSAGE_NAME), MESSAGE,
 				false, messageId, part);
 	}
