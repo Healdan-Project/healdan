@@ -19,10 +19,10 @@ menu, are Healdan's version and the installation ID; give both when you report a
 | Environment | the settings the server runs with, the container's environment among them, with secrets masked |
 
 The **Environment** tab shows `********` in place of anything that looks secret: a variable or setting whose name
-has *password*, *secret*, *token*, *credential*, *API key*, *access key*, *private key*, *security key* or
-*licence key* in it, such as `DB_PASSWORD`, a `-D` option named that way inside another value, such as
-`CATALINA_OPTS`, and the password in an address, such as a proxy's. An empty value still shows as empty, so you can
-see whether it's set.
+has *password*, *secret*, *token*, *credential*, *API key*, *access key*, *private key*, *security key*,
+*licence key*, *encryption key* or *anonymous key* in it, such as `DB_PASSWORD`, a `-D` option named that way
+inside another value, such as `CATALINA_OPTS`, and the password in an address, such as a proxy's. An empty value
+still shows as empty, so you can see whether it's set.
 
 {{< callout type="warning" >}}
 A secret under some other name still shows in plain text. Check a screenshot of the **Environment** tab before you

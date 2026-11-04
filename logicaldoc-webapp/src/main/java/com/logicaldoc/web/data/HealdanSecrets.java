@@ -36,7 +36,8 @@ public final class HealdanSecrets {
     // A name with one of these in it, in any case, holds a secret. The index's
     // token filters are settings, not tokens.
     private static final String SECRET_WORDS = "password|passwd|secret|token(?!filter)|credential|api[._-]?key"
-            + "|access[._-]?key|private[._-]?key|security[._-]?key|licen[cs]e[._-]?key";
+            + "|access[._-]?key|private[._-]?key|security[._-]?key|licen[cs]e[._-]?key|encryption[._-]?key"
+            + "|anonymous[._-]?key";
 
     private static final Pattern SECRET_NAME = Pattern.compile("(?i).*(" + SECRET_WORDS + ").*");
 

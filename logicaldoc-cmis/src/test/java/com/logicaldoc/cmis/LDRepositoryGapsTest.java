@@ -15,8 +15,11 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.chemistry.opencmis.commons.PropertyIds;
+import org.apache.chemistry.opencmis.commons.data.FailedToDeleteData;
 import org.apache.chemistry.opencmis.commons.data.ObjectData;
+import org.apache.chemistry.opencmis.commons.data.ObjectParentData;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisConstraintException;
+import org.apache.chemistry.opencmis.commons.exceptions.CmisInvalidArgumentException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisPermissionDeniedException;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.PropertiesImpl;
 import org.apache.chemistry.opencmis.commons.impl.dataobjects.PropertyIdImpl;
@@ -27,10 +30,13 @@ import org.junit.Test;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentStatus;
 import com.logicaldoc.core.document.FolderAccessControlEntry;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
 import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.SessionManager;
@@ -42,9 +48,10 @@ import com.logicaldoc.util.plugin.PluginException;
  * CMIS gaps the capability map listed: folder creation asked WRITE on the
  * parent where the GUI and the web services ask ADD, and {@code getObject}
  * resolves a shortcut to the document it points to, and a folder alias to its
- * folder, so deleting, moving or renaming one acted on what it points to.
- * Deleting a tree also went round an immutable document, which the document
- * DAO keeps from CMIS's session user, and deleted the folders round it.
+ * folder, so deleting, moving or renaming one acted on what it points to, and
+ * reading it read what it points to. Deleting a tree also went round an
+ * immutable document, which the document DAO kept from CMIS's session user,
+ * who came without its groups, and deleted the folders round it.
  */
 public class LDRepositoryGapsTest extends AbstractCmisTestCase {
 
@@ -309,11 +316,14 @@ public class LDRepositoryGapsTest extends AbstractCmisTestCase {
         authorOnly(tree.getId(), Permission.READ, Permission.DELETE);
         authorOnly(inner.getId(), Permission.READ, Permission.DELETE);
 
-        // CMIS's session user comes without its groups, so an admin's too
+        // An admin's too, as the folder DAO's deleteTree() refuses. The
+        // refusal counts them, as the tree's permissions aren't checked yet.
         for (LDRepository repository : List.of(asAuthor, asAdmin))
             for (boolean continueOnFailure : new boolean[] { false, true })
-                assertThrows(CmisConstraintException.class,
-                        () -> repository.deleteTree(null, "fld." + tree.getId(), continueOnFailure));
+                assertEquals("Folder %d holds immutable documents (1)".formatted(tree.getId()),
+                        assertThrows(CmisConstraintException.class,
+                                () -> repository.deleteTree(null, "fld." + tree.getId(), continueOnFailure))
+                                .getMessage());
 
         // Nothing was deleted, as the folder DAO's deleteTree() refuses it
         assertNotNull(folderDao.findById(tree.getId()));
@@ -332,6 +342,67 @@ public class LDRepositoryGapsTest extends AbstractCmisTestCase {
         for (LDRepository repository : List.of(asAuthor, asAdmin))
             assertThrows(CmisConstraintException.class, () -> repository.deleteObject(null, "doc." + PLAIN));
         assertNotNull(documentDao.findById(PLAIN));
+    }
+
+    @Test
+    public void testADeleteTheDaoSkipsIsReportedAndKeepsTheFolder() throws PersistenceException {
+        // While storing is off, the DAOs skip every delete without saying so
+        Folder tree = folder("tree", Folder.DEFAULTWORKSPACEID);
+        documentDao.jdbcUpdate("update ld_document set ld_folderid = %d where ld_id = %d".formatted(tree.getId(), OTHER));
+        boolean storing = RunLevel.current().aspectEnabled(Aspect.STORING);
+        FailedToDeleteData failed;
+        RunLevel.current().setAspect(Aspect.STORING, false);
+        try {
+            failed = asAdmin.deleteTree(null, "fld." + tree.getId(), true);
+        } finally {
+            RunLevel.current().setAspect(Aspect.STORING, storing);
+        }
+
+        // The folder still holds the document, so it isn't deleted either
+        assertEquals(List.of("doc." + OTHER, "fld." + tree.getId()), failed.getIds());
+        assertNotNull(documentDao.findById(OTHER));
+        assertNotNull(folderDao.findById(tree.getId()));
+    }
+
+    @Test
+    public void testAnAdminCancelsSomeoneElsesCheckOut() throws PersistenceException {
+        // CMIS's session user came without its groups, so its admin checks never passed
+        documentDao.jdbcUpdate("update ld_document set ld_status = %d, ld_lockuserid = 4 where ld_id = %d"
+                .formatted(DocumentStatus.CHECKEDOUT.ordinal(), PLAIN));
+
+        asAdmin.cancelCheckOut("doc." + PLAIN);
+
+        assertEquals(DocumentStatus.UNLOCKED, documentDao.findById(PLAIN).getStatus());
+    }
+
+    @Test
+    public void testReadingAShortcutOrAnAliasReadsItself() throws PersistenceException {
+        // As listings show them, and as a move or a rename leaves them
+        Folder target = folder("target", Folder.DEFAULTWORKSPACEID);
+        asAdmin.moveObject(context(), new Holder<>("doc." + SHORTCUT), "fld." + target.getId(), null);
+
+        assertEquals("doc." + SHORTCUT,
+                asAdmin.getObject(context(), "doc." + SHORTCUT, null, null, false, false, null).getId());
+        List<ObjectParentData> parents = asAdmin.getObjectParents(context(), "doc." + SHORTCUT, null, false, false,
+                null);
+        assertEquals("fld." + target.getId(), parents.get(0).getObject().getId());
+
+        Folder outside = folder("outside", target.getId());
+        Folder alias = alias(Folder.DEFAULTWORKSPACEID, outside);
+        assertEquals("fld." + alias.getId(),
+                asAdmin.getObject(context(), "fld." + alias.getId(), null, null, false, false, null).getId());
+        assertEquals("fld." + Folder.DEFAULTWORKSPACEID,
+                asAdmin.getFolderParent(context(), "fld." + alias.getId()).getId());
+    }
+
+    @Test
+    public void testAVersionIsNeitherMovedNorUpdated() throws PersistenceException {
+        Folder target = folder("target", Folder.DEFAULTWORKSPACEID);
+
+        assertThrows(CmisInvalidArgumentException.class,
+                () -> asAdmin.moveObject(context(), new Holder<>("ver.1"), "fld." + target.getId(), null));
+        assertThrows(CmisInvalidArgumentException.class,
+                () -> asAdmin.updateProperties(context(), new Holder<>("ver.1"), name("renamed"), null));
     }
 
     private Folder folder(String name, long parentId) throws PersistenceException {

@@ -3,6 +3,7 @@
 
 package com.logicaldoc.web;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -16,6 +17,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -76,6 +78,7 @@ public class LogDownloadSecretsTest extends AbstractWPTestCase {
         config.setProperty("LDOCHOME", home.getPath());
         // CE's dump of the configuration left out only keys with "password"
         config.setProperty("healdan.test.clientSecret", "dump-s3cret");
+        Set<String> leftBefore = environmentFilesLeft();
         try (MockedConstruction<LogConfigurator> logConfigurators = Mockito.mockConstruction(LogConfigurator.class,
                 (configurator, context) -> when(configurator.getLogsRoot()).thenReturn(logs.getPath()))) {
             download();
@@ -84,6 +87,10 @@ public class LogDownloadSecretsTest extends AbstractWPTestCase {
             config.setProperty("LDOCHOME", ldocHome);
             config.remove("healdan.test.clientSecret");
         }
+
+        // CE wrote its dump into the environment's temp file once more, and
+        // left it in the temp folder
+        assertEquals(leftBefore, environmentFilesLeft());
 
         Map<String, String> entries = unzip();
         // The zip was made, with every part this test looks at
@@ -94,7 +101,7 @@ public class LogDownloadSecretsTest extends AbstractWPTestCase {
 
         for (Map.Entry<String, String> entry : entries.entrySet())
             for (String secret : List.of("env-hunter2", "opt-s3cret", "db-s3cret", "smtp-s3cret", "proxy-s3cret",
-                    "url-s3cret", "backup-s3cret", "tomcat-s3cret", "dump-s3cret"))
+                    "url-s3cret", "backup-s3cret", "tomcat-s3cret", "dump-s3cret", "enc-s3cret"))
                 assertFalse(entry.getKey() + " holds " + secret, entry.getValue().contains(secret));
 
         String environment = entries.get("environment.txt");
@@ -126,6 +133,7 @@ public class LogDownloadSecretsTest extends AbstractWPTestCase {
                 proxy.password=
                 proxy.password.old=proxy-s3cret
                 index.tokenfilter.stemmer=enabled
+                encryption.key=enc-s3cret
                 """);
         write(new File(home, "conf/context.properties.bak"), "jdbc.password:backup-s3cret\n");
         write(new File(home, "conf/build.properties"),
@@ -163,6 +171,16 @@ public class LogDownloadSecretsTest extends AbstractWPTestCase {
                 entries.put(entry.getName(), new String(zin.readAllBytes(), StandardCharsets.ISO_8859_1));
         }
         return entries;
+    }
+
+    /**
+     * The environment files in the temp folder, where the download makes its
+     * own
+     */
+    private static Set<String> environmentFilesLeft() {
+        String[] names = new File(System.getProperty("java.io.tmpdir"))
+                .list((dir, name) -> name.startsWith("environment") && name.endsWith(".txt"));
+        return names != null ? Set.of(names) : Set.of();
     }
 
     private static void write(File file, String content) throws IOException {
