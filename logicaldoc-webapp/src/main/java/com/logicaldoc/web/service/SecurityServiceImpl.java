@@ -1208,6 +1208,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public void deleteMenu(long menuId) throws ServerException {
         Session session = validateSession();
+        // Healdan: GUI settings for a custom action, else Access control
+        HealdanRpcChecks.menuDelete(session, menuId);
 
         MenuDAO dao = MenuDAO.get();
         try {
@@ -1224,7 +1226,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public void saveMenus(List<GUIMenu> menus, String locale) throws ServerException {
-        validateSession();
+        // Healdan: what saving each menu needs, every one before any is saved
+        HealdanRpcChecks.menuChanges(validateSession(), menus);
 
         for (GUIMenu guiMenu : menus)
             saveMenu(guiMenu, locale);
@@ -1233,6 +1236,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public GUIMenu saveMenu(GUIMenu guiMenu, String locale) throws ServerException {
         Session session = validateSession();
+        // Healdan: GUI settings for a custom action, else Access control
+        HealdanRpcChecks.menuChanges(session, List.of(guiMenu));
 
         MenuDAO dao = MenuDAO.get();
         try {
@@ -1292,6 +1297,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public GUIMenu getMenu(long menuId, String locale) throws ServerException {
         Session session = validateSession();
+        // Healdan: what changing the menu needs, or the right to run a custom action
+        HealdanRpcChecks.menuRead(session, menuId);
 
         try {
             Menu menu = MenuDAO.get().findById(menuId);
@@ -1398,7 +1405,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public List<GUISequence> loadBlockedEntities() throws ServerException {
-        Session session = validateSession();
+        // Healdan: the Brute force prevention screen's menu
+        Session session = checkMenu(getThreadLocalRequest(), HealdanRpcChecks.BRUTE_FORCE_MENU);
         if (session.getTenantId() != Tenant.DEFAULT_ID)
             return new ArrayList<>();
 
@@ -1450,7 +1458,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public void removeBlockedEntities(List<Long> ids) throws ServerException {
-        Session session = validateSession();
+        // Healdan: the Brute force prevention screen's menu
+        Session session = checkMenu(getThreadLocalRequest(), HealdanRpcChecks.BRUTE_FORCE_MENU);
         if (session.getTenantId() != Tenant.DEFAULT_ID)
             return;
 
@@ -1467,7 +1476,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public void replicateUsersSettings(long masterUserId, List<Long> userIds, boolean gui, boolean groups)
             throws ServerException {
-        Session session = validateSession();
+        // Healdan: Access control, whose Users screen calls it
+        Session session = checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
 
         UserDAO userDao = UserDAO.get();
         try {
@@ -1507,6 +1517,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public void updateDeviceLabel(long deviceId, String label) throws ServerException {
         Session session = validateSession();
+        // Healdan: only the device's owner
+        HealdanRpcChecks.ownDevices(session, List.of(deviceId));
         DeviceDAO dDao = DeviceDAO.get();
         try {
             Device device = dDao.findById(deviceId);
@@ -1553,6 +1565,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public void deleteTrustedDevices(List<Long> ids) throws ServerException {
         Session session = validateSession();
+        // Healdan: only the devices' owner, every one before any is deleted
+        HealdanRpcChecks.ownDevices(session, ids);
         DeviceDAO dDao = DeviceDAO.get();
         for (Long id : ids)
             try {
@@ -1564,7 +1578,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public String syncGeolocationDB(String key) throws ServerException {
-        Session session = validateSession();
+        // Healdan: Access control, as the same screen's saveSettings
+        Session session = checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
         Context.get().getConfig().setProperty(SECURITY_GEOLOCATION_APIKEY, key != null ? key : "");
         try {
             Context.get().getConfig().write();
@@ -1580,6 +1595,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public void saveAvatar(long userId) throws ServerException {
         Session session = validateSession();
+        // Healdan: the user's own, or Access control
+        HealdanRpcChecks.userChange(session, userId);
 
         Map<String, File> uploadedFilesMap = UploadServlet.getUploads(session.getSid());
         Map.Entry<String, File> file = uploadedFilesMap.entrySet().iterator().next();
@@ -1598,6 +1615,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
     @Override
     public void resetAvatar(long userId) throws ServerException {
         Session session = validateSession();
+        // Healdan: the user's own, or Access control
+        HealdanRpcChecks.userChange(session, userId);
 
         try {
             UserDAO userDao = UserDAO.get();
@@ -1612,7 +1631,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
     @Override
     public void cloneWorkTimes(long srcUserId, List<Long> userIds, List<Long> groupIds) throws ServerException {
-        Session session = validateSession();
+        // Healdan: Access control, whose Users screen's Working time tab calls it
+        Session session = checkMenu(getThreadLocalRequest(), Menu.ACCESS_CONTROL);
 
         Set<Long> uniqueUserIds = userIds.stream().distinct().collect(Collectors.toSet());
 
