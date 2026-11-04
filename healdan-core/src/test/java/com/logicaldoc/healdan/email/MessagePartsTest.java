@@ -17,6 +17,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Stream;
 
 import org.junit.Test;
 
@@ -129,13 +132,16 @@ public class MessagePartsTest {
 		assertEquals(PDF.length, parts.get(0).size());
 	}
 
+	/** The older S/MIME type name, named so that it would be listed if it were walked */
+	private static MimeMessage pkcs7() throws Exception {
+		return built("application/x-pkcs7-mime; name=\"smime.p7m\"", "ZGF0YQ==\n");
+	}
+
 	@Test
 	public void testEncryptedListsNothing() throws Exception {
 		// parts-encrypted.eml has a name and an attachment disposition, so it would be listed if it were walked
 		assertEquals(List.of(), MessageParts.list(fixture("parts-encrypted.eml")));
-
-		// The older S/MIME type name, named so that it would be listed if it were walked
-		assertEquals(List.of(), MessageParts.list(built("application/x-pkcs7-mime; name=\"smime.p7m\"", "ZGF0YQ==\n")));
+		assertEquals(List.of(), MessageParts.list(pkcs7()));
 		// PGP/MIME, whose second part is named
 		assertEquals(List.of(), MessageParts.list(pgp()));
 	}
@@ -153,27 +159,36 @@ public class MessagePartsTest {
 		assertEquals(List.of(), MessageParts.list(fixture("parts-rights-protected.eml")));
 
 		// Only the protected part is unreadable: a PDF beside it is still listed
-		MimeMessage message = mixed(
+		assertEquals(List.of("Plain.pdf"), names(rpmsgAndPdf()));
+	}
+
+	private static MimeMessage rpmsgAndPdf() throws Exception {
+		return mixed(
 				file("Content-Type: application/x-microsoft-rpmsg-message\nContent-Disposition: attachment; filename=\"message.rpmsg\""),
 				file("Content-Type: application/pdf\nContent-Disposition: attachment; filename=\"Plain.pdf\""));
-		assertEquals(List.of("Plain.pdf"), names(message));
+	}
+
+	private static MimeMessage pkcs7AndPdf() throws Exception {
+		return mixed(
+				file("Content-Type: application/pkcs7-mime; name=\"smime.p7m\"\nContent-Disposition: attachment; filename=\"smime.p7m\""),
+				file("Content-Type: application/pdf\nContent-Disposition: attachment; filename=\"Plain.pdf\""));
 	}
 
 	@Test
 	public void testAnEncryptedPartEndsOnlyItsOwnBranch() throws Exception {
 		// Of two siblings, the encrypted one lists nothing and the other still lists
-		MimeMessage message = mixed(
-				file("Content-Type: application/pkcs7-mime; name=\"smime.p7m\"\nContent-Disposition: attachment; filename=\"smime.p7m\""),
-				file("Content-Type: application/pdf\nContent-Disposition: attachment; filename=\"Plain.pdf\""));
-		assertEquals(List.of("Plain.pdf"), names(message));
+		assertEquals(List.of("Plain.pdf"), names(pkcs7AndPdf()));
+	}
+
+	/** Cut after the headers and a few lines of preamble: a multipart with no boundary at all */
+	private static MimeMessage truncated() throws Exception {
+		String eml = new String(bytes("parts-attached.eml"), StandardCharsets.ISO_8859_1);
+		return parse(eml.substring(0, eml.indexOf("--=_mixed_1") - 1).getBytes(StandardCharsets.ISO_8859_1));
 	}
 
 	@Test
 	public void testUnreadableListsNothing() throws Exception {
-		// Cut after the headers and a few lines of preamble: a multipart with no boundary at all
-		String eml = new String(bytes("parts-attached.eml"), StandardCharsets.ISO_8859_1);
-		String truncated = eml.substring(0, eml.indexOf("--=_mixed_1") - 1);
-		MimeMessage message = parse(truncated.getBytes(StandardCharsets.ISO_8859_1));
+		MimeMessage message = truncated();
 
 		try (LogCapture log = LogCapture.of(MessageParts.class)) {
 			assertEquals(List.of(), MessageParts.list(message));
@@ -250,13 +265,8 @@ public class MessagePartsTest {
 				() -> MessageParts.write(fixture("parts-encrypted.eml"), 0, new ByteArrayOutputStream()));
 	}
 
-	@Test
-	public void testNamesAreSafe() throws Exception {
-		// No path, and nothing a store or an operating system refuses
-		assertEquals(List.of("x_y_.pdf"), names(mixed(
-				file("Content-Type: application/pdf\nContent-Disposition: attachment; filename=\"../x:y?.pdf\""))));
-
-		String[][] table = {
+	/** The headers of a part and the name it should be given */
+	private static final String[][] NAME_TABLE = {
 				{ "Content-Disposition: attachment; filename=\"C:\\\\Users\\\\ann\\\\Report.docx\"", "Report.docx" },
 				{ "Content-Disposition: attachment; filename=\"/etc/passwd\"", "passwd" },
 				{ "Content-Disposition: attachment; filename=\"=?utf-8?Q?Caf=C3=A9_menu.pdf?=\"", "Caf\u00e9 menu.pdf" },
@@ -267,26 +277,55 @@ public class MessagePartsTest {
 				{ "Content-Disposition: attachment; filename=\"a<b>|c.pdf.\"", "a_b__c.pdf" },
 				// The Content-Type's name when the disposition has none
 				{ "Content-Type: application/pdf; name=\"Only In Type.pdf\"", "Only In Type.pdf" } };
-		for (String[] row : table)
-			assertEquals(row[0], List.of(row[1]), names(mixed(file(row[0].startsWith("Content-Type") ? row[0]
-					: "Content-Type: application/pdf\n" + row[0]))));
+
+	private static MimeMessage named(String headers) throws Exception {
+		return mixed(file(headers.startsWith("Content-Type") ? headers : "Content-Type: application/pdf\n" + headers));
+	}
+
+	private static MimeMessage pathName() throws Exception {
+		return named("Content-Disposition: attachment; filename=\"../x:y?.pdf\"");
+	}
+
+	private static MimeMessage longName() throws Exception {
+		return named("Content-Disposition: attachment; filename=\"" + "a".repeat(300) + ".pdf\"");
+	}
+
+	@Test
+	public void testNamesAreSafe() throws Exception {
+		// No path, and nothing a store or an operating system refuses
+		assertEquals(List.of("x_y_.pdf"), names(pathName()));
+
+		for (String[] row : NAME_TABLE)
+			assertEquals(row[0], List.of(row[1]), names(named(row[0])));
 
 		// A long name is shortened, and keeps its extension
-		List<String> longName = names(mixed(file("Content-Type: application/pdf\n"
-				+ "Content-Disposition: attachment; filename=\"" + "a".repeat(300) + ".pdf\"")));
+		List<String> longName = names(longName());
 		assertEquals(255, longName.get(0).length());
 		assertTrue(longName.get(0).endsWith("aaa.pdf"));
+	}
+
+	private static final String[] MARKUPS = { "<img src=\"cid:one@example.com\">", "<IMG SRC='CID:ONE@EXAMPLE.COM'>",
+			"<img src=cid:one@example.com>", "<img src=\"cid:one%40example.com\">",
+			"<td style=\"background:url(cid:one@example.com);\">" };
+
+	/** An HTML part with the markup, and an image with a Content-ID, a disposition or a name of its own */
+	private static MimeMessage referencing(String markup) throws Exception {
+		return mixed(html(markup), file("Content-Type: image/png\nContent-ID: <one@example.com>"));
+	}
+
+	private static MimeMessage plusSign() throws Exception {
+		return mixed(html("<img src=\"cid:a+b@example.com\">"), file("Content-Type: image/png\nContent-ID: <a+b@example.com>"));
+	}
+
+	private static MimeMessage noImages() throws Exception {
+		return mixed(html("<p>No images</p>"), file("Content-Type: image/png\nContent-ID: <one@example.com>"));
 	}
 
 	@Test
 	public void testReferencesAreFoundHoweverTheyAreWritten() throws Exception {
 		// Each part has a Content-ID and no disposition and no name, so only a reference makes it inline
-		String[] markups = { "<img src=\"cid:one@example.com\">", "<IMG SRC='CID:ONE@EXAMPLE.COM'>",
-				"<img src=cid:one@example.com>", "<img src=\"cid:one%40example.com\">",
-				"<td style=\"background:url(cid:one@example.com);\">" };
-		for (String markup : markups) {
-			List<Part> parts = MessageParts.list(mixed(html(markup),
-					file("Content-Type: image/png\nContent-ID: <one@example.com>")));
+		for (String markup : MARKUPS) {
+			List<Part> parts = MessageParts.list(referencing(markup));
 			assertEquals(markup, 1, parts.size());
 			assertTrue(markup, parts.get(0).inline());
 			// With no name of its own, it keeps one a person can read
@@ -294,12 +333,10 @@ public class MessagePartsTest {
 		}
 
 		// A plus sign in a Content-ID stays a plus sign
-		assertEquals(1, MessageParts.list(mixed(html("<img src=\"cid:a+b@example.com\">"),
-				file("Content-Type: image/png\nContent-ID: <a+b@example.com>"))).size());
+		assertEquals(1, MessageParts.list(plusSign()).size());
 
 		// Nothing names it: a part with a Content-ID and no name is a body, and isn't listed
-		assertEquals(List.of(), MessageParts.list(mixed(html("<p>No images</p>"),
-				file("Content-Type: image/png\nContent-ID: <one@example.com>"))));
+		assertEquals(List.of(), MessageParts.list(noImages()));
 	}
 
 	private static MimeMessage inlineAndNamed() throws Exception {
@@ -342,32 +379,68 @@ public class MessagePartsTest {
 		assertTrue(parts.stream().allMatch(Part::attachedMessage));
 	}
 
-	/** Checks that each part {@code list} gives is written with exactly the size it gave, and returns the count */
-	private static void assertWritesWhatListSaid(String label, MimeMessage message, int expected) throws Exception {
+	/**
+	 * Checks that each part {@code list} gives is written with exactly the size it gave, and that the next index
+	 * isn't a part.
+	 * 
+	 * @return how many parts there are
+	 */
+	private static int assertWritesWhatListSaid(String label, MimeMessage message) throws Exception {
 		List<Part> parts = MessageParts.list(message);
-		assertEquals(label, expected, parts.size());
-		for (Part part : parts) {
+		for (int i = 0; i < parts.size(); i++) {
 			ByteArrayOutputStream out = new ByteArrayOutputStream();
-			MessageParts.write(message, part.index(), out);
-			assertEquals(label + " #" + part.index(), part.size(), out.size());
+			MessageParts.write(message, i, out);
+			assertEquals(label + " #" + i, parts.get(i).size(), out.size());
+			assertEquals(label + " #" + i, i, parts.get(i).index());
 		}
-		// And no more: the next index isn't a part
-		assertThrows(label, IllegalArgumentException.class,
-				() -> MessageParts.write(message, expected, new ByteArrayOutputStream()));
+		int next = parts.size();
+		// An unreadable message throws something else, which the tests of unreadable messages pin
+		Class<? extends Exception> refusal = parts.isEmpty() ? Exception.class : IllegalArgumentException.class;
+		assertThrows(label, refusal, () -> MessageParts.write(message, next, new ByteArrayOutputStream()));
+		return parts.size();
 	}
 
 	@Test
 	public void testWriteGivesTheSizeListSaidForEveryPart() throws Exception {
-		assertWritesWhatListSaid("attached", fixture("parts-attached.eml"), 3);
-		assertWritesWhatListSaid("unreferenced", fixture("parts-unreferenced.eml"), 2);
-		assertWritesWhatListSaid("signed", fixture("parts-signed.eml"), 1);
-		assertWritesWhatListSaid("encrypted", fixture("parts-encrypted.eml"), 0);
-		assertWritesWhatListSaid("rights-protected", fixture("parts-rights-protected.eml"), 0);
-		// The messages the other tests build: inline and named parts, attached messages, a referenced image
-		assertWritesWhatListSaid("inline and named", inlineAndNamed(), 3);
-		assertWritesWhatListSaid("attached messages", attachedMessages(), 3);
-		assertWritesWhatListSaid("referenced", mixed(html("<img src=\"cid:one@example.com\">"),
-				file("Content-Type: image/png\nContent-ID: <one@example.com>")), 1);
-		assertWritesWhatListSaid("pgp", pgp(), 0);
+		// Every eml in the folder, found by listing it so that a fixture added later is covered too
+		List<Path> emls;
+		try (Stream<Path> files = Files.list(Path.of("src/test/resources/email"))) {
+			emls = files.filter(f -> f.getFileName().toString().endsWith(".eml")).sorted().toList();
+		}
+		Map<String, Integer> counts = new TreeMap<>();
+		for (Path eml : emls)
+			counts.put(eml.getFileName().toString(), assertWritesWhatListSaid(eml.getFileName().toString(), parse(Files.readAllBytes(eml))));
+		// The ones with parts, and one that is a real message: if the folder were wrong this would be empty
+		assertEquals(3, (int) counts.get("parts-attached.eml"));
+		assertEquals(2, (int) counts.get("parts-unreferenced.eml"));
+		assertEquals(1, (int) counts.get("parts-signed.eml"));
+		assertEquals(0, (int) counts.get("parts-encrypted.eml"));
+		assertEquals(0, (int) counts.get("parts-rights-protected.eml"));
+		assertTrue(counts.toString(), counts.get("New email with attachments.eml") > 0);
+		assertTrue(counts.toString(), counts.size() >= 9);
+
+		// The messages the other tests build
+		assertEquals(0, assertWritesWhatListSaid("pgp", pgp()));
+		assertEquals(0, assertWritesWhatListSaid("pkcs7", pkcs7()));
+		assertEquals(1, assertWritesWhatListSaid("rpmsg and pdf", rpmsgAndPdf()));
+		assertEquals(1, assertWritesWhatListSaid("pkcs7 and pdf", pkcs7AndPdf()));
+		assertEquals(3, assertWritesWhatListSaid("inline and named", inlineAndNamed()));
+		assertEquals(3, assertWritesWhatListSaid("attached messages", attachedMessages()));
+		assertEquals(1, assertWritesWhatListSaid("path name", pathName()));
+		assertEquals(1, assertWritesWhatListSaid("long name", longName()));
+		for (String[] row : NAME_TABLE)
+			assertEquals(row[0], 1, assertWritesWhatListSaid(row[0], named(row[0])));
+		for (String markup : MARKUPS)
+			assertEquals(markup, 1, assertWritesWhatListSaid(markup, referencing(markup)));
+		assertEquals(1, assertWritesWhatListSaid("plus sign", plusSign()));
+		assertEquals(0, assertWritesWhatListSaid("no images", noImages()));
+		// Nested as deep as the walk goes
+		assertEquals(1, assertWritesWhatListSaid("nested", nested(MessageParts.MAX_DEPTH - 1)));
+
+		// The unreadable ones list nothing by design, and write nothing
+		for (MimeMessage unreadable : List.of(truncated(), nested(200))) {
+			assertEquals(List.of(), MessageParts.list(unreadable));
+			assertThrows(Exception.class, () -> MessageParts.write(unreadable, 0, new ByteArrayOutputStream()));
+		}
 	}
 }
