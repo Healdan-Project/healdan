@@ -244,6 +244,22 @@ public class HealdanFixtures {
 	}
 
 	/**
+	 * Gives a folder of type default a reference to another, as CE's copy of
+	 * an alias does and a web services update can. CE follows the reference
+	 * wherever it lists a folder's children, whatever the folder's type.
+	 *
+	 * @param folder the folder
+	 * @param target the folder it is to refer to
+	 * @return the folder as stored
+	 * @throws Exception if the folder can't be updated
+	 */
+	public Folder refer(Folder folder, Folder target) throws Exception {
+		jdbc().update("update ld_folder set ld_foldref = ? where ld_id = ?", target.getId(), folder.getId());
+		Context.get(CacheEvictor.class).evictFolders(List.of(folder.getId()));
+		return FolderDAO.get().findById(folder.getId());
+	}
+
+	/**
 	 * Gives the group exactly these permissions on the folder.
 	 * 
 	 * @param folder the folder

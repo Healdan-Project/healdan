@@ -66,6 +66,36 @@ public class ProfileSchema {
 	}
 
 	/**
+	 * @param setId an attribute set
+	 * @return true if the set holds the profile's Class or Subclass list; false
+	 *         while there is no profile template
+	 */
+	public boolean holdsTheLists(long setId) {
+		return !listsIn(setId).isEmpty();
+	}
+
+	/**
+	 * @param setId an attribute set
+	 * @return the profile's lists, Class and Subclass, that the template takes
+	 *         from the set; none while there is no profile template
+	 */
+	public Set<String> listsIn(long setId) {
+		Template template;
+		try {
+			template = template();
+		} catch (IllegalStateException e) {
+			return Set.of();
+		}
+		Set<String> lists = new HashSet<>();
+		for (String name : List.of(HealdanConstants.ATTR_DOCCLASS, HealdanConstants.ATTR_DOCSUBCLASS)) {
+			Attribute attribute = template.getAttribute(name);
+			if (attribute != null && Long.valueOf(setId).equals(attribute.getSetId()))
+				lists.add(name);
+		}
+		return lists;
+	}
+
+	/**
 	 * @return the attributes that always come from the workspace
 	 */
 	public Set<String> fixed() {

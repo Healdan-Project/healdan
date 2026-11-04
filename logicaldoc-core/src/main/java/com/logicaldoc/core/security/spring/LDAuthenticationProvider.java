@@ -63,8 +63,10 @@ public class LDAuthenticationProvider implements AuthenticationProvider {
 
         String key = getKey(authentication, httpReq);
 
+        // Healdan: whether a key came, never the key, an API key or a second
+        // factor
         if (log.isDebugEnabled())
-            log.debug("Authenticate user {} with key {}", username, StringUtils.defaultString(key, "-"));
+            log.debug("Authenticate user {} {}", username, StringUtils.isEmpty(key) ? "without a key" : "with a key");
 
         Client client = SessionManager.get().buildClient(httpReq);
 

@@ -7,6 +7,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.Map;
 
 import org.junit.Test;
 
@@ -18,10 +20,10 @@ import com.logicaldoc.util.servlet.MockServletResponse;
 import com.logicaldoc.web.AuthorMenus;
 
 /**
- * Checks who may list the environment. It holds the server's environment
- * variables and Java system properties, which in Healdan's container include
- * the database password, so it needs System > General, whose Environment tab
- * lists them.
+ * Checks who may list the environment, and that it shows no secrets. It holds
+ * the server's environment variables and Java system properties, which in
+ * Healdan's container include the database password, so it needs System >
+ * General, whose Environment tab lists them, and masks what looks secret.
  */
 public class EnvironmentDataServletTest extends AbstractDataServletTestCase {
 
@@ -37,6 +39,28 @@ public class EnvironmentDataServletTest extends AbstractDataServletTestCase {
 
         AuthorMenus.grant(GENERAL);
         assertTrue(list().contains("<scope>java</scope>"));
+    }
+
+    @Test
+    public void testListingMasksSecrets() throws IOException {
+        // Environment variables can't be set from Java, and both scopes go
+        // through the same masking
+        Map<String, String> properties = Map.of("healdan.test.password", "hunter2", "healdan.test.opts",
+                "-Xmx2g -Dhealdan.test.secret=s3cr3t -Dfile.encoding=UTF-8", "healdan.test.proxy",
+                "http://bob:pr0xy-pw@proxy.example:3128");
+        properties.forEach(System::setProperty);
+        try {
+            String xml = list();
+            assertTrue(xml.contains("<scope>java</scope>"));
+            for (String secret : List.of("hunter2", "s3cr3t", "pr0xy-pw"))
+                assertFalse(secret, xml.contains(secret));
+            assertTrue(xml.contains("-Xmx2g -Dhealdan.test.secret=******** -Dfile.encoding=UTF-8"));
+            assertTrue(xml.contains("http://bob:********@proxy.example:3128"));
+            // What isn't secret still shows
+            assertTrue(xml.contains(System.getProperty("java.version")));
+        } finally {
+            properties.keySet().forEach(System::clearProperty);
+        }
     }
 
     private String list() throws IOException {

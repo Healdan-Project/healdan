@@ -1764,6 +1764,8 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
         try {
             ApiKeyDAO dao = ApiKeyDAO.get();
+            // Healdan: only the key's owner
+            ownApiKey(session, keyId);
             dao.delete(keyId);
         } catch (PersistenceException e) {
             throwServerException(session, log, e);
@@ -1776,12 +1778,33 @@ public class SecurityServiceImpl extends AbstractRemoteService implements Securi
 
         try {
             ApiKeyDAO dao = ApiKeyDAO.get();
-            ApiKey apiKey = dao.findById(keyId);
+            // Healdan: only the key's owner
+            ApiKey apiKey = ownApiKey(session, keyId);
             apiKey.setName(newName);
             dao.store(apiKey);
         } catch (PersistenceException e) {
             throwServerException(session, log, e);
         }
+    }
+
+    /**
+     * Healdan: the user's own API key. Account > API keys lists only the
+     * user's own, so nobody else, an administrator included, changes one.
+     *
+     * @param session the current session
+     * @param keyId identifier of the key
+     *
+     * @return the key
+     *
+     * @throws AccessDeniedException the key doesn't exist or is another user's
+     * @throws PersistenceException error in the database
+     */
+    private static ApiKey ownApiKey(Session session, long keyId) throws AccessDeniedException, PersistenceException {
+        ApiKey apiKey = ApiKeyDAO.get().findById(keyId);
+        if (apiKey == null || apiKey.getUserId() != session.getUserId())
+            throw new AccessDeniedException(
+                    "User %s cannot change the API key %d".formatted(session.getUsername(), keyId));
+        return apiKey;
     }
 
     @Override
