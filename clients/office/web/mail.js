@@ -69,18 +69,21 @@
   // --- What the pane says --------------------------------------------------------------------------------------------------
 
   function copyLine(copy) {
-    const where = [copy.matter, copy.folder].filter((part) => typeof part === "string" && part !== "").join(" / ");
-    const name = typeof copy.name === "string" && copy.name !== "" ? ` ${copy.name}` : "";
-    const number = copy.docNumber === undefined || copy.docNumber === null ? "" : `#${copy.docNumber}`;
+    // "<matter> › <folder>, #<docNumber>" (M5 spec section 8.2), the matter as the helper gives it; the doc # is the link.
+    const where = [copy.matter, copy.folder].filter((part) => typeof part === "string" && part !== "").join(" › ");
+    const label = copy.docNumber === undefined || copy.docNumber === null ? "" : `#${copy.docNumber}`;
+    const before = where !== "" && label !== "" ? `${where}, ` : where;
     return {
-      text: `${number}${name}${where === "" ? "" : ` in ${where}`}`.trim(),
+      text: `${before}${label}`,
+      before,
+      label,
       address: typeof copy.address === "string" ? copy.address : "",
     };
   }
 
   /**
    * What mail/status's answer shows.
-   * @returns {{kind: "filed"|"elsewhere"|"not-filed", lines: {text: string, address: string}[],
+   * @returns {{kind: "filed"|"elsewhere"|"not-filed", lines: {text: string, before: string, label: string, address: string}[],
    *   suggestions: {folderId: number, label: string}[]}}
    */
   function statusView(answer) {
@@ -131,6 +134,23 @@
       : "Healdan Helper answered with something the add-in didn't expect.";
   }
 
+  /** What a click on a button for a message that is no longer the open one says. */
+  const CHANGED = "This message changed. Choose again.";
+
+  /** Whether two items are the same message: the same object, or the same item id (or else the same Message-ID). */
+  function sameItem(a, b) {
+    if (!a || !b) {
+      return false;
+    }
+    if (a === b) {
+      return true;
+    }
+    if (a.itemId || b.itemId) {
+      return a.itemId === b.itemId;
+    }
+    return Boolean(a.internetMessageId) && a.internetMessageId === b.internetMessageId;
+  }
+
   // --- Filing --------------------------------------------------------------------------------------------------------------
 
   /**
@@ -139,12 +159,16 @@
    * @param {object} glue mail-glue.js's
    * @param {number} [folderId] File Here's folder; without it, the helper's Save window opens (File…)
    * @param {number} [openAt] where File…'s window opens: the first suggestion's folder
+   * @param {object} [chosen] the message the person chose it for, taken at the click; refused when another is open now
    * @returns {Promise<{kind: "ok"|"problem", text: string}>} never rejects
    */
-  async function fileMessage(client, glue, folderId, openAt) {
-    const item = glue.item();
+  async function fileMessage(client, glue, folderId, openAt, chosen) {
+    const item = chosen || glue.item();
     if (!item) {
       return { kind: "problem", text: "Select a message to file it." };
+    }
+    if (!sameItem(item, glue.item())) {
+      return { kind: "problem", text: CHANGED };
     }
     let eml;
     try {
@@ -163,6 +187,11 @@
       view = outcomeView(await client.call("mail/file", body));
     } catch (error) {
       return { kind: "problem", text: failureText(error) };
+    }
+    if (view.categorise && !sameItem(item, glue.item())) {
+      // Filing can take as long as the person's own Save window: the pane may have moved on. The category would land on
+      // the wrong message, so it isn't added.
+      return { kind: view.kind, text: `${view.text} Another message was open, so it has no Healdan category.`, moved: true };
     }
     if (view.categorise) {
       try {
@@ -230,6 +259,7 @@
     let stopped = false;
     let timer = null;
     let view = null; // the last status shown, for File…'s openAt
+    let shown = null; // the message that status describes
     let filing = false;
 
     function setStatus(kind, text) {
@@ -256,12 +286,15 @@
       els.copies.replaceChildren();
       for (const line of lines) {
         const item = document.createElement("li");
-        if (linkable(line.address)) {
+        if (linkable(line.address) && line.label !== "") {
+          const before = document.createElement("span");
+          before.textContent = line.before;
           const link = document.createElement("a");
           link.href = line.address;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
-          link.textContent = line.text;
+          link.textContent = line.label;
+          item.appendChild(before);
           item.appendChild(link);
         } else {
           item.textContent = line.text;
@@ -283,6 +316,7 @@
         where.textContent = suggestion.label;
         button.appendChild(label);
         button.appendChild(where);
+        button.disabled = filing;
         button.addEventListener("click", () => file(suggestion.folderId));
         els.suggestions.appendChild(button);
       }
@@ -291,6 +325,7 @@
     /** What the pane shows when nothing about a message is known: only the status line. */
     function showOnly(kind, text) {
       view = null;
+      shown = null;
       setStatus(kind, text);
       renderCopies([]);
       show(els.actions, false);
@@ -298,8 +333,9 @@
       setBusy("");
     }
 
-    function render(next) {
+    function render(next, item) {
       view = next;
+      shown = item;
       setStatus(next.kind === "filed" ? "ok" : "waiting", KIND_TITLES[next.kind]);
       renderCopies(next.lines);
       renderSuggestions(next.kind === "filed" ? [] : next.suggestions);
@@ -330,13 +366,13 @@
         ids = threadIds(item.internetMessageId, headers);
         if (ids.length === 0) {
           if (!queued) {
-            render({ kind: "not-filed", lines: [], suggestions: [] });
+            render({ kind: "not-filed", lines: [], suggestions: [] }, item);
           }
           return;
         }
         const answer = await client.call("mail/status", { messageIds: ids });
-        if (!queued) {
-          render(statusView(answer));
+        if (!queued && sameItem(item, glue.item())) {
+          render(statusView(answer), item);
         }
       } catch (error) {
         if (queued) {
@@ -357,6 +393,7 @@
           renderCopies([]);
           renderSuggestions([]);
           view = null;
+          shown = item;
           show(els.actions, true);
           show(els.pairing, false);
           setBusy("");
@@ -400,18 +437,35 @@
       if (filing) {
         return;
       }
+      // Buttons belong to the message they were drawn for: one pressed after another was opened files nothing.
+      const item = glue.item();
+      if (!item || shown === null || !sameItem(shown, item)) {
+        put(els.outcome, CHANGED);
+        els.outcome.className = "status problem";
+        show(els.outcome, true);
+        return;
+      }
       filing = true;
       setButtons(true);
       els.outcome.hidden = true;
       setBusy("Filing the message… If Healdan Helper has a window open, finish there.");
       const openAt = view && view.suggestions.length > 0 ? view.suggestions[0].folderId : undefined;
-      const result = await fileMessage(client, glue, folderId, openAt);
-      filing = false;
-      setBusy("");
-      setButtons(false);
-      put(els.outcome, result.text);
-      els.outcome.className = `status ${result.kind}`;
-      show(els.outcome, true);
+      let result;
+      try {
+        result = await fileMessage(client, glue, folderId, openAt, item);
+      } catch (error) {
+        result = { kind: "problem", text: failureText(error) };
+      } finally {
+        filing = false;
+        setBusy("");
+        setButtons(false);
+      }
+      // The outcome belongs to the message it describes: it is not left on the next one.
+      if (sameItem(item, glue.item())) {
+        put(els.outcome, result.text);
+        els.outcome.className = `status ${result.kind}`;
+        show(els.outcome, true);
+      }
       await refresh();
     }
 
@@ -466,7 +520,17 @@
 
     // A pinned pane stays open while the message changes. Several selected at once come as the same event with no item.
     try {
-      await glue.onItemChanged(() => refresh());
+      await glue.onItemChanged(() => {
+        // The buttons and the outcome were for the message that was open: gone at once, before the new one's status lands.
+        view = null;
+        shown = null;
+        renderCopies([]);
+        renderSuggestions([]);
+        show(els.actions, false);
+        show(els.outcome, false);
+        setStatus("waiting", "Checking Healdan…");
+        refresh();
+      });
     } catch (error) {
       // Without the event the pane still checks the message it opened on.
     }

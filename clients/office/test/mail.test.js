@@ -183,7 +183,7 @@ test("statusView lists each copy with its address, and a copy in another matter 
   const copy = { docNumber: 12345, name: "Lease", matter: "1.1 Smith", folder: "Documents", address: "https://dms/frontend.jsp?docId=9" };
   assert.deepEqual(Mail.statusView({ filed: true, copies: [copy], elsewhere: false, suggestions: [] }), {
     kind: "filed",
-    lines: [{ text: "#12345 Lease in 1.1 Smith / Documents", address: "https://dms/frontend.jsp?docId=9" }],
+    lines: [{ text: "1.1 Smith › Documents, #12345", before: "1.1 Smith › Documents, ", label: "#12345", address: "https://dms/frontend.jsp?docId=9" }],
     suggestions: [],
   });
   const elsewhere = Mail.statusView({ filed: false, copies: [], elsewhere: true, suggestions: [{ folderId: 4, path: "A/B" }] });
@@ -200,7 +200,7 @@ test("statusView keeps five suggestions and drops malformed ones", () => {
 
 test("outcomeView says what happened, and only a filing is categorised", () => {
   const email = { docNumber: 7, name: "N", matter: "M", folder: "F" };
-  assert.deepEqual(Mail.outcomeView({ outcome: "filed", email }), { kind: "ok", text: "Filed as #7 N in M / F.", categorise: true });
+  assert.deepEqual(Mail.outcomeView({ outcome: "filed", email }), { kind: "ok", text: "Filed as M › F, #7.", categorise: true });
   assert.equal(Mail.outcomeView({ outcome: "already-filed", email }).categorise, true);
   assert.equal(Mail.outcomeView({ outcome: "cancelled" }).categorise, false);
   assert.equal(Mail.outcomeView({ outcome: "cancelled" }).kind, "ok");
@@ -298,9 +298,11 @@ test("start shows Filed with a link, and the helper's text only as text", async 
   const { page, text } = await open({ client, glue: fakeGlue() });
   assert.equal(text("status"), "Filed");
   const [first, second] = page.getElementById("copies").children;
-  assert.equal(first.textContent, `#1 ${evil} in M / F`);
+  assert.equal(first.textContent, "M › F, #1");
   assert.equal(first.children.length, 0, "an address that isn't http(s) is no link");
-  assert.equal(second.children[0].href, "https://dms/frontend.jsp?docId=2");
+  assert.equal(second.children[0].textContent, "M › F, ");
+  assert.equal(second.children[1].textContent, "#2", "only the doc # is the link");
+  assert.equal(second.children[1].href, "https://dms/frontend.jsp?docId=2");
   assert.equal(page.getElementById("suggestions").children.length, 0);
 });
 
@@ -313,7 +315,7 @@ test("File Here and File... file, show the outcome, and check the status again",
   const { page, text } = await open({ client, glue });
   await page.getElementById("suggestions").children[0].fire("click");
   assert.deepEqual(client.calls.find((c) => c.route === "mail/file").body, { eml: "RU1M", folderId: 5 });
-  assert.equal(text("outcome"), "Filed as #9 N in M / F.");
+  assert.equal(text("outcome"), "Filed as M › F, #9.");
   assert.equal(client.calls.filter((c) => c.route === "mail/status").length, 2);
   await page.getElementById("file-other").fire("click");
   assert.deepEqual(client.calls.filter((c) => c.route === "mail/file")[1].body, { eml: "RU1M", openAt: 5 });
@@ -362,4 +364,104 @@ test("mail/status answering internal-error says Can't Reach Healdan and keeps Fi
   assert.match(text("status"), /^Can't Reach Healdan/);
   assert.equal(page.getElementById("actions-section").hidden, false);
   assert.equal(page.getElementById("suggestions").children.length, 0);
+});
+
+// --- Staying on the message --------------------------------------------------------------------------------------------
+
+/** A client whose mail/file waits until `release()` is called. */
+function slowClient(statusAnswer, fileAnswer) {
+  const client = fakeClient({ "mail/status": statusAnswer });
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const base = client.call.bind(client);
+  client.call = async (route, body) => {
+    if (route === "mail/file") {
+      client.calls.push({ route, body });
+      await gate;
+      return fileAnswer;
+    }
+    return base(route, body);
+  };
+  client.release = release;
+  return client;
+}
+
+const SUGGESTED = { filed: false, copies: [], elsewhere: false, suggestions: [{ folderId: 5, path: "P" }] };
+
+test("a message change clears the buttons at once, and an old button files nothing", async () => {
+  const client = fakeClient({ "mail/status": SUGGESTED });
+  const glue = fakeGlue({ item: { itemId: "A", internetMessageId: "<a@x>" } });
+  const { page, text } = await open({ client, glue });
+  const oldButton = page.getElementById("suggestions").children[0];
+  // B opens, and its status has not landed.
+  let land;
+  client.call = async (route, body) => {
+    client.calls.push({ route, body });
+    await new Promise((resolve) => (land = resolve));
+    return SUGGESTED;
+  };
+  glue.current = { itemId: "B", internetMessageId: "<b@x>" };
+  glue.handler();
+  assert.equal(page.getElementById("actions-section").hidden, true);
+  assert.equal(page.getElementById("suggestions").children.length, 0);
+  assert.equal(text("status"), "Checking Healdan…");
+  const before = client.calls.length;
+  await oldButton.fire("click");
+  assert.equal(client.calls.slice(before).some((c) => c.route === "mail/file"), false, "nothing is sent");
+  assert.equal(glue.log.includes("readEml"), false);
+  assert.equal(text("outcome"), "This message changed. Choose again.");
+  land();
+});
+
+test("a message that changed under fileMessage is refused, and the .eml comes from the chosen item", async () => {
+  const a = { itemId: "A" };
+  const glue = fakeGlue({ item: { itemId: "B" } });
+  const client = fakeClient({ "mail/file": { outcome: "filed" } });
+  const view = await Mail.fileMessage(client, glue, 1, undefined, a);
+  assert.equal(view.text, "This message changed. Choose again.");
+  assert.equal(client.calls.length, 0);
+});
+
+test("when the open message moves on during a filing, there is no category and the outcome says so", async () => {
+  for (const [outcome, start] of [["filed", "Filed as M › F, #4."], ["already-filed", "Already Filed as M › F, #4."]]) {
+    const email = { docNumber: 4, name: "N", matter: "M", folder: "F" };
+    const client = slowClient(SUGGESTED, { outcome, email });
+    const glue = fakeGlue({ item: { itemId: "A", internetMessageId: "<a@x>" } });
+    const { page } = await open({ client, glue });
+    const filing = page.getElementById("suggestions").children[0].fire("click");
+    await settle();
+    glue.current = { itemId: "B", internetMessageId: "<b@x>" };
+    client.release();
+    await filing;
+    assert.equal(glue.log.includes("addCategory"), false);
+    // The outcome belongs to A, so it isn't shown on B.
+    assert.equal(page.getElementById("outcome").hidden, true);
+
+    // The same through fileMessage: the open message is A when the filing starts and B when it ends.
+    const opened = [{ itemId: "A" }]; // the check at the start sees A, the one after the filing sees B
+    const moving = fakeGlue();
+    moving.item = () => opened.shift() ?? { itemId: "B" };
+    const view = await Mail.fileMessage(fakeClient({ "mail/file": { outcome, email } }), moving, 1, undefined, { itemId: "A" });
+    assert.equal(view.text, `${start} Another message was open, so it has no Healdan category.`);
+    assert.equal(moving.log.includes("addCategory"), false);
+  }
+});
+
+test("while a filing runs, redrawn suggestions are disabled, and a throw doesn't leave the pane stuck", async () => {
+  const client = slowClient(SUGGESTED, { outcome: "cancelled" });
+  const glue = fakeGlue({ item: { internetMessageId: "<own@x>" } });
+  const { page, pane } = await open({ client, glue });
+  const filing = page.getElementById("suggestions").children[0].fire("click");
+  await settle();
+  await pane.refresh();
+  assert.equal(page.getElementById("suggestions").children[0].disabled, true);
+  client.release();
+  await filing;
+  // A throw out of the glue (not a rejection fileMessage knows) frees the pane.
+  glue.readEml = () => {
+    throw new Error("boom");
+  };
+  await page.getElementById("suggestions").children[0].fire("click");
+  await page.getElementById("file-other").fire("click");
+  assert.equal(page.getElementById("file-other").disabled, false);
 });

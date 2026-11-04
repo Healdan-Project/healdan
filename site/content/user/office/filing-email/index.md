@@ -14,11 +14,12 @@ the pin at its top right, and it stays open and follows you from message to mess
 
 The pane's first line says where the message stands:
 
-- **Filed** means a copy of the message is in a matter you can read. Each copy is listed with its doc #, its name and
-  its matter and folder. Choose a copy to open it in Healdan's web page.
+- **Filed** means a copy of the message is in a matter you can read. Each copy is listed as its matter and folder,
+  then its doc #, as in `998.1 › Correspondence, #12345`. Choose the doc # to open the copy in Healdan's web page.
 - **Not Filed** means no copy is in Healdan.
-- **Filed in Another Matter** means a copy exists, but not one you can read. You can still file the message into a
-  matter of your own: see [Already Filed](#already-filed).
+- **Filed in Another Matter** means the message is filed, but elsewhere than the conversation: the newest copy of the
+  conversation's messages is in a matter that none of this message's own copies is in. You can still file this message
+  into that matter: see [Already Filed](#already-filed).
 
 The first time, Outlook isn't paired with the helper, and the pane asks for a code. Healdan Helper shows a six-digit
 code in a window on your Mac. Type it in the pane and choose **Pair**. See
@@ -38,7 +39,7 @@ you filed earlier messages of the same conversation into, or filed into most rec
   document. It opens on the first suggestion, or on your recent folders when there is none.
 
 While the helper works, the pane says so. If the Save window is open, finish there. When it's done, the pane says
-`Filed as #1234 …`, and checks the message again.
+`Filed as 998.1 › Correspondence, #1234`, and checks the message again.
 
 ## Attachments
 
