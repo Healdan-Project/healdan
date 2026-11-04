@@ -5,7 +5,9 @@ package com.logicaldoc.healdan.email;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.Collection;
 import java.util.Date;
@@ -14,10 +16,13 @@ import java.util.Optional;
 import java.util.StringJoiner;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.poifs.filesystem.DocumentEntry;
+import org.apache.poi.poifs.filesystem.DocumentInputStream;
+import org.apache.poi.poifs.filesystem.Entry;
+import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.auxilii.msgparser.MsgParser;
 import com.logicaldoc.core.communication.EMail;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.communication.Recipient;
@@ -53,6 +58,11 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 
 	/** The attribute values are stored in a varchar(4000) */
 	private static final int MAX_TEXT = 4000;
+
+	/** The streams of an {@code msg}'s PR_INTERNET_MESSAGE_ID (0x1035), as Unicode and as 8-bit text */
+	private static final String MSG_ID_UNICODE = "__substg1.0_1035001F";
+
+	private static final String MSG_ID_8BIT = "__substg1.0_1035001E";
 
 	/**
 	 * @param file the email
@@ -135,9 +145,34 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 
 	private static EmailFields fromMsg(File file) throws Exception {
 		EmailFields fields = fromMsg(MailUtil.msgToMail(file, false));
-		// CE's reader drops the Message-ID, so the file is parsed once more for it
-		String messageId = safe("Message-ID", () -> MessageIds.normalize(new MsgParser().parseMsg(file).getMessageId()));
+		// CE's reader drops the Message-ID, so its one property is read, not the whole file again
+		String messageId = safe("Message-ID", () -> MessageIds.normalize(msgMessageId(file)));
 		return fields.withMessageId(messageId);
+	}
+
+	/**
+	 * @return the {@code msg}'s PR_INTERNET_MESSAGE_ID, the property msgparser
+	 *         reads the Message-ID from, as Unicode or 8-bit text; null if it
+	 *         has none
+	 */
+	private static String msgMessageId(File file) throws IOException {
+		try (POIFSFileSystem msg = new POIFSFileSystem(file, true)) {
+			for (Entry entry : msg.getRoot()) {
+				if (!(entry instanceof DocumentEntry document))
+					continue;
+				if (MSG_ID_UNICODE.equalsIgnoreCase(entry.getName()))
+					return new String(bytes(document), StandardCharsets.UTF_16LE);
+				if (MSG_ID_8BIT.equalsIgnoreCase(entry.getName()))
+					return new String(bytes(document), StandardCharsets.ISO_8859_1);
+			}
+			return null;
+		}
+	}
+
+	private static byte[] bytes(DocumentEntry document) throws IOException {
+		try (DocumentInputStream in = new DocumentInputStream(document)) {
+			return in.readAllBytes();
+		}
 	}
 
 	private EmailFields withMessageId(String id) {

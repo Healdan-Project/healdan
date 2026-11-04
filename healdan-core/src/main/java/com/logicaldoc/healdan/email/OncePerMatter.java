@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.email;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,8 +19,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -36,6 +40,7 @@ import com.logicaldoc.healdan.matter.Matter;
 import com.logicaldoc.healdan.matter.MatterDAO;
 import com.logicaldoc.healdan.matter.MatterDisplay;
 import com.logicaldoc.healdan.matter.MatterLocator;
+import com.logicaldoc.healdan.rules.FilingRules;
 import com.logicaldoc.healdan.rules.StoredRows;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 import com.logicaldoc.healdan.security.AccessChecks;
@@ -58,7 +63,10 @@ import com.logicaldoc.util.spring.Context;
  * that block and held by a longer transaction would wait on the block in
  * turn. On MariaDB a transaction reads from the snapshot its first read took
  * (REPEATABLE READ), which can be older than a filing committed since, so a
- * transaction whose reads come from a snapshot looks again in a new one.
+ * transaction begun before the call that checks, whose reads come from a
+ * snapshot, looks again in a new one. One the call began, such as the
+ * store's own inside the block, took its snapshot after every filing before
+ * it.
  * <p>
  * What that leaves: a transaction of several stores commits after the block,
  * and a folder move or restore doesn't go through it at all. So CE's folder
@@ -69,12 +77,21 @@ import com.logicaldoc.util.spring.Context;
  * Folder operations check every email they bring along before anything
  * moves, and two copies of a message arriving together are refused too: the
  * documents of a merge or a copy are stored one by one, and a refusal half
- * way would leave the search index and the file Store changed (plan, D3).
+ * way would leave the search index and the file Store changed (plan, D3). A
+ * tree checked for a folder move or merge isn't checked again before each of
+ * its subfolders and documents moves in the same transaction, as a merge
+ * moves them one by one; each document's store still checks it.
  */
 @Component
 public class OncePerMatter {
 
 	static final String ALREADY_FILED = "This message is already in %s as #%s.";
+
+	/**
+	 * The resource, bound to the current transaction, of the folders a folder
+	 * move or merge in it checked, each with the matter it was checked against
+	 */
+	private static final String CHECKED = OncePerMatter.class.getName() + ".checked";
 
 	private final MatterLocator locator;
 
@@ -124,17 +141,36 @@ public class OncePerMatter {
 
 	private Optional<Document> copyInMatter(String messageId, long matterId, long except, User actor)
 			throws PersistenceException {
-		for (long id : index.copies(messageId)) {
+		return copyAmong(index.copies(messageId), matterId, except, actor, new HashMap<>());
+	}
+
+	/**
+	 * @param copies the ids of a message's copies, lowest first
+	 * @param matters the matter of each folder seen so far, so each is found
+	 *        once
+	 * @return the first copy in the matter that the user can read
+	 */
+	private Optional<Document> copyAmong(List<Long> copies, long matterId, long except, User actor,
+			Map<Long, Matter> matters) throws PersistenceException {
+		for (long id : copies) {
 			if (id == except)
 				continue;
 			Document copy = DocumentDAO.get().findById(id);
 			if (copy == null || copy.getFolder() == null
-					|| !isMatter(matterId, locator.locate(copy.getFolder().getId()).matter()))
+					|| !isMatter(matterId, matterOf(copy.getFolder().getId(), matters)))
 				continue;
 			if (readable(copy, actor))
 				return Optional.of(copy);
 		}
 		return Optional.empty();
+	}
+
+	private Matter matterOf(long folderId, Map<Long, Matter> matters) throws PersistenceException {
+		if (matters.containsKey(folderId))
+			return matters.get(folderId);
+		Matter matter = locator.locate(folderId).matter();
+		matters.put(folderId, matter);
+		return matter;
 	}
 
 	/**
@@ -177,9 +213,30 @@ public class OncePerMatter {
 	}
 
 	/**
+	 * {@link #checkMove}, before CE's move begins: nothing when a folder move
+	 * or merge in this transaction already checked the tree the document leaves
+	 * against the target's matter, as a merge moves its documents one by one.
+	 * The move's store checks it either way.
+	 *
+	 * @param docId the document
+	 * @param fromFolderId where it is
+	 * @param targetFolderId where it goes
+	 * @param actor who moves it; null for nobody
+	 * @throws AlreadyFiledException if the target's matter holds a copy
+	 * @throws PersistenceException error at data layer
+	 */
+	public void checkMoveAhead(long docId, long fromFolderId, long targetFolderId, User actor)
+			throws PersistenceException {
+		Long checkedAgainst = checkedTrees().get(fromFolderId);
+		if (checkedAgainst == null || !isMatter(checkedAgainst, matterAt(targetFolderId)))
+			checkMove(docId, fromFolderId, targetFolderId, actor);
+	}
+
+	/**
 	 * A folder moves, or merges, into another matter: {@link #check} for every
 	 * email under it, itself included, arriving in the target's matter. Nothing
-	 * when both are in one matter.
+	 * when both are in one matter, or when a folder move or merge in this
+	 * transaction checked the folder against that matter already.
 	 *
 	 * @param folderId the folder moved, or merged
 	 * @param targetFolderId its new parent, or the folder it merges into
@@ -190,10 +247,12 @@ public class OncePerMatter {
 	 */
 	public void checkSubtree(long folderId, long targetFolderId, User actor) throws PersistenceException {
 		Matter target = matterAt(targetFolderId);
-		if (target == null || isMatter(target.getId(), storedMatter(folderId)))
+		if (target == null || isMatter(target.getId(), storedMatter(folderId))
+				|| Long.valueOf(target.getId()).equals(checkedTrees().get(folderId)))
 			return;
-		checkArrivals(index.emailsIn(FolderDAO.get().findFolderIdInTree(folderId, false), false), target, true, actor,
-				true);
+		Collection<Long> tree = FolderDAO.get().findFolderIdInTree(folderId, false);
+		checkArrivals(index.emailsIn(tree, false), target, true, actor, true);
+		remember(tree, target.getId());
 	}
 
 	/**
@@ -219,12 +278,15 @@ public class OncePerMatter {
 	 * back the documents deleted in its tree, and a live document there comes
 	 * back too where a deleted folder hid it; CE restores a live folder by
 	 * moving it, which brings its live emails along. Each such email arrives,
-	 * unless it is a live copy in the parent's matter already.
+	 * unless it is a live copy in the parent's matter already. Two copies of a
+	 * message coming back together are refused, such as one deleted on its own
+	 * and one filed after it and deleted with the folder.
 	 *
 	 * @param folderId the folder restored
 	 * @param parentId where to
 	 * @param actor who restores it; null for nobody
-	 * @throws AlreadyFiledException if the parent's matter holds a copy
+	 * @throws AlreadyFiledException if the parent's matter holds a copy, or two
+	 *         would come back
 	 * @throws PersistenceException error at data layer
 	 */
 	public void checkSubtreeRestore(long folderId, long parentId, User actor) throws PersistenceException {
@@ -233,13 +295,14 @@ public class OncePerMatter {
 			return;
 		Collection<Long> tree = FolderDAO.get().findFolderIdInTree(folderId, true);
 		Map<Long, String> arriving = new TreeMap<>(index.emailsIn(tree, true));
+		Map<Long, Matter> matters = new HashMap<>();
 		for (Map.Entry<Long, String> live : index.emailsIn(tree, false).entrySet()) {
 			Document document = DocumentDAO.get().findById(live.getKey());
 			if (document == null || document.getFolder() == null
-					|| !isMatter(target.getId(), locator.locate(document.getFolder().getId()).matter()))
+					|| !isMatter(target.getId(), matterOf(document.getFolder().getId(), matters)))
 				arriving.put(live.getKey(), live.getValue());
 		}
-		checkArrivals(arriving, target, true, actor, false);
+		checkArrivals(arriving, target, true, actor, true);
 	}
 
 	/**
@@ -264,8 +327,12 @@ public class OncePerMatter {
 
 	private Optional<Document> firstCopy(Map<Long, String> arriving, long matterId, boolean selves, User actor)
 			throws PersistenceException {
+		// One lookup for all the messages, and one walk for each folder a copy is in
+		Map<String, List<Long>> copies = index.copiesOf(arriving.values());
+		Map<Long, Matter> matters = new HashMap<>();
 		for (Map.Entry<Long, String> email : arriving.entrySet()) {
-			Optional<Document> copy = copyInMatter(email.getValue(), matterId, selves ? email.getKey() : 0L, actor);
+			Optional<Document> copy = copyAmong(copies.getOrDefault(email.getValue(), List.of()), matterId,
+					selves ? email.getKey() : 0L, actor, matters);
 			if (copy.isPresent())
 				return copy;
 		}
@@ -274,7 +341,9 @@ public class OncePerMatter {
 
 	/**
 	 * Two copies of a message arriving together would both be in the matter:
-	 * the first the user can read is named, in the matter it is in now
+	 * the first the user can read is named, in the matter it is in now. One a
+	 * folder restore brings back is in the trash, where the DAO doesn't find
+	 * it, so it is read from its row and named in the matter it comes back to.
 	 */
 	private void checkTwins(Map<Long, String> arriving, Matter target, User actor) throws PersistenceException {
 		Map<String, List<Long>> byMessage = new LinkedHashMap<>();
@@ -288,6 +357,12 @@ public class OncePerMatter {
 					Matter now = twin.getFolder() != null ? locator.locate(twin.getFolder().getId()).matter() : null;
 					throw refusal(now != null ? now : target, twin);
 				}
+				if (twin == null) {
+					List<String> trashed = jdbc.queryForList(
+							"select ld_customid from ld_document where ld_id = ? and ld_deleted <> 0", String.class, id);
+					if (!trashed.isEmpty() && readableInTrash(id, actor))
+						throw refusal(target, id, trashed.get(0));
+				}
 			}
 		}
 	}
@@ -296,10 +371,24 @@ public class OncePerMatter {
 		return actor == null || AccessChecks.readableDocument(copy, actor).isPresent();
 	}
 
+	/**
+	 * @return true if the user may read the deleted document, as they will once
+	 *         it is restored
+	 */
+	private static boolean readableInTrash(long docId, User actor) throws PersistenceException {
+		return actor == null || FilingRules.get().isAdmin(actor)
+				|| StoredRows.get().mayReadDocument(docId, actor.getId());
+	}
+
 	private static AlreadyFiledException refusal(Matter matter, Document copy) throws PersistenceException {
+		return refusal(matter, copy.getId(), copy.getCustomId());
+	}
+
+	private static AlreadyFiledException refusal(Matter matter, long copyId, String docNumber)
+			throws PersistenceException {
 		Client client = ClientDAO.get().findById(matter.getClientId());
 		String number = MatterDisplay.number(client != null ? client.getNumber() : 0L, matter.getNumber());
-		return new AlreadyFiledException(ALREADY_FILED.formatted(number, copy.getCustomId()), copy.getId());
+		return new AlreadyFiledException(ALREADY_FILED.formatted(number, docNumber), copyId);
 	}
 
 	/**
@@ -336,14 +425,63 @@ public class OncePerMatter {
 
 	/**
 	 * @return true if the current transaction reads from a snapshot (REPEATABLE
-	 *         READ or SERIALIZABLE), which can be older than another filing's
-	 *         commit
+	 *         READ or SERIALIZABLE) that can be older than another filing's
+	 *         commit: one begun before the innermost transactional call, such as
+	 *         a folder copy's around each document's store. The store's own,
+	 *         begun inside {@code DocumentManager}'s block, took its snapshot
+	 *         after every filing before it.
 	 */
 	private boolean readsFromSnapshot() {
-		if (!TransactionSynchronizationManager.isActualTransactionActive())
+		if (!TransactionSynchronizationManager.isActualTransactionActive() || begunByTheCall())
 			return false;
 		Integer isolation = jdbc.execute((ConnectionCallback<Integer>) Connection::getTransactionIsolation);
 		return isolation != null && isolation >= Connection.TRANSACTION_REPEATABLE_READ;
+	}
+
+	/**
+	 * @return true if the innermost transactional call began the current
+	 *         transaction; false when it joined one, or no such call is under
+	 *         way, as for a transaction begun by a {@code TransactionTemplate}
+	 */
+	private static boolean begunByTheCall() {
+		try {
+			return TransactionAspectSupport.currentTransactionStatus().isNewTransaction();
+		} catch (NoTransactionException e) {
+			return false;
+		}
+	}
+
+	/**
+	 * @return the folders checked in the current transaction by a folder move
+	 *         or merge, each with the matter it was checked against
+	 */
+	@SuppressWarnings("unchecked")
+	private static Map<Long, Long> checkedTrees() {
+		Object bound = TransactionSynchronizationManager.getResource(CHECKED);
+		return bound != null ? (Map<Long, Long>) bound : Map.of();
+	}
+
+	/**
+	 * Remembers, until the current transaction ends, that the tree was checked
+	 * against the matter; nothing outside a transaction
+	 */
+	@SuppressWarnings("unchecked")
+	private static void remember(Collection<Long> tree, long matterId) {
+		if (!TransactionSynchronizationManager.isSynchronizationActive())
+			return;
+		Map<Long, Long> checked = (Map<Long, Long>) TransactionSynchronizationManager.getResource(CHECKED);
+		if (checked == null) {
+			checked = new HashMap<>();
+			TransactionSynchronizationManager.bindResource(CHECKED, checked);
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCompletion(int status) {
+					TransactionSynchronizationManager.unbindResourceIfPossible(CHECKED);
+				}
+			});
+		}
+		for (Long folderId : tree)
+			checked.put(folderId, matterId);
 	}
 
 	@FunctionalInterface

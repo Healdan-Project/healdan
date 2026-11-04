@@ -382,6 +382,11 @@ paths:
         number; one that fails while it's being stored leaves a gap in the
         doc #s, as a deleted document does.
 
+        An email (`.eml` or `.msg`) whose message the folder's matter already
+        holds, in a copy the caller can read, is `409 already-filed` while
+        it's being stored, so its doc # is a gap too. The problem's `detail`
+        names the copy's doc #, and its `document` is the copy.
+
         `201` means the document is stored with its version 1.0 in its
         timeline. When the server stores the document but not that version,
         the answer is `500 server-error`, and its `detail` gives the new
@@ -1605,9 +1610,9 @@ components:
           description: |
             For `version-moved`: the document as it is now, so a client can
             tell from its `fileVersion` whether anyone stored newer content.
-            For `already-filed`: the copy of the message that the matter
-            already holds, when the caller can read it; left out when the
-            caller can't.
+            For `already-filed`: the copy the matter holds, when the caller
+            can read it; left out when the caller can't, and for a copy from
+            before Healdan, which has no doc #.
     FieldError:
       type: object
       additionalProperties: false

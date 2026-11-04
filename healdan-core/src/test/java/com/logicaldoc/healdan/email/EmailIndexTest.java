@@ -8,8 +8,11 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -289,6 +292,54 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 				EmailIndex.get().emailsIn(List.of(documents.getId()), true));
 		assertTrue(EmailIndex.get().emailsIn(List.of(otherDocuments.getId()), false).isEmpty());
 		assertTrue(EmailIndex.get().emailsIn(List.of(), false).isEmpty());
+	}
+
+	private void checkIn(Document doc, byte[] content, String asName) throws Exception {
+		DocumentManager.get().checkout(doc.getId(), fx.documentHistory(admin));
+		DocumentManager.get().checkin(doc.getId(), new ByteArrayInputStream(content), asName, false, null,
+				fx.documentHistory(admin));
+		awaitAsyncWork();
+	}
+
+	private static Object messageIdProperty(Document doc) throws Exception {
+		return DocumentDAO.get().findById(doc.getId(), true).getValue(HealdanConstants.ATTR_EMAILMESSAGEID);
+	}
+
+	@Test
+	public void testACheckInOfAnotherMessageReplacesItsRow() throws Exception {
+		Document doc = file("healdan-cc.eml", "upload.eml");
+
+		checkIn(doc, Files.readAllBytes(Path.of("src/test/resources/email/healdan-emoji.eml")), "upload.eml");
+		assertEquals("2@example.com", EmailIndex.get().messageIdOf(doc.getId()));
+		assertTrue(EmailIndex.get().copies("1@example.com").isEmpty());
+		assertEquals(List.of(doc.getId()), EmailIndex.get().copies("2@example.com"));
+		assertEquals("2@example.com", messageIdProperty(doc));
+
+		// A new version that is no message takes the row and the property away
+		checkIn(doc, "Plain text".getBytes(StandardCharsets.UTF_8), "upload.txt");
+		assertNull(EmailIndex.get().messageIdOf(doc.getId()));
+		assertEquals(0, rows());
+		assertNull(messageIdProperty(doc));
+
+		// Nor does a check-in of a document that is no message add a row
+		Document docx = fx.upload(documents, "a.docx", "text", admin);
+		checkIn(docx, "v2".getBytes(StandardCharsets.UTF_8), "a.docx");
+		assertEquals(0, rows());
+	}
+
+	@Test
+	public void testANewDocumentWhoseFileGivesNoneIsIndexedByItsProperty() throws Exception {
+		// A copy's clone stored without its file, which carries the Message-ID property
+		Document vo = new Document();
+		vo.setFileName("clone.eml");
+		vo.setFolder(documents);
+		vo.setTenantId(Tenant.DEFAULT_ID);
+		vo.setLanguage("en");
+		vo.setValue(HealdanConstants.ATTR_EMAILMESSAGEID, "<clone@example.com>");
+		DocumentDAO.get().store(vo, fx.documentHistory(admin));
+
+		// What the once-per-matter rule checked is what the index holds
+		assertEquals(List.of(vo.getId()), EmailIndex.get().copies("clone@example.com"));
 	}
 
 	@Test

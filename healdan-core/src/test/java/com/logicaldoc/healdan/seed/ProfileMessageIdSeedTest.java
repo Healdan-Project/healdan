@@ -101,6 +101,28 @@ public class ProfileMessageIdSeedTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testAnAdminsPropertyAfterReceivedMakesRoom() throws Exception {
+		Template t = template();
+		t.getTemplateAttributes().remove(HealdanConstants.ATTR_EMAILMESSAGEID);
+		Attribute matterRef = new Attribute();
+		matterRef.setLabel("Matter reference");
+		matterRef.setType(Attribute.Type.STRING);
+		matterRef.setPosition(14);
+		matterRef.setEditor(Attribute.EDITOR_DEFAULT);
+		t.getTemplateAttributes().put("matterref", matterRef);
+		TemplateDAO.get().store(t);
+
+		jdbc().update("delete from hd_setting where name = ?", MARKER);
+		Context.get(SeedRunner.class).runPending();
+
+		Template after = template();
+		assertEquals(14, after.getAttribute(HealdanConstants.ATTR_EMAILMESSAGEID).getPosition());
+		assertEquals(15, after.getAttribute("matterref").getPosition());
+		// Received and what comes before it stay where they were
+		assertEquals(13, after.getAttribute(HealdanConstants.ATTR_EMAILRECEIVED).getPosition());
+	}
+
+	@Test
 	public void testAProfileAnAdminDeletedStaysDeleted() throws Exception {
 		TemplateDAO.get().delete(template().getId());
 		jdbc().update("delete from hd_setting where name = ?", MARKER);
