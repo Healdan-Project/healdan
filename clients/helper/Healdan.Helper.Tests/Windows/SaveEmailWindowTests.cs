@@ -25,14 +25,17 @@ public sealed class SaveEmailWindowTests
 {
     private static readonly DateTimeOffset Sent = DateTimeOffset.Parse("2026-11-02T14:05:00Z");
 
-    /// <summary>The routes the window reads at folder 11; anything else is 404.</summary>
-    private sealed class FakeServer : HttpMessageHandler
+    /// <summary>
+    /// The routes the window reads at folder 11, which Recent Folders lists too; anything else is 404. Folder 11 takes
+    /// emails unless <paramref name="canFile"/> is false.
+    /// </summary>
+    private sealed class FakeServer(bool canFile = true) : HttpMessageHandler
     {
-        private const string Folder = """
+        private string Folder => $$"""
             {"type":"folder","id":11,"name":"Correspondence","kind":"folder","matter":{"id":3,"display":"998.1 – Healdan Demo","client":null},
              "store":{"id":1,"name":"Healdan"},
              "path":[{"id":1,"name":"Healdan","kind":"store"},{"id":10,"name":"998.1 – Healdan Demo","kind":"matter"},{"id":11,"name":"Correspondence","kind":"folder"}],
-             "canFile":true}
+             "canFile":{{(canFile ? "true" : "false")}}}
             """;
 
         private const string Form = """
@@ -50,7 +53,8 @@ public sealed class SaveEmailWindowTests
             string? body = path switch
             {
                 "/v1/me" => """{"id":1,"username":"jane","name":"Jane Smith","email":null,"language":null,"admin":false}""",
-                "/v1/me/favorites" or "/v1/folders/recent" or "/v1/folders/11/children" => """{"items":[],"offset":0,"limit":50,"total":0}""",
+                "/v1/me/favorites" or "/v1/folders/11/children" => """{"items":[],"offset":0,"limit":50,"total":0}""",
+                "/v1/folders/recent" => $$"""{"items":[{{Folder}}],"offset":0,"limit":50,"total":1}""",
                 "/v1/folders/11" => Folder,
                 "/v1/folders/11/form" => Form,
                 _ => null
@@ -97,14 +101,16 @@ public sealed class SaveEmailWindowTests
     /// Makes the window at folder 11 over <paramref name="filing"/> and shows it on the UI thread, waits for the folder's
     /// form, runs <paramref name="test"/> there, and closes it.
     /// </summary>
-    private static Task Run(SaveEmailRequest request, Func<SaveWindow, Task> test, Filing? filing = null) => Headless.RunAsync(async () =>
+    private static Task Run(SaveEmailRequest request, Func<SaveWindow, Task> test, Filing? filing = null, FakeServer? server = null,
+        bool waitForForm = true) => Headless.RunAsync(async () =>
     {
         filing ??= new Filing();
-        var window = new SaveWindow(request, new HealdanApi(new Uri("https://healdan.test"), new FakeServer()), filing.SubmitAsync);
+        var window = new SaveWindow(request, new HealdanApi(new Uri("https://healdan.test"), server ?? new FakeServer()), filing.SubmitAsync);
         window.Show();
         try
         {
-            await Until(() => Find<ContentControl>(window, "FormHost").IsVisible);
+            if (waitForForm)
+                await Until(() => Find<ContentControl>(window, "FormHost").IsVisible);
             await test(window);
         }
         finally
@@ -158,15 +164,25 @@ public sealed class SaveEmailWindowTests
         }
     }
 
+    private static readonly DateTimeOffset Received = DateTimeOffset.Parse("2026-11-02T14:05:09Z");
+
     [MacFact]
-    public Task TheMessageIsShownReadOnlyWithNoNameToType() => Run(Request(Part(1, "Lease.pdf")), window =>
+    public Task TheMessageIsShownReadOnlyWithNoNameToType() => Run(Request(Part(1, "Lease.pdf")) with
+    {
+        To = "Robert Example <robert@example.com>, Sam Example <sam@example.com>",
+        Cc = "Ann Example <ann@example.com>",
+        Received = Received,
+    }, window =>
     {
         Assert.Equal("File to Healdan", window.Title);
         Assert.Equal("Lease renewal", Find<SelectableTextBlock>(window, "EmailSubject").Text);
         Assert.Equal("Pat Example <pat@example.com>", Find<SelectableTextBlock>(window, "EmailFrom").Text);
+        Assert.Equal("Robert Example <robert@example.com>, Sam Example <sam@example.com>", Find<SelectableTextBlock>(window, "EmailTo").Text);
+        Assert.Equal("Ann Example <ann@example.com>", Find<SelectableTextBlock>(window, "EmailCc").Text);
         Assert.Equal(When.DateAndTime(Sent), Find<SelectableTextBlock>(window, "EmailSent").Text);
-        Assert.True(Shown(Find<SelectableTextBlock>(window, "EmailFrom")));
-        Assert.True(Shown(Find<SelectableTextBlock>(window, "EmailSent")));
+        Assert.Equal(When.DateAndTime(Received), Find<SelectableTextBlock>(window, "EmailReceived").Text);
+        foreach (var name in new[] { "EmailFrom", "EmailTo", "EmailCc", "EmailSent", "EmailReceived" })
+            Assert.True(Shown(Find<SelectableTextBlock>(window, name)), name);
 
         // M1 names an email after its subject, so there's no name to type, nor a format or a local copy to choose.
         Assert.False(Shown(Find<TextBox>(window, "NameBox")));
@@ -202,8 +218,34 @@ public sealed class SaveEmailWindowTests
     public Task AMessageWithoutAttachmentsHasNoAttachmentsBox() => Run(Request(), window =>
     {
         Assert.False(Shown(Find<CheckBox>(window, "AttachmentsBox")));
+        // A line the message lacks isn't shown: this one has no recipients and no Received date.
+        foreach (var name in new[] { "ToRow", "CcRow", "ReceivedRow" })
+            Assert.False(Shown(Find<StackPanel>(window, name)), name);
         return Task.CompletedTask;
     });
+
+    [MacFact]
+    public Task AFolderThatTakesNoEmailsSaysSo() => Run(Request(), window =>
+    {
+        Assert.Equal("Emails can't be filed in Correspondence. Choose a folder inside a matter that you can add to.",
+            Find<TextBlock>(window, "FormNotice").Text);
+        Assert.False(Find<Button>(window, "SaveButton").IsEnabled);
+        return Task.CompletedTask;
+    }, server: new FakeServer(canFile: false), waitForForm: false);
+
+    [MacFact]
+    public Task TheRefusalLineClearsOnceAFolderIsChosen() =>
+        // As when File Here's folder is gone: the window starts with no folder to file in, and the refusal on the line.
+        Run(Request() with { FolderId = null, Refusal = new SubmitOutcome.Refused("No such folder.", []) }, async window =>
+        {
+            var list = Find<ListBox>(window, "EntryList");
+            await Until(() => list.ItemCount > 0); // Recent Folders, which lists folder 11
+            Assert.Equal("No such folder.", Line(window));
+
+            list.SelectedIndex = 0;
+            await Until(() => Find<ContentControl>(window, "FormHost").IsVisible);
+            Assert.Null(Line(window));
+        }, waitForForm: false);
 
     [MacFact]
     public Task SaveStaysOffUntilTheRequiredPropertiesAreFilledAndAnswersTheTickedAttachments() =>
@@ -268,7 +310,7 @@ public sealed class SaveEmailWindowTests
     {
         var filing = new Filing();
         const string refused = "Attachment 1 (setup.exe): Files ending in .exe can't be uploaded.";
-        filing.Outcomes.Enqueue(new SubmitOutcome.Refused(refused, [Error("attachments", refused)]));
+        filing.Outcomes.Enqueue(new SubmitOutcome.Refused(refused, [Error("attachments[1]", refused)]));
         return Run(Request(Part(1, "setup.exe"), Part(3, "Lease.pdf")), async window =>
         {
             await FillComments(window);
@@ -276,7 +318,7 @@ public sealed class SaveEmailWindowTests
 
             Click(Find<Button>(window, "SaveButton"));
             await Until(() => AttachmentProblem(window, 0) is not null);
-            Assert.Equal("Files ending in .exe can't be uploaded.", AttachmentProblem(window, 0)); // its name is on the tick
+            Assert.Equal(refused, AttachmentProblem(window, 0)); // placed by the field's index, attachments[1]
             Assert.Null(AttachmentProblem(window, 1));
             Assert.Null(Line(window)); // nothing more to say than what's under the tick
 
@@ -325,12 +367,41 @@ public sealed class SaveEmailWindowTests
             Assert.False(cancel.IsEnabled);
             Assert.Equal("Filing the email in Healdan…", Line(window));
             Assert.Contains("muted", Find<TextBlock>(window, "SubmitText").Classes);
+            // Nor can the folder change, so a refusal that comes is about the folder still shown.
+            Assert.All(FolderAndForm(window), c => Assert.False(c.IsEffectivelyEnabled, c.Name ?? c.GetType().Name));
             window.Close();
             Assert.True(window.IsVisible); // the filing's outcome is the window's, so it waits for it
 
             filing.Gate!.TrySetResult();
             await Until(() => !window.IsVisible);
             Assert.Equal("save", (string?)window.Answer["action"]);
+        }, filing);
+    }
+
+    /// <summary>What a Save waiting must keep still: the folder browser, the places, the properties and the attachments.</summary>
+    private static List<Control> FolderAndForm(Window window) =>
+    [
+        Find<ListBox>(window, "EntryList"), Find<Border>(window, "PlacesHost"), Find<Button>(window, "BackButton"),
+        Find<ComboBox>(window, "ScopePicker"), Find<TextBox>(window, "SearchBox"), Find<Button>(window, "NewFolderButton"),
+        Find<ContentControl>(window, "FormHost"), Comments(window), Find<CheckBox>(window, "AttachmentsBox"),
+    ];
+
+    [MacFact]
+    public Task AfterARefusalTheFolderAndFormCanChangeAgain()
+    {
+        var filing = new Filing { Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        filing.Outcomes.Enqueue(new SubmitOutcome.Refused("You may not file documents into folder 11.", []));
+        return Run(Request(Part(1, "Lease.pdf")), async window =>
+        {
+            await FillComments(window);
+            Click(Find<Button>(window, "SaveButton"));
+            await Until(() => !Find<ListBox>(window, "EntryList").IsEffectivelyEnabled);
+
+            filing.Gate!.TrySetResult();
+            await Until(() => Line(window) == "You may not file documents into folder 11.");
+            Assert.All(FolderAndForm(window).Where(c => c.Name != "BackButton"), // Back has no history to go back to
+                c => Assert.True(c.IsEffectivelyEnabled, c.Name ?? c.GetType().Name));
+            Assert.True(Find<Button>(window, "CancelButton").IsEnabled);
         }, filing);
     }
 

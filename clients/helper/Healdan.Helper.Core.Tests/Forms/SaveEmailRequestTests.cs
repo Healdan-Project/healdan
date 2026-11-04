@@ -14,12 +14,14 @@ public class SaveEmailRequestTests
 {
     private static readonly DateTimeOffset Sent = DateTimeOffset.Parse("2026-11-02T14:05:00+01:00");
 
+    private static readonly DateTimeOffset Received = DateTimeOffset.Parse("2026-11-02T14:05:07+01:00");
+
     private static EmailInspection Inspection(string? subject = "Lease renewal") => new("m1@example.com", subject, "Pat Example <pat@example.com>", Sent,
     [
         new EmailPart(1, "Lease.pdf", "application/pdf", 2048, false, false),
         new EmailPart(2, "logo.png", "image/png", 300, true, false),
         new EmailPart(3, "Forwarded.eml", "message/rfc822", 900, false, true),
-    ], []);
+    ], [], To: "Robert Example <robert@example.com>, Sam Example <sam@example.com>", Cc: "Ann Example <ann@example.com>", Received: Received);
 
     [Fact]
     public void AMessageIsShownWithItsAttachmentsAndNotItsInlineParts()
@@ -27,6 +29,8 @@ public class SaveEmailRequestTests
         var request = SaveEmailRequest.For(Inspection(), folderId: 11);
 
         Assert.Equal(("Lease renewal", "Pat Example <pat@example.com>", Sent, 11L), (request.Subject, request.From, request.Sent, request.FolderId));
+        Assert.Equal(("Robert Example <robert@example.com>, Sam Example <sam@example.com>", "Ann Example <ann@example.com>", Received),
+            (request.To, request.Cc, request.Received));
         Assert.Equal([1, 3], request.Attachments.Select(a => a.Index));
         Assert.Equal(["Lease renewal"], request.Subjects);
     }
@@ -49,8 +53,9 @@ public class SaveEmailRequestTests
         var json = request.ToJson();
         var back = SaveEmailRequest.FromJson(JsonNode.Parse(json.ToJsonString())!.AsObject());
 
-        Assert.Equal(["subject", "from", "sent", "attachments", "subjects", "folderId", "refusal"], json.Select(p => p.Key));
+        Assert.Equal(["subject", "from", "to", "cc", "sent", "received", "attachments", "subjects", "folderId", "refusal"], json.Select(p => p.Key));
         Assert.Equal((request.Subject, request.From, request.Sent, request.FolderId), (back.Subject, back.From, back.Sent, back.FolderId));
+        Assert.Equal((request.To, request.Cc, request.Received), (back.To, back.Cc, back.Received));
         Assert.Equal(request.Attachments, back.Attachments);
         Assert.Equal(request.Subjects, back.Subjects);
         Assert.Null(back.Refusal);
@@ -74,6 +79,7 @@ public class SaveEmailRequestTests
         var request = SaveEmailRequest.FromJson(new JsonObject());
 
         Assert.Equal(((string?)null, (string?)null, (DateTimeOffset?)null, (long?)null), (request.Subject, request.From, request.Sent, request.FolderId));
+        Assert.Equal(((string?)null, (string?)null, (DateTimeOffset?)null), (request.To, request.Cc, request.Received));
         Assert.Empty(request.Attachments);
         Assert.Empty(request.Subjects);
     }
@@ -114,12 +120,14 @@ public class SaveEmailRequestTests
         var placed = new SubmitOutcome.Refused("Some fields need correcting.",
         [
             Error("deadline", "Deadline takes a date."),
-            Error("attachments", "Attachment 3 (setup.exe): Files ending in .exe can't be uploaded."),
-            Error("attachments", "Attachment 1 (a (b): c.pdf): The file is empty."),
+            Error("attachments[3]", "Attachment 3 (setup.exe): Files ending in .exe can't be uploaded."),
+            Error("attachments[1]", "Attachment 1 (Lease.pdf): The file is empty."),
         ]).Place(FormHasDeadline, OffersOneAndThree);
 
         Assert.Equal([("deadline", "Deadline takes a date.")], placed.OnFields);
-        Assert.Equal([(3, "Files ending in .exe can't be uploaded."), (1, "The file is empty.")], placed.OnAttachments); // a name with "): " in it too
+        // By the field's index, never the words, which show whole under the tick.
+        Assert.Equal([(3, "Attachment 3 (setup.exe): Files ending in .exe can't be uploaded."), (1, "Attachment 1 (Lease.pdf): The file is empty.")],
+            placed.OnAttachments);
         Assert.Null(placed.General); // every one has its place, so the line has nothing to add
     }
 
@@ -129,16 +137,29 @@ public class SaveEmailRequestTests
         var placed = new SubmitOutcome.Refused("Some fields need correcting.",
         [
             Error("pages", "Pages takes a whole number."),                                // not on this form
-            Error("attachments", "The email has no attachment 9."),                      // not offered
-            Error("attachments", "Attachment 2 (logo.png): The file is empty."),          // not offered either
+            Error("attachments[9]", "The email has no attachment 9."),                   // not offered
+            Error("attachments[2]", "Part 2 is shown in the message, so it isn't an attachment."), // nor this one
+            Error("attachments", "An attachment's index is missing."),                   // no index at all
+            Error("attachments[x]", "Attachment x: something."),                         // one that doesn't parse
             Error("file", "Files ending in .eml can't be uploaded."),                      // the email itself
         ]).Place(FormHasDeadline, OffersOneAndThree);
 
         Assert.Empty(placed.OnFields);
         Assert.Empty(placed.OnAttachments);
-        Assert.Equal("Pages takes a whole number. The email has no attachment 9. Attachment 2 (logo.png): The file is empty. "
-            + "Files ending in .eml can't be uploaded.", placed.General);
+        Assert.Equal("Pages takes a whole number. The email has no attachment 9. Part 2 is shown in the message, so it isn't an attachment. "
+            + "An attachment's index is missing. Attachment x: something. Files ending in .eml can't be uploaded.", placed.General);
     }
+
+    [Theory]
+    [InlineData("attachments[0]", 0)]
+    [InlineData("attachments[12]", 12)]
+    [InlineData("attachments", null)]
+    [InlineData("attachments[]", null)]
+    [InlineData("attachments[-1]", null)]
+    [InlineData("attachments[1] ", null)]
+    [InlineData("docclass", null)]
+    public void AnAttachmentsIndexIsReadFromItsFieldsName(string field, int? index) =>
+        Assert.Equal(index, SubmitOutcome.Refused.AttachmentIndex(field));
 
     [Fact]
     public void SignedOutTheEmailIsNotFiledAndTheUserIsToldSo() =>

@@ -85,7 +85,8 @@ public sealed record EmailPart(int Index, string Name, string Type, long Size, b
 
 /// <summary>
 /// What <c>inspectEmail</c> found in an email. Every field the message lacks, or has damaged, is null.
-/// <see cref="MessageId"/> has no angle brackets. <see cref="Copies"/> are the documents the user may read.
+/// <see cref="MessageId"/> has no angle brackets. <see cref="To"/> and <see cref="Cc"/> are the recipients, joined with
+/// ", ". <see cref="Copies"/> are the documents the user may read.
 /// </summary>
 [Schema("EmailInspection")]
 public sealed record EmailInspection(
@@ -94,7 +95,10 @@ public sealed record EmailInspection(
     string? From,
     DateTimeOffset? Sent,
     List<EmailPart> Attachments,
-    List<DocumentView> Copies);
+    List<DocumentView> Copies,
+    string? To = null,
+    string? Cc = null,
+    DateTimeOffset? Received = null);
 
 /// <summary>The <c>email</c> part of a filing: the folder, the properties, and the attachments to file by <see cref="EmailPart.Index"/>.</summary>
 [Schema("NewEmail")]

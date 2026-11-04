@@ -118,8 +118,13 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
         catch (ApiException e) when (route.StartsWith("mail/", StringComparison.Ordinal))
         {
             // Healdan's words can name an attachment, which the log never does (M5): its status and code are enough here,
-            // and the user has had its words in the helper's notification.
-            log.Error($"/v1/{route} from the add-in failed: Healdan answered {e.Status} {e.Code}");
+            // and the user has had its words in the helper's notification. A refusal, such as inspect's of a message too
+            // large, is a warning; Healdan's own failure an error.
+            var line = $"/v1/{route} from the add-in failed: Healdan answered {e.Status} {e.Code}";
+            if (e.Status >= 500)
+                log.Error(line);
+            else
+                log.Warn(line);
             return AddinAnswer.Error(500, "internal-error");
         }
         catch (Exception e)

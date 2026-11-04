@@ -538,7 +538,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
 | `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
-| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` only when Healdan can't be reached before any window is up; Outlook's key only |
+| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` before any window is up, when File Here can't reach Healdan or `inspect` fails (no answer, too large, not an email, `401`); Outlook's key only |
 | `POST /v1/mail/file-many` | the number of messages and their subjects | a ticket; Outlook's key only |
 | `POST /v1/mail/file-one` | the ticket and one `.eml` | filed, `already-filed` or failed; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
@@ -605,20 +605,25 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
       and `folderId` are each a whole number above 0, or `400 bad-request`.
     - **The window** is the Save window's email mode, File to Healdan (M5 spec §7.3), shown after the helper asks the
       server what's in the message (`POST /api/v1/emails/inspect`): the folder and its form as for a document; the
-      subject, From and Sent read-only, with no name to type, as M1 names every email after its subject; and "Also file
-      attachments as separate documents", unticked, with a tick for each attachment by name and size and none for
-      inline parts. The box ticks and unticks them all, and each can be unticked while it's ticked.
+      subject, From, To, CC, Sent and Received read-only (a line the message lacks isn't shown), with no name to type, as
+      M1 names every email after its subject; and "Also file attachments as separate documents", unticked, with a tick
+      for each attachment by name and size and none for inline parts. The box ticks and unticks them all, and each can
+      be unticked while it's ticked.
     - **Its Save files through the window** (`IWindows.SaveEmailAsync`'s `submit`, which `MailFiling` builds around
-      `POST /api/v1/emails`). Save, Cancel and closing are off while it waits, and the line by Save says "Filing the email
-      in Healdan…". Filed, or `409 already-filed`, which counts as filed, closes the window with that outcome and the copy.
+      `POST /api/v1/emails`). While it waits, the folder browser, the places, the properties and the attachments are off,
+      so the folder a refusal is about is still the one shown, and so are Save, Cancel and closing; the line by Save
+      says "Filing the email in Healdan…". Filed, or `409 already-filed`, which counts as filed, closes the window with
+      that outcome and the copy.
       A refusal (`409 filing-rule`, `403`, `413`, a `422`) shows in the window, which stays open to choose another folder
       or untick an attachment (`SubmitOutcome.Refused.Place`). A property's error shows under its field and keeps Save off
-      until the field changes; an attachment's (`attachments`, "Attachment 3 (name): …") shows under its tick, until the
-      tick changes; anything else shows on the line by Save. An outage (no answer, or a `5xx`) stays open too, saying
+      until the field changes; an attachment's, whose field the server names by its index (`attachments[3]`), shows
+      under its tick until the tick changes; anything else, a field name that doesn't parse included, shows on the line
+      by Save, until the next Save or another folder is chosen. An outage (no answer, or a `5xx`) stays open too, saying
       "Can't reach Healdan. Try again." Cancel is `outcome: cancelled`.
-    - **Before any window is up,** an outage on File Here, or any failure of `inspect`, is told in the helper's
-      notification and answered `500 internal-error`, which the pane shows as Can't Reach Healdan. The window's refusals
-      are never notified: the window says them.
+    - **Before any window is up,** an outage on File Here, or any failure of `inspect` (no answer, a message too large,
+      one that isn't an email, a `401`), is told in the helper's notification and answered `500 internal-error`. The log
+      has Healdan's status and code, a `4xx` as a warning and a `5xx` as an error. The window's refusals are never
+      notified: the window says them.
     - **Like `save-new`,** it answers `202` when it's still running after 20 s, while the window is up.
   - **`mail/file-many` and `mail/file-one`** are taken by the port now, keyed for Outlook and with the body limits above,
     and answer `404 not-found` until the filing of several messages is built (M5).

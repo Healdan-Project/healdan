@@ -17,7 +17,7 @@
     <Border x:Name="Toolbar" Classes="toolbar" DockPanel.Dock="Top">
       <Grid ColumnDefinitions="Auto,Auto,Auto,*" VerticalAlignment="Center">
         <TextBlock x:Name="WindowTitle" Classes="heading" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="False" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+        <StackPanel x:Name="NavButtons" Grid.Column="1" Orientation="Horizontal" Spacing="2">
           <Button x:Name="BackButton" Classes="tool" AutomationProperties.Name="Back">
             <local:IconView Data="{StaticResource Icon.chevron-left}" />
           </Button>
@@ -47,7 +47,7 @@
         <Button x:Name="SaveButton" Grid.Column="3" Classes="footer accent" Content="Save" IsDefault="True" />
       </Grid>
     </Border>
-    <Grid ColumnDefinitions="170,*,290">
+    <Grid x:Name="Panes" ColumnDefinitions="170,*,290">
       <Border x:Name="PlacesHost" Classes="nav" />
 
       <Border Grid.Column="1" Classes="pane">
@@ -126,9 +126,21 @@
                 <TextBlock Text="From" Classes="label" Margin="0,0,0,2" />
                 <SelectableTextBlock x:Name="EmailFrom" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
               </StackPanel>
+              <StackPanel x:Name="ToRow">
+                <TextBlock Text="To" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailTo" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="CcRow">
+                <TextBlock Text="CC" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailCc" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
               <StackPanel x:Name="SentRow">
                 <TextBlock Text="Sent" Classes="label" Margin="0,0,0,2" />
                 <SelectableTextBlock x:Name="EmailSent" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="ReceivedRow">
+                <TextBlock Text="Received" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailReceived" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
               </StackPanel>
             </StackPanel>
             <!-- A ContentControl clips to its bounds, which would cut a focused field's ring at the form's edges. -->

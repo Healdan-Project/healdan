@@ -20,13 +20,17 @@ namespace Healdan.Helper.Core.Forms;
 /// <param name="Subjects">The messages' subjects: one for one message, none when it has no subject, and more for several (Task 13).</param>
 /// <param name="FolderId">The folder to open at; null opens at Recent Folders.</param>
 /// <param name="Refusal">Why Healdan refused a File Here into that folder, shown as the window opens (M5 spec §10); null for none.</param>
+/// <param name="To">The To recipients, joined with ", ", read-only beside From.</param>
+/// <param name="Cc">The CC recipients, likewise.</param>
+/// <param name="Received">When it was received, read-only beside <paramref name="Sent"/>.</param>
 public sealed record SaveEmailRequest(string? Subject, string? From, DateTimeOffset? Sent, IReadOnlyList<EmailPart> Attachments,
-    IReadOnlyList<string> Subjects, long? FolderId, SubmitOutcome.Refused? Refusal = null)
+    IReadOnlyList<string> Subjects, long? FolderId, SubmitOutcome.Refused? Refusal = null,
+    string? To = null, string? Cc = null, DateTimeOffset? Received = null)
 {
     /// <summary>One message, from what <c>inspect</c> found in it, with its inline parts left out.</summary>
     public static SaveEmailRequest For(EmailInspection inspection, long? folderId, SubmitOutcome.Refused? refusal = null) => new(
         inspection.Subject, inspection.From, inspection.Sent, [.. inspection.Attachments.Where(a => !a.Inline)],
-        inspection.Subject is { } subject ? [subject] : [], folderId, refusal);
+        inspection.Subject is { } subject ? [subject] : [], folderId, refusal, inspection.To, inspection.Cc, inspection.Received);
 
     /// <summary>
     /// The request as <see cref="IWindows"/> passes it, which <see cref="ToJson"/> made; anything it lacks is left empty.
@@ -40,8 +44,7 @@ public sealed record SaveEmailRequest(string? Subject, string? From, DateTimeOff
         var subjects = request["subjects"] is JsonArray list
             ? list.Select(s => s is JsonValue v && v.TryGetValue<string>(out var text) ? text : null).OfType<string>().ToList()
             : [];
-        DateTimeOffset? sent = request["sent"] is JsonValue at && at.TryGetValue<string>(out var stamp)
-            && DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : null;
+        var sent = Moment(request, "sent");
         // Any JSON number: a value made in code may hold an int, which TryGetValue<long> doesn't answer.
         long? folderId = request["folderId"] is JsonValue n && n.GetValueKind() == JsonValueKind.Number
             && long.TryParse(n.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : null;
@@ -53,18 +56,26 @@ public sealed record SaveEmailRequest(string? Subject, string? From, DateTimeOff
                 : [];
             refusal = new SubmitOutcome.Refused(problem, fields);
         }
-        return new SaveEmailRequest(Text(request, "subject"), Text(request, "from"), sent, attachments, subjects, folderId, refusal);
+        return new SaveEmailRequest(Text(request, "subject"), Text(request, "from"), sent, attachments, subjects, folderId, refusal,
+            Text(request, "to"), Text(request, "cc"), Moment(request, "received"));
     }
 
+    private static DateTimeOffset? Moment(JsonObject body, string key) =>
+        body[key] is JsonValue at && at.TryGetValue<string>(out var stamp)
+        && DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : null;
+
     /// <summary>
-    /// <c>{"subject", "from", "sent", "attachments": [EmailPart…], "subjects": […], "folderId", "refusal": {"problem",
-    /// "fields": [FieldError…]}}</c>, for <see cref="IWindows.SaveEmailAsync"/>.
+    /// <c>{"subject", "from", "to", "cc", "sent", "received", "attachments": [EmailPart…], "subjects": […], "folderId",
+    /// "refusal": {"problem", "fields": [FieldError…]}}</c>, for <see cref="IWindows.SaveEmailAsync"/>.
     /// </summary>
     public JsonObject ToJson() => new()
     {
         ["subject"] = Subject,
         ["from"] = From,
+        ["to"] = To,
+        ["cc"] = Cc,
         ["sent"] = Sent?.ToString("O", CultureInfo.InvariantCulture),
+        ["received"] = Received?.ToString("O", CultureInfo.InvariantCulture),
         ["attachments"] = JsonSerializer.SerializeToNode(Attachments, HealdanApi.Json),
         ["subjects"] = new JsonArray([.. Subjects.Select(s => (JsonNode?)s)]),
         ["folderId"] = FolderId,

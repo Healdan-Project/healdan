@@ -159,8 +159,8 @@ public partial class SaveWindow : Window
         var target = _browser!.TargetFolder(_controls!.SelectedEntry);
         if (target?.Id == _target?.Id)
             return;
-        if (_target is not null && _email is not null && !_submitting)
-            Line(null, problem: true); // another folder: the last one's refusal is no longer the question
+        if (_email is not null && !_submitting)
+            Line(null, problem: true); // another folder, or the first chosen: the last refusal is no longer the question
         _target = target;
         var load = ++_formLoad;
         UpdateSave();
@@ -173,7 +173,7 @@ public partial class SaveWindow : Window
         }
         if (!target.CanFile)
         {
-            Notice($"Documents can't be filed in {target.Name}. Choose a folder inside a matter that you can add to.");
+            Notice($"{(_email is null ? "Documents" : "Emails")} can't be filed in {target.Name}. Choose a folder inside a matter that you can add to.");
             return;
         }
         if (target.Id == _formFolder?.Id && _form is not null)

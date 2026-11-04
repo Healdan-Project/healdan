@@ -33,10 +33,10 @@ public abstract partial record SubmitOutcome
         public const string CantReach = "Can't reach Healdan. Try again.";
 
         /// <summary>
-        /// Where each part of the refusal shows: a property's error under that field; an attachment's (the server names it
-        /// "Attachment 3 (Lease.pdf): …") under that attachment's tick, without the name the tick shows already; anything
-        /// else on the window's problem line. The line has <see cref="Problem"/> when there were no field errors, the
-        /// errors that have no place of their own when there were, and nothing when every one has its place.
+        /// Where each part of the refusal shows: a property's error under that field; an attachment's (the server names its
+        /// field <c>attachments[3]</c>, by the attachment's index) under that attachment's tick; anything else on the
+        /// window's problem line. The line has <see cref="Problem"/> when there were no field errors, the errors that have
+        /// no place of their own when there were, and nothing when every one has its place.
         /// </summary>
         /// <param name="isField">Whether the form has a field of that name.</param>
         /// <param name="isAttachment">Whether the window offers the attachment with that index.</param>
@@ -49,23 +49,24 @@ public abstract partial record SubmitOutcome
             List<string> rest = [];
             foreach (var error in Fields)
             {
-                if (error.Field == "attachments" && AttachmentError().Match(error.Detail) is { Success: true } m
-                    && int.TryParse(m.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) && isAttachment(index))
-                    onAttachments.Add((index, m.Groups[2].Value));
-                else if (error.Field != "attachments" && error.Field != "file" && isField(error.Field))
-                    onFields.Add((error.Field, error.Detail));
+                var field = error.Field ?? ""; // read from JSON, it may lack one
+                if (AttachmentIndex(field) is { } index && isAttachment(index))
+                    onAttachments.Add((index, error.Detail));
+                else if (!field.StartsWith("attachments", StringComparison.Ordinal) && field != "file" && isField(field))
+                    onFields.Add((field, error.Detail));
                 else
                     rest.Add(error.Detail);
             }
             return new Placement(onFields, onAttachments, rest.Count > 0 ? string.Join(" ", rest) : null);
         }
 
-        /// <summary>
-        /// "Attachment 3 (Lease.pdf): Files ending in .exe can't be uploaded.", as <c>EmailFiling.checkAttachment</c> writes it.
-        /// The name is the sender's and may hold anything, the rule's words are Healdan's own: so the last "): " ends the name.
-        /// </summary>
-        [GeneratedRegex(@"^Attachment (\d+) \(.*\): (.+)$", RegexOptions.Singleline)]
-        private static partial Regex AttachmentError();
+        /// <summary>The index in a field named <c>attachments[3]</c>, as <c>fileEmail</c> names a ticked attachment's; else null.</summary>
+        public static int? AttachmentIndex(string field) =>
+            AttachmentField().Match(field) is { Success: true } m
+            && int.TryParse(m.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var index) ? index : null;
+
+        [GeneratedRegex(@"^attachments\[(\d+)\]$")]
+        private static partial Regex AttachmentField();
     }
 
     /// <summary>Where a refusal shows: under fields, under attachments, and on the problem line (null for none).</summary>

@@ -56,7 +56,10 @@ public partial class SaveWindow
         EmailBlock.IsVisible = true;
         (EmailSubject.Text, SubjectRow.IsVisible) = (request.Subject, request.Subject is not null);
         (EmailFrom.Text, FromRow.IsVisible) = (request.From, request.From is not null);
+        (EmailTo.Text, ToRow.IsVisible) = (request.To, request.To is not null);
+        (EmailCc.Text, CcRow.IsVisible) = (request.Cc, request.Cc is not null);
         (EmailSent.Text, SentRow.IsVisible) = (request.Sent is { } sent ? When.DateAndTime(sent) : null, request.Sent is not null);
+        (EmailReceived.Text, ReceivedRow.IsVisible) = (request.Received is { } received ? When.DateAndTime(received) : null, request.Received is not null);
     }
 
     /// <summary>
@@ -113,17 +116,16 @@ public partial class SaveWindow
     }
 
     /// <summary>
-    /// The email mode's Save: files the answer through the window, with Save, Cancel and closing off meanwhile. Done closes
-    /// the window; a refusal shows in it, and it stays open.
+    /// The email mode's Save: files the answer through the window, with the folder browser, the places, the properties and
+    /// the attachments off, and Save, Cancel and closing too, meanwhile, so the folder a refusal is about is still the one
+    /// shown when it comes. Done closes the window; a refusal shows in it, and it stays open.
     /// </summary>
     private async void Submit(JsonObject answer)
     {
-        _submitting = true;
+        Submitting(true);
         foreach (var (_, _, problem) in _attachments)
             problem.IsVisible = false;
         Line("Filing the email in Healdan…", problem: false);
-        (SaveButton.Content, CancelButton.IsEnabled) = ("Filing…", false);
-        UpdateSave();
         SubmitOutcome outcome;
         try
         {
@@ -135,8 +137,7 @@ public partial class SaveWindow
             Program.Log.Error("The Save window couldn't file the email", e);
             outcome = new SubmitOutcome.Refused("Healdan Helper couldn't file the email. Try again.", []);
         }
-        _submitting = false;
-        (SaveButton.Content, CancelButton.IsEnabled) = ("Save", true);
+        Submitting(false);
         if (outcome is SubmitOutcome.Refused refused)
         {
             Line(null, problem: true);
@@ -145,6 +146,15 @@ public partial class SaveWindow
             return;
         }
         Finish(answer);
+    }
+
+    /// <summary>While a Save waits, nothing in the window but the waiting takes a click, and it won't close.</summary>
+    private void Submitting(bool waiting)
+    {
+        _submitting = waiting;
+        Panes.IsEnabled = NavButtons.IsEnabled = ScopePicker.IsEnabled = SearchBox.IsEnabled = !waiting;
+        (SaveButton.Content, CancelButton.IsEnabled) = (waiting ? "Filing…" : "Save", !waiting);
+        UpdateSave();
     }
 
     /// <summary>The attachments to file as separate documents, by their index: none unless the box is ticked.</summary>

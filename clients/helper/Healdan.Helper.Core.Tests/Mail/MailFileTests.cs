@@ -196,7 +196,7 @@ public sealed class MailFileTests : IDisposable
     [InlineData(409, "filing-rule", "Only the Correspondence folder takes emails in this matter.", null)]
     [InlineData(403, "forbidden", "You may not file documents into folder 11.", null)]
     [InlineData(413, "too-large", "The file is larger than 100 MB, the most Healdan takes.", null)]
-    [InlineData(422, "validation", "Attachment 1 (setup.exe): Files ending in .exe can't be uploaded.", "attachments")]
+    [InlineData(422, "validation", "Attachment 1 (setup.exe): Files ending in .exe can't be uploaded.", "attachments[1]")]
     [InlineData(422, "validation", "Comments takes at most 4000 characters.", "comments")]
     public async Task ARefusalShowsInTheWindowWhichStaysOpenForAnotherTry(int status, string code, string detail, string? field)
     {
@@ -236,6 +236,50 @@ public sealed class MailFileTests : IDisposable
         Assert.Equal(("Can't reach Healdan. Try again.", 0), (refused.Problem, refused.Fields.Count));
         Assert.Equal("filed", (string?)outcome["outcome"]); // the second Save went through
         Assert.Empty(_notifier.Notices);
+    }
+
+    [Fact]
+    public async Task ATokenRefusedInTheWindowSaysToSignInAgainAndStaysOpen()
+    {
+        _server.RefuseNextEmail(401, "unauthenticated", "The token is unknown, expired or revoked.");
+        Saves(Save(11), Save(11)); // signed in again meanwhile, the second Save files
+
+        var outcome = await Mail().FileAsync(Eml(), null);
+
+        var refused = Assert.IsType<SubmitOutcome.Refused>(_windows.EmailOutcomes.First());
+        Assert.Equal(("Sign in to Healdan again, then choose Save.", 0), (refused.Problem, refused.Fields.Count));
+        Assert.Equal("filed", (string?)outcome["outcome"]);
+        Assert.Empty(_notifier.Notices);
+    }
+
+    [Fact]
+    public async Task ATokenRefusedBeforeTheWindowIsToldAndThrown()
+    {
+        _server.Unauthorized = true;
+
+        var e = await Assert.ThrowsAsync<ApiException>(() => Mail().FileAsync(Eml(), null)); // inspect
+        Assert.Equal(401, e.Status);
+        // File Here: the form's 401 would open the window, but inspect's comes first, before any window is up.
+        Assert.Equal(401, (await Assert.ThrowsAsync<ApiException>(() => Mail().FileAsync(Eml(), 11))).Status);
+
+        Assert.Empty(_windows.Asked);
+        Assert.Equal(2, _notifier.Notices.Count);
+        Assert.All(_notifier.Notices, n => Assert.Equal("The email wasn't filed: sign in to Healdan again, then file it once more.", n.Message));
+    }
+
+    [Fact]
+    public async Task AFailureOfTheHelpersOwnInTheWindowSaysSoAndStaysOpen()
+    {
+        // A Save with no folder is no answer the window gives: the filing fails before it reaches Healdan.
+        Saves(new JsonObject { ["action"] = "save" }, Save(11));
+
+        var outcome = await Mail().FileAsync(Eml(), null);
+
+        var refused = Assert.IsType<SubmitOutcome.Refused>(_windows.EmailOutcomes.First());
+        Assert.Equal(("Healdan Helper couldn't file the email. Try again.", 0), (refused.Problem, refused.Fields.Count));
+        Assert.Contains("ERROR Filing an email from the Save window failed (InvalidOperationException", Log);
+        Assert.Equal("filed", (string?)outcome["outcome"]);
+        Assert.Single(_server.EmailsReceived); // the first never reached Healdan
     }
 
     [Fact]
@@ -336,7 +380,7 @@ public sealed class MailFileTests : IDisposable
         const string named = "Attachment 1 (secret-plan.pdf): Files ending in .pdf can't be uploaded.";
         _server.RefuseNextEmail(422, "validation", named, new JsonObject
         {
-            ["fields"] = new JsonArray(new JsonObject { ["field"] = "attachments", ["code"] = "forbidden-extension", ["detail"] = named }),
+            ["fields"] = new JsonArray(new JsonObject { ["field"] = "attachments[1]", ["code"] = "forbidden-extension", ["detail"] = named }),
         });
         Saves(Save(11, 1), Save(11, 1));
         _server.FileEmail = (_, _) => new FiledEmail(Doc(200, "Secret subject.eml"), [Doc(201, "secret-plan.pdf")], []);

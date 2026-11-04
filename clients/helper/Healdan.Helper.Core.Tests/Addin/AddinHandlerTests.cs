@@ -400,9 +400,22 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
         Assert.Equal((500, """{"error":"internal-error"}"""), (answer.Status, answer.Body.ToJsonString())); // the pane: Can't Reach Healdan
         Assert.Contains("may be unreachable", Notifier.All);
         // Healdan's words can name an attachment, so the log has its status and code only.
-        Assert.Contains("/v1/mail/file from the add-in failed: Healdan answered 503 unavailable", Log);
+        Assert.Contains("ERROR /v1/mail/file from the add-in failed: Healdan answered 503 unavailable", Log);
         Assert.DoesNotContain("setup.exe", Log);
         Assert.Empty(_windows.Asked);
+    }
+
+    [Fact]
+    public async Task AnInspectHealdanRefusesIsAWarningNotAnError()
+    {
+        Server.Unauthorized = true; // as inspect refuses a message too large, or one that isn't an email
+        var handler = Handler(Cycle());
+
+        var answer = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml() });
+
+        Assert.Equal((500, """{"error":"internal-error"}"""), (answer.Status, answer.Body.ToJsonString()));
+        Assert.Contains("WARN /v1/mail/file from the add-in failed: Healdan answered 401 unauthenticated", Log);
+        Assert.DoesNotContain(" ERROR ", Log);
     }
 
     [Fact]
