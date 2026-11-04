@@ -30,7 +30,7 @@ public sealed class HelperSettings
 
     /// <summary>
     /// The helper has offered Set Up Microsoft Office (M3.5 spec §5.13), which it does once, at the first start that finds
-    /// Word, Excel or PowerPoint installed and the certificate not yet trusted. After that it is in the menu and Settings,
+    /// Word, Excel, PowerPoint or Outlook installed and the certificate not yet trusted. After that it is in the menu and Settings,
     /// not shown again unasked.
     /// </summary>
     public bool OfficeSetUpOffered { get; set; }

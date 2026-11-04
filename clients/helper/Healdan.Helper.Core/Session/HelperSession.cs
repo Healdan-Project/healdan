@@ -1222,7 +1222,7 @@ public sealed class HelperSession : ICycleEvents, IDisposable
 
     /// <summary>
     /// After Set Up Microsoft Office has the Mac trust the helper's certificate (M3.5 spec §5.13): opens the Office add-in's
-    /// port, or has the open port serve the certificate Set Up renewed, so Word, Excel and PowerPoint reach the helper
+    /// port, or has the open port serve the certificate Set Up renewed, so Word, Excel, PowerPoint and Outlook reach the helper
     /// without a restart.
     /// </summary>
     public void EnsureAddin() => OpenAddin();

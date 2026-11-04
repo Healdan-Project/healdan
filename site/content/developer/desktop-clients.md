@@ -94,7 +94,10 @@ size the helper uses, the widths then match CoreText's.
   URLForApplicationWithBundleIdentifier:` finds it, as `open -a` does. `Platform/LaunchServices.cs` makes both calls,
   and its lookups stop at a nil answer, since Foundation raises an Objective-C exception for a nil argument. Settings
   (`SettingsWindow`) offer `AppChooser.Offered` for each kind and write the user's pick to `kinds`; its Microsoft Office
-  group lists `Pairing.Paired()` with Forget and starts Set Up. `OfficeApps` holds the set the cycle works with, and everything after the open (the
+  group lists `Pairing.Paired()` with Forget and starts Set Up. `InstalledApps` finds Outlook too
+  (`/Applications/Microsoft Outlook.app`, `com.microsoft.Outlook`), which opens no copies but runs Healdan's add-in, so
+  Set Up Microsoft Office applies on a Mac with any of Word, Excel, PowerPoint or Outlook (`OfficeSetUp.Applies`,
+  `InstalledApps.AnyAddinApp`). `OfficeApps` holds the set the cycle works with, and everything after the open (the
   reopen of a kept copy, the lock check, the crash check, the resume, Bring to the Front) goes by the record's app,
   whatever Settings say by then.
   - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens

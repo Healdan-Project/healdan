@@ -248,6 +248,15 @@ public sealed class SettingsWindowTests : IDisposable
     }, setUpAlready: true);
 
     [MacFact]
+    public Task OutlookAloneIsEnoughForTheGroupAndItsSetUp() => Run(window =>
+    {
+        Assert.True(Find<Border>(window, "OfficeGroup").IsVisible);
+        Assert.True(Find<Grid>(window, "SetUpRow").IsVisible);
+        Assert.Contains("Trusts Healdan Helper's certificate, so Word, Excel, PowerPoint and Outlook can reach it.", Texts(window));
+        return Task.CompletedTask;
+    }, installed: OnlyLibreOffice with { Outlook = true });
+
+    [MacFact]
     public Task NoOfficeAndNothingPairedLeavesTheGroupOut() => Run(window =>
     {
         Assert.False(Find<Border>(window, "OfficeGroup").IsVisible);

@@ -80,7 +80,7 @@ public partial class App : Application
         var windows = new AppWindows(notifier, _log, paths);
         var device = DeviceIdentity.Load(paths, log: _log);
         // The certificate for the add-in's port, which Set Up Microsoft Office makes and has the Mac trust (M3.5 spec §5.13),
-        // and the session serves once it's trusted (§5.8). Only a Mac with Word, Excel or PowerPoint on it ever needs it.
+        // and the session serves once it's trusted (§5.8). Only a Mac with Word, Excel, PowerPoint or Outlook on it ever needs it.
         var certificate = new AddinCertificate(paths, TimeProvider.System);
         var trust = new MacCertificateTrust();
         var mac = OperatingSystem.IsMacOS();

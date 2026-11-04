@@ -24,7 +24,7 @@
           <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
             <TextBlock Text="Trust Healdan Helper's certificate" />
             <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap"
-                       Text="macOS asks for your password once. Word, Excel and PowerPoint use it to reach Healdan Helper on this Mac." />
+                       Text="macOS asks for your password once. Word, Excel, PowerPoint and Outlook use it to reach Healdan Helper on this Mac." />
           </StackPanel>
           <StackPanel x:Name="DoneMark" Grid.Column="2" Orientation="Horizontal" Spacing="4" Margin="10,0,0,0" VerticalAlignment="Top" IsVisible="False">
             <local:IconView Data="{StaticResource Icon.check}" Foreground="{DynamicResource HdOnBrush}" AutomationProperties.Name="Done" />

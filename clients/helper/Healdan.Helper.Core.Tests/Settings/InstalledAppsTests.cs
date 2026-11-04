@@ -59,7 +59,23 @@ public sealed class InstalledAppsTests
         Assert.Equal(new InstalledApps(false, false, false, false), WhereverTheyAre());
         Assert.Equal(new InstalledApps(true, false, false, false), WhereverTheyAre("org.libreoffice.script")); // open -a LibreOffice finds it there
         Assert.Equal(new InstalledApps(false, true, true, true), WhereverTheyAre("com.microsoft.Word", "com.microsoft.Excel", "com.microsoft.Powerpoint"));
-        Assert.Equal(new InstalledApps(false, false, true, false), WhereverTheyAre("com.microsoft.Excel", "com.microsoft.Outlook"));
+        Assert.Equal(new InstalledApps(false, false, true, false, Outlook: true), WhereverTheyAre("com.microsoft.Excel", "com.microsoft.Outlook"));
+    }
+
+    [Fact]
+    public void OutlookIsFoundLikeTheOthersButIsNoneOfTheCopyCyclesPrograms()
+    {
+        Assert.True(OnMac("/Applications/Microsoft Outlook.app").Outlook);
+        Assert.True(WhereverTheyAre("com.microsoft.Outlook").Outlook);
+        Assert.False(OnMac("/Applications/Microsoft Word.app").Outlook);
+        Assert.False(InstalledApps.Detect(macOS: false, "/home/user", _ => true, _ => true).Outlook); // never off macOS
+
+        // It runs the Healdan add-in, but opens no copies.
+        var outlookOnly = OnMac("/Applications/Microsoft Outlook.app");
+        Assert.False(outlookOnly.MicrosoftOffice);
+        Assert.True(outlookOnly.AnyAddinApp);
+        Assert.True(OnMac("/Applications/Microsoft Excel.app").AnyAddinApp);
+        Assert.False(OnMac("/Applications/LibreOffice.app").AnyAddinApp);
     }
 
     [Fact]
@@ -84,7 +100,7 @@ public sealed class InstalledAppsTests
         });
 
         Assert.Equal(new InstalledApps(true, true, false, true), installed);
-        Assert.Equal(["com.microsoft.Excel", "com.microsoft.Powerpoint", "com.healdan.coffeepdf"], asked);
+        Assert.Equal(["com.microsoft.Excel", "com.microsoft.Powerpoint", "com.healdan.coffeepdf", "com.microsoft.Outlook"], asked);
     }
 
     [Fact]

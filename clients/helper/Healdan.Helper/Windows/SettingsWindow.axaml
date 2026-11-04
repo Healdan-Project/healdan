@@ -32,7 +32,7 @@
     </Border>
     <TextBlock Classes="footnote"
                Text="OpenDocument files open in LibreOffice whatever you choose, while it's installed. Other files open read-only in the computer's default app." />
-    <!-- Microsoft Office (M3.5 spec §5.10): left out on a Mac with no Word, Excel or PowerPoint and no app paired. -->
+    <!-- Microsoft Office (M3.5 spec §5.10): left out on a Mac with no Word, Excel, PowerPoint or Outlook and no app paired. -->
     <TextBlock x:Name="OfficeHeader" Text="Microsoft Office" Classes="group-header" IsVisible="False" />
     <Border x:Name="OfficeGroup" Classes="group" IsVisible="False">
       <StackPanel>
@@ -41,7 +41,7 @@
           <StackPanel Grid.Column="1" VerticalAlignment="Center">
             <TextBlock Text="Set Up" />
             <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap"
-                       Text="Trusts Healdan Helper's certificate, so Word, Excel and PowerPoint can reach it." />
+                       Text="Trusts Healdan Helper's certificate, so Word, Excel, PowerPoint and Outlook can reach it." />
           </StackPanel>
           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
             <Ellipse x:Name="SetUpDot" Width="7" Height="7" />
