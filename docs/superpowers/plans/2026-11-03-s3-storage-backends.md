@@ -132,7 +132,7 @@ Each is a place where the spec and master disagree, found while checking every c
 
    **Owner (2026-11-03): (b).** A `storage-hide-stores` seed, as `hide-dropbox` hides Dropbox's menu: it deletes menu 105's ACL rows and marks the menu deleted, which every menu query leaves out, admins' included. Its `enabled()` is false unless `Store.get()` is a `HealdanStorage`, as the other storage seeds' are, so the screen goes exactly when its edits would start to hurt (Task 9). `store.1.dir` and the six folders are then set only in `context.properties`, which Known Limitations says (Task 19).
 2. **CE's prefix match is already fixed.** Spec §3.1 ("Until this work is built, CE's bug stands") and §17's last bullet predate [Healdan-Project/healdan#153](https://github.com/Healdan-Project/healdan/pull/153): `3eedc64` (2026-11-01) made `FSStore.listResources` match a file version exactly, and a follow-up (2026-11-02) fixed `replaceFile`'s null file version; `FSStoreFileVersionTest` is in `UPSTREAM_TESTS`, and the capability map's §6 records both. `HealdanStorage` still matches exactly, from its rows. **Default:** Task 21 rewrites those two passages to say so. **Owner (2026-11-03): the default.**
-3. **The migration's number and portability.** Spec §3.1 and §5.1 say V1 to V5 shipped and expect V7. M4 shipped V6 (`V6__signin.sql`) and V7 (`V7__refresh_token_width.sql`), so this is **V8** (`V8__storage.sql`). §5.1 and §14 also say its SQL "runs unchanged" on PostgreSQL; Healdan's MariaDB scripts use `datetime` and `ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin`, and its HSQLDB scripts `timestamp`. **Default:** the two scripts keep that convention, and use only `bigint`, `int`, `varchar`, timestamps and sequences, so the HSQLDB script is the one PostgreSQL's folder copies. **Owner (2026-11-03): the default.**
+3. **The migration's number and portability.** Spec §3.1 and §5.1 say V1 to V5 shipped and expect V7. M4 shipped V6 (`V6__signin.sql`) and V7 (`V7__refresh_token_width.sql`), and M5's plan, approved for building on 2026-11-03, takes V8 (`V8__email_index.sql`), so this is **V9** (`V9__storage.sql`): the next free version, as §5.1 says. If this is built before M5, the two swap. §5.1 and §14 also say its SQL "runs unchanged" on PostgreSQL; Healdan's MariaDB scripts use `datetime` and `ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin`, and its HSQLDB scripts `timestamp`. **Default:** the two scripts keep that convention, and use only `bigint`, `int`, `varchar`, timestamps and sequences, so the HSQLDB script is the one PostgreSQL's folder copies. **Owner (2026-11-03): the default.** (The owner accepted V8; M5's plan, merged afterwards the same day, took V8, so this is V9, the next free version the owner's answer meant.)
 4. **Smoke step 5e is taken.** Spec §15.2 and §16.1 name the storage step "5e"; M4's `test-signin.sh` is step 5e. **Default:** the storage step is **5f**. **Owner (2026-11-03): the default.**
 5. **M4 has landed, and its key guard needs the storage secrets.** Spec §4 and §14 say M4 is "being built now". It was accepted on 2026-11-02, and `SecretBox` (`healdan-core`'s `signin` package) is there to reuse. Its R37 guard makes a key only while nothing stored is sealed, and `SecretBox.sealedIn` counts only providers' client secrets and helpers' refresh tokens. Left alone, an admin typing an S3 secret while the key file is missing would make a new key silently, and every sealed value would be lost. Counting them isn't enough on its own: M4's new-key question (`ProviderDialog.askNewKey`), `SecretBox`'s two log messages and the Backup and Restore page's key sections all say a new key loses only providers' client secrets and helpers' refresh tokens, so an admin confirming a new key on the Sign-In tab would take every S3 backend down unwarned. **Default:** `sealedIn` also counts `hd_storage_backend.hd_secret` (Task 2), an edit to M4's class; that question, those messages and those sections name the storage backends' secrets too, and a backend whose secret won't open fails, saying to enter it again (Tasks 12 and 14). **Owner (2026-11-03): the default.**
 6. **Files the spec's §15.2 doesn't list.** The build also changes:
@@ -155,7 +155,7 @@ Each is a place where the spec and master disagree, found while checking every c
    - **(b) A fifth table, `hd_storage_event`,** which the tab lists.
    - (c) A `UserEvent` appended upstream, with a line in §15.1.
 
-   **Owner (2026-11-03): (b).** A recovery key reads every file on its backend, so every showing is kept, as §9 says. `hd_storage_event` is a Hibernate entity, `StorageEvent`, in V8, recording each Show Recovery Key and each Enter Recovery Key: the backend, the event, when, and the user's id and name (kept as typed, since a user can be deleted later). Nothing deletes its rows, a removed backend's included. `hd_storage_backend` has no `hd_keyshown` or `hd_keyshownby`: the tab shows the latest from the events (Tasks 2, 14 and 17). Each event is logged as well (§13).
+   **Owner (2026-11-03): (b).** A recovery key reads every file on its backend, so every showing is kept, as §9 says. `hd_storage_event` is a Hibernate entity, `StorageEvent`, in V9, recording each Show Recovery Key and each Enter Recovery Key: the backend, the event, when, and the user's id and name (kept as typed, since a user can be deleted later). Nothing deletes its rows, a removed backend's included. `hd_storage_backend` has no `hd_keyshown` or `hd_keyshownby`: the tab shows the latest from the events (Tasks 2, 14 and 17). Each event is logged as well (§13).
 9. **Is a staged copy held after its upload?** §8 holds "a source copy after a move", and §5.2 calls staging "a built-in local backend", which would keep every Client Work upload on the server's disk for the holding period, against §1's "the server's disk stays small". A restore doesn't need it: a backup taken while a file was staged holds both the row saying "staging" and the staged file. Options:
    - (a) Deleted once its upload is verified and the row points at the bucket. Previews, thumbnails and the indexer, which read a new file seconds to minutes after its save, then usually fetch it back from the bucket, against §6.1's "made at local speed", and a file saved minutes before an outage can't be opened during it.
    - **(b) Moved into the read cache,** as that write's entry.
@@ -297,12 +297,12 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
 ### Task 2: The tables, the settings and the secret box's count
 
 **Files:**
-- Create: `healdan-core/src/main/resources/healdan/db/migration/mariadb/V8__storage.sql`, `…/hsqldb/V8__storage.sql`
+- Create: `healdan-core/src/main/resources/healdan/db/migration/mariadb/V9__storage.sql`, `…/hsqldb/V9__storage.sql` (question 3: after M5's V8)
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/StorageBackend.java`, `StorageBackendDAO.java`, `HibernateStorageBackendDAO.java`, `StoreBackend.java`, `StoreBackendDAO.java`, `HibernateStoreBackendDAO.java`, `StorageEvent.java`, `StorageEventDAO.java`, `HibernateStorageEventDAO.java` (question 8), `StoredFiles.java` (`hd_storage_file`, JDBC), `HeldCopies.java` (`hd_storage_held`, JDBC), `StorageSettings.java`
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/seed/StorageSettingsSeed.java`
 - Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/seed/SeedRunner.java` (`ORDER` gains `"storage-settings"`, `"storage-record-original"` and `"storage-hide-stores"` after `"signin-settings"`, and `"smoke-storage"` after `"smoke-signin"`)
 - Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/signin/SecretBox.java` (`sealedIn` also counts `select count(*) from hd_storage_backend where hd_secret is not null`)
-- Modify: `healdan-core/src/test/java/com/logicaldoc/healdan/db/HealdanMigratorTest.java` (it pins the schema's version: `fromVersion("7")` and "7 migrations applied, schema version 7" become 8, as V7's commit `fce24950b` moved them from 6)
+- Modify: `healdan-core/src/test/java/com/logicaldoc/healdan/db/HealdanMigratorTest.java` (it pins the schema's version, which M5's V8 moves to 8: `fromVersion("8")` and "8 migrations applied, schema version 8" become 9, as V7's commit `fce24950b` moved them from 6 to 7)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/StorageDataTest.java`, `seed/StorageSettingsSeedTest.java`; `healdan-core/src/test/java/com/logicaldoc/healdan/signin/SecretBoxTest.java` (one test)
 
 **Interfaces:**
@@ -349,7 +349,7 @@ public class HeldCopies { /* JdbcTemplate over hd_storage_held: hold(backendId, 
 
 - [ ] **Step 1: Write the failing tests**
   - `StorageDataTest extends AbstractStorageTestCase`:
-    - `testMigrationMadeTheTables`: the five tables exist (`INFORMATION_SCHEMA`), `hd_schema_history` has version 8, and backend 1 is a `local` backend named `Original`, not encrypted, with no path.
+    - `testMigrationMadeTheTables`: the five tables exist (`INFORMATION_SCHEMA`), `hd_schema_history` has version 9, and backend 1 is a `local` backend named `Original`, not encrypted, with no path.
     - `testOneRowPerFile`: a second insert of `(docId, resource)` fails; `recordWrite` twice leaves one row, with a new write id each time.
     - `testMovedOnlyIfUnchanged`: `moved(…, write = w1, …)` after a second write changes nothing and answers false; so does it after the row is deleted and written again, whose new write id is never `w1`.
     - `testWaiting`: a staged write, and a `setStore` that leaves a row misplaced, set `hd_waiting`, keeping an earlier value; `moved` clears it.
@@ -428,7 +428,7 @@ create index hd_storage_event_backend on hd_storage_event (hd_backendid, hd_date
 - [ ] **Step 4: Write the entities, the row classes, the settings and the seed, and edit `SecretBox`, `SeedRunner` and `HealdanMigratorTest`.** Run the tests: PASS, and `mvn -B -ntp -pl healdan-core test -Dtest='SecretBoxTest,HealdanMigratorTest,SeedsTest'`: PASS.
 - [ ] **Step 5: Commit:** "Add the storage tables and settings, and count storage secrets as sealed"
 
-**CI:** all in the `Tests` shards. `healdan-core`'s own tests run V8 on every fresh test database from here, which also checks it on HSQLDB with nothing of `healdan-storage` present.
+**CI:** all in the `Tests` shards. `healdan-core`'s own tests run V9 on every fresh test database from here, which also checks it on HSQLDB with nothing of `healdan-storage` present.
 
 ---
 
@@ -1146,7 +1146,7 @@ volumes:
 
 ### Task 22: The owner's acceptance
 
-- [ ] **Step 1:** Once PRs A to D are merged, the owner backs up (the database and both volumes, as today), upgrades, and checks the first start's log: V8 applied, Original's files recorded, `HealdanStorage` in use.
+- [ ] **Step 1:** Once PRs A to D are merged, the owner backs up (the database and both volumes, as today), upgrades, and checks the first start's log: V9 applied, Original's files recorded, `HealdanStorage` in use.
 - [ ] **Step 2:** The owner's walkthrough, spec §16.3, rows 1 to 8, against the owner's server and Wasabi bucket, following the Install pages as written. Row 6 shortens the holding period to 1 day. Row 7's fresh stack starts only once the owner's server is stopped (call 23), and the owner's server starts again only once that stack is taken down. Record each row's result and any punch-list item in the spec's §16.3 and this plan's decision log.
 - [ ] **Step 3:** The owner keeps each backend's recovery key in a password manager, and the next backup holds the new key files.
 
