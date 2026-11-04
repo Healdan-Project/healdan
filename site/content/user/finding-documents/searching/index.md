@@ -27,6 +27,9 @@ Your install may call matters *projects*. The Matters scope then uses that word.
 Full-text search finds words inside documents, including Word, Excel and PowerPoint files, PDFs, and emails' text
 and attachment names. A document is searchable shortly after it's filed.
 
+An email's From, To, CC and Subject are part of its text, so words in them are found. Its Message-ID is a property
+as they are, but unlike them it isn't part of the text, so full-text search doesn't find it.
+
 ## Matter Numbers
 
 - **`998.1`** opens matter 1 of client 998.

@@ -64,6 +64,25 @@ learn from.
 - **Its own tables.** Flyway owns the tables whose names start `hd_`, and only those. A change ships as a new
   script under `healdan-core/src/main/resources/healdan/db/migration/`, never as an edit to one that has shipped.
   Healdan never changes the structure of LogicalDOC's `ld_` tables.
+  - `hd_email` indexes email: a row for each email document, with its Message-ID and the SHA-256 of it that
+    lookups search by. `EmailDocumentListener` adds the row when an email is filed, from the Message-ID it read
+    from the file, or from the Message-ID property the document came with when the file gives none. A check-in
+    replaces it with the new version's, and takes it away when the new version is no message. `EmailIndex` answers
+    which documents are copies of a message, comparing the Message-ID exactly. The index, not the Message-ID property, is what Healdan trusts, as LogicalDOC's own screens can edit
+    the property.
+  - The row holds no matter. A message has few copies, so whoever asks finds each copy's matter afresh. A lookup
+    joins `ld_document`, so it leaves out deleted documents. The row of a document deleted for good stays, and no
+    lookup sees it.
+  - A background thread, `EmailIndexWorker`, gives the emails filed before the index existed their row and their
+    Message-ID property. It starts a minute after the server, reads 50 emails at a time in the order of their ids,
+    and writes the id of the last one to `email.index.cursor` in `hd_setting`, so a restart carries on from there.
+    It reads deleted documents too, so that a restore finds the row, and leaves shortcuts out. It writes the
+    property directly, so no version is made and no listener runs. An email it can't read gets nothing, and is
+    logged by its document id.
+  - When the first pass has read them all it writes `email.index` = `done`, which only records that. Every start
+    scans on from the cursor, so an email filed since whose row is missing (the listener logs a row it can't add
+    and goes on) gets it at the next start. To read every email again, delete the `email.index` and
+    `email.index.cursor` rows from `hd_setting` and restart.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.

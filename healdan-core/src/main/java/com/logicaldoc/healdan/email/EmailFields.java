@@ -5,7 +5,9 @@ package com.logicaldoc.healdan.email;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.Collection;
 import java.util.Date;
@@ -14,6 +16,10 @@ import java.util.Optional;
 import java.util.StringJoiner;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.poi.poifs.filesystem.DocumentEntry;
+import org.apache.poi.poifs.filesystem.DocumentInputStream;
+import org.apache.poi.poifs.filesystem.Entry;
+import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,13 +46,23 @@ import jakarta.mail.internet.MimeMessage;
  * @param subject the subject
  * @param sent when it was sent
  * @param received when it was received
+ * @param messageId the Message-ID without its angle brackets
+ *        ({@link MessageIds#normalize}); null when the message has none. An
+ *        {@code msg} already read by CE ({@link #fromMsg(EMail)}) always gives
+ *        null, as CE's reader drops it
  */
-public record EmailFields(String from, String to, String cc, String subject, Date sent, Date received) {
+public record EmailFields(String from, String to, String cc, String subject, Date sent, Date received,
+		String messageId) {
 
 	private static final Logger log = LoggerFactory.getLogger(EmailFields.class);
 
 	/** The attribute values are stored in a varchar(4000) */
 	private static final int MAX_TEXT = 4000;
+
+	/** The streams of an {@code msg}'s PR_INTERNET_MESSAGE_ID (0x1035), as Unicode and as 8-bit text */
+	private static final String MSG_ID_UNICODE = "__substg1.0_1035001F";
+
+	private static final String MSG_ID_8BIT = "__substg1.0_1035001E";
 
 	/**
 	 * @param file the email
@@ -59,7 +75,9 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 				return Optional.of(fromMsg(file));
 			return fromEml(file);
 		} catch (Throwable t) {
-			log.warn("Cannot read the email {}: {}", file != null ? file.getName() : null, t.toString());
+			// The class only: a parser's message can hold addresses. A file may be named after the subject too
+			log.warn("Cannot read an email: {}", t.getClass().getName());
+			log.debug("Cannot read an email", t);
 			return Optional.empty();
 		}
 	}
@@ -70,7 +88,7 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 			message = MailUtil.readMime(is);
 		}
 		if (message == null) {
-			log.warn("Cannot read the email {}: not a MIME message", file.getName());
+			log.warn("Cannot read an email: not a MIME message");
 			return Optional.empty();
 		}
 		return Optional.of(fromEml(message));
@@ -87,7 +105,8 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		String from = safe("from", () -> join(message.getFrom() == null ? null : List.of(message.getFrom())));
 		String to = safe("to", () -> join(recipients(message, Message.RecipientType.TO)));
 		String cc = safe("cc", () -> join(recipients(message, Message.RecipientType.CC)));
-		return of(from, to, cc, subject, sent, received);
+		String messageId = safe("Message-ID", () -> MessageIds.normalize(message.getMessageID()));
+		return of(from, to, cc, subject, sent, received, messageId);
 	}
 
 	private static Collection<Address> recipients(MimeMessage message, Message.RecipientType type) throws Exception {
@@ -125,7 +144,39 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 	}
 
 	private static EmailFields fromMsg(File file) throws Exception {
-		return fromMsg(MailUtil.msgToMail(file, false));
+		EmailFields fields = fromMsg(MailUtil.msgToMail(file, false));
+		// CE's reader drops the Message-ID, so its one property is read, not the whole file again
+		String messageId = safe("Message-ID", () -> MessageIds.normalize(msgMessageId(file)));
+		return fields.withMessageId(messageId);
+	}
+
+	/**
+	 * @return the {@code msg}'s PR_INTERNET_MESSAGE_ID, the property msgparser
+	 *         reads the Message-ID from, as Unicode or 8-bit text; null if it
+	 *         has none
+	 */
+	private static String msgMessageId(File file) throws IOException {
+		try (POIFSFileSystem msg = new POIFSFileSystem(file, true)) {
+			for (Entry entry : msg.getRoot()) {
+				if (!(entry instanceof DocumentEntry document))
+					continue;
+				if (MSG_ID_UNICODE.equalsIgnoreCase(entry.getName()))
+					return new String(bytes(document), StandardCharsets.UTF_16LE);
+				if (MSG_ID_8BIT.equalsIgnoreCase(entry.getName()))
+					return new String(bytes(document), StandardCharsets.ISO_8859_1);
+			}
+			return null;
+		}
+	}
+
+	private static byte[] bytes(DocumentEntry document) throws IOException {
+		try (DocumentInputStream in = new DocumentInputStream(document)) {
+			return in.readAllBytes();
+		}
+	}
+
+	private EmailFields withMessageId(String id) {
+		return new EmailFields(from, to, cc, subject, sent, received, id);
 	}
 
 	/**
@@ -140,7 +191,7 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		Date received = mail.getReceivedDate() != null ? mail.getReceivedDate() : sent;
 		return of(safe("from", () -> join(mail.getFrom() == null ? null : List.of(mail.getFrom()))),
 				safe("to", () -> joinRecipients(mail.getRecipients())),
-				safe("cc", () -> joinRecipients(mail.getRecipientsCC())), subject, sent, received);
+				safe("cc", () -> joinRecipients(mail.getRecipientsCC())), subject, sent, received, null);
 	}
 
 	private static String joinRecipients(Collection<Recipient> recipients) {
@@ -176,8 +227,9 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 			joiner.add(name.trim());
 	}
 
-	private static EmailFields of(String from, String to, String cc, String subject, Date sent, Date received) {
-		return new EmailFields(text(from), text(to), text(cc), text(subject), sent, received);
+	private static EmailFields of(String from, String to, String cc, String subject, Date sent, Date received,
+			String messageId) {
+		return new EmailFields(text(from), text(to), text(cc), text(subject), sent, received, messageId);
 	}
 
 	/*
@@ -200,7 +252,8 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		try {
 			return reader.get();
 		} catch (Throwable t) {
-			log.warn("Cannot read the {} of the email: {}", what, t.toString());
+			log.warn("Cannot read the {} of an email: {}", what, t.getClass().getName());
+			log.debug("Cannot read the {} of an email", what, t);
 			return null;
 		}
 	}

@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.api;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.logicaldoc.core.HealdanVetoException;
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.email.AlreadyFiledException;
+import com.logicaldoc.healdan.security.AccessChecks;
 
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -24,7 +31,9 @@ import jakarta.ws.rs.ext.ExceptionMapper;
  * Turns every exception into an RFC 9457 problem (spec section 4.4):
  * <ul>
  * <li>an {@link ApiProblem} as it is;</li>
- * <li>a Healdan veto as {@code 409 refused}, with its message;</li>
+ * <li>the once-per-matter rule's refusal as {@code 409 already-filed}, with
+ * its message and the copy as {@code document} (M5 spec §6.4);</li>
+ * <li>any other Healdan veto as {@code 409 refused}, with its message;</li>
  * <li>JSON that can't be read as {@code 400 bad-request};</li>
  * <li>what JAX-RS raises with its own status: {@code 404 not-found},
  * {@code 401 unauthenticated}, {@code 403 forbidden}, {@code 413 too-large}
@@ -49,7 +58,11 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 		if (exception instanceof ApiProblem problem)
 			return problem(problem);
 
-		HealdanVetoException veto = findVeto(exception);
+		AlreadyFiledException filed = find(exception, AlreadyFiledException.class);
+		if (filed != null)
+			return problem(alreadyFiled(filed));
+
+		HealdanVetoException veto = find(exception, HealdanVetoException.class);
 		if (veto != null)
 			return problem(new ApiProblem(409, "refused", veto.getMessage()));
 
@@ -98,15 +111,36 @@ public class ProblemMapper implements ExceptionMapper<Throwable> {
 	}
 
 	/**
-	 * @return the veto, if the exception is one or was caused by one
+	 * @return the exception of that type, if the exception is one or was
+	 *         caused by one
 	 */
-	private static HealdanVetoException findVeto(Throwable exception) {
+	private static <T extends Throwable> T find(Throwable exception, Class<T> type) {
 		// Bounded, in case of a loop of causes
 		Throwable t = exception;
 		for (int depth = 0; t != null && depth < 20; depth++, t = t.getCause())
-			if (t instanceof HealdanVetoException veto)
-				return veto;
+			if (type.isInstance(t))
+				return type.cast(t);
 		return null;
+	}
+
+	/**
+	 * @return the refusal, with the copy as the caller sees it; the rule names
+	 *         only a copy the caller can read, and one the caller can't (a rule
+	 *         run with no user) is left out
+	 */
+	private static ApiProblem alreadyFiled(AlreadyFiledException filed) {
+		ApiProblem problem = new ApiProblem(409, "already-filed", filed.getMessage());
+		try {
+			User caller = Caller.current().user();
+			Optional<Document> copy = AccessChecks.readableDocument(DocumentDAO.get().findById(filed.copyId()),
+					caller);
+			if (copy.isPresent())
+				problem.with("document", ApiViews.document(copy.get(), caller));
+		} catch (PersistenceException | RuntimeException e) {
+			log.warn("Can't add document {} to an already-filed problem: {}", filed.copyId(), e.getClass().getName());
+			log.debug("Can't add document {} to an already-filed problem", filed.copyId(), e);
+		}
+		return problem;
 	}
 
 	/**

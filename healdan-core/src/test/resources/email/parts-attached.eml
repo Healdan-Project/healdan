@@ -1,0 +1,69 @@
+From: Ann Smith <ann@example.com>
+To: Bob Jones <bob@example.com>
+Subject: Contract for review
+Date: Tue, 03 Nov 2026 10:00:00 +0000
+Message-ID: <attached-1@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="=_mixed_1"
+
+--=_mixed_1
+Content-Type: multipart/alternative; boundary="=_alt_1"
+
+--=_alt_1
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hello Bob,
+The contract is attached.
+
+--=_alt_1
+MIME-Version: 1.0
+Content-Type: multipart/related; boundary="=_related_1"
+
+--=_related_1
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><body><p>Hello Bob,</p><p>The contract is attached.</p><img src=3D"cid:=
+logo@example.com" alt=3D"Logo"></body></html>
+
+--=_related_1
+Content-Type: image/png
+Content-Transfer-Encoding: base64
+Content-Disposition: inline; filename="logo.png"
+Content-ID: <logo@example.com>
+MIME-Version: 1.0
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9
+HQAAAABJRU5ErkJggg==
+
+--=_related_1--
+
+--=_alt_1--
+
+--=_mixed_1
+Content-Type: application/pdf
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Contract.pdf"
+MIME-Version: 1.0
+
+JVBERi0xLjQKJSBIZWFsZGFuIHRlc3QgZml4dHVyZQolJUVPRgo=
+
+--=_mixed_1
+Content-Type: message/rfc822
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+Content-Disposition: attachment
+
+From: Cara Diaz <cara@example.com>
+To: Ann Smith <ann@example.com>
+Subject: Original request
+Date: Mon, 02 Nov 2026 09:00:00 +0000
+Message-ID: <forwarded-1@example.com>
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+MIME-Version: 1.0
+
+Please send the contract.
+
+--=_mixed_1--

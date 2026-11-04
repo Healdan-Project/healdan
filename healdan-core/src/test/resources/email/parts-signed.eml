@@ -1,0 +1,39 @@
+Content-Type: multipart/signed; protocol="application/pkcs7-signature";
+ micalg="sha-256"; boundary="=_signed_1"
+MIME-Version: 1.0
+From: Ann Smith <ann@example.com>
+To: Bob Jones <bob@example.com>
+Subject: Signed contract
+Date: Tue, 03 Nov 2026 12:00:00 +0000
+Message-ID: <signed-1@example.com>
+
+--=_signed_1
+Content-Type: multipart/mixed; boundary="=_inner_1"
+MIME-Version: 1.0
+
+--=_inner_1
+Content-Type: text/plain; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+
+Signed text.
+
+--=_inner_1
+Content-Type: application/pdf
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="Signed Contract.pdf"
+
+JVBERi0xLjQKJSBIZWFsZGFuIHRlc3QgZml4dHVyZQolJUVPRgo=
+
+--=_inner_1--
+
+--=_signed_1
+Content-Type: application/pkcs7-signature; name="smime.p7s"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="smime.p7s"
+
+ZHVtbXkgc2lnbmF0dXJlIGJ5dGVzLCBub3QgYSByZWFsIHNpZ25hdHVyZQo=
+
+--=_signed_1--

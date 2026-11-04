@@ -481,6 +481,39 @@ public class FilingTest extends ApiTestCase {
 	}
 
 	@Test
+	public void testAlreadyFiled() throws Exception {
+		byte[] eml = """
+				From: "Ann Smith" <ann@example.com>
+				To: bob@example.com
+				Subject: Re: Demo plan
+				Date: Tue, 14 Oct 2025 09:29:00 +0200
+				Message-ID: <filed-once@example.com>
+				MIME-Version: 1.0
+				Content-Type: text/plain; charset=UTF-8
+
+				Hello Bob.
+				""".replace("\n", "\r\n").getBytes(StandardCharsets.UTF_8);
+		String token = signIn(clerk);
+		ApiResponse first = file(token, document(documents, null, null, null), "x.eml", eml);
+		assertEquals(first.toString(), 201, first.status());
+		Folder letters = fx.folder(documents, "Letters");
+		DbSnapshot before = fx.snapshot();
+
+		// Into another folder of the matter, under another name
+		ApiResponse again = file(token, document(letters, "again.eml", null, null), "again.eml", eml);
+
+		assertEquals(again.toString(), 409, again.status());
+		assertEquals("already-filed", again.code());
+		long docNumber = first.json().path("docNumber").asLong();
+		assertEquals("This message is already in 998.1 as #" + docNumber + ".", again.json().path("detail").textValue());
+		// The copy, as GET /v1/documents/{docNumber} shows it
+		JsonNode copy = again.json().path("document");
+		assertEquals(get("/api/v1/documents/" + docNumber).token(token).send().json(), copy);
+		// The doc # taken for the refused filing is a gap, as for any store that fails (spec section 6.5)
+		before.assertUnchangedExcept("hd_counter");
+	}
+
+	@Test
 	public void testNameKept() throws Exception {
 		String name = "Board minutes \u2013 \u00e9.docx";
 

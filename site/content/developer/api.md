@@ -184,6 +184,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 409 | `not-held` | A save with `ifHeld: true` found the document free: its check-out was released |
 | 409 | `version-moved` | A save with `ifVersion` found the document at another version. The problem adds the `document` |
 | 409 | `filing-rule` | The folder can't hold documents: a Store, a matter's top folder or a search folder |
+| 409 | `already-filed` | The matter already holds the email's message, in a copy you can read. `detail` names its doc #, and the problem adds the copy as `document` |
 | 409 | `not-browsable` | A Store's contents were asked for. Find a matter by search, My Matters or Recent Matters instead |
 | 409 | `refused` | Another of Healdan's rules refused it. `detail` says which |
 | 413 | `too-large` | The file is over the upload limit |

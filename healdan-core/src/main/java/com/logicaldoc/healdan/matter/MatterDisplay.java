@@ -23,6 +23,15 @@ public final class MatterDisplay {
 	 * @return for example {@code 998.1 – Healdan Demo}
 	 */
 	public static String format(long client, long matter, String name) {
-		return "%d.%d \u2013 %s".formatted(client, matter, name);
+		return "%s \u2013 %s".formatted(number(client, matter), name);
+	}
+
+	/**
+	 * @param client the client number
+	 * @param matter the matter number
+	 * @return the matter's number alone, for example {@code 998.1}
+	 */
+	public static String number(long client, long matter) {
+		return "%d.%d".formatted(client, matter);
 	}
 }

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.healdan.db.HealdanMigrator;
 import com.logicaldoc.healdan.db.HealdanMigrator.Status;
+import com.logicaldoc.healdan.email.EmailIndexWorker;
 import com.logicaldoc.healdan.preview.PreviewWorker;
 import com.logicaldoc.healdan.seed.SeedRunner;
 import com.logicaldoc.healdan.signin.AdminSignInAlert;
@@ -39,26 +40,31 @@ public class HealdanStartup {
 
 	private final PreviewWorker previewWorker;
 
+	private final EmailIndexWorker emailIndexWorker;
+
 	private final AdminSignInAlert adminSignInAlert;
 
 	@Autowired
 	public HealdanStartup(HealdanMigrator migrator, SeedRunner seedRunner, PreviewWorker previewWorker,
-			AdminSignInAlert adminSignInAlert) {
+			EmailIndexWorker emailIndexWorker, AdminSignInAlert adminSignInAlert) {
 		this.migrator = migrator;
 		this.seedRunner = seedRunner;
 		this.previewWorker = previewWorker;
+		this.emailIndexWorker = emailIndexWorker;
 		this.adminSignInAlert = adminSignInAlert;
 	}
 
 	/*
-	 * The worker starts only when the migrations and seeds ran. Tests build the
+	 * The workers start only when the migrations and seeds ran. Tests build the
 	 * context before the schema exists, so for them run() returns false and
 	 * no thread starts.
 	 */
 	@PostConstruct
 	void start() {
-		if (run())
+		if (run()) {
 			previewWorker.start();
+			emailIndexWorker.start();
+		}
 	}
 
 	/**

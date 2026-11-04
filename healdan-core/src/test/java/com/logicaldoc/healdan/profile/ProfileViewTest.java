@@ -61,7 +61,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 
 	private static final List<String> EMAIL = List.of(HealdanConstants.ATTR_EMAILFROM, HealdanConstants.ATTR_EMAILTO,
 			HealdanConstants.ATTR_EMAILCC, HealdanConstants.ATTR_EMAILSUBJECT, HealdanConstants.ATTR_EMAILSENT,
-			HealdanConstants.ATTR_EMAILRECEIVED);
+			HealdanConstants.ATTR_EMAILRECEIVED, HealdanConstants.ATTR_EMAILMESSAGEID);
 
 	private final HealdanFixtures fx = new HealdanFixtures();
 
@@ -97,7 +97,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		List<ProfileField> fields = ProfileView.get().forNewDocument(documents.getId(), clerk);
 
 		assertEquals(List.of("client", "matter", "author", "typist", "docclass", "docsubclass", "comments", "legacydocnum",
-				"emailfrom", "emailto", "emailcc", "emailsubject", "emailsent", "emailreceived"),
+				"emailfrom", "emailto", "emailcc", "emailsubject", "emailsent", "emailreceived", "emailmessageid"),
 				fields.stream().map(ProfileField::name).toList());
 
 		ProfileField client = field(fields, HealdanConstants.ATTR_CLIENT);
@@ -222,18 +222,18 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		court.setLabel("Court");
 		court.setType(Attribute.Type.STRING);
 		court.setMandatory(true);
-		court.setPosition(14);
+		court.setPosition(15);
 		profile.getTemplateAttributes().put("court", court);
 		Attribute secret = new Attribute();
 		secret.setLabel("Secret");
 		secret.setType(Attribute.Type.STRING);
 		secret.setHidden(true);
-		secret.setPosition(15);
+		secret.setPosition(16);
 		profile.getTemplateAttributes().put("secret", secret);
 		Attribute section = new Attribute();
 		section.setLabel("More");
 		section.setType(Attribute.Type.SECTION);
-		section.setPosition(16);
+		section.setPosition(17);
 		profile.getTemplateAttributes().put("more", section);
 		TemplateDAO.get().store(profile);
 
@@ -247,7 +247,7 @@ public class ProfileViewTest extends AbstractHealdanTestCase {
 		assertNull(last.value());
 		assertNull(last.source());
 		// Hidden attributes and sections aren't fields
-		assertEquals(15, fields.size());
+		assertEquals(16, fields.size());
 
 		// A document filed before the attribute existed shows it empty
 		ProfileField onBefore = field(ProfileView.get().forDocument(reload(before)), "court");

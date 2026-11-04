@@ -21,7 +21,7 @@ filed.
 | Subclass | a finer kind, from the chosen Class's list. Optional |
 | Comments | anything worth noting about the document, up to 4000 characters. Optional |
 | Legacy doc # | the document's number in the system it came from, if it was moved in from one |
-| From, To, CC, Subject, Sent, Received | an email's details. See [Emails](../emails/) |
+| From, To, CC, Subject, Sent, Received, Message-ID | an email's details. See [Emails](../emails/) |
 
 Your administrator can add more properties.
 
