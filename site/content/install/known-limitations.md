@@ -18,8 +18,8 @@ weight: 11
 - **Microsoft Entra ID is experimental.** Signing in through Entra ID hasn't been tried against a real Entra tenant
   yet, only through Authentik and a stand-in provider. See [Microsoft Entra ID](../sign-in/entra-id/).
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
-  has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's SOAP and
-  REST web services. Unlinking the account from its provider gives it a password again.
+  has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's REST web
+  services. Unlinking the account from its provider gives it a password again.
 - **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider never signs in
   with an API key, on any route, as the key would skip the provider. Linking an account to a provider deletes the
   API keys it had and closes the sessions they opened, and so does unlinking it. The web page still lets a provider

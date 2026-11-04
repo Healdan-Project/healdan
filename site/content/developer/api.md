@@ -448,9 +448,9 @@ describes it, and its tests fail when it calls a route or reads a field the desc
 
 ## LogicalDOC's Web Services and API Keys
 
-LogicalDOC's own web services are still there: SOAP and REST under `/services/`. They take LogicalDOC's API keys,
-which start `ld-` and are sent as `X-API-KEY`. People make them in the web page, under the person icon in the top
-bar, in **Security → API Keys**.
+LogicalDOC's own REST web services are still there, under `/services/rest/`; Healdan doesn't offer LogicalDOC's SOAP
+services. They take LogicalDOC's API keys, which start `ld-` and are sent as `X-API-KEY`. People make them in the
+web page, under the person icon in the top bar, in **Security → API Keys**.
 
 They're LogicalDOC's older services. They speak LogicalDOC's words, so a Store is a workspace there, and an API key
 never expires and survives a password change. New clients use `/api`, which doesn't take API keys.
@@ -459,7 +459,6 @@ An account that signs in through a provider can't use an API key at all: linking
 key it makes afterwards in the web page is refused on every route.
 
 **A device token isn't an API key.** It works only under `/api`. LogicalDOC's services refuse it however it's sent:
-to `/services/rest/auth/loginApiKey` or the SOAP service's `loginApiKey`, as `X-API-KEY` on any of their routes, or
-as the password or key of a Basic sign-in, which WebDAV and CMIS use. So a lost token can't be turned into an API
-key, which would outlast it. Still, guard a token as you would the password: until it's revoked, it signs in to the
-API as you.
+to `/services/rest/auth/loginApiKey`, as `X-API-KEY` on any of their routes, or as the password or key of a Basic
+sign-in, which WebDAV and CMIS use. So a lost token can't be turned into an API key, which would outlast it. Still,
+guard a token as you would the password: until it's revoked, it signs in to the API as you.

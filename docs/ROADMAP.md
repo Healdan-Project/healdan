@@ -52,6 +52,7 @@ Throughout, **(owner)** marks something the owner decided or described. **(call)
 7. **Linux and macOS first.** Windows comes later, for adoption. (owner)
 8. **One licence for the code.** All of Healdan's code, including its own modules, is under the LGPL-3.0, like upstream. The docs site's content is under CC BY 4.0. (owner, 2026-10-23)
 9. **Open-source databases only.** Healdan runs on MariaDB today. PostgreSQL is to become its first-class database, and Healdan will move away from MariaDB in time. MySQL isn't supported and won't be added, and Oracle and SQL Server are gone completely. (owner, 2026-10-29 and 2026-10-30, [Healdan-Project/healdan#110](https://github.com/Healdan-Project/healdan/issues/110))
+10. **LogicalDOC's paid clients aren't a goal.** Healdan makes no effort to work with LogicalDOC's paid add-ins, extensions or apps. Their features only raise whether Healdan should build its own, as it did for Office. (owner, 2026-11-03)
 
 ## 3. Glossary
 
@@ -277,7 +278,7 @@ M2 comes before M3 because the add-ins need an API (call). M4 can be pulled earl
 - **Add-in requirements.**
   - CORS, because Office web add-ins call the API from a browser context.
   - Token authentication, so add-ins never store a password.
-- **Leave the old interfaces alone.** The existing SOAP, REST, WebDAV and CMIS interfaces stay as they are.
+- **Leave the old interfaces alone.** The existing SOAP, REST, WebDAV and CMIS interfaces stay as they are. (changed on 2026-11-03: Healdan removed LogicalDOC's SOAP services (owner), in the [SOAP removal spec](superpowers/specs/2026-11-03-soap-removal-design.md); REST, WebDAV and CMIS stay.)
 
 **Non-goals.** Removing or reshaping the existing `/services/rest` API.
 
@@ -490,7 +491,7 @@ The signed, notarised Healdan Helper 0.5.0 was released the same day ([`helper-v
 
 **Design.** Settled in the [M4 design spec](superpowers/specs/2026-11-01-m4-oidc-sign-in-design.md), which the owner approved on 2026-11-01, with its [plan](superpowers/plans/2026-11-01-m4-oidc-sign-in.md), approved the same day. The owner decided:
 
-- **Passwords.** Once a provider is on, only accounts that aren't linked to it keep a password: `admin`, and any local account an admin keeps on purpose. Provider accounts have no password on any route, so they don't use WebDAV, CMIS, SOAP or REST with one.
+- **Passwords.** Once a provider is on, only accounts that aren't linked to it keep a password: `admin`, and any local account an admin keeps on purpose. Provider accounts have no password on any route, so they don't use WebDAV, CMIS, SOAP or REST with one. (2026-11-03: Healdan has since removed SOAP; see the [SOAP removal spec](superpowers/specs/2026-11-03-soap-removal-design.md).)
 - **Linking.** A first sign-in links to an existing account by email, where the provider's emails can be trusted (on in the Entra preset, off in Authentik's), never to `admin`. Otherwise it makes a new account.
 - **Groups.** An explicit map from provider groups to Healdan groups, synced at every sign-in. A sign-in that maps to no Healdan group is refused.
 - **Leavers.** Healdan keeps the provider's refresh token for a helper sign-in, and checks with the provider when the token's session reopens and at least every 8 hours. A refusal revokes the token; an outage signs nobody out.
