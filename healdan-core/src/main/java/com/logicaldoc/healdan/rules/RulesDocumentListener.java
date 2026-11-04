@@ -41,7 +41,7 @@ public class RulesDocumentListener implements DocumentListener {
 	@Override
 	public void beforeStore(Document document, DocumentHistory transaction, Map<String, Object> dictionary)
 			throws PersistenceException {
-		if (!arrives(document, transaction))
+		if (!arrives(document, transaction, dictionary))
 			return;
 
 		Folder folder = document.getFolder();
@@ -58,12 +58,12 @@ public class RulesDocumentListener implements DocumentListener {
 	/**
 	 * @return true if the store brings the document into its folder
 	 */
-	private static boolean arrives(Document document, DocumentHistory transaction) {
+	private static boolean arrives(Document document, DocumentHistory transaction, Map<String, Object> dictionary) {
 		if (document.getId() == 0L)
 			return true;
 		if (transaction != null && ARRIVALS.contains(transaction.getEvent()))
 			return true;
-		Long stored = StoredRows.get().documentFolder(document.getId());
+		Long stored = StoredRows.get().documentFolder(document.getId(), dictionary);
 		return stored == null || document.getFolder() == null || stored.longValue() != document.getFolder().getId();
 	}
 

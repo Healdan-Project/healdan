@@ -104,6 +104,9 @@ public class StoredRows implements PreUpdateEventListener {
 
 	private static final Logger log = LoggerFactory.getLogger(StoredRows.class);
 
+	/** Key in a listener dictionary of the document's folder before the store */
+	private static final String DOCUMENT_FOLDER = StoredRows.class.getName() + ".documentFolder";
+
 	private static final String FOLDER_COLUMNS = "ld_id, ld_parentid, ld_name, ld_type, ld_foldref, ld_deleted, ld_securityref";
 
 	/** Large id lists are queried in chunks */
@@ -202,6 +205,22 @@ public class StoredRows implements PreUpdateEventListener {
 		List<Long> found = jdbc.queryForList("select ld_folderid from ld_document where ld_id = ?", Long.class,
 				documentId);
 		return found.isEmpty() ? null : found.get(0);
+	}
+
+	/**
+	 * {@link #documentFolder(long)}, read once for all the listeners of one
+	 * store
+	 *
+	 * @param documentId the document being stored
+	 * @param dictionary the dictionary CE passes the listeners of the store
+	 * @return its folder before the store, null if there is no row
+	 */
+	public Long documentFolder(long documentId, Map<String, Object> dictionary) {
+		if (dictionary.containsKey(DOCUMENT_FOLDER))
+			return (Long) dictionary.get(DOCUMENT_FOLDER);
+		Long folder = documentFolder(documentId);
+		dictionary.put(DOCUMENT_FOLDER, folder);
+		return folder;
 	}
 
 	/**

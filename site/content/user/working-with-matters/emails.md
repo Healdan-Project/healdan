@@ -26,6 +26,9 @@ A matter holds each message once. Healdan tells one message from another by its 
   uploaded in the browser, saved over WebDAV, sent through the API, copied, moved in from another matter, or restored
   from the trash, with a folder or on its own. The refusal names the copy the matter holds, for example "This message
   is already in 998.1 as #12345."
+- **Folders count the same way.** Copying a folder with its documents within the matter it's in is refused when it
+  holds an email, as the copy would hold a second copy of the message. So is moving or merging a folder into a matter
+  when it would bring along a message the matter holds, or two copies of one message.
 - **Another matter can hold its own copy,** so one message can be filed in every matter it concerns.
 - **A copy you can't see doesn't count.** If the matter's copy is in a folder you can't open, your filing goes
   through, so a refusal never tells you about a document you can't read.

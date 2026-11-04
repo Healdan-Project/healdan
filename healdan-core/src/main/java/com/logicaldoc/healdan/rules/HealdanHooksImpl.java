@@ -124,7 +124,8 @@ public class HealdanHooksImpl implements HealdanHooks {
 			if (document.getDocRef() != null)
 				rules.checkShortcut(target);
 			rules.checkDocumentTarget(target);
-			if (target != null && document.getFolder() != null)
+			// A shortcut is no copy; the store checks again, inside DocumentManager's synchronized block
+			if (target != null && document.getFolder() != null && document.getDocRef() == null)
 				oncePerMatter.checkMove(document.getId(), document.getFolder().getId(), target.getId(),
 						FilingRules.actor(transaction));
 		});
@@ -152,7 +153,9 @@ public class HealdanHooksImpl implements HealdanHooks {
 			if (docRef != null)
 				rules.checkShortcut(target);
 			rules.checkDocumentTarget(target);
-			oncePerMatter.check(EmailIndex.get().messageIdOf(docId), folderId, docId, FilingRules.actor(transaction));
+			if (docRef == null)
+				oncePerMatter.check(EmailIndex.get().messageIdOf(docId), folderId, docId,
+						FilingRules.actor(transaction));
 		});
 	}
 

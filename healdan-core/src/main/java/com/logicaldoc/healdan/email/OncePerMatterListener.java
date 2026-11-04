@@ -7,7 +7,6 @@ import java.util.Map;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
-import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentListener;
 import com.logicaldoc.core.folder.Folder;
@@ -21,17 +20,20 @@ import com.logicaldoc.healdan.rules.Vetoes;
 /**
  * Applies the once-per-matter rule ({@link OncePerMatter}) to every new
  * document, which covers uploads, the API, WebDAV, CMIS and copies, which
- * {@code DocumentManager.copyToFolder} stores as new documents; and to a store
- * that changes an existing document's folder without a move, such as a web
- * service update. Moves, restores and folder operations are checked by
- * {@code HealdanHooksImpl} before CE writes anything.
+ * {@code DocumentManager.copyToFolder} stores as new documents; and to every
+ * store that changes an existing document's folder, a move or a web service
+ * update. It runs inside {@code DocumentManager}'s {@code synchronized} block,
+ * which puts two filings one after the other (see {@link OncePerMatter}).
+ * {@code HealdanHooksImpl} checks a move once already, before CE removes the
+ * document's index hit, and checks restores and folder operations, which CE
+ * writes before any store.
  * <p>
  * A new document's Message-ID is the one {@link EmailDocumentListener} (130)
  * read from its file, since {@code hd_email} rows, not the attribute that CE's
  * screens can edit, say what is a copy; the attribute stands in only when the
- * file gave none. It runs before the doc # listener (140), so a refusal never
- * burns a number. CE creates it by reflection, hence the public no-arg
- * constructor.
+ * file gave none. It runs before the doc # listener (140), so a refusal takes
+ * no number, unless one was reserved before the store, as the API reserves
+ * it. CE creates it by reflection, hence the public no-arg constructor.
  */
 public class OncePerMatterListener implements DocumentListener {
 
@@ -57,12 +59,8 @@ public class OncePerMatterListener implements DocumentListener {
 				return;
 			}
 
-			// moveToFolder's hook has checked a move
-			if (transaction != null && DocumentEvent.MOVED.toString().equals(transaction.getEvent()))
-				return;
-			if (EmailIndex.get().messageIdOf(document.getId()) == null)
-				return;
-			Long stored = StoredRows.get().documentFolder(document.getId());
+			// hd_email is read only when the folder changes
+			Long stored = StoredRows.get().documentFolder(document.getId(), dictionary);
 			if (stored != null && stored.longValue() != folder.getId())
 				Vetoes.check(Vetoes.ids(folder.getId(), stored), Vetoes.ids(document.getId()),
 						() -> OncePerMatter.get().checkMove(document.getId(), stored, folder.getId(), actor));

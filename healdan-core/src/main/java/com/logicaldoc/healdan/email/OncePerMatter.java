@@ -49,12 +49,22 @@ import com.logicaldoc.util.spring.Context;
  * so a refusal never reveals a document; with no user (a system task) every
  * copy counts. Moves within a matter and new versions aren't checked.
  * <p>
- * Before it looks, a check locks the matter's {@code hd_matter} row for the
- * rest of the transaction, so a second filing into the matter waits for the
- * first to commit. On MariaDB a transaction reads from the snapshot its first
- * read took (REPEATABLE READ), which can be older than the first filing's
- * commit; so once the lock is held, a transaction whose reads come from a
- * snapshot looks again in a new one.
+ * Two filings at once are put one after the other by CE's
+ * {@code DocumentManager}, which runs each {@code create} and
+ * {@code moveToFolder}, its listeners and its store, in one
+ * {@code synchronized} block, and commits inside it when no outer transaction
+ * is open. So {@link OncePerMatterListener}'s check, inside the store, sees
+ * every filing before it. Healdan takes no lock of its own: one taken inside
+ * that block and held by a longer transaction would wait on the block in
+ * turn. On MariaDB a transaction reads from the snapshot its first read took
+ * (REPEATABLE READ), which can be older than a filing committed since, so a
+ * transaction whose reads come from a snapshot looks again in a new one.
+ * <p>
+ * What that leaves: a transaction of several stores commits after the block,
+ * and a folder move or restore doesn't go through it at all. So CE's folder
+ * copy or merge (one transaction each), a folder move or a restore, and an
+ * upload of the same message into the same matter at the same moment, can
+ * leave two copies.
  * <p>
  * Folder operations check every email they bring along before anything
  * moves, and two copies of a message arriving together are refused too: the
@@ -92,7 +102,7 @@ public class OncePerMatter {
 
 	/**
 	 * The copy that would refuse the message arriving in the folder's matter, as
-	 * the user sees it. Takes no lock.
+	 * the user sees it.
 	 *
 	 * @param messageId a normalised Message-ID, or null
 	 * @param folderId where the message arrives
@@ -128,8 +138,8 @@ public class OncePerMatter {
 	}
 
 	/**
-	 * {@link #copyIn}, then refuses. Locks the matter's row first, in the
-	 * current transaction.
+	 * {@link #copyIn}, then refuses. When the current transaction reads from a
+	 * snapshot, it looks again in a new one.
 	 *
 	 * @param messageId a normalised Message-ID, or null
 	 * @param folderId where the message arrives
@@ -243,7 +253,6 @@ public class OncePerMatter {
 			throws PersistenceException {
 		if (arriving.isEmpty())
 			return;
-		MatterDAO.get().lockForFiling(target.getId());
 		Optional<Document> copy = firstCopy(arriving, target.getId(), selves, actor);
 		if (copy.isEmpty() && readsFromSnapshot())
 			copy = inNewTransaction(() -> firstCopy(arriving, target.getId(), selves, actor));
@@ -327,7 +336,8 @@ public class OncePerMatter {
 
 	/**
 	 * @return true if the current transaction reads from a snapshot (REPEATABLE
-	 *         READ or SERIALIZABLE), which can be older than the lock
+	 *         READ or SERIALIZABLE), which can be older than another filing's
+	 *         commit
 	 */
 	private boolean readsFromSnapshot() {
 		if (!TransactionSynchronizationManager.isActualTransactionActive())
@@ -342,14 +352,15 @@ public class OncePerMatter {
 	}
 
 	/**
-	 * Runs the lookup in a transaction of its own, whose snapshot is taken now,
-	 * after the lock was granted: it sees what other filings committed since
-	 * the current transaction's snapshot, though not the current transaction's
-	 * own writes, which the lookup in it has seen
+	 * Runs the lookup in a read-only transaction of its own, READ COMMITTED: it
+	 * sees what other filings committed since the current transaction's
+	 * snapshot, though not the current transaction's own writes, which the
+	 * lookup in it has seen
 	 */
 	private Optional<Document> inNewTransaction(Lookup lookup) throws PersistenceException {
 		TransactionTemplate template = new TransactionTemplate(transactions);
 		template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+		template.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
 		template.setReadOnly(true);
 		PersistenceException[] failure = new PersistenceException[1];
 		Optional<Document> found = template.execute(status -> {

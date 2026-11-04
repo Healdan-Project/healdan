@@ -15,6 +15,8 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 
+import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
@@ -164,6 +166,39 @@ public class OncePerMatterTest extends AbstractRulesTestCase {
 		Folder inner = fx.folder(otherDocuments, "Inner");
 		allowed(() -> DocumentManager.get().moveToFolder(reload(other), inner, documentHistory(alice)));
 		assertEquals(inner.getId(), reload(other).getFolder().getId());
+	}
+
+	@Test
+	public void testAMoveIsCheckedAgainInItsStore() throws Exception {
+		Document other = fileEmail(otherDocuments, alice);
+		// A copy arrives in 998.1 between the move's hook and its store, as another upload's could
+		HealdanHooks real = HealdanHooks.get();
+		Document[] arrived = new Document[1];
+		HealdanHooks.register(new HealdanHooks() {
+			@Override
+			public void beforeDocumentMove(Document document, Folder target, DocumentHistory transaction)
+					throws PersistenceException {
+				real.beforeDocumentMove(document, target, transaction);
+				HealdanHooks.register(real);
+				try {
+					arrived[0] = fileEmail(documents, alice);
+				} catch (Exception e) {
+					throw new IllegalStateException(e);
+				}
+			}
+		});
+		try {
+			DocumentManager.get().moveToFolder(reload(other), correspondence, documentHistory(alice));
+			fail("Not refused");
+		} catch (Exception e) {
+			assertEquals(alreadyIn("998.1", arrived[0]), ruleIn(e).getMessage());
+		} finally {
+			HealdanHooks.register(real);
+		}
+		awaitAsyncWork();
+
+		assertEquals(otherDocuments.getId(), reload(other).getFolder().getId());
+		assertEquals(List.of(other.getId(), arrived[0].getId()), copies());
 	}
 
 	@Test

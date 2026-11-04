@@ -158,7 +158,7 @@
 		<parameter id="class" value="com.logicaldoc.healdan.email.EmailDocumentListener" />
 	</extension>
 
-	<!-- After the email fields (130), whose Message-ID it checks; before the doc # (140), so a refusal never burns a number -->
+	<!-- After the email fields (130), whose Message-ID it checks; before the doc # (140), so a refusal takes no number unless the API reserved one -->
 	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanOncePerMatter">
 		<parameter id="position" value="135" />
 		<parameter id="class" value="com.logicaldoc.healdan.email.OncePerMatterListener" />
