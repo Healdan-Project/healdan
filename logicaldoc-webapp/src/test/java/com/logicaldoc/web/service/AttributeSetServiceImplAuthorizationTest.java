@@ -14,8 +14,11 @@ import java.util.List;
 
 import org.junit.Test;
 
+import com.logicaldoc.core.HealdanHooks;
+import com.logicaldoc.core.HealdanVetoException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.metadata.AttributeOptionDAO;
+import com.logicaldoc.core.metadata.AttributeSet;
 import com.logicaldoc.core.metadata.AttributeSetDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
@@ -64,6 +67,27 @@ public class AttributeSetServiceImplAuthorizationTest extends AbstractWPTestCase
         AuthorMenus.grant(DOCUMENT_METADATA);
         testSubject.save(set);
         assertEquals("changed", AttributeSetDAO.get().findById(SET).getDescription());
+    }
+
+    @Test
+    public void testSaveReportsARefusal() throws Exception {
+        prepareSession("admin", "admin");
+        GUIAttributeSet set = testSubject.getAttributeSet(SET);
+        set.setDescription("changed");
+        HealdanHooks previous = HealdanHooks.get();
+        HealdanHooks.register(new HealdanHooks() {
+            @Override
+            public void beforeAttributeSetStore(AttributeSet attributeSet) throws PersistenceException {
+                throw new HealdanVetoException("Not this set.");
+            }
+        });
+        try {
+            ServerException e = assertThrows(ServerException.class, () -> testSubject.save(set));
+            assertEquals("Not this set.", e.getMessage());
+        } finally {
+            HealdanHooks.register(previous);
+        }
+        assertEquals("test1_desc", AttributeSetDAO.get().findById(SET).getDescription());
     }
 
     @Test

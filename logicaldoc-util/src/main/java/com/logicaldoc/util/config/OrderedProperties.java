@@ -48,8 +48,10 @@ public class OrderedProperties extends Properties {
 
         // Write the properties
         for (String key : keys) {
-            String value = doubleSlash(super.getProperty(key));
-            String line = "%s=%s%n".formatted(key, value);
+            // Healdan: a line break in a key or a value would start a line of
+            // its own, which loads as a property of its own
+            String value = escapeLineBreaks(doubleSlash(super.getProperty(key)));
+            String line = "%s=%s%n".formatted(escapeLineBreaks(key), value);
             dataOutputStream.writeBytes(line);
         }
 
@@ -75,6 +77,17 @@ public class OrderedProperties extends Properties {
         }
 
         return buf.toString();
+    }
+
+    /**
+     * Healdan: writes each line break as the escape {@link #load} reads back
+     * as one
+     * 
+     * @param orig the string to escape
+     * @return the string with its line breaks escaped
+     */
+    private static String escapeLineBreaks(String orig) {
+        return orig.replace("\r", "\\r").replace("\n", "\\n");
     }
 
     /**

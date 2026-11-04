@@ -1,0 +1,137 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+package com.logicaldoc.core.document;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+
+import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import com.logicaldoc.core.AbstractCoreTestCase;
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Permission;
+import com.logicaldoc.util.plugin.PluginException;
+
+/**
+ * Two entries of a folder's ACL are equal when they're for the same group, as
+ * {@code ld_folder_acl}'s key is. CE's {@code FolderAccessControlEntry.equals}
+ * also compared the permissions and fields the constructor writes and Hibernate
+ * doesn't map, so an entry made with a group id never equalled the stored one,
+ * and {@code Folder.addAccessControlEntry} added a second entry for the group
+ * instead of replacing it.
+ */
+public class FolderAclEqualityTest extends AbstractCoreTestCase {
+
+    /**
+     * The fixture's folder 6 has an ACL of its own: entries for groups 2, 3 and
+     * -3, each granting READ, WRITE and ADD among others
+     */
+    private static final long FOLDER_ID = 6L;
+
+    private static final long GROUP_ID = 2L;
+
+    private FolderDAO folderDao;
+
+    @Before
+    @Override
+    public void setUp() throws IOException, SQLException, PluginException {
+        super.setUp();
+        folderDao = FolderDAO.get();
+    }
+
+    @Test
+    public void testEntriesForTheSameGroupAreEqual() throws PersistenceException {
+        FolderAccessControlEntry reader = entry(GROUP_ID, Permission.READ);
+        FolderAccessControlEntry stored = folderDao.findById(FOLDER_ID, true).getAccessControlEntry(GROUP_ID);
+
+        assertEquals(reader, reader);
+        assertEquals(reader, stored);
+        assertEquals(stored, reader);
+        assertEquals(reader.hashCode(), stored.hashCode());
+        assertNotEquals(reader, entry(3L, Permission.READ));
+        assertNotEquals(reader, new DocumentAccessControlEntry(GROUP_ID));
+        assertNotEquals(reader, null);
+    }
+
+    @Test
+    public void testAddingAnEntryReplacesTheGroupsEntry() throws PersistenceException {
+        Folder folder = folderDao.findById(FOLDER_ID, true);
+        assertEquals(3, folder.getAccessControlList().size());
+        folder.addAccessControlEntry(entry(GROUP_ID, Permission.READ));
+        assertEquals(3, folder.getAccessControlList().size());
+        assertEquals(Set.of(Permission.READ), folder.getAccessControlEntry(GROUP_ID).grantedPermissions());
+
+        folderDao.store(folder);
+
+        Folder stored = folderDao.findById(FOLDER_ID, true);
+        assertEquals(3, stored.getAccessControlList().size());
+        assertEquals(Set.of(Permission.READ), stored.getAccessControlEntry(GROUP_ID).grantedPermissions());
+    }
+
+    /**
+     * Equality ignores the permissions, so this proves Hibernate still saves a
+     * change to them, one of the folder's own included
+     */
+    @Test
+    public void testChangingAnEntrysPermissionsIsSaved() throws PersistenceException {
+        Folder folder = folderDao.findById(FOLDER_ID, true);
+        folder.getAccessControlEntry(GROUP_ID).setWrite(false);
+        folder.getAccessControlEntry(GROUP_ID).setAdd(false);
+
+        folderDao.store(folder);
+
+        FolderAccessControlEntry stored = folderDao.findById(FOLDER_ID, true).getAccessControlEntry(GROUP_ID);
+        assertFalse(stored.isWrite());
+        assertFalse(stored.isAdd());
+        assertEquals(0, folderDao.queryForInt(
+                "select ld_write + ld_add from ld_folder_acl where ld_folderid=%d and ld_groupid=%d"
+                        .formatted(FOLDER_ID, GROUP_ID)));
+    }
+
+    @Test
+    public void testReadingLeavesTheAclRowsAlone() throws Exception {
+        logAclWrites();
+
+        assertEquals(3, folderDao.findById(FOLDER_ID, true).getAccessControlList().size());
+        assertEquals(3, folderDao.findFolder(FOLDER_ID, true).getAccessControlList().size());
+
+        assertEquals(List.of(), aclWrites());
+    }
+
+    private static FolderAccessControlEntry entry(long groupId, Permission... permissions) {
+        FolderAccessControlEntry entry = new FolderAccessControlEntry(groupId);
+        entry.grantPermissions(Set.of(permissions));
+        return entry;
+    }
+
+    /**
+     * Records every row written to {@code ld_folder_acl}, in
+     * {@code acl_writes}
+     */
+    private void logAclWrites() throws SQLException {
+        try (Connection con = getConnection(); Statement statement = con.createStatement()) {
+            statement.execute("create table acl_writes (ld_id bigint generated by default as identity primary key, "
+                    + "ld_operation varchar(10) not null)");
+            for (String operation : List.of("insert", "update", "delete"))
+                statement.execute("create trigger acl_%s after %s on ld_folder_acl for each row "
+                        .formatted(operation, operation) + "insert into acl_writes (ld_operation) values ('%s')"
+                                .formatted(operation));
+        }
+    }
+
+    private List<String> aclWrites() throws PersistenceException {
+        return folderDao.queryForList("select ld_operation from acl_writes order by ld_id", String.class);
+    }
+}

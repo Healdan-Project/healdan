@@ -166,12 +166,15 @@ public final class DockerInit {
 
     /**
      * LogicalDOC writes context.properties one byte per character, so values outside Latin-1 come back changed.
-     * Refuse them here rather than let Tomcat fail later with a corrupted password or URL.
+     * Refuse them here rather than let Tomcat fail later with a corrupted password or URL. A line break now comes
+     * back as written, but in a password or an address it's a slip, such as a secret file's last newline, so it's
+     * refused too.
      */
     private static void verifyStored(File file, Map<String, String> envKeys) throws IOException {
         ContextProperties stored = new ContextProperties(file);
         for (Map.Entry<String, String> key : envKeys.entrySet())
-            if (!key.getValue().equals(stored.getProperty(key.getKey()))
+            if (key.getValue().contains("\r") || key.getValue().contains("\n")
+                    || !key.getValue().equals(stored.getProperty(key.getKey()))
                     || !key.getValue().equals(stored.getString(key.getKey())))
                 throw new IllegalArgumentException(ConfigPlan.source(key.getKey())
                         + " cannot be stored in context.properties as given: use only Latin-1 characters and no line breaks");

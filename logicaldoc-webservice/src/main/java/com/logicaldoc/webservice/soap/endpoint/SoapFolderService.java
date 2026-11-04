@@ -142,8 +142,11 @@ public class SoapFolderService extends AbstractService implements FolderService 
             throws AuthenticationException, WebserviceException, PersistenceException, PermissionException {
         User user = validateSession(sid);
         FolderDAO folderDao = FolderDAO.get();
-        long rootId = folderDao.findRoot(user.getTenantId()).getTenantId();
-        if (folderId == rootId)
+        // Healdan: the root's id, not its tenant's, and the Default workspace,
+        // as the message says
+        long rootId = folderDao.findRoot(user.getTenantId()).getId();
+        Folder defaultWorkspace = folderDao.findDefaultWorkspace(user.getTenantId());
+        if (folderId == rootId || (defaultWorkspace != null && folderId == defaultWorkspace.getId()))
             throw new WebserviceException("Cannot delete root folder or Default workspace");
 
         checkFolderPermission(Permission.DELETE, user, folderId);
