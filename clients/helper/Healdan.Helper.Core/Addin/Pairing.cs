@@ -44,8 +44,8 @@ public sealed class PairingRestingException(TimeSpan left)
 public sealed record PairedApp(string App, DateTimeOffset Paired);
 
 /// <summary>
-/// Pairing Word, Excel and PowerPoint with the helper (M3.5 spec §5.9, §9). The first time a Healdan button is pressed in
-/// an app, the add-in asks to pair, and the helper's window shows a six-digit code, which the user types into the add-in's
+/// Pairing Word, Excel, PowerPoint and Outlook with the helper (M3.5 spec §5.9, §9; M5 spec §7.1). The first time a Healdan
+/// button is pressed in an app, the add-in asks to pair, and the helper's window shows a six-digit code, which the user types into the add-in's
 /// pane. The right code gives the add-in a random key for that app, which it keeps and sends with every request.
 /// <para>The code is drawn at random, shown only in the helper's window, and works for <see cref="Lifetime"/> and
 /// <see cref="Tries"/> tries. One pairing at a time: a new one cancels the one before, and its window. The helper keeps
@@ -87,19 +87,25 @@ public sealed class Pairing(HelperPaths paths, IWindows windows, TimeProvider cl
     /// <summary>When pairing began to rest, on the clock's timer (<see cref="TimeProvider.GetTimestamp"/>); null while it doesn't.</summary>
     private long? _restingSince;
 
-    /// <summary>The apps that can pair, by the names Office's add-in host gives them: Word, Excel and PowerPoint.</summary>
-    public static IReadOnlyList<string> Apps { get; } = [.. Enum.GetValues<OfficeProgram>().Select(OfficePrograms.CheckOutName)];
+    /// <summary>
+    /// The apps that can pair, by the names Office's add-in host gives them: Word, Excel and PowerPoint, then Outlook. Outlook
+    /// pairs by name only: it isn't an <see cref="OfficeProgram"/>, as it isn't in the copy cycle (M5 spec §7.1).
+    /// </summary>
+    public static IReadOnlyList<string> Apps { get; } = [.. Enum.GetValues<OfficeProgram>().Select(OfficePrograms.CheckOutName), OutlookName];
+
+    /// <summary>The name Outlook's add-in pairs under, and the only key the mail routes take (<see cref="AddinHandler"/>).</summary>
+    public const string OutlookName = "Outlook";
 
     /// <summary>
     /// Starts pairing <paramref name="app"/>: cancels any pairing under way, draws a code and shows it in the helper's
     /// window. Returns the id <see cref="Finish"/> names this pairing by, which isn't the code.
     /// </summary>
-    /// <exception cref="ArgumentException"><paramref name="app"/> isn't Word, Excel or PowerPoint: nothing is shown.</exception>
+    /// <exception cref="ArgumentException"><paramref name="app"/> isn't Word, Excel, PowerPoint or Outlook: nothing is shown.</exception>
     /// <exception cref="PairingRestingException">Too many wrong codes in a row, a moment ago: nothing is shown.</exception>
     public string Start(string app)
     {
         if (!Apps.Contains(app))
-            throw new ArgumentException("Only Word, Excel and PowerPoint pair with the helper.", nameof(app));
+            throw new ArgumentException("Only Word, Excel, PowerPoint and Outlook pair with the helper.", nameof(app));
         var pending = new Pending(
             Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
             app,
@@ -182,7 +188,7 @@ public sealed class Pairing(HelperPaths paths, IWindows windows, TimeProvider cl
         return app;
     }
 
-    /// <summary>The apps paired, each once with when it last paired, in the order Word, Excel, PowerPoint: for Settings.</summary>
+    /// <summary>The apps paired, each once with when it last paired, in the order of <see cref="Apps"/> (Word, Excel, PowerPoint, Outlook): for Settings.</summary>
     public IReadOnlyList<PairedApp> Paired()
     {
         var keys = AddinKeys.Load(paths);

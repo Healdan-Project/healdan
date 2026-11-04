@@ -20,10 +20,23 @@ public sealed record FakeSave(
 /// <summary>A copy of a message in <see cref="FakeApi"/>: the document, the folder it's in, and the message's normalised Message-ID.</summary>
 public sealed record FakeEmailCopy(string MessageId, long DocNumber, long FolderId);
 
+/// <summary>
+/// A folder in <see cref="FakeApi"/>, for <c>GET /folders/{id}</c> and <c>/folders/recent</c>: in the matter
+/// <paramref name="MatterId"/>, shown as <paramref name="Matter"/>, and one the person may file into when
+/// <paramref name="CanFile"/>.
+/// </summary>
+public sealed record FakeFolder(long Id, string Name, long MatterId, string Matter, bool CanFile);
+
 /// <summary>A document in <see cref="FakeApi"/>.</summary>
 public sealed class FakeDoc
 {
     public required long Number { get; init; }
+
+    /// <summary>
+    /// The document's internal id, which the server's addresses (<c>/frontend.jsp?docId=</c>) use. It is never the doc #, so a
+    /// test can't pass by taking one for the other.
+    /// </summary>
+    public long Id => 90_000 + Number;
 
     public required string Name { get; set; }
 
@@ -41,6 +54,8 @@ public sealed class FakeDoc
     public string? LastSaveId { get; set; }
 
     public DateTimeOffset LastSaved { get; set; } = DateTimeOffset.Parse("2026-10-24T09:30:00Z");
+
+    public DateTimeOffset DateFiled { get; set; } = DateTimeOffset.Parse("2026-10-01T09:00:00Z");
 
     public string Content => Encoding.UTF8.GetString(Files[FileVersion]);
 }
@@ -71,6 +86,8 @@ public sealed class FakeApi : HttpMessageHandler
     private bool _refuseNextFiling;
     private bool _breakNextSave;
     private readonly List<FakeEmailCopy> _emailCopies = [];
+    private readonly Dictionary<long, FakeFolder> _folders = [];
+    private List<long> _recentFolders = [];
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
 
@@ -180,16 +197,35 @@ public sealed class FakeApi : HttpMessageHandler
     /// <summary>
     /// Makes <paramref name="docNumber"/> (made if it isn't there) a copy of the message <paramref name="messageId"/> in
     /// folder <paramref name="folderId"/>, for <c>GET /emails</c>, <c>POST /emails/inspect</c> and as the copy a filing
-    /// meets. The id is kept as the server does, without angle brackets.
+    /// meets. The id is kept as the server does, without angle brackets. <paramref name="filed"/> is when it was filed.
     /// </summary>
-    public void AddEmailCopy(string messageId, long docNumber, long folderId)
+    public void AddEmailCopy(string messageId, long docNumber, long folderId, DateTimeOffset? filed = null)
     {
         lock (_lock)
         {
             if (!_docs.ContainsKey(docNumber))
                 _docs[docNumber] = new FakeDoc { Number = docNumber, Name = "Message.eml", Files = { ["1.0"] = [] } };
+            if (filed is { } when)
+                _docs[docNumber].DateFiled = when;
             _emailCopies.Add(new FakeEmailCopy(NormaliseMessageId(messageId), docNumber, folderId));
         }
+    }
+
+    /// <summary>
+    /// Makes folder <paramref name="id"/> known, for <c>GET /folders/{id}</c>: a folder of that name in the matter
+    /// <paramref name="matterId"/>, whose copies of a message are shown in it. Others are <c>404</c>.
+    /// </summary>
+    public void AddFolder(long id, string name, long matterId = 3, string matter = "1.1 – Smoke Matter", bool canFile = true)
+    {
+        lock (_lock)
+            _folders[id] = new FakeFolder(id, name, matterId, matter, canFile);
+    }
+
+    /// <summary>Sets <c>GET /folders/recent</c>: these folders, in this order (each made with <see cref="AddFolder"/>).</summary>
+    public void SetRecentFolders(params long[] ids)
+    {
+        lock (_lock)
+            _recentFolders = [.. ids];
     }
 
     /// <summary>
@@ -264,6 +300,10 @@ public sealed class FakeApi : HttpMessageHandler
             return await FileEmailAsync(request, ct);
         if (parts is ["emails"] && request.Method == HttpMethod.Get)
             return CopiesOf(request.RequestUri);
+        if (parts is ["folders", "recent"] && request.Method == HttpMethod.Get)
+            return RecentFolders();
+        if (parts is ["folders", var folderId] && request.Method == HttpMethod.Get && long.TryParse(folderId, out var folder))
+            return FolderAnswer(folder);
         if (parts.Length < 2 || parts[0] != "documents" || !long.TryParse(parts[1], out var n))
             return Problem(404, "not-found", "No such route in the fake.");
         lock (_lock)
@@ -486,28 +526,57 @@ public sealed class FakeApi : HttpMessageHandler
         }
     }
 
-    /// <summary>The answer of <c>GET /emails</c>: one item for each different id asked for, in order, whatever its brackets.</summary>
+    /// <summary>
+    /// The answer of <c>GET /emails</c>: one item for each different id asked for, in order, whatever its brackets. As the
+    /// server does, it counts the values sent, 1 to 100, not the distinct ids they come to.
+    /// </summary>
     private HttpResponseMessage CopiesOf(Uri uri)
     {
-        var asked = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+        var sent = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
             .Select(p => p.Split('=', 2))
             .Where(p => p[0] == "messageId")
-            .Select(p => NormaliseMessageId(Uri.UnescapeDataString(p.ElementAtOrDefault(1) ?? "")))
-            .Distinct()
+            .Select(p => Uri.UnescapeDataString(p.ElementAtOrDefault(1) ?? ""))
             .ToList();
-        if (asked.Count is 0 or > 100)
+        if (sent.Count is 0 or > 100)
             return Problem(400, "bad-request", "Send messageId 1 to 100 times.");
+        var asked = sent.Select(NormaliseMessageId).Distinct().ToList();
         lock (_lock)
             return JsonAnswer(new EmailCopies([.. asked.Select(id => new EmailCopy(id, [.. _emailCopies
                 .Where(c => c.MessageId == id)
-                .Select(c => new EmailCopy.Copy(View(_docs[c.DocNumber], c.FolderId), $"http://localhost:8080/frontend.jsp?docId={c.DocNumber}"))]))]));
+                .Select(c => new EmailCopy.Copy(View(_docs[c.DocNumber], c.FolderId), $"http://localhost:8080/frontend.jsp?docId={_docs[c.DocNumber].Id}"))]))]));
     }
+
+    private HttpResponseMessage RecentFolders()
+    {
+        lock (_lock)
+        {
+            var items = _recentFolders.Where(_folders.ContainsKey).Select(id => FolderOf(_folders[id])).ToList();
+            return JsonAnswer(new Page<FolderView>(items, 0, 50, items.Count));
+        }
+    }
+
+    private HttpResponseMessage FolderAnswer(long id)
+    {
+        lock (_lock)
+            return _folders.TryGetValue(id, out var folder)
+                ? JsonAnswer(FolderOf(folder))
+                : Problem(404, "not-found", "No such folder.");
+    }
+
+    private static FolderView FolderOf(FakeFolder f) => new(
+        "folder", f.Id, f.Name, "folder", new MatterRef(f.MatterId, f.Matter), new StoreRef(1, "Healdan"),
+        [new FolderRef(1, "Healdan", "store"), new FolderRef(10_000 + f.MatterId, f.Matter, "matter"), new FolderRef(f.Id, f.Name, "folder")],
+        f.CanFile);
 
     private List<DocumentView> CopyViews(string messageId) =>
         [.. _emailCopies.Where(c => c.MessageId == messageId).Select(c => View(_docs[c.DocNumber], c.FolderId))];
 
-    /// <summary>The Message-ID as the server keeps it: without angle brackets or surrounding space.</summary>
-    private static string NormaliseMessageId(string id) => id.Trim().TrimStart('<').TrimEnd('>').Trim();
+    /// <summary>The Message-ID as the server keeps it: without its angle brackets (a pair) or surrounding space.</summary>
+    private static string NormaliseMessageId(string id)
+    {
+        id = id.Trim();
+        return id.Length >= 2 && id[0] == '<' && id[^1] == '>' ? id[1..^1].Trim() : id;
+    }
 
     /// <summary>The <c>Message-ID</c> and <c>Subject</c> headers of a plain message, where the header block has them.</summary>
     private static (string? MessageId, string? Subject) ReadHeaders(byte[] eml)
@@ -576,11 +645,16 @@ public sealed class FakeApi : HttpMessageHandler
     private static DocumentView View(FakeDoc d) => new(
         "document", d.Number, d.Name, d.Files[d.FileVersion].Length, d.Version, d.FileVersion, $"{d.Number}.{d.FileVersion}",
         new FolderRef(9, "Documents", "folder"), new MatterRef(3, "1.1 – Smoke Matter"),
-        DateTimeOffset.Parse("2026-10-01T09:00:00Z"), d.LastSaved, Hold(d.Hold),
+        d.DateFiled, d.LastSaved, Hold(d.Hold),
         d.CanWrite && (d.Hold is null || (d.Hold.ById == MyId && (d.Hold.DeviceId is null || d.Hold.DeviceId == HereDevice))));
 
-    /// <summary>The document as a message copy in <paramref name="folderId"/>.</summary>
-    private static DocumentView View(FakeDoc d, long folderId) => View(d) with { Folder = new FolderRef(folderId, "Documents", "folder") };
+    /// <summary>
+    /// The document as a message copy in <paramref name="folderId"/>: in the folder <see cref="AddFolder"/> made (and its
+    /// matter), else in a folder called Documents of the smoke matter.
+    /// </summary>
+    private DocumentView View(FakeDoc d, long folderId) => _folders.TryGetValue(folderId, out var f)
+        ? View(d) with { Folder = new FolderRef(f.Id, f.Name, "folder"), Matter = new MatterRef(f.MatterId, f.Matter) }
+        : View(d) with { Folder = new FolderRef(folderId, "Documents", "folder") };
 
     private static HttpResponseMessage JsonAnswer<T>(T body, HttpStatusCode status = HttpStatusCode.OK) => new(status)
     {

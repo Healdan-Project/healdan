@@ -10,6 +10,7 @@ using Healdan.Helper.Core.Copies;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Mail;
 using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Security;
 using Healdan.Helper.Core.Settings;
@@ -1161,7 +1162,8 @@ public sealed class HelperSession : ICycleEvents, IDisposable
         }
         // The add-in's document routes, for this start only: a Save to Healdan ticket from before a sign-out goes with them.
         var documents = new AddinDocuments(cycle, new OfficeFiling(cycle, _apps, _windows, _notifier, _paths, _log),
-            new ChannelHandler(cycle, Links, _windows, _notifier, _log, _paths));
+            new ChannelHandler(cycle, Links, _windows, _notifier, _log, _paths),
+            new MailFiling(api, _windows, _notifier, _log));
         lock (_gate)
         {
             _started = _cycle == cycle;

@@ -7,9 +7,11 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Addin;
+using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Links;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Mail;
 using Healdan.Helper.Core.Office;
 using Healdan.Helper.Core.Tests.Cycle;
 using Healdan.Helper.Core.Tests.Ui;
@@ -227,7 +229,8 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         var log = new HelperLog(Paths.Log);
         var apps = TestApps.Of(LibreOffice, microsoftOffice: Office);
         return new AddinDocuments(cycle, new OfficeFiling(cycle, apps, _windows, Notifier, Paths, log),
-            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths));
+            new ChannelHandler(cycle, new LinkHandler(_windows, Notifier, log), _windows, Notifier, log, Paths),
+            new MailFiling(new HealdanApi(new Uri("https://healdan.test"), Server) { Token = "hd_test" }, _windows, Notifier, log));
     }
 
     private System.Security.Cryptography.X509Certificates.X509Certificate2 NewCertificate()
@@ -402,7 +405,11 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         Scripting.Front = _ => new FrontDocument(null, "", "Document1");
         _signedIn = false;
 
-        foreach (var route in new[] { "open-dialog", "save-new", "file", "new-version", "properties", "state", "result" })
+        foreach (var route in new[]
+        {
+            "open-dialog", "save-new", "file", "new-version", "properties", "state", "result",
+            "mail/status", "mail/file", "mail/file-many", "mail/file-one",
+        })
             IsError(HttpStatusCode.Conflict, "signed-out", await Post(server, route, new JsonObject { ["app"] = "Word", ["url"] = "" }, key));
         var ping = await Post(server, "ping", key: key);
         Assert.Equal((HttpStatusCode.OK, """{"ok":true,"signedIn":false}"""), (ping.Status, ping.Body!.ToJsonString()));
@@ -418,12 +425,54 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         Assert.Equal(150L * 1024 * 1024, AddinServer.MaxBodyBytes);
 
         // Only the head is sent: the answer comes without the server waiting for a body it won't read.
-        var (statusLine, body) = await Raw(server,
-            $"POST /v1/file HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
-            + $"X-Healdan-Key: {key}\r\nContent-Type: application/json\r\nContent-Length: {150L * 1024 * 1024 + 1}\r\n\r\n");
+        async Task<(string StatusLine, string Body)> Head(string route, long length) => await Raw(server,
+            $"POST /v1/{route} HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+            + $"X-Healdan-Key: {key}\r\nContent-Type: application/json\r\nContent-Length: {length}\r\n\r\n");
 
-        Assert.Equal("HTTP/1.1 413 Content Too Large", statusLine);
-        Assert.Equal("""{"error":"too-large"}""", body);
+        // Save to Healdan's document, and the messages Outlook files, take up to 150 MiB; every other route, a mebibyte.
+        foreach (var route in new[] { "file", "mail/file", "mail/file-one" })
+        {
+            var (statusLine, body) = await Head(route, 150L * 1024 * 1024 + 1);
+            Assert.Equal("HTTP/1.1 413 Content Too Large", statusLine);
+            Assert.Equal("""{"error":"too-large"}""", body);
+        }
+        foreach (var route in new[] { "mail/status", "mail/file-many", "save-new", "properties", "state", "open-dialog", "new-version" })
+        {
+            var (statusLine, body) = await Head(route, 1024 * 1024 + 1);
+            Assert.Equal("HTTP/1.1 413 Content Too Large", statusLine);
+            Assert.Equal("""{"error":"too-large"}""", body);
+        }
+    }
+
+    [Fact]
+    public async Task TheRoutesThatTakeADocumentTakeMoreThanAMebibyte()
+    {
+        var server = Start();
+        var key = await PairAsync(server); // Word's: the mail routes refuse it as a bad request, once they have read it
+        var big = new JsonObject { ["bytes"] = new string('A', 2 * 1024 * 1024) };
+
+        foreach (var route in new[] { "file", "mail/file", "mail/file-one" })
+            IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, route, big, key)); // read, not refused as too large
+    }
+
+    [Fact]
+    public async Task OutlookPairsAndAsksAMessagesStatusOverThePort()
+    {
+        Server.AddFolder(11, "Correspondence");
+        Server.AddEmailCopy("m1@example.com", 50, 11);
+        var server = Start();
+        var outlook = await PairAsync(server, "Outlook");
+        var word = await PairAsync(server);
+
+        var filed = await Post(server, "mail/status", new JsonObject { ["messageIds"] = new JsonArray("<m1@example.com>") }, outlook);
+
+        Assert.Equal(HttpStatusCode.OK, filed.Status);
+        Assert.Equal(true, (bool?)filed.Body!["filed"]);
+        Assert.Equal(50L, (long?)filed.Body["copies"]![0]!["docNumber"]);
+        // Word's key is for Word: the mail routes are Outlook's alone.
+        IsError(HttpStatusCode.BadRequest, "bad-request",
+            await Post(server, "mail/status", new JsonObject { ["messageIds"] = new JsonArray("<m1@example.com>") }, word));
+        Assert.DoesNotContain("m1@example.com", Log);
     }
 
     [Fact]

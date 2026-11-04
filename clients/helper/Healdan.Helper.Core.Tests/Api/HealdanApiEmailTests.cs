@@ -263,8 +263,24 @@ public class FakeApiEmailTests
         var copy = Assert.Single(answer.Items[0].Copies);
         Assert.Equal(50, copy.Document.DocNumber);
         Assert.Equal(9, copy.Document.Folder.Id);
-        Assert.EndsWith("/frontend.jsp?docId=50", copy.Address);
+        // The address names the document's internal id, as the server's does, never its doc #.
+        var id = _server.Doc(50).Id;
+        Assert.NotEqual(50, id);
+        Assert.EndsWith($"/frontend.jsp?docId={id}", copy.Address);
         Assert.Empty(answer.Items[1].Copies);
+    }
+
+    [Fact]
+    public async Task CopiesCountTheValuesSentNotTheDistinctIds()
+    {
+        _server.AddEmailCopy("abc@example.com", 50, 9);
+
+        // 101 values that are one id are still 101 values, as the server counts them.
+        var e = await Assert.ThrowsAsync<ApiException>(() => Api().EmailCopiesAsync([.. Enumerable.Repeat("abc@example.com", 101)]));
+        Assert.Equal((400, "bad-request"), (e.Status, e.Code));
+
+        var answer = await Api().EmailCopiesAsync([.. Enumerable.Repeat("abc@example.com", 100)]);
+        Assert.Equal("abc@example.com", Assert.Single(answer.Items).MessageId);
     }
 
     [Fact]

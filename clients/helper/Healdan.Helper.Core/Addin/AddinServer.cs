@@ -15,10 +15,10 @@ using Healdan.Helper.Core.Logging;
 namespace Healdan.Helper.Core.Addin;
 
 /// <summary>
-/// The add-in's port (M3.5 spec §5.8, §9): a second listener beside the extension's channel, which Word, Excel and
-/// PowerPoint's Healdan add-in calls from its pages on the helper's own server. Office's web view blocks a secure page's
-/// requests to <c>http://127.0.0.1</c>, so it's HTTPS, with the helper's own certificate, on <c>127.0.0.1</c> only, at the
-/// first of <see cref="AddinPorts.All"/> it can take.
+/// The add-in's port (M3.5 spec §5.8, §9): a second listener beside the extension's channel, which Word, Excel,
+/// PowerPoint and Outlook's Healdan add-in calls from its pages on the helper's own server. Office's web view blocks a
+/// secure page's requests to <c>http://127.0.0.1</c>, so it's HTTPS, with the helper's own certificate, on
+/// <c>127.0.0.1</c> only, at the first of <see cref="AddinPorts.All"/> it can take.
 /// <para>HTTP/1.1, one request per connection (<c>Connection: close</c>): a request line, headers to an empty line, and a
 /// <c>Content-Length</c> body. Anything else is <c>400 bad-request</c>. Before any route runs, a request must pass, in
 /// this order: <c>Host</c> is this port at <c>127.0.0.1</c> or <c>localhost</c> (no DNS rebinding); <c>Origin</c> is the
@@ -49,7 +49,10 @@ namespace Healdan.Helper.Core.Addin;
 public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bool> signedIn, X509Certificate2 certificate, HelperLog log,
     IReadOnlyList<int>? ports = null, TimeSpan? hold = null) : IDisposable
 {
-    /// <summary>The largest body taken: Save to Healdan's document, in base64 (plan: the add-in's port).</summary>
+    /// <summary>
+    /// The largest body taken: Save to Healdan's document, or a message Outlook files, in base64 (plan: the add-in's port;
+    /// M5 spec §7.2).
+    /// </summary>
     public const long MaxBodyBytes = 150L * 1024 * 1024;
 
     /// <summary>The largest body any other route takes, so one without a key can't make the helper hold 150 MiB.</summary>
@@ -75,7 +78,14 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
     private static readonly HashSet<string> PairingRoutes = ["pair/start", "pair/finish"];
 
     /// <summary>The routes that need a paired key. They're the add-in's own, apart from the extension's channel's.</summary>
-    private static readonly HashSet<string> KeyedRoutes = ["ping", "open-dialog", "save-new", "file", "new-version", "properties", "state", "result"];
+    private static readonly HashSet<string> KeyedRoutes =
+    [
+        "ping", "open-dialog", "save-new", "file", "new-version", "properties", "state", "result",
+        "mail/status", "mail/file", "mail/file-many", "mail/file-one", // Outlook's (M5 spec §7.2)
+    ];
+
+    /// <summary>The routes that take a document or a message, up to <see cref="MaxBodyBytes"/>; the rest, <see cref="SmallBodyBytes"/>.</summary>
+    private static bool TakesLargeBody(string? route) => route is "file" or "mail/file" or "mail/file-one";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -368,7 +378,7 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
         if (app is not null && !signedIn())
             return Answer.Error(409, "signed-out");
 
-        if (request.ContentLength > (route == "file" ? MaxBodyBytes : SmallBodyBytes))
+        if (request.ContentLength > (TakesLargeBody(route) ? MaxBodyBytes : SmallBodyBytes))
             return Answer.Error(413, "too-large");
         var body = await request.ReadBodyAsync(tls, reading);
         if (body is null)

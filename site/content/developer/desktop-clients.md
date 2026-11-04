@@ -37,6 +37,8 @@ for every app.
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
   - `Addin/`: the Office add-in's port and its routes, pairing, and the certificate the port serves;
+  - `Mail/`: what Outlook's routes do, which isn't the copy cycle's: a message's status and the folders to suggest
+    (`MailFiling`, `Suggestions`);
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
@@ -471,11 +473,12 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
 
 ## The Add-in's Port
 
-The Healdan add-in in Word, Excel and PowerPoint calls the helper on a second listener beside the channel. Office's web
-view blocks a secure page's requests to `http://127.0.0.1`, so it's HTTPS, with the helper's own certificate. The code
-is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks), `AddinHandler` (the routes),
-`Pairing` and `AddinKeys`. The design is the M3.5 spec, `docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md`,
-§5.8, §5.9 and §9.
+The Healdan add-in in Word, Excel and PowerPoint, and Outlook's (M5), call the helper on a second listener beside the
+channel. Office's web view blocks a secure page's requests to `http://127.0.0.1`, so it's HTTPS, with the helper's own
+certificate. The code is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks), `AddinHandler`
+(the routes), `Pairing` and `AddinKeys`. The design is the M3.5 spec,
+`docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md`, §5.8, §5.9 and §9, and, for Outlook, the M5 spec,
+`docs/superpowers/specs/2026-11-03-m5-email-design.md`, §7.1 and §7.2.
 
 - **The ports:** `127.0.0.1`, the first free of `47615`, `47616`, `47617` and `47618` (`AddinPorts`). The add-in
   tries them in the same order, so another user of the Mac with a helper on the first doesn't stop this one. The
@@ -491,7 +494,8 @@ is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks)
 - **Nothing from outside closes it.** A connection that fails before it's taken, or the helper running out of file
   descriptors for a moment, is logged once for each kind, and the port goes on listening, as Kestrel's does.
 - **HTTP/1.1, one request per connection** (`Connection: close`): a request line, headers to an empty line, and a
-  `Content-Length` body of at most 150 MiB for `file` and 1 MiB for any other route. Anything else, such as a chunked
+  `Content-Length` body of at most 150 MiB for `file`, `mail/file` and `mail/file-one` (a document, or a message, in
+  base64) and 1 MiB for any other route. Anything else, such as a chunked
   body, a second request, a folded or doubled `Host`, a body that isn't UTF-8, or a value no text can hold (an escaped
   lone surrogate), is `400 bad-request`. Bodies are JSON, and errors are `{"error": "<code>"}`, as the channel's are.
 
@@ -529,6 +533,10 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/new-version` | `{"app", "url"}` | `{}` |
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
+| `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
+| `POST /v1/mail/file` | the `.eml`, and optionally a suggested folder's id | the outcome; Outlook's key only |
+| `POST /v1/mail/file-many` | the number of messages and their subjects | a ticket; Outlook's key only |
+| `POST /v1/mail/file-one` | the ticket and one `.eml` | filed, `already-filed` or failed; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
 
 - **The app** is the one the request's key was paired for. A body naming another is `400 bad-request`: a key drives
@@ -555,8 +563,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 - **Short requests:** the add-in calls the port with `fetch` from Office's web view, which is WebKit, and WebKit is
   likely to give up on a request that has had no answer for about a minute. `open-dialog`, `save-new` and `properties`
   wait while the helper's windows are up, and `file` can wait up to 300 s behind Word's Grant File Access, so a lost
-  answer would lose a ticket, or the state of a copy just filed. So any keyed route but `ping` and `state` that hasn't
-  finished after 20 s answers `202 {"pending": "<id>"}` and goes on (`PendingResults`). The add-in then asks
+  answer would lose a ticket, or the state of a copy just filed. So any keyed route but `ping`, `state` and
+  `mail/status` that hasn't finished after 20 s answers `202 {"pending": "<id>"}` and goes on (`PendingResults`). The add-in then asks
   `result`, which waits up to 20 s again, until the outcome comes: the status and body the route would have answered,
   an error included. An outcome belongs to the key that started it, is answered once, and is kept for 10 minutes
   after its route finishes. A key can have 64 outcomes waiting at most; the next route answers
@@ -566,13 +574,31 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 - **The add-in follows a `202` itself,** in `call`, so a button's flow sees only the route's own answer. When `result`
   answers `no-result` after that, the pane says the answer was lost (`lost-result`) and asks the user to check the
   document in Healdan before trying again. The log names a route that went pending, never its id.
+- **Outlook's routes** (`mail/…`, M5 spec §7.2) are for a key paired as Outlook alone: another app's key is
+  `400 bad-request` on all four, as is a body that names another app. Outlook isn't in the copy cycle, so they work on
+  `MailFiling` (in `AddinDocuments`, made anew at each start), straight on the server's API.
+  - **`mail/status`** takes `messageIds`, 1 to 100 non-empty strings: the message's own Message-ID first, then its
+    `In-Reply-To`, then its `References`, oldest first. It asks the server (`GET /api/v1/emails`) about the first,
+    the second and the newest 19 `References` at most, 21 in all, and never more than about 6,000 characters of them,
+    so the request line stays under the 8 KB that Tomcat and most proxies allow whatever the add-in sends. Ids are
+    sent and matched without angle brackets or surrounding space, and ones the server counts as none (empty, over 998
+    characters) aren't sent. `copies` are the readable copies of the message's own id. `elsewhere` is true when the
+    message is filed but its thread's newest copy is in a matter none of the message's copies is in, so the pane can
+    say Filed in Another Matter. `suggestions` are the folders of the thread's copies, newest first, then the person's
+    recent folders (`Suggestions`): only where they may file, no repeats, five at most, each with its path written out
+    from its matter down. It never goes pending, and an unreachable or refusing server is `500 internal-error`.
+  - **The other three** are taken by the port now, keyed for Outlook and with the body limits above, and answer
+    `404 not-found` until the filing that serves them is built (M5).
 - **The add-in's routes and the channel's are separate lists:** the extension can't call these, nor the add-in the
   channel's.
 
 ### Pairing
 
-- **`pair/start`** takes `Word`, `Excel` or `PowerPoint`, nothing else, as the window shows it. The helper's pairing
-  window shows a six-digit code from `RandomNumberGenerator`, and the answer's `pairingId` isn't the code.
+- **`pair/start`** takes `Word`, `Excel`, `PowerPoint` or `Outlook`, nothing else, as the window shows it. The helper's
+  pairing window shows a six-digit code from `RandomNumberGenerator`, and the answer's `pairingId` isn't the code.
+  Outlook pairs by name, as one more app with its own key and the same certificate and codes; it isn't an
+  `OfficeProgram`, because it isn't in the copy cycle (M5 spec §7.1). `Pairing.Apps` lists it last, so Settings shows
+  it after PowerPoint.
 - **`pair/finish`** with the code the user typed: the right one answers a key, 32 random bytes in base64url, which the
   add-in keeps and sends as `X-Healdan-Key`. A wrong one is `403 wrong-code` with the tries left; after three, or two
   minutes, or once a newer pairing has started, it's `403 pairing-expired`.
@@ -709,7 +735,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **`AddinServerTests`** run a real add-in's port on ports the system says are free, with a client that trusts only
   the test's certificate, and send what a web page, another program or another Healdan's page would.
   `PairingTests` and `AddinHandlerTests` cover pairing and the routes, and `PendingResultsTests` a route that answers
-  `202` and is collected through `result`. Those run with a hold time of milliseconds, and a slow route waits on a gate
+  `202` and is collected through `result`. `MailStatusTests` and `SuggestionsTests` cover Outlook's `mail/status`
+  against `FakeApi`, which also answers `GET /emails` and `GET /folders`. Those run with a hold time of milliseconds, and a slow route waits on a gate
   the test opens rather than for a fixed time.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.

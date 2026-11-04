@@ -204,11 +204,11 @@ public sealed class PendingResultsTests
     }
 
     [Fact]
-    public async Task PingAndStateNeverPend()
+    public async Task PingStateAndMailStatusNeverPend()
     {
         var results = Results();
 
-        foreach (var route in new[] { "ping", "state" })
+        foreach (var route in new[] { "ping", "state", "mail/status" })
         {
             var answer = await results.RunAsync(route, KeyA, async () =>
             {
