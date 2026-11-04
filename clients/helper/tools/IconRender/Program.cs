@@ -30,7 +30,8 @@ var icons = (ResourceDictionary)AvaloniaXamlLoader.Load(new Uri("avares://Healda
     ("save-as-new-version", "versions", false),
     ("save-as-new-document", "file-plus", false),
     ("properties", "list-details", false),
-    ("insert-doc-id", "hash", false)
+    ("insert-doc-id", "hash", false),
+    ("file-email", "mail", true)
 ];
 
 var grey = Color.Parse("#7C7C80");
@@ -52,8 +53,9 @@ Dispatcher.UIThread.Invoke(() =>
     }
     Save(Mark(42, null), output, "healdan-42.png");
     Save(Mark(42, Colors.White), output, "healdan-42-hc.png");
-    // The manifest's icon is 32 px and its high-resolution icon 64; the ribbon's group takes 16, 32 and 80
-    foreach (var size in new[] { 16, 32, 64, 80 })
+    // The Word manifest's icon is 32 px and its high-resolution icon 64; the Outlook manifest's is 64 and 128; the
+    // ribbon's group takes 16, 32 and 80
+    foreach (var size in new[] { 16, 32, 64, 80, 128 })
         Save(Mark(size, null), officeOutput, $"healdan-{size}.png");
 });
 Console.WriteLine($"Wrote the extension's images to {output}");

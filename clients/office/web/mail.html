@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 The Healdan Project -->
+<!-- SPDX-License-Identifier: LGPL-3.0-only -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Healdan</title>
+  <link rel="stylesheet" href="healdan.css">
+</head>
+<body>
+  <!-- The Outlook add-in's pane (M5 spec section 8). The server's Content-Security-Policy allows scripts from the server
+       and Office.js's address only, so none is inline. -->
+  <main id="main">
+    <p id="status" class="status" role="status">Healdan</p>
+  </main>
+
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="healdan.js"></script>
+</body>
+</html>

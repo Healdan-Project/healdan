@@ -160,6 +160,29 @@ and PowerPoint for the people you choose. You need to be a Microsoft 365 adminis
   it again from the same address, go to **Settings › Integrated apps**, select Healdan, and choose **Update add-in**
   to upload the new file. The pages themselves come from your server and change when it does.
 
+### Deploying the Outlook Add-in
+
+Outlook has a manifest of its own, so it deploys on its own: it can go to different people, and updating it leaves
+Word's alone. Healdan serves it at `https://<server>/api/addin/outlook-manifest.xml`, made the same way as Word's, with
+your server's address in every link and as its one app domain. The bullets under [Microsoft Office](#microsoft-office)
+about the address, HTTPS and the pages needing no sign-in apply to it too.
+
+1. **Download the manifest.** Open `https://<server>/api/addin/outlook-manifest.xml` in a browser, with your server's
+   address for `<server>`, and save the file it shows. Check that your server's address is in its links.
+2. **Upload it as for Word's:** in the admin centre, go to **Settings**, then **Integrated apps**, choose **Upload
+   custom apps**, choose **Office Add-in**, and upload the file.
+3. **Choose who gets it,** and finish the deployment.
+
+- **What it asks for.** The add-in reads and changes the message it is open on (the permission Microsoft calls
+  `ReadWriteItem`), which is what filing a message and marking it with the Healdan category need. It asks for nothing
+  about the rest of the mailbox. It shows a **Healdan** button when a message is open, which opens a pane that can be
+  pinned, and works on several selected messages at once where Outlook allows it.
+- **A new manifest needs Update add-in.** As for Word's, when an upgrade raises the manifest's `<Version>`, download it
+  again, select Healdan under **Settings › Integrated apps**, and choose **Update add-in**. The pane's page comes from
+  your server and changes when it does.
+- **Each Mac still needs the helper,** set up as for the other apps. The pane pairs with it once, by a code, under the
+  name Outlook.
+
 ### What Each Mac Needs for the Add-in
 
 - **Healdan Helper 0.4.0 or later,** signed in to this server, with Set Up Microsoft Office done. The add-in calls the helper at `https://127.0.0.1:47615` on the same Mac, or on `47616`, `47617` or
