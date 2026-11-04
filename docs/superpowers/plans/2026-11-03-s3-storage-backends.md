@@ -10,13 +10,14 @@
   - the backends behind one small interface: a local folder, an S3 bucket through the AWS SDK for Java 2.x, and, in tests only, an in-memory fake;
   - encryption with Tink's streaming AEAD, a key file per encrypted backend in the configuration volume, and a recovery key;
   - staging and the read cache, folders on the server;
-  - the mover, held deletes and the purge, the nightly check, the failing-backend checks and the alert;
+  - the mover, held deletes and the purge, the nightly check, the failing-backend checks and the alert, and the lock per file that keeps saves, the mover and the purge apart (call 20);
   - the listeners that keep each file's Store current;
   - the Storage tab's RPC servlet at `/frontend/healdanstorage`;
+  - a filter over CE's download routes that shows the outage message (question 7);
   - the `storage-record-original` and `smoke-storage` seeds.
-- **`healdan-core`** gets the tables (one Flyway script for both databases) and four small seams: the seed names in `SeedRunner.ORDER`, a start hook in `HealdanStartup`, a folder-restore hook in `HealdanHooksImpl`, and the storage secrets in `SecretBox`'s count.
+- **`healdan-core`** gets the tables (one Flyway script for both databases) and small seams (question 6): the seed names in `SeedRunner.ORDER`, a start hook in `HealdanStartup.start()`, a folder-restore hook in `HealdanHooksImpl`, the storage secrets in `SecretBox`'s count and in M4's new-key messages, a public way to send a templated email (`OutgoingEmail`), and `PreviewWorker` waiting out an unreachable backend.
 - **`healdan-api`** answers an unreachable backend as `503 storage-unreachable` (question 7).
-- **The old web page:** a Storage tab in Healdan Settings, beside M4's Sign-In tab.
+- **The old web page:** a Storage tab in Healdan Settings, beside M4's Sign-In tab, and the outage message on its downloads (question 7).
 - **Docker:** `ConfigPlan` sets `store=` on every start; a `logicaldoc-cache` volume; the paths in `docker/setenv.sh`.
 - **CI** tests the logic against an in-memory backend, the S3 client against a fake S3 server inside the Java tests, and the whole flow against Garage on the smoke stack, on amd64 and arm64.
 
@@ -59,6 +60,7 @@ Every task's requirements include these.
   No CE Java, `context-core.xml`, `context.properties` or message bundle changes. Question 1's option (c) would be a third; any other upstream edit needs the owner's say-so and a line in the spec's §15.1.
 - **`HealdanStorage` is never a Spring component.** Only `<bean id="store" class="${store}"/>` makes it: a `@Component` would make a second `Store` bean, and `Store.get()` (`Context.get(Store.class)`) would fail. Every other `healdan-storage` bean does nothing unless `Store.get()` is a `HealdanStorage`, so a WAR still on `FSStore` (outside Docker, or before PR C) is untouched.
 - **`HealdanStorage.init()` reads no table and is safe to call again.** Spring calls it before Flyway has run, and CE's `SettingServiceImpl.saveStoreSettings` calls `Store.get().init()` again.
+- **One lock per file** (call 20). `FileLocks` is a striped lock in the JVM, keyed by `(docId, resource)`. `HealdanStorage` holds it while it writes or deletes a file's bytes and updates its row; the mover holds it for its commit (the row's check, the rename into place, the row's update, then the source's hold or the staged copy's delete); the purge holds it while it checks and deletes a held S3 object. Healdan runs one node (spec §2.2), so a lock in the JVM is enough.
 - **Code location:** `healdan-storage`'s `com.logicaldoc.healdan.storage` and its packages `backend`, `crypto`, `mover`, `seed` and `web`; the GUI's `frontend.client.healdan.settings` (the tab), `.beans` and `.services`.
 - **The plugin:** JPF id `healdan-storage`, version the root POM's (9.3.2 today), requiring `logicaldoc-core` and `healdan-core`; class `com.logicaldoc.healdan.storage.HealdanStoragePlugin`. Extensions, each id unique (JPF drops the whole plugin on a duplicate):
   - `DocumentListener`, id `healdanStorageDocuments`, class `com.logicaldoc.healdan.storage.StoreTrackingDocumentListener`, position `120`;
@@ -73,9 +75,9 @@ Every task's requirements include these.
   | Backends' key files | `/opt/logicaldoc/conf/healdan-storage-keys/` | `healdan.storageKeys` | `healdan-storage-keys/` beside `SecretBox`'s key file |
 
   Tests set all three under `target/`, as they do `healdan.secretKey`.
-- **Rows:** `hd_storage_file.hd_backendid` is `0` for staging, which has no `hd_storage_backend` row. Backend 1's row, Original, is made by the migration.
-- **Object keys:** the backend's prefix, then CE's layout: `healdan/123/45/doc/1.2-thumb.png`. A prefix is stored without a leading `/` and with one trailing `/`. The check object is `<prefix>.healdan-check`; Test's objects are `<prefix>.healdan-test-<uuid>`. Neither can clash with CE's layout, whose names start with a digit.
-- **A local backend's root** holds `.healdan-backend` (the marker, holding the backend's id), `.held/` (held deletes, in CE's layout), and, if encrypted, `.healdan-check`.
+- **Rows:** `hd_storage_file.hd_backendid` is `0` for staging, which has no `hd_storage_backend` row. Backend 1's row, Original, is made by the migration. Each write gives its row a new `hd_write`, a random 64-bit id (call 21): unlike a counter, it never repeats when a row is deleted and made again, or when a database is restored, so the mover's check and the cache's keys can trust it. Backend ids are `long` everywhere, as `PersistentObject`'s are.
+- **Object keys:** the backend's prefix, then CE's layout: `healdan/123/45/doc/1.2-thumb.png`. A prefix is stored without a leading `/` and with one trailing `/`. The marker object is `<prefix>.healdan-backend` (call 23), the check object `<prefix>.healdan-check`, and Test's objects `<prefix>.healdan-test-<uuid>`. None can clash with CE's layout, whose names start with a digit.
+- **A local backend's root** holds `.healdan-backend` (the marker, holding this install's id and the backend's id), `.held/` (held deletes, in CE's layout), and, if encrypted, `.healdan-check`.
 - **Settings in `hd_setting`:**
 
   | Key | Default | Range | In the tab |
@@ -86,14 +88,16 @@ Every task's requirements include these.
   | `storage.sweepSeconds` | `300` | 5 to 3600 | no; the smoke seed sets `5` (call 12) |
   | `storage.retestSeconds` | `60` | 5 to 3600 | no; the smoke seed sets `5` |
   | `storage.alert.sent` | none | | no: the day the last alert went |
+  | `storage.installId` | a random UUID, made once | | no: names this install in every backend's marker (call 23) |
 
 - **Timings:**
+  - every backend is checked at start, before the mover's first pass; until its first check passes, a backend refuses writes and its transfers wait (call 24);
   - the mover sweeps every `storage.sweepSeconds` and is woken by a staged save, a document or matter changing Store, a Store switching backend, and Retry;
   - a failing backend is tested again every `storage.retestSeconds`;
   - a file's retries wait 1, 2, 4, 8, 16, 32, 60, 60 and 60 minutes; the tenth failure marks it stuck;
-  - the alert: a file waiting, or a backend failing, for more than 24 hours; at most one email a day;
+  - the alert: a file waiting (`hd_waiting`, since its row's backend stopped matching its Store's), or a backend failing, for more than 24 hours; at most one email a day;
   - the purge runs daily, and the nightly check at 03:17 server time, and neither in the first 10 minutes after a start;
-  - every S3 call has a 10-second connection timeout and a 60-second read timeout.
+  - every S3 call has a 10-second connection timeout and a 60-second read timeout, which tests shorten.
 - **Sizes:** S3 uploads over 64 MiB go up in 16 MiB parts; Tink's segments are 1 MiB; a file over a tenth of the cache's size isn't cached (§6.3).
 - **Encryption** (§9):
   - Tink's streaming AEAD with `AesGcmHkdfStreamingParameters`: 32-byte key, 32-byte derived keys, HKDF-SHA256, 1 MiB ciphertext segments (Tink's `AES256_GCM_HKDF_1MB`);
@@ -102,20 +106,20 @@ Every task's requirements include these.
   - the recovery key is the same 32 bytes in Crockford's base32: 52 characters in 13 groups of 4, read case-insensitively, with spaces and hyphens ignored (call 15).
 - **The endpoint** (§13) is `https://`, or `http://` only when every address its host resolves to is private (10/8, 172.16/12, 192.168/16, fc00::/7) or loopback, as Garage's `http://garage:3900` is on the smoke stack.
 - **Never logged, sent to a client or shown back:** the S3 secret, key bytes and recovery keys (but for Show Recovery Key, to an admin), and sealed values. **Logged** (§13): backend changes, a Store's backend changing, recovery keys shown, moves started and finished, stuck files, purges, and the nightly check's fixes.
-- **Docs ship in the PR with the code they describe** (CLAUDE.md). The pages the spec names have their own tasks, 18 to 20. Title Case for titles and labels, British spelling.
+- **Docs ship in the PR with the code they describe** (CLAUDE.md), and so do CLAUDE.md's build, test, CI and Docker facts, which change together with the Developer Guide's. The pages the spec names have their own tasks, 18 to 20; a page or fact that an earlier task changes is in that task (Tasks 1, 13, 14, 15 and 16). Title Case for titles and labels, British spelling.
 - **CI time.** Each PR states how many seconds it adds to `build`, the `Tests` jobs and the Docker smoke test.
 
 ## Review Focus
 
 These are the inputs most likely to hurt someone that a task's main tests could miss. Each has a test in the task named.
 
-1. **A file that exists nowhere:** a source removed before the target is verified; a held S3 object purged after a row points at it again; a rewrite during a copy that the write counter misses; a crash between the copy and the row's update (Tasks 7 and 11).
-2. **A local Store's file reaching S3:** a Store resolved wrongly (Templates, the Default workspace, an alias, a document with no folder yet), a document or matter moving, a folder restored into another Store, and the nightly check as the backstop (Tasks 6, 10 and 11).
-3. **The wrong key:** a key file swapped or rebuilt from a mistyped recovery key, and writes that then go on under it (Tasks 4 and 12).
-4. **CE's own flows through `HealdanStorage`:** exact file versions (`1.2` beside `1.20`), `replaceFile`'s deletes, `destroyDocument` after its rows are gone, aliases, and CE's size check on an encrypted backend (Task 6).
+1. **A file that exists nowhere:** a source removed before the target is verified; a held S3 object purged while the mover uploads it again; a save landing on the key the mover is writing, holding or deleting; a file deleted and made again during its transfer; a crash between the copy and the row's update; two backends, or two servers, sharing a bucket and prefix (Tasks 7, 11 and 14).
+2. **A local Store's file reaching S3:** a Store resolved wrongly (Templates, the Default workspace, an alias, a document with no folder yet, an `ld_path` CE left stale), a document or matter moving, a folder restored into another Store, a Store changing while its file's upload waits, and the nightly check as the backstop (Tasks 6, 10 and 11).
+3. **The wrong key:** a key file swapped or rebuilt from a mistyped recovery key, writes that then go on under it, and writes in the minutes after a start (Tasks 4, 11 and 12).
+4. **CE's own flows through `HealdanStorage`:** exact file versions (`1.2` beside `1.20`), `replaceFile`'s deletes and a second replace, `destroyDocument` after its rows are gone, aliases, a 0-byte file, and CE's size check on an encrypted backend (Task 6).
 5. **An empty mount point written to** when an NFS share didn't mount (Task 3).
 6. **Secrets:** the S3 secret in a log, an answer, the GUI or an exception's message; a key made over sealed values while the key file is missing (Tasks 2, 5 and 14).
-7. **An outage spent as failures:** retries used up, or files marked stuck, while a backend is merely unreachable (Task 11).
+7. **An outage spent as failures:** retries used up, files marked stuck, or previews given up, while a backend is merely unreachable; a download that silently arrives empty (Tasks 11 and 13).
 
 ## Questions for the Owner
 
@@ -128,20 +132,22 @@ Each is a place where the spec and master disagree, found while checking every c
 2. **CE's prefix match is already fixed.** Spec §3.1 ("Until this work is built, CE's bug stands") and §17's last bullet predate [Healdan-Project/healdan#153](https://github.com/Healdan-Project/healdan/pull/153): `3eedc64` (2026-11-01) made `FSStore.listResources` match a file version exactly, and a follow-up (2026-11-02) fixed `replaceFile`'s null file version; `FSStoreFileVersionTest` is in `UPSTREAM_TESTS`, and the capability map's §6 records both. `HealdanStorage` still matches exactly, from its rows. **Default:** Task 21 rewrites those two passages to say so.
 3. **The migration's number and portability.** Spec §3.1 and §5.1 say V1 to V5 shipped and expect V7. M4 shipped V6 (`V6__signin.sql`) and V7 (`V7__refresh_token_width.sql`), so this is **V8** (`V8__storage.sql`). §5.1 and §14 also say its SQL "runs unchanged" on PostgreSQL; Healdan's MariaDB scripts use `datetime` and `ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin`, and its HSQLDB scripts `timestamp`. **Default:** the two scripts keep that convention, and use only `bigint`, `int`, `varchar`, timestamps and sequences, so the HSQLDB script is the one PostgreSQL's folder copies.
 4. **Smoke step 5e is taken.** Spec §15.2 and §16.1 name the storage step "5e"; M4's `test-signin.sh` is step 5e. **Default:** the storage step is **5f**.
-5. **M4 has landed, and its key guard needs the storage secrets.** Spec §4 and §14 say M4 is "being built now". It was accepted on 2026-11-02, and `SecretBox` (`healdan-core`'s `signin` package) is there to reuse. Its R37 guard makes a key only while nothing stored is sealed, and `SecretBox.sealedIn` counts only providers' client secrets and helpers' refresh tokens. Left alone, an admin typing an S3 secret while the key file is missing would make a new key silently, and every sealed value would be lost. **Default:** `sealedIn` also counts `hd_storage_backend.hd_secret` (Task 2), an edit to M4's class.
+5. **M4 has landed, and its key guard needs the storage secrets.** Spec §4 and §14 say M4 is "being built now". It was accepted on 2026-11-02, and `SecretBox` (`healdan-core`'s `signin` package) is there to reuse. Its R37 guard makes a key only while nothing stored is sealed, and `SecretBox.sealedIn` counts only providers' client secrets and helpers' refresh tokens. Left alone, an admin typing an S3 secret while the key file is missing would make a new key silently, and every sealed value would be lost. Counting them isn't enough on its own: M4's new-key question (`ProviderDialog.askNewKey`), `SecretBox`'s two log messages and the Backup and Restore page's key sections all say a new key loses only providers' client secrets and helpers' refresh tokens, so an admin confirming a new key on the Sign-In tab would take every S3 backend down unwarned. **Default:** `sealedIn` also counts `hd_storage_backend.hd_secret` (Task 2), an edit to M4's class; that question, those messages and those sections name the storage backends' secrets too, and a backend whose secret won't open fails, saying to enter it again (Tasks 12 and 14).
 6. **Files the spec's §15.2 doesn't list.** The build also changes:
    - `Dockerfile`: the cache folder in its `mkdir` (~65) and `VOLUME` (~83);
    - `docker/setenv.sh`: the three paths above;
-   - `healdan-core`'s `SeedRunner.ORDER`, `HealdanStartup` (a start hook), `HealdanHooksImpl.afterFolderRestore` (a hook, §17's "small seam"), `SecretBox.sealedIn` (question 5), and its test-jar's `PluginFixtures` (an archive for another Healdan plugin);
+   - `healdan-core`'s `SeedRunner.ORDER`, `HealdanStartup.start()` (a start hook), `HealdanHooksImpl.afterFolderRestore` (a hook, §17's "small seam"), `SecretBox.sealedIn` and its messages (question 5), `OutgoingEmail` (a public way for another module to send a templated email), `PreviewWorker.failed` (an unreachable backend postpones a preview without spending a try), `HealdanMigratorTest` (which pins the schema's version), and its test-jar's `PluginFixtures` (an archive for another Healdan plugin) and `SignInTestHooks` (a public way to capture sent emails);
+   - the GUI's `ProviderDialog` (M4's new-key question, question 5);
    - `healdan-api`'s `ProblemMapper`, `DocumentResource` and `openapi.yaml`, and the Developer Guide's API page (question 7);
-   - `docker/tests/garage/` (Garage's configuration and setup script).
+   - `docker/tests/garage/` (Garage's configuration and setup script);
+   - docs pages §15.3 doesn't name: the Install manual's `what-runs.md` and `upgrading.md` say a value already in `context.properties` is never changed but for two kinds, which `store` now joins, and its `configuration.md` that `.env` owns the only settings written on every start; the Developer Guide's `building-from-source.md` holds the per-module test commands and the test-jar rule `healdan-storage` now shares with `healdan-api`.
 
-   **Default:** all of them, as Tasks 1, 2, 6, 10, 11, 13, 15 and 16 list.
-7. **Where the outage message shows** (§6.5). The helper and the add-ins read files through `/api/v1/documents/{docNumber}/content` and `/thumbnail`, and the helper already shows a problem's `detail` ("#12 couldn't be opened: …", `CopyCycle`). The web page's download goes through CE's `DownloadServlet`, which passes the exception's message to `sendError`, but `docker/server.xml`'s `ErrorReportValve` has `showReport="false"`, so the browser gets a bare "HTTP Status 500". Options:
-   - **(a) The API only** (default): `503 storage-unreachable` with the message as `detail`, a new code in `openapi.yaml` (Task 13). The web page shows a bare error, and Known Limitations says so.
-   - (b) As (a), and a `@WebFilter` in `healdan-storage` over CE's download routes that renders the message (escaped) when a read failed this way: no upstream edit, about a day's work.
+   **Default:** all of them, as Tasks 1, 2, 6, 10, 11, 12, 13, 14, 15 and 16 list.
+7. **Where the outage message shows** (§6.5). The helper and the add-ins read files through `/api/v1/documents/{docNumber}/content` and `/thumbnail`, and the helper already shows a problem's `detail` ("#12 couldn't be opened: …", `CopyCycle`). The web page's download goes through CE's `DownloadServlet` and `ServletUtil.downloadDocument`, which checks `exists` and `size` (answered from the rows, so they pass), opens the response's stream and sets `200` (~288–302), and only then reads the file. A read that fails there leaves try-with-resources to close the stream, which commits a `200` with an empty body; `DownloadServlet`'s `sendError` then meets a committed response and is swallowed (~803–808). The browser saves an empty file and shows no error. (`docker/server.xml`'s `ErrorReportValve` has `showReport="false"`, so even an uncommitted error would be a bare page.) Options:
+   - (a) The API only: `503 storage-unreachable` with the message as `detail`, a new code in `openapi.yaml` (Task 13). The web page saves empty files during an outage, which Known Limitations would have to say, against §6.5's "fails with a message that says why".
+   - **(b) As (a), and `DownloadErrorFilter`** (default): a `@WebFilter` in `healdan-storage` over CE's download routes (`/download`, `/download/*`, `/convertpdf/*`) that hands CE a response whose stream commits nothing until its first byte. A read that fails before any byte is answered `503` with the message, escaped, on a small page. No upstream edit, about a day's work (Task 13). A file read by range straight from the bucket (over a tenth of the cache) that fails after its first bytes still arrives cut off, which Known Limitations says.
 8. **"Recorded in the history"** (§9, Show Recovery Key). CE's user history takes only `UserEvent` values, an upstream enum, and §5.1 lists four tables. **Default:** each showing is logged with who and when (§13), and `hd_storage_backend` keeps the last showing (`hd_keyshown`, `hd_keyshownby`), which the tab shows. Options: a fifth table, `hd_storage_event`, which the tab lists; or a `UserEvent` appended upstream, with a line in §15.1.
-9. **Is a staged copy held after its upload?** §8 holds "a source copy after a move", and §5.2 calls staging "a built-in local backend", which would keep every Client Work upload on the server's disk for the holding period, against §1's "the server's disk stays small". A restore doesn't need it: a backup taken while a file was staged holds both the row saying "staging" and the staged file. **Default:** a staged copy is deleted once its upload is verified and the row points at the bucket (Task 11); copies on real backends are held as §8 says.
+9. **Is a staged copy held after its upload?** §8 holds "a source copy after a move", and §5.2 calls staging "a built-in local backend", which would keep every Client Work upload on the server's disk for the holding period, against §1's "the server's disk stays small". A restore doesn't need it: a backup taken while a file was staged holds both the row saying "staging" and the staged file. **Default:** a staged copy is deleted once its upload is verified and the row points at the bucket, under the file's lock, so a save that lands in staging meanwhile is never the copy deleted (Task 11, call 20); copies on real backends are held as §8 says.
 
 ## Spec Corrections and Calls This Plan Makes
 
@@ -151,26 +157,31 @@ The owner hears about these when this plan is handed over. Task 21 folds them in
 2. **Tink without keysets.** Healdan builds the key object itself (`AesGcmHkdfStreamingKey` from the key file's bytes) and the primitive with `AesGcmHkdfStreaming.create(key)`, so no keyset, JSON or registry is used. Tink 1.24.0 depends on `gson` 2.13.2 and `protobuf-java` 4.33.6, while `logicaldoc-parent` pins `gson` at 2.3.1 for the whole reactor. Task 1 lists the WAR's jars: where the WAR ships either at another version, the plugin zip leaves it out, and `TinkClasspathTest` proves the encryption runs with Tink's `gson` and `protobuf` classes hidden.
 3. **Rows through JDBC.** `hd_storage_file` and `hd_storage_held` are read and written with `JdbcTemplate`, as `hd_preview_job` is, by `(docId, resource)`, with no Hibernate entity and no second-level cache: one row a file means many rows and bulk updates. `hd_storage_backend` and `hd_storage_store` are Hibernate entities, as M4's tables are.
 4. **Staging is backend `0`** in the rows, with no `hd_storage_backend` row (§5.2).
-5. **A start hook in `healdan-core`.** `HealdanStartup.run()` calls each `HealdanStartListener` bean after the seeds, as it starts M1.5's preview worker. `healdan-storage`'s starts the mover, the purge, the nightly check and the backend checks. A Spring event would reach `@EventListener` beans only after every singleton was made, which is after `HealdanStartup`'s `@PostConstruct`.
-6. **A folder-restore hook in `healdan-core`** (§17). CE restores a folder tree with JDBC and calls only `HealdanHooks.afterFolderRestore`, whose one implementation is `healdan-core`'s `HealdanHooksImpl`. It now also calls each `FolderTreeListener` bean, a new `healdan-core` interface, so `healdan-storage` re-reads the Stores of a tree restored into another Store. Every other move fires a listener: `DocumentManager.moveToFolder` stores the document, a folder move stores the folder, and a merge moves each document with `moveToFolder` (`HibernateFolderDAO.moveDocumentsOnMerge`).
+5. **A start hook in `healdan-core`.** `HealdanStartup.start()`, its `@PostConstruct`, calls each `HealdanStartListener` bean when `run()` returns true, beside starting M1.5's preview worker. Tests call `run()` themselves (`AbstractHealdanTestCase.setUp`), so, as today, they start no thread; `run()` itself doesn't start the preview worker. `healdan-storage`'s listener checks every backend, then starts the mover, the purge, the nightly check, the retests and the alert (call 24). A Spring event would reach `@EventListener` beans only after every singleton was made, which is after `HealdanStartup`'s `@PostConstruct`.
+6. **A folder-restore hook in `healdan-core`** (§17). CE restores a folder tree with JDBC and calls only `HealdanHooks.afterFolderRestore`, whose one implementation is `healdan-core`'s `HealdanHooksImpl`. It now also calls each `FolderTreeListener` bean, a new `healdan-core` interface, with the tree's documents, which `afterFolderRestore` already works out (`StoredRows.tree` and `documentIds`), so `healdan-storage` re-reads the Stores of a tree restored into another Store. Every other move fires a listener: `DocumentManager.moveToFolder` stores the document, a folder move stores the folder, and a merge moves each document with `moveToFolder` (`HibernateFolderDAO.moveDocumentsOnMerge`).
 7. **The seeds join `SeedRunner.ORDER` by name** (§17): `storage-settings` after `signin-settings`, `storage-record-original` after it, and `smoke-storage` after `smoke-signin`. A name with no bean is skipped, so `healdan-core`'s own tests are untouched. Each storage seed's `enabled()` is false unless `Store.get()` is a `HealdanStorage`, so a server still on `FSStore` records nothing it would then let go stale.
 8. **A `storage-settings` seed** sets the settings above with `setIfMissing`, and adds the alert's message template, `storage.alert`, as M4's `signin-settings` adds `signin.adminalert`.
 9. **The places are system properties** that `docker/setenv.sh` sets, as M4's `healdan.secretKey` is, because `ContextProperties` doesn't say where it was loaded from.
-10. **A Store is the top-level workspace above a folder,** Templates included and CE's Default workspace not (§11). `HealdanStorage` reads it from `ld_folder.ld_path`, CE's path of folder ids with the root left out (`/<store>/…`, `HibernateFolderDAO.computePath`), in one query that the nightly check runs for every document at once, and walks the parents where a path is missing. It doesn't use `MatterLocator`, which gives Templates no Store id.
-11. **A file with no row is read from Original,** and logged at warning level. Only `FSStore` wrote before the switch, so an unrecorded file can only be there; this covers the minutes between the switch and `storage-record-original`. A write always makes a row.
+10. **A Store is the top-level workspace above a folder,** Templates included and CE's Default workspace not (§11). `StoreOf` finds it by walking `ld_parentid`, as `MatterLocator` and `Propagation` do, and never reads `ld_path`: CE's folder restore re-parents a tree with JDBC and leaves its `ld_path` as it was (`HibernateFolderDAO.restore`, ~862–872; only `move` rewrites paths, and only under the old prefix), so a path can name the wrong Store for good, and a nightly check reading the same column would never notice. Bulk work (the recording seed, the nightly check, a Store's check before a switch) reads `ld_folder`'s `(ld_id, ld_parentid)` once and resolves each folder's top in memory.
+11. **A file with no row is read from Original,** and logged at warning level. Only `FSStore` wrote before the switch, so an unrecorded file can only be there: one in a folder the recording seed couldn't read (Task 9). A write always makes a row.
 12. **Two hidden settings for the smoke stack,** `storage.sweepSeconds` and `storage.retestSeconds`, as M4's `signin.recheck.minutes`. Without them, step 5f's outage check would wait a minute or more for the retest, and up to five for the sweep.
-13. **The outage exception lives in `healdan-core`,** as `com.logicaldoc.healdan.util.StorageUnreachableException extends IOException`, because `healdan-api` maps it and can't depend on `healdan-storage`. Its message is the one §6.5 gives, naming the Store.
-14. **The marker holds the backend's id.** A marker naming another backend fails the backend too, which catches two backends given one folder.
+13. **The outage exception lives in `healdan-core`,** as `com.logicaldoc.healdan.util.StorageUnreachableException extends IOException`, because `healdan-api` maps it and `healdan-core`'s `PreviewWorker` waits it out, and neither can depend on `healdan-storage`. Its message is the one §6.5 gives, naming the Store.
+14. **The marker holds this install's id and the backend's id.** A marker naming another install or backend fails the backend too, which catches two backends given one folder. S3 backends get one too (call 23).
 15. **The recovery key's alphabet is Crockford's base32,** which has no I, L, O or U, so a key read aloud or copied by hand survives. The confirmation is the last group of four.
-16. **Each upload is verified twice:** S3 refuses a body whose `Content-MD5` doesn't match (on a single put and on each part), and the mover then reads the object's size back with `HEAD` before it points the row at it. A local write goes to a temporary name in the same folder, is synced and its size checked, then is moved into place.
+16. **Each upload is verified twice:** S3 refuses a body whose `Content-MD5` doesn't match (on a single put and on each part), and the mover then reads the object's size back with `HEAD` before it points the row at it. A local write goes to a temporary name in the same folder, is synced and its size checked, then is moved into place: at once for a save, and for the mover only at its commit (call 20).
 17. **Three layers of tests** (see "How CI Tests It"): an in-memory backend, a fake S3 server in the Java tests, and Garage on the smoke stack. No Testcontainers: the `Tests` shards don't run Docker.
 18. **The smoke overlay sets Garage up with Garage's admin API** from a one-shot `busybox` container, as Garage's image has no shell. Task 0 confirms the calls on v2.5.0, or switches to its CLI through `docker compose exec`.
 19. **The smoke seed adds matters 1.2 and 1.3 to Smoke Cloud,** where §16.1 names 1.2 only. Check 4 moves 1.2 home, so 1.3 keeps a file on Garage for step 8's restart to read back through the bucket (Task 16).
+20. **The mover commits under the file's lock, and discards a copy it couldn't commit** (§7 step 3 changed). A save into a local Store writes straight to the key a transfer onto that backend is writing: the mover's rename into place could replace the save's new bytes, and §7's "puts its copy in held deletes" would then move the live key, the save's bytes or its own, into `.held/`, for the purge to delete. So the mover writes a local target under a temporary name of its own (an S3 target at its key, which saves never write: an S3 Store's saves land in staging), and then, holding the file's lock, checks that the row's write id is the one it read and that the row's Store's backend is still the target. If both hold, it moves its file into place, points the row at the target, and holds the source, or deletes the staged copy (question 9). If not, it deletes its own copy, which no row ever pointed at, so no backup can need it; an S3 object stays only if a held row names its key. Saves, deletes and the purge take the same lock, so nothing acts between the check and the update.
+21. **A write id, not a write counter** (§5.1, §6.4 and §7 changed). The counter restarts at 1 when a row is deleted and made again: Replace File deletes a version's derived files and M1.5 makes them again, and deleting version 1.3 and checking in again makes a new 1.3. A stale transfer's "unchanged" check would then match the new file, point its row at the old bytes, and delete the new ones. A database restored in place also winds counters and CE's document ids back while the cache volume, which backups skip, keeps its plaintext, so a new document could be served a lost one's cached bytes. A random 64-bit `hd_write` per write never repeats, and the mover's check and the cache's keys use it.
+22. **The purge and the mover don't cross** (§6.2 kept). The purge deletes a held S3 object only holding its file's lock, and only if no row points at it and no transfer of that file is under way (the mover's set of files in transfer, in memory). Otherwise the purge's check and its delete could straddle the mover's upload of the same key and the row's update, leaving the row pointing at nothing.
+23. **Backends can't share a place** (§10 added to). Nothing else would stop two S3 backends, or two installs, using one bucket and prefix: the mover would write one's objects over the other's, the purge (which checks rows on its own backend only) would delete the other's live files, and a second encrypted backend would overwrite the first's check object. The tab refuses an S3 backend whose endpoint host, bucket and prefix equal another's or contain it (an empty prefix contains every other), and a local path that is, holds, or is inside Original's folder, staging, the cache, the configuration folder or another backend's. Each S3 backend gets a marker object, `<prefix>.healdan-backend`, holding this install's id (`storage.installId`, made once by the settings seed) and the backend's id; a marker naming another install or backend fails the backend, as call 14's does for a folder. A server restored from a backup has the same install id, so the restore steps say to stop the first server before the second starts (Tasks 19 and 22).
+24. **Backends are checked at start, before the mover** (§9 kept). Spec §9 decrypts the check object "at start", so that a botched restore can't write files under the wrong key. `StorageStartup` checks every backend before the mover's first pass, and a backend refuses writes and holds its transfers until its first check passes; only the purge and the nightly check wait 10 minutes after a start.
 
 ## Conventions
 
-- **Running Maven:** `~/logicaldoc-dev.properties` must exist (an empty file works). After an upstream or `healdan-core` change: `mvn -B -ntp -pl healdan-core -DskipTests install` (with the test-jar, which `healdan-storage`'s tests need, as `healdan-api`'s do). Then `mvn -B -ntp -pl healdan-storage test -Dtest=<Class>`.
-- **The GUI:** `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, which runs the GWT compile; `-Dgwt.skipCompilation=true` when only the server's Java changed.
+- **Running Maven:** `~/logicaldoc-dev.properties` must exist (an empty file works). After changing an upstream module, re-install that module (CLAUDE.md); after a `healdan-core` change: `mvn -B -ntp -pl healdan-core -DskipTests install` (with the test-jar, which `healdan-storage`'s tests need, as `healdan-api`'s do). Then `mvn -B -ntp -pl healdan-storage test -Dtest=<Class>`.
+- **The GUI:** `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, which runs the GWT compile; when only the server's Java changed, `-Dgwt.skipCompilation=true -Dmaven.antrun.skip=true` (both, for `install`, as CLAUDE.md says).
 - **The smoke test:** `docker/smoke-test.sh` on a fresh stack; `docker build --target tools .` for `ConfigPlan`'s tests.
 - **Commits:** one per task, with an imperative subject, a body that says why, and the `Co-Authored-By` trailer.
 
@@ -196,7 +207,7 @@ All target `master`, each stacked on the one before. PRs A and B change nothing 
 - **PR A, Tasks 1–8:** the module, the tables, the backends, encryption, and `HealdanStorage` with staging, held deletes and the cache. Its tests run CE's flows through it.
 - **PR B, Tasks 9–13:** recording what's there, Store tracking, the mover, failing backends and the alert, and the API's outage answer.
 - **PR C, Tasks 14–20:** the Storage tab, the Docker switch, Garage on the smoke stack, and the docs. Usable by an admin from here.
-- **PR D, Task 21:** CLAUDE.md, the capability map, the spec's corrections and the roadmap.
+- **PR D, Task 21:** CLAUDE.md's "Healdan's code" and upstream-edits lists, the capability map, the spec's corrections and the roadmap. CLAUDE.md's build, test, CI and Docker facts change in the tasks that change them (Tasks 1, 15 and 16), with the Developer Guide's.
 - **Task 22:** the owner's server upgraded, and the owner's walkthrough (§16.3).
 
 Expected costs, to be replaced by each PR's measured figures:
@@ -244,9 +255,10 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
 - Modify (upstream): `pom.xml` (`<module>healdan-storage</module>` after `healdan-api`), `logicaldoc-webapp/pom.xml` (the `artifactItem` after `healdan-api`'s)
 - Modify: `healdan-core/src/test/java/com/logicaldoc/healdan/PluginFixtures.java` (`public static String archive(String pluginId)`, for another Healdan plugin's `plugin.xml` on the classpath)
 - Create: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/AbstractStorageTestCase.java`, `StorageModuleTest.java`, `TinkClasspathTest.java`
+- Docs: `CLAUDE.md` ("Build and test": `healdan-storage`'s test commands, and that its tests need `healdan-core` installed with its test-jar, as `healdan-api`'s do) and `site/content/developer/building-from-source.md` (the same, beside `healdan-api`'s commands, its test-jar bullet and its `-Dmaven.test.skip=true` note)
 
 **Interfaces:**
-- Produces: `AbstractStorageTestCase extends AbstractHealdanTestCase`, whose `getPluginArchives()` adds `PluginFixtures.archive("healdan-storage")`, and whose `getConfigResource()` names `context-storage.properties`: `healdan-core`'s test `context.properties` (copied in by `testResources`, as `healdan-api` does) with `store=com.logicaldoc.healdan.storage.HealdanStorage`, which the class writes into `target/test-classes/` before the context starts (CE reads the file by name). It empties the three folders under `target/` before each test.
+- Produces: `AbstractStorageTestCase extends AbstractHealdanTestCase`, whose `getPluginArchives()` adds `PluginFixtures.archive("healdan-storage")`, and whose `getConfigResource()` names `context-storage.properties`: `healdan-core`'s test `context.properties` (copied in by `testResources`, as `healdan-api` does) with `store=com.logicaldoc.healdan.storage.HealdanStorage`, which the class writes into `target/test-classes/` before the context starts (CE reads the file by name). Before `super.setUp()`, where the seeds run, it empties Original's folder (`store.1.dir`, `target/store`), staging, the cache and the keys folder: each test's database starts CE's document ids at 100 again, so a file an earlier test left in Original would be recorded as the new test's.
 
 - [ ] **Step 1: Write the failing tests**
   - `StorageModuleTest extends AbstractStorageTestCase`:
@@ -262,7 +274,7 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
   - Run: `mvn -B -ntp -pl healdan-storage dependency:tree -Dscope=runtime` and `mvn -B -ntp -pl logicaldoc-webapp -am dependency:tree -Dscope=runtime -Dgwt.skipCompilation=true`.
   - For each jar the plugin brings, record whether the WAR already ships it and at which version. A jar the WAR ships is left out of the assembly; one it ships at another version is a ruling here (`gson`, `protobuf-java` and `error_prone_annotations` are the candidates), which call 2's test must cover.
   - Then `mvn -B -ntp -pl healdan-storage -DskipTests package` and `unzip -l healdan-storage/target/healdan-storage-*-plugin.zip | grep WEB-INF/lib`. State in PR A the jars the WAR gains and their total size.
-- [ ] **Step 5: Commit:** "Add the healdan-storage module and its libraries"
+- [ ] **Step 5: Docs, then commit:** "Add the healdan-storage module and its libraries"
 
 **CI:** both tests run in the `Tests` shards. The Docker image build packs the plugin zip into the WAR from this task on.
 
@@ -276,6 +288,7 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/seed/StorageSettingsSeed.java`
 - Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/seed/SeedRunner.java` (`ORDER` gains `"storage-settings"` and `"storage-record-original"` after `"signin-settings"`, and `"smoke-storage"` after `"smoke-signin"`)
 - Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/signin/SecretBox.java` (`sealedIn` also counts `select count(*) from hd_storage_backend where hd_secret is not null`)
+- Modify: `healdan-core/src/test/java/com/logicaldoc/healdan/db/HealdanMigratorTest.java` (it pins the schema's version: `fromVersion("7")` and "7 migrations applied, schema version 7" become 8, as V7's commit `fce24950b` moved them from 6)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/StorageDataTest.java`, `seed/StorageSettingsSeedTest.java`; `healdan-core/src/test/java/com/logicaldoc/healdan/signin/SecretBoxTest.java` (one test)
 
 **Interfaces:**
@@ -294,16 +307,16 @@ public class StorageBackend extends PersistentObject {
 @Entity @Table(name = "hd_storage_store")
 public class StoreBackend extends PersistentObject { long storeId; long backendId; } // unique storeId
 
-public record StoredFile(long docId, String resource, int backendId /* 0 = staging */, Long storeId, long size,
-		long writes, Date stored, int attempts, String lastError, boolean stuck, Date nextTry) {}
+public record StoredFile(long docId, String resource, long backendId /* 0 = staging */, Long storeId, long size,
+		long write, Date stored, Date waiting, int attempts, String lastError, boolean stuck, Date nextTry) {}
 
 @Component
 public class StoredFiles {                                    // JdbcTemplate over hd_storage_file
 	public Optional<StoredFile> find(long docId, String resource);
 	public List<StoredFile> list(long docId);                  // every resource of a document
-	public long recordWrite(long docId, String resource, int backendId, Long storeId, long size); // insert or update; writes+1; returns the new count
-	public boolean moved(long docId, String resource, long writes, int toBackend); // only if hd_writes is still `writes`
-	public void setStore(Collection<Long> docIds, Long storeId);
+	public long recordWrite(long docId, String resource, long backendId, Long storeId, long size); // insert or update; a new random write id, returned
+	public boolean moved(long docId, String resource, long write, long toBackend); // only if hd_write is still `write`; clears hd_waiting
+	public void setStore(Collection<Long> docIds, Long storeId); // sets hd_waiting, if empty, on rows it leaves misplaced
 	public void delete(long docId, String resource);
 	public List<StoredFile> misplaced(int limit);              // backend isn't the Store's: staged first, then newest docs
 	// waiting and stuck counts per Store, sizes, failures and Retry, for the tab and the mover
@@ -312,14 +325,20 @@ public class StoredFiles {                                    // JdbcTemplate ov
 public class HeldCopies { /* JdbcTemplate over hd_storage_held: hold(backendId, location, docId, resource, until), due(now), drop(backendId, location) */ }
 ```
 
+- Every `StoredFiles` write runs holding the file's lock (Global Constraints), so `recordWrite`'s update-then-insert can't race another write of the same file to the insert, and the SQL stays the same on every database.
+- `hd_waiting` is when a row's backend stopped matching its Store's: set, if empty, by a staged write, by `setStore`, and by a Store switching backend; cleared by `moved`. The alert measures from it (Task 12), not from `hd_stored`, which a Store switch leaves months old.
+- `StorageBackendDAO.remove(id)` deletes the row for good, not through CE's `ld_deleted`, as M4's `HibernateSignInGroupDAO` does, so a removed backend's sealed secret leaves the database and `sealedIn`'s count.
+
 - [ ] **Step 1: Write the failing tests**
   - `StorageDataTest extends AbstractStorageTestCase`:
     - `testMigrationMadeTheTables`: the four tables exist (`INFORMATION_SCHEMA`), `hd_schema_history` has version 8, and backend 1 is a `local` backend named `Original`, not encrypted, with no path.
-    - `testOneRowPerFile`: a second insert of `(docId, resource)` fails; `recordWrite` twice leaves one row with `writes` 2.
-    - `testMovedOnlyIfUnchanged`: `moved(…, writes = 1, …)` after a second write changes nothing and answers false.
+    - `testOneRowPerFile`: a second insert of `(docId, resource)` fails; `recordWrite` twice leaves one row, with a new write id each time.
+    - `testMovedOnlyIfUnchanged`: `moved(…, write = w1, …)` after a second write changes nothing and answers false; so does it after the row is deleted and written again, whose new write id is never `w1`.
+    - `testWaiting`: a staged write, and a `setStore` that leaves a row misplaced, set `hd_waiting`, keeping an earlier value; `moved` clears it.
     - `testOneBackendPerStore`: a second `StoreBackend` for one Store fails to store.
+    - `testRemoveForGood`: after `StorageBackendDAO.remove`, no row is left, deleted or not, so no sealed secret either.
     - `testMisplacedOrder`: staged rows come before moves, and moves newest document first.
-  - `StorageSettingsSeedTest`: the six settings' defaults (Global Constraints) and the template `storage.alert` in English; an admin's value is kept when the step runs again (its marker deleted).
+  - `StorageSettingsSeedTest`: the seven settings' defaults (Global Constraints), `storage.installId` made once and kept, and the template `storage.alert` in English; an admin's value is kept when the step runs again (its marker deleted).
   - `SecretBoxTest.testStorageSecretsCountAsSealed`: with no key file and one `hd_storage_backend` row whose `hd_secret` is sealed, `seal` throws `KeyMissingException` naming one sealed value.
 - [ ] **Step 2: Run them to see them fail**
 
@@ -357,13 +376,14 @@ create sequence hd_storage_store_SEQ start with 100 increment by 50;
 -- hd_backendid 0 is staging
 create table hd_storage_file (
 	hd_docid bigint not null, hd_resource varchar(255) not null,
-	hd_backendid bigint not null, hd_storeid bigint, hd_size bigint not null, hd_writes bigint not null,
-	hd_stored datetime not null,
+	hd_backendid bigint not null, hd_storeid bigint, hd_size bigint not null, hd_write bigint not null,
+	hd_stored datetime not null, hd_waiting datetime,
 	hd_attempts int not null, hd_lasterror varchar(4000), hd_stuck int not null, hd_nexttry datetime,
 	primary key (hd_docid, hd_resource)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
 create index hd_storage_file_store on hd_storage_file (hd_storeid, hd_backendid);
 create index hd_storage_file_due on hd_storage_file (hd_stuck, hd_nexttry);
+create index hd_storage_file_waiting on hd_storage_file (hd_waiting);
 
 -- hd_location: the object key, or the path under the backend's .held/ folder. Holding a location again moves its
 -- purge date on, so a location is held once at a time.
@@ -376,8 +396,8 @@ create table hd_storage_held (
 create index hd_storage_held_purge on hd_storage_held (hd_purge);
 ```
 
-  Neither JDBC table needs a sequence, so the application's SQL is the same on every database.
-- [ ] **Step 4: Write the entities, the row classes, the settings and the seed, and edit `SecretBox` and `SeedRunner`.** Run the tests: PASS, and `mvn -B -ntp -pl healdan-core test -Dtest='SecretBoxTest,HealdanMigratorTest,SeedRunnerTest'`: PASS.
+  Neither JDBC table needs a sequence, and write ids are made in Java, so the application's SQL is the same on every database.
+- [ ] **Step 4: Write the entities, the row classes, the settings and the seed, and edit `SecretBox`, `SeedRunner` and `HealdanMigratorTest`.** Run the tests: PASS, and `mvn -B -ntp -pl healdan-core test -Dtest='SecretBoxTest,HealdanMigratorTest,SeedsTest'`: PASS.
 - [ ] **Step 5: Commit:** "Add the storage tables and settings, and count storage secrets as sealed"
 
 **CI:** all in the `Tests` shards. `healdan-core`'s own tests run V8 on every fresh test database from here, which also checks it on HSQLDB with nothing of `healdan-storage` present.
@@ -396,8 +416,9 @@ create index hd_storage_held_purge on hd_storage_held (hd_purge);
 ```java
 /** A place file bytes go (spec section 10): keys are CE's relative paths, with no prefix */
 public interface Backend {
-	int id();
-	void put(String key, Path file, byte[] md5) throws IOException;   // whole, verified; md5 of the bytes as stored
+	long id();
+	void put(String key, Path file, byte[] md5) throws IOException;   // saves: whole, verified, in place; md5 of the bytes as stored
+	Staged stage(String key, Path file, byte[] md5) throws IOException; // the mover: verified, not yet in place (call 20)
 	InputStream get(String key) throws IOException;                    // FileNotFoundException when missing
 	SeekableByteChannel open(String key) throws IOException;           // for ranges
 	long size(String key) throws IOException;                          // -1 when missing
@@ -408,9 +429,14 @@ public interface Backend {
 	String hold(String key) throws IOException;                        // local: moves it under .held/; S3: leaves it
 	void purgeHeld(String location) throws IOException;
 }
+/** A copy the mover wrote and verified, which no row points at yet */
+public interface Staged {
+	void commit() throws IOException;                                  // local: moved into place; S3: already there
+	void discard() throws IOException;                                 // local: deleted; S3: the object deleted (call 20)
+}
 ```
 
-`LocalBackend(int id, Path root, boolean create)`: `create` writes the marker (`<id>\n`) and makes `.held/`; otherwise `check()` fails when `.healdan-backend` is missing or names another id, and every `put` calls `check()` first. `put` writes `<key>.healdan-tmp-<uuid>` in the key's folder, `FileChannel.force(true)`, checks the size, then `Files.move(…, ATOMIC_MOVE)`, then syncs the folder. `hold` is a `Files.move` into `.held/<key>` on the same disk.
+`LocalBackend(long id, String installId, Path root, boolean create)`: `create` writes the marker (`<installId> <id>\n`) and makes `.held/`; otherwise `check()` fails when `.healdan-backend` is missing or names another install or id, and every `put` and `stage` calls `check()` first. `put` writes `<key>.healdan-tmp-<uuid>` in the key's folder, `FileChannel.force(true)`, checks the size, then `Files.move(…, ATOMIC_MOVE)`, then syncs the folder. `stage` does all of that but the move, which `commit` does. `hold` is a `Files.move(…, REPLACE_EXISTING)` into `.held/<key>` on the same disk: a key is held once at a time (Task 2's table), so a newer held copy replaces an older one, as CE rewrites derived files under the same names. `LocalBackend.probe(root)` is Test for a folder not saved yet (Task 14): it exists, is writable (a probe file written and deleted) and holds no marker.
 
 `MemoryBackend` keeps bytes in a map and takes faults: `refuseNext(n)`, `failAfterBytes(n)`, `unreachable(boolean)`, `slow(Duration)`, `corruptNextPut()`; it counts calls per key.
 
@@ -418,9 +444,12 @@ public interface Backend {
   - `BackendContract` (abstract; `LocalBackendTest`, `MemoryBackendTest` and Task 5's `S3BackendTest` extend it): put then get, `size`, `exists` through `size`, overwrite, delete (twice), `open` and read at 0, in the middle and across the end, `list` by prefix, a missing key (`FileNotFoundException`, size -1), 0-byte and 50 MiB files.
   - `LocalBackendTest` also:
     - `testMissingMarkerRefusesWrites`: with the marker deleted (an NFS share that didn't mount), `check()` and `put` fail with `BackendFailingException`, and nothing is written under the root.
-    - `testMarkerOfAnotherBackend`: a marker holding `7` fails backend `3`.
+    - `testMarkerOfAnotherBackend`: a marker naming backend `7`, or another install, fails backend `3`.
     - `testNoHalfFiles`: a put whose source throws half-way leaves no file at the key and no temporary file.
+    - `testStageCommitDiscard`: a staged copy isn't at its key, and a file already there is untouched, until `commit`; `discard` leaves nothing.
     - `testHoldAndRead`: `hold` moves the file under `.held/` with the same path; `held(key)` finds it.
+    - `testHoldTwice`: holding a key, writing it again and holding it again keeps the newer copy in `.held/`, and throws nothing.
+    - `testProbe`: `probe` passes an empty writable folder, and refuses a missing one, a read-only one, and one holding a marker.
     - `testDotNamesNeverListed`: `.held/`, `.healdan-backend` and temporary files never appear in `list`.
 - [ ] **Step 2: Run them to see them fail.** Run: `mvn -B -ntp -pl healdan-storage test -Dtest='LocalBackendTest,MemoryBackendTest'`. Expected: FAIL.
 - [ ] **Step 3: Write the interface and the two backends.** Run the tests: PASS.
@@ -442,10 +471,10 @@ public interface Backend {
 ```java
 @Component
 public class BackendKeys {                    // the folder from -Dhealdan.storageKeys (Global Constraints)
-	public byte[] make(int backendId) throws IOException;     // 32 random bytes; refuses to overwrite a file
-	public Optional<byte[]> read(int backendId);              // empty when missing or not 32 bytes
-	public void restore(int backendId, byte[] key) throws IOException; // Enter Recovery Key
-	public void delete(int backendId) throws IOException;     // Remove, once the backend is empty
+	public byte[] make(long backendId) throws IOException;    // 32 random bytes; refuses to overwrite a file
+	public Optional<byte[]> read(long backendId);             // empty when missing or not 32 bytes
+	public void restore(long backendId, byte[] key) throws IOException; // Enter Recovery Key
+	public void delete(long backendId) throws IOException;    // Remove, once the backend is empty
 }
 public final class RecoveryKey {
 	public static String format(byte[] key);                  // 13 groups of 4, Crockford base32
@@ -466,14 +495,14 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 
 - [ ] **Step 1: Write the failing tests**
   - `FileCipherTest`:
-    - round trips of 0 bytes, 1 byte, exactly 1 MiB, 1 MiB + 1, and 5 MiB;
-    - ranges through the seekable channel: the first byte, the last, a range across a segment's edge (1048560 to 1048600, given the header), and one inside the last segment;
+    - round trips of 0 bytes, 1 byte, 1,048,520 and 1,048,521 bytes (the first segment's edge: Tink's 40-byte header, 1 + 32 + 7, and its 16-byte tag leave the first segment 1,048,520 bytes of plaintext, and every later one 1,048,560), 2,097,080 and 2,097,081 bytes (the second's), and 5 MiB;
+    - ranges through the seekable channel: the first byte, the last, ranges across the first segment's edge (1048500 to 1048540) and the second's (2097060 to 2097100), and one inside the last segment;
     - `testCiphertextHoldsNoPlaintext`: a file of one repeated token encrypts to bytes that don't contain it;
     - `testWrongKeyRefused`: decrypting under another key throws (`IOException`), whole and ranged;
     - `testSwappedObjectRefused`: a file encrypted for `12/1.2` doesn't decrypt as `12/1.3` or `13/1.2`;
     - `testTruncatedRefused`: a ciphertext missing its last segment throws.
   - `BackendKeysTest`: the file is 32 bytes, `rw-------`, its folder `rwx------` (POSIX only, `Assume` elsewhere); `make` refuses an existing file; two concurrent `make`s make one key; `restore` replaces a missing file.
-  - `RecoveryKeyTest`: `format` gives 52 characters in 13 groups; `parse(format(k))` is `k`, also lower-cased, unspaced and with `O` for `0` and `I`/`L` for `1`, as Crockford reads them; a wrong length or character is refused; a one-character typo changes the key, so `KeyCheck` catches it (with Task 12).
+  - `RecoveryKeyTest`: `format` gives 52 characters in 13 groups; `parse(format(k))` is `k`, also lower-cased, unspaced and with `O` for `0` and `I`/`L` for `1`, as Crockford reads them; a wrong length or character is refused; so is a last character other than `0` or `G`, as the last character carries one bit of the key and four spare bits that must be zero; so every one-character typo is either refused here or changes the key, which `KeyCheck` catches (with Task 12).
   - `KeyCheckTest`: the check object decrypts under the right key and fails under another.
 - [ ] **Step 2: Run them to see them fail.** Run: `mvn -B -ntp -pl healdan-storage test -Dtest='FileCipherTest,BackendKeysTest,RecoveryKeyTest,KeyCheckTest'`. Expected: FAIL.
 - [ ] **Step 3: Write them.** The key object is `AesGcmHkdfStreamingKey.create(params, SecretBytes.copyFrom(key, InsecureSecretKeyAccess.get()))` with the parameters in the Global Constraints, and the primitive `AesGcmHkdfStreaming.create(key)` (call 2). Run the tests: PASS.
@@ -490,11 +519,13 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 - Create (tests): `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/backend/FakeS3.java`, `S3BackendTest.java`, `EndpointsTest.java`
 
 **Interfaces:**
-- Produces: `S3Backend(int id, S3Settings settings, String secret)`, where `S3Settings` is the endpoint, region, bucket, prefix, path style and access key; it implements `Backend`. Its client:
-  - `S3Client.builder().httpClient(UrlConnectionHttpClient.builder().connectionTimeout(10 s).socketTimeout(60 s).build())`;
+- Produces: `S3Backend(long id, String installId, S3Settings settings, String secret)`, where `S3Settings` is the endpoint, region, bucket, prefix, path style and access key, and the timeouts (10 s and 60 s; tests give 1 s and no retries, so `testUnreachable` takes seconds, not the minutes of three 60-second waits); it implements `Backend`. Its client:
+  - `S3Client.builder().httpClient(UrlConnectionHttpClient.builder().connectionTimeout(…).socketTimeout(…).build())`;
   - `.endpointOverride(endpoint)`, `.region(Region.of(region))`, `.forcePathStyle(pathStyle)`, static credentials;
   - `.requestChecksumCalculation(WHEN_REQUIRED)` and `.responseChecksumValidation(WHEN_REQUIRED)` for any endpoint that isn't `*.amazonaws.com` (§10.1);
   - single puts up to 64 MiB with `contentMD5`; larger files in 16 MiB parts, each with its `contentMD5`, aborted on any failure;
+  - `stage` uploads to the key, `commit` does nothing, and `discard` deletes the object (call 20);
+  - `check()` reads the marker object, `<prefix>.healdan-backend`, which creating the backend writes: missing, or naming another install or backend, is a `BackendFailingException` (call 23);
   - `hold` returns the object key and touches nothing (§8).
 - An `SdkClientException` from a connection, a timeout, or a `5xx` after the SDK's retries is a `BackendUnreachableException`; a `403` is a `BackendFailingException` naming the cause ("access denied"), with no secret or signature in its message.
 
@@ -503,7 +534,8 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
   - `S3BackendTest extends BackendContract`, against `FakeS3`, and also:
     - `testContentMd5OnEveryUpload`: every `PUT` and part carries `Content-MD5`; none carries `x-amz-checksum-*` or `x-amz-sdk-checksum-algorithm`.
     - `testCorruptUploadRefused`: with `FakeS3` flipping a byte in transit, the put fails and no object exists.
-    - `testMultipart`: a 70 MiB file goes up in 5 parts of 16 MiB and a last of 6 MiB.
+    - `testMultipart`: a 70 MiB file goes up in 4 parts of 16 MiB and a last of 6 MiB.
+    - `testMarker`: creating writes the marker object; a marker naming another install or backend, or none, fails `check()`.
     - `testMultipartAbortedOnFailure`: the third part failing aborts the upload; `FakeS3` holds no open upload.
     - `testRanges`: `open` reads bytes 1048000 to 1049999 with one ranged `GET`.
     - `testPrefix`: with prefix `healdan`, the key `123/45/doc/1.2` is stored as `healdan/123/45/doc/1.2`.
@@ -521,38 +553,40 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 ### Task 6: `HealdanStorage`: CE's flows, saves and reads
 
 **Files:**
-- Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/HealdanStorage.java` (replacing Task 1's stub), `Backends.java` (builds and caches each backend from its row, with its cipher, and staging), `StoreOf.java` (call 10), `Staging.java`
+- Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/HealdanStorage.java` (replacing Task 1's stub), `Backends.java` (builds and caches each backend from its row, with its cipher, and staging; `forget(id)` drops one, for Task 14), `StoreOf.java` (call 10), `Staging.java`, `FileLocks.java` (call 20)
 - Create: `healdan-core/src/main/java/com/logicaldoc/healdan/util/StorageUnreachableException.java` (call 13; thrown from Task 8 on)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/HealdanStorageTest.java`, `CeFlowsTest.java`, `StoreOfTest.java`
 
 **Interfaces:**
 - Consumes: `StoredFiles`, `StoreBackendDAO`, `StorageBackendDAO` (Task 2); `Backend`s (Tasks 3 and 5); `FileCipher`, `BackendKeys` (Task 4).
 - Produces: `public class HealdanStorage extends AbstractStore`, keeping CE's deletion log and its `WRITECHECK` size check, and overriding every other `Store` method:
-  - `store(InputStream|File, resource)`: finds the Store (`StoreOf.of(docId)`: empty when the document has no row or folder yet) and its backend; a local backend is written straight away (encrypted if it is), an S3 backend's file goes to staging and wakes the mover (Task 11); then `recordWrite`. A previous copy on another backend goes to held deletes (§6.2, Task 7). CE's `checkWriteAfterStore` reads `size()`, the row's plaintext size.
+  - `store(InputStream|File, resource)`: `store(File)` first refuses an empty file with `AbstractStore.checkNotEmpty`, as `FSStore.store(File)` does: CE's `replaceFile` and `checkin` rely on that refusal, and nothing else stops a 0-byte replace through SOAP, REST, WebDAV or CMIS from wiping a version. Then, holding the file's lock (call 20), it finds the Store (`StoreOf.of(docId)`: empty when the document has no row or folder yet) and its backend; a local backend is written straight away (encrypted if it is), an S3 backend's file goes to staging and wakes the mover (Task 11); then `recordWrite`. A previous copy on another backend goes to held deletes (§6.2, Task 7). CE's `checkWriteAfterStore` reads `size()`, the row's plaintext size.
   - `getStream`, `writeToStream` (with and without a range), `getBytes` (both), `writeToFile`, `getString`: from the row's place; S3 through the cache from Task 8.
   - `exists`, `size`: from the row, never the backend; with no row, from Original's folder (call 11).
   - `listResources(docId, fileVersion)`: from the rows, exact (`1.2` and `1.2-…`, not `1.20`).
-  - `delete(resource)`, `delete(docId)`: the copies go to held deletes, then the rows go; CE's history records the deletion as today.
+  - `delete(resource)`, `delete(docId)`: holding each file's lock, the copies go to held deletes, then the rows go; CE's history records the deletion as today.
   - `getTotalSize`: the rows' sizes summed. `moveResourcesToStore`: 0. `getStoreDefinitions`: empty. `newStore`: null, as today. `test()`: Task 12's backend tests, recording nothing. `getParameterNames`: empty.
   - `init()`: nothing that reads a table (Global Constraints).
 
 - [ ] **Step 1: Write the failing tests**
-  - `StoreOfTest`: the Store comes from `ld_path`, and from the parents when `ld_path` is null; a document in a matter in Store S is S; in Templates, the Templates Store; in the Default workspace, none; an alias resolves to its target's document (`StoreResource` already follows `docRef`); an unknown doc id, none.
+  - `StoreOfTest`: the Store comes from walking `ld_parentid`; a folder whose `ld_path` names another Store (as CE's restore leaves it) still gives its real Store, and so does one with no path; a document in a matter in Store S is S; in Templates, the Templates Store; in the Default workspace, none; an alias resolves to its target's document (`StoreResource` already follows `docRef`); an unknown doc id, none; the bulk form, over every folder at once, agrees with the single one.
   - `HealdanStorageTest` (with a `MemoryBackend` registered as an S3-kind backend and a `LocalBackend` under `target/`):
     - `testLocalStoreWritesStraightThere`: a file of a document in a Store on a local backend is on that backend, and its row says so.
     - `testS3StoreGoesToStaging`: a file of a document in a Store on an S3 backend is in staging, its row says backend 0, and the S3 backend got no call.
     - `testUnknownStoreGoesToStaging`: a file of a document with no row yet goes to staging, with no Store.
-    - `testWriteCounter`: three writes of one resource leave `writes` 3.
+    - `testWriteIds`: three writes of one resource give three different write ids; deleting it and writing it again gives a fourth.
+    - `testEmptyFileRefused`: `store(File)` of 0 bytes throws, as `FSStore`'s does, and changes no file and no row.
     - `testSizeIsPlaintext`: on an encrypted local backend, `size()` is the file's length, and CE's size check passes with `WRITECHECK` on.
     - `testExistsAndSizeNeverTouchTheBackend`: with the S3 backend unreachable, `exists` and `size` answer from the row.
     - `testNoRowReadsOriginal` (call 11): a file only in Original's folder, with no row, reads, and a warning is logged.
     - `testInitReadsNothing`: `init()` with no Healdan tables doesn't fail, and may run twice.
   - `CeFlowsTest`, CE's own code through `HealdanStorage` (§16.1), each on a local Store and on an S3 Store:
     - `DocumentManager.create`, then `checkin` (a new file version);
-    - `replaceFile` on version 1.2 with 1.20 present: 1.20's files stay, and 1.2's derived files are held;
+    - `replaceFile` on version 1.2 with 1.20 present: 1.20's files stay, and 1.2's derived files are held; a second `replaceFile` of 1.2 within the holding period works too (Task 3's `testHoldTwice`);
+    - `replaceFile` and `checkin` with a 0-byte file: refused, and the version's bytes and row unchanged;
     - `deleteVersion` of 1.2 with 1.20 present;
     - `destroyDocument` (the trash purge): every file held, every row gone, though CE deleted `ld_document` first;
-    - `copyToFolder` into another Store: the copy's files are on the target Store's backend;
+    - `copyToFolder` into another Store: on a local target Store, the copy's files are on its backend; on an S3 one, they're staged with the target Store; either way nothing is written to the source Store's backend;
     - M1.5's preview and thumbnail for a `.docx` through `PreviewWorker`: made from the staged original, and stored beside it;
     - a ranged read through `writeToStream(resource, out, start, length)`, as CE's `ServletUtil` serves a `Range` header.
 - [ ] **Step 2: Run them to see them fail.** Run: `mvn -B -ntp -pl healdan-storage test -Dtest='StoreOfTest,HealdanStorageTest,CeFlowsTest'`. Expected: FAIL.
@@ -570,14 +604,15 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/HeldDeletesTest.java`
 
 **Interfaces:**
-- Produces: `Held.hold(backendId, docId, resource)`: a local copy moves under `.held/` and an S3 object stays; either way a `hd_storage_held` row records where and its purge date (now plus `storage.holdDays`). `Purge.run()`: deletes what's due, then its row; it skips, and drops the row of, an S3 object that a `hd_storage_file` row points at again (same backend and key), and a local `.held/` copy is deleted only from `.held/`.
+- Produces: `Held.hold(backendId, docId, resource)`: a local copy moves under `.held/`, replacing an earlier held copy of the same key, and an S3 object stays; either way a `hd_storage_held` row records where and its purge date (now plus `storage.holdDays`). `Purge.run()`: for each held copy that's due, holding its file's lock (call 22), deletes it, then its row; it skips, and drops the row of, an S3 object that a `hd_storage_file` row points at again (same backend and key); it skips, keeping the row for the next purge, an S3 object whose file the mover is moving; and a local `.held/` copy is deleted only from `.held/`.
 - Reads: a local backend's file missing from its place is read from `.held/` (§6.3), so a restored database finds a file deleted after its backup.
 
 - [ ] **Step 1: Write the failing tests** (`HeldDeletesTest`):
   - `testLocalHeldThenPurged`: a deleted version's file moves to `.held/`, stays readable through a row restored by hand (a restored database), and is gone after the purge past its date.
   - `testS3HeldUntouched`: deleting on an S3 backend makes no backend call; the purge deletes the object after its date.
   - `testPurgeSkipsRepointedObject`: an object held, then pointed at again by a row (the mover re-uploaded under the same key, §6.2), survives the purge, and its held row is dropped.
-  - `testReplacedPreviewHeld`: `replaceFile` holds the old thumbnail.
+  - `testPurgeWaitsForTransfer` (with Task 11): with a due held object's file being uploaded again to the same key (a slow `MemoryBackend`), the purge leaves the object and its held row; once the row points at it, the next purge drops the held row only.
+  - `testReplacedPreviewHeld`: `replaceFile` holds the old thumbnail, and a second `replaceFile` within the period holds the newer one in its place.
   - `testMovedSourceHeld` (with Task 11): the source of a move is held, not deleted.
   - `testHoldDaysRange`: `storage.holdDays` outside 1 to 365 is refused by `StorageSettings`.
 - [ ] **Step 2–3: Run them to see them fail, write `Held` and `Purge`, run them:** PASS.
@@ -595,14 +630,15 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/ReadCacheTest.java`
 
 **Interfaces:**
-- Produces: `ReadCache` in `-Dhealdan.storageCache`; an entry is `<backendId>/<docId>/<resource>@<writes>`, plain bytes; a size cap of `storage.cacheGb`; least recently read dropped first (the access time kept in memory, and the files' modification times on a restart, when the index is rebuilt from the folder, §6.4). A read fetches the whole object, decrypts it into a temporary file in the cache folder, moves it into place, and serves from there. A file larger than a tenth of the cap isn't cached: its ranges are read through `S3Channel` and decrypted segment by segment.
+- Produces: `ReadCache` in `-Dhealdan.storageCache`; an entry is `<backendId>/<docId>/<resource>@<write>`, plain bytes, named by the row's write id (call 21), so neither a rewrite nor a database restored in place, which hands out document ids again, can be served another file's bytes; a size cap of `storage.cacheGb`; least recently read dropped first (the access time kept in memory, and the files' modification times on a restart, when the index is rebuilt from the folder, §6.4). A read fetches the whole object, decrypts it into a temporary file in the cache folder, moves it into place, and serves from there. A file larger than a tenth of the cap isn't cached: its ranges are read through `S3Channel` and decrypted segment by segment.
 - An unreachable backend on a miss is a `StorageUnreachableException` whose message is "This file is in <Store>'s cloud storage, which can't be reached right now." (§6.5).
 
 - [ ] **Step 1: Write the failing tests** (`ReadCacheTest`, with a `MemoryBackend` that counts `get`s):
   - `testSecondReadHits`: the second read makes no backend call.
-  - `testCap`: with a 10 MiB cap, reading 4 files of 4 MiB leaves the 2 most recently read.
-  - `testLeastRecentlyReadDroppedFirst`: reading A, B, A, then C drops B.
-  - `testRewrittenFileNeverStale`: after a rewrite (writes 2), the next read fetches again and serves the new bytes.
+  - `testCap`: with a 10 MiB cap, reading 12 files of 1 MiB (a tenth of the cap, so cached) leaves the 10 most recently read.
+  - `testLeastRecentlyReadDroppedFirst`: with the same cap and size, reading A, B, A, then nine others drops B, not A.
+  - `testRewrittenFileNeverStale`: after a rewrite (a new write id), the next read fetches again and serves the new bytes.
+  - `testReusedDocIdNeverHits`: an entry for doc X's earlier row is never served for a new row of doc X with another write id, as after a database restored in place.
   - `testLargeFileReadByRange`: a 3 MiB file with a 20 MiB cap isn't cached, and a 1 KiB range costs one ranged read.
   - `testIndexRebuiltOnRestart`: a new `ReadCache` on the same folder serves the earlier entries.
   - `testDeleteDropsEntry`.
@@ -624,9 +660,9 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 **Interfaces:**
 - Consumes: `StoredFiles` (Task 2), `StoreOf` (Task 6), `LocalBackend` (Task 3).
 - Produces: the seed (§5.3). `enabled()` is false unless `Store.get()` is a `HealdanStorage` (call 7). It:
-  1. writes Original's marker (`1`) if there's none (§10.2);
-  2. walks `store.1.dir`, skipping every name that starts with `.` (so `.held/` and the marker) and doc id 0 (CE's own `test()` leftovers), reading each path `<digits>/…/doc/<resource>` as the doc id the digits make (`AbstractStore.computeRelativePath` in reverse);
-  3. inserts, in batches of 500, a row for each file that has none: backend 1, its size, its document's Store (`StoreOf`, in bulk), `writes` 1;
+  1. writes Original's marker (this install's id and `1`) if there's none (§10.2);
+  2. walks `store.1.dir`, skipping every name that starts with `.` (so `.held/` and the marker) and doc id 0 (CE's own `test()` leftovers), reading each path `<digits>/…/doc/<resource>` as the doc id the digits make (`AbstractStore.computeRelativePath` in reverse). A folder it can't read (on an NFS share whose owners the entrypoint can't change, say) is logged and skipped, not thrown: a seed that fails stops every start, and would walk the whole folder again each time. Its files get no row and still read through call 11; the log names each such folder, and the totals count them;
+  3. inserts, in batches of 500, a row for each file that has none: backend 1, its size, its document's Store (`StoreOf`, in bulk), a new write id;
   4. gives a file whose document isn't in `ld_document` no Store, and logs a warning naming the doc id and resource;
   5. logs its progress every 10,000 files, and the totals at the end.
 
@@ -636,7 +672,8 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
   - `testEveryFileRecorded`: files of three documents in two Stores, with versions and derived files, give one row each, with their sizes and Stores.
   - `testOrphan`: a file of doc 99999, not in `ld_document`, gets a row with no Store, and a warning.
   - `testSkipsDotNamesAndTestFile`: `.held/…`, the marker and `0/doc/test` get no row.
-  - `testKeepsExistingRows`: a row already there (a save during the walk) keeps its backend, size and `writes`.
+  - `testKeepsExistingRows`: a row already there (a save during the walk) keeps its backend, size and write id.
+  - `testUnreadableFolderSkipped` (POSIX only): a `chmod 000` folder under Original's is logged and skipped, every other file is recorded, and the seed finishes.
   - `testMarkerWritten`, and `testDisabledWithoutHealdanStorage` (through the seed's package-private `Supplier<Store>`).
 - [ ] **Step 2–3: Run them to see them fail, write the seed, run them:** PASS.
 - [ ] **Step 4: Measure it:** time the seed over 100,000 small files under `target/` and record files a second in PR B, for `install/upgrading.md`'s sentence (Task 19).
@@ -651,7 +688,7 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 **Files:**
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/StoreTrackingDocumentListener.java`, `StoreTrackingFolderListener.java`, `StoreTracking.java`, `NightlyCheck.java`
 - Create: `healdan-core/src/main/java/com/logicaldoc/healdan/rules/FolderTreeListener.java`
-- Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/rules/HealdanHooksImpl.java` (`afterFolderRestore` ends by calling each `FolderTreeListener` bean, call 6)
+- Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/rules/HealdanHooksImpl.java` (`afterFolderRestore` ends by calling each `FolderTreeListener` bean with the documents it already works out, call 6)
 - Modify: `healdan-storage/src/main/resources/plugin.xml` (the two listener extensions, Global Constraints)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/StoreTrackingTest.java`, `NightlyCheckTest.java`; `healdan-core/src/test/java/com/logicaldoc/healdan/rules/FolderTreeListenerTest.java`
 
@@ -661,31 +698,32 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 ```java
 /** Told after CE moved a folder tree with JDBC, where no FolderListener runs (healdan-core) */
 public interface FolderTreeListener {
-	void afterTreeRestored(long folderId, long parentId) throws PersistenceException;
+	void afterTreeRestored(long folderId, long parentId, List<Long> documentIds) throws PersistenceException;
 }
 @Component
 public class StoreTracking implements FolderTreeListener {
 	public void documentChanged(long docId);      // re-reads its Store; rows updated; the mover woken if any row is now misplaced
-	public void treeChanged(long folderId);       // every document under ld_path like '<path>%', in one update per Store
+	public void treeChanged(long folderId, Collection<Long> documentIds); // the tree's Store, found once by its parents; one update
 	public int checkStore(long storeId);          // before a Store switches backend (§5.4); returns rows fixed
 }
 @Component
-public class NightlyCheck { public int run(); }  // every row's Store recomputed in one query; each fix logged
+public class NightlyCheck { public int run(); }  // every row's Store recomputed from ld_folder's parent ids, read once; each fix logged
 ```
 
-- The document listener acts in `afterStore` when the transaction's event is `MOVED` or `RESTORED`, or the document's folder differs from its row's; the folder listener when a folder's parent changed (`MOVED`, `RESTORED`). Both update rows only after the transaction commits (`TransactionSynchronization`), and do nothing unless `Store.get()` is a `HealdanStorage`.
+- No Store comes from `ld_path` (call 10). A moved folder's documents come from `StoredRows.tree` and `documentIds`, which walk parent ids, as `afterFolderRestore` already does.
+- The document listener acts in `afterStore` when the transaction's event is `MOVED` or `RESTORED`, or the document's Store differs from its rows'; the folder listener when a folder's parent changed (`MOVED`, `RESTORED`). Both update rows only after the transaction commits (`TransactionSynchronization`), and do nothing unless `Store.get()` is a `HealdanStorage`.
 
 - [ ] **Step 1: Write the failing tests**
-  - `FolderTreeListenerTest` (`healdan-core`): `afterFolderRestore` calls a registered listener once, after its own work, with the folder and parent.
+  - `FolderTreeListenerTest` (`healdan-core`): `afterFolderRestore` calls a registered listener once, after its own work, with the folder, the parent and the tree's documents.
   - `StoreTrackingTest` (Stores A on a local backend and B on an S3 `MemoryBackend`):
     - `testMatterMovesStore`: moving a matter's workspace from A to B (`FolderDAO.move`, as an admin, M1's rule) gives its documents' rows Store B, and wakes the mover.
     - `testDocumentMovesBetweenStores`: `DocumentManager.moveToFolder` from a matter in A to one in B.
     - `testMergeAcrossStores`: merging a folder in A into one in B (`moveDocumentsOnMerge`).
-    - `testRestoreIntoAnotherStore`: a folder deleted from A and restored under a matter in B (`HibernateFolderDAO.restore`) through the hook.
+    - `testRestoreIntoAnotherStore`: a folder deleted from A and restored under a matter in B (`HibernateFolderDAO.restore`) through the hook gives its documents' rows Store B, though its `ld_path` still names A, and a document saved there afterwards is written as B's.
     - `testRolledBackMoveChangesNothing`: a move that Healdan's rules veto leaves the rows' Stores alone.
-    - `testCopyIntoAnotherStore`: `copyToFolder` writes the copy to B's backend straight away (Task 6), with no move.
-  - `NightlyCheckTest`: a row given a wrong Store by hand is fixed, the fix is logged with the doc id, resource and both Stores, and the mover is woken; a correct repository gives 0 fixes.
-- [ ] **Step 2–3: Run them to see them fail, write the listeners, the hook and the check, run them:** PASS. Also run `mvn -B -ntp -pl healdan-core test -Dtest='HealdanHooks*,RulesFolderListenerTest'`: PASS.
+    - `testCopyIntoAnotherStore`: `copyToFolder` stages the copy with Store B (Task 6), writes nothing to A's backend, and the next pass uploads it, with no move from A.
+  - `NightlyCheckTest`: a row given a wrong Store by hand is fixed, the fix is logged with the doc id, resource and both Stores, and the mover is woken; a folder whose `ld_path` names another Store doesn't change the answer; a correct repository gives 0 fixes.
+- [ ] **Step 2–3: Run them to see them fail, write the listeners, the hook and the check, run them:** PASS. Also run `afterFolderRestore`'s existing tests: `mvn -B -ntp -pl healdan-core test -Dtest='FolderTreeListenerTest,PropagationTest,PermissionRulesTest,DeleteTreeCacheTest,FilingRulesTest'`: PASS.
 - [ ] **Step 4: Commit:** "Keep each file's Store current through moves, merges and restores, and check it nightly"
 
 **CI:** the `Tests` shards: CE's real folder and document DAOs, with Healdan's rules on.
@@ -697,47 +735,53 @@ public class NightlyCheck { public int run(); }  // every row's Store recomputed
 **Files:**
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/mover/Mover.java`, `Transfer.java`, `RetrySchedule.java`, `StorageStartup.java`
 - Create: `healdan-core/src/main/java/com/logicaldoc/healdan/HealdanStartListener.java`
-- Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/HealdanStartup.java` (after `seedRunner.runPending()`, each `HealdanStartListener` bean's `started()`, call 5)
+- Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/HealdanStartup.java` (in `start()`, when `run()` returns true, beside `previewWorker.start()`, each `HealdanStartListener` bean's `started()`; not in `run()`, which every Healdan test's `setUp` calls, call 5)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/mover/MoverTest.java`, `RetryScheduleTest.java`; `healdan-core/src/test/java/com/logicaldoc/healdan/HealdanStartListenerTest.java`
 
 **Interfaces:**
 - Produces:
 
 ```java
-public interface HealdanStartListener { void started(); }   // healdan-core: after the migrations and seeds ran
+public interface HealdanStartListener { void started(); }   // healdan-core: after the migrations and seeds ran, at a real start
 
 @Component
 public class Mover {
 	public void start();                         // a coordinator thread, healdan-storage-mover, and storage.transfers workers
 	public void wake();
 	public void retry(long storeId);             // stuck files back to waiting (the tab's Retry)
+	public void resize(int transfers);           // the tab's saved setting, at once
+	public boolean moving(long docId, String resource); // the purge asks (call 22)
 	public int runOnce();                        // tests: one pass, waiting for its transfers
-	public void stop();
+	@PreDestroy public void stop();
 }
 ```
 
-- One pass takes `StoredFiles.misplaced`: rows whose backend isn't their Store's backend (no Store: Original), not stuck, due, and not on a paused backend. Staged files come first, then moves, newest documents first (§7). No file is in two transfers at once.
-- A transfer (§7):
-  1. reads the file from where it is, decrypting if that backend is encrypted, into a temporary file in staging;
-  2. writes it to the target, encrypting if the target is, with call 16's verification;
-  3. points the row at the target with `moved(docId, resource, writes, target)`. If the write counter changed (a rewrite meanwhile), the target's copy is held (§8) and the file waits for the next pass;
-  4. holds the source copy (Task 7), but for staging (question 9's default): a staged copy is deleted once the row points at the bucket.
+- One pass takes `StoredFiles.misplaced`: rows whose backend isn't their Store's backend (no Store: Original), not stuck, due, and not on a paused or unchecked backend. Staged files come first, then moves, newest documents first (§7). No file is in two transfers at once; the files in transfer are kept in a set, which `moving` answers from.
+- A transfer (§7, changed by calls 20 and 21):
+  1. checks that the row is still misplaced toward the target, its Store's backend being the target, and skips it if not: a file whose Store turned local after the pass began is never uploaded;
+  2. reads the file from where it is, decrypting if that backend is encrypted, into a temporary file in staging, noting the row's write id;
+  3. stages it on the target (`Backend.stage`), encrypting if the target is, with call 16's verification: an S3 target's object is at its key, which saves never write; a local target's file waits under a temporary name beside the key, where a save's bytes can't be overwritten;
+  4. holding the file's lock: if the row's write id is still the one from step 2 and its Store's backend is still the target, commits the staged copy (a local file is moved into place), points the row at the target with `moved(docId, resource, write, target)`, and holds the source copy (Task 7), but for staging (question 9's default), whose copy is deleted; otherwise discards its staged copy (an S3 object is kept only if a held row names its key) and leaves the row alone, for the next pass if it's still misplaced.
 - A failure counts an attempt, records the error, and sets the next try (`RetrySchedule`); the tenth marks the file stuck (§7). `BackendUnreachableException` counts nothing: it pauses that backend's transfers until Task 12's retest finds it again.
-- `StorageStartup implements HealdanStartListener` starts the mover, the purge (Task 7), the nightly check (Task 10), the backend checks (Task 12) and the alert, none in the first 10 minutes after the start but the mover.
+- `StorageStartup implements HealdanStartListener` checks every backend first (Task 12, call 24), then starts the mover, the retests and the alert at once, and the purge (Task 7) and the nightly check (Task 10) after 10 minutes. `Mover.stop()` is a `@PreDestroy`, so no transfer outlives the context.
 
 - [ ] **Step 1: Write the failing tests**
-  - `HealdanStartListenerTest` (`healdan-core`): a listener is called once after the seeds, and not when CE's schema doesn't exist yet.
+  - `HealdanStartListenerTest` (`healdan-core`): `start()` calls a listener once, after the seeds; `run()` alone, as every test's `setUp` calls it, calls none; neither does `start()` when CE's schema doesn't exist yet.
   - `RetryScheduleTest`: the gaps in the Global Constraints, and stuck at the tenth failure.
   - `MoverTest` (`MemoryBackend`s, with `runOnce`):
     - `testStagedFirst`: with a staged file and a move both waiting and one transfer, the staged file goes first.
     - `testVerifiedBeforeRowMoves`: with `corruptNextPut`, the row stays on its source and the source copy stays readable.
     - `testSourceHeldAfter`: local to S3, and S3 to local: the source copy is held (§8), and the row points at the target.
     - `testStagingDeletedAfterUpload`: a staged file is gone from staging once uploaded (question 9).
-    - `testRewriteMidCopyCaught`: a write to the file while its transfer is slow leaves the row on the new bytes, holds the target's stale copy, and the next pass moves the new bytes.
-    - `testCrashBeforeRowUpdate`: a transfer that dies after the target write leaves the row on the source, which still reads; the next pass finishes it.
+    - `testSaveInStagingDuringCommitKept`: a save that lands in staging right after a file's upload commits is kept, and uploaded by the next pass.
+    - `testRewriteMidCopyCaught`: a save of the file while its upload is slow leaves the row on the save's bytes and discards the mover's copy; the next pass moves the new bytes.
+    - `testSaveDuringMoveHomeKept`: while a file moves from S3 to a local backend, a save writes it straight to that backend; the mover's staged copy never replaces it, nothing goes to `.held/`, and the row stays on the save's bytes, already in place.
+    - `testDeleteAndRecreateMidCopy`: a file deleted and written again while its transfer is slow (Replace File, then M1.5 making the conversion again) keeps its new bytes and new write id; the old transfer's copy is discarded, not committed.
+    - `testStoreTurnsLocalMidTransfer`: a file whose Store turns local while its upload waits in the pass is never uploaded; one whose Store turns local while its upload runs has its object discarded, and the row stays local.
+    - `testCrashBeforeRowUpdate`: a transfer that dies after staging its copy leaves the row on the source, which still reads; the next pass finishes it.
     - `testRetriesThenStuckThenRetry`: ten refusals mark the file stuck with the last error; `retry` puts it back, and it moves.
     - `testUnreachablePausesWithoutSpendingRetries`: with the target unreachable, attempts stay 0 and the backend is paused; once it's back, the file moves.
-    - `testParallelTransfers`: with `storage.transfers` 4 and a slow backend, four transfers run at once, never two on one file.
+    - `testParallelTransfers`: with `storage.transfers` 4 and a slow backend, four transfers run at once, never two on one file; after `resize(2)`, two.
     - `testStoreSwitch`: switching Store B's backend from Original to S3 moves every file of B, and none of A (§7).
     - `testLocalStoreNeverToS3` (Review Focus 2): files of a Store on a local backend are never written to the S3 backend, whatever order rows and moves arrive in.
 - [ ] **Step 2–3: Run them to see them fail, write the mover and the start hook, run them:** PASS.
@@ -751,14 +795,15 @@ public class Mover {
 
 **Files:**
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/BackendHealth.java`, `BackendTest.java`, `StorageAlert.java`
-- Modify: `HealdanStorage.java` (`test()` runs `BackendTest` on every backend; writes to a failing local backend fail)
+- Modify: `HealdanStorage.java` (`test()` runs `BackendTest` on every backend; writes to a failing or unchecked local backend fail)
+- Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/signin/OutgoingEmail.java` (a public `sendTemplate(EMail, String template, Map<String, Object> dictionary)`, its package-private `fill` then `send`, so another module's alert sends through M4's sender, which throws where CE's `EMailSender` would drop an email silently); `healdan-core/src/test/java/com/logicaldoc/healdan/signin/SignInTestHooks.java` (a public `captureEmails(List<EMail>)`, undone by `reset()`, as `OutgoingEmail.sender` is package-private)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/BackendHealthTest.java`, `BackendTestTest.java`, `StorageAlertTest.java`
 
 **Interfaces:**
 - Produces:
-  - `BackendHealth`: per backend, OK or failing, with the last error and since when (§10.3), kept in memory and logged on each change. Causes: the marker missing or naming another backend; the check object missing or not decrypting (§9); unreachable. Checked after the start, every `storage.retestSeconds` while failing, and on Test. A failing backend refuses writes and pauses its transfers; saves into an S3 Store still land in staging.
-  - `BackendTest.run(backend)`: puts a test object, reads it back whole and by a range, lists it, deletes it, then checks the key (§10.1). It records no row and holds nothing.
-  - `StorageAlert`: once a day, if a file has waited more than 24 hours, or a backend has failed for more than 24 hours, emails the members of the `admin` group who have an email, with the template `storage.alert` (Task 2), through CE's outgoing email; nothing when `OutgoingEmail.isSetUp()` is false (M4's correction 3, R38). `storage.alert.sent` holds the day it last went.
+  - `BackendHealth`: per backend, unchecked, OK or failing, with the last error and since when (§10.3), kept in memory and logged on each change. Causes: the marker missing or naming another install or backend; the check object missing or not decrypting (§9); the S3 secret not opening (`SecretBox.open` gives null, as after a new secret key: "enter the secret again in Edit"); unreachable. Checked at start, before the mover's first pass (call 24), every `storage.retestSeconds` while failing, and on Test. An unchecked or failing backend refuses writes and holds its transfers; saves into an S3 Store still land in staging.
+  - `BackendTest.run(backend)`: for a local backend, checks the marker, writes a test object, reads it back whole and by a range, and deletes it (`list` hides its dot name, and only S3 lists); for S3 (§10.1), checks the marker object, puts a test object, reads it back whole and by a range, lists it and deletes it. Then, if the backend is encrypted, it checks the key (§9). It records no row and holds nothing.
+  - `StorageAlert`: once a day, if a row's `hd_waiting` is more than 24 hours old, or a backend has failed for more than 24 hours, emails the members of the `admin` group who have an email, with the template `storage.alert` (Task 2), through `OutgoingEmail.sendTemplate`; nothing when `OutgoingEmail.isSetUp()` is false (M4's correction 3, R38). `storage.alert.sent` holds the day it last went, written only once every email was taken.
 
 - [ ] **Step 1: Write the failing tests**
   - `BackendHealthTest`:
@@ -766,9 +811,11 @@ public class Mover {
     - `testWrongKey`: an encrypted backend whose key file holds another key is failing at its check, refuses writes, and the mover doesn't write to it (Review Focus 3).
     - `testCheckObjectMissing`: an encrypted backend with files and no check object is failing.
     - `testUnreachableThenBack`: failing while unreachable, OK at the first retest after it's back, and the mover resumes.
+    - `testUncheckedUntilStart`: before its first check, an encrypted backend refuses writes and the mover doesn't touch it; `StorageStartup` checks it before the mover's first pass, so a wrong key file is caught before anything is written under it.
+    - `testSecretUnopened`: an S3 backend whose secret was sealed under a lost key is failing, saying to enter the secret again.
     - `testS3StoreSavesWhileFailing`: a save into a Store on a failing S3 backend lands in staging.
-  - `BackendTestTest`: Test passes on a `LocalBackend`, a `MemoryBackend` and `FakeS3`, leaves no object and no row, and fails, naming the step, when ranges or deletes are refused.
-  - `StorageAlertTest` (as M4's alert tests capture the email): no email before 24 hours; one after; none a second time that day; another the next day while it lasts; none once it clears; none without outgoing email.
+  - `BackendTestTest`: Test passes on a `LocalBackend` (Original included), a `MemoryBackend` and `FakeS3`, leaves no object and no row, and fails, naming the step, when ranges or deletes are refused.
+  - `StorageAlertTest` (capturing the email through `SignInTestHooks.captureEmails`): no email before 24 hours; one after; none a second time that day; another the next day while it lasts; none once it clears; none without outgoing email; a Store switched to S3 an hour ago raises nothing though its rows' `hd_stored` is months old, and files still waiting 25 hours after the switch raise it.
 - [ ] **Step 2–3: Run them to see them fail, write them, run them:** PASS.
 - [ ] **Step 4: Commit:** "Fail a backend that's unmounted, under the wrong key or unreachable, and alert the admins after a day"
 
@@ -776,23 +823,27 @@ public class Mover {
 
 ---
 
-### Task 13: Outages through the API
+### Task 13: Outages: the API, the web page's downloads and previews
 
 **Files:**
 - Modify: `healdan-api/src/main/java/com/logicaldoc/healdan/api/ProblemMapper.java` (a `StorageUnreachableException`, or one in the cause chain, is `503 storage-unreachable` with its message as `detail`)
+- Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/web/DownloadErrorFilter.java` (question 7's default: `@WebFilter` over `/download`, `/download/*` and `/convertpdf/*`, handing CE a response whose stream commits nothing until its first byte; a read that fails before then is answered `503` with the message, escaped, on a small page), test `DownloadErrorFilterTest.java`
+- Modify: `healdan-core/src/main/java/com/logicaldoc/healdan/preview/PreviewWorker.java` (`failed`: a `StorageUnreachableException` in the cause chain postpones that job by `UNAVAILABLE_WAIT` without counting a try, as LibreOffice being unavailable does, but without pausing the other jobs, whose files may be local; otherwise an outage of about 71 minutes uses up a job's 4 tries and its preview is given up for good), test `PreviewWorkerTest.java` (one test)
 - Modify: `healdan-api/src/main/java/com/logicaldoc/healdan/api/DocumentResource.java` (`content` and `thumbnail` open the stream before the answer starts, not inside the `StreamingOutput`, so a read that fails is never a `200` with a cut-off body; `thumbnail` answers a read that fails as it answers a thumbnail that isn't there yet, `404`, so clients show their placeholder, §6.5)
 - Modify: `healdan-api/src/main/resources/healdan/api/openapi.yaml` (the `503` on `/v1/documents/{docNumber}/content`, the only route that returns a document's bytes, and the code in `Problem`'s description)
-- Test: `healdan-api/src/test/java/com/logicaldoc/healdan/api/ProblemMapperTest.java`, `DocumentContentTest.java` (one test each)
+- Test: `healdan-api/src/test/java/com/logicaldoc/healdan/api/ProblemMapperTest.java`, `DocumentResourceTest.java` (one test each)
 - Docs: `site/content/developer/api.md` (the status table gains `503 storage-unreachable`)
 
 - [ ] **Step 1: Write the failing tests.**
   - `ProblemMapperTest.testStorageUnreachable`: the exception, wrapped in an `IOException` and a `PersistenceException`, maps to `503`, code `storage-unreachable`, `detail` the exception's message; nothing else of the exception reaches the answer.
-  - `DocumentContentTest.testUnreadableFileIsNot200`: with the stored file replaced by a folder of the same name (it exists, and `getStream` fails), `content` answers `500 server-error`, not a `200`. `healdan-api`'s tests keep CE's `MockStore`, which can't fail a read any other way; the `503` itself is checked on the stack (step 5f).
-- [ ] **Step 2–3: Run them to see them fail, write the mapping, the eager opens and the contract, run them and `RouteCoverageTest`:** PASS.
+  - `DocumentResourceTest.testUnreadableFileIsNot200`: with the stored file replaced by a folder of the same name (it exists, and `getStream` fails), `content` answers `500 server-error`, not a `200`. `healdan-api`'s tests keep CE's `MockStore`, which can't fail a read any other way; the `503` itself is checked on the stack (step 5f).
+  - `DownloadErrorFilterTest`, through CE's real `DownloadServlet` with a store that throws `StorageUnreachableException`: a read that fails before its first byte is answered `503` with the message, escaped, and no `Content-Disposition`; one that fails after its first bytes is cut off, as before; a read that works is untouched, byte for byte.
+  - `PreviewWorkerTest.testStorageUnreachablePostpones`: a job whose read throws `StorageUnreachableException` is postponed with its tries unspent, and the next job in the queue still runs.
+- [ ] **Step 2–3: Run them to see them fail, write the mapping, the eager opens, the contract, the filter and the worker's change, run them and `RouteCoverageTest`:** PASS.
 
-  Run: `mvn -B -ntp -pl healdan-core -DskipTests install && mvn -B -ntp -pl healdan-api test -Dtest='ProblemMapperTest,DocumentContentTest,RouteCoverageTest'`
-- [ ] **Step 4: Question 7.** If the owner chose (b), add `DownloadErrorFilter` (`@WebFilter` over CE's download servlets) here, with a test that a failed read shows the message, escaped. Otherwise Task 19's Known Limitations says the web page shows a bare error.
-- [ ] **Step 5: Docs, then commit:** "Answer an unreachable storage backend as 503 storage-unreachable"
+  Run: `mvn -B -ntp -pl healdan-core test -Dtest=PreviewWorkerTest && mvn -B -ntp -pl healdan-core -DskipTests install && mvn -B -ntp -pl healdan-api test -Dtest='ProblemMapperTest,DocumentResourceTest,RouteCoverageTest' && mvn -B -ntp -pl healdan-storage test -Dtest=DownloadErrorFilterTest`
+- [ ] **Step 4: Question 7.** If the owner chose (a), leave out `DownloadErrorFilter`, and Task 19's Known Limitations says the web page saves an empty file during an outage.
+- [ ] **Step 5: Docs, then commit:** "Answer an unreachable storage backend with its message, on the API and the web page"
 
 **CI:** the `Tests` shards. Step 5f (Task 16) checks the real `503` through the API with Garage stopped. The helper shows the `detail` as it does today ("#12 couldn't be opened: …"), so `Clients` has nothing to run.
 
@@ -804,6 +855,8 @@ public class Mover {
 **Files:**
 - Create (GUI module, shared with the server): `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/healdan/services/HealdanStorageService.java` (`@RemoteServiceRelativePath("healdanstorage")`), `HealdanStorageServiceAsync.java`; `…/healdan/beans/GUIStorageOverview.java`, `GUIStorageBackend.java`, `GUIStoreBackend.java`, `GUIStuckFile.java`
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/web/HealdanStorageServiceImpl.java` (`@WebServlet("/frontend/healdanstorage")`, extends `healdan-core`'s `HealdanRemoteService`), `StorageAdmin.java` (the rules, testable without the servlet)
+- Modify (question 5): `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/healdan/settings/ProviderDialog.java` (`askNewKey` says a new key also loses the storage backends' S3 secrets, to enter again in the Storage tab), `healdan-core/src/main/java/com/logicaldoc/healdan/signin/SecretBox.java` (its error and warning name the storage backends' secrets and the Storage tab too)
+- Docs (question 5): `site/content/install/backup-and-restore.md` ("The Key for Sign-In Secrets", "If the Key File Goes Missing" and "If the Key Is Lost": the key seals the S3 backends' secrets too, and a new key means entering them again)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/web/HealdanStorageServiceTest.java`, `StorageAdminTest.java`
 
 **Interfaces:**
@@ -820,7 +873,7 @@ String[] testBackend(long backendId) throws ServerException;
 String showRecoveryKey(long backendId) throws ServerException;      // logged with who; hd_keyshown and hd_keyshownby (question 8)
 void enterRecoveryKey(long backendId, String typed) throws ServerException; // checked against the check object before anything is written
 void removeBackend(long backendId) throws ServerException;
-String previewStoreSwitch(long storeId, long backendId) throws ServerException; // "214 files (3.1 GB) will move to Wasabi …"
+long[] previewStoreSwitch(long storeId, long backendId) throws ServerException; // files and bytes that will move; the GUI words the question
 void setStoreBackend(long storeId, long backendId) throws ServerException;
 GUIStuckFile[] stuckFiles(long storeId) throws ServerException;     // document, resource, attempts, last error
 void retry(long storeId) throws ServerException;
@@ -830,13 +883,15 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
 - `GUIStorageBackend` carries everything in `StorageBackend` but the secret, plus `hasSecret`, the status, its error and since when, files and size; `recoveryKey` is set only in `addBackend`'s answer.
 - **The rules** (`StorageAdmin`, §8, §9, §10, §11):
   - S3 backends are encrypted unless the admin turns it off; local ones aren't unless turned on;
-  - adding runs Test first; an encrypted backend gets its key file and its check object, and isn't offered to Stores until `confirmRecoveryKey` gets the key's last group;
+  - adding (§11) runs, in order: Test on the unsaved settings (`testNew`: for a local folder, `LocalBackend.probe`, as it has no marker or id yet; for S3, a test object put, read, listed and deleted); the row saved; the marker written (a file, or the S3 marker object); for an encrypted backend, its key file and check object; the full Test (Task 12), the key check included; then the recovery key. An encrypted backend isn't offered to Stores until `confirmRecoveryKey` gets the key's last group;
+  - backends can't share a place (call 23): an S3 backend whose endpoint host, bucket and prefix equal or contain another's (an empty prefix contains every other) is refused, and so is a local path that is, holds, or is inside Original's folder, staging, the cache, the configuration folder or another backend's;
   - the bucket, prefix, path and encryption can't change once a file is recorded or held on the backend; the name, and for S3 the endpoint, region, keys and path style, can;
+  - saving, confirming a recovery key, entering one and removing call `Backends.forget(id)`, so the next call builds the backend and cipher from the row and key file as they now are, as M4's provider save calls `ProviderClient.forget`; saving the settings calls `Mover.resize`;
   - Original can be renamed, not removed, and has no path field;
-  - Remove needs no Store using the backend and no row or held copy on it, and deletes its key file;
+  - Remove needs no Store using the backend and no row or held copy on it, deletes its key file, and deletes its row for good (`StorageBackendDAO.remove`), so its sealed secret leaves the database;
   - the Store list is every top-level workspace but CE's Default (Templates included), with Original for a Store that has no row;
-  - switching a Store's backend runs `StoreTracking.checkStore` first, then wakes the mover;
-  - the secret is sealed with `SecretBox`; a `KeyMissingException` is answered as M4's Sign-In tab answers it (M4 R37), and only a confirmed save calls `sealWithNewKey`;
+  - switching a Store's backend runs `StoreTracking.checkStore` first, sets `hd_waiting` on the rows it leaves misplaced, then wakes the mover;
+  - the secret is sealed with `SecretBox`; a `KeyMissingException` is answered as M4's Sign-In tab answers it (M4 R37), with `BackendDialog` asking the same question, naming the providers' and the storage backends' secrets alike, and only a confirmed save calls `sealWithNewKey`;
   - the endpoint rule (Global Constraints).
 
 - [ ] **Step 1: Write the failing tests**
@@ -845,17 +900,20 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
     - `testSecretNeverComesBack`: after `addBackend(…, "s3cr3t")`, no answer, serialised, contains `s3cr3t`; `hasSecret` is true; `hd_secret` starts `v1:`.
     - `testRecoveryKeyFlow`: against `FakeS3`, `addBackend` returns a 52-character key; the backend isn't offered to Stores; a wrong last group is refused; the right one confirms it.
     - `testShowRecoveryKeyRecorded`: the answer is the key; `hd_keyshown` and `hd_keyshownby` are set; a log line names the admin and the backend, and holds no key.
-    - `testEnterRecoveryKey`: with the key file deleted the backend fails (Task 12); a mistyped key is refused and writes no file; the right one rebuilds the file and the backend is OK.
+    - `testEnterRecoveryKey`: with the key file deleted the backend fails (Task 12); a mistyped key is refused and writes no file; the right one rebuilds the file, the backend is OK, and the next write is encrypted under it.
+    - `testAddLocalFolder`: a new local folder passes Test before saving, gets its marker when saved, and passes the full Test.
   - `StorageAdminTest`:
-    - `testRemoveRules`: refused while a Store uses the backend, while a row is on it, and while a held copy is; then allowed, and the key file is gone; Original can't be removed.
+    - `testRemoveRules`: refused while a Store uses the backend, while a row is on it, and while a held copy is; then allowed: the key file is gone, and the row with it, deleted or not; Original can't be removed.
+    - `testNoSharedPlace`: a second S3 backend on the same endpoint and bucket with the same prefix, an empty one, or one inside the other's is refused; a local path inside Original's folder, staging, the cache, the configuration folder or another backend's is refused.
     - `testFixedOnceUsed`: changing the bucket, prefix, path or encryption is refused once a row exists; the name and keys change.
+    - `testEditRebuildsBackend`: after `saveBackend` with new keys or a new endpoint, the next call uses them, not the cached ones.
     - `testStoreList`: Templates is listed, the Default workspace isn't, and a new Store shows Original.
     - `testSwitchPreviewAndSwitch`: the preview counts the Store's files and size; the switch checks the rows' Stores and wakes the mover.
     - `testSettingsRanges`, `testEndpointRule`, `testKeyMissingForSecret` (as M4's).
 - [ ] **Step 2–3: Run them to see them fail, write the service, run them:** PASS.
 
   Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install && mvn -B -ntp -pl healdan-storage test -Dtest='HealdanStorageServiceTest,StorageAdminTest'`
-- [ ] **Step 4: Commit:** "Serve the Storage tab's settings, admins only"
+- [ ] **Step 4: Docs, then commit:** "Serve the Storage tab's settings, admins only"
 
 **CI:** the `Tests` shards.
 
@@ -867,13 +925,14 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
 - Modify: `docker/tools/src/ConfigPlan.java` (`HEALDAN_KEYS`, spec §12: `Map.of("store", "com.logicaldoc.healdan.storage.HealdanStorage")`), `docker/tools/src/DockerInit.java` (applies them on every start after `IMAGE_KEYS`, and checks they were stored), `docker/tools/test/ConfigPlanTest.java`, `ConfigFileTest.java`
 - Modify: `compose.yaml` (`logicaldoc-cache:/opt/logicaldoc/cache`, and the volume), `Dockerfile` (`/opt/logicaldoc/cache` in the `mkdir` ~65 and `VOLUME` ~83), `docker/entrypoint.sh` (`CACHE`, and the ownership loop takes it), `docker/setenv.sh` (`-Dhealdan.storageStaging=/opt/logicaldoc/repository/staging -Dhealdan.storageCache=/opt/logicaldoc/cache -Dhealdan.storageKeys=/opt/logicaldoc/conf/healdan-storage-keys`)
 - Modify: `docker/tests/test-image.sh` ("cache content owned by uid 1000", beside the repository's check)
+- Docs: `CLAUDE.md` ("Docker": `store` is set on every start whatever the file holds, a third exception beside `IMAGE_KEYS` and `REPLACED_DEFAULTS`; the cache volume and its owner), `site/content/install/what-runs.md`, `upgrading.md` and `configuration.md` (each says a value already in `context.properties` is never changed, or that `.env` owns the only settings re-applied on every start; `store` now is too, and setting it yourself does nothing)
 
 - [ ] **Step 1: Write the failing tests**
   - `ConfigPlanTest`: `HEALDAN_KEYS` holds `store` and only that; `ConfigFileTest`: a conf file with `store=com.logicaldoc.core.store.FSStore`, and one with any other value, has `HealdanStorage` after a start; the file's other keys are untouched.
   - `test-image.sh`: a file made as root in the cache volume is owned by uid 1000 after the start.
 - [ ] **Step 2: Run them to see them fail.** Run: `docker build --target tools .` and `docker/tests/test-image.sh`. Expected: FAIL.
 - [ ] **Step 3: Write them,** then run both, and `docker/smoke-test.sh`: the stack starts on `HealdanStorage`, `storage-record-original` records the smoke fixture's files, and every existing step passes.
-- [ ] **Step 4: Commit:** "Run the image on HealdanStorage, with a cache volume"
+- [ ] **Step 4: Docs, then commit:** "Run the image on HealdanStorage, with a cache volume"
 
 **CI:** `docker-image.yml`: the `tools` target's tests, `test-image.sh`, and the whole smoke test now through `HealdanStorage`, on amd64 and arm64.
 
@@ -884,7 +943,8 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
 **Files:**
 - Create: `docker/tests/compose.storage.yaml`, `docker/tests/garage/garage.toml`, `docker/tests/garage/setup.sh`, `docker/tests/test-storage.sh`
 - Create: `healdan-storage/src/main/java/com/logicaldoc/healdan/storage/seed/SmokeStorageSeed.java` (`smoke-storage`)
-- Modify: `docker/smoke-test.sh` (`compose()` adds `-f docker/tests/compose.storage.yaml`; step **5f** after 5e (question 4); step 8 runs `test-storage.sh after-restart`)
+- Modify: `docker/smoke-test.sh` (`compose()` adds `-f docker/tests/compose.storage.yaml`; step **5f** after 5e (question 4); step 8 runs `test-storage.sh after-restart`). It runs the script as `GARAGE_CONTAINER="$(compose ps -q garage)" APP_CONTAINER=… DB_CONTAINER=… bash docker/tests/test-storage.sh`, as it gives `test-previews.sh` its containers: a separate script has neither `compose()` nor its `-p` and `--env-file`, so a bare `docker compose` there would reach project `logicaldoc`, a developer's own stack, or fail on `.env`.
+- Docs: `CLAUDE.md` ("Docker": the storage overlay, `HEALDAN_SMOKE_STORAGE`, and smoke step 5f with what it checks)
 - Test: `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/seed/SmokeStorageSeedTest.java`
 
 - [ ] **Step 1: The overlay**
@@ -914,6 +974,7 @@ services:
     environment:
       HEALDAN_SMOKE_STORAGE: "true"
       HEALDAN_SMOKE_S3_ENDPOINT: http://garage:3900
+      HEALDAN_SMOKE_S3_REGION: garage
       HEALDAN_SMOKE_S3_BUCKET: healdan-smoke
       HEALDAN_SMOKE_S3_ACCESS_KEY: GK0123456789abcdef01234567
       HEALDAN_SMOKE_S3_SECRET: <64 fixed hex digits>
@@ -927,10 +988,10 @@ volumes:
 - [ ] **Step 2: Write the failing seed test, then the seed.** `SmokeStorageSeedTest`, with the variables given through the seed's `Supplier` and `FakeS3` as the endpoint: with `HEALDAN_SMOKE_STORAGE` and `HEALDAN_SMOKE_FIXTURE` both `true`, the step adds an encrypted S3 backend `Smoke Garage` (key file made, check object written, recovery key confirmed), a Store `Smoke Cloud` readable by Everyone as `Smoke` is, mapped to it, and matters 1.2 and 1.3 (call 19) under client 1 from `Smoke template`; and sets `storage.sweepSeconds` and `storage.retestSeconds` to `5` (call 12). Without either variable, `enabled()` is false. It follows `SmokeFixtureSeed`'s pattern and runs after it (`smoke-storage` follows `smoke-signin` in `ORDER`).
 
   Run: `mvn -B -ntp -pl healdan-storage test -Dtest=SmokeStorageSeedTest`. Expected: FAIL, then PASS.
-- [ ] **Step 3: Write `test-storage.sh`.** It needs `curl` (7.75 or later, for `--aws-sigv4 "aws:amz:garage:s3"`), `jq` and `sha256sum`, reads rows with `docker compose exec db mariadb`, and polls at most 60 s for each change. Its checks, each a `check` line as in `test-api.sh` (§16.1):
-  1. **Encrypted in Garage.** A text file holding a random token, and a second file, are uploaded through `/api/v1` into matter 1.2. Within 60 s both rows point at the Garage backend and the objects are listed in `healdan-smoke`; the first object, fetched with SigV4, doesn't contain the token.
+- [ ] **Step 3: Write `test-storage.sh`.** It needs `curl` 8.0.0 or later (for `--aws-sigv4 "aws:amz:garage:s3"`, which adds the `x-amz-content-sha256` header Garage refuses to do without only from curl 8.0.0; Ubuntu 22.04's 7.81 and Debian 12's 7.88 get a `400`), `jq`, `sha256sum` and `docker`. It takes `GARAGE_CONTAINER`, `APP_CONTAINER` and `DB_CONTAINER`, reads rows with `docker exec "$DB_CONTAINER" mariadb …`, stops and starts Garage with `docker stop` and `docker start "$GARAGE_CONTAINER"`, and polls at most 60 s for each change. Its checks, each a `check` line as in `test-api.sh` (§16.1):
+  1. **Encrypted in Garage.** A text file holding a random token, and a second plain-text file, are uploaded through `/api/v1` into matter 1.2. Within 60 s both rows point at the Garage backend and the objects are listed in `healdan-smoke`; the first object, fetched with SigV4, doesn't contain the token.
   2. **The same bytes back.** `GET /api/v1/documents/<n>/content` of the first gives the uploaded file's SHA-256.
-  3. **An outage.** `compose stop garage`. A third file uploaded into matter 1.2 answers `2xx`, and its row says staging; the second file, never read, answers `503 storage-unreachable` whose `detail` names Smoke Cloud (Task 13); the first, cached, still downloads. `compose start garage`; within 60 s the third file's row points at Garage.
+  3. **An outage.** Garage stopped. A third file uploaded into matter 1.2 answers `2xx`, and its row says staging; the second file, never read (plain text, so no preview job reads it, and CE's indexer first runs 30 minutes after a start), answers `503 storage-unreachable` whose `detail` names Smoke Cloud, and the web page's `/download` of it answers `503` too (Task 13); the first, cached, still downloads. Garage started; within 60 s the third file's row points at Garage.
   4. **Moving home.** Matter 1.2's workspace moves to the Smoke Store through `/services/rest/folder/move` as `admin` (M1: admins move matters between Stores). Within 60 s every row of its documents points at Original, the files are under `/opt/logicaldoc/repository/docs/` in the app container, Garage still lists their objects, and `hd_storage_held` has a row for each.
   5. **Staying in the cloud.** A file uploaded into matter 1.3 reaches Garage, as check 1.
 
@@ -954,17 +1015,19 @@ volumes:
   - **Backends:** a `ListGrid` of name, kind (Local Folder or S3), where (the path, or the endpoint and bucket), encrypted, files and size, and status (OK, or Failing with the last error and since when); Add Backend, Edit, Test, Show Recovery Key, Enter Recovery Key and Remove.
   - **`BackendDialog`:** the kind; for S3 the name, endpoint, region, bucket, prefix, access key, secret (a `PasswordItem`, empty, hinted "set" or "not set"), path style and Encrypt; for a local folder the name, path and Encrypt; Test before Save. Fields that can't change once files are there are read-only then.
   - **`RecoveryKeyDialog`:** shows the key in its groups, says plainly that losing both it and the key file loses the backend's files, and asks for the last group back; Show Recovery Key reuses it without the question.
-  - **Stores:** each Store, its backend (a drop-down of confirmed backends), waiting files and size, and stuck files (a link to `StuckFilesDialog`, with Retry). Changing the drop-down shows `previewStoreSwitch`'s sentence and asks first.
+  - **Stores:** each Store, its backend (a drop-down of confirmed backends), waiting files and size, and stuck files (a link to `StuckFilesDialog`, with Retry). Changing the drop-down asks first, with a sentence the tab builds from `previewStoreSwitch`'s counts and the backend's name: "214 files (3.1 GB) will move to Wasabi in the background. …".
   - **Settings:** the holding period (days), the cache (GB) and parallel transfers, and Save.
+  - **Names and messages are text, never HTML:** backend, Store and file names, and S3's error messages in the status and the stuck files' list, which an author's file name or a server can fill. The grids `setEscapeHTML(true)` and the questions escape what they quote (`SafeHtmlUtils.htmlEscape`), as the Sign-In tab does.
   - When `load()` says `HealdanStorage` isn't CE's store bean, the tab says so and shows nothing else.
 - [ ] **Step 2: Build the GUI, and check the tab on a stack.** Run: `mvn -B -ntp -pl logicaldoc-gui -DskipTests install`, then on a smoke stack with the Garage overlay:
   - add a second S3 backend on Garage with prefix `second`, Test passes, save and confirm its recovery key;
   - switch the Smoke Store to it; the confirmation counts its files; the waiting count falls to none;
   - stop Garage: the backend shows Failing with its error; start it: OK again;
   - show the recovery key; delete its key file in the conf volume; the backend fails; enter the key; it's OK;
-  - remove a backend that holds files: refused; the one with nothing: removed.
+  - remove a backend that holds files: refused; the one with nothing: removed;
+  - a stuck file whose name holds `<b>x</b>` shows those characters, not bold text.
 
-  Take the docs' pictures (Tasks 18 and 19) here.
+  Take the docs' pictures (Tasks 18 and 19) on a demo stack with the Garage overlay, signed in as the Writing Docs page says, after adding the Garage backend through the tab (the smoke seed needs `HEALDAN_SMOKE_FIXTURE`, so it stays off there).
 - [ ] **Step 3: Commit:** "Set storage backends up in Healdan Settings' Storage tab"
 
 **CI:** the Docker image's GWT compile; the server side's tests are Task 14's.
@@ -999,12 +1062,12 @@ volumes:
 **Files:**
 - Create: `site/content/install/cloud-storage.md` (§15.3: the bucket and the region's endpoint; a user limited to the bucket, with the policy; the lifecycle rule for incomplete multipart uploads after 7 days; Wasabi's 90-day minimum, and why the holding period suits it; other S3 services should work, but only Wasabi and Garage are tested), with a card in `site/content/install/_index.md`
 - Modify:
-  - `install/backup-and-restore.md` (§12: what the two files now hold, the holding period against the oldest backup, recovery keys in a password manager, the offsite recipe with restic to a second Wasabi bucket, Test after a restore, a file CE rewrote in place);
+  - `install/backup-and-restore.md` (§12: what the two files now hold, the holding period against the oldest backup, recovery keys in a password manager, the offsite recipe with restic to a second Wasabi bucket, Test after a restore, a file CE rewrote in place; and, for a restore onto a second server, to stop the first one before the second starts, as both would share the buckets, keys and install id, call 23);
   - `install/host-folders.md` (the cache volume; folders for extra local backends in `compose.override.yaml`, made writable by uid 1000, as the entrypoint won't change an NFS share's owner);
   - `install/what-runs.md` (the cache volume);
   - `install/upgrading.md` (the first start records every existing file, at Task 9's measured rate);
   - `install/troubleshooting.md` (a failing backend, a missing marker, stuck files, the alert);
-  - `install/known-limitations.md` (a backend per Store, not per matter; encryption can't be added to a backend that holds files; a file CE rewrites in place keeps only its newest bytes; question 1's and question 7's answers).
+  - `install/known-limitations.md` (a backend per Store, not per matter; encryption can't be added to a backend that holds files; a file CE rewrites in place keeps only its newest bytes; a large file read by range straight from the bucket can arrive cut off if the bucket drops mid-read; question 1's and question 7's answers).
 
 - [ ] **Step 1: Write them,** and test the restic recipe once against a throwaway bucket on Garage (`restic -r s3:http://127.0.0.1:13900/…`), so its commands are known to run.
 - [ ] **Step 2: Check them,** as Task 18. Expected: PASS.
@@ -1031,10 +1094,10 @@ volumes:
 
 **Files:**
 - Modify: `CLAUDE.md`:
-  - "Healdan's code" gains `healdan-storage`: `HealdanStorage` behind `store=`, never a component; the rows (`hd_storage_file`, backend 0 is staging); the places and their properties; key files and recovery keys; the hooks it uses in `healdan-core`;
-  - "Docker" gains the cache volume, `ConfigPlan`'s `HEALDAN_KEYS`, and the storage overlay with step 5f;
-  - "Build and test" gains the module's test commands and Garage in the smoke stack;
+  - "Healdan's code" gains `healdan-storage`: `HealdanStorage` behind `store=`, never a component; the rows (`hd_storage_file`, backend 0 is staging, write ids); the lock per file; the places and their properties; key files, markers and recovery keys; the hooks it uses in `healdan-core`;
   - "Upstream edits" gains this spec's §15.1.
+
+  (Its build, test, Docker and smoke-test facts changed with Tasks 1, 15 and 16.)
 - Modify: `docs/reference/logicaldoc-ce-capability-map.md` §3.2 (Healdan's `HealdanStorage` replaces the bean; CE's Stores screen still lists "Store 1" from `store.1.dir`, question 1).
 - Modify: `docs/superpowers/specs/2026-11-01-s3-storage-backends-design.md` (each question's answer and each call above, marked "changed in the build"; §3.1's and §17's prefix-match text, question 2; Status).
 - Modify: `docs/ROADMAP.md` (the glossary's Store row, whose "Call" names CE's per-folder mapping, now `hd_storage_store`; the backlog row, or the milestone it became).
@@ -1049,7 +1112,7 @@ volumes:
 ### Task 22: The owner's acceptance
 
 - [ ] **Step 1:** Once PRs A to D are merged, the owner backs up (the database and both volumes, as today), upgrades, and checks the first start's log: V8 applied, Original's files recorded, `HealdanStorage` in use.
-- [ ] **Step 2:** The owner's walkthrough, spec §16.3, rows 1 to 8, against the owner's server and Wasabi bucket, following the Install pages as written. Row 6 shortens the holding period to 1 day. Record each row's result and any punch-list item in the spec's §16.3 and this plan's decision log.
+- [ ] **Step 2:** The owner's walkthrough, spec §16.3, rows 1 to 8, against the owner's server and Wasabi bucket, following the Install pages as written. Row 6 shortens the holding period to 1 day. Row 7's fresh stack starts only once the owner's server is stopped (call 23), and the owner's server starts again only once that stack is taken down. Record each row's result and any punch-list item in the spec's §16.3 and this plan's decision log.
 - [ ] **Step 3:** The owner keeps each backend's recovery key in a password manager, and the next backup holds the new key files.
 
 ---
@@ -1063,9 +1126,22 @@ Every ruling the build makes that the plan or the spec didn't settle goes here, 
 - **The spec's names were checked against master at `56e9815`.** These held: `context-core.xml:21` (`<bean id="store" class="${store}" />`); `logicaldoc-webapp/src/main/resources/context.properties:458` (`store=com.logicaldoc.core.store.FSStore`, with `store.1.encryption` and `store.1.compression` read by no CE code); CE's `Store` interface and its methods (it also has `getString`, a ranged `getBytes`, `isEnabled`, `getParameters`, `init`, `destroy` and `newStore`, which `HealdanStorage` overrides too); `AbstractStore.computeRelativePath`, `checkWriteAfterStore` and `id = 1`; `StoreResource`'s five suffixes; `DocumentManager.replaceFile` (~183), `create` (~1015) and `storeFile` (~1063, `store.store` ~1066), `deleteVersion` (~1598), `getStore(Folder)` (~2012, falling back to `store.write`) and `enforceFilesIntoFolderStore` (~1966); `FSStore.moveResourcesToStore` throwing; the `Store` extension point with no implementation; `Folder.stores` and `ld_folder_store`; 26 classes reaching the bean through `Store.get()`, `Context.get(Store.class)` or injection, none casting it to `FSStore`; `ConfigPlan`'s `IMAGE_KEYS` and `REPLACED_DEFAULTS`; the entrypoint's ownership loop over the two volumes; `SeedRunner.ORDER`; `HealdanHooks`' single registered implementation; the Healdan Settings panel's Sign-In tab; the backup's two files; and every docs page §15.3 names to change. The rest are questions 1 to 9.
 - **The libraries' versions** are those Maven Central listed as latest on 2026-11-03; Garage's is Docker Hub's latest release tag.
 
+**Reviewing the plan (2026-11-03)**
+
+- **A code review of this plan, against master at `56e9815`,** found races and wrong claims that the first draft would have built in. Each is fixed above, and the design changes are calls 20 to 24:
+  - a save onto the key a transfer was writing or holding, a staged copy's delete taking a save, and the purge deleting an object the mover had just uploaded again (call 20, call 22);
+  - the write counter repeating after a delete or a restore (call 21);
+  - the Store read from `ld_path`, which CE's folder restore leaves stale (call 10 rewritten);
+  - a file whose Store turned local still uploaded (Task 11's step 1 and its commit check);
+  - two backends or servers sharing a bucket and prefix (call 23);
+  - the key check put off 10 minutes after a start (call 24);
+  - `FSStore`'s refusal of empty files dropped, a second local hold of one key throwing, cached backends never rebuilt, Test refusing every new local folder, M1.5's previews given up during an outage, and question 7's premise (Tasks 3, 6, 12, 13 and 14);
+  - the start hook placed in `run()`, which tests call (call 5 rewritten), test commands naming classes that don't exist or a pinned schema version, test figures that contradicted the plan's own rules, the smoke script's containers and curl version, the alert's email seam, M4's new-key messages, and CLAUDE.md's facts landing a PR late.
+
 ## Follow-Ups
 
-Filled in from the build's reviews: each gap in a narrow case, or for later, that doesn't block the walkthrough. Two are known before the build:
+Filled in from the build's reviews: each gap in a narrow case, or for later, that doesn't block the walkthrough. Three are known before the build:
 
 - **A crash between a move's row update and its hold** leaves the source copy unrecorded: no file is lost, but the copy stays until someone deletes it. The nightly check could list such orphans on local backends. (Task 11)
+- **A crash after the mover stages a local target's copy** leaves a `.healdan-tmp-` file beside the key, which nothing points at. The nightly check could delete those more than a day old. (Task 11)
 - **`HibernateVersionDAO.deleteVersion`** (upstream) deletes only a version's own file, never its derived files, so a deleted version's preview and thumbnail stay in the repository, recorded and moved with their Store like any other file. (Seen while planning.)
