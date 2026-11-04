@@ -71,6 +71,12 @@ learn from.
   - The row holds no matter. A message has few copies, so whoever asks finds each copy's matter afresh. A lookup
     joins `ld_document`, so it leaves out deleted documents. The row of a document deleted for good stays, and no
     lookup sees it.
+  - A background thread, `EmailIndexWorker`, gives the emails filed before the index existed their row and their
+    Message-ID property. It starts a minute after the server, reads 50 emails at a time in the order of their ids,
+    and writes the id of the last one to `email.index.cursor` in `hd_setting`, so a restart carries on from there.
+    It reads deleted documents too, so that a restore finds the row, and leaves shortcuts out. When it has read
+    them all it writes `email.index` = `done`, and later starts do nothing. It writes the property directly, so no
+    version is made and no listener runs. An email it can't read gets nothing, and is logged by its document id.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.
