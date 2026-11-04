@@ -148,6 +148,18 @@ public class MessagePartsTest {
 	}
 
 	@Test
+	public void testRightsProtectedListsNothing() throws Exception {
+		// Outlook's rights-protected message: a note, then message.rpmsg, which is named so that it would be listed
+		assertEquals(List.of(), MessageParts.list(fixture("parts-rights-protected.eml")));
+
+		// Only the protected part is unreadable: a PDF beside it is still listed
+		MimeMessage message = mixed(
+				file("Content-Type: application/x-microsoft-rpmsg-message\nContent-Disposition: attachment; filename=\"message.rpmsg\""),
+				file("Content-Type: application/pdf\nContent-Disposition: attachment; filename=\"Plain.pdf\""));
+		assertEquals(List.of("Plain.pdf"), names(message));
+	}
+
+	@Test
 	public void testAnEncryptedPartEndsOnlyItsOwnBranch() throws Exception {
 		// Of two siblings, the encrypted one lists nothing and the other still lists
 		MimeMessage message = mixed(
@@ -290,9 +302,8 @@ public class MessagePartsTest {
 				file("Content-Type: image/png\nContent-ID: <one@example.com>"))));
 	}
 
-	@Test
-	public void testInlineDispositionAndNames() throws Exception {
-		MimeMessage message = mixed(
+	private static MimeMessage inlineAndNamed() throws Exception {
+		return mixed(
 				// Inline with a Content-ID that nothing references: still inline (a signature's logo)
 				file("Content-Type: image/png\nContent-Disposition: inline; filename=\"sig.png\"\nContent-ID: <sig@example.com>"),
 				// Inline with a name and no Content-ID, as Apple Mail sends a PDF: an attachment
@@ -300,26 +311,63 @@ public class MessagePartsTest {
 				// Referenced, and named
 				html("<img src=\"cid:ref@example.com\">"),
 				file("Content-Type: image/jpeg; name=\"ref.jpg\"\nContent-ID: <ref@example.com>"));
-		List<Part> parts = MessageParts.list(message);
+	}
+
+	@Test
+	public void testInlineDispositionAndNames() throws Exception {
+		List<Part> parts = MessageParts.list(inlineAndNamed());
 		assertEquals(List.of("sig.png", "Mac.pdf", "ref.jpg"), parts.stream().map(Part::name).toList());
 		assertEquals(List.of(true, false, true), parts.stream().map(Part::inline).toList());
 		assertEquals(List.of(0, 1, 2), parts.stream().map(Part::index).toList());
 	}
 
-	@Test
-	public void testAnAttachedMessageIsNotWalkedInto() throws Exception {
+	private static MimeMessage attachedMessages() throws Exception {
 		String inner = "From: cara@example.com\nSubject: =?utf-8?Q?Caf=C3=A9?=\nMessage-ID: <inner@example.com>\n"
 				+ "MIME-Version: 1.0\nContent-Type: multipart/mixed; boundary=\"i\"\n\n--i\nContent-Type: text/plain\n\nText\n"
 				+ "--i\nContent-Type: application/pdf\nContent-Disposition: attachment; filename=\"Inside.pdf\"\n\ndata\n--i--\n";
-		List<Part> parts = MessageParts.list(mixed("Content-Type: message/rfc822\n\n" + inner,
+		return mixed("Content-Type: message/rfc822\n\n" + inner,
 				// The same, with a name of its own, and with no Message-ID
 				"Content-Type: message/rfc822; name=\"Named.eml\"\n\nFrom: x@example.com\nSubject: No id\n\nBody\n",
 				// Without a subject or a name
-				"Content-Type: message/rfc822\n\nFrom: x@example.com\n\nBody\n"));
+				"Content-Type: message/rfc822\n\nFrom: x@example.com\n\nBody\n");
+	}
+
+	@Test
+	public void testAnAttachedMessageIsNotWalkedInto() throws Exception {
+		List<Part> parts = MessageParts.list(attachedMessages());
 		assertEquals(List.of("Caf\u00e9.eml", "Named.eml", "Attached message.eml"),
 				parts.stream().map(Part::name).toList());
 		assertEquals("inner@example.com", parts.get(0).messageId());
 		assertEquals(null, parts.get(1).messageId());
 		assertTrue(parts.stream().allMatch(Part::attachedMessage));
+	}
+
+	/** Checks that each part {@code list} gives is written with exactly the size it gave, and returns the count */
+	private static void assertWritesWhatListSaid(String label, MimeMessage message, int expected) throws Exception {
+		List<Part> parts = MessageParts.list(message);
+		assertEquals(label, expected, parts.size());
+		for (Part part : parts) {
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			MessageParts.write(message, part.index(), out);
+			assertEquals(label + " #" + part.index(), part.size(), out.size());
+		}
+		// And no more: the next index isn't a part
+		assertThrows(label, IllegalArgumentException.class,
+				() -> MessageParts.write(message, expected, new ByteArrayOutputStream()));
+	}
+
+	@Test
+	public void testWriteGivesTheSizeListSaidForEveryPart() throws Exception {
+		assertWritesWhatListSaid("attached", fixture("parts-attached.eml"), 3);
+		assertWritesWhatListSaid("unreferenced", fixture("parts-unreferenced.eml"), 2);
+		assertWritesWhatListSaid("signed", fixture("parts-signed.eml"), 1);
+		assertWritesWhatListSaid("encrypted", fixture("parts-encrypted.eml"), 0);
+		assertWritesWhatListSaid("rights-protected", fixture("parts-rights-protected.eml"), 0);
+		// The messages the other tests build: inline and named parts, attached messages, a referenced image
+		assertWritesWhatListSaid("inline and named", inlineAndNamed(), 3);
+		assertWritesWhatListSaid("attached messages", attachedMessages(), 3);
+		assertWritesWhatListSaid("referenced", mixed(html("<img src=\"cid:one@example.com\">"),
+				file("Content-Type: image/png\nContent-ID: <one@example.com>")), 1);
+		assertWritesWhatListSaid("pgp", pgp(), 0);
 	}
 }

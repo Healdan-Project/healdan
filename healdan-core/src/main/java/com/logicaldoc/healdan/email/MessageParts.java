@@ -36,11 +36,13 @@ import jakarta.mail.internet.MimeUtility;
  * <p>
  * The walk goes depth first from the message. {@code multipart/signed} is
  * walked into its first part only, which is the content; the signature isn't
- * an attachment. A part that is S/MIME-encrypted ({@code multipart/encrypted},
- * {@code application/pkcs7-mime}, {@code application/x-pkcs7-mime}) has
- * nothing readable and contributes nothing, so a message that is one lists
- * nothing. A {@code message/rfc822} part is one attached message and isn't
- * walked into. Any other multipart is walked in order.
+ * an attachment. A part that is encrypted ({@code multipart/encrypted},
+ * {@code application/pkcs7-mime}, {@code application/x-pkcs7-mime}) or
+ * rights-protected (Outlook's {@code application/x-microsoft-rpmsg-message},
+ * usually named {@code message.rpmsg}) has nothing readable and contributes
+ * nothing, so a message that is one lists nothing. A {@code message/rfc822}
+ * part is one attached message and isn't walked into. Any other multipart is
+ * walked in order.
  * <p>
  * A leaf is <em>inline</em> when its disposition is {@code inline} and it has
  * a Content-ID, or when an HTML part of the message names its Content-ID as a
@@ -57,6 +59,10 @@ public final class MessageParts {
 	static final int MAX_DEPTH = 32;
 
 	private static final String MESSAGE = "message/rfc822";
+
+	/** Parts whose content is encrypted or rights-protected: nothing in them can be read, so nothing is listed */
+	private static final List<String> UNREADABLE = List.of("multipart/encrypted", "application/pkcs7-mime",
+			"application/x-pkcs7-mime", "application/x-microsoft-rpmsg-message");
 
 	/** What a part with no file name of its own is called, and an attached message with no subject */
 	private static final String INLINE_NAME = "Inline part";
@@ -189,9 +195,9 @@ public final class MessageParts {
 		void visit(jakarta.mail.Part part, int depth) throws MessagingException, IOException {
 			if (depth > MAX_DEPTH)
 				throw new MessagingException("Nested too deeply");
-			if (part.isMimeType("multipart/encrypted") || part.isMimeType("application/pkcs7-mime")
-					|| part.isMimeType("application/x-pkcs7-mime"))
-				return;
+			for (String unreadable : UNREADABLE)
+				if (part.isMimeType(unreadable))
+					return;
 
 			if (part.isMimeType("multipart/signed")) {
 				// The content is the first part, and the signature the second
