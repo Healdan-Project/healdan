@@ -37,8 +37,8 @@ for every app.
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
   - `Addin/`: the Office add-in's port and its routes, pairing, and the certificate the port serves;
-  - `Mail/`: what Outlook's routes do, which isn't the copy cycle's: a message's status and the folders to suggest
-    (`MailFiling`, `Suggestions`);
+  - `Mail/`: what Outlook's routes do, which isn't the copy cycle's: a message's status, the folders to suggest, and
+    filing a message (`MailFiling`, `Suggestions`);
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
@@ -515,6 +515,7 @@ a web page in a browser, or a page from another Healdan is refused here.
 | `X-Healdan-Protocol: 1`, on every request but `GET /v1/hello` | `400 bad-request` without it; `426 update-healdan-helper` for a protocol the helper doesn't speak |
 | `X-Healdan-Key` is a key the helper gave, on every route but `hello` and the two pairing routes. A route that doesn't exist asks for one too, so a caller without a key learns nothing | `403 not-paired` |
 | The helper is signed in and started, on every keyed route but `ping` | `409 signed-out` |
+| On a `mail/` route, the key is Outlook's, so another app's key can't have the helper read 150 MiB for nothing | `400 bad-request`, before the body is read |
 
 Every answer once `Origin` has passed, errors included, carries `Access-Control-Allow-Origin: <origin>`,
 `Vary: Origin`, `Access-Control-Allow-Headers: Content-Type, X-Healdan-Key, X-Healdan-Protocol`,
@@ -537,7 +538,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
 | `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
-| `POST /v1/mail/file` | the `.eml`, and optionally a suggested folder's id | the outcome; Outlook's key only |
+| `POST /v1/mail/file` | `{"eml", "folderId"}`: the `.eml` in base64, and optionally a suggested folder's id | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`; Outlook's key only |
 | `POST /v1/mail/file-many` | the number of messages and their subjects | a ticket; Outlook's key only |
 | `POST /v1/mail/file-one` | the ticket and one `.eml` | filed, `already-filed` or failed; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
@@ -578,8 +579,10 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
   answers `no-result` after that, the pane says the answer was lost (`lost-result`) and asks the user to check the
   document in Healdan before trying again. The log names a route that went pending, never its id.
 - **Outlook's routes** (`mail/…`, M5 spec §7.2) are for a key paired as Outlook alone: another app's key is
-  `400 bad-request` on all four, as is a body that names another app. Outlook isn't in the copy cycle, so they work on
-  `MailFiling` (in `AddinDocuments`, made anew at each start), straight on the server's API.
+  `400 bad-request` on all four, refused by the port before it reads the body, as is a body that names another app.
+  Outlook isn't in the copy cycle, so they work on `MailFiling` (in `AddinDocuments`, made anew at each start), straight
+  on the server's API. A failure the server answered is logged by its status and code alone, as Healdan's words can name
+  an attachment, and the log never names a subject, an address, an attachment or a Message-ID.
   - **`mail/status`** takes `messageIds`, 1 to 100 non-empty strings: the message's own Message-ID first, then its
     `In-Reply-To`, then its `References`, oldest first. It asks the server (`GET /api/v1/emails`) about the first,
     the second and the newest 19 `References` at most, 21 in all, and never more than about 6,000 characters of them,
@@ -588,10 +591,25 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     characters) aren't sent. `copies` are the readable copies of the message's own id. `elsewhere` is true when the
     message is filed but its thread's newest copy is in a matter none of the message's copies is in, so the pane can
     say Filed in Another Matter. `suggestions` are the folders of the thread's copies, newest first, then the person's
-    recent folders (`Suggestions`): only where they may file, no repeats, five at most, each with its path written out
-    from its matter down. It never goes pending, and an unreachable or refusing server is `500 internal-error`.
-  - **The other three** are taken by the port now, keyed for Outlook and with the body limits above, and answer
-    `404 not-found` until the filing that serves them is built (M5).
+    recent folders (`Suggestions`): only where they may file, none in a matter that holds the message already (where File
+    Here could only answer `already-filed`), no repeats, five at most, each with its path written out from its matter
+    down. It never goes pending. An unreachable or refusing server is `500 internal-error`, but when only a folder can't
+    be read for now (anything but `404` or `403`, which leave that folder out), the status answers without suggestions.
+  - **`mail/file`** files one message (`MailFiling.FileAsync`). With `folderId` (File Here), it reads the folder's form
+    (`GET /api/v1/folders/{id}/form`): when every required field has a value, its own or an inherited one, it files the
+    message there at once with no properties and no attachments (`POST /api/v1/emails`), so a one-click filing never fails
+    for a missing property; otherwise the Save window opens at that folder. Without one (File…), it asks the server what's
+    in the message (`POST /api/v1/emails/inspect`) and opens the Save window's email mode, File to Healdan (M5 spec §7.3):
+    the folder and its form as for a document; the subject, From and Sent read-only, with no name to type, as M1 names
+    every email after its subject; and "Also file attachments as separate documents", unticked, with a tick for each
+    attachment by name and size and none for inline parts. The box ticks and unticks them all, and each can be unticked
+    while it's ticked. The window's answer (`IWindows.SaveEmailAsync`, `{"action": "save", "folderId", "properties",
+    "attachments": [index…]}`) is what's filed; its Cancel is `outcome: cancelled`. A matter that holds the message
+    already (`409 already-filed`) is `outcome: already-filed` with the copy, not a failure. Any other failure is told in
+    the helper's notification, with the server's words, and answered `500 internal-error`. Like `save-new`, it answers
+    `202` when it's still running after 20 s, while the window is up.
+  - **`mail/file-many` and `mail/file-one`** are taken by the port now, keyed for Outlook and with the body limits above,
+    and answer `404 not-found` until the filing of several messages is built (M5).
 - **The add-in's routes and the channel's are separate lists:** the extension can't call these, nor the add-in the
   channel's.
 
@@ -738,9 +756,10 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
 - **`AddinServerTests`** run a real add-in's port on ports the system says are free, with a client that trusts only
   the test's certificate, and send what a web page, another program or another Healdan's page would.
   `PairingTests` and `AddinHandlerTests` cover pairing and the routes, and `PendingResultsTests` a route that answers
-  `202` and is collected through `result`. `MailStatusTests` and `SuggestionsTests` cover Outlook's `mail/status`
-  against `FakeApi`, which also answers `GET /emails` and `GET /folders`. Those run with a hold time of milliseconds, and a slow route waits on a gate
-  the test opens rather than for a fixed time.
+  `202` and is collected through `result`. Those run with a hold time of milliseconds, and a slow route waits on a gate
+  the test opens rather than for a fixed time. `MailStatusTests` and `SuggestionsTests` cover Outlook's `mail/status`,
+  and `MailFileTests` its `mail/file`, against `FakeApi`, which also answers `GET /emails`, `GET /folders`, a folder's
+  form, `POST /emails/inspect` and `POST /emails`; `SaveEmailWindowTests` drive the Save window's email mode headless.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.
 - **`LoopbackReceiverTests` and `ProviderSignInTests`** run the receiver on real sockets, at ports the system gives, so

@@ -14,9 +14,9 @@ public class SuggestionsTests
     private readonly Dictionary<long, FolderView> _folders = [];
     private readonly List<long> _read = [];
 
-    private FolderView Folder(long id, bool canFile = true, string? name = null)
+    private FolderView Folder(long id, bool canFile = true, string? name = null, long matter = 3)
     {
-        var folder = new FolderView("folder", id, name ?? $"Folder {id}", "folder", new MatterRef(3, "998.1 – Healdan Demo"),
+        var folder = new FolderView("folder", id, name ?? $"Folder {id}", "folder", new MatterRef(matter, $"998.{matter} – Healdan Demo"),
             new StoreRef(1, "Healdan"), [new FolderRef(1, "Healdan", "store"), new FolderRef(id, name ?? $"Folder {id}", "folder")], canFile);
         _folders[id] = folder;
         return folder;
@@ -27,12 +27,12 @@ public class SuggestionsTests
         "document", 100 + days, "Message.eml", 10, "1.0", "1.0", $"{100 + days}.1.0", new FolderRef(folder, $"Folder {folder}", "folder"), null,
         Day.AddDays(days), Day.AddDays(days), null, true);
 
-    private IReadOnlyList<long> Build(IReadOnlyList<DocumentView> thread, IReadOnlyList<FolderView> recent) =>
+    private IReadOnlyList<long> Build(IReadOnlyList<DocumentView> thread, IReadOnlyList<FolderView> recent, IReadOnlySet<long>? heldIn = null) =>
         [.. Suggestions.Build(thread, id =>
         {
             _read.Add(id);
             return _folders.GetValueOrDefault(id);
-        }, recent).Select(f => f.Id)];
+        }, recent, heldIn).Select(f => f.Id)];
 
     [Fact]
     public void TheThreadsFoldersComeNewestFiledFirst()
@@ -63,6 +63,18 @@ public class SuggestionsTests
         Folder(11); // folder 12 was deleted, or isn't the person's to see: the lookup gives none
 
         Assert.Equal([11], Build([Copy(12, 9), Copy(11, 1)], []));
+    }
+
+    [Fact]
+    public void AFolderInAMatterThatHoldsTheMessageIsLeftOut()
+    {
+        Folder(11);
+        Folder(12, matter: 4);
+        var recent = new[] { Folder(14), Folder(15, matter: 4), Folder(16, matter: 5) };
+
+        // The message is in matter 3 already: File Here into any of its folders could only answer already-filed.
+        Assert.Equal([12, 15, 16], Build([Copy(11, 2), Copy(12, 1)], recent, heldIn: new HashSet<long> { 3 }));
+        Assert.Equal([16], Build([Copy(11, 2), Copy(12, 1)], recent, heldIn: new HashSet<long> { 3, 4 }));
     }
 
     [Fact]

@@ -88,6 +88,9 @@ public sealed class FakeApi : HttpMessageHandler
     private readonly List<FakeEmailCopy> _emailCopies = [];
     private readonly Dictionary<long, FakeFolder> _folders = [];
     private List<long> _recentFolders = [];
+    private readonly Dictionary<long, string> _forms = [];
+    private readonly HashSet<long> _brokenFolders = [];
+    private readonly List<NewEmail> _emailsReceived = [];
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
 
@@ -229,6 +232,34 @@ public sealed class FakeApi : HttpMessageHandler
     }
 
     /// <summary>
+    /// Sets <c>GET /folders/{id}/form</c> for the folder: <paramref name="form"/>, a <c>ProfileFieldPage</c>. A folder
+    /// <see cref="AddFolder"/> made without one answers <see cref="Tests.Forms.Forms.Page"/>, whose required fields all
+    /// have values; any other is <c>404</c>.
+    /// </summary>
+    public void SetForm(long folderId, JsonElement form)
+    {
+        lock (_lock)
+            _forms[folderId] = form.GetRawText();
+    }
+
+    /// <summary><c>GET /folders/{id}</c> for the folder fails from now on as a server in trouble does (<c>503</c>).</summary>
+    public void BreakFolder(long id)
+    {
+        lock (_lock)
+            _brokenFolders.Add(id);
+    }
+
+    /// <summary>The <c>email</c> part of each <c>POST /emails</c> received, filed or refused, in order.</summary>
+    public IReadOnlyList<NewEmail> EmailsReceived
+    {
+        get
+        {
+            lock (_lock)
+                return [.. _emailsReceived];
+        }
+    }
+
+    /// <summary>
     /// Answers <c>POST /emails</c> itself: called with the <c>email</c> part and the file, it gives the <c>201</c> body.
     /// Left null, the fake files only the email (its copy joins <see cref="AddEmailCopy"/>'s), refuses a message the
     /// folder already holds as <c>409 already-filed</c> with the copy, and a ticked attachment as <c>422</c>, as it has none.
@@ -304,6 +335,8 @@ public sealed class FakeApi : HttpMessageHandler
             return RecentFolders();
         if (parts is ["folders", var folderId] && request.Method == HttpMethod.Get && long.TryParse(folderId, out var folder))
             return FolderAnswer(folder);
+        if (parts is ["folders", var formFolderId, "form"] && request.Method == HttpMethod.Get && long.TryParse(formFolderId, out var formFolder))
+            return FormAnswer(formFolder);
         if (parts.Length < 2 || parts[0] != "documents" || !long.TryParse(parts[1], out var n))
             return Problem(404, "not-found", "No such route in the fake.");
         lock (_lock)
@@ -493,6 +526,7 @@ public sealed class FakeApi : HttpMessageHandler
         var email = json.Deserialize<NewEmail>(Json)!;
         lock (_lock)
         {
+            _emailsReceived.Add(email);
             if (_refuseNextFiling)
             {
                 _refuseNextFiling = false;
@@ -558,9 +592,24 @@ public sealed class FakeApi : HttpMessageHandler
     private HttpResponseMessage FolderAnswer(long id)
     {
         lock (_lock)
+        {
+            if (_brokenFolders.Contains(id))
+                return Problem(503, "unavailable", "Healdan is busy. Try again in a moment.");
             return _folders.TryGetValue(id, out var folder)
                 ? JsonAnswer(FolderOf(folder))
                 : Problem(404, "not-found", "No such folder.");
+        }
+    }
+
+    private HttpResponseMessage FormAnswer(long id)
+    {
+        lock (_lock)
+        {
+            var form = _forms.TryGetValue(id, out var set) ? set : _folders.ContainsKey(id) ? Tests.Forms.Forms.Page : null;
+            return form is null
+                ? Problem(404, "not-found", "No such folder.")
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(form, Encoding.UTF8, "application/json") };
+        }
     }
 
     private static FolderView FolderOf(FakeFolder f) => new(

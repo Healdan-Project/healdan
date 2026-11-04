@@ -67,8 +67,39 @@ public sealed class MailStatusTests : IDisposable
         Assert.Equal((50L, "Message.eml", ThisMatter, "Correspondence"), ((long)copy["docNumber"]!, (string)copy["name"]!, (string)copy["matter"]!, (string)copy["folder"]!));
         // The address is the server's, which names the document's internal id: the pane links to it as it is.
         Assert.Equal($"http://localhost:8080/frontend.jsp?docId={_server.Doc(50).Id}", (string)copy["address"]!);
-        // Only the message's own copies are its copies: the parent's folder is a suggestion, not a place it is filed.
-        Assert.Equal([(12L, $"{ThisMatter} › Drafts")], Suggested(status));
+        // Only the message's own copies are its copies. The parent's folder isn't offered either: it's in the matter that
+        // holds the message already, where File Here could only answer already-filed.
+        Assert.Empty(Suggested(status));
+    }
+
+    [Fact]
+    public async Task NoFolderInAMatterThatHoldsTheMessageIsSuggested()
+    {
+        _server.AddFolder(21, "Drafts", 4, OtherMatter);
+        _server.AddEmailCopy("m1@example.com", 50, 11, Day);                // the message is in this matter
+        _server.AddEmailCopy("p1@example.com", 51, 12, Day.AddDays(2));     // so the thread's folder here isn't offered,
+        _server.AddEmailCopy("p2@example.com", 52, 20, Day.AddDays(1));     // the other matter's is
+        _server.SetRecentFolders(13, 21, 11);                              // and of the recent ones, only the other matter's
+
+        var status = await Mail().StatusAsync(["m1@example.com", "p1@example.com", "p2@example.com"]);
+
+        Assert.Equal(true, (bool?)status["filed"]);
+        Assert.Equal([(20L, $"{OtherMatter} › Correspondence"), (21L, $"{OtherMatter} › Drafts")], Suggested(status));
+    }
+
+    [Fact]
+    public async Task AFolderThatCantBeReadForNowLeavesOutTheSuggestionsButNotTheStatus()
+    {
+        _server.AddEmailCopy("m1@example.com", 50, 20, Day);
+        _server.AddEmailCopy("p1@example.com", 51, 12, Day.AddDays(1));
+        _server.BreakFolder(12); // the server is in trouble: not gone, nor refused
+
+        var status = await Mail().StatusAsync(["m1@example.com", "p1@example.com"]);
+
+        Assert.Equal(true, (bool?)status["filed"]);
+        Assert.Equal(50L, (long?)status["copies"]![0]!["docNumber"]);
+        Assert.Equal(true, (bool?)status["elsewhere"]);
+        Assert.Empty(Suggested(status));
     }
 
     [Fact]
@@ -193,7 +224,7 @@ public sealed class MailStatusTests : IDisposable
         // Own, In-Reply-To, then References oldest first: 60 of them.
         var ids = new List<string> { "m1@example.com", "parent@example.com" };
         ids.AddRange(Enumerable.Range(1, 60).Select(i => $"r{i:D2}@example.com"));
-        _server.AddEmailCopy("m1@example.com", 50, 11, Day);
+        _server.AddEmailCopy("m1@example.com", 50, 20, Day); // in the other matter, so this one's folders are offered
         _server.AddEmailCopy("r01@example.com", 51, 12, Day.AddDays(9)); // the oldest reference: not asked, so unknown
         _server.AddEmailCopy("r60@example.com", 52, 13, Day);
 

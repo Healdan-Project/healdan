@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
@@ -32,7 +34,8 @@ public sealed record AddinDocuments(CopyCycle Cycle, OfficeFiling Filing, IChann
 /// The routes are the extension's (spec §5.8), for the program the request's key was paired for: the windows go to the
 /// extension's handler, filing to <see cref="OfficeFiling"/>, and Save as New Version and the copy's state to the cycle.
 /// <para>Outlook's routes, <c>mail/…</c> (M5 spec §7.2), are for a key paired as Outlook alone, and any other app's is
-/// <c>400 bad-request</c> on them; Outlook isn't in the copy cycle, so they work on <see cref="MailFiling"/>.</para>
+/// <c>400 bad-request</c> on them (the port refuses it before reading the body); Outlook isn't in the copy cycle, so they
+/// work on <see cref="MailFiling"/>. Their failures are logged without Healdan's words, which can name an attachment.</para>
 /// <para>The add-in can't always say which document it's in, so the helper decides (spec §5.8): the copy its <c>url</c>
 /// names, when that's one of the helper's copies, else the program's front window's (<see cref="OfficeFiling.CopyForAsync"/>).
 /// Paths stay copies in <c>Copies</c>, as the extension's do, except for Save to Healdan on a document not in Healdan.</para>
@@ -90,6 +93,9 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
                         : new JsonObject { ["known"] = false });
                 case "mail/status":
                     return AddinAnswer.Ok(await mail.StatusAsync(MessageIdsOf(body)));
+                case "mail/file":
+                    var eml = Bytes(body, "eml");
+                    return AddinAnswer.Ok(await mail.FileAsync(eml, FolderIdOf(body)));
                 default:
                     return AddinAnswer.Error(404, "not-found");
             }
@@ -108,6 +114,13 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
         {
             log.Warn($"/v1/{route} from the add-in wasn't a request it takes: {e.Message}");
             return AddinAnswer.Error(400, "bad-request");
+        }
+        catch (ApiException e) when (route.StartsWith("mail/", StringComparison.Ordinal))
+        {
+            // Healdan's words can name an attachment, which the log never does (M5): its status and code are enough here,
+            // and the user has had its words in the helper's notification.
+            log.Error($"/v1/{route} from the add-in failed: Healdan answered {e.Status} {e.Code}");
+            return AddinAnswer.Error(500, "internal-error");
         }
         catch (Exception e)
         {
@@ -206,6 +219,15 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
 
     /// <summary>The most Message-IDs one request names: the server's limit for one lookup (M5 spec §6.8).</summary>
     private const int MaxMessageIds = 100;
+
+    /// <summary><c>folderId</c>, File Here's folder: a whole number above 0, or none for File….</summary>
+    private static long? FolderIdOf(JsonObject body) => body["folderId"] switch
+    {
+        null => null,
+        JsonValue v when v.GetValueKind() == JsonValueKind.Number
+            && long.TryParse(v.ToJsonString(), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0 => id,
+        _ => throw new ArgumentException("folderId isn't a folder's id.", "folderId"),
+    };
 
     /// <summary>
     /// The add-in's <c>url</c> (its <c>Office.context.document.url</c>) as a local path, or null when it names none: empty,

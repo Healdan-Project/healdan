@@ -325,6 +325,79 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
         Assert.Equal(false, (bool?)notFiled.Body["filed"]);
     }
 
+    private static string Eml(string subject = "Lease renewal") =>
+        Convert.ToBase64String(Encoding.UTF8.GetBytes($"Message-ID: <m1@example.com>\r\nSubject: {subject}\r\n\r\nHello.\r\n"));
+
+    [Fact]
+    public async Task MailFileFilesTheMessageInTheFolderGivenOrOpensTheSaveWindow()
+    {
+        Server.AddFolder(11, "Correspondence");
+        var handler = Handler(Cycle());
+
+        var filed = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml(), ["folderId"] = 11 });
+
+        Assert.Equal(200, filed.Status);
+        Assert.Equal("filed", (string?)filed.Body["outcome"]);
+        Assert.Equal("Correspondence", (string?)filed.Body["email"]!["folder"]);
+        Assert.Empty(_windows.Asked);
+
+        // Without a folder, the Save window's email mode, whose Cancel is the outcome.
+        var cancelled = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml("Another") });
+
+        Assert.Equal((200, """{"outcome":"cancelled"}"""), (cancelled.Status, cancelled.Body.ToJsonString()));
+        Assert.Equal("save-email", Assert.Single(_windows.Asked).Route);
+    }
+
+    [Fact]
+    public async Task MailFileTakesTheMessageAndOptionallyAFolderId()
+    {
+        var handler = Handler(Cycle());
+
+        foreach (var body in new JsonObject[]
+        {
+            new(),                                                  // no message
+            new() { ["eml"] = 5 },                                  // not text
+            new() { ["eml"] = "not base64!" },                      // not base64
+            new() { ["eml"] = Eml(), ["folderId"] = "11" },         // the folder isn't a number
+            new() { ["eml"] = Eml(), ["folderId"] = 1.5 },          // nor a whole one
+            new() { ["eml"] = Eml(), ["folderId"] = 0 },            // nor a folder's
+        })
+        {
+            var answer = await handler.HandleAsync("mail/file", "Outlook", body);
+            Assert.Equal((400, """{"error":"bad-request"}"""), (answer.Status, answer.Body.ToJsonString()));
+        }
+        Assert.Empty(Server.Calls);
+        Assert.Empty(_windows.Asked);
+    }
+
+    [Fact]
+    public async Task AFilingHealdanRefusesIsToldAndLoggedWithoutItsDetail()
+    {
+        Server.AddFolder(11, "Correspondence");
+        Server.RefuseNextFiling();
+        var handler = Handler(Cycle());
+
+        var answer = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml(), ["folderId"] = 11 });
+
+        Assert.Equal((500, """{"error":"internal-error"}"""), (answer.Status, answer.Body.ToJsonString()));
+        Assert.Contains("You can't add documents to this folder.", Notifier.All); // the user is told why
+        // A refusal's detail can name an attachment, so the log has its status and code only.
+        Assert.Contains("/v1/mail/file from the add-in failed: Healdan answered 403 forbidden", Log);
+        Assert.DoesNotContain("You can't add documents", Log);
+    }
+
+    [Fact]
+    public async Task TheSeveralMessageRoutesAreStillToCome()
+    {
+        var handler = Handler(Cycle());
+
+        foreach (var route in new[] { "mail/file-many", "mail/file-one" })
+        {
+            var answer = await handler.HandleAsync(route, "Outlook", new JsonObject());
+            Assert.Equal((404, """{"error":"not-found"}"""), (answer.Status, answer.Body.ToJsonString()));
+        }
+    }
+
     [Fact]
     public async Task AServerThatCantBeReachedIsAnInternalErrorAndLogsNoMessageId()
     {

@@ -1,0 +1,65 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Api;
+using Healdan.Helper.Core.Browse;
+using Healdan.Helper.Core.Ui;
+
+namespace Healdan.Helper.Core.Forms;
+
+/// <summary>
+/// What filing a message asks of the Save window's email mode (M5 spec §7.3): the message as <c>inspect</c> found it
+/// (its subject, sender and when it was sent, read-only), the attachments to offer, and the folder to open at, a File
+/// Here's whose form needs something typed. There's no name: M1 names every email after its subject (plan correction 10).
+/// </summary>
+/// <param name="Attachments">The parts to offer as separate documents: never the inline ones (M5 spec §6.6).</param>
+/// <param name="Subjects">The messages' subjects: one for one message, none when it has no subject, and more for several (Task 13).</param>
+/// <param name="FolderId">The folder to open at; null opens at Recent Folders.</param>
+public sealed record SaveEmailRequest(string? Subject, string? From, DateTimeOffset? Sent, IReadOnlyList<EmailPart> Attachments,
+    IReadOnlyList<string> Subjects, long? FolderId)
+{
+    /// <summary>One message, from what <c>inspect</c> found in it, with its inline parts left out.</summary>
+    public static SaveEmailRequest For(EmailInspection inspection, long? folderId) => new(
+        inspection.Subject, inspection.From, inspection.Sent, [.. inspection.Attachments.Where(a => !a.Inline)],
+        inspection.Subject is { } subject ? [subject] : [], folderId);
+
+    /// <summary>
+    /// The request as <see cref="IWindows"/> passes it, which <see cref="ToJson"/> made; anything it lacks is left empty.
+    /// Named apart from the record's <see cref="From"/>, the sender, which C# won't let a method share.
+    /// </summary>
+    public static SaveEmailRequest FromJson(JsonObject request)
+    {
+        var attachments = request["attachments"] is JsonArray parts
+            ? parts.OfType<JsonObject>().Select(p => p.Deserialize<EmailPart>(HealdanApi.Json)).OfType<EmailPart>().Where(p => !p.Inline).ToList()
+            : [];
+        var subjects = request["subjects"] is JsonArray list
+            ? list.Select(s => s is JsonValue v && v.TryGetValue<string>(out var text) ? text : null).OfType<string>().ToList()
+            : [];
+        DateTimeOffset? sent = request["sent"] is JsonValue at && at.TryGetValue<string>(out var stamp)
+            && DateTimeOffset.TryParse(stamp, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed) ? parsed : null;
+        // Any JSON number: a value made in code may hold an int, which TryGetValue<long> doesn't answer.
+        long? folderId = request["folderId"] is JsonValue n && n.GetValueKind() == JsonValueKind.Number
+            && long.TryParse(n.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : null;
+        return new SaveEmailRequest(Text(request, "subject"), Text(request, "from"), sent, attachments, subjects, folderId);
+    }
+
+    /// <summary><c>{"subject", "from", "sent", "attachments": [EmailPart…], "subjects": […], "folderId"}</c>, for <see cref="IWindows.SaveEmailAsync"/>.</summary>
+    public JsonObject ToJson() => new()
+    {
+        ["subject"] = Subject,
+        ["from"] = From,
+        ["sent"] = Sent?.ToString("O", CultureInfo.InvariantCulture),
+        ["attachments"] = JsonSerializer.SerializeToNode(Attachments, HealdanApi.Json),
+        ["subjects"] = new JsonArray([.. Subjects.Select(s => (JsonNode?)s)]),
+        ["folderId"] = FolderId,
+    };
+
+    /// <summary>An attachment as its tick names it: <c>Lease.pdf (2.0 KB)</c>.</summary>
+    public static string Label(EmailPart part, CultureInfo? culture = null) => $"{part.Name} ({FileSizes.Text(part.Size, culture)})";
+
+    private static string? Text(JsonObject body, string key) =>
+        body[key] is JsonValue v && v.TryGetValue<string>(out var s) && s.Length > 0 ? s : null;
+}

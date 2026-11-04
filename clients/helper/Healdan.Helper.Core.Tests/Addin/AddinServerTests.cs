@@ -421,13 +421,15 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
     public async Task BodiesOverTheCapAreRefused()
     {
         var server = Start();
-        var key = await PairAsync(server);
+        var word = await PairAsync(server);
+        var outlook = await PairAsync(server, "Outlook");
         Assert.Equal(150L * 1024 * 1024, AddinServer.MaxBodyBytes);
 
-        // Only the head is sent: the answer comes without the server waiting for a body it won't read.
+        // Only the head is sent: the answer comes without the server waiting for a body it won't read. The mail routes are
+        // Outlook's key's alone, and another's is refused before its length is looked at.
         async Task<(string StatusLine, string Body)> Head(string route, long length) => await Raw(server,
             $"POST /v1/{route} HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
-            + $"X-Healdan-Key: {key}\r\nContent-Type: application/json\r\nContent-Length: {length}\r\n\r\n");
+            + $"X-Healdan-Key: {(route.StartsWith("mail/", StringComparison.Ordinal) ? outlook : word)}\r\nContent-Type: application/json\r\nContent-Length: {length}\r\n\r\n");
 
         // Save to Healdan's document, and the messages Outlook files, take up to 150 MiB; every other route, a mebibyte.
         foreach (var route in new[] { "file", "mail/file", "mail/file-one" })
@@ -448,11 +450,34 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
     public async Task TheRoutesThatTakeADocumentTakeMoreThanAMebibyte()
     {
         var server = Start();
-        var key = await PairAsync(server); // Word's: the mail routes refuse it as a bad request, once they have read it
+        var word = await PairAsync(server);
+        var outlook = await PairAsync(server, "Outlook");
         var big = new JsonObject { ["bytes"] = new string('A', 2 * 1024 * 1024) };
 
-        foreach (var route in new[] { "file", "mail/file", "mail/file-one" })
-            IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, route, big, key)); // read, not refused as too large
+        // Read, not refused as too large: each then refuses a body without what it takes as a bad request, and mail/file-one
+        // answers that it isn't there yet (M5 plan, Task 13).
+        IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "file", big, word));
+        IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "mail/file", big, outlook));
+        IsError(HttpStatusCode.NotFound, "not-found", await Post(server, "mail/file-one", big, outlook));
+    }
+
+    [Fact]
+    public async Task AnotherAppsKeyOnAMailRouteIsRefusedBeforeItsBodyIsRead()
+    {
+        var server = Start();
+        var word = await PairAsync(server);
+
+        // Only the head is sent, saying 150 MiB follow: the answer comes without the body, and isn't too-large.
+        foreach (var route in new[] { "mail/status", "mail/file", "mail/file-many", "mail/file-one" })
+        {
+            var (statusLine, body) = await Raw(server,
+                $"POST /v1/{route} HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+                + $"X-Healdan-Key: {word}\r\nContent-Type: application/json\r\nContent-Length: {AddinServer.MaxBodyBytes}\r\n\r\n");
+            Assert.Equal("HTTP/1.1 400 Bad Request", statusLine);
+            Assert.Equal("""{"error":"bad-request"}""", body);
+        }
+        Assert.Contains("Refused a request to the Office add-in's port (bad-request): its key isn't Outlook's", Log);
+        Assert.Empty(Server.Calls);
     }
 
     [Fact]

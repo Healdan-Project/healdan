@@ -24,9 +24,9 @@ namespace Healdan.Helper.Core.Addin;
 /// this order: <c>Host</c> is this port at <c>127.0.0.1</c> or <c>localhost</c> (no DNS rebinding); <c>Origin</c> is the
 /// helper's server's (no other page, and no other Healdan's), and only then does an answer carry CORS headers, a
 /// preflight's included; <c>X-Healdan-Protocol</c> is one it speaks; <c>X-Healdan-Key</c> is a paired key
-/// (<see cref="Pairing.AppFor"/>), but for <c>hello</c> and pairing itself; and the helper is signed in, but for
-/// <c>ping</c>, which says whether it is. Review Focus 5: another user of the Mac has no key, and a web page has neither
-/// the origin nor the key.</para>
+/// (<see cref="Pairing.AppFor"/>), but for <c>hello</c> and pairing itself; the helper is signed in, but for <c>ping</c>,
+/// which says whether it is; and on a <c>mail/</c> route, the key is Outlook's. Review Focus 5: another user of the Mac
+/// has no key, and a web page has neither the origin nor the key.</para>
 /// <para>It does transport and those checks; the routes are <see cref="AddinHandler"/>'s. Every request is short
 /// (<see cref="PendingResults"/>): a keyed route still running after the hold time answers <c>202 {"pending": id}</c>, and
 /// <c>result</c>, a keyed route like the others, answers its outcome later. Its log names routes and refusals, never a
@@ -377,6 +377,10 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
             return new Answer(200, new JsonObject { ["ok"] = true, ["signedIn"] = signedIn() });
         if (app is not null && !signedIn())
             return Answer.Error(409, "signed-out");
+        // Outlook's routes are its key's alone: another's is refused before its body is read, so a Word key can't have the
+        // helper read 150 MiB for nothing (AddinHandler refuses it the same way).
+        if (route.StartsWith("mail/", StringComparison.Ordinal) && app != Pairing.OutlookName)
+            return Refused(400, "bad-request", "its key isn't Outlook's, and the mail routes are Outlook's alone");
 
         if (request.ContentLength > (TakesLargeBody(route) ? MaxBodyBytes : SmallBodyBytes))
             return Answer.Error(413, "too-large");

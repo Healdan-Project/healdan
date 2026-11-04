@@ -116,6 +116,14 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
             : Task.FromResult(WindowAnswers.NotReady("save-new")));
     }
 
+    /// <summary>
+    /// The Save window's email mode, for Outlook's <c>mail/file</c> (M5 spec §7.3). It is the Save window, one at a time
+    /// with Word's and LibreOffice's. Before the helper is signed in and started it answers Cancel, so nothing is filed.
+    /// </summary>
+    public Task<JsonObject> SaveEmailAsync(JsonObject request) => OnUi(() => Ready("mail/file") is { } api
+        ? Answering("save", () => new SaveWindow(SaveEmailRequest.FromJson(request), api), w => w.Answer)
+        : Task.FromResult(WindowAnswers.Cancel()));
+
     public Task<JsonObject> PropertiesAsync(JsonObject request)
     {
         // The channel added the doc # once it found the path is a local copy's (ChannelHandler).

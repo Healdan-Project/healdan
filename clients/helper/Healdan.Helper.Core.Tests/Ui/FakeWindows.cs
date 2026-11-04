@@ -49,6 +49,9 @@ public sealed class FakeWindows : IWindows
 
     public Task<JsonObject> SaveNewAsync(JsonObject request) => Ask("save-new", request);
 
+    /// <summary>The Save window's email mode, recorded as <c>save-email</c>.</summary>
+    public Task<JsonObject> SaveEmailAsync(JsonObject request) => Ask("save-email", request);
+
     public Task<JsonObject> PropertiesAsync(JsonObject request) => Ask("properties", request);
 
     public void HeldElsewhere(long docNumber, string deviceName, string? app, DateTimeOffset? lastSaved) =>
