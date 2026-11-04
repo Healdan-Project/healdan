@@ -71,6 +71,8 @@ public abstract class AbstractRulesTestCase extends AbstractHealdanTestCase {
 
 	protected static final String ALIAS_MERGE = "A folder alias can't be merged, or merged into.";
 
+	protected static final String ALIAS_CYCLE = "A folder alias can't go inside the folder it points to.";
+
 	protected static final String FOLDER_IN_SEARCH_FOLDER = "Search folders can't hold folders.";
 
 	protected static final String FOLDER_IN_STORE = "Folders can't be created directly in a Store. Use New matter.";
