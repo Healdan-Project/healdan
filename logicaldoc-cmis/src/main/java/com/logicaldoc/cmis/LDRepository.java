@@ -760,11 +760,11 @@ public class LDRepository {
                 throw new CmisInvalidArgumentException("Id is not valid!");
 
             validatePermission(targetFolderId, context, Permission.WRITE);
-            validatePermission(objectId.getValue(), context, Permission.DOWNLOAD);
+            // Healdan: a shortcut or a folder alias itself, not what it points to
+            PersistentObject object = getObjectItself(objectId.getValue());
+            validatePermission(object, objectId.getValue(), context, Permission.DOWNLOAD);
 
             Folder target = getFolder(targetFolderId);
-
-            Object object = getObject(objectId.getValue());
 
             if (object instanceof Document document) {
                 DocumentHistory transaction = new DocumentHistory();
@@ -772,7 +772,8 @@ public class LDRepository {
                 transaction.setSessionId(sid);
                 documentManager.moveToFolder(document, target, transaction);
 
-                AbstractDocument doc = getDocument(objectId.getValue());
+                // Healdan: the document moved, a shortcut itself
+                AbstractDocument doc = (AbstractDocument) getObjectItself(objectId.getValue());
                 return compileObjectType(context, doc, null, false, false, objectInfos);
             } else {
                 FolderHistory transaction = new FolderHistory();
@@ -782,7 +783,8 @@ public class LDRepository {
 
                 folderDao.move((Folder) object, target, transaction);
 
-                Folder folder = getFolder(objectId.getValue());
+                // Healdan: the folder moved, an alias itself
+                Folder folder = (Folder) getObjectItself(objectId.getValue());
                 return compileObjectType(context, folder, null, false, false, objectInfos);
             }
         } catch (CmisPermissionDeniedException | PersistenceException e) {
@@ -930,11 +932,11 @@ public class LDRepository {
             Properties properties,
             ObjectInfoHandler objectInfos) {
         debug("updateProperties %s".formatted(objectId));
-        validatePermission(objectId.getValue(), context, Permission.WRITE);
+        // Healdan: a shortcut or a folder alias itself, not what it points to
+        PersistentObject object = getObjectItself(objectId.getValue());
+        validatePermission(object, objectId.getValue(), context, Permission.WRITE);
 
         try {
-            // get the document or folder
-            PersistentObject object = getObject(objectId.getValue());
             log.debug("object.getId() {}", object.getId());
 
             // get old properties
