@@ -106,6 +106,7 @@ public class ConfigFileTest {
         // silently corrupted into a value that only fails later when Tomcat logs in.
         Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa€ss")), "non-Latin-1 password");
         Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa\rss")), "line break in password");
+        Check.throwsWith("DB_PASSWORD", () -> apply(conf, Map.of("DB_PASSWORD", "pa\nss")), "newline in password");
         Check.throwsWith("LOGICALDOC_PUBLIC_URL",
                 () -> apply(conf, Map.of("DB_PASSWORD", "pw", "LOGICALDOC_PUBLIC_URL", "https://bücher.例え.jp")),
                 "non-Latin-1 public URL");
