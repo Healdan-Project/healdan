@@ -304,11 +304,12 @@ public class SecretBox {
 		return true;
 	}
 
-	/** @return the key file's stamp, or null if there is no such file */
+	/** @return the key file's stamp, or null if there is no such file, or it can't be read */
 	private KeyStamp stamp() {
 		try {
 			BasicFileAttributes attributes = Files.readAttributes(keyFile, BasicFileAttributes.class);
-			return attributes.isRegularFile()
+			// A file made unreadable in place (chmod, chown, a relabel) keeps its time, size and identity
+			return attributes.isRegularFile() && Files.isReadable(keyFile)
 					? new KeyStamp(attributes.lastModifiedTime(), attributes.size(), attributes.fileKey())
 					: null;
 		} catch (IOException e) {

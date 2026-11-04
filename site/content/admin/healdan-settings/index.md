@@ -348,7 +348,8 @@ also loses their helper. Web page sessions aren't checked again: see
 [Known Limitations](../../install/known-limitations/).
 
 - **When:** each time the helper's session opens again, after 30 idle minutes or a restart, and once the last check
-  is more than eight hours old.
+  is more than eight hours old. A last check more than two hours in the future, as after the server's clock was set
+  back, makes one due at once.
 - **The provider accepts:** when its answer carries the person's details, their names, email and groups follow it,
   as at a sign-in, gate included. So a provider must send the groups claim then too, or the helper is signed out.
   An ID token that isn't signed (`alg` of `none`), as Microsoft's documentation describes Entra ID's, is ignored as

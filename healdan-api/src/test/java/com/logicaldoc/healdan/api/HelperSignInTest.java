@@ -333,6 +333,18 @@ public class HelperSignInTest extends ApiTestCase {
 			Files.write(keyFile, key);
 		}
 		assertEquals(201, exchange(code(LOOPBACK), VERIFIER, LOOPBACK).status());
+
+		// With no refresh token to seal, the missing key is told as such all the same, not as a provider turned off
+		fake.noRefreshToken();
+		String bare = code(LOOPBACK);
+		Files.delete(keyFile);
+		try {
+			ApiResponse response = exchange(bare, VERIFIER, LOOPBACK);
+			assertEquals(response.toString(), 500, response.status());
+			assertEquals(AuthResource.KEY_MISSING, response.json().path("detail").textValue());
+		} finally {
+			Files.write(keyFile, key);
+		}
 	}
 
 	/**

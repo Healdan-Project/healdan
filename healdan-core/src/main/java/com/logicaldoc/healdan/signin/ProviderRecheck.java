@@ -90,11 +90,13 @@ public class ProviderRecheck {
 
 	/**
 	 * How far ahead of the clock a token's last check may be and still count:
-	 * enough for servers whose clocks differ a little, and for a database that
-	 * rounds a time to the second. One further ahead, as after the clock was
-	 * set back, makes a check due at once.
+	 * enough for servers whose clocks differ a little, for a database that
+	 * rounds a time to the second, and for a daylight-saving change, which
+	 * reads a check made in the hour the clocks go back, kept without its zone,
+	 * as an hour later. One further ahead, as after the clock was set back,
+	 * makes a check due at once.
 	 */
-	static final Duration CHECKED_AHEAD = Duration.ofMinutes(1);
+	static final Duration CHECKED_AHEAD = Duration.ofHours(2);
 
 	/** The clock checks are timed by; {@code SignInTestHooks} moves it in tests */
 	static volatile Clock clock = Clock.systemUTC();
@@ -259,7 +261,7 @@ public class ProviderRecheck {
 
 	private boolean undecided(ApiToken token, SignInProvider p, String account, Instant now, String why) {
 		// Forget the waits that are over, so the map holds only the tokens of an outage still going on
-		undecided.values().removeIf(tried -> !now.isBefore(tried.plus(WAIT_AFTER_UNDECIDED)));
+		undecided.values().removeIf(tried -> !waitingSince(tried, now));
 		undecided.put(token.getId(), now);
 		log.warn("Couldn't re-check the device token {} of the account {} with the sign-in provider {}: {}. It's "
 				+ "kept, and checked again no sooner than {} minutes from now.", token.getId(), account, p.id(), why,
@@ -305,7 +307,16 @@ public class ProviderRecheck {
 
 	private boolean waiting(long tokenId, Instant now) {
 		Instant tried = undecided.get(tokenId);
-		return tried != null && now.isBefore(tried.plus(WAIT_AFTER_UNDECIDED));
+		return tried != null && waitingSince(tried, now);
+	}
+
+	/**
+	 * @return true while the wait after a check tried then runs. A try in the
+	 *         future means the clock was set back, and the wait is over, as it
+	 *         would otherwise hold the checks off until the clock caught up.
+	 */
+	private static boolean waitingSince(Instant tried, Instant now) {
+		return !tried.isAfter(now) && now.isBefore(tried.plus(WAIT_AFTER_UNDECIDED));
 	}
 
 	/**

@@ -12,15 +12,18 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.LongSupplier;
 
 import javax.sql.DataSource;
 
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.function.ThrowingRunnable;
@@ -576,6 +579,31 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		new SecretBox(keyFile, () -> 0L).seal("makes another key");
 		assertEquals(List.of(), listing.enabled());
 		assertFalse(listing.find("entra").orElseThrow().hasSecret());
+	}
+
+	/**
+	 * A key file made unreadable in place keeps its time, size and identity:
+	 * the providers are off at once all the same, and on again once it can be
+	 * read
+	 */
+	@Test
+	public void testListingNoticesAnUnreadableKey() throws Exception {
+		Path keyFile = folder.getRoot().toPath().resolve("unreadable.key");
+		SecretBox box = new SecretBox(keyFile, () -> 0L);
+		SignInProviders listing = new SignInProviders(settings(), box, SignInIdentityDAO.get(), SignInGroupDAO.get());
+		listing.save(entra(), SECRET_ONE);
+		assertEquals(1, listing.enabled().size());
+
+		Set<PosixFilePermission> readable = Files.getPosixFilePermissions(keyFile);
+		Files.setPosixFilePermissions(keyFile, Set.of());
+		try {
+			// Whoever can read it anyway, such as root, has nothing to test
+			Assume.assumeFalse(Files.isReadable(keyFile));
+			assertEquals(List.of(), listing.enabled());
+		} finally {
+			Files.setPosixFilePermissions(keyFile, readable);
+		}
+		assertEquals(1, listing.enabled().size());
 	}
 
 	@Test

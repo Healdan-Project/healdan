@@ -23,6 +23,7 @@ import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -121,6 +122,9 @@ public final class FakeProvider implements AutoCloseable {
 
 	private static final String JSON = "application/json; charset=UTF-8";
 
+	/** The exchange attribute that says to answer in chunks */
+	private static final String CHUNKED = "fake.chunked";
+
 	private static final SecureRandom RANDOM = new SecureRandom();
 
 	/** Marks a discovery member to leave out */
@@ -171,6 +175,12 @@ public final class FakeProvider implements AutoCloseable {
 
 	/** How each path's answer is spread out, when it is */
 	private final Map<String, Trickle> trickles = new ConcurrentHashMap<>();
+
+	/** The paths answered in chunks, with no Content-Length */
+	private final Set<String> chunked = ConcurrentHashMap.newKeySet();
+
+	/** Members added to the key set, beside the keys */
+	private final Map<String, Object> extraKeysMembers = new ConcurrentHashMap<>();
 
 	/** Where the token endpoint sends every request, with {@link #tokenRedirectStatus}, when set */
 	private volatile String tokenRedirect;
@@ -508,6 +518,36 @@ public final class FakeProvider implements AutoCloseable {
 			trickles.remove(path);
 		else
 			trickles.put(path, new Trickle(bytes, gap));
+		return this;
+	}
+
+	/**
+	 * Answers a path in chunks from now on, with no {@code Content-Length},
+	 * so a client learns an answer's size only as it reads it.
+	 *
+	 * @param path a path it serves, such as {@code /keys}
+	 * @param chunk true to answer in chunks; false to give the length again
+	 * @return this provider
+	 */
+	public FakeProvider chunked(String path, boolean chunk) {
+		if (chunk)
+			chunked.add(path);
+		else
+			chunked.remove(path);
+		return this;
+	}
+
+	/**
+	 * @param member a member to add to the key set, beside the keys, such as a
+	 *        long one to make it large
+	 * @param value its value; null leaves it out again
+	 * @return this provider
+	 */
+	public FakeProvider keysMember(String member, Object value) {
+		if (value == null)
+			extraKeysMembers.remove(member);
+		else
+			extraKeysMembers.put(member, value);
 		return this;
 	}
 
@@ -875,6 +915,8 @@ public final class FakeProvider implements AutoCloseable {
 			Trickle trickle = trickles.get(path);
 			if (trickle != null)
 				exchange.setStreams(null, new TricklingStream(exchange.getResponseBody(), trickle));
+			if (chunked.contains(path))
+				exchange.setAttribute(CHUNKED, Boolean.TRUE);
 			switch (path) {
 				case "/.well-known/openid-configuration" -> {
 					discoveryRequests.incrementAndGet();
@@ -890,7 +932,7 @@ public final class FakeProvider implements AutoCloseable {
 					keys.add(ecKey);
 					keys.add(ecKey384);
 					keys.add(ecKey521);
-					send(exchange, 200, JSON, new JWKSet(keys).toString(true));
+					send(exchange, 200, JSON, new JWKSet(keys, Map.copyOf(extraKeysMembers)).toString(true));
 				}
 				case "/token" -> {
 					tokenRequests.incrementAndGet();
@@ -1219,7 +1261,8 @@ public final class FakeProvider implements AutoCloseable {
 	private static void send(HttpExchange exchange, int status, String type, String body) throws IOException {
 		byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().set("Content-Type", type);
-		exchange.sendResponseHeaders(status, bytes.length);
+		// A length of 0 is the JDK server's way of sending chunks
+		exchange.sendResponseHeaders(status, Boolean.TRUE.equals(exchange.getAttribute(CHUNKED)) ? 0 : bytes.length);
 		try (OutputStream out = exchange.getResponseBody()) {
 			out.write(bytes);
 		}

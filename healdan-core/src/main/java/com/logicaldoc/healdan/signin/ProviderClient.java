@@ -6,17 +6,22 @@ package com.logicaldoc.healdan.signin;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.net.ConnectException;
 import java.net.MalformedURLException;
+import java.net.Proxy;
 import java.net.ProxySelector;
+import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
+import java.nio.channels.UnresolvedAddressException;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
@@ -153,19 +158,23 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * <p>
  * <b>Every call to a provider is bounded.</b> Nimbus builds each request and
  * reads each answer, and the JDK's {@code HttpClient} sends it, with the JVM's
- * trust store and proxy settings. Its whole answer must come within
- * {@value #TIMEOUT_MILLIS} milliseconds, connecting included, however the
- * provider spreads it out, and may weigh at most {@value #MAX_ANSWER_BYTES}
- * bytes ({@value #MAX_KEYS_BYTES} for the keys). A call that goes beyond either
- * fails as if the provider couldn't be reached. A sign-in waits for another's
- * fetch of the keys no longer than a fetch may take.
+ * trust store and HTTP proxy settings: the first proxy they name is used, and
+ * a SOCKS proxy is refused, as the JDK's client would skip it and connect
+ * directly. Its whole answer must come within {@value #TIMEOUT_MILLIS}
+ * milliseconds, connecting included, however the provider spreads it out
+ * (twice that for a refresh, whose answer may hold a new refresh token), and
+ * may weigh at most {@value #MAX_ANSWER_BYTES} bytes ({@value #MAX_KEYS_BYTES}
+ * for the keys). A call that goes beyond either fails as if the provider
+ * couldn't be reached. A sign-in waits for another's fetch of the keys no
+ * longer than a fetch may take, and {@value #KEYS_WAIT_MARGIN_MILLIS}
+ * milliseconds more.
  */
 @Component
 public class ProviderClient {
 
 	/**
 	 * How long each call may take, from connecting to the last byte of its
-	 * answer (spec section 13)
+	 * answer (spec section 13); twice that for a refresh
 	 */
 	static final int TIMEOUT_MILLIS = 10_000;
 
@@ -194,6 +203,13 @@ public class ProviderClient {
 
 	/** How long the keys are kept before they're fetched again, as Nimbus's default */
 	private static final long KEYS_LIFETIME_MILLIS = JWKSourceBuilder.DEFAULT_CACHE_TIME_TO_LIVE;
+
+	/**
+	 * How much longer than a fetch of the keys may take a sign-in waits for
+	 * another's: the fetch also makes its request before the timeout starts,
+	 * and reads the keys after
+	 */
+	static final long KEYS_WAIT_MARGIN_MILLIS = 1_000L;
 
 	/**
 	 * At most two fetches of the keys in this time, as Nimbus's default: enough
@@ -347,6 +363,36 @@ public class ProviderClient {
 	@FunctionalInterface
 	interface TlsContext {
 		SSLContext get() throws NoSuchAlgorithmException;
+	}
+
+	/**
+	 * Java's proxy settings as they stand at each call, as HttpURLConnection
+	 * read them, for clients kept across a change to them
+	 */
+	private static final ProxySelector JVM_PROXIES = new ProxySelector() {
+
+		@Override
+		public List<Proxy> select(URI uri) {
+			ProxySelector proxies = ProxySelector.getDefault();
+			return proxies == null ? List.of(Proxy.NO_PROXY) : proxies.select(uri);
+		}
+
+		@Override
+		public void connectFailed(URI uri, SocketAddress address, IOException e) {
+			ProxySelector proxies = ProxySelector.getDefault();
+			if (proxies != null)
+				proxies.connectFailed(uri, address, e);
+		}
+	};
+
+	/**
+	 * The clients calls are sent with, one for each redirect rule, kept so that
+	 * calls to a provider share its connections
+	 */
+	private final Map<HttpClient.Redirect, Client> clients = new ConcurrentHashMap<>();
+
+	/** A client, and the TLS it was made with: another TLS, as tests set, makes another client */
+	private record Client(SSLContext tls, HttpClient http) {
 	}
 
 	/** The providers whose unsigned refreshed ID tokens have been logged; once for each, for the JVM's life */
@@ -1019,9 +1065,9 @@ public class ProviderClient {
 			// The cache fetches the keys again when a token names a key it doesn't hold. No refresh ahead,
 			// which would run threads of its own, and no outage tolerance: keys that can't be fetched refuse
 			// the sign-in.
-			// A sign-in waits for another's fetch of the keys no longer than the fetch may take
+			// A sign-in waits for another's fetch of the keys no longer than the fetch may take, with its margin
 			return JWKSourceBuilder.<SecurityContext>create(address.toURL(), retriever)
-					.cache(KEYS_LIFETIME_MILLIS, timeout).refreshAheadCache(false)
+					.cache(KEYS_LIFETIME_MILLIS, timeout + KEYS_WAIT_MARGIN_MILLIS).refreshAheadCache(false)
 					.rateLimited(KEYS_RATE_LIMIT_MILLIS).retrying(false).outageTolerant(false).build();
 		} catch (MalformedURLException | IllegalArgumentException e) {
 			throw new ProviderException("The keys address (jwks_uri) isn't a valid address", e);
@@ -1035,7 +1081,9 @@ public class ProviderClient {
 		HTTPRequest http = request.toHTTPRequest();
 		// It carries the secret, so it goes nowhere it's redirected to
 		http.setFollowRedirects(false);
-		return send(http, MAX_ANSWER_BYTES);
+		// A refresh the provider answered may have turned its refresh token over, retiring the one sent: it has the
+		// time to connect and then the time to answer, as the old per-phase timeouts gave it, rather than one for both
+		return send(http, MAX_ANSWER_BYTES, grant instanceof RefreshTokenGrant ? 2L * timeout : timeout);
 	}
 
 	/**
@@ -1050,59 +1098,101 @@ public class ProviderClient {
 				response.getEntityContentType() == null ? null : response.getEntityContentType().toString());
 	}
 
+	/** Sends a request to a provider, as {@link #send(HTTPRequest, int, long)} does, within the timeout */
+	private HTTPResponse send(HTTPRequest request, int maxBytes) throws IOException {
+		return send(request, maxBytes, timeout);
+	}
+
 	/**
 	 * Sends a request to a provider, in place of Nimbus's
-	 * {@code HTTPRequest.send}, with the JVM's trust store and proxy settings,
-	 * but bounded: the whole answer must come within the timeout, connecting
-	 * included, however the provider spreads it out, and may weigh at most so
-	 * many bytes. Past the time the request is cancelled, which closes its
-	 * connection. A redirect is followed only for a {@code GET}, and never
-	 * from {@code https} to {@code http}.
+	 * {@code HTTPRequest.send}, with the JVM's trust store and HTTP proxy
+	 * settings, but bounded: the whole answer must come within the wait,
+	 * connecting included, however the provider spreads it out, and may weigh
+	 * at most so many bytes. Past the wait the request is cancelled, which
+	 * closes its connection. A redirect is followed only for a {@code GET},
+	 * and never from {@code https} to {@code http}.
 	 *
 	 * @param request the request, as Nimbus builds it
 	 * @param maxBytes the most the answer's body may weigh
+	 * @param wait how long the whole answer may take, in milliseconds
 	 * @return the answer: its status, headers and body
-	 * @throws IOException if the provider can't be reached, the answer doesn't
-	 *         all come in time (a {@link SocketTimeoutException}), or it's
-	 *         larger than allowed
+	 * @throws IOException if the provider can't be reached, Java's settings
+	 *         name a SOCKS proxy for it, the answer doesn't all come in time
+	 *         (a {@link SocketTimeoutException}), or it's larger than allowed
 	 */
-	private HTTPResponse send(HTTPRequest request, int maxBytes) throws IOException {
-		Duration limit = Duration.ofMillis(timeout);
+	private HTTPResponse send(HTTPRequest request, int maxBytes, long wait) throws IOException {
 		HttpClient.Redirect redirects = request.getMethod() == HTTPRequest.Method.GET && request.getFollowRedirects()
 				? HttpClient.Redirect.NORMAL
 				: HttpClient.Redirect.NEVER;
-		ProxySelector proxies = ProxySelector.getDefault();
-		HttpClient http;
+		HttpRequest jdk = toJdk(request);
+		List<Proxy> proxies = JVM_PROXIES.select(jdk.uri());
+		// The JDK's client takes only an HTTP proxy: it would skip a SOCKS one without a word and connect directly
+		if (!proxies.isEmpty() && proxies.get(0).type() == Proxy.Type.SOCKS)
+			throw new IOException("Java's settings name a SOCKS proxy for the provider's address, which calls to "
+					+ "providers can't use: name an HTTP proxy (https.proxyHost and https.proxyPort) instead");
+		CompletableFuture<HttpResponse<byte[]>> answer = client(redirects).sendAsync(jdk,
+				info -> new Capped(info.headers().firstValueAsLong("Content-Length").orElse(-1L), maxBytes));
 		try {
-			http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(limit)
-					.followRedirects(redirects).proxy(proxies != null ? proxies : HttpClient.Builder.NO_PROXY)
-					.sslContext(sslContext.get()).build();
+			return fromJdk(answer.get(wait, TimeUnit.MILLISECONDS));
+		} catch (TimeoutException e) {
+			// Cancelled, which closes its connection rather than leaving it to the next call
+			answer.cancel(true);
+			throw new SocketTimeoutException(
+					"The provider's whole answer didn't come within %d milliseconds".formatted(wait));
+		} catch (InterruptedException e) {
+			answer.cancel(true);
+			Thread.currentThread().interrupt();
+			throw new InterruptedIOException("Interrupted while waiting for the provider");
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause();
+			if (cause instanceof ConnectException unconnected && unconnected.getMessage() == null)
+				throw unconnected(unconnected, jdk.uri());
+			if (cause instanceof IOException io)
+				throw io;
+			throw new IOException(cause == null ? "The call failed" : cause.getClass().getSimpleName(), cause);
+		}
+	}
+
+	/**
+	 * @return the client for the redirect rule, made once for the TLS calls
+	 *         use; its connections are kept for the next call to the same
+	 *         provider
+	 */
+	private HttpClient client(HttpClient.Redirect redirects) throws IOException {
+		SSLContext tls;
+		try {
+			tls = sslContext.get();
 		} catch (NoSuchAlgorithmException e) {
 			throw new IOException("No TLS for the provider's address", e);
 		}
-		try {
-			CompletableFuture<HttpResponse<byte[]>> answer = http.sendAsync(toJdk(request),
-					info -> new Capped(info.headers().firstValueAsLong("Content-Length").orElse(-1L), maxBytes));
-			try {
-				return fromJdk(answer.get(timeout, TimeUnit.MILLISECONDS));
-			} catch (TimeoutException e) {
-				answer.cancel(true);
-				throw new SocketTimeoutException(
-						"The provider's whole answer didn't come within %d milliseconds".formatted(timeout));
-			} catch (InterruptedException e) {
-				answer.cancel(true);
-				Thread.currentThread().interrupt();
-				throw new InterruptedIOException("Interrupted while waiting for the provider");
-			} catch (ExecutionException e) {
-				Throwable cause = e.getCause();
-				if (cause instanceof IOException io)
-					throw io;
-				throw new IOException(cause == null ? "The call failed" : cause.getClass().getSimpleName(), cause);
+		return clients.compute(redirects, (rule, held) -> {
+			if (held != null && held.tls() == tls)
+				return held;
+			if (held != null)
+				held.http().shutdown();
+			return new Client(tls, HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+					.connectTimeout(Duration.ofMillis(timeout)).followRedirects(rule).proxy(JVM_PROXIES)
+					.sslContext(tls).build());
+		}).http();
+	}
+
+	/**
+	 * @return a failure to connect, which the JDK's client leaves without a
+	 *         word, told as HttpURLConnection told it: the host that's unknown,
+	 *         or the address that couldn't be reached
+	 */
+	private static IOException unconnected(ConnectException e, URI address) {
+		for (Throwable why = e.getCause(); why != null; why = why.getCause())
+			if (why instanceof UnresolvedAddressException) {
+				UnknownHostException unknown = new UnknownHostException(address.getHost());
+				unknown.initCause(e);
+				return unknown;
 			}
-		} finally {
-			// Ends whatever is left of the call, its connection included, without waiting for it
-			http.shutdownNow();
-		}
+		int port = address.getPort() != -1 ? address.getPort()
+				: "https".equalsIgnoreCase(address.getScheme()) ? 443 : 80;
+		ConnectException told = new ConnectException("Couldn't connect to " + address.getHost() + ":" + port);
+		told.initCause(e);
+		return told;
 	}
 
 	/** @return Nimbus's request as the JDK's: its method, address, headers and body */

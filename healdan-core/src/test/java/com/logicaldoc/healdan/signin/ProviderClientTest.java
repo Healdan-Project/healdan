@@ -12,6 +12,10 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.time.Duration;
@@ -369,6 +373,16 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
 		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofSeconds(11)) < 0);
 		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
+		// Named, though the JDK's client leaves a refused connection without a word
+		assertTrue(e.getMessage(), e.getMessage().contains("ConnectException: Couldn't connect to 127.0.0.1:"));
+
+		// And a host that doesn't resolve, as HttpURLConnection named it
+		SignInProvider nowhere = new SignInProvider("nowhere", p.preset(), p.label(), true,
+				"https://login.firm.invalid", p.clientId(), true, p.identityClaim(), p.usernameClaim(),
+				p.emailClaim(), p.groupsClaim(), p.linkByEmail());
+		ProviderException unknown = assertThrows(ProviderException.class,
+				() -> client.start(nowhere, REDIRECT, false));
+		assertTrue(unknown.getMessage(), unknown.getMessage().contains("UnknownHostException: login.firm.invalid"));
 	}
 
 	/**
@@ -650,6 +664,86 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		fake.tokenAnswerMember("padding", "x".repeat(max - 50_000));
 		Tokens big = signIn(p, true);
 		assertEquals(Outcome.ACCEPTED, client.refresh(p, big.refreshToken()).outcome());
+		fake.tokenAnswerMember("padding", null);
+
+		// In chunks, with no length to refuse it by at once, it's counted as it comes
+		fake.chunked("/.well-known/openid-configuration", true).discovery("padding", "x".repeat(max));
+		client.forget("fake");
+		ProviderException chunked = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(chunked.getMessage(), chunked.getMessage().contains("larger than 1048576 bytes"));
+		fake.discovery("padding", "x".repeat(max - 50_000));
+		client.forget("fake");
+		assertNotNull(client.start(p, REDIRECT, false));
+		fake.discovery("padding", null).chunked("/.well-known/openid-configuration", false);
+
+		// The keys have their own cap, 50 KB, with a length or in chunks
+		assertEquals(51_200, ProviderClient.MAX_KEYS_BYTES);
+		for (boolean inChunks : new boolean[] { false, true }) {
+			fake.chunked("/keys", inChunks).keysMember("padding", "x".repeat(ProviderClient.MAX_KEYS_BYTES));
+			client.forget("fake");
+			ProviderException keys = assertThrows(ProviderException.class, () -> signIn(p, false));
+			assertTrue(keys.getMessage(), keys.getMessage().contains("keys couldn't be fetched"));
+			fake.keysMember("padding", "x".repeat(ProviderClient.MAX_KEYS_BYTES - 10_000));
+			client.forget("fake");
+			assertNotNull(signIn(p, false).claims());
+		}
+		fake.chunked("/keys", false).keysMember("padding", null);
+	}
+
+	/*
+	 * A refresh has twice the timeout, to connect and then to answer, as the
+	 * per-phase timeouts gave it: a provider that turns refresh tokens over
+	 * has retired the old one once it answers, so a slow answer cut off would
+	 * cost the helper its sign-in. A code's exchange has the one timeout.
+	 */
+	@Test
+	public void testARefreshHasTwiceTheTimeout() throws Exception {
+		ProviderClient quick = new ProviderClient(SignInProviders.get(), 1000);
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(quick, p, true);
+
+		fake.delay("/token", Duration.ofMillis(1400));
+		assertEquals(Outcome.ACCEPTED, quick.refresh(p, t.refreshToken()).outcome());
+
+		Start s = quick.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		ProviderException e = assertThrows(ProviderException.class,
+				() -> quick.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertTrue(e.getMessage(), e.getMessage().contains("SocketTimeoutException"));
+		fake.delay("/token", Duration.ZERO);
+	}
+
+	/*
+	 * The JDK's client would skip a SOCKS proxy and connect directly: a call
+	 * Java's settings send through one is refused, and the provider is never
+	 * asked
+	 */
+	@Test
+	public void testSocksProxyRefused() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		ProxySelector before = ProxySelector.getDefault();
+		ProxySelector.setDefault(new ProxySelector() {
+
+			@Override
+			public List<Proxy> select(URI uri) {
+				return List.of(new Proxy(Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("socks.invalid", 1080)));
+			}
+
+			@Override
+			public void connectFailed(URI uri, SocketAddress address, IOException e) {
+				// Nothing to note
+			}
+		});
+		try {
+			int asked = fake.discoveryRequests();
+			ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+			assertTrue(e.getMessage(), e.getMessage().contains("SOCKS proxy"));
+			assertEquals("the provider wasn't asked", asked, fake.discoveryRequests());
+		} finally {
+			ProxySelector.setDefault(before);
+		}
+		client.forget("fake");
+		assertNotNull(client.start(p, REDIRECT, false));
 	}
 
 	/*

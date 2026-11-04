@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
+import java.util.Optional;
 
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -82,9 +82,6 @@ public class AuthResource {
 
 	/** What separates the two users of an impersonation in CE's sign-in */
 	private static final String IMPERSONATION = ">";
-
-	/** A PKCE verifier (RFC 7636 section 4.1), as {@code openapi.yaml}'s {@code CodeSignIn} has it */
-	private static final Pattern CODE_VERIFIER = Pattern.compile("[A-Za-z0-9._~-]{43,128}");
 
 	private static final Logger log = LoggerFactory.getLogger(AuthResource.class);
 
@@ -197,7 +194,15 @@ public class AuthResource {
 		}
 		// The code was issued up to a minute ago: the provider may have been turned off or removed since. After the
 		// seal, so that a missing key file, which also leaves the client secret unopened, is told as such
-		if (SignInProviders.get().find(redeemed.provider()).filter(SignInProvider::usable).isEmpty()) {
+		Optional<SignInProvider> provider = SignInProviders.get().find(redeemed.provider());
+		if (provider.filter(SignInProvider::usable).isEmpty()) {
+			// With no refresh token, the seal didn't need the key: a provider still on is told the key is missing
+			if (provider.filter(SignInProvider::enabled).isPresent() && !SecretBox.get().hasKey()) {
+				log.warn("Refused a sign-in with a helper's code through the sign-in provider {}: its client secret "
+						+ "can't be opened, as Healdan's secret key file is missing or can't be read",
+						redeemed.provider());
+				throw new ApiProblem(500, "server-error", KEY_MISSING);
+			}
 			log.info("Refused a sign-in with a helper's code through the sign-in provider {}: the provider isn't on "
 					+ "and set up any more", redeemed.provider());
 			throw signInFailed();
@@ -309,8 +314,8 @@ public class AuthResource {
 			errors.add(new FieldError("code", REQUIRED, "Give the one-time code."));
 		if (StringUtils.isEmpty(credentials.codeVerifier()))
 			errors.add(new FieldError("codeVerifier", REQUIRED, "Give the code's verifier."));
-		else if (!CODE_VERIFIER.matcher(credentials.codeVerifier()).matches())
-			// Refused before the code is redeemed, so a helper that sent it wrong can send it again
+		else if (!OneTimeCodes.isVerifier(credentials.codeVerifier()))
+			// Refused before the code is redeemed, by redeem's own check, so a helper that sent it wrong can send it again
 			errors.add(new FieldError("codeVerifier", "invalid",
 					"A code's verifier is 43 to 128 letters, digits, hyphens, full stops, underscores and tildes."));
 		if (StringUtils.isEmpty(credentials.redirectUri()))
