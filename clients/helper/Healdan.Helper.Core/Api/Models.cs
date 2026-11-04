@@ -77,6 +77,48 @@ public sealed record SaveRequest(string Kind, bool KeepCheckedOut, string Name, 
 [Schema("NewDocument")]
 public sealed record NewDocument(long FolderId, string Name, JsonObject Properties, bool CheckOut);
 
+// Email (M5).
+
+/// <summary>An attachment or an inline part of an email, as <c>inspectEmail</c> numbers them.</summary>
+[Schema("EmailPart")]
+public sealed record EmailPart(int Index, string Name, string Type, long Size, bool Inline, bool Message);
+
+/// <summary>
+/// What <c>inspectEmail</c> found in an email. Every field the message lacks, or has damaged, is null.
+/// <see cref="MessageId"/> has no angle brackets. <see cref="Copies"/> are the documents the user may read.
+/// </summary>
+[Schema("EmailInspection")]
+public sealed record EmailInspection(
+    string? MessageId,
+    string? Subject,
+    string? From,
+    DateTimeOffset? Sent,
+    List<EmailPart> Attachments,
+    List<DocumentView> Copies);
+
+/// <summary>The <c>email</c> part of a filing: the folder, the properties, and the attachments to file by <see cref="EmailPart.Index"/>.</summary>
+[Schema("NewEmail")]
+public sealed record NewEmail(long FolderId, JsonObject Properties, List<int> Attachments);
+
+/// <summary>What <c>fileEmail</c> filed: the email, its attachments, and the ticked emails the matter already held.</summary>
+[Schema("FiledEmail")]
+public sealed record FiledEmail(DocumentView Email, List<DocumentView> Attachments, List<FiledEmail.SkippedPart> Skipped)
+{
+    /// <summary>An attachment ticked but not filed, because it's an email the matter already holds (<see cref="Document"/>).</summary>
+    public sealed record SkippedPart(int Index, string Code, DocumentView Document);
+}
+
+/// <summary>The copies of one message, with <see cref="MessageId"/> as the server normalised it (without angle brackets).</summary>
+[Schema("EmailCopy")]
+public sealed record EmailCopy(string MessageId, List<EmailCopy.Copy> Copies)
+{
+    /// <summary>A copy, and <see cref="Address"/>, where the web page shows it.</summary>
+    public sealed record Copy(DocumentView Document, string Address);
+}
+
+[Schema("EmailCopies")]
+public sealed record EmailCopies(List<EmailCopy> Items);
+
 [Schema("PasswordSignIn")]
 internal sealed record SignInBody(string Username, string Password, string Name, DeviceRef Device);
 
