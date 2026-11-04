@@ -13,12 +13,17 @@ Templates**, on the **Templates** and **Attribute sets** tabs.
 The **Healdan profile** template holds the properties every document and folder carries, which
 [Properties](../../../user/working-with-matters/properties/) in the User Guide describes.
 
-![The Healdan profile template's Properties tab: its fourteen attributes, from client, matter, author and typist to docclass, docsubclass, comments, legacydocnum and the six email fields, with Class mandatory, Client and Matter read-only, and Subclass depending on docclass](profile-attributes.png)
+![The Healdan profile template's Properties tab: its fifteen attributes, from client, matter, author and typist to docclass, docsubclass, comments, legacydocnum and the seven email fields, with Class mandatory, Client and Matter read-only, and Subclass depending on docclass](profile-attributes.png)
 
 - **Healdan puts it on every document and folder in a matter** each time one is saved, so one given another
   template there gets the Healdan profile back at its next save.
 - **The Healdan profile attribute set** holds the choices for Class (`docclass`) and Subclass (`docsubclass`), and
   the properties added to the profile ([Adding a Property](#adding-a-property)).
+- **The seven email fields** (From, To, CC, Subject, Sent, Received and Message-ID) are read from an email when it's
+  filed, so a document that isn't an email has none. Message-ID, the identifier the sender's mail program gave the
+  message, shows in Properties with the others, but isn't part of full-text search: Healdan finds an email's copies
+  by it through a table of its own, and trusts that table, not the property, so editing the property doesn't change
+  which messages count as copies. See [Emails](../../../user/working-with-matters/emails/).
 
 ## Changing the Class and Subclass Lists
 
