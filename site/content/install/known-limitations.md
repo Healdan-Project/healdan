@@ -40,7 +40,9 @@ weight: 11
 - **Providers are reached without LogicalDOC's proxy.** Healdan calls a sign-in provider directly, or through the
   proxy that Java's own settings name (`-Dhttps.proxyHost`, `-Dhttps.proxyPort` and `-Dhttp.nonProxyHosts`, in
   [`CATALINA_OPTS`](../configuration/)), not the one under **Administration → Settings → Proxy**. Setting
-  `CATALINA_OPTS` replaces its default, `-Xmx2g`, so keep `-Xmx2g` beside the proxy's flags.
+  `CATALINA_OPTS` replaces its default, `-Xmx2g`, so keep `-Xmx2g` beside the proxy's flags. It must be an HTTP
+  proxy, and only the first one Java's settings give is tried: a SOCKS proxy (`-DsocksProxyHost`) makes every call
+  to a provider fail, and `-Dhttps.protocols` isn't read (`-Djdk.tls.client.protocols` is).
 - **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
   Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
   helper for Ubuntu comes next. Windows comes later.

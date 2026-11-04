@@ -12,6 +12,10 @@ import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.time.Duration;
@@ -369,6 +373,16 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
 		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofSeconds(11)) < 0);
 		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
+		// Named, though the JDK's client leaves a refused connection without a word
+		assertTrue(e.getMessage(), e.getMessage().contains("ConnectException: Couldn't connect to 127.0.0.1:"));
+
+		// And a host that doesn't resolve, as HttpURLConnection named it
+		SignInProvider nowhere = new SignInProvider("nowhere", p.preset(), p.label(), true,
+				"https://login.firm.invalid", p.clientId(), true, p.identityClaim(), p.usernameClaim(),
+				p.emailClaim(), p.groupsClaim(), p.linkByEmail());
+		ProviderException unknown = assertThrows(ProviderException.class,
+				() -> client.start(nowhere, REDIRECT, false));
+		assertTrue(unknown.getMessage(), unknown.getMessage().contains("UnknownHostException: login.firm.invalid"));
 	}
 
 	/**
@@ -579,6 +593,201 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		// Nor can a client that hasn't the discovery document yet
 		assertEquals(Outcome.UNREACHABLE,
 				new ProviderClient(SignInProviders.get()).refresh(p, bare.refreshToken()).outcome());
+	}
+
+	/*
+	 * A refresh answered 200 with a new refresh token, in an answer Nimbus can't
+	 * read in full, keeps the new token: a provider that turns them over has
+	 * retired the old one, which it refuses at the next check
+	 */
+	@Test
+	public void testTurnedOverRefreshTokenKeptWhenTheAnswerCantBeRead() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		String json = "application/json";
+
+		// No access token or token type, which a token response must have
+		fake.answerRefreshWith(json, "{\"refresh_token\":\"rt-kept-1\",\"id_token\":\"x\"}");
+		assertKept("rt-kept-1", client.refresh(p, t.refreshToken()));
+		// JSON, but not said to be
+		fake.answerRefreshWith("text/plain",
+				"{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"refresh_token\":\"rt-kept-2\"}");
+		assertKept("rt-kept-2", client.refresh(p, t.refreshToken()));
+		// An ID token that isn't a JWT
+		fake.answerRefreshWith(json, "{\"access_token\":\"a\",\"token_type\":\"Bearer\",\"id_token\":\"not-a-jwt\","
+				+ "\"refresh_token\":\"rt-kept-3\"}");
+		assertKept("rt-kept-3", client.refresh(p, t.refreshToken()));
+
+		// No refresh token to keep: none in the answer, one that isn't a string, or no JSON at all
+		fake.answerRefreshWith(json, "{\"id_token\":\"x\"}");
+		assertKept(null, client.refresh(p, t.refreshToken()));
+		fake.answerRefreshWith(json, "{\"refresh_token\":42}");
+		assertKept(null, client.refresh(p, t.refreshToken()));
+		fake.answerRefreshWith("text/html", "<html><body>Signed in</body></html>");
+		assertKept(null, client.refresh(p, t.refreshToken()));
+
+		// The old token wasn't spent by those answers, and still refreshes
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());
+	}
+
+	private static void assertKept(String refreshToken, Refreshed r) {
+		assertEquals(Outcome.UNREACHABLE, r.outcome());
+		assertNull(r.claims());
+		assertEquals(refreshToken, r.refreshToken());
+	}
+
+	/*
+	 * A discovery document or a token answer may weigh at most a mebibyte, so a
+	 * provider can't fill the server's memory; a call past it fails as if the
+	 * provider couldn't be reached
+	 */
+	@Test
+	public void testAnswersAreCappedInSize() throws Exception {
+		int max = 1_048_576;
+		SignInProvider p = fake.asProvider("fake");
+
+		fake.discovery("padding", "x".repeat(max));
+		ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(e.getMessage(), e.getMessage().contains("larger than 1048576 bytes"));
+		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof IOException);
+		fake.discovery("padding", null);
+		client.forget("fake");
+		Tokens t = signIn(p, true);
+
+		// A token answer past it: the code is refused, and the refresh is unreachable
+		fake.tokenAnswerMember("padding", "x".repeat(max));
+		ProviderException code = refused(p);
+		assertTrue(code.getMessage(), code.getMessage().contains("larger than 1048576 bytes"));
+		assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+
+		// One within it is fine
+		fake.tokenAnswerMember("padding", "x".repeat(max - 50_000));
+		Tokens big = signIn(p, true);
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, big.refreshToken()).outcome());
+		fake.tokenAnswerMember("padding", null);
+
+		// In chunks, with no length to refuse it by at once, it's counted as it comes
+		fake.chunked("/.well-known/openid-configuration", true).discovery("padding", "x".repeat(max));
+		client.forget("fake");
+		ProviderException chunked = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(chunked.getMessage(), chunked.getMessage().contains("larger than 1048576 bytes"));
+		fake.discovery("padding", "x".repeat(max - 50_000));
+		client.forget("fake");
+		assertNotNull(client.start(p, REDIRECT, false));
+		fake.discovery("padding", null).chunked("/.well-known/openid-configuration", false);
+
+		// The keys have their own cap, 50 KB, with a length or in chunks
+		assertEquals(51_200, ProviderClient.MAX_KEYS_BYTES);
+		for (boolean inChunks : new boolean[] { false, true }) {
+			fake.chunked("/keys", inChunks).keysMember("padding", "x".repeat(ProviderClient.MAX_KEYS_BYTES));
+			client.forget("fake");
+			ProviderException keys = assertThrows(ProviderException.class, () -> signIn(p, false));
+			assertTrue(keys.getMessage(), keys.getMessage().contains("keys couldn't be fetched"));
+			fake.keysMember("padding", "x".repeat(ProviderClient.MAX_KEYS_BYTES - 10_000));
+			client.forget("fake");
+			assertNotNull(signIn(p, false).claims());
+		}
+		fake.chunked("/keys", false).keysMember("padding", null);
+	}
+
+	/*
+	 * A refresh has twice the timeout, to connect and then to answer, as the
+	 * per-phase timeouts gave it: a provider that turns refresh tokens over
+	 * has retired the old one once it answers, so a slow answer cut off would
+	 * cost the helper its sign-in. A code's exchange has the one timeout.
+	 */
+	@Test
+	public void testARefreshHasTwiceTheTimeout() throws Exception {
+		ProviderClient quick = new ProviderClient(SignInProviders.get(), 1000);
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(quick, p, true);
+
+		fake.delay("/token", Duration.ofMillis(1400));
+		assertEquals(Outcome.ACCEPTED, quick.refresh(p, t.refreshToken()).outcome());
+
+		Start s = quick.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		ProviderException e = assertThrows(ProviderException.class,
+				() -> quick.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertTrue(e.getMessage(), e.getMessage().contains("SocketTimeoutException"));
+		fake.delay("/token", Duration.ZERO);
+	}
+
+	/*
+	 * The JDK's client would skip a SOCKS proxy and connect directly: a call
+	 * Java's settings send through one is refused, and the provider is never
+	 * asked
+	 */
+	@Test
+	public void testSocksProxyRefused() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		ProxySelector before = ProxySelector.getDefault();
+		ProxySelector.setDefault(new ProxySelector() {
+
+			@Override
+			public List<Proxy> select(URI uri) {
+				return List.of(new Proxy(Proxy.Type.SOCKS, InetSocketAddress.createUnresolved("socks.invalid", 1080)));
+			}
+
+			@Override
+			public void connectFailed(URI uri, SocketAddress address, IOException e) {
+				// Nothing to note
+			}
+		});
+		try {
+			int asked = fake.discoveryRequests();
+			ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+			assertTrue(e.getMessage(), e.getMessage().contains("SOCKS proxy"));
+			assertEquals("the provider wasn't asked", asked, fake.discoveryRequests());
+		} finally {
+			ProxySelector.setDefault(before);
+		}
+		client.forget("fake");
+		assertNotNull(client.start(p, REDIRECT, false));
+	}
+
+	/*
+	 * The timeout bounds a call's whole answer, not only each read: a provider
+	 * that trickles an answer, each byte within the read timeout, can't hold a
+	 * sign-in, a refresh or a fetch of the keys for longer
+	 */
+	@Test
+	public void testAWholeAnswerWithinTheTimeout() throws Exception {
+		ProviderClient quick = new ProviderClient(SignInProviders.get(), 500);
+		SignInProvider p = fake.asProvider("fake");
+		// 30 bytes 100 milliseconds apart: 3 seconds in all, each gap well within the read timeout
+		Duration gap = Duration.ofMillis(100);
+
+		fake.trickle("/.well-known/openid-configuration", 30, gap);
+		long began = System.nanoTime();
+		ProviderException e = assertThrows(ProviderException.class, () -> quick.start(p, REDIRECT, false));
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2000)) < 0);
+		assertTrue(String.valueOf(e.getCause()), e.getCause() instanceof SocketTimeoutException);
+		fake.trickle("/.well-known/openid-configuration", 0, gap);
+		quick.forget("fake");
+		Tokens t = signIn(quick, p, true);
+
+		// The token endpoint, for a code and for a refresh
+		fake.trickle("/token", 30, gap);
+		Start s = quick.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		began = System.nanoTime();
+		ProviderException exchanged = assertThrows(ProviderException.class,
+				() -> quick.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2000)) < 0);
+		assertTrue(exchanged.getMessage(), exchanged.getMessage().contains("SocketTimeoutException"));
+		began = System.nanoTime();
+		assertEquals(Outcome.UNREACHABLE, quick.refresh(p, t.refreshToken()).outcome());
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2000)) < 0);
+		fake.trickle("/token", 0, gap);
+
+		// The keys, fetched afresh after forget
+		quick.forget("fake");
+		fake.trickle("/keys", 30, gap);
+		began = System.nanoTime();
+		ProviderException keys = assertThrows(ProviderException.class, () -> signIn(quick, p, false));
+		assertTrue(Duration.ofNanos(System.nanoTime() - began).compareTo(Duration.ofMillis(2500)) < 0);
+		assertTrue(keys.getMessage(), keys.getMessage().contains("keys couldn't be fetched"));
 	}
 
 	// Ruling R28: Microsoft's documentation describes the ID token in a refresh answer as unsigned (alg none). It's
@@ -1077,6 +1286,185 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		}
 	}
 
+	/*
+	 * A discovery document kept from when plain HTTP was allowed is checked
+	 * again at each use: once HTTP is off, its http:// endpoint refuses the
+	 * sign-in, without the document being fetched again
+	 */
+	@Test
+	public void testKeptDiscoveryIsCheckedForHttpsAtEachUse() throws Exception {
+		fake.close();
+		fake = FakeProvider.startTls().trust();
+		SignInTestHooks.allowHttp(true);
+		fake.discovery("authorization_endpoint", "http://login.firm.example/authorize");
+		SignInProvider p = fake.asProvider("tls");
+		assertNotNull(client.start(p, REDIRECT, false));
+		int asked = fake.discoveryRequests();
+
+		SignInTestHooks.allowHttp(false);
+		ProviderException e = assertThrows(ProviderException.class, () -> client.start(p, REDIRECT, false));
+		assertTrue(e.getMessage(), e.getMessage().contains("authorisation endpoint"));
+		assertTrue(e.getMessage(), e.getMessage().contains("isn't an https address"));
+		assertEquals("the kept document, not a new one", asked, fake.discoveryRequests());
+	}
+
+	/*
+	 * The token endpoint's requests carry the secret, so a redirect isn't
+	 * followed, whatever its status: the code is refused, the refresh is
+	 * unreachable, and Check reports it
+	 */
+	@Test
+	public void testTokenRequestsAreNotRedirected() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		for (int status : new int[] { 301, 302, 303, 307, 308 }) {
+			fake.redirectToken("/elsewhere", status);
+			ProviderException e = refused(p);
+			assertTrue(e.getMessage(), e.getMessage().contains("HTTP " + status));
+			assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+			assertFalse(client.check(p, REDIRECT).ok());
+		}
+		assertEquals(0, fake.requests("/elsewhere"));
+
+		fake.redirectToken(null, 0);
+		assertEquals(Outcome.ACCEPTED, client.refresh(p, t.refreshToken()).outcome());
+	}
+
+	/*
+	 * An ID token with no kid is checked against each key kept for its
+	 * algorithm, so it passes when one of them signed it, and fails when none
+	 * did. With no kid it can't name a key the kept ones lack, so a rotated
+	 * key is found only once the keys are fetched again: when they're 5
+	 * minutes old, or after forget. Every provider Healdan names sends a kid.
+	 */
+	@Test
+	public void testIdTokenWithoutKeyId() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		fake.omitKeyId();
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+
+		// Signed with the second of two published keys, once the keys are fetched again
+		fake.rotateKey();
+		ProviderException kept = refused(p);
+		assertTrue(kept.getMessage(), kept.getMessage().contains("its signature doesn't match the provider's key"));
+		client.forget("fake");
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+
+		// Signed with a key it doesn't publish
+		fake.signWithAnotherKey();
+		ProviderException e = refused(p);
+		assertTrue(e.getMessage(), e.getMessage().contains("its signature doesn't match the provider's key"));
+	}
+
+	/* An encrypted ID token (a JWE) isn't one Healdan reads: refused at a sign-in, unreachable at a refresh */
+	@Test
+	public void testEncryptedIdTokenRefused() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+		fake.encryptIdTokens(true);
+
+		ProviderException e = refused(p);
+		assertTrue(e.getMessage(), e.getMessage().contains("encrypted"));
+		Refreshed r = client.refresh(p, t.refreshToken());
+		assertEquals(Outcome.UNREACHABLE, r.outcome());
+		assertNull(r.claims());
+		// The provider turned the refresh token over, so the new one is kept
+		assertNotNull(r.refreshToken());
+	}
+
+	/*
+	 * A key the ID token's header carries (jwk) or points to (jku, x5u) is never
+	 * used, nor fetched: the token is checked against the provider's published
+	 * keys only, under its own kid or the kid of a published key
+	 */
+	@Test
+	public void testKeysInTheTokensHeaderAreIgnored() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		for (String header : List.of("jwk", "jku", "x5u")) {
+			// A client of its own each time: an unknown kid fetches the keys again, at most twice in 30 seconds
+			ProviderClient fresh = new ProviderClient(SignInProviders.get());
+			fake.signWithKeyIn(header, "attacker");
+			ProviderException unknown = refused(fresh, p);
+			assertTrue(header + ": " + unknown.getMessage(),
+					unknown.getMessage().contains("none of the keys the provider publishes is the one it names"));
+			fake.signWithKeyIn(header, "k1");
+			ProviderException forged = refused(fresh, p);
+			assertTrue(header + ": " + forged.getMessage(),
+					forged.getMessage().contains("its signature doesn't match the provider's key"));
+		}
+		assertEquals(0, fake.requests("/attacker-keys"));
+		assertEquals(0, fake.requests("/attacker-cert"));
+
+		fake.signWithKeyIn(null, null);
+		assertEquals("s-1001", signIn(p, false).claims().identity());
+	}
+
+	/* Every EC signature Healdan accepts works, each with its curve */
+	@Test
+	public void testEllipticCurveSignatures() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		for (String algorithm : List.of("ES256", "ES384", "ES512")) {
+			fake.signWith(algorithm);
+			client.forget("fake");
+			assertEquals(algorithm, "s-1001", signIn(p, true).claims().identity());
+			assertTrue(algorithm, client.check(p, REDIRECT).ok());
+		}
+	}
+
+	/*
+	 * A provider's own words about an error are quoted with what Healdan sent
+	 * it taken out, as it is and form-encoded: the code, the verifier and the
+	 * secret for a code, the refresh token and the secret for a refresh
+	 */
+	@Test
+	public void testProvidersErrorDescriptionsAreRedacted() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		Tokens t = signIn(p, true);
+
+		Start s = client.start(p, REDIRECT, false);
+		String code = fake.authorize(s.authorization());
+		fake.answerCode(400, "invalid_request");
+		ProviderException e = assertThrows(ProviderException.class,
+				() -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		assertTrue(e.getMessage(), e.getMessage().contains("HTTP 400, invalid_request"));
+		assertTrue(e.getMessage(), e.getMessage().contains("code [hidden], verifier [hidden], secret [hidden] ([hidden])"));
+		for (String secret : List.of(code, s.verifier(), FakeProvider.SECRET))
+			assertFalse(e.getMessage(), e.getMessage().contains(secret));
+
+		try (LogCapture log = LogCapture.of(ProviderClient.class)) {
+			fake.answerRefresh(400, "invalid_request");
+			assertEquals(Outcome.UNREACHABLE, client.refresh(p, t.refreshToken()).outcome());
+			assertTrue(log.lines().toString(), log.lines().stream()
+					.anyMatch(line -> line.contains("Not a refresh token issued here: [hidden] ([hidden])")));
+			for (String line : log.lines()) {
+				assertFalse(line, line.contains(t.refreshToken()));
+				assertFalse(line, line.contains(FakeProvider.SECRET));
+			}
+		}
+	}
+
+	/* The client secret goes in a header or the form's body, never in an address's query */
+	@Test
+	public void testSecretNeverInAQueryString() throws Exception {
+		SignInProvider p = fake.asProvider("fake");
+		List<List<String>> methods = Arrays.asList(List.of("client_secret_basic"), List.of("client_secret_post"), null);
+		for (List<String> listed : methods) {
+			fake.tokenEndpointAuthMethods(listed);
+			client.forget("fake");
+			Tokens t = signIn(p, true);
+			client.refresh(p, t.refreshToken());
+			client.check(p, REDIRECT);
+		}
+		assertTrue(fake.requests("/token") >= 9);
+		String encoded = java.net.URLEncoder.encode(FakeProvider.SECRET, java.nio.charset.StandardCharsets.UTF_8);
+		for (String request : fake.requests()) {
+			assertFalse(request, request.contains(FakeProvider.SECRET));
+			assertFalse(request, request.contains(encoded));
+			// Nothing Healdan sends a provider has a query
+			assertFalse(request, request.contains("?"));
+		}
+	}
+
 	@Test
 	public void testNothingSecretIsLogged() throws Exception {
 		String name = ProviderClient.class.getName();
@@ -1176,9 +1564,13 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 
 	/* A sign-in through the provider as it is now, which must be refused */
 	private ProviderException refused(SignInProvider p) throws ProviderException {
-		Start s = client.start(p, REDIRECT, false);
+		return refused(client, p);
+	}
+
+	private ProviderException refused(ProviderClient c, SignInProvider p) throws ProviderException {
+		Start s = c.start(p, REDIRECT, false);
 		String code = fake.authorize(s.authorization());
-		return assertThrows(ProviderException.class, () -> client.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
+		return assertThrows(ProviderException.class, () -> c.exchange(p, REDIRECT, code, s.verifier(), s.nonce()));
 	}
 
 	private static boolean mentions(Check check, String text) {

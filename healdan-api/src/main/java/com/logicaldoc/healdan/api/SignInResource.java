@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
@@ -20,6 +22,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.security.Client;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.SessionManager;
 import com.logicaldoc.core.security.authentication.AuthenticationException;
@@ -181,6 +184,19 @@ public class SignInResource {
 	private static final int MAX_QUOTED = 200;
 
 	private static final Logger log = LoggerFactory.getLogger(SignInResource.class);
+
+	/** LogicalDOC's checks of an account, as its sign-in chain runs them */
+	static final Consumer<User> CE_CHECKS = user -> com.logicaldoc.util.spring.Context.get(DefaultAuthenticator.class)
+			.validateUser(user);
+
+	/** How a helper's sign-in checks its account before handing it a code; tests replace it */
+	static volatile Consumer<User> accountChecks = CE_CHECKS;
+
+	/** How a web page's sign-in opens its CE session, through the chain */
+	static final BiFunction<User, Client, Session> CE_SESSIONS = SignIns::openSession;
+
+	/** How a web page's sign-in opens its session; tests replace it */
+	static volatile BiFunction<User, Client, Session> sessions = CE_SESSIONS;
 
 	/**
 	 * The helper's side of its sign-in, checked at the start.
@@ -451,28 +467,44 @@ public class SignInResource {
 		// (disabled, expired, outside working hours, legals unconfirmed) is told so here, not given a code
 		if (helper != null) {
 			try {
-				com.logicaldoc.util.spring.Context.get(DefaultAuthenticator.class).validateUser(user);
+				accountChecks.accept(user);
 			} catch (AuthenticationException e) {
 				return refused(address, helper, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in would refuse "
 						+ "the account " + quote(user.getUsername()) + " (" + e.getClass().getSimpleName() + ")", false);
+			} catch (RuntimeException e) {
+				// Only its class: its message could quote the account's row. Refused at the helper's address, not a 500
+				return refused(address, helper, id, claims.identity(), ACCOUNT, "LogicalDOC's checks of the account "
+						+ quote(user.getUsername()) + " failed on " + e.getClass().getName(), true);
 			}
 			return handToHelper(helper, user, id, tokens.refreshToken());
 		}
 
 		Session session;
 		try {
-			session = SignIns.openSession(user, SessionManager.get().buildClient(request));
+			session = sessions.apply(user, SessionManager.get().buildClient(request));
 		} catch (AuthenticationException e) {
 			// Disabled, expired, outside working hours, legals not confirmed, or the address blocked
 			return refused(address, null, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in refused the account "
 					+ quote(user.getUsername()) + " (" + e.getClass().getSimpleName() + ")", false);
+		} catch (RuntimeException e) {
+			// As in the helper's branch: only its class, and refused at the login page, the cookie cleared, not a 500
+			return refused(address, null, id, claims.identity(), ACCOUNT, "LogicalDOC's sign-in of the account "
+					+ quote(user.getUsername()) + " failed on " + e.getClass().getName(), true);
 		}
 		if (session == null)
 			return refused(address, null, id, claims.identity(), ACCOUNT,
 					"LogicalDOC's sign-in opened no session for the account " + quote(user.getUsername()), true);
 
-		String landing = landing(request, address);
-		signInBrowser(session.getSid(), request, response);
+		String landing;
+		try {
+			landing = landing(request, address);
+			signInBrowser(session.getSid(), request, response);
+		} catch (RuntimeException e) {
+			// The session opened, but the browser couldn't be given it: closed, so nothing is left signed in
+			SessionManager.get().kill(session.getSid());
+			return refused(address, null, id, claims.identity(), ACCOUNT, "the web page couldn't be given the session "
+					+ "of the account " + quote(user.getUsername()) + " (" + e.getClass().getName() + ")", true);
+		}
 		log.info("Signed {} in to the web page through the sign-in provider {}", quote(user.getUsername()), id);
 		return redirect(URI.create(landing));
 	}

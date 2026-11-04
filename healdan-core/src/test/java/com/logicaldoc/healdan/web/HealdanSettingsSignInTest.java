@@ -53,6 +53,7 @@ import com.logicaldoc.healdan.signin.ProviderClient;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.signin.SignInAccounts;
 import com.logicaldoc.healdan.signin.SignInAccounts.Allowed;
+import com.logicaldoc.healdan.signin.SignInGroupDAO;
 import com.logicaldoc.healdan.signin.SignInIdentityDAO;
 import com.logicaldoc.healdan.signin.SignInProvider;
 import com.logicaldoc.healdan.signin.SignInProviders;
@@ -205,6 +206,57 @@ public class HealdanSettingsSignInTest extends AbstractHealdanTestCase {
 		assertFalse(SignInProviders.get().adminAlert());
 		assertEquals(1, SignInIdentityDAO.get().countLinked("entra"));
 		assertEquals(UserSource.OIDC, UserDAO.get().findById(pat.getId(), true).getSource());
+	}
+
+	/*
+	 * A provider and its group map are saved in one transaction: when the map
+	 * can't be written, an added provider leaves nothing under its id, which
+	 * would refuse it as in use, and an edited one stays as it was
+	 */
+	@Test
+	public void testAFailedGroupMapSavesNothing() throws Exception {
+		SignInProviders failing = new SignInProviders(HealdanSettings.get(), SecretBox.get(), SignInIdentityDAO.get(),
+				SignInGroupDAO.get()) {
+			@Override
+			public synchronized void saveGroups(String id, List<GroupMapping> mappings)
+					throws com.logicaldoc.core.PersistenceException {
+				throw new com.logicaldoc.core.PersistenceException("The group map couldn't be written");
+			}
+		};
+		HealdanSettingsServiceImpl service = new HealdanSettingsServiceImpl() {
+			private static final long serialVersionUID = 1L;
+
+			@Override
+			protected Session session() {
+				return boss;
+			}
+
+			@Override
+			protected jakarta.servlet.http.HttpServletRequest request() {
+				return request;
+			}
+
+			@Override
+			protected SignInProviders providers() {
+				return failing;
+			}
+		};
+
+		// Added: nothing is left under its id, so it can be added once the map can be written
+		assertThrows(ServerException.class, () -> service.saveProvider(added("entra", Preset.ENTRA), SECRET));
+		assertEquals(List.of(), HealdanSettings.get().names("signin.entra."));
+		assertEquals("", HealdanSettings.get().get("signin.providers"));
+		assertTrue(SignInProviders.get().all().isEmpty());
+		GUISignInProvider saved = as(boss).saveProvider(added("entra", Preset.ENTRA), SECRET);
+
+		// Edited: the label, the secret and the map stay as they were
+		saved.setLabel("Sign In with Entra");
+		saved.setGroups(new GUIGroupMapping[0]);
+		assertThrows(ServerException.class, () -> service.saveProvider(saved, ANOTHER_SECRET));
+		SignInProvider kept = SignInProviders.get().find("entra").orElseThrow();
+		assertEquals("Sign In with Microsoft", kept.label());
+		assertEquals(SECRET, SignInProviders.get().secret("entra"));
+		assertEquals(List.of(new GroupMapping("g-lit", litigation.getId())), SignInProviders.get().groups("entra"));
 	}
 
 	@Test

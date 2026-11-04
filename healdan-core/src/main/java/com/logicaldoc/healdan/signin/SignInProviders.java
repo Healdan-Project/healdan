@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.signin;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -20,6 +21,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.security.user.Group;
@@ -98,8 +101,14 @@ public class SignInProviders {
 
 	private static final String LINK_BY_EMAIL = "linkByEmail";
 
-	/** Ids that name a page of the sign-in address, where a provider's id would be */
-	private static final Set<String> RESERVED_IDS = Set.of("done");
+	/**
+	 * Ids a provider can't have: {@code done} names a page of the sign-in
+	 * address, where a provider's id would be, and {@code password} and
+	 * {@code recheck} are where Healdan's own options are kept
+	 * ({@code signin.password.label}, {@code signin.recheck.minutes}), even
+	 * while their rows are missing
+	 */
+	private static final Set<String> RESERVED_IDS = Set.of("done", "password", "recheck");
 
 	private static final int MAX_LABEL = 60;
 
@@ -109,7 +118,13 @@ public class SignInProviders {
 
 	private static final int MAX_ISSUER = 1000;
 
-	private static final int MAX_SECRET = 1000;
+	/**
+	 * The most bytes a client secret may have in UTF-8, as it's sealed: 1000
+	 * characters of letters and digits, fewer in a script that takes more bytes
+	 * a character. Sealed, it's at most 1375 characters, well within the
+	 * setting's 4000.
+	 */
+	static final int MAX_SECRET_BYTES = 1000;
 
 	/** The width of {@code hd_signin_group.hd_value} */
 	private static final int MAX_GROUP_VALUE = 255;
@@ -216,8 +231,7 @@ public class SignInProviders {
 	 *         13).
 	 */
 	public List<SignInProvider> enabled() {
-		return all().stream().filter(p -> p.enabled() && p.issuer() != null && p.clientId() != null && p.hasSecret())
-				.toList();
+		return all().stream().filter(SignInProvider::usable).toList();
 	}
 
 	/**
@@ -358,6 +372,53 @@ public class SignInProviders {
 			settings.set(PROVIDERS, String.join(",", listed));
 		}
 		log.info("Sign-in provider {} {}", id, adding ? "added" : "saved");
+	}
+
+	/**
+	 * Adds or changes a provider, as {@link #save(SignInProvider, String,
+	 * boolean)} does, and replaces its group map, as {@link #saveGroups} does,
+	 * in one transaction: if either fails, neither is saved, so a failed add
+	 * leaves no settings under the id to refuse it as in use, and a failed
+	 * change leaves the provider as it was. The Sign-In tab's Save calls it.
+	 *
+	 * @param p the provider; {@code hasSecret} is ignored
+	 * @param newSecret the client secret to keep, sealed; null or blank keeps
+	 *        the one stored
+	 * @param newKey whether the administrator confirmed making a new key for
+	 *        the new secret (ruling R37)
+	 * @param mappings the new group map
+	 * @throws PersistenceException error at data layer
+	 * @throws HealdanRuleException as {@link #save(SignInProvider, String)} and
+	 *         {@link #saveGroups} refuse
+	 */
+	public synchronized void save(SignInProvider p, String newSecret, boolean newKey, List<GroupMapping> mappings)
+			throws PersistenceException {
+		try {
+			new TransactionTemplate(Context.get(PlatformTransactionManager.class)).executeWithoutResult(status -> {
+				try {
+					save(p, newSecret, newKey);
+					saveGroups(p.id(), mappings);
+				} catch (PersistenceException e) {
+					// A checked exception: wrapped, so that the template rolls back
+					throw new Checked(e);
+				}
+			});
+		} catch (Checked e) {
+			throw e.wrapped;
+		}
+	}
+
+	/** Carries a {@link PersistenceException} out of a transaction, which then rolls back */
+	private static final class Checked extends RuntimeException {
+
+		private static final long serialVersionUID = 1L;
+
+		private final transient PersistenceException wrapped;
+
+		Checked(PersistenceException wrapped) {
+			super(wrapped);
+			this.wrapped = wrapped;
+		}
 	}
 
 	/**
@@ -610,8 +671,9 @@ public class SignInProviders {
 
 	private SignInProvider read(String id) {
 		Preset preset = Preset.of(settings.get(key(id, PRESET)));
+		// Whether the secret opens, not the secret: listing providers, as the public GET /server does, opens none
 		return new SignInProvider(id, preset, setting(id, LABEL, preset.label()), flag(id, ENABLED, true),
-				optional(id, ISSUER), optional(id, CLIENT_ID), secret(id) != null,
+				optional(id, ISSUER), optional(id, CLIENT_ID), box.opens(settings.get(key(id, CLIENT_SECRET))),
 				setting(id, IDENTITY_CLAIM, preset.identityClaim()), setting(id, USERNAME_CLAIM, preset.usernameClaim()),
 				setting(id, EMAIL_CLAIM, preset.emailClaim()), setting(id, GROUPS_CLAIM, preset.groupsClaim()),
 				flag(id, LINK_BY_EMAIL, preset.linkByEmail()));
@@ -700,8 +762,10 @@ public class SignInProviders {
 			return null;
 		}
 		String secret = newSecret.strip();
-		if (secret.length() > MAX_SECRET)
-			throw refuse("The client secret can't be longer than %d characters.".formatted(MAX_SECRET));
+		// The bytes that are sealed, not the characters typed: a character can take up to four of them
+		if (secret.getBytes(StandardCharsets.UTF_8).length > MAX_SECRET_BYTES)
+			throw refuse(("The client secret can't be longer than %d characters, or fewer in a script that takes "
+					+ "more than one byte a character.").formatted(MAX_SECRET_BYTES));
 		try {
 			// Only an administrator who confirmed it makes a new key over sealed values: the file may only be missing
 			// for a while, and a new key would leave every other value unreadable (ruling R37)
