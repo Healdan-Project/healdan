@@ -185,6 +185,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 409 | `version-moved` | A save with `ifVersion` found the document at another version. The problem adds the `document` |
 | 409 | `filing-rule` | The folder can't hold documents: a Store, a matter's top folder or a search folder |
 | 409 | `already-filed` | The matter already holds this email, by its Message-ID. The problem adds the `document`, the copy that is there, when you can read it |
+| 409 | `filing-in-progress` | Another request was filing the same email into the matter, and it didn't end within 30 seconds. Nothing was kept: send the request again |
 | 409 | `not-browsable` | A Store's contents were asked for. Find a matter by search, My Matters or Recent Matters instead |
 | 409 | `refused` | Another of Healdan's rules refused it. `detail` says which |
 | 413 | `too-large` | The file is over the upload limit |
@@ -427,11 +428,13 @@ The answer is `201`, with the email's address as `Location`.
   its own in the same folder, with its own doc #, named by its file name and linked to the email (a link of type
   `attachment`, the email first, which the web page's Links tab shows). Leave `attachments` out to file the email
   alone. An inline part, such as a logo the message shows, can't be ticked.
-- **The properties** sent apply to the email and to each attachment, but for the email fields, which each takes from
-  its own file. Anything not sent inherits from the folder.
+- **The properties** sent apply to the email and to each attachment. Anything not sent inherits from the folder.
+  The email fields can't be sent: each document takes its own from its file, and a value for one is `422` with the
+  code `read-only`.
 - **An attached message** (a forward) is filed as an `.eml` of its own, so it gets its own email fields. One whose
   message the matter already holds is skipped, not refused, and listed in `skipped` with its copy; the email still
-  files. So is an attached `.eml` or `.msg` file the matter holds.
+  files. So is an attached `.eml` or `.msg` file the matter holds. A copy from before Healdan has no doc #, so its
+  `document` is `null`.
 - **All or nothing.** Everything is checked before anything is stored: the folder (`404`, `409 filing-rule`,
   `403`), the email (`413 too-large`, `422 not-an-email`), whether the matter holds it already, each ticked
   attachment against the upload rules, then the properties. A `422` names a ticked attachment's problem under the
@@ -441,8 +444,9 @@ The answer is `201`, with the email's address as `Location`.
 - **`409 already-filed`** means the matter already holds this message, by its Message-ID; the problem's `document`
   is the copy. A client that repeats a filing whose answer it lost meets this, naming the copy its first try made,
   and can take it as done. A repeat that arrives while the first try is still filing waits for it to end, then meets
-  this, or files the email if the first try was taken back. The same refusal comes from `POST /documents`, the web
-  page and every other way a copy of the message could reach the matter.
+  this, or files the email if the first try was taken back, and so does a `POST /documents` of the same message.
+  One that waits more than 30 seconds is `409 filing-in-progress`: send it again. The same refusal comes from the
+  web page and every other way a copy of the message could reach the matter.
 
 ## Doc IDs in Word and LibreOffice Files
 

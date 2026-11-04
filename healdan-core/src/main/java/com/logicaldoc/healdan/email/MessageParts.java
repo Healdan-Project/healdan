@@ -10,6 +10,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -104,6 +105,18 @@ public final class MessageParts {
 		}
 	}
 
+	/** Takes each part's content, as {@link MessageParts#write(MimeMessage, Collection, Writer)} reads it */
+	@FunctionalInterface
+	public interface Writer {
+
+		/**
+		 * @param index the part's index
+		 * @param content its decoded content, which the walk closes
+		 * @throws IOException if it can't be written
+		 */
+		void write(int index, InputStream content) throws IOException;
+	}
+
 	/** A part the walk found, with what {@link #write} needs to read it again */
 	private record Found(String name, String type, boolean inline, String messageId, jakarta.mail.Part source) {
 	}
@@ -145,12 +158,32 @@ public final class MessageParts {
 	 * @throws MessagingException if the message can't be walked
 	 */
 	public static void write(MimeMessage message, int index, OutputStream out) throws IOException, MessagingException {
+		write(message, List.of(index), (i, content) -> content.transferTo(out));
+	}
+
+	/**
+	 * Writes several parts' content, walking the message once.
+	 *
+	 * @param message the message
+	 * @param indexes the parts' indexes, as {@link #list} gave them, in the
+	 *        order to write them
+	 * @param writer given each part's decoded content in turn; an attached
+	 *        message as its {@code eml} bytes
+	 * @throws IllegalArgumentException if the message has no such part; then
+	 *         nothing is written
+	 * @throws IOException if a part can't be read or written
+	 * @throws MessagingException if the message can't be walked
+	 */
+	public static void write(MimeMessage message, Collection<Integer> indexes, Writer writer)
+			throws IOException, MessagingException {
 		List<Found> found = scan(Objects.requireNonNull(message));
-		if (index < 0 || index >= found.size())
-			throw new IllegalArgumentException("The message has no part " + index);
-		try (InputStream in = found.get(index).source().getInputStream()) {
-			in.transferTo(out);
-		}
+		for (int index : indexes)
+			if (index < 0 || index >= found.size())
+				throw new IllegalArgumentException("The message has no part " + index);
+		for (int index : indexes)
+			try (InputStream in = found.get(index).source().getInputStream()) {
+				writer.write(index, in);
+			}
 	}
 
 	/** The decoded length, read once */

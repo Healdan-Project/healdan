@@ -23,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
@@ -78,9 +77,6 @@ import jakarta.ws.rs.core.UriInfo;
 public class DocumentResource {
 
 	private static final Logger log = LoggerFactory.getLogger(DocumentResource.class);
-
-	/** CE's {@code Version.DEFAULT_START_VERSION} */
-	private static final String DEFAULT_FIRST_VERSION = "1.0";
 
 	/** The media type of a thumbnail, as CE's {@code ThumbnailManager} makes it */
 	private static final String PNG = "image/png";
@@ -190,38 +186,12 @@ public class DocumentResource {
 	}
 
 	/**
-	 * @return the version CE gives a new document, from
-	 *         {@code document.startversion} as CE reads it (its own reader
-	 *         isn't public): {@code 1.0} by default
-	 */
-	static String firstVersion() {
-		String start = com.logicaldoc.util.spring.Context.get().getConfig().getString("document.startversion",
-				DEFAULT_FIRST_VERSION);
-		try {
-			String[] parts = start.split("\\.");
-			return start.contains(".") ? "%d.%d".formatted(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]))
-					: "%d.0".formatted(Integer.parseInt(start));
-		} catch (RuntimeException e) {
-			return DEFAULT_FIRST_VERSION;
-		}
-	}
-
-	/**
 	 * @return the {@code document} part
 	 * @throws ApiProblem {@code 400} if it's missing, isn't the JSON expected
 	 *         or doesn't say which folder
 	 */
 	private static NewDocument parse(String document) {
-		if (document == null)
-			throw ApiProblem.badRequest("Send the document's details as JSON in a part named document.");
-		NewDocument request;
-		try {
-			request = ApiJson.mapper().readValue(document, NewDocument.class);
-		} catch (JsonProcessingException e) {
-			throw ApiProblem.badRequest(ProblemMapper.describe(e));
-		}
-		if (request == null)
-			throw ApiProblem.badRequest("The document part must be a JSON object.");
+		NewDocument request = ApiJson.part(document, NewDocument.class, "document", "the document's details");
 		if (request.folderId() == null)
 			throw ApiProblem.badRequest("Say which folder to file the document into with folderId.");
 		return request;

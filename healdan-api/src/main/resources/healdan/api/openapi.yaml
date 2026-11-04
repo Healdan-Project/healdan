@@ -326,7 +326,11 @@ paths:
         properties are inherited from the folder, with any `properties` sent
         as the document's own. Author and Typist are the caller unless sent.
         An email (`.eml` or `.msg`) gets its From, To, CC, Subject, Sent and
-        Received from the message, and is named after its subject. With
+        Received from the message, and is named after its subject. While a
+        `fileEmail` call is filing the same message into the folder's
+        matter, an email waits for it to end, then meets `409
+        already-filed` or is filed; one that waits more than 30 seconds is
+        `409 filing-in-progress`, and can be sent again. With
         `checkOut: true` the document is checked out to the caller too, held
         on the caller's device as by `checkOutDocument`. The answer is `201`
         with the document, and its address as `Location`.
@@ -553,8 +557,10 @@ paths:
         (the email first), which the web page's Links tab shows. An attached
         message is filed as an `.eml` of its own, so it gets its own email
         fields. The `properties` sent apply to the email and to each
-        attachment, but for the email fields; anything not sent inherits from
-        the folder. Author and Typist are the caller unless sent. The answer
+        attachment; anything not sent inherits from the folder. The email
+        fields can't be sent, as each document takes its own from its file:
+        a value for one is `422` with the code `read-only`. Author and Typist
+        are the caller unless sent. The answer
         is `201` with the email's document and the attachments', and the
         email's address as `Location`.
 
@@ -580,7 +586,8 @@ paths:
            this, naming the copy it made, so the call is safe to repeat for a
            message with a Message-ID. A repeat that arrives while the first
            call is still filing waits for it to end, then meets this, or files
-           the email when the first call was undone.
+           the email when the first call was undone. One that waits more than
+           30 seconds is `409 filing-in-progress`, and can be sent again.
         8. `422 validation` listing every field that is wrong: `file` with
            `disallowed` when the `upload.disallow` setting lists `eml`; and
            `attachments` for each index ticked that isn't one of the email's
@@ -594,10 +601,13 @@ paths:
         An index ticked twice is filed once. An attachment that is itself an
         email (an attached message, or an `.eml` or `.msg` file) whose
         message the folder's matter already holds is skipped, not refused,
-        and listed in `skipped` with `already-filed` and the copy; the email
-        and the other attachments still file. So is one that a filing at the
+        and listed in `skipped` with `already-filed` and the copy (`null`
+        for a copy from before Healdan, which has no doc #); the email and
+        the other attachments still file. So is one that a filing at the
         same moment, or another attachment of this email, put in the matter
-        while this one was being filed.
+        while this one was being filed. One put in the matter and taken out
+        again while this one was being filed is `409 filing-in-progress`,
+        with nothing kept: file the email again.
 
         Only once every check has passed are the email, then each attachment,
         then the links stored, each document as `fileDocument` stores one. If
@@ -1575,7 +1585,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, refused, too-large, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
@@ -2555,9 +2565,9 @@ components:
           description: |
             Values for the properties, by name, as `NewDocument.properties`
             takes them. They apply to the email and to each attachment filed
-            with it, but for the email fields, which each takes from its own
-            file. A property left out, sent as `null`, or sent as it would
-            inherit, inherits from the folder.
+            with it. The email fields can't be sent: each document takes its
+            own from its file. A property left out, sent as `null`, or sent as
+            it would inherit, inherits from the folder.
           additionalProperties:
             $ref: '#/components/schemas/PropertyValue'
           examples:
@@ -2606,8 +2616,12 @@ components:
                 enum: [already-filed]
                 description: Why it wasn't filed.
               document:
-                $ref: '#/components/schemas/DocumentView'
-                description: The copy of its message that the matter holds.
+                oneOf:
+                  - $ref: '#/components/schemas/DocumentView'
+                  - type: 'null'
+                description: |
+                  The copy of its message that the matter holds; `null` for
+                  a copy from before Healdan, which has no doc #.
     NewDocument:
       type: object
       additionalProperties: false
