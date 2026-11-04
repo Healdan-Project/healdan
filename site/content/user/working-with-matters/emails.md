@@ -34,7 +34,8 @@ A matter holds each message once. Healdan tells one message from another by its 
   through, so a refusal never tells you about a document you can't read.
 - **The trash doesn't count.** Once a copy is deleted, the message can be filed again; the deleted copy then can't
   be restored into the same matter while the new one is there.
-- **Moving a copy within its matter** is never refused, nor is saving a new version of it.
+- **Moving a copy within its matter** is never refused, nor is saving a new version of it. A new version that is
+  another message counts as that message from then on, and one that is no message counts as none.
 - **A message with no Message-ID** is never treated as a copy of another.
 
 ## Its Name

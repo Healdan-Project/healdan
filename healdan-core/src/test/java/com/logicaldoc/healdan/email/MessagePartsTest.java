@@ -3,6 +3,7 @@
 
 package com.logicaldoc.healdan.email;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -16,11 +17,14 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.stream.Stream;
 
+import org.bouncycastle.cms.CMSProcessableByteArray;
+import org.bouncycastle.cms.CMSSignedDataGenerator;
 import org.junit.Test;
 
 import com.logicaldoc.core.communication.MailUtil;
@@ -144,6 +148,37 @@ public class MessagePartsTest {
 		assertEquals(List.of(), MessageParts.list(pkcs7()));
 		// PGP/MIME, whose second part is named
 		assertEquals(List.of(), MessageParts.list(pgp()));
+	}
+
+	/** Opaque-signed S/MIME: a PDF inside the signature, which has no signer, as only its content matters here */
+	private static MimeMessage opaqueSigned() throws Exception {
+		String content = "Content-Type: multipart/mixed; boundary=\"s\"\r\n\r\n--s\r\nContent-Type: text/plain\r\n\r\n"
+				+ "Signed text\r\n--s\r\nContent-Type: application/pdf\r\n"
+				+ "Content-Disposition: attachment; filename=\"Signed.pdf\"\r\nContent-Transfer-Encoding: base64\r\n\r\n"
+				+ Base64.getMimeEncoder().encodeToString(PDF) + "\r\n--s--\r\n";
+		byte[] signature = new CMSSignedDataGenerator()
+				.generate(new CMSProcessableByteArray(content.getBytes(StandardCharsets.US_ASCII)), true).getEncoded();
+		return built("application/pkcs7-mime; smime-type=signed-data; name=\"smime.p7m\"\n"
+				+ "Content-Transfer-Encoding: base64", Base64.getMimeEncoder().encodeToString(signature) + "\n");
+	}
+
+	@Test
+	public void testOpaqueSignedListsItsContent() throws Exception {
+		MimeMessage message = opaqueSigned();
+		List<Part> parts = MessageParts.list(message);
+		assertEquals(List.of("Signed.pdf"), parts.stream().map(Part::name).toList());
+		assertEquals("application/pdf", parts.get(0).type());
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		MessageParts.write(message, 0, out);
+		assertArrayEquals(PDF, out.toByteArray());
+
+		// Encrypted S/MIME still lists nothing, with smime-type or without
+		assertEquals(List.of(), MessageParts.list(pkcs7()));
+		assertEquals(List.of(), MessageParts.list(
+				built("application/pkcs7-mime; smime-type=enveloped-data; name=\"smime.p7m\"", "ZGF0YQ==\n")));
+		// A signature that isn't one can't be read
+		assertEquals(List.of(), MessageParts.list(
+				built("application/pkcs7-mime; smime-type=signed-data; name=\"smime.p7m\"", "ZGF0YQ==\n")));
 	}
 
 	private static MimeMessage pgp() throws Exception {
@@ -366,13 +401,16 @@ public class MessagePartsTest {
 				// The same, with a name of its own, and with no Message-ID
 				"Content-Type: message/rfc822; name=\"Named.eml\"\n\nFrom: x@example.com\nSubject: No id\n\nBody\n",
 				// Without a subject or a name
-				"Content-Type: message/rfc822\n\nFrom: x@example.com\n\nBody\n");
+				"Content-Type: message/rfc822\n\nFrom: x@example.com\n\nBody\n",
+				// Named without an extension, as some clients send it
+				"Content-Type: message/rfc822\nContent-Disposition: attachment; filename=\"Re: Contract\"\n\n"
+						+ "From: x@example.com\nSubject: Re: Contract\n\nBody\n");
 	}
 
 	@Test
 	public void testAnAttachedMessageIsNotWalkedInto() throws Exception {
 		List<Part> parts = MessageParts.list(attachedMessages());
-		assertEquals(List.of("Caf\u00e9.eml", "Named.eml", "Attached message.eml"),
+		assertEquals(List.of("Caf\u00e9.eml", "Named.eml", "Attached message.eml", "Re_ Contract.eml"),
 				parts.stream().map(Part::name).toList());
 		assertEquals("inner@example.com", parts.get(0).messageId());
 		assertEquals(null, parts.get(1).messageId());
@@ -425,7 +463,8 @@ public class MessagePartsTest {
 		assertEquals(1, assertWritesWhatListSaid("rpmsg and pdf", rpmsgAndPdf()));
 		assertEquals(1, assertWritesWhatListSaid("pkcs7 and pdf", pkcs7AndPdf()));
 		assertEquals(3, assertWritesWhatListSaid("inline and named", inlineAndNamed()));
-		assertEquals(3, assertWritesWhatListSaid("attached messages", attachedMessages()));
+		assertEquals(4, assertWritesWhatListSaid("attached messages", attachedMessages()));
+		assertEquals(1, assertWritesWhatListSaid("opaque-signed", opaqueSigned()));
 		assertEquals(1, assertWritesWhatListSaid("path name", pathName()));
 		assertEquals(1, assertWritesWhatListSaid("long name", longName()));
 		for (String[] row : NAME_TABLE)

@@ -403,11 +403,21 @@ public class StoredRows implements PreUpdateEventListener {
 	 *         the folder whose security it uses
 	 */
 	public boolean mayDelete(long folderId, long userId) {
+		return folderAllows(folderId, userId, "ld_delete");
+	}
+
+	/**
+	 * @param permission a permission column of {@code ld_folder_acl}
+	 * @return true if one of the user's groups has it on the folder, deleted or
+	 *         not, or on the folder whose security it uses
+	 */
+	private boolean folderAllows(long folderId, long userId, String permission) {
 		List<Long> refs = jdbc.queryForList("select ld_securityref from ld_folder where ld_id = ?", Long.class,
 				folderId);
 		long aclFolder = !refs.isEmpty() && refs.get(0) != null ? refs.get(0) : folderId;
 		Integer count = jdbc.queryForObject(
-				"select count(*) from ld_folder_acl where ld_folderid = ? and ld_delete = 1 and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)",
+				"select count(*) from ld_folder_acl where ld_folderid = ? and %s = 1 and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)"
+						.formatted(permission),
 				Integer.class, aclFolder, userId);
 		return count != null && count > 0;
 	}
@@ -433,20 +443,40 @@ public class StoredRows implements PreUpdateEventListener {
 	 * @return true if the user has DELETE on the document
 	 */
 	public boolean mayDeleteDocument(long documentId, long userId) {
+		return documentAllows(documentId, userId, "ld_delete");
+	}
+
+	/**
+	 * Reads the read permission on a document, deleted or not, as
+	 * {@link #mayDeleteDocument} reads delete
+	 *
+	 * @param documentId the document
+	 * @param userId the user
+	 * @return true if the user has READ on the document
+	 */
+	public boolean mayReadDocument(long documentId, long userId) {
+		return documentAllows(documentId, userId, "ld_read");
+	}
+
+	/**
+	 * @param permission a permission column of {@code ld_document_acl} and
+	 *        {@code ld_folder_acl}
+	 */
+	private boolean documentAllows(long documentId, long userId, String permission) {
 		// The entries that grant something, on the permission columns CE reads
 		List<Integer> entries = jdbc.queryForList("""
-				select ld_delete from ld_document_acl
+				select %s from ld_document_acl
 				 where ld_docid = ? and ld_groupid in (select ld_groupid from ld_usergroup where ld_userid = ?)
 				   and (ld_read = 1 or ld_write = 1 or ld_security = 1 or ld_immutable = 1 or ld_delete = 1
 				        or ld_rename = 1 or ld_sign = 1 or ld_archive = 1 or ld_workflow = 1 or ld_download = 1
 				        or ld_calendar = 1 or ld_subscription = 1 or ld_print = 1 or ld_password = 1 or ld_move = 1
 				        or ld_email = 1 or ld_automation = 1 or ld_readingreq = 1 or ld_preview = 1
 				        or ld_customid = 1 or ld_revision = 1)
-				""", Integer.class, documentId, userId);
+				""".formatted(permission), Integer.class, documentId, userId);
 		if (!entries.isEmpty())
 			return entries.contains(1);
 		Long folderId = documentFolder(documentId);
-		return folderId != null && mayDelete(folderId, userId);
+		return folderId != null && folderAllows(folderId, userId, permission);
 	}
 
 	private static String deleted(boolean withDeleted) {

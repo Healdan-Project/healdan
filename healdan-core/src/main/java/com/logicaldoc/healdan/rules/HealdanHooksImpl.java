@@ -134,7 +134,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 			rules.checkDocumentTarget(target);
 			// A shortcut is no copy; the store checks again, inside DocumentManager's synchronized block
 			if (target != null && document.getFolder() != null && document.getDocRef() == null)
-				oncePerMatter.checkMove(document.getId(), document.getFolder().getId(), target.getId(),
+				oncePerMatter.checkMoveAhead(document.getId(), document.getFolder().getId(), target.getId(),
 						FilingRules.actor(transaction));
 		});
 		stampMove(document, target);

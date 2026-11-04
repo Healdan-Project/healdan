@@ -14,7 +14,8 @@ import com.logicaldoc.healdan.HealdanConstants;
 /**
  * Adds the Message-ID attribute to the Healdan profile, at position 14 after
  * Received, so an email's Message-ID is a property like its From and Subject
- * (M5 spec §6.1). Nothing else moves. A profile an admin deleted stays
+ * (M5 spec §6.1). Properties an admin added after Received move down one, as
+ * {@link ProfileCommentsSeed} moves them. A profile an admin deleted stays
  * deleted, and one that already has {@code emailmessageid} is left alone.
  */
 @Component
@@ -33,6 +34,11 @@ public class ProfileMessageIdSeed implements SeedStep {
 		Template template = TemplateDAO.get().findByName(HealdanConstants.PROFILE_TEMPLATE, Tenant.DEFAULT_ID, true);
 		if (template == null || template.getAttribute(HealdanConstants.ATTR_EMAILMESSAGEID) != null)
 			return;
+
+		// An admin's own properties after Received make room, as for Comments
+		for (Attribute attribute : template.getTemplateAttributes().values())
+			if (attribute.getPosition() >= POSITION)
+				attribute.setPosition(attribute.getPosition() + 1);
 
 		Attribute messageId = new Attribute();
 		messageId.setLabel("Message-ID");

@@ -123,12 +123,28 @@ public class EmailIndex {
 	 *         order asked; an empty list for one with no copy
 	 */
 	public Map<String, List<Long>> copies(Collection<String> messageIds) {
-		Map<String, List<Long>> answer = new LinkedHashMap<>();
+		List<String> normalized = new ArrayList<>();
 		for (String messageId : messageIds) {
 			String id = MessageIds.normalize(messageId);
 			if (id != null)
-				answer.putIfAbsent(id, new ArrayList<>());
+				normalized.add(id);
 		}
+		return copiesOf(normalized);
+	}
+
+	/**
+	 * {@link #copies(String)} for many at once, in chunked queries
+	 *
+	 * @param messageIds normalised Message-IDs ({@link MessageIds#normalize}),
+	 *        which aren't normalised again
+	 * @return the same for each, keyed by it, in the order given; an empty list
+	 *         for one with no copy
+	 */
+	public Map<String, List<Long>> copiesOf(Collection<String> messageIds) {
+		Map<String, List<Long>> answer = new LinkedHashMap<>();
+		for (String id : messageIds)
+			if (isKept(id))
+				answer.putIfAbsent(id, new ArrayList<>());
 
 		List<String> asked = new ArrayList<>(answer.keySet());
 		for (int from = 0; from < asked.size(); from += CHUNK) {
