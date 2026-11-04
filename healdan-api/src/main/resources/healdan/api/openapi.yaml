@@ -580,12 +580,14 @@ paths:
            the email when the first call was undone.
         8. `422 validation` listing every field that is wrong: `file` with
            `disallowed` when the `upload.disallow` setting lists `eml`; and
-           `attachments` for each index ticked that isn't one of the email's
-           attachments (`not-an-attachment`, an inline part included), or
-           whose attachment the upload rules refuse, with the codes of
+           `attachments[<index>]`, such as `attachments[2]`, for each index
+           ticked that isn't one of the email's attachments
+           (`not-an-attachment`, an inline part included), or whose
+           attachment the upload rules refuse, with the codes of
            `fileDocument`'s `name` (`too-long`, `invalid`, `extension`,
            `disallowed`) and `file` (`too-large`, `empty`). Each detail names
-           the index and the attachment's name.
+           the index and the attachment's name. An index left `null` is
+           `attachments`.
         9. The properties, as `fileDocument` checks them (`422`).
 
         An index ticked twice is filed once. An attachment that is itself an
@@ -1602,7 +1604,11 @@ components:
       properties:
         field:
           type: string
-          examples: [docclass]
+          description: |
+            The field that is wrong: a property's name, or a request's member.
+            One element of a list is named with its position or index, as
+            `fileEmail` names a ticked attachment `attachments[2]`.
+          examples: [docclass, 'attachments[2]']
         code:
           type: string
           examples: [required, not-an-email, not-an-attachment]
@@ -2465,7 +2471,7 @@ components:
       type: object
       additionalProperties: false
       description: What `inspectEmail` found in an email.
-      required: [messageId, subject, from, sent, attachments, copies]
+      required: [messageId, subject, from, to, cc, sent, received, attachments, copies]
       properties:
         messageId:
           type: [string, 'null']
@@ -2479,10 +2485,24 @@ components:
           type: [string, 'null']
           description: The sender, as `Name <address>`.
           examples: ['Ann Smith <ann@example.com>']
+        to:
+          type: [string, 'null']
+          description: The To recipients, each as `from` is, joined with `, `.
+          examples: ['Bob Jones <bob@example.com>, carol@example.com']
+        cc:
+          type: [string, 'null']
+          description: The CC recipients, as `to` has them.
         sent:
           type: [string, 'null']
           format: date-time
           description: When the message was sent, or `null` when it doesn't say.
+        received:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            When the message was received: the date of its most recent
+            `Received` header, else its `Delivery-Date`; `null` when it has
+            neither.
         attachments:
           type: array
           description: The attachments and inline parts, by `index`.

@@ -482,7 +482,7 @@ public class EmailFilingTest extends ApiTestCase {
 
 		ApiResponse empty = fileEmail(token, request(documents, null, List.of(0)), eml.getBytes(StandardCharsets.UTF_8));
 
-		assertEquals(List.of("attachments empty"), fields(empty));
+		assertEquals(List.of("attachments[0] empty"), fields(empty)); // named by its index, for the client to show by it
 		assertEquals("Attachment 0 (empty.txt): The file is empty.",
 				empty.json().path("fields").get(0).path("detail").textValue());
 		before.assertUnchanged();
@@ -493,7 +493,7 @@ public class EmailFilingTest extends ApiTestCase {
 		EmailFiling.checkAttachment(new MessageParts.Part(3, "Big.pdf", "application/pdf", 1024L * 1024L + 1L, false,
 				null), errors);
 		assertEquals(1, errors.size());
-		assertEquals("attachments", errors.get(0).field());
+		assertEquals("attachments[3]", errors.get(0).field());
 		assertEquals("too-large", errors.get(0).code());
 		assertEquals("Attachment 3 (Big.pdf): The file is larger than the upload limit of 1 MB.",
 				errors.get(0).detail());
@@ -549,19 +549,19 @@ public class EmailFilingTest extends ApiTestCase {
 		assertEquals(unreadable.toString(), 404, unreadable.status());
 
 		// The inline logo, a part the message hasn't got, and both at once
-		assertEquals(List.of("attachments not-an-attachment"),
+		assertEquals(List.of("attachments[0] not-an-attachment"),
 				fields(fileEmail(token, request(documents, null, List.of(1, 0)), eml)));
-		assertEquals(List.of("attachments not-an-attachment"),
+		assertEquals(List.of("attachments[7] not-an-attachment"),
 				fields(fileEmail(token, request(documents, null, List.of(7)), eml)));
 		ApiResponse both = fileEmail(token, request(documents, null, List.of(0, 7, -1)), eml);
-		assertEquals(List.of("attachments not-an-attachment", "attachments not-an-attachment",
-				"attachments not-an-attachment"), fields(both));
+		assertEquals(List.of("attachments[0] not-an-attachment", "attachments[7] not-an-attachment",
+				"attachments[-1] not-an-attachment"), fields(both));
 		assertTrue(both.text(), both.json().path("fields").get(1).path("detail").textValue().contains("7"));
 
 		// A ticked attachment whose extension upload.disallow lists, named with its index
 		Context.get().getConfig().setProperty(DISALLOW, "exe, PDF");
 		ApiResponse disallowed = fileEmail(token, request(documents, null, List.of(1)), eml);
-		assertEquals(List.of("attachments disallowed"), fields(disallowed));
+		assertEquals(List.of("attachments[1] disallowed"), fields(disallowed));
 		String detail = disallowed.json().path("fields").get(0).path("detail").textValue();
 		assertTrue(detail, detail.contains("1") && detail.contains("Contract.pdf") && detail.contains(".pdf"));
 		// and the email itself

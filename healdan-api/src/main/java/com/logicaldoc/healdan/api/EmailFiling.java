@@ -83,8 +83,21 @@ public class EmailFiling {
 	/** What the email is filed as; the email listener names it after its subject */
 	static final String EMAIL_NAME = "message.eml";
 
-	/** The request field a ticked attachment's refusal names */
+	/**
+	 * The request field a ticked attachment's refusal names: as
+	 * {@link #attachmentField(int)} with its index, alone for an index left
+	 * null
+	 */
 	static final String ATTACHMENTS = "attachments";
+
+	/**
+	 * @return the field a refusal of the attachment ticked with that index
+	 *         names, such as {@code attachments[2]}, so a client can show it by
+	 *         that attachment without reading the detail
+	 */
+	static String attachmentField(int index) {
+		return ATTACHMENTS + "[" + index + "]";
+	}
 
 	/** The field the email's own refusal names, its part */
 	static final String FILE = EmailResource.FILE;
@@ -261,13 +274,13 @@ public class EmailFiling {
 				continue;
 			Part part = index != null && index >= 0 && index < parts.size() ? parts.get(index) : null;
 			if (part == null) {
-				errors.add(new FieldError(ATTACHMENTS, NOT_AN_ATTACHMENT,
+				errors.add(new FieldError(index == null ? ATTACHMENTS : attachmentField(index), NOT_AN_ATTACHMENT,
 						index == null ? "An attachment's index is missing."
 								: "The email has no attachment %d.".formatted(index)));
 				continue;
 			}
 			if (part.inline()) {
-				errors.add(new FieldError(ATTACHMENTS, NOT_AN_ATTACHMENT,
+				errors.add(new FieldError(attachmentField(index), NOT_AN_ATTACHMENT,
 						"Part %d is shown in the message, so it isn't an attachment.".formatted(index)));
 				continue;
 			}
@@ -279,7 +292,8 @@ public class EmailFiling {
 	}
 
 	/**
-	 * The upload rules, for an attachment: each error names it by its index and
+	 * The upload rules, for an attachment: each error's field names it by its
+	 * index ({@link #attachmentField(int)}), and its detail by its index and
 	 * name. An attachment's decoded content is never larger than the email it
 	 * came in, which has passed the limit already; its size is checked all the
 	 * same, as for any upload.
@@ -292,7 +306,7 @@ public class EmailFiling {
 		else if (part.size() == 0L)
 			found.add(new FieldError(ATTACHMENTS, "empty", "The file is empty."));
 		for (FieldError error : found)
-			errors.add(new FieldError(ATTACHMENTS, error.code(),
+			errors.add(new FieldError(attachmentField(part.index()), error.code(),
 					"Attachment %d (%s): %s".formatted(part.index(), part.name(), error.detail())));
 	}
 
