@@ -23,15 +23,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.document.DocumentEvent;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentHistoryDAO;
-import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
@@ -42,18 +39,12 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.api.model.DocumentView;
-import com.logicaldoc.healdan.api.model.FieldError;
 import com.logicaldoc.healdan.api.model.NewDocument;
 import com.logicaldoc.healdan.api.model.Page;
-import com.logicaldoc.healdan.docnumber.DocNumberListener;
 import com.logicaldoc.healdan.docnumber.LegacyDocNumbers;
 import com.logicaldoc.healdan.navigation.RecentDocuments;
 import com.logicaldoc.healdan.navigation.RecentDocuments.RecentDocument;
-import com.logicaldoc.healdan.profile.Inheritance;
-import com.logicaldoc.healdan.profile.ProfileView;
-import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
 import com.logicaldoc.healdan.security.AccessChecks;
-import com.logicaldoc.healdan.stamp.DocIdStamper;
 import com.logicaldoc.healdan.token.DeviceHolds;
 import com.logicaldoc.util.MimeType;
 
@@ -86,14 +77,6 @@ import jakarta.ws.rs.core.UriInfo;
 public class DocumentResource {
 
 	private static final Logger log = LoggerFactory.getLogger(DocumentResource.class);
-
-	/** The request fields a new document's name and file come in */
-	private static final String NAME = "name";
-
-	private static final String FILE = "file";
-
-	/** CE's {@code Version.DEFAULT_START_VERSION} */
-	private static final String DEFAULT_FIRST_VERSION = "1.0";
 
 	/** The media type of a thumbnail, as CE's {@code ThumbnailManager} makes it */
 	private static final String PNG = "image/png";
@@ -177,47 +160,9 @@ public class DocumentResource {
 			if (!AccessChecks.allowed(user, Permission.WRITE, folder))
 				throw ApiProblem.forbidden("You may not file documents into folder %d.".formatted(folder.getId()));
 
-			List<FieldError> errors = new ArrayList<>();
-			String name = StringUtils.strip(
-					StringUtils.isNotBlank(request.name()) ? request.name() : Uploads.fileName(file));
-			Uploads.checkName(name, NAME, errors);
-
+			String name = StringUtils.isNotBlank(request.name()) ? request.name() : Uploads.fileName(file);
 			upload = Uploads.toTempFile(file);
-			if (errors.isEmpty() && upload.length() > Uploads.maxBytes())
-				throw Uploads.tooLarge();
-			FieldError empty = Uploads.emptyError(upload, FILE);
-			if (empty != null)
-				errors.add(empty);
-
-			Map<String, Object> values = checkProperties(request, folder, user, errors);
-			if (!errors.isEmpty())
-				throw ApiProblem.validation(errors);
-
-			Document vo = new Document();
-			vo.setFolder(folder);
-			vo.setFileName(name);
-			vo.setTenantId(user.getTenantId());
-			vo.setLanguage(StringUtils.defaultIfBlank(user.getLanguage(), "en"));
-			PropertyInput.set(vo, values);
-			DocumentHistory transaction = new DocumentHistory();
-			transaction.setSession(caller.session());
-			transaction.setEvent(DocumentEvent.STORED);
-
-			// Every check has passed: the number is taken now, so that the file can carry it (M3 spec section 9.7)
-			long docNumber = DocNumberListener.reserveNext();
-			String docId = DocIdStamper.value(docNumber, firstVersion());
-			boolean stamped = DocIdStamper.stamp(upload.toPath(), Uploads.extension(name), docId);
-			Document created;
-			// A create that fails leaves a gap in the doc #s, as a deleted document does
-			try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(docNumber)) {
-				created = DocumentManager.get().create(upload, vo, transaction).getDocument();
-			}
-			long id = created.getId();
-			if (stamped && !docId.equals(DocIdStamper.value(Long.parseLong(created.getCustomId()),
-					created.getFileVersion())))
-				log.warn("Document #{} v{} was stamped {}", created.getCustomId(), created.getFileVersion(), docId);
-			// CE swallows a failed write of the version record, as it does on a save
-			VersionResource.confirmStored(id, Long.parseLong(created.getCustomId()), null, user);
+			long id = Filer.get().file(folder, name, request.properties(), upload, caller).getId();
 
 			if (Boolean.TRUE.equals(request.checkOut())) {
 				// Past the Office preview saving the document as its conversion of the new file ends
@@ -241,59 +186,15 @@ public class DocumentResource {
 	}
 
 	/**
-	 * @return the version CE gives a new document, from
-	 *         {@code document.startversion} as CE reads it (its own reader
-	 *         isn't public): {@code 1.0} by default
-	 */
-	static String firstVersion() {
-		String start = com.logicaldoc.util.spring.Context.get().getConfig().getString("document.startversion",
-				DEFAULT_FIRST_VERSION);
-		try {
-			String[] parts = start.split("\\.");
-			return start.contains(".") ? "%d.%d".formatted(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]))
-					: "%d.0".formatted(Integer.parseInt(start));
-		} catch (RuntimeException e) {
-			return DEFAULT_FIRST_VERSION;
-		}
-	}
-
-	/**
 	 * @return the {@code document} part
 	 * @throws ApiProblem {@code 400} if it's missing, isn't the JSON expected
 	 *         or doesn't say which folder
 	 */
 	private static NewDocument parse(String document) {
-		if (document == null)
-			throw ApiProblem.badRequest("Send the document's details as JSON in a part named document.");
-		NewDocument request;
-		try {
-			request = ApiJson.mapper().readValue(document, NewDocument.class);
-		} catch (JsonProcessingException e) {
-			throw ApiProblem.badRequest(ProblemMapper.describe(e));
-		}
-		if (request == null)
-			throw ApiProblem.badRequest("The document part must be a JSON object.");
+		NewDocument request = ApiJson.part(document, NewDocument.class, "document", "the document's details");
 		if (request.folderId() == null)
 			throw ApiProblem.badRequest("Say which folder to file the document into with folderId.");
 		return request;
-	}
-
-	/**
-	 * Checks the properties sent for a new document over the form for its
-	 * folder: each required one must have a value once inheritance has run.
-	 *
-	 * @return the values to set
-	 */
-	private static Map<String, Object> checkProperties(NewDocument request, Folder folder, User user,
-			List<FieldError> errors) throws PersistenceException {
-		Map<String, JsonNode> sent = request.properties() != null ? request.properties() : Map.of();
-		List<ProfileField> form = ProfileView.get().forNewDocument(folder.getId(), user);
-		List<FieldError> propertyErrors = new ArrayList<>();
-		Map<String, Object> values = PropertyInput.check(form, sent, Inheritance.get().inheritedFrom(folder.getId()),
-				user, propertyErrors);
-		PropertyInput.checkRequired(form, values, propertyErrors);
-		errors.addAll(propertyErrors);
-		return values;
 	}
 
 	/**

@@ -12,6 +12,7 @@ import java.util.Date;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.DeserializationFeature;
@@ -46,6 +47,33 @@ public final class ApiJson {
 	 */
 	public static ObjectMapper mapper() {
 		return MAPPER;
+	}
+
+	/**
+	 * Reads a multipart request's JSON part, as the calls that file take their
+	 * details.
+	 *
+	 * @param json the part; null when it wasn't sent
+	 * @param type what it holds
+	 * @param name the part's name, for the refusals
+	 * @param holds what it holds, for the refusal when it's missing, such as
+	 *        {@code the document's details}
+	 * @return what it holds
+	 * @throws ApiProblem {@code 400} if it's missing, isn't the JSON expected
+	 *         or isn't an object
+	 */
+	static <T> T part(String json, Class<T> type, String name, String holds) {
+		if (json == null)
+			throw ApiProblem.badRequest("Send %s as JSON in a part named %s.".formatted(holds, name));
+		T value;
+		try {
+			value = MAPPER.readValue(json, type);
+		} catch (JsonProcessingException e) {
+			throw ApiProblem.badRequest(ProblemMapper.describe(e));
+		}
+		if (value == null)
+			throw ApiProblem.badRequest("The %s part must be a JSON object.".formatted(name));
+		return value;
 	}
 
 	/**

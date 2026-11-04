@@ -185,6 +185,7 @@ Switch on `code`, which is stable. `detail` is an English sentence you can show 
 | 409 | `version-moved` | A save with `ifVersion` found the document at another version. The problem adds the `document` |
 | 409 | `filing-rule` | The folder can't hold documents: a Store, a matter's top folder or a search folder |
 | 409 | `already-filed` | The matter already holds the email's message, in a copy you can read. `detail` names its doc #, and the problem adds the copy as `document` |
+| 409 | `filing-in-progress` | Another request was filing the same email into the matter, and it didn't end within 30 seconds. Nothing was kept: send the request again |
 | 409 | `not-browsable` | A Store's contents were asked for. Find a matter by search, My Matters or Recent Matters instead |
 | 409 | `refused` | Another of Healdan's rules refused it. `detail` says which |
 | 413 | `too-large` | The file is over the upload limit |
@@ -238,6 +239,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Finding | `GET /search?scope=&q=&within=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent` |
+| Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
@@ -326,6 +328,125 @@ Nothing is stored unless every check passes. They run in this order, and the fir
 5. `ifHeld` (`409 not-held`), then `ifVersion` (`409 version-moved`);
 6. an immutable or archived document (`409 refused`);
 7. the name, the file and the comment (`413`, `422`).
+
+## Filing Email
+
+A client that files email from a mail program asks two things before it files: what is in the message, and whether
+it is filed already. Then it files the message, with any attachments the person ticked. Each call counts only the
+documents the caller can read, so none shows that a hidden document exists.
+
+### Looking Inside an Email
+
+`POST /emails/inspect` takes the `.eml` in a multipart part named `file` and says what is in it. Nothing is stored,
+so the upload limits apply as for `POST /documents`, and nothing is left on the server afterwards.
+
+```json
+{
+  "messageId": "abc123@mail.example.com",
+  "subject": "Contract for review",
+  "from": "Ann Smith <ann@example.com>",
+  "sent": "2026-11-03T10:00:00Z",
+  "attachments": [
+    { "index": 0, "name": "logo.png", "type": "image/png", "size": 70, "inline": true, "message": false },
+    { "index": 1, "name": "Contract.pdf", "type": "application/pdf", "size": 48213, "inline": false, "message": false }
+  ],
+  "copies": [ { "type": "document", "docNumber": 1234, … } ]
+}
+```
+
+- **The Message-ID** is the header's value without its angle brackets or surrounding space, compared exactly, case
+  included. It is `null` when the message has none or one over 998 characters, and a message without one is never
+  taken for a copy of another. A field the message lacks or has damaged is `null`.
+- **The attachments** are the message's attachments and inline parts, numbered by `index` in a walk of its parts
+  that always gives the same list for the same bytes. An attachment has a file name and is sent as an attachment,
+  or has no disposition and isn't shown by the message's HTML; an attached message (`message/rfc822`) is one too,
+  with `message: true`, named after its subject when it has no name. A part the HTML shows by `cid:` is `inline`:
+  it is listed so that a client can say it is there, and isn't an attachment. Each name is made safe for a Store and an operating system.
+  A message that is encrypted (S/MIME) or rights-protected has no readable parts, and lists none.
+- **The copies** are the documents that are copies of this message and that the caller can read, oldest first, as
+  `GET /emails` finds them below.
+- **Refusals.** A request without a `file` part is `400`, a file over the upload limit `413 too-large`, and a file
+  that isn't an email (empty, not MIME, or with no header lines) `422 validation` with the field `file` and the
+  code `not-an-email`. Only an `.eml` is read: an Outlook `.msg` is `422`.
+
+### Finding a Message's Copies
+
+`GET /emails` takes `messageId`, once for each message, from 1 to 100 times, and says for each where it is filed:
+
+```text
+GET /api/v1/emails?messageId=abc123%40mail.example.com&messageId=%3Cdef456%40mail.example.com%3E
+```
+
+```json
+{
+  "items": [
+    {
+      "messageId": "abc123@mail.example.com",
+      "copies": [
+        { "document": { "type": "document", "docNumber": 1234, … }, "address": "https://healdan.example/frontend.jsp?docId=5678" }
+      ]
+    },
+    { "messageId": "def456@mail.example.com", "copies": [] }
+  ]
+}
+```
+
+- **Percent-encode every value.** A Message-ID can hold a `+`, `&`, `=` or `#`, which a query string reads in its
+  own way. With or without angle brackets, it is the same Message-ID.
+- **One item for each different Message-ID,** in the order they were first asked, with the Message-ID as Healdan
+  compares it. A value that isn't a Message-ID (blank, or over 998 characters) is answered as it was sent, with no
+  copies. No `messageId`, or more than 100, is `400`.
+- **The copies** are the documents the caller can read, oldest first. A deleted document and a shortcut are left
+  out, and so is a document from before Healdan with no numeric doc #, as in every list.
+- **`address`** is where the web page opens the document: the server's public address (`LOGICALDOC_PUBLIC_URL`),
+  or, when there is none, the address the request was made to, then `/frontend.jsp?docId=` and the document's
+  internal id. It lets a client link to a copy without knowing that id. It isn't the doc #, which `docNumber` gives.
+
+### Filing an Email and Its Attachments
+
+`POST /emails` files an `.eml` whole, as received, attachments inside. It takes two multipart parts: `email`, JSON
+with `folderId`, `properties` (as `POST /documents` takes them) and `attachments`, and `file`, the `.eml`:
+
+```text
+email={"folderId": 812, "properties": {"docclass": "Letters"}, "attachments": [1, 2]};type=application/json
+file=@message.eml
+```
+
+```json
+{
+  "email": { "type": "document", "docNumber": 1234, "name": "Contract for review.eml", … },
+  "attachments": [ { "type": "document", "docNumber": 1235, "name": "Contract.pdf", … } ],
+  "skipped": [ { "index": 2, "code": "already-filed", "document": { "type": "document", "docNumber": 998, … } } ]
+}
+```
+
+The answer is `201`, with the email's address as `Location`.
+
+- **The email** is filed as `POST /documents` files a document: the next doc #, named after its subject, with its
+  email fields read from the message.
+- **Each attachment ticked** in `attachments`, by the `index` `POST /emails/inspect` gave it, becomes a document of
+  its own in the same folder, with its own doc #, named by its file name and linked to the email (a link of type
+  `attachment`, the email first, which the web page's Links tab shows). Leave `attachments` out to file the email
+  alone. An inline part, such as a logo the message shows, can't be ticked.
+- **The properties** sent apply to the email and to each attachment. Anything not sent inherits from the folder.
+  The email fields can't be sent: each document takes its own from its file, and a value for one is `422` with the
+  code `read-only`.
+- **An attached message** (a forward) is filed as an `.eml` of its own, so it gets its own email fields. One whose
+  message the matter already holds is skipped, not refused, and listed in `skipped` with its copy; the email still
+  files. So is an attached `.eml` or `.msg` file the matter holds. A copy from before Healdan has no doc #, so its
+  `document` is `null`.
+- **All or nothing.** Everything is checked before anything is stored: the folder (`404`, `409 filing-rule`,
+  `403`), the email (`413 too-large`, `422 not-an-email`), whether the matter holds it already, each ticked
+  attachment against the upload rules, then the properties. A `422` names a ticked attachment's problem under the
+  field `attachments`, with its index and name in the `detail`, and an index that isn't an attachment with the code
+  `not-an-attachment`. If storing then fails part way, everything stored is taken back to the trash before the
+  answer, so the answer is either everything filed or nothing filed.
+- **`409 already-filed`** means the matter already holds this message, by its Message-ID; the problem's `document`
+  is the copy. A client that repeats a filing whose answer it lost meets this, naming the copy its first try made,
+  and can take it as done. A repeat that arrives while the first try is still filing waits for it to end, then meets
+  this, or files the email if the first try was taken back, and so does a `POST /documents` of the same message.
+  One that waits more than 30 seconds is `409 filing-in-progress`: send it again. The same refusal comes from the
+  web page and every other way a copy of the message could reach the matter.
 
 ## Doc IDs in Word and LibreOffice Files
 

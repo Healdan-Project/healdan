@@ -64,15 +64,38 @@ public final class PublicAddress {
 	 *         address over plain HTTP, or one that isn't a plain address
 	 */
 	public static Optional<Address> of(HttpServletRequest request) {
-		String configured = Context.get().getConfig().getProperty(SERVER_URL);
-		String candidate = isSet(configured) ? configured.trim() : requested(request);
+		return parse(candidate(request), true);
+	}
 
+	/**
+	 * @param request the request being answered
+	 * @return where a link to the web page starts, with no slash at the end:
+	 *         the public address, over plain HTTP too, as a link only shows
+	 *         it; otherwise the address the request was made to
+	 */
+	public static String forLinks(HttpServletRequest request) {
+		return parse(candidate(request), false).map(Address::base).orElseGet(() -> requested(request));
+	}
+
+	/** The public address when one is set, otherwise the address the request was made to */
+	private static String candidate(HttpServletRequest request) {
+		String configured = Context.get().getConfig().getProperty(SERVER_URL);
+		return isSet(configured) ? configured.trim() : requested(request);
+	}
+
+	/**
+	 * @param candidate an address
+	 * @param secure true to refuse plain HTTP but on this machine, unless the
+	 *        sign-in overlay allows it
+	 * @return the address, if it is one Healdan can use
+	 */
+	private static Optional<Address> parse(String candidate, boolean secure) {
 		Matcher matcher = ADDRESS.matcher(candidate);
 		if (!matcher.matches())
 			return Optional.empty();
 		String scheme = matcher.group("scheme").toLowerCase(Locale.ROOT);
 		String host = matcher.group("host").toLowerCase(Locale.ROOT);
-		if (!"https".equals(scheme) && !isThisMachine(host) && !SignInProviders.httpAllowed())
+		if (secure && !"https".equals(scheme) && !isThisMachine(host) && !SignInProviders.httpAllowed())
 			return Optional.empty();
 		String origin = scheme + "://" + host + (matcher.group("port") != null ? matcher.group("port") : "");
 		return Optional.of(new Address(origin, origin + matcher.group("path")));
@@ -85,10 +108,11 @@ public final class PublicAddress {
 
 	/**
 	 * @param request the request being answered
-	 * @return the address the request was made to, with the install's path: what
-	 *         {@link #of} falls back to when no public address is set, and the
-	 *         Sign-In tab's best guess at the redirect address when there is no
-	 *         address Healdan can use
+	 * @return the address the request was made to, with the install's path and
+	 *         no slash at the end: what {@link #of} and {@link #forLinks} fall
+	 *         back to when no public address is set, and the Sign-In tab's
+	 *         best guess at the redirect address when there is no address
+	 *         Healdan can use
 	 */
 	static String requested(HttpServletRequest request) {
 		String scheme = request.getScheme();

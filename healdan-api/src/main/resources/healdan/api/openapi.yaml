@@ -326,7 +326,11 @@ paths:
         properties are inherited from the folder, with any `properties` sent
         as the document's own. Author and Typist are the caller unless sent.
         An email (`.eml` or `.msg`) gets its From, To, CC, Subject, Sent and
-        Received from the message, and is named after its subject. With
+        Received from the message, and is named after its subject. While a
+        `fileEmail` call is filing the same message into the folder's
+        matter, an email waits for it to end, then meets `409
+        already-filed` or is filed; one that waits more than 30 seconds is
+        `409 filing-in-progress`, and can be sent again. With
         `checkOut: true` the document is checked out to the caller too, held
         on the caller's device as by `checkOutDocument`. The answer is `201`
         with the document, and its address as `Location`.
@@ -422,6 +426,237 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DocumentView'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/emails/inspect:
+    post:
+      operationId: inspectEmail
+      summary: Look inside an email
+      description: |
+        Says what is in an email (`.eml`) without storing it: its Message-ID,
+        subject, sender and sent date, its attachments and inline parts, and
+        the copies of the message the caller can already read. A client calls
+        it to build the Save window before it files the email. Only an `.eml`
+        is read; an Outlook `.msg` is a `422`.
+
+        The attachments and inline parts are numbered by `index`: the walk of
+        the message goes depth first, and counts only them, so the same bytes
+        always give the same list and the same numbers. An *attachment* is a part with a file name that is sent as an
+        attachment, or has no disposition and isn't shown by the message's
+        HTML (by `cid:`), or is an attached message (`message/rfc822`). An
+        *inline* part is shown by the message's HTML, or is inline with a
+        Content-ID; it is listed with `inline: true`, so a client can say it is
+        there, and isn't offered as an attachment. A message that is encrypted (S/MIME) or rights-protected
+        has no readable parts, so it lists none. Each name is made safe for a
+        Store and for an operating system.
+
+        `messageId` is the header's value without its angle brackets or
+        surrounding space, compared exactly; it is `null` when the message has
+        none, or one over 998 characters. Every field the message lacks, or
+        has damaged, is `null`.
+
+        `copies` count only documents the caller can read, so the answer
+        never shows that a hidden document exists. They are the same
+        documents, in the same order, that `findEmailCopies` gives for the
+        Message-ID.
+
+        The upload limits apply as for `fileDocument`, and nothing is stored,
+        so the call can't be used to put files on the server. The checks run
+        in this order, and the first that fails gives the answer:
+
+        1. `400 bad-request` for a missing `file` part.
+        2. `413 too-large` over the upload limit, the `upload.maxsize`
+           setting in MB. A file more than 1 MB over the limit is refused
+           while it's sent.
+        3. `422 validation` with the field `file` and the code
+           `not-an-email` for a file that isn't an email message: an empty
+           file, one that isn't MIME, or one with no header lines.
+      tags: [Emails]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The email, as an `.eml` file. The part's content type
+                    isn't looked at, and neither is its file name.
+      responses:
+        '200':
+          description: What the email holds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailInspection'
+        default:
+          $ref: '#/components/responses/Problem'
+  /v1/emails:
+    get:
+      operationId: findEmailCopies
+      summary: Where messages are filed
+      description: |
+        For each Message-ID asked for, the documents that are copies of that
+        message and that the caller can read: no deleted document, no shortcut
+        and none the caller can't read, so the answer never shows that a
+        hidden copy exists. The copies come oldest first. A copy that isn't a
+        numbered document of a Store (a document from before Healdan) is left
+        out, as in every list.
+
+        The answer has one item for each different Message-ID, in the order
+        they were first asked. A Message-ID may be sent with or without its
+        angle brackets, and the item gives it without. A value that isn't a
+        Message-ID (blank, or over 998 characters) is answered as it was sent,
+        with no copies. A message is looked up by its Message-ID only, so a
+        message without one is never found.
+
+        Each copy comes with `address`, where the web page shows the document,
+        so a client can link to it. It is built from the server's public
+        address (`LOGICALDOC_PUBLIC_URL`), or from the address the request was
+        made to when there is none.
+
+        Send `messageId` once for each Message-ID, 1 to 100 times. None, or
+        more than 100, is `400`. A Message-ID can hold characters that a
+        query string reads in its own way, such as `+`, `&`, `=` and `#`, so
+        percent-encode every value.
+      tags: [Emails]
+      parameters:
+        - name: messageId
+          in: query
+          required: true
+          description: |
+            A Message-ID, such as `abc123@mail.example.com`, with or without
+            angle brackets. Repeat the parameter for each message.
+          style: form
+          explode: true
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 100
+            items:
+              type: string
+      responses:
+        '200':
+          description: The copies of each message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmailCopies'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: fileEmail
+      summary: File an email and its attachments
+      description: |
+        Files an email (`.eml`) whole, as received, attachments inside, as
+        `fileDocument` files a document: it gets the next doc #, is named
+        after its subject, and gets its From, To, CC, Subject, Sent, Received
+        and Message-ID from the message. Each attachment ticked in
+        `attachments`, by the `index` that `inspectEmail` gave it, becomes a
+        document of its own in the same folder, with its own doc #, named by
+        its file name and linked to the email by a link of type `attachment`
+        (the email first), which the web page's Links tab shows. An attached
+        message is filed as an `.eml` of its own, so it gets its own email
+        fields. The `properties` sent apply to the email and to each
+        attachment; anything not sent inherits from the folder. The email
+        fields can't be sent, as each document takes its own from its file:
+        a value for one is `422` with the code `read-only`. Author and Typist
+        are the caller unless sent. The answer
+        is `201` with the email's document and the attachments', and the
+        email's address as `Location`.
+
+        All or nothing. Nothing is stored unless every check passes. They run
+        in this order, and the first that fails gives the answer:
+
+        1. `400 bad-request` for an `email` part that is missing, isn't the
+           JSON expected (a field the server doesn't know included) or has no
+           `folderId`, and for a missing `file` part.
+        2. `404 not-found` for a folder the caller can't read, as for one that
+           doesn't exist.
+        3. `409 filing-rule` for a folder that can't hold documents: a Store,
+           a matter's top folder or a search folder.
+        4. `403 forbidden` without the Write permission on the folder.
+        5. `413 too-large` for an email over the upload limit, the
+           `upload.maxsize` setting in MB. A file more than 1 MB over the
+           limit is refused while it's sent.
+        6. `422 validation` with the field `file` and the code `not-an-email`
+           for a file that isn't an email message, as for `inspectEmail`.
+        7. `409 already-filed` when the folder's matter already holds the
+           message, by its Message-ID, with the copy as `document` (when the
+           caller can read it). A repeat after an answer that was lost meets
+           this, naming the copy it made, so the call is safe to repeat for a
+           message with a Message-ID. A repeat that arrives while the first
+           call is still filing waits for it to end, then meets this, or files
+           the email when the first call was undone. One that waits more than
+           30 seconds is `409 filing-in-progress`, and can be sent again.
+        8. `422 validation` listing every field that is wrong: `file` with
+           `disallowed` when the `upload.disallow` setting lists `eml`; and
+           `attachments` for each index ticked that isn't one of the email's
+           attachments (`not-an-attachment`, an inline part included), or
+           whose attachment the upload rules refuse, with the codes of
+           `fileDocument`'s `name` (`too-long`, `invalid`, `extension`,
+           `disallowed`) and `file` (`too-large`, `empty`). Each detail names
+           the index and the attachment's name.
+        9. The properties, as `fileDocument` checks them (`422`).
+
+        An index ticked twice is filed once. An attachment that is itself an
+        email (an attached message, or an `.eml` or `.msg` file) whose
+        message the folder's matter already holds is skipped, not refused,
+        and listed in `skipped` with `already-filed` and the copy (`null`
+        for a copy from before Healdan, which has no doc #); the email and
+        the other attachments still file. So is one that a filing at the
+        same moment, or another attachment of this email, put in the matter
+        while this one was being filed. One put in the matter and taken out
+        again while this one was being filed is `409 filing-in-progress`,
+        with nothing kept: file the email again.
+
+        Only once every check has passed are the email, then each attachment,
+        then the links stored, each document as `fileDocument` stores one. If
+        anything fails part way, everything stored is taken back (to the
+        trash) before the answer, which is the failure's: the answer is either
+        everything filed or nothing filed. A document stored but not
+        completely, the failure `fileDocument` answers as `500` with "Don't
+        file it again", is taken back too, and the answer is `500
+        server-error` saying nothing was kept. In the rare case that the
+        server can't take a document back, the answer is `500 server-error`
+        naming the doc #s left.
+      tags: [Emails]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [email, file]
+              properties:
+                email:
+                  $ref: '#/components/schemas/NewEmail'
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The email, as an `.eml` file. The part's content type
+                    isn't looked at, and neither is its file name.
+            encoding:
+              email:
+                contentType: application/json
+      responses:
+        '201':
+          description: What was filed
+          headers:
+            Location:
+              description: The email's address, such as `/api/v1/documents/1234`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FiledEmail'
         default:
           $ref: '#/components/responses/Problem'
   /v1/search:
@@ -1355,7 +1590,7 @@ components:
         code:
           type: string
           description: What clients switch on.
-          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, refused, too-large, validation, too-many-attempts, server-error]
+          examples: [bad-request, unauthenticated, sign-in-failed, password-expired, forbidden, not-found, not-browsable, checked-out, locked, held-elsewhere, not-held, version-moved, filing-rule, already-filed, filing-in-progress, refused, too-large, validation, too-many-attempts, server-error]
         fields:
           type: array
           items:
@@ -1375,7 +1610,9 @@ components:
           description: |
             For `version-moved`: the document as it is now, so a client can
             tell from its `fileVersion` whether anyone stored newer content.
-            For `already-filed`: the copy the matter holds.
+            For `already-filed`: the copy the matter holds, when the caller
+            can read it; left out when the caller can't, and for a copy from
+            before Healdan, which has no doc #.
     FieldError:
       type: object
       additionalProperties: false
@@ -1386,7 +1623,7 @@ components:
           examples: [docclass]
         code:
           type: string
-          examples: [required]
+          examples: [required, not-an-email, not-an-attachment]
         detail:
           type: string
           examples: [Class is required.]
@@ -2203,6 +2440,193 @@ components:
               type: integer
               format: int64
         - type: 'null'
+    EmailPart:
+      type: object
+      additionalProperties: false
+      description: An attachment or an inline part of an email.
+      required: [index, name, type, size, inline, message]
+      properties:
+        index:
+          type: integer
+          minimum: 0
+          description: |
+            The part's place in the walk of the message, counting only
+            attachments and inline parts, from 0. The same bytes always give
+            the same numbers.
+        name:
+          type: string
+          description: |
+            Its file name, made safe for a Store and an operating system. An
+            attached message without one is named after its subject, with
+            `.eml`.
+          examples: [Contract.pdf]
+        type:
+          type: string
+          description: Its media type, in lower case.
+          examples: [application/pdf]
+        size:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The length of its decoded content in bytes.
+        inline:
+          type: boolean
+          description: |
+            `true` for a part the message's HTML shows, such as a logo. It is
+            listed so a client can say it is there, and isn't an attachment.
+        message:
+          type: boolean
+          description: |
+            `true` for an attached message (`message/rfc822`), which is filed
+            as an `.eml` of its own.
+    EmailInspection:
+      type: object
+      additionalProperties: false
+      description: What `inspectEmail` found in an email.
+      required: [messageId, subject, from, sent, attachments, copies]
+      properties:
+        messageId:
+          type: [string, 'null']
+          description: |
+            The Message-ID without angle brackets or surrounding space; `null`
+            when the message has none or one over 998 characters.
+          examples: [abc123@mail.example.com]
+        subject:
+          type: [string, 'null']
+        from:
+          type: [string, 'null']
+          description: The sender, as `Name <address>`.
+          examples: ['Ann Smith <ann@example.com>']
+        sent:
+          type: [string, 'null']
+          format: date-time
+          description: When the message was sent, or `null` when it doesn't say.
+        attachments:
+          type: array
+          description: The attachments and inline parts, by `index`.
+          items:
+            $ref: '#/components/schemas/EmailPart'
+        copies:
+          type: array
+          description: |
+            The documents that are copies of this message and that the caller
+            can read, oldest first.
+          items:
+            $ref: '#/components/schemas/DocumentView'
+    EmailCopy:
+      type: object
+      additionalProperties: false
+      description: The copies of one message.
+      required: [messageId, copies]
+      properties:
+        messageId:
+          type: string
+          description: |
+            The Message-ID asked for, without angle brackets; a value that
+            isn't a Message-ID, as it was sent.
+        copies:
+          type: array
+          description: |
+            The documents that are copies of the message and that the caller
+            can read, oldest first; none if there are none.
+          items:
+            type: object
+            additionalProperties: false
+            required: [document, address]
+            properties:
+              document:
+                $ref: '#/components/schemas/DocumentView'
+              address:
+                type: string
+                description: |
+                  Where the web page opens the document, such as
+                  `https://healdan.example/frontend.jsp?docId=1234`. It
+                  names the document by an id that only this address uses,
+                  and isn't a doc #.
+    EmailCopies:
+      type: object
+      additionalProperties: false
+      description: The answer of `findEmailCopies`.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: One item for each different Message-ID asked for, in order.
+          items:
+            $ref: '#/components/schemas/EmailCopy'
+    NewEmail:
+      type: object
+      additionalProperties: false
+      description: The `email` part of `fileEmail`.
+      required: [folderId]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The folder to file the email, and its attachments, into.
+        properties:
+          type: [object, 'null']
+          description: |
+            Values for the properties, by name, as `NewDocument.properties`
+            takes them. They apply to the email and to each attachment filed
+            with it. The email fields can't be sent: each document takes its
+            own from its file. A property left out, sent as `null`, or sent as
+            it would inherit, inherits from the folder.
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyValue'
+          examples:
+            - docclass: Letters
+        attachments:
+          type: [array, 'null']
+          description: |
+            The attachments to file as documents of their own, by the
+            `index` that `inspectEmail` gave them. Left out, `null` or empty
+            for none: the email is filed whole either way.
+          items:
+            type: integer
+          examples:
+            - [1, 2]
+    FiledEmail:
+      type: object
+      additionalProperties: false
+      description: What `fileEmail` filed.
+      required: [email, attachments, skipped]
+      properties:
+        email:
+          $ref: '#/components/schemas/DocumentView'
+          description: The email's document.
+        attachments:
+          type: array
+          description: |
+            The documents of the attachments filed with the email, by index.
+          items:
+            $ref: '#/components/schemas/DocumentView'
+        skipped:
+          type: array
+          description: |
+            The attachments ticked but not filed, by index: each an email
+            the folder's matter already holds.
+          items:
+            type: object
+            additionalProperties: false
+            required: [index, code, document]
+            properties:
+              index:
+                type: integer
+                minimum: 0
+                description: The attachment's index.
+              code:
+                type: string
+                enum: [already-filed]
+                description: Why it wasn't filed.
+              document:
+                oneOf:
+                  - $ref: '#/components/schemas/DocumentView'
+                  - type: 'null'
+                description: |
+                  The copy of its message that the matter holds; `null` for
+                  a copy from before Healdan, which has no doc #.
     NewDocument:
       type: object
       additionalProperties: false

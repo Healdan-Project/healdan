@@ -20,7 +20,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.PersistentObject;
 import com.logicaldoc.core.document.Document;
@@ -402,7 +401,7 @@ public class VersionResource {
 	 */
 	static String nextVersion(Document document, boolean major) {
 		if (StringUtils.isEmpty(document.getVersion()))
-			return DocumentResource.firstVersion();
+			return Filer.firstVersion();
 		try {
 			return Version.calculateNewVersion(document.getVersion(), major);
 		} catch (RuntimeException e) {
@@ -532,16 +531,7 @@ public class VersionResource {
 	 *         or doesn't say which kind of save it is
 	 */
 	private static NewVersion parse(String version) {
-		if (version == null)
-			throw ApiProblem.badRequest("Send the save's details as JSON in a part named version.");
-		NewVersion request;
-		try {
-			request = ApiJson.mapper().readValue(version, NewVersion.class);
-		} catch (JsonProcessingException e) {
-			throw ApiProblem.badRequest(ProblemMapper.describe(e));
-		}
-		if (request == null)
-			throw ApiProblem.badRequest("The version part must be a JSON object.");
+		NewVersion request = ApiJson.part(version, NewVersion.class, "version", "the save's details");
 		if (!SNAPSHOT.equals(request.kind()) && !VERSION.equals(request.kind()))
 			throw ApiProblem.badRequest("Say what to save with kind: snapshot or version.");
 		return request;
