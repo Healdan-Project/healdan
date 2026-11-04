@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
@@ -18,6 +19,8 @@ import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.util.spring.Context;
@@ -36,7 +39,8 @@ import com.logicaldoc.util.spring.Context;
  * document that is gone for good stays, and every lookup joins
  * {@code ld_document} and skips it. A deleted document (in the recycle bin)
  * keeps its row too, so it can be restored with its Message-ID, and no lookup
- * answers it. Every value is bound; a Message-ID is compared exactly, the hash
+ * answers it. A shortcut ({@code ld_docref}) is never a copy, whatever row it
+ * may carry. Every value is bound; a Message-ID is compared exactly, the hash
  * only narrows the search.
  */
 @Component
@@ -45,14 +49,23 @@ public class EmailIndex {
 	/** The most hashes one query asks for */
 	private static final int CHUNK = 100;
 
+	/** The most folders one query of {@link #emailsIn} asks about */
+	private static final int FOLDER_CHUNK = 500;
+
+	/** The documents a lookup answers: not deleted, and not shortcuts */
+	private static final String LIVE = "d.ld_deleted = 0 and d.ld_docref is null";
+
 	private static final String COPIES = "select e.hd_docid from hd_email e join ld_document d on d.ld_id = e.hd_docid "
-			+ "where e.hd_messageidhash = ? and e.hd_messageid = ? and d.ld_deleted = 0 order by e.hd_docid";
+			+ "where e.hd_messageidhash = ? and e.hd_messageid = ? and " + LIVE + " order by e.hd_docid";
 
 	private final JdbcTemplate jdbc;
+
+	private final NamedParameterJdbcTemplate named;
 
 	@Autowired
 	public EmailIndex(DataSource dataSource) {
 		this.jdbc = new JdbcTemplate(dataSource);
+		this.named = new NamedParameterJdbcTemplate(jdbc);
 	}
 
 	/**
@@ -77,20 +90,19 @@ public class EmailIndex {
 		}
 
 		String hash = MessageIds.hash(messageId);
-		if (replace(docId, messageId, hash))
-			return;
+		/*
+		 * Insert first: nearly every call adds a new document's row. On MariaDB an
+		 * update that matches nothing takes a gap lock, which two wide transactions
+		 * can deadlock on
+		 */
 		try {
 			jdbc.update("insert into hd_email (hd_docid, hd_messageid, hd_messageidhash) values (?, ?, ?)", docId,
 					messageId, hash);
 		} catch (DuplicateKeyException e) {
-			// Another thread added the row since, or the update counted no change
-			replace(docId, messageId, hash);
+			// The document has a row already: the index worker's, or an earlier one
+			jdbc.update("update hd_email set hd_messageid = ?, hd_messageidhash = ? where hd_docid = ?", messageId,
+					hash, docId);
 		}
-	}
-
-	private boolean replace(long docId, String id, String hash) {
-		return jdbc.update("update hd_email set hd_messageid = ?, hd_messageidhash = ? where hd_docid = ?", id, hash,
-				docId) > 0;
 	}
 
 	/**
@@ -125,7 +137,7 @@ public class EmailIndex {
 					.collect(Collectors.toCollection(LinkedHashSet::new));
 			String placeholders = String.join(", ", Collections.nCopies(hashes.size(), "?"));
 			jdbc.query("select e.hd_docid, e.hd_messageid from hd_email e join ld_document d on d.ld_id = e.hd_docid "
-					+ "where e.hd_messageidhash in (" + placeholders + ") and d.ld_deleted = 0 order by e.hd_docid",
+					+ "where e.hd_messageidhash in (" + placeholders + ") and " + LIVE + " order by e.hd_docid",
 					rs -> {
 						// The hash only narrows the search; the Message-ID itself decides
 						List<Long> copies = answer.get(rs.getString(2));
@@ -149,5 +161,28 @@ public class EmailIndex {
 		List<String> found = jdbc.queryForList("select hd_messageid from hd_email where hd_docid = ?", String.class,
 				docId);
 		return found.isEmpty() ? null : found.get(0);
+	}
+
+	/**
+	 * The emails a folder operation brings along, for the once-per-matter rule
+	 *
+	 * @param folderIds folders, such as a tree's
+	 * @param deleted false for the documents not deleted, true for those
+	 *        deleted with code 1, which a folder restore brings back
+	 * @return each such document that has a row and isn't a shortcut, with its
+	 *         Message-ID, lowest id first
+	 */
+	public Map<Long, String> emailsIn(Collection<Long> folderIds, boolean deleted) {
+		List<Long> ids = new ArrayList<>(folderIds);
+		Map<Long, String> emails = new TreeMap<>();
+		for (int from = 0; from < ids.size(); from += FOLDER_CHUNK)
+			named.query("select e.hd_docid, e.hd_messageid from hd_email e join ld_document d on d.ld_id = e.hd_docid "
+					+ "where d.ld_deleted = :deleted and d.ld_docref is null and d.ld_folderid in (:folders)",
+					new MapSqlParameterSource("deleted", deleted ? 1 : 0).addValue("folders",
+							ids.subList(from, Math.min(from + FOLDER_CHUNK, ids.size()))),
+					rs -> {
+						emails.put(rs.getLong(1), rs.getString(2));
+					});
+		return emails;
 	}
 }

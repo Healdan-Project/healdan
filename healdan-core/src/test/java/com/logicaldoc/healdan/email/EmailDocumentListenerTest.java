@@ -15,7 +15,9 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -25,6 +27,7 @@ import org.junit.Test;
 import com.auxilii.msgparser.MsgParser;
 import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentDAO;
+import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
@@ -250,6 +253,34 @@ public class EmailDocumentListenerTest extends AbstractHealdanTestCase {
 	private static void assertNoSurrogate(String text) {
 		for (int i = 0; i < text.length(); i++)
 			assertFalse(text, Character.isSurrogate(text.charAt(i)));
+	}
+
+	@Test
+	public void testAShortcutIsNoCopy() throws Exception {
+		File file = File.createTempFile("email", ".eml");
+		try {
+			Files.copy(new File("src/test/resources/email/healdan-cc.eml").toPath(), file.toPath(),
+					StandardCopyOption.REPLACE_EXISTING);
+			Document shortcut = new Document();
+			shortcut.setFileName("upload.eml");
+			shortcut.setDocRef(42L);
+			DocumentHistory transaction = fx.documentHistory(admin);
+			transaction.setFile(file);
+			Map<String, Object> dictionary = new HashMap<>();
+
+			EmailDocumentListener listener = new EmailDocumentListener();
+			listener.beforeStore(shortcut, transaction, dictionary);
+			shortcut.setId(43L);
+			listener.afterStore(shortcut, transaction, dictionary);
+
+			// Neither the fields nor a row: the shortcut shows another document's file
+			assertFalse(dictionary.containsKey(EmailDocumentListener.MESSAGE_ID));
+			assertNull(shortcut.getValue(HealdanConstants.ATTR_EMAILMESSAGEID));
+			assertEquals("upload.eml", shortcut.getFileName());
+			assertNull(EmailIndex.get().messageIdOf(43L));
+		} finally {
+			file.delete();
+		}
 	}
 
 	@Test

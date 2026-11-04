@@ -33,6 +33,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
+import com.logicaldoc.healdan.matter.Client;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.spring.Context;
@@ -50,6 +51,9 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 
 	private Folder documents;
 
+	/** The Documents of matter 998.2: the rule lets a matter hold a message once */
+	private Folder otherDocuments;
+
 	private JdbcTemplate jdbc;
 
 	@Override
@@ -62,19 +66,27 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 		jdbc = new JdbcTemplate(Context.get(DataSource.class));
 		admin = fx.admin();
 		Folder store = fx.store("Main");
+		Client client = fx.client(998, "Healdan");
 		documents = FolderDAO.get().findByName(
-				FolderDAO.get().findById(fx.matter(fx.client(998, "Healdan"), 1, "Demo", store, "Documents").getFolderId()),
+				FolderDAO.get().findById(fx.matter(client, 1, "Demo", store, "Documents").getFolderId()),
+				"Documents", Tenant.DEFAULT_ID, true).get(0);
+		otherDocuments = FolderDAO.get().findByName(
+				FolderDAO.get().findById(fx.matter(client, 2, "Other", store, "Documents").getFolderId()),
 				"Documents", Tenant.DEFAULT_ID, true).get(0);
 	}
 
 	private Document file(String resource, String asName) throws Exception {
+		return file(resource, asName, documents);
+	}
+
+	private Document file(String resource, String asName, Folder folder) throws Exception {
 		File copy = File.createTempFile("email", "." + asName.substring(asName.lastIndexOf('.') + 1));
 		try {
 			Files.copy(new File("src/test/resources/email/" + resource).toPath(), copy.toPath(),
 					StandardCopyOption.REPLACE_EXISTING);
 			Document vo = new Document();
 			vo.setFileName(asName);
-			vo.setFolder(documents);
+			vo.setFolder(folder);
 			vo.setTenantId(Tenant.DEFAULT_ID);
 			vo.setLanguage("en");
 			Document created = DocumentManager.get().create(copy, vo, fx.documentHistory(admin)).getDocument();
@@ -162,7 +174,7 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 	public void testManyAtOnce() throws Exception {
 		Document first = file("healdan-cc.eml", "one.eml");
 		Document second = file("healdan-emoji.eml", "two.eml");
-		Document third = file("healdan-emoji.eml", "three.eml");
+		Document third = file("healdan-emoji.eml", "three.eml", otherDocuments);
 		assertEquals("2@example.com", EmailIndex.get().messageIdOf(second.getId()));
 
 		Map<String, List<Long>> copies = EmailIndex.get().copies(List.of("2@example.com", "1@example.com", "missing@example.com"));
@@ -224,7 +236,7 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 	@Test
 	public void testACopyOfAnEmailIsIndexedToo() throws Exception {
 		Document original = file("healdan-cc.eml", "upload.eml");
-		Folder elsewhere = fx.folder(documents, "Elsewhere");
+		Folder elsewhere = fx.folder(otherDocuments, "Elsewhere");
 
 		Document copy = DocumentManager.get().copyToFolder(original, elsewhere, fx.documentHistory(admin), true, true, true)
 				.getDocument();
@@ -236,7 +248,8 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testAnIndexFailureNeverRefusesTheEmail() throws Exception {
-		jdbc.execute("drop table hd_email");
+		// The rows can be read, as the once-per-matter rule does, but none can be added
+		jdbc.execute("alter table hd_email add constraint hd_email_refuses check (hd_docid < 0)");
 		try (LogCapture log = LogCapture.of(EmailDocumentListener.class)) {
 			Document doc = file("healdan-cc.eml", "upload.eml");
 
@@ -247,9 +260,35 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 					.anyMatch(l -> l.matches("WARN Cannot index the Message-ID of document " + doc.getId() + ": [\\w.$]+")));
 			assertTrue(log.lines().toString(), log.lines().stream().noneMatch(l -> l.contains("1@example.com")));
 		} finally {
-			jdbc.execute("create table hd_email (hd_docid bigint not null, hd_messageid varchar(998) not null, "
-					+ "hd_messageidhash char(64) not null, primary key (hd_docid))");
+			jdbc.execute("alter table hd_email drop constraint hd_email_refuses");
 		}
+	}
+
+	@Test
+	public void testShortcutsAreNoCopies() throws Exception {
+		Document doc = file("healdan-cc.eml", "upload.eml");
+		// A shortcut with a row, as one filed before the listener left shortcuts out could have
+		Document shortcut = fx.legacyShortcut(doc, otherDocuments);
+		EmailIndex.get().put(shortcut.getId(), "1@example.com");
+
+		assertEquals(List.of(doc.getId()), EmailIndex.get().copies("1@example.com"));
+		assertEquals(List.of(doc.getId()), EmailIndex.get().copies(List.of("1@example.com")).get("1@example.com"));
+		assertTrue(EmailIndex.get().emailsIn(List.of(otherDocuments.getId()), false).isEmpty());
+	}
+
+	@Test
+	public void testEmailsInAFolder() throws Exception {
+		Document live = file("healdan-cc.eml", "one.eml");
+		Document trashed = file("healdan-emoji.eml", "two.eml");
+		DocumentDAO.get().delete(trashed.getId(), fx.documentHistory(admin));
+		fx.upload(documents, "a.docx", "text", admin);
+		awaitAsyncWork();
+
+		assertEquals(Map.of(live.getId(), "1@example.com"), EmailIndex.get().emailsIn(List.of(documents.getId()), false));
+		assertEquals(Map.of(trashed.getId(), "2@example.com"),
+				EmailIndex.get().emailsIn(List.of(documents.getId()), true));
+		assertTrue(EmailIndex.get().emailsIn(List.of(otherDocuments.getId()), false).isEmpty());
+		assertTrue(EmailIndex.get().emailsIn(List.of(), false).isEmpty());
 	}
 
 	@Test

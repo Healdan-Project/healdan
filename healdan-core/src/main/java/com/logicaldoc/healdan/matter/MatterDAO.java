@@ -75,4 +75,15 @@ public interface MatterDAO extends PersistentObjectDAO<Matter> {
 	 * @throws PersistenceException error at data layer
 	 */
 	public long countByStore(long storeId) throws PersistenceException;
+
+	/**
+	 * Locks the matter's row until the current transaction ends, so that two
+	 * filings into one matter check its copies of a message one after the
+	 * other (M5 spec §6.4). Called inside the transaction that stores the
+	 * document; outside one, the lock ends with the call.
+	 *
+	 * @param matterId the matter
+	 * @throws PersistenceException error at data layer
+	 */
+	public void lockForFiling(long matterId) throws PersistenceException;
 }

@@ -15,6 +15,7 @@ import com.logicaldoc.core.folder.FolderEvent;
 import com.logicaldoc.core.folder.FolderHistory;
 import com.logicaldoc.core.folder.FolderListener;
 import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.email.OncePerMatter;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.rules.StoredRows.FolderRow;
 
@@ -63,8 +64,11 @@ public class RulesFolderListener implements FolderListener {
 		}
 
 		boolean moved = stored.parentId() != folder.getParentId();
-		if (moved)
+		if (moved) {
 			rules.checkFolderMove(folder, parentOf(folder), actor);
+			// Into another matter, its emails mustn't meet copies there (M5 spec §6.4)
+			OncePerMatter.get().checkSubtree(folder.getId(), folder.getParentId(), actor);
+		}
 		boolean renamed = !Objects.equals(stored.name(), folder.getName());
 		if (renamed && !(moved && madeUnique(stored, folder, transaction)))
 			rules.checkFolderRename(folder, actor);

@@ -93,6 +93,13 @@ public class HibernateMatterDAO extends HibernatePersistentObjectDAO<Matter> imp
 	}
 
 	@Override
+	public void lockForFiling(long matterId) throws PersistenceException {
+		// On the session's connection, so the lock lasts until the document's transaction ends
+		queryForList("select ld_id from hd_matter where ld_id = :id for update", Map.of("id", matterId), Long.class,
+				null);
+	}
+
+	@Override
 	public void store(Matter matter) throws PersistenceException {
 		super.store(matter);
 		flush();

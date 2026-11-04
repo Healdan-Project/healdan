@@ -158,6 +158,12 @@
 		<parameter id="class" value="com.logicaldoc.healdan.email.EmailDocumentListener" />
 	</extension>
 
+	<!-- After the email fields (130), whose Message-ID it checks; before the doc # (140), so a refusal never burns a number -->
+	<extension plugin-id="logicaldoc-core" point-id="DocumentListener" id="healdanOncePerMatter">
+		<parameter id="position" value="135" />
+		<parameter id="class" value="com.logicaldoc.healdan.email.OncePerMatterListener" />
+	</extension>
+
 	<!-- After the rules (100), so that it checks only stores the structure rules let through -->
 	<extension plugin-id="logicaldoc-core" point-id="FolderListener" id="healdanPermissions">
 		<parameter id="position" value="110" />

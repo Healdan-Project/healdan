@@ -23,7 +23,8 @@ import com.logicaldoc.healdan.HealdanConstants;
  * its Message-ID among them (spec §6.8; M5 spec §6.1). The document is named
  * after the subject. Once it is stored, the Message-ID the listener read from
  * the file goes into {@link EmailIndex} (M5 spec §6.2), the index the
- * once-per-matter rule and the lookups use. It runs after the profile listener,
+ * once-per-matter rule and the lookups use. A shortcut is no copy of a message,
+ * so it gets neither. It runs after the profile listener,
  * which has added the email attributes with the template's definitions. It
  * never refuses anything: an email that can't be read is filed with blank
  * fields and its own name, and an index row that can't be added is logged (the
@@ -36,9 +37,10 @@ public class EmailDocumentListener implements DocumentListener {
 
 	/**
 	 * Where {@code beforeStore} leaves the Message-ID it read from a new email's
-	 * file for {@code afterStore}, which runs once the document has its id
+	 * file for {@code afterStore}, which runs once the document has its id, and
+	 * for {@link OncePerMatterListener}, which runs between them
 	 */
-	private static final String MESSAGE_ID = EmailDocumentListener.class.getName();
+	static final String MESSAGE_ID = EmailDocumentListener.class.getName();
 
 	public EmailDocumentListener() {
 		// Instantiated by CE
@@ -51,6 +53,9 @@ public class EmailDocumentListener implements DocumentListener {
 			return;
 
 		document.setCreation(new Date());
+		// A shortcut shows another document's file: it isn't a copy of the message
+		if (document.getDocRef() != null)
+			return;
 
 		try {
 			fillEmail(document, transaction, dictionary);

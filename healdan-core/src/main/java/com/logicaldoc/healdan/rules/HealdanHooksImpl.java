@@ -23,6 +23,8 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.HealdanRuleException;
 import com.logicaldoc.healdan.docnumber.DocNumberListener;
+import com.logicaldoc.healdan.email.EmailIndex;
+import com.logicaldoc.healdan.email.OncePerMatter;
 import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.preview.ConversionPages;
 import com.logicaldoc.healdan.profile.EditMarks;
@@ -42,7 +44,9 @@ import jakarta.annotation.PreDestroy;
  * rows with JDBC; a folder delete or restore is JDBC throughout; a merge moves
  * documents one by one, and a copy writes files and schedules versions, before
  * the store a listener could veto. A folder delete also checks R74's
- * permissions here, as every route deletes a tree through this hook.
+ * permissions here, as every route deletes a tree through this hook. The
+ * once-per-matter rule (M5 spec §6.4) checks moves, restores, merges and
+ * folder copies here, for the same reasons.
  */
 @Component
 public class HealdanHooksImpl implements HealdanHooks {
@@ -55,10 +59,13 @@ public class HealdanHooksImpl implements HealdanHooks {
 
 	private final StoredRows rows;
 
+	private final OncePerMatter oncePerMatter;
+
 	@Autowired
-	public HealdanHooksImpl(FilingRules rules, StoredRows rows) {
+	public HealdanHooksImpl(FilingRules rules, StoredRows rows, OncePerMatter oncePerMatter) {
 		this.rules = rules;
 		this.rows = rows;
+		this.oncePerMatter = oncePerMatter;
 	}
 
 	@PostConstruct
@@ -117,6 +124,9 @@ public class HealdanHooksImpl implements HealdanHooks {
 			if (document.getDocRef() != null)
 				rules.checkShortcut(target);
 			rules.checkDocumentTarget(target);
+			if (target != null && document.getFolder() != null)
+				oncePerMatter.checkMove(document.getId(), document.getFolder().getId(), target.getId(),
+						FilingRules.actor(transaction));
 		});
 		stampMove(document, target);
 	}
@@ -142,6 +152,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 			if (docRef != null)
 				rules.checkShortcut(target);
 			rules.checkDocumentTarget(target);
+			oncePerMatter.check(EmailIndex.get().messageIdOf(docId), folderId, docId, FilingRules.actor(transaction));
 		});
 	}
 
@@ -182,6 +193,7 @@ public class HealdanHooksImpl implements HealdanHooks {
 		Vetoes.check(Vetoes.ids(folderId, parentId), List.of(), () -> {
 			rules.checkFolderRestore(folderId, parentId, FilingRules.actor(transaction));
 			PermissionRules.get().checkRestore(folderId, parentId);
+			oncePerMatter.checkSubtreeRestore(folderId, parentId, FilingRules.actor(transaction));
 		});
 	}
 
@@ -211,8 +223,11 @@ public class HealdanHooksImpl implements HealdanHooks {
 	public void beforeFolderCopy(Folder source, Folder target, String newName, boolean foldersOnly,
 			String securityOption, FolderHistory transaction) throws PersistenceException {
 		Vetoes.check(Vetoes.ids(source != null ? source.getId() : null, target != null ? target.getId() : null),
-				List.of(),
-				() -> rules.checkFolderCopy(source, target, newName, foldersOnly, FilingRules.actor(transaction)));
+				List.of(), () -> {
+					rules.checkFolderCopy(source, target, newName, foldersOnly, FilingRules.actor(transaction));
+					if (source != null && target != null && !foldersOnly)
+						oncePerMatter.checkSubtreeCopy(source.getId(), target.getId(), FilingRules.actor(transaction));
+				});
 		PermissionRules.copying();
 	}
 
@@ -220,7 +235,11 @@ public class HealdanHooksImpl implements HealdanHooks {
 	public void beforeFolderMerge(Folder source, Folder target, FolderHistory transaction)
 			throws PersistenceException {
 		Vetoes.check(Vetoes.ids(source != null ? source.getId() : null, target != null ? target.getId() : null),
-				List.of(), () -> rules.checkFolderMerge(source, target, FilingRules.actor(transaction)));
+				List.of(), () -> {
+					rules.checkFolderMerge(source, target, FilingRules.actor(transaction));
+					if (source != null && target != null)
+						oncePerMatter.checkSubtree(source.getId(), target.getId(), FilingRules.actor(transaction));
+				});
 	}
 
 	/**
