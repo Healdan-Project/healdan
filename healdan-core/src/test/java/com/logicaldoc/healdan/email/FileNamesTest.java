@@ -68,4 +68,36 @@ public class FileNamesTest {
 	public void testExtensionKeepsItsCase() {
 		assertEquals("Hello.EML", FileNames.fromSubject("Hello", "EML", "x.EML"));
 	}
+
+	@Test
+	public void testAnAttachmentsName() {
+		String[][] table = { { "Contract.pdf", "Contract.pdf" }, { "  padded.pdf  ", "padded.pdf" },
+				{ "x:y?.pdf", "x_y_.pdf" }, { "a/b\\c.pdf", "a_b_c.pdf" }, { "tab\tand\u0000nul.txt", "tab_and_nul.txt" },
+				{ "Caf\u00e9 \u2013 menu.docx", "Caf\u00e9 \u2013 menu.docx" }, { "ends with dots...", "ends with dots" },
+				{ "README", "README" }, { ".gitignore", ".gitignore" }, { "", "fallback.bin" }, { "   ", "fallback.bin" },
+				{ "...", "fallback.bin" }, { null, "fallback.bin" } };
+		for (String[] row : table)
+			assertEquals(row[0], row[1], FileNames.fromFileName(row[0], "fallback.bin"));
+	}
+
+	@Test
+	public void testAnAttachmentsNameKeepsItsExtensionWhenShortened() {
+		String result = FileNames.fromFileName("x".repeat(400) + ".docx", "f");
+		assertEquals(255, result.length());
+		assertTrue(result.endsWith("x.docx"));
+		// No extension, or one too long to be one: the whole name is cut
+		assertEquals(255, FileNames.fromFileName("y".repeat(400), "f").length());
+		String odd = FileNames.fromFileName("z".repeat(10) + "." + "e".repeat(300), "f");
+		assertEquals(255, odd.length());
+		assertTrue(odd.startsWith("zzzzzzzzzz.eee"));
+		// Cut at a dot, it doesn't end in one
+		assertEquals("b".repeat(254), FileNames.fromFileName("b".repeat(254) + "." + "c".repeat(300), "f"));
+	}
+
+	@Test
+	public void testAnAttachmentsNameFitsTheDatabase() {
+		String party = new String(Character.toChars(0x1F389));
+		assertEquals("Party \ufffd.pdf", FileNames.fromFileName("Party " + party + ".pdf", "f"));
+		assertEquals("Party \ufffd.eml", FileNames.fromFileName(null, "Party " + party + ".eml"));
+	}
 }

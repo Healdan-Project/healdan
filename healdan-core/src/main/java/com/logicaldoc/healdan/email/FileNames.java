@@ -14,6 +14,9 @@ public final class FileNames {
 	/** The longest file name CE stores */
 	static final int MAX_LENGTH = 255;
 
+	/** The longest extension, dot included, kept when a long file name is cut */
+	private static final int MAX_EXTENSION = 16;
+
 	private FileNames() {
 	}
 
@@ -32,10 +35,7 @@ public final class FileNames {
 		if (subject == null)
 			return keep(fallback);
 		// Before the cut, which then splits no surrogate pair
-		String plane = BasicPlane.replaceOthers(subject);
-		StringBuilder clean = new StringBuilder(plane.length());
-		plane.chars().forEach(c -> clean.append(forbidden(c) ? '_' : (char) c));
-		String base = clean.toString().trim();
+		String base = replaceForbidden(subject).trim();
 		if (base.isEmpty())
 			return keep(fallback);
 
@@ -52,12 +52,52 @@ public final class FileNames {
 	}
 
 	/**
+	 * @param name the file name of one of an email's parts, decoded and without
+	 *        a path, may be null
+	 * @param fallback the name to keep when nothing is left of it
+	 * @return the name with {@code / \ : * ? " < > |} and control characters
+	 *         replaced by {@code _}, and every character beyond the Basic
+	 *         Multilingual Plane by U+FFFD (R33), trimmed, without trailing
+	 *         dots, and cut to at most 255 characters with its extension kept;
+	 *         the fallback, with U+FFFD for the characters beyond the plane,
+	 *         when nothing is left
+	 */
+	public static String fromFileName(String name, String fallback) {
+		if (name == null)
+			return keep(fallback);
+		String result = withoutTrailingDots(replaceForbidden(name).trim());
+		if (result.length() > MAX_LENGTH) {
+			int dot = result.lastIndexOf('.');
+			// A dot well inside the name starts an extension, unless it is too long to be one
+			String extension = dot > 0 && result.length() - dot <= MAX_EXTENSION ? result.substring(dot) : "";
+			String stem = result.substring(0, result.length() - extension.length());
+			result = withoutTrailingDots(stem.substring(0, MAX_LENGTH - extension.length()).trim()) + extension;
+		}
+		return result.isEmpty() ? keep(fallback) : result;
+	}
+
+	/**
 	 * @param name the name an email came with
 	 * @return the name with U+FFFD for each character beyond the Basic
 	 *         Multilingual Plane, which would fail the insert on MariaDB (R33)
 	 */
 	public static String keep(String name) {
 		return BasicPlane.replaceOthers(name);
+	}
+
+	/** The text with {@code _} for each forbidden character and U+FFFD for each one beyond the plane */
+	private static String replaceForbidden(String text) {
+		String plane = BasicPlane.replaceOthers(text);
+		StringBuilder clean = new StringBuilder(plane.length());
+		plane.chars().forEach(c -> clean.append(forbidden(c) ? '_' : (char) c));
+		return clean.toString();
+	}
+
+	private static String withoutTrailingDots(String name) {
+		String result = name;
+		while (result.endsWith("."))
+			result = result.substring(0, result.length() - 1).trim();
+		return result;
 	}
 
 	private static boolean forbidden(int c) {
