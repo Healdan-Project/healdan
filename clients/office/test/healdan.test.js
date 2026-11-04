@@ -671,9 +671,21 @@ test("a page where WebKit blocks storage, so reading localStorage itself throws,
   assert.deepEqual(Object.entries(result), [["needsPairing", true]]);
 });
 
-test("a client needs one of Office's three apps", () => {
-  assert.throws(() => Healdan.createHelperClient({ fetch: async () => {}, storage: memoryStorage(), origin: SERVER, host: "Outlook" }), TypeError);
+test("a client needs one of Office's four apps", () => {
+  assert.throws(() => Healdan.createHelperClient({ fetch: async () => {}, storage: memoryStorage(), origin: SERVER, host: "Teams" }), TypeError);
   assert.throws(() => Healdan.createHelperClient({ fetch: async () => {}, storage: memoryStorage(), origin: SERVER }), TypeError);
+});
+
+test("Outlook pairs as Outlook and keeps its key as healdan.key.Outlook", async () => {
+  const helper = fakeHelper({ routes: { "pair/start": [200, { pairingId: "p-1" }], "pair/finish": [200, { key: KEY }] } });
+  const storage = memoryStorage();
+  const client = Healdan.createHelperClient({ fetch: helper.fetch, storage, origin: SERVER, host: "Outlook" });
+  assert.equal(client.paired(), false);
+  assert.equal(await client.pairStart(), "p-1");
+  await client.pairFinish("p-1", "123456");
+  assert.deepEqual(helper.calls()[0].body, { app: "Outlook" });
+  assert.equal(storage.getItem("healdan.key.Outlook"), KEY);
+  assert.equal(client.paired(), true);
 });
 
 // --- Save to Healdan -------------------------------------------------------------------------------------------------

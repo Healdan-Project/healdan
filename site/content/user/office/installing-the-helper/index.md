@@ -199,10 +199,10 @@ about the two other things macOS asks for later. You do it once, however many of
   it, whether you're signed in or not. Signed out, the Healdan window says so. Without a trusted certificate they can't
   reach it, and the window says that instead.
 
-## Pairing Word, Excel and PowerPoint
+## Pairing Word, Excel, PowerPoint and Outlook
 
-The first time you press a Healdan button in Word, Excel or PowerPoint, the app pairs with the helper, so that only
-your own add-in can use it.
+The first time you press a Healdan button in Word, Excel or PowerPoint, or open the Healdan pane in Outlook, the app
+pairs with the helper, so that only your own add-in can use it.
 
 1. A Healdan window opens in the app and says it isn't paired yet, and the helper shows a window of its own at the top
    right of your screen, under its menu bar icon: "Word wants to connect to Healdan Helper", with a six-digit code in
@@ -211,8 +211,9 @@ your own add-in can use it.
 3. The helper's window closes, and the app is paired. The Healdan window says to close it and press the button
    again.
 
-- **Each app pairs once,** and stays paired when you quit it or restart your Mac. Word, Excel and PowerPoint keep
-  their own pairing, so each asks the first time you use Healdan in it.
+- **Each app pairs once,** and stays paired when you quit it or restart your Mac. Word, Excel, PowerPoint and Outlook
+  keep their own pairing, so each asks the first time you use Healdan in it. In Outlook the pane shows the code field
+  itself: type the code there. See [Filing Email from Outlook](../filing-email/).
 - **The code expires after two minutes,** and three wrong tries cancel it. Choose **Pair** again for a new code, or
   press the Healdan button again. Only one code is shown at a time: a new one replaces the window. After nine wrong codes in a row, pairing
   pauses for ten minutes.
@@ -236,7 +237,7 @@ Each of these comes once.
 | After your first sign-in | macOS may say that Healdan Helper was added to your login items | Nothing: it lets the helper start when you sign in |
 | After your first sign-in | LibreOffice: install the extension Healdan? | **OK**, then restart LibreOffice |
 | After your first sign-in, with Word, Excel, PowerPoint or Outlook installed | The helper's Set Up Microsoft Office window, and when you choose Set Up, macOS asking for your password to change your certificate trust settings | **Set Up**, then your password: see [Setting Up Microsoft Office](#setting-up-microsoft-office) |
-| The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan window: see [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint) |
+| The first time you press a Healdan button in each of Word, Excel and PowerPoint | The helper's window shows a six-digit code | Type it in the app's Healdan window: see [Pairing Word, Excel, PowerPoint and Outlook](#pairing-word-excel-powerpoint-and-outlook) |
 | The first time the helper works in each of Word, Excel and PowerPoint, as at your first Save to Healdan | macOS: allow Healdan Helper to control the app? | **Allow**. The helper waits up to five minutes for your answer |
 | The first time each of them saves into the helper's `Copies` folder | The app: grant access to the folder | **Select…**, up one level, `Copies`, **Grant Access** |
 | The first Open in App from each browser | The browser: allow this page to open Healdan Helper? | **Allow**. Ticking the box to remember it saves asking again |
@@ -311,7 +312,7 @@ Settings has four groups (three while your Mac has no Word, Excel, PowerPoint or
     Office window: see [Setting Up Microsoft Office](#setting-up-microsoft-office).
   - **Paired Apps:** each of Word, Excel, PowerPoint and Outlook that has paired with the helper, and the date it last
     paired, or **None**. **Forget** makes the helper forget an app: it asks for a new code the next time you press a
-    Healdan button in it. See [Pairing Word, Excel and PowerPoint](#pairing-word-excel-and-powerpoint).
+    Healdan button in it. See [Pairing Word, Excel, PowerPoint and Outlook](#pairing-word-excel-powerpoint-and-outlook).
 - **This Computer:**
   - **Start at Sign-In:** On or Off. After your first sign-in, the helper starts whenever you sign in to your Mac.
     To stop it, turn it off in **System Settings › General › Login Items & Extensions**. While it isn't on, a line

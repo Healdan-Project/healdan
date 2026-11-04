@@ -110,7 +110,7 @@ In Word, Excel and PowerPoint, file a new document with **Save to Healdan** on t
 same window opens, and works as above, apart from these:
 
 - **The first press pairs the app** with the helper, and files nothing: see
-  [Pairing Word, Excel and PowerPoint](../installing-the-helper/#pairing-word-excel-and-powerpoint). Press the button
+  [Pairing Word, Excel, PowerPoint and Outlook](../installing-the-helper/#pairing-word-excel-powerpoint-and-outlook). Press the button
   again once the Healdan window says it's paired.
 
 - **Only the app's own format.** The File Format pop-up offers Word Document (`.docx`), Excel Workbook (`.xlsx`) or

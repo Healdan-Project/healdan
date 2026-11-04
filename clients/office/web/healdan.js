@@ -48,6 +48,9 @@
 
   const HOSTS = ["Word", "Excel", "PowerPoint"];
 
+  /** The apps that may pair with the helper: the three with ribbon buttons, and Outlook, whose pane (mail.html) files email. */
+  const CLIENT_HOSTS = [...HOSTS, "Outlook"];
+
   /** localStorage's names: the key is kept per app (healdan.key.Word), and the port the helper answered on. */
   const KEY_PREFIX = "healdan.key.";
   const PORT_NAME = "healdan.port";
@@ -187,13 +190,13 @@
    * @param {Function} [options.fetch] the page's fetch (a fake in tests)
    * @param {Storage} [options.storage] the page's localStorage, which Office keeps for each app and the pane and the ribbon's buttons share
    * @param {string} [options.origin] the page's origin, which the helper must be signed in to: another server's helper is passed by
-   * @param {string} options.host "Word", "Excel" or "PowerPoint"
+   * @param {string} options.host "Word", "Excel", "PowerPoint" or "Outlook"
    * @param {number} [options.probeTimeout] milliseconds to wait for each port's hello
    */
   function createHelperClient(options) {
     const host = options && options.host;
-    if (!HOSTS.includes(host)) {
-      throw new TypeError(`The add-in runs in Word, Excel or PowerPoint, not ${host}.`);
+    if (!CLIENT_HOSTS.includes(host)) {
+      throw new TypeError(`The add-in runs in Word, Excel, PowerPoint or Outlook, not ${host}.`);
     }
     const doFetch = options.fetch || ((...args) => root.fetch(...args));
     const storage = options.storage || pageStorage();

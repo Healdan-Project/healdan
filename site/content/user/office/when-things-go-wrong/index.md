@@ -1,6 +1,6 @@
 ---
 title: When Things Go Wrong
-weight: 6
+weight: 8
 ---
 
 The helper's first rule is that nothing you save is lost. When something goes wrong, it keeps your work on your Mac
@@ -94,7 +94,7 @@ Word, Excel and PowerPoint may also be showing a prompt for access to the helper
 
 An app asks for a new code when it has lost its pairing: Office's cache was cleared, or you chose **Forget** for the
 app in the helper's Settings. Press a Healdan button, and type the code as the first time: see
-[Pairing Word, Excel and PowerPoint](../installing-the-helper/#pairing-word-excel-and-powerpoint).
+[Pairing Word, Excel, PowerPoint and Outlook](../installing-the-helper/#pairing-word-excel-powerpoint-and-outlook).
 
 - **Wrong codes are counted.** Three wrong tries cancel a code, and nine wrong codes in a row make the helper stop
   showing codes for ten minutes.

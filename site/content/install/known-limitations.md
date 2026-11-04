@@ -111,3 +111,15 @@ weight: 11
   already paired with their own helper may be asked to pair again. Their LibreOffice extension and the web page are
   unaffected. Microsoft Office works for the second person once the first has quit their helper or signed out of the
   Mac.
+
+## Filing Email from Outlook
+
+- **Only the new Outlook for Mac.** The add-in's pane works in the new Outlook for Mac. Legacy Outlook for Mac
+  doesn't run it, and Outlook on Windows and on the web, including on Linux, wait for a later phase.
+- **Filing is one message at a time for now.** With several messages selected, the pane asks you to select one.
+- **Moving or deleting the mail afterwards isn't followed.** Healdan files a copy of the message. Moving it to
+  another folder in Outlook, or deleting it, changes nothing in Healdan, and the other way round.
+- **Encrypted and signed messages.** A message Outlook can't give the helper as it stands, such as an encrypted one,
+  isn't filed: the pane says Healdan can't be reached, and nothing is filed.
+- **The pane needs the server to load.** Outlook loads the add-in's pane from your Healdan server. While the
+  server can't be reached, the pane doesn't open, even though the helper is running.

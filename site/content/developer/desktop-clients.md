@@ -595,6 +595,13 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     Here could only answer `already-filed`), no repeats, five at most, each with its path written out from its matter
     down. It never goes pending. An unreachable or refusing server is `500 internal-error`, but when only a folder can't
     be read for now (anything but `404` or `403`, which leave that folder out), the status answers without suggestions.
+  - **The pane** (`clients/office/web/mail.html`, `mail.js`, `mail-glue.js`) is Outlook's page for these routes. `mail-glue.js`
+    holds the Outlook calls (`internetMessageId`, `getAllInternetHeadersAsync`, `getAsFileAsync`, `categories.addAsync`, the
+    `ItemChanged` event) and `mail.js` the logic, which Node's tests run. It sends `mail/status` the ids from `threadIds`
+    on each change, one check at a time, and `mail/file` with the message as base64, then adds the category `Healdan`
+    after `filed` or `already-filed` only. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
+    helper says goes on the page as text, and an address is a link only when it's http or https. Several messages at once
+    are not handled yet.
   - **`mail/file`** files one message (`MailFiling.FileAsync`).
     - **With `folderId` (File Here),** it reads the folder's form (`GET /api/v1/folders/{id}/form`). When every required
       field has a value, its own or an inherited one, it files the message there at once with no properties and no
