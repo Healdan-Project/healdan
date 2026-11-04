@@ -1,0 +1,151 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+package com.logicaldoc.healdan.api;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.document.DocumentEvent;
+import com.logicaldoc.core.document.DocumentHistory;
+import com.logicaldoc.core.document.DocumentManager;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.security.user.User;
+import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.docnumber.DocNumberListener;
+import com.logicaldoc.healdan.profile.Inheritance;
+import com.logicaldoc.healdan.profile.ProfileView;
+import com.logicaldoc.healdan.profile.ProfileView.ProfileField;
+import com.logicaldoc.healdan.stamp.DocIdStamper;
+import com.logicaldoc.util.spring.Context;
+
+/**
+ * Files one document into a folder, as {@code POST /v1/documents} does once
+ * its folder is checked (spec section 6.5). {@link DocumentResource} files
+ * with it, and so does anything else that files documents through the API,
+ * such as an email and its attachments.
+ */
+@Component
+public class Filer {
+
+	private static final Logger log = LoggerFactory.getLogger(Filer.class);
+
+	/** The request fields a new document's name and file come in */
+	private static final String NAME = "name";
+
+	private static final String FILE = "file";
+
+	/**
+	 * @return the filer
+	 */
+	public static Filer get() {
+		return Context.get(Filer.class);
+	}
+
+	/**
+	 * Files a document through CE's create, so that Healdan's rules give it its
+	 * doc #, Date filed and properties. The caller has checked that the folder
+	 * can hold documents and that the user may write to it, and owns the
+	 * upload file: this never deletes it. Nothing is stored unless every check
+	 * passes. They run in this order, and the first that fails gives the
+	 * answer:
+	 * <ol>
+	 * <li>the name ({@code 422});</li>
+	 * <li>the file: {@code 413 too-large} over the upload limit (only when the
+	 * name is right), {@code 422} when it's empty;</li>
+	 * <li>the properties ({@code 422}).</li>
+	 * </ol>
+	 * One {@code 422} lists every field that's wrong: the name, the file, then
+	 * the properties.
+	 * <p>
+	 * Only then is the doc # taken from Healdan's counter, and a Word or
+	 * LibreOffice file that carries the {@code Healdan Doc ID} property is
+	 * stamped with it and version 1.0 before CE's create stores it (M3 spec
+	 * section 9.7). The stamp rewrites the upload file. A create that fails then
+	 * leaves a gap in the doc #s, as a deleted document does.
+	 *
+	 * @param folder the folder to file into
+	 * @param name the name to file the document under
+	 * @param properties the properties sent, by name; null for none
+	 * @param upload the content, in a file the caller made and deletes
+	 * @param caller who files it
+	 * @return the document, stored
+	 * @throws ApiProblem {@code 413} for a file over the upload limit,
+	 *         {@code 422} for a name, an empty file or properties that are
+	 *         wrong
+	 */
+	public Document file(Folder folder, String name, Map<String, JsonNode> properties, File upload, Caller caller) {
+		User user = caller.user();
+		try {
+			List<FieldError> errors = new ArrayList<>();
+			String fileName = StringUtils.strip(name);
+			Uploads.checkName(fileName, NAME, errors);
+
+			if (errors.isEmpty() && upload.length() > Uploads.maxBytes())
+				throw Uploads.tooLarge();
+			FieldError empty = Uploads.emptyError(upload, FILE);
+			if (empty != null)
+				errors.add(empty);
+
+			Map<String, Object> values = checkProperties(properties, folder, user, errors);
+			if (!errors.isEmpty())
+				throw ApiProblem.validation(errors);
+
+			Document vo = new Document();
+			vo.setFolder(folder);
+			vo.setFileName(fileName);
+			vo.setTenantId(user.getTenantId());
+			vo.setLanguage(StringUtils.defaultIfBlank(user.getLanguage(), "en"));
+			PropertyInput.set(vo, values);
+			DocumentHistory transaction = new DocumentHistory();
+			transaction.setSession(caller.session());
+			transaction.setEvent(DocumentEvent.STORED);
+
+			// Every check has passed: the number is taken now, so that the file can carry it (M3 spec section 9.7)
+			long docNumber = DocNumberListener.reserveNext();
+			String docId = DocIdStamper.value(docNumber, DocumentResource.firstVersion());
+			boolean stamped = DocIdStamper.stamp(upload.toPath(), Uploads.extension(fileName), docId);
+			Document created;
+			// A create that fails leaves a gap in the doc #s, as a deleted document does
+			try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(docNumber)) {
+				created = DocumentManager.get().create(upload, vo, transaction).getDocument();
+			}
+			if (stamped && !docId.equals(DocIdStamper.value(Long.parseLong(created.getCustomId()),
+					created.getFileVersion())))
+				log.warn("Document #{} v{} was stamped {}", created.getCustomId(), created.getFileVersion(), docId);
+			// CE swallows a failed write of the version record, as it does on a save
+			VersionResource.confirmStored(created.getId(), Long.parseLong(created.getCustomId()), null, user);
+			return created;
+		} catch (PersistenceException e) {
+			throw new IllegalStateException("Can't file a document", e);
+		}
+	}
+
+	/**
+	 * Checks the properties sent for a new document over the form for its
+	 * folder: each required one must have a value once inheritance has run.
+	 *
+	 * @return the values to set
+	 */
+	private static Map<String, Object> checkProperties(Map<String, JsonNode> properties, Folder folder, User user,
+			List<FieldError> errors) throws PersistenceException {
+		Map<String, JsonNode> sent = properties != null ? properties : Map.of();
+		List<ProfileField> form = ProfileView.get().forNewDocument(folder.getId(), user);
+		List<FieldError> propertyErrors = new ArrayList<>();
+		Map<String, Object> values = PropertyInput.check(form, sent, Inheritance.get().inheritedFrom(folder.getId()),
+				user, propertyErrors);
+		PropertyInput.checkRequired(form, values, propertyErrors);
+		errors.addAll(propertyErrors);
+		return values;
+	}
+}
