@@ -4,6 +4,7 @@
 package com.logicaldoc.core;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -26,6 +27,8 @@ import com.logicaldoc.core.document.DocumentManager;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.metadata.AttributeSet;
+import com.logicaldoc.core.metadata.AttributeSetDAO;
 import com.logicaldoc.core.searchengine.SearchEngine;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
@@ -127,6 +130,18 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
         @Override
         public void beforeGroupDelete(Group group) throws PersistenceException {
             calls.add("beforeGroupDelete:%d".formatted(group.getId()));
+            throw new HealdanVetoException(VETO);
+        }
+
+        @Override
+        public void beforeAttributeSetStore(AttributeSet set) throws PersistenceException {
+            calls.add("beforeAttributeSetStore:%d,|%s|".formatted(set.getId(), String.join("|", set.getAttributeNames())));
+            throw new HealdanVetoException(VETO);
+        }
+
+        @Override
+        public void beforeAttributeSetDelete(AttributeSet set) throws PersistenceException {
+            calls.add("beforeAttributeSetDelete:%d".formatted(set.getId()));
             throw new HealdanVetoException(VETO);
         }
     };
@@ -405,6 +420,46 @@ public class HealdanHooksTest extends AbstractCoreTestCase {
 
         assertEquals(List.of("beforeGroupStore:2,renamed", "beforeGroupStore:2,renamed"), calls);
         assertEquals("author", groupDao.findById(2L).getName());
+    }
+
+    @Test
+    public void testAttributeSetDelete() throws Exception {
+        HealdanHooks.register(vetoing);
+        try {
+            AttributeSetDAO.get().delete(-1L);
+            fail("The hook should have vetoed the delete");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+
+        assertEquals(List.of("beforeAttributeSetDelete:-1"), calls);
+        assertEquals(0, column("ld_attributeset", "ld_deleted", -1L));
+        assertEquals("default", AttributeSetDAO.get().findById(-1L).getName());
+    }
+
+    @Test
+    public void testAttributeSetStore() throws Exception {
+        String attributes = "select count(*) from ld_attributeset_ext where ld_attsetid = -1";
+        long attributesBefore = folderDao.queryForLong(attributes);
+        AttributeSetDAO setDao = AttributeSetDAO.get();
+        AttributeSet set = setDao.findById(-1L, true);
+        set.removeAttribute("source");
+
+        HealdanHooks.register(vetoing);
+        try {
+            setDao.store(set);
+            fail("The hook should have vetoed the store");
+        } catch (PersistenceException e) {
+            assertEquals(VETO, e.getMessage());
+        }
+
+        assertEquals(1, calls.size());
+        assertTrue(calls.get(0), calls.get(0).startsWith("beforeAttributeSetStore:-1,"));
+        // The hook sees the set as it is to be stored
+        assertFalse(calls.get(0), calls.get(0).contains("|source|"));
+        assertTrue(calls.get(0), calls.get(0).contains("|sourceAuthor|"));
+        assertEquals(attributesBefore, folderDao.queryForLong(attributes));
+        assertNotNull(setDao.findById(-1L, true).getAttribute("source"));
     }
 
     @Test

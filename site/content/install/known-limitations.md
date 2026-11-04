@@ -18,8 +18,8 @@ weight: 11
 - **Microsoft Entra ID is experimental.** Signing in through Entra ID hasn't been tried against a real Entra tenant
   yet, only through Authentik and a stand-in provider. See [Microsoft Entra ID](../sign-in/entra-id/).
 - **Provider accounts have no password.** An account that signs in through a provider, such as Microsoft Entra ID,
-  has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's SOAP and
-  REST web services. Unlinking the account from its provider gives it a password again.
+  has no Healdan password, so it can't sign in where Healdan asks for one: WebDAV, CMIS, and LogicalDOC's REST web
+  services. Unlinking the account from its provider gives it a password again.
 - **Provider accounts can't use LogicalDOC's API keys.** An account that signs in through a provider never signs in
   with an API key, on any route, as the key would skip the provider. Linking an account to a provider deletes the
   API keys it had and closes the sessions they opened, and so does unlinking it. The web page still lets a provider
@@ -40,7 +40,9 @@ weight: 11
 - **Providers are reached without LogicalDOC's proxy.** Healdan calls a sign-in provider directly, or through the
   proxy that Java's own settings name (`-Dhttps.proxyHost`, `-Dhttps.proxyPort` and `-Dhttp.nonProxyHosts`, in
   [`CATALINA_OPTS`](../configuration/)), not the one under **Administration → Settings → Proxy**. Setting
-  `CATALINA_OPTS` replaces its default, `-Xmx2g`, so keep `-Xmx2g` beside the proxy's flags.
+  `CATALINA_OPTS` replaces its default, `-Xmx2g`, so keep `-Xmx2g` beside the proxy's flags. It must be an HTTP
+  proxy, and only the first one Java's settings give is tried: a SOCKS proxy (`-DsocksProxyHost`) makes every call
+  to a provider fail, and `-Dhttps.protocols` isn't read (`-Djdk.tls.client.protocols` is).
 - **LibreOffice and Microsoft Office on macOS only.** The [Healdan Helper](../office-integration/), which brings
   Healdan into LibreOffice and, with its add-in, into Word, Excel and PowerPoint, runs on Macs with Apple silicon. The
   helper for Ubuntu comes next. Windows comes later.

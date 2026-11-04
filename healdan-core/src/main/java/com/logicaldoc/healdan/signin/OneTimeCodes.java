@@ -142,6 +142,16 @@ public class OneTimeCodes {
 	}
 
 	/**
+	 * @param verifier a PKCE verifier, possibly null
+	 * @return true if it has a verifier's shape, which {@link #redeem}
+	 *         requires: the API checks it before it redeems a code, so a
+	 *         verifier of the wrong shape leaves the code unused
+	 */
+	public static boolean isVerifier(String verifier) {
+		return verifier != null && VERIFIER.matcher(verifier).matches();
+	}
+
+	/**
 	 * Redeems a code. It's removed first, whatever comes of the rest, so it
 	 * never works twice.
 	 *
@@ -164,7 +174,7 @@ public class OneTimeCodes {
 		}
 		if (issued == null || !clock.instant().isBefore(issued.expires()))
 			return Optional.empty();
-		if (verifier == null || !VERIFIER.matcher(verifier).matches() || !MessageDigest.isEqual(
+		if (!isVerifier(verifier) || !MessageDigest.isEqual(
 				challenge(verifier).getBytes(StandardCharsets.US_ASCII),
 				issued.challenge().getBytes(StandardCharsets.US_ASCII)))
 			return Optional.empty();

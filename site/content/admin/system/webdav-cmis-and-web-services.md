@@ -4,8 +4,10 @@ weight: 5
 ---
 
 Besides the web page and Healdan's own [API](../../../developer/api/), LogicalDOC has three other ways in: WebDAV,
-CMIS, and its SOAP and REST web services. They're set under **Administration → Settings → Protocols**, one tab
-each. All three are on to begin with.
+CMIS, and its REST web services. They're set under **Administration → Settings → Protocols**, one tab each. All
+three are on to begin with.
+
+Healdan doesn't offer LogicalDOC's SOAP web services: their addresses answer `404 Not Found`.
 
 ## Their Addresses
 
@@ -15,7 +17,6 @@ For a server at `https://healdan.example`:
 |---|---|---|
 | WebDAV | `https://healdan.example/webdav/store` | a username and password |
 | CMIS 1.0, AtomPub binding | `https://healdan.example/service/cmis` | a username and password |
-| SOAP web services | `https://healdan.example/services` | a username and password, or a LogicalDOC API key |
 | REST web services | `https://healdan.example/services/rest` | a username and password, or a LogicalDOC API key |
 
 Each tab shows its address as your server has it.
@@ -65,7 +66,7 @@ The Healdan Helper signs in to Healdan's own API, under `/api`, and keeps a devi
 WebDAV, CMIS and the web services refuse a device token. The other way round, once a device has signed in, the API
 takes nothing but its device token: not a LogicalDOC API key, a password on each request, or the web page's
 session. A LogicalDOC API key, which each person makes under **Account** in the top bar, **Security → API Keys**,
-works only in the web services.
+works only in the REST web services.
 
 ## WebDAV and Office Apps
 

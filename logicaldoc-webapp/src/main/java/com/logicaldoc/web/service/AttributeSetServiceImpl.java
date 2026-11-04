@@ -147,6 +147,9 @@ public class AttributeSetServiceImpl extends AbstractRemoteService implements At
             AttributeSetDAO dao = AttributeSetDAO.get();
             dao.store(attributeSet);
         } catch (Exception e) {
+            // Healdan: a veto's own reason, which the GUI shows
+            if (e instanceof com.logicaldoc.core.HealdanVetoException veto)
+                throw new ServerException(veto.getMessage(), veto);
             throw new ServerException(
                     String.format("AttributeSet has not been %s", guiAttributeSet.getId() != 0L ? "updated" : "stored"),
                     e);

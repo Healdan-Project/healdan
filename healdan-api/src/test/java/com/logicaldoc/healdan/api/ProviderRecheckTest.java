@@ -188,6 +188,61 @@ public class ProviderRecheckTest extends ApiTestCase {
 		assertEquals(0, deleted(token));
 	}
 
+	/*
+	 * A last check in the future, as after the clock was set back, doesn't hold
+	 * the checks off until the clock catches up: one more than a minute ahead
+	 * is due at once
+	 */
+	@Test
+	public void testCheckedInTheFutureIsDue() throws Exception {
+		String token = helperToken();
+		int asked = fake.tokenRequests();
+
+		// Within two hours, as servers' clocks may differ, and a daylight-saving change reads a check made in the
+		// hour the clocks go back an hour late: not due
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(-61));
+		assertEquals(200, me(token).status());
+		assertEquals("nothing was asked of the provider", asked, fake.tokenRequests());
+
+		// The clock went back three hours: due now, not in eleven
+		SignInTestHooks.passRecheckTime(Duration.ofHours(-2));
+		assertEquals(200, me(token).status());
+		assertEquals("one refresh", asked + 1, fake.tokenRequests());
+		assertEquals(0, deleted(token));
+
+		// and "checked" is now, so the next is 8 hours from now
+		assertEquals(200, me(token).status());
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(479));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 1, fake.tokenRequests());
+		SignInTestHooks.passRecheckTime(Duration.ofMinutes(2));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 2, fake.tokenRequests());
+	}
+
+	/*
+	 * After the clock was set back, the 15 minutes after a check that decided
+	 * nothing would lie in the future: the wait is over, rather than holding
+	 * the checks off until the clock caught up
+	 */
+	@Test
+	public void testWaitAfterAnOutageEndsWhenTheClockGoesBack() throws Exception {
+		String token = helperToken();
+		int asked = fake.tokenRequests();
+		SignInTestHooks.passRecheckTime(Duration.ofHours(12));
+		fake.downForRefresh();
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 1, fake.tokenRequests());
+		assertEquals(200, me(token).status());
+		assertEquals("waiting", asked + 1, fake.tokenRequests());
+
+		// Back three hours: the last check is still more than eight hours old, and the wait is over
+		SignInTestHooks.passRecheckTime(Duration.ofHours(-3));
+		assertEquals(200, me(token).status());
+		assertEquals(asked + 2, fake.tokenRequests());
+		assertEquals(0, deleted(token));
+	}
+
 	@Test
 	public void testRefusalRevokes() throws Exception {
 		String token = helperToken();
