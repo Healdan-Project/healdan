@@ -22,6 +22,7 @@ import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.apache.cxf.jaxrs.ext.multipart.Multipart;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.communication.MailUtil;
 import com.logicaldoc.core.document.Document;
@@ -33,6 +34,8 @@ import com.logicaldoc.healdan.api.model.EmailCopy;
 import com.logicaldoc.healdan.api.model.EmailInspection;
 import com.logicaldoc.healdan.api.model.EmailPart;
 import com.logicaldoc.healdan.api.model.FieldError;
+import com.logicaldoc.healdan.api.model.FiledEmail;
+import com.logicaldoc.healdan.api.model.NewEmail;
 import com.logicaldoc.healdan.email.EmailFields;
 import com.logicaldoc.healdan.email.EmailIndex;
 import com.logicaldoc.healdan.email.MessageIds;
@@ -50,12 +53,17 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 
 /**
- * Email: what is in an {@code eml} before it is filed, and where a message's
- * copies are (M5 spec §6.7, §6.8). Both calls count only the documents the
- * caller can read, so neither reveals one that is hidden (spec §11).
+ * Email: what is in an {@code eml} before it is filed, filing it with its
+ * attachments, and where a message's copies are (M5 spec §6.5, §6.7, §6.8).
+ * Each counts only the documents the caller can read, so none reveals one that
+ * is hidden (spec §11).
  */
 @Component
 @Path("/v1/emails")
@@ -67,6 +75,9 @@ public class EmailResource {
 
 	/** The field the {@code eml} comes in, and the one a refusal names */
 	static final String FILE = "file";
+
+	/** The part a filing's details come in, as JSON ({@link NewEmail}) */
+	static final String EMAIL = "email";
 
 	/** The code of the {@code 422} for a file that isn't an email */
 	static final String NOT_AN_EMAIL = "not-an-email";
@@ -167,6 +178,71 @@ public class EmailResource {
 	}
 
 	/**
+	 * Files an email whole, and each attachment ticked as a document of its own
+	 * in the same folder, linked to it, all or nothing (spec §6.5, §6.8):
+	 * {@link EmailFiling} checks and stores.
+	 *
+	 * @param email the {@code email} part, as JSON ({@link NewEmail})
+	 * @param file the {@code file} part, the {@code eml}
+	 * @param uri the request's addresses
+	 * @return {@code 201} with what was filed, and the email's address as
+	 *         {@code Location}
+	 * @throws ApiProblem {@code 400} for an {@code email} part that's missing,
+	 *         isn't the JSON expected or doesn't say which folder, or a missing
+	 *         {@code file} part; then {@link EmailFiling#file}'s refusals
+	 */
+	@POST
+	@Consumes(MediaType.MULTIPART_FORM_DATA)
+	public Response file(@Multipart(value = EMAIL, required = false) String email,
+			@Multipart(value = FILE, required = false) Attachment file, @Context UriInfo uri) {
+		return fileWith(email, file, uri, EmailFiling.get());
+	}
+
+	/**
+	 * {@link #file}, with the filing given, which a test can make with a
+	 * {@link Filer} of its own
+	 */
+	static Response fileWith(String email, Attachment file, UriInfo uri, EmailFiling filing) {
+		NewEmail request = parse(email);
+		if (file == null)
+			throw ApiProblem.badRequest("Send the email in a part named file.");
+		File upload = null;
+		try {
+			upload = Uploads.toTempFile(file);
+			FiledEmail filed = filing.file(upload, request, Caller.current());
+			String location = UriBuilder.fromPath(uri.getBaseUri().getRawPath()).path("v1/documents/{docNumber}")
+					.build(filed.email().docNumber()).toString();
+			return Response.status(Response.Status.CREATED).header(HttpHeaders.LOCATION, location).entity(filed)
+					.build();
+		} catch (IOException e) {
+			throw new IllegalStateException("Can't read the uploaded file", e);
+		} finally {
+			FileUtils.deleteQuietly(upload);
+		}
+	}
+
+	/**
+	 * @return the {@code email} part
+	 * @throws ApiProblem {@code 400} if it's missing, isn't the JSON expected
+	 *         or doesn't say which folder
+	 */
+	private static NewEmail parse(String email) {
+		if (email == null)
+			throw ApiProblem.badRequest("Send the filing's details as JSON in a part named email.");
+		NewEmail request;
+		try {
+			request = ApiJson.mapper().readValue(email, NewEmail.class);
+		} catch (JsonProcessingException e) {
+			throw ApiProblem.badRequest(ProblemMapper.describe(e));
+		}
+		if (request == null)
+			throw ApiProblem.badRequest("The email part must be a JSON object.");
+		if (request.folderId() == null)
+			throw ApiProblem.badRequest("Say which folder to file the email into with folderId.");
+		return request;
+	}
+
+	/**
 	 * Says where messages are filed: for each Message-ID asked for, the copies
 	 * the caller can read (spec §6.7). A Message-ID may be sent with or without
 	 * its angle brackets; the answer gives it without. Each is answered once, in
@@ -234,22 +310,7 @@ public class EmailResource {
 	 *         there is none Healdan can use, the one this request was made to
 	 */
 	private static String base(HttpServletRequest request) {
-		return PublicAddress.of(request).map(PublicAddress.Address::base).orElseGet(() -> requested(request));
-	}
-
-	/**
-	 * @return the address the request was made to, with the install's path and
-	 *         no slash at the end
-	 */
-	private static String requested(HttpServletRequest request) {
-		String host = request.getServerName();
-		// A bare IPv6 address needs its brackets in a URL
-		if (host != null && host.indexOf(':') >= 0 && !host.startsWith("["))
-			host = "[" + host + "]";
-		String scheme = request.getScheme();
-		int port = request.getServerPort();
-		boolean usual = port <= 0 || ("http".equalsIgnoreCase(scheme) && port == 80)
-				|| ("https".equalsIgnoreCase(scheme) && port == 443);
-		return scheme + "://" + host + (usual ? "" : ":" + port) + request.getContextPath();
+		return PublicAddress.of(request).map(PublicAddress.Address::base)
+				.orElseGet(() -> PublicAddress.requested(request));
 	}
 }

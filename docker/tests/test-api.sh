@@ -4,8 +4,9 @@
 
 # The Office add-in's flow against the JSON API in the real Docker image (M2 spec §14.1): sign in, find a matter,
 # file a document, check it out, save twice, read it back, then M3's additions (search within a folder, creating a
-# folder, favorites, doc ID stamping, a second device, save preconditions, the #<n> v<m> lookup), hit the sign-in
-# throttle, check that LogicalDOC's own services refuse the token, and sign out. In-process tests can't reach CE's real filter chain (XssFilter,
+# folder, favorites, doc ID stamping, a second device, save preconditions, the #<n> v<m> lookup) and M5's (inspecting
+# an .eml, filing it with its attachment, already-filed), hit the sign-in throttle, check that LogicalDOC's own
+# services refuse the token, and sign out. In-process tests can't reach CE's real filter chain (XssFilter,
 # SessionFilter and the rest), so this proves a Bearer token passes it.
 # Needs the smoke fixture (Store "Smoke" > "1.1 - Smoke Matter" > Documents) and a running stack.
 # Usage: BASE=http://127.0.0.1:8080 docker/tests/test-api.sh   (needs curl, jq, python3, cmp)
@@ -77,6 +78,22 @@ with zipfile.ZipFile(out / "api-stamped.docx", "w", zipfile.ZIP_DEFLATED) as z:
                'xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
                '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="Healdan Doc ID">'
                '<vt:lpwstr>not stamped</vt:lpwstr></property></Properties>')
+
+# An email with one attachment, and its Message-ID, new for each run (M5).
+import email.policy, email.utils, uuid
+from email.message import EmailMessage
+mail = EmailMessage()
+mail["From"] = "Ann Smith <ann@example.com>"
+mail["To"] = "Bob Jones <bob@example.com>"
+mail["Subject"] = "Smoke filing"
+mail["Date"] = email.utils.formatdate()
+message_id = "smoke-%s@example.com" % uuid.uuid4().hex
+mail["Message-ID"] = "<%s>" % message_id
+mail.set_content("The contract is attached.")
+mail.add_attachment(b"%PDF-1.4\n% Healdan smoke fixture\n%%EOF\n", maintype="application", subtype="pdf",
+                    filename="Contract.pdf")
+(out / "api-mail.eml").write_bytes(mail.as_bytes(policy=email.policy.SMTP))
+(out / "api-mail.msgid").write_text(message_id)
 PY
 
 # req <expected status> <curl args...>: calls the API and leaves the body in $OUT. Sends the bearer token when set.
@@ -345,6 +362,37 @@ step28() { # leave nothing held, and sign the second computer out
   expect 204 "DELETE /auth/tokens/current (ci-2)"
 }
 
+# --- M5's additions (spec §15.1) -------------------------------------------------------------------------------
+MAIL_ID=$(cat "$WORK/api-mail.msgid")
+mail_doc=
+
+step29() {
+  req -F "file=@$WORK/api-mail.eml;filename=mail.eml" "$BASE/api/v1/emails/inspect"
+  expect 200 "POST /emails/inspect" || return 1
+  json_is .messageId "$MAIL_ID" && json_is '.attachments | length' 1 && json_is '.attachments[0].name' Contract.pdf \
+    && json_is '.copies | length' 0
+}
+step30() {
+  req -F 'email={"folderId": '"$docs_id"', "attachments": [0]};type=application/json' \
+    -F "file=@$WORK/api-mail.eml;filename=mail.eml" "$BASE/api/v1/emails"
+  expect 201 "POST /emails" || return 1
+  json_is .email.name 'Smoke filing.eml' && json_is '.attachments | length' 1 \
+    && json_is '.attachments[0].name' Contract.pdf && json_is '.skipped | length' 0 || return 1
+  mail_doc=$(jq -r .email.docNumber "$OUT")
+  grep -Eq '^[0-9]+$' <<<"$mail_doc" || { echo "  no docNumber"; return 1; }
+  req -G --data-urlencode "messageId=$MAIL_ID" "$BASE/api/v1/emails"; expect 200 "GET /emails" || return 1
+  json_is '.items[0].copies | length' 1 && json_is '.items[0].copies[0].document.docNumber' "$mail_doc"
+}
+step31() { # a repeat is answered with the copy; so is the same message uploaded elsewhere in the matter
+  req -F 'email={"folderId": '"$docs_id"', "attachments": [0]};type=application/json' \
+    -F "file=@$WORK/api-mail.eml;filename=mail.eml" "$BASE/api/v1/emails"
+  expect 409 "POST /emails again" && json_is .code already-filed && json_is .document.docNumber "$mail_doc" || return 1
+  req -F 'document={"folderId": '"${folder2:-$docs_id}"'};type=application/json' \
+    -F "file=@$WORK/api-mail.eml;filename=mail.eml" "$BASE/api/v1/documents"
+  expect 409 "POST /documents with the same .eml" && json_is .code already-filed \
+    && json_is .document.docNumber "$mail_doc"
+}
+
 check "1. GET /api/v1/server names Healdan" step1
 check "2. the docs page and openapi.yaml are served" step2
 check "3. a session cookie without a token is 401" step3
@@ -372,6 +420,9 @@ check "25. moving the check-out refuses the first computer's save" step25
 check "26. ifVersion is version-moved, a saveId makes a save repeat-safe, the stamp follows" step26
 check "27. lookup resolves #<doc #> v<version>" step27
 check "28. the check-out is released and the second computer signs out" step28
+check "29. an .eml with one attachment is inspected" step29
+check "30. it is filed with its attachment, and found by its Message-ID" step30
+check "31. filing it again, or uploading it into the matter, is already-filed" step31
 check "17. six wrong passwords: 401 five times, then 429" step17
 # 19 runs before 18, which revokes the token.
 check "19. LogicalDOC's loginApiKey refuses the token" step19

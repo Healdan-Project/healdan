@@ -85,12 +85,13 @@ public final class PublicAddress {
 
 	/**
 	 * @param request the request being answered
-	 * @return the address the request was made to, with the install's path: what
-	 *         {@link #of} falls back to when no public address is set, and the
-	 *         Sign-In tab's best guess at the redirect address when there is no
-	 *         address Healdan can use
+	 * @return the address the request was made to, with the install's path and
+	 *         no slash at the end: what {@link #of} falls back to when no public
+	 *         address is set, the Sign-In tab's best guess at the redirect
+	 *         address when there is no address Healdan can use, and where the
+	 *         API's links to the web page point then
 	 */
-	static String requested(HttpServletRequest request) {
+	public static String requested(HttpServletRequest request) {
 		String scheme = request.getScheme();
 		String host = request.getServerName();
 		// A bare IPv6 address needs its brackets in a URL

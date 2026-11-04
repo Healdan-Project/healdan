@@ -7,6 +7,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -85,6 +86,29 @@ public class Filer {
 	 *         wrong
 	 */
 	public Document file(Folder folder, String name, Map<String, JsonNode> properties, File upload, Caller caller) {
+		return file(folder, name, properties, upload, caller, stored -> {
+			// The answer says what was stored
+		});
+	}
+
+	/**
+	 * {@link #file(Folder, String, Map, File, Caller)}, telling the caller as
+	 * soon as CE has stored the document. A failure after that, such as a
+	 * version record CE didn't write, leaves the document stored, so a caller
+	 * that has to take it back (an email filed with its attachments) learns of
+	 * it here.
+	 *
+	 * @param folder the folder to file into
+	 * @param name the name to file the document under
+	 * @param properties the properties sent, by name; null for none
+	 * @param upload the content, in a file the caller made and deletes
+	 * @param caller who files it
+	 * @param stored told of the document once CE has stored it, before the
+	 *        version record is checked
+	 * @return the document, stored
+	 */
+	public Document file(Folder folder, String name, Map<String, JsonNode> properties, File upload, Caller caller,
+			Consumer<Document> stored) {
 		User user = caller.user();
 		try {
 			List<FieldError> errors = new ArrayList<>();
@@ -120,6 +144,7 @@ public class Filer {
 			try (DocNumberListener.Reservation reservation = DocNumberListener.useReserved(docNumber)) {
 				created = DocumentManager.get().create(upload, vo, transaction).getDocument();
 			}
+			stored.accept(created);
 			if (stamped && !docId.equals(DocIdStamper.value(Long.parseLong(created.getCustomId()),
 					created.getFileVersion())))
 				log.warn("Document #{} v{} was stamped {}", created.getCustomId(), created.getFileVersion(), docId);

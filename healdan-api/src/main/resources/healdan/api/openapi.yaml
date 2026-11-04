@@ -536,6 +536,109 @@ paths:
                 $ref: '#/components/schemas/EmailCopies'
         default:
           $ref: '#/components/responses/Problem'
+    post:
+      operationId: fileEmail
+      summary: File an email and its attachments
+      description: |
+        Files an email (`.eml`) whole, as received, attachments inside, as
+        `fileDocument` files a document: it gets the next doc #, is named
+        after its subject, and gets its From, To, CC, Subject, Sent, Received
+        and Message-ID from the message. Each attachment ticked in
+        `attachments`, by the `index` that `inspectEmail` gave it, becomes a
+        document of its own in the same folder, with its own doc #, named by
+        its file name and linked to the email by a link of type `attachment`
+        (the email first), which the web page's Links tab shows. An attached
+        message is filed as an `.eml` of its own, so it gets its own email
+        fields. The `properties` sent apply to the email and to each
+        attachment, but for the email fields; anything not sent inherits from
+        the folder. Author and Typist are the caller unless sent. The answer
+        is `201` with the email's document and the attachments', and the
+        email's address as `Location`.
+
+        All or nothing. Nothing is stored unless every check passes. They run
+        in this order, and the first that fails gives the answer:
+
+        1. `400 bad-request` for an `email` part that is missing, isn't the
+           JSON expected (a field the server doesn't know included) or has no
+           `folderId`, and for a missing `file` part.
+        2. `404 not-found` for a folder the caller can't read, as for one that
+           doesn't exist.
+        3. `409 filing-rule` for a folder that can't hold documents: a Store,
+           a matter's top folder or a search folder.
+        4. `403 forbidden` without the Write permission on the folder.
+        5. `413 too-large` for an email over the upload limit, the
+           `upload.maxsize` setting in MB. A file more than 1 MB over the
+           limit is refused while it's sent.
+        6. `422 validation` with the field `file` and the code `not-an-email`
+           for a file that isn't an email message, as for `inspectEmail`.
+        7. `409 already-filed` when the folder's matter already holds the
+           message, by its Message-ID, with the copy as `document` (when the
+           caller can read it). A repeat after an answer that was lost meets
+           this, naming the copy it made, so the call is safe to repeat for a
+           message with a Message-ID.
+        8. `422 validation` listing every field that is wrong: `file` with
+           `disallowed` when the `upload.disallow` setting lists `eml`; and
+           `attachments` for each index ticked that isn't one of the email's
+           attachments (`not-an-attachment`, an inline part included), or
+           whose attachment the upload rules refuse, with the codes of
+           `fileDocument`'s `name` (`too-long`, `invalid`, `extension`,
+           `disallowed`) and `file` (`too-large`, `empty`). Each detail names
+           the index and the attachment's name.
+        9. The properties, as `fileDocument` checks them (`422`).
+
+        An index ticked twice is filed once. An attachment that is itself an
+        email (an attached message, or an `.eml` or `.msg` file) whose
+        message the folder's matter already holds is skipped, not refused,
+        and listed in `skipped` with `already-filed` and the copy; the email
+        and the other attachments still file. So is one that a filing at the
+        same moment, or another attachment of this email, put in the matter
+        while this one was being filed.
+
+        Only once every check has passed are the email, then each attachment,
+        then the links stored, each document as `fileDocument` stores one. If
+        anything fails part way, everything stored is taken back (to the
+        trash) before the answer, which is the failure's: the answer is either
+        everything filed or nothing filed. A document stored but not
+        completely, the failure `fileDocument` answers as `500` with "Don't
+        file it again", is taken back too, and the answer is `500
+        server-error` saying nothing was kept. In the rare case that the
+        server can't take a document back, the answer is `500 server-error`
+        naming the doc #s left.
+      tags: [Emails]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [email, file]
+              properties:
+                email:
+                  $ref: '#/components/schemas/NewEmail'
+                file:
+                  type: string
+                  contentMediaType: application/octet-stream
+                  description: |
+                    The email, as an `.eml` file. The part's content type
+                    isn't looked at, and neither is its file name.
+            encoding:
+              email:
+                contentType: application/json
+      responses:
+        '201':
+          description: What was filed
+          headers:
+            Location:
+              description: The email's address, such as `/api/v1/documents/1234`
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FiledEmail'
+        default:
+          $ref: '#/components/responses/Problem'
   /v1/search:
     get:
       operationId: search
@@ -1500,7 +1603,7 @@ components:
           examples: [docclass]
         code:
           type: string
-          examples: [required, not-an-email]
+          examples: [required, not-an-email, not-an-attachment]
         detail:
           type: string
           examples: [Class is required.]
@@ -2431,6 +2534,75 @@ components:
           description: One item for each different Message-ID asked for, in order.
           items:
             $ref: '#/components/schemas/EmailCopy'
+    NewEmail:
+      type: object
+      additionalProperties: false
+      description: The `email` part of `fileEmail`.
+      required: [folderId]
+      properties:
+        folderId:
+          type: integer
+          format: int64
+          minimum: 0
+          description: The folder to file the email, and its attachments, into.
+        properties:
+          type: [object, 'null']
+          description: |
+            Values for the properties, by name, as `NewDocument.properties`
+            takes them. They apply to the email and to each attachment filed
+            with it, but for the email fields, which each takes from its own
+            file. A property left out, sent as `null`, or sent as it would
+            inherit, inherits from the folder.
+          additionalProperties:
+            $ref: '#/components/schemas/PropertyValue'
+          examples:
+            - docclass: Letters
+        attachments:
+          type: [array, 'null']
+          description: |
+            The attachments to file as documents of their own, by the
+            `index` that `inspectEmail` gave them. Left out, `null` or empty
+            for none: the email is filed whole either way.
+          items:
+            type: integer
+          examples:
+            - [1, 2]
+    FiledEmail:
+      type: object
+      additionalProperties: false
+      description: What `fileEmail` filed.
+      required: [email, attachments, skipped]
+      properties:
+        email:
+          $ref: '#/components/schemas/DocumentView'
+          description: The email's document.
+        attachments:
+          type: array
+          description: |
+            The documents of the attachments filed with the email, by index.
+          items:
+            $ref: '#/components/schemas/DocumentView'
+        skipped:
+          type: array
+          description: |
+            The attachments ticked but not filed, by index: each an email
+            the folder's matter already holds.
+          items:
+            type: object
+            additionalProperties: false
+            required: [index, code, document]
+            properties:
+              index:
+                type: integer
+                minimum: 0
+                description: The attachment's index.
+              code:
+                type: string
+                enum: [already-filed]
+                description: Why it wasn't filed.
+              document:
+                $ref: '#/components/schemas/DocumentView'
+                description: The copy of its message that the matter holds.
     NewDocument:
       type: object
       additionalProperties: false

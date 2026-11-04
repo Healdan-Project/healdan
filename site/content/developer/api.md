@@ -236,7 +236,7 @@ Lists take `offset` (0 to begin with) and `limit` (50 to begin with, from 1 to 2
 | Finding | `GET /search?scope=&q=&within=`, `GET /lookup?q=` for a typed doc #, `GET /documents?legacyDocNumber=` |
 | Filing | `GET /folders/{id}/form`, then `POST /documents` with the file |
 | A document | `GET /documents/{docNumber}`, `/content`, `/versions`, `/thumbnail`, `GET` and `PATCH /properties`; `GET /documents/recent` |
-| Email | `POST /emails/inspect` for what is in an `.eml`, `GET /emails?messageId=` for where its copies are |
+| Email | `POST /emails/inspect` for what is in an `.eml`, `POST /emails` to file it with its attachments, `GET /emails?messageId=` for where its copies are |
 | Check-out and saves | `POST` and `DELETE /documents/{docNumber}/checkout`, `POST /documents/{docNumber}/versions`; `GET /me/checkouts` |
 | Favorites | `GET` and `POST /me/favorites`, `DELETE /me/favorites/{id}`: the user's bookmarks, apart from My Matters |
 
@@ -329,8 +329,8 @@ Nothing is stored unless every check passes. They run in this order, and the fir
 ## Filing Email
 
 A client that files email from a mail program asks two things before it files: what is in the message, and whether
-it is filed already. Both count only the documents the caller can read, so neither shows that a hidden document
-exists.
+it is filed already. Then it files the message, with any attachments the person ticked. Each call counts only the
+documents the caller can read, so none shows that a hidden document exists.
 
 ### Looking Inside an Email
 
@@ -398,6 +398,48 @@ GET /api/v1/emails?messageId=abc123%40mail.example.com&messageId=%3Cdef456%40mai
 - **`address`** is where the web page opens the document: the server's public address (`LOGICALDOC_PUBLIC_URL`),
   or, when there is none, the address the request was made to, then `/frontend.jsp?docId=` and the document's
   internal id. It lets a client link to a copy without knowing that id. It isn't the doc #, which `docNumber` gives.
+
+### Filing an Email and Its Attachments
+
+`POST /emails` files an `.eml` whole, as received, attachments inside. It takes two multipart parts: `email`, JSON
+with `folderId`, `properties` (as `POST /documents` takes them) and `attachments`, and `file`, the `.eml`:
+
+```text
+email={"folderId": 812, "properties": {"docclass": "Letters"}, "attachments": [1, 2]};type=application/json
+file=@message.eml
+```
+
+```json
+{
+  "email": { "type": "document", "docNumber": 1234, "name": "Contract for review.eml", … },
+  "attachments": [ { "type": "document", "docNumber": 1235, "name": "Contract.pdf", … } ],
+  "skipped": [ { "index": 2, "code": "already-filed", "document": { "type": "document", "docNumber": 998, … } } ]
+}
+```
+
+The answer is `201`, with the email's address as `Location`.
+
+- **The email** is filed as `POST /documents` files a document: the next doc #, named after its subject, with its
+  email fields read from the message.
+- **Each attachment ticked** in `attachments`, by the `index` `POST /emails/inspect` gave it, becomes a document of
+  its own in the same folder, with its own doc #, named by its file name and linked to the email (a link of type
+  `attachment`, the email first, which the web page's Links tab shows). Leave `attachments` out to file the email
+  alone. An inline part, such as a logo the message shows, can't be ticked.
+- **The properties** sent apply to the email and to each attachment, but for the email fields, which each takes from
+  its own file. Anything not sent inherits from the folder.
+- **An attached message** (a forward) is filed as an `.eml` of its own, so it gets its own email fields. One whose
+  message the matter already holds is skipped, not refused, and listed in `skipped` with its copy; the email still
+  files. So is an attached `.eml` or `.msg` file the matter holds.
+- **All or nothing.** Everything is checked before anything is stored: the folder (`404`, `409 filing-rule`,
+  `403`), the email (`413 too-large`, `422 not-an-email`), whether the matter holds it already, each ticked
+  attachment against the upload rules, then the properties. A `422` names a ticked attachment's problem under the
+  field `attachments`, with its index and name in the `detail`, and an index that isn't an attachment with the code
+  `not-an-attachment`. If storing then fails part way, everything stored is taken back to the trash before the
+  answer, so the answer is either everything filed or nothing filed.
+- **`409 already-filed`** means the matter already holds this message, by its Message-ID; the problem's `document`
+  is the copy. A client that repeats a filing whose answer it lost meets this, naming the copy its first try made,
+  and can take it as done. The same refusal comes from `POST /documents`, the web page and every other way a copy of
+  the message could reach the matter.
 
 ## Doc IDs in Word and LibreOffice Files
 
