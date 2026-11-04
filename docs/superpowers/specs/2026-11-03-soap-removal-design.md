@@ -40,18 +40,21 @@ wasn't a promise to keep them. The roadmap's non-goal for `/services/rest` still
 `@PluginContext`, and `HealdanContext`'s scan finds the class. Spring runs it after every plugin context's XML has been
 read, `context-webservice.xml` included, and before any bean is created. (call)
 
-- **It removes every bean definition that would build a SOAP server.** A definition goes when its class, resolved with
-  the bean factory's class loader, is a `jakarta.xml.ws.Endpoint` or a CXF `org.apache.cxf.frontend.ServerFactoryBean`:
+- **It removes every bean definition that would build a SOAP server.** A definition goes when the type Spring predicts
+  for its bean (`getBeanNamesForType`, which creates nothing) is a `jakarta.xml.ws.Endpoint` or a CXF
+  `org.apache.cxf.frontend.ServerFactoryBean`, both loaded with the bean factory's class loader:
   - `jaxws:endpoint`, which upstream uses for all nine, makes CXF's `EndpointDefinitionParser$SpringEndpointImpl`, an
     `Endpoint`;
   - `jaxws:server`, which upstream doesn't use today, makes a `JaxWsServerFactoryBean`, a `ServerFactoryBean`.
 
-  It matches by type, never by id, so a SOAP endpoint that upstream adds later is removed too. CE's REST servers are
-  CXF `JAXRSServerFactoryBean`s, which are neither, so they stay. A definition with no class name, or one whose class
-  can't be loaded, is left alone.
+  It matches by type, never by id, so a SOAP endpoint that upstream adds later is removed too, whether XML, a factory
+  method or a `FactoryBean` declares it. CE's REST servers are CXF `JAXRSServerFactoryBean`s, which are neither, so
+  they stay. A definition whose type Spring can't tell without creating the bean, such as a `Server` that a method
+  builds, is left alone; `SoapRemoverTest` fails if one serves SOAP (§8).
 - **It removes only definitions.** The `Soap*Service` classes, the interceptors and CXF's bus stay (§4). Each
   endpoint's implementor is named inside its `jaxws:endpoint`, so no `Soap*Service` instance is made for SOAP.
-- **It logs what it removed,** in one INFO line at startup naming each definition's id.
+- **It logs what it removed,** in one INFO line at startup naming each definition's id, and warns when it can't load
+  one of the two types, which leaves SOAP servers of that type in place.
 - **No setting.** It always runs. (owner)
 
 **What callers see.** Spring Security's catch-all chain permits `/services/*`, so a request reaches
@@ -85,16 +88,26 @@ which CE's REST never had; Healdan's `/api` adds it if a client needs it.
 `docker/tests/test-api.sh` made its non-admin user, `apiuser`, with SOAP's `storeUser`, since CE's REST can't make
 users.
 
-- **A new seed step, `smoke-api-user`, makes it instead.** It goes after `smoke-signin` in `SeedRunner.ORDER`, and
-  runs only when `HEALDAN_SMOKE_FIXTURE` is `true`, as `smoke-fixture` does, so production never gets the user. It's a
-  new step rather than a change to `smoke-fixture`, because a shipped seed step never changes. (call)
+- **A new seed step, `smoke-api-user`, makes it instead.** It goes last in `SeedRunner.ORDER`, after `demo-fixture`,
+  which refuses a stack with users, so the smoke and demo overlays still start together. It runs only when
+  `HEALDAN_SMOKE_FIXTURE` is `true`, as `smoke-fixture` does, so production never gets the user. It's a new step
+  rather than a change to `smoke-fixture`, because a shipped seed step never changes. (call)
+- **Only on a fresh stack.** The password is published, so the step makes the user only when the stack has no users
+  but `admin`, `_system` and `smoke-signin`'s `sso-user`. On a stack with people it warns, makes nothing and counts as
+  done.
+- **An existing `apiuser` stays as it is.** A stack upgraded in place has the one the script made over SOAP. The step
+  changes nothing about it and counts as done, so startup goes on; it warns when that account is disabled or has
+  another password, as the script can't sign in as it then.
+- (2026-11-04: the last two bullets and the step's place after `demo-fixture` came from the review after
+  Healdan-Project/healdan#187 merged, and changed the step in place: it only runs with the smoke overlay, and on a
+  stack where it had already run, it only made the user the script would have.)
 - **It makes the user as `storeUser` did:** username `apiuser`, name `Api`, first name `User`, email
   `apiuser@example.com`, language `en`, enabled, with the script's test password and no extra groups, stored with a
   `CREATED` history row. The password is a constant in the seed and in the script, each with a comment naming the
   other.
 - **The script's setup step becomes two checks:** `GET /services/Auth?wsdl` answers 404, and the `storeUser`
   request it used to send to `/services/Security` answers 404. The steps after it sign in as `apiuser`, so they show
-  the seed worked.
+  the seed worked, and they run whether or not the 404 checks pass.
 
 ## 6. Docs
 
@@ -133,7 +146,7 @@ holds.
 
 | File | Edit | Why |
 |---|---|---|
-| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/settings/protocols/WebservicesPanel.java` | The SOAP base URL item goes: its four lines, and `soapUrl` from both `setItems` calls, with a `Healdan:` comment where it was | The Web Service tab would otherwise show an address that answers nothing |
+| `logicaldoc-gui/src/main/java/com/logicaldoc/gui/frontend/client/settings/protocols/WebservicesPanel.java` | The SOAP base URL item is hidden: one `soapUrl.setVisible(false)` after it's made, with a `Healdan:` comment, so upstream's lines stay as they are | The Web Service tab would otherwise show an address that answers nothing |
 
 Upstream changed that file once in the year to 2026-11-03. No server-side upstream file changes.
 
@@ -143,12 +156,15 @@ Upstream changed that file once in the year to 2026-11-03. No server-side upstre
   - With the real context, which loads `WebserviceContext` because `logicaldoc-webservice` is a test dependency: no
     bean is a `jakarta.xml.ws.Endpoint`; CE's REST servers are all still defined (`restAuth`, `restDocument`,
     `restFolder`, `restSearch`, `restTag`, `restBookmark`, `restSystem`, `restDocumentMetadata` and
-    `commentservice`); and CXF's `ServerRegistry` on the context's bus holds no server at any of the nine SOAP
-    addresses.
-  - On a bare bean factory holding a `JaxWsServerFactoryBean` definition, a `JAXRSServerFactoryBean` definition and a
-    definition with no class name: only the first is removed.
+    `commentservice`); and CXF's `ServerRegistry` on the context's bus holds no server with a SOAP binding, at any
+    address.
+  - On a bare bean factory holding an `EndpointImpl` definition, a static factory method that returns an `Endpoint`, a
+    `JaxWsServerFactoryBean` definition, a `JAXRSServerFactoryBean` definition and a definition its `create` method
+    makes: the first three are removed.
 - **`SmokeApiUserSeedTest`** (`healdan-core`): with `HEALDAN_SMOKE_FIXTURE` unset the step is off; with it `true`, it
-  makes `apiuser` with the fields in §5 and a password that signs in.
+  makes `apiuser` with the fields in §5 and the script's password's hash, though `sso-user` exists; it leaves an
+  existing `apiuser` as it is, makes nothing on a stack with another user, and comes after `demo-fixture`. That the
+  user signs in, and can file into the smoke matter, is checked by `test-api.sh`, not here.
 - **`docker/tests/test-api.sh`:** the two 404 checks in §5, on the real image, in the smoke test's step 5c.
 - **Unchanged:** the tests that call the `Soap*Service` classes directly (`ChannelHarness`, `LogicalDocRoutesTest`,
   `SoapPermissionGapsTest` and others) stay. They now cover the code CE's REST inherits.

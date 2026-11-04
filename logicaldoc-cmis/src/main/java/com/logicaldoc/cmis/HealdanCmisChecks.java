@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.chemistry.opencmis.commons.exceptions.CmisConstraintException;
+import org.apache.chemistry.opencmis.commons.exceptions.CmisInvalidArgumentException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisPermissionDeniedException;
 import org.apache.chemistry.opencmis.commons.exceptions.CmisStorageException;
 
@@ -38,11 +39,12 @@ import com.logicaldoc.core.security.user.User;
  * <p>
  * An immutable document, or a tree holding one, is refused. CE's document
  * DAO skips an immutable document without saying so unless the user's groups
- * include admin, and CMIS's session user comes without its groups, so CE's
- * CMIS reported such a document deleted, an admin's request included, and
+ * include admin, and CE's CMIS took the session user without its groups, so
+ * it reported such a document deleted, an admin's request included, and
  * deleted the folders round it. The folder DAO's {@code deleteTree} refuses
  * such a tree, an admin's included, before deleting anything, and so does
- * this.
+ * this. A delete the DAO still skips is reported as failed
+ * ({@link #deleted}), and the folders round it stay.
  * <p>
  * Healdan addition: lives in its own file so upstream merges don't touch it.
  */
@@ -65,11 +67,41 @@ final class HealdanCmisChecks {
 			if (document.isImmutable())
 				throw new CmisConstraintException("Document %d is immutable".formatted(document.getId()));
 		} else if (object instanceof Folder folder) {
-			List<Long> immutable = immutableIn(folder);
-			if (!immutable.isEmpty())
-				throw new CmisConstraintException("Folder %d holds immutable documents: %s".formatted(folder.getId(),
-						immutable.stream().map(Object::toString).collect(Collectors.joining(", "))));
+			// A count, as the tree's permissions aren't checked yet
+			long immutable = immutableIn(folder);
+			if (immutable > 0)
+				throw new CmisConstraintException(
+						"Folder %d holds immutable documents (%d)".formatted(folder.getId(), immutable));
 		}
+	}
+
+	/**
+	 * Refuses a version where a document or a folder is needed, as moving and
+	 * updating properties are
+	 *
+	 * @param object the object
+	 * @param objectId the ID it was given by
+	 */
+	static void documentOrFolder(PersistentObject object, String objectId) {
+		if (!(object instanceof Document) && !(object instanceof Folder))
+			throw new CmisInvalidArgumentException("Object %s is neither a document nor a folder".formatted(objectId));
+	}
+
+	/**
+	 * Whether a delete the DAO was asked for happened. The document DAO skips
+	 * an immutable document without saying so unless the user is an admin, and
+	 * both skip every delete while the storing aspect is off.
+	 *
+	 * @param object the document or folder deleted
+	 *
+	 * @return true if it's gone
+	 *
+	 * @throws PersistenceException error in the database
+	 */
+	static boolean deleted(PersistentObject object) throws PersistenceException {
+		if (object instanceof Folder)
+			return FolderDAO.get().findById(object.getId()) == null;
+		return DocumentDAO.get().findById(object.getId()) == null;
 	}
 
 	/**
@@ -127,17 +159,16 @@ final class HealdanCmisChecks {
 	}
 
 	/**
-	 * The immutable documents in a folder's tree, as the folder DAO's
-	 * {@code deleteTree} looks for them: in its own subfolders, not an alias's
-	 * folder's
+	 * How many immutable documents a folder's tree holds, looked for as the
+	 * folder DAO's {@code deleteTree} looks for them: in its own subfolders,
+	 * not an alias's folder's
 	 */
-	private static List<Long> immutableIn(Folder folder) {
+	private static long immutableIn(Folder folder) {
 		try {
 			Collection<Long> tree = FolderDAO.get().findFolderIdInTree(folder.getId(), false);
-			return DocumentDAO.get().queryForList(
-					"select ld_id from ld_document where ld_deleted = 0 and ld_immutable = 1 and ld_folderid in (%s)"
-							.formatted(tree.stream().map(Object::toString).collect(Collectors.joining(","))),
-					Long.class);
+			return DocumentDAO.get().queryForLong(
+					"select count(*) from ld_document where ld_deleted = 0 and ld_immutable = 1 and ld_folderid in (%s)"
+							.formatted(tree.stream().map(Object::toString).collect(Collectors.joining(","))));
 		} catch (PersistenceException e) {
 			throw new CmisStorageException(e.getMessage(), e);
 		}

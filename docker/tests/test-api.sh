@@ -137,7 +137,6 @@ XML
 check "setup: SOAP's WSDL answers 404" test "$(http_code "$BASE/services/Auth?wsdl")" = 404
 check "setup: SOAP's storeUser answers 404" test "$(http_code -H 'Content-Type: text/xml; charset=utf-8' \
   -H 'SOAPAction: ""' -d "$soap_user" "$BASE/services/Security")" = 404
-[ "$FAILED" = 0 ] || exit 1
 
 # Each step is a function, so that `check` reports it as one line. They run in the current shell and share state.
 JSON=(-H 'Content-Type: application/json')

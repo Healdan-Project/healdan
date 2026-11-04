@@ -163,7 +163,7 @@ public class LogDownload extends HttpServlet {
 			 * Now create a copy of the configuration and store it in the zip
 			 * file
 			 */
-			OrderedProperties prop = writeContextPropertiesDump(out);
+			writeContextPropertiesDump(out);
 
 			/*
 			 * Save the most important configuration files
@@ -215,7 +215,8 @@ public class LogDownload extends HttpServlet {
 			 */
 			dumpLegals(out);
 
-			prop.store(new FileOutputStream(buf), "Support Request");
+			// Healdan: CE wrote its dump here once more, into the environment's
+			// deleted temp file, which was then left in the temp folder unmasked
 		}
 
 		return tmp;

@@ -238,9 +238,14 @@ releases of `1.2.3-rc1` and the version's other pre-releases, with their disk im
 of what was tested. It also refuses to publish a pre-release of a version that's already released, so re-running an
 old `helper-v1.2.3-rc1` run attaches nothing.
 
-`package.sh` tries `hdiutil` and each staple three times, as both have failed for a moment on CI's runners (a stapler
-lost its connection to Apple on 0.4.0-rc3). A run that still fails can be run again with "Re-run failed jobs", which
-builds, signs and notarises from the start.
+`package.sh` tries `hdiutil` three times, as it's sometimes busy on CI's runners. Stapling a ticket and checking it
+both fetch the ticket from Apple, whose ticket server dropped the connection on 0.4.0-rc3, 0.6.0 and 0.7.0, on the
+last two for longer than three tries 10 seconds apart. So `clients/helper/packaging/mac/stapler.sh` runs each `xcrun stapler staple` and
+`xcrun stapler validate`, for the app, the disk image and the job's own check: it tries five times, waiting 15, 30, 60
+and then 120 seconds, but only while stapler exits with 68, its code for a lost connection. Any other failure, such
+as a ticket Apple doesn't have, ends it at once: `package.sh` stops, and the job's own check takes the disk image for
+one that isn't notarised. A connection still lost after the fifth try fails the job, rather than leaving the release
+out. A run that fails can be run again with "Re-run failed jobs", which builds, signs and notarises from the start.
 
 Actions → Clients → Run workflow packages any branch or tag by hand, under a version you give or
 `0.0.0-dev.<run>`, and attaches nothing to a release. Only a `helper-v*` tag's run is signed: a branch's is built

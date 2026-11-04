@@ -63,6 +63,21 @@ public class StructureRulesTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testAFolderAliasNeverMovesInsideTheFolderItPointsTo() throws Exception {
+		// CE's createAlias refuses the cycle, but its move didn't look: admins too
+		Folder pointed = fx.folder(loose, "Pointed");
+		Folder below = fx.folder(pointed, "Below");
+		Folder alias = folderDao.createAlias(loose.getId(), pointed.getId(), folderHistory(admin));
+		assertRefused(ALIAS_CYCLE, () -> move(alias, pointed, admin));
+		assertRefused(ALIAS_CYCLE, () -> move(alias, below, admin));
+		assertEquals(loose.getId(), reload(alias).getParentId());
+
+		Folder elsewhere = fx.folder(loose, "Elsewhere");
+		allowed(() -> move(alias, elsewhere, admin));
+		assertEquals(elsewhere.getId(), reload(alias).getParentId());
+	}
+
+	@Test
 	public void testAStoreNeverBecomesAnAlias() throws Exception {
 		// Made into an alias where it is, as SOAP update can, or by a change of type: admins too (R34)
 		assertRefused(STORE_SHORTCUT, () -> makeAlias(store, loose, admin));

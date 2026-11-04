@@ -7,9 +7,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
-import java.util.Set;
 
 import org.apache.cxf.Bus;
+import org.apache.cxf.binding.soap.SoapBinding;
+import org.apache.cxf.endpoint.Server;
 import org.apache.cxf.endpoint.ServerRegistry;
 import org.apache.cxf.jaxrs.JAXRSServerFactoryBean;
 import org.apache.cxf.jaxws.EndpointImpl;
@@ -25,17 +26,14 @@ import jakarta.xml.ws.Endpoint;
 
 public class SoapRemoverTest extends AbstractHealdanTestCase {
 
-	/** The addresses of the nine SOAP services upstream's context-webservice.xml declares */
-	private static final Set<String> SOAP_ADDRESSES = Set.of("/Auth", "/Document", "/Folder", "/Search", "/Tag",
-			"/Bookmark", "/System", "/Security", "/DocumentMetadata");
-
 	/** CE's REST servers in the same file, which stay */
 	private static final List<String> REST_SERVERS = List.of("restAuth", "restDocument", "restFolder", "restSearch",
 			"restTag", "restBookmark", "restSystem", "restDocumentMetadata", "commentservice");
 
 	/**
 	 * The real context, which loads the web services' XML: no SOAP endpoint is
-	 * built, none is running, and CE's REST servers are all there
+	 * built, CXF serves nothing with a SOAP binding, at any address, and CE's
+	 * REST servers are all there
 	 */
 	@Test
 	public void testTheContextHasNoSoapServices() {
@@ -44,15 +42,22 @@ public class SoapRemoverTest extends AbstractHealdanTestCase {
 		for (String id : REST_SERVERS)
 			assertTrue(id, Context.get().containsBean(id));
 
-		List<String> addresses = Context.get(Bus.class).getExtension(ServerRegistry.class).getServers().stream()
-				.map(server -> server.getEndpoint().getEndpointInfo().getAddress()).toList();
-		assertTrue(addresses.toString(), addresses.stream().noneMatch(SOAP_ADDRESSES::contains));
+		List<Server> servers = Context.get(Bus.class).getExtension(ServerRegistry.class).getServers();
+		List<String> soap = servers.stream().filter(server -> server.getEndpoint().getBinding() instanceof SoapBinding)
+				.map(SoapRemoverTest::address).toList();
+		assertTrue(soap.toString(), soap.isEmpty());
+		List<String> addresses = servers.stream().map(SoapRemoverTest::address).toList();
 		assertTrue(addresses.toString(), addresses.contains("/rest/auth"));
 	}
 
+	private static String address(Server server) {
+		return server.getEndpoint().getEndpointInfo().getAddress();
+	}
+
 	/**
-	 * By type, whatever the id: a JAX-WS endpoint and a JAX-WS server factory
-	 * go; a JAX-RS server and a definition with no class name stay
+	 * By type, as Spring predicts it, whatever the id: a JAX-WS endpoint, one a
+	 * factory method makes and a JAX-WS server factory go; a JAX-RS server, and
+	 * the server a factory bean's method makes from it, stay
 	 */
 	@Test
 	public void testRemovesSoapServersOnly() {
@@ -64,9 +69,17 @@ public class SoapRemoverTest extends AbstractHealdanTestCase {
 		noClass.setFactoryBeanName("aRestServer");
 		noClass.setFactoryMethodName("create");
 		factory.registerBeanDefinition("madeByAFactory", noClass);
+		RootBeanDefinition fromAMethod = new RootBeanDefinition(SoapRemoverTest.class);
+		fromAMethod.setFactoryMethodName("endpoint");
+		factory.registerBeanDefinition("anEndpointFromAMethod", fromAMethod);
 
 		new SoapRemover().postProcessBeanDefinitionRegistry(factory);
 
 		assertEquals(List.of("aRestServer", "madeByAFactory"), List.of(factory.getBeanDefinitionNames()));
+	}
+
+	/** The factory method of testRemovesSoapServersOnly's anEndpointFromAMethod, which Spring never calls */
+	static Endpoint endpoint() {
+		throw new UnsupportedOperationException();
 	}
 }
