@@ -176,6 +176,7 @@ public sealed class CopyCycle : IDisposable
     /// Opens a document (spec §5.5). It's checked out from this computer, unless the caller can't edit it, someone else
     /// holds it or <paramref name="readOnly"/> asks for read-only; then downloaded, unless this computer kept a copy of
     /// it (after a crash, or with changes Healdan hasn't confirmed), which is reopened instead; then opened in the app.
+    /// A crashed copy's check-out is checked with Healdan before it reopens (<see cref="CheckCrashedHoldAsync"/>).
     /// A <paramref name="version"/> always opens read-only. If the document is checked out to the user on another
     /// computer, <see cref="ICycleEvents.HeldElsewhere"/> asks first and nothing is opened. Opens run in the
     /// background, so failures are reported through the events rather than thrown; a check-out the open took is
@@ -752,6 +753,7 @@ public sealed class CopyCycle : IDisposable
                 live = _sessions.Values.FirstOrDefault(s => s.DocNumber == n && !s.ReadOnly && !s.Ended);
             if (live is not null)
             {
+                await CheckCrashedHoldAsync(live, ct);
                 Reopen(live);
                 return;
             }
@@ -955,6 +957,75 @@ public sealed class CopyCycle : IDisposable
     private static string Refused(string documentName, string fileName) =>
         $"{documentName} wasn't opened: Healdan Helper never opens {Path.GetExtension(fileName)} files, as they can run "
         + "programs on this computer. Download it from the web page if you need it.";
+
+    /// <summary>
+    /// #136: a crashed copy keeps its check-out, which may have ended while its app was away, as when the web page's
+    /// Unlock released it, so Healdan is asked before the copy is reopened. A check-out that ended with nothing newer
+    /// stored is taken again, where the document's <c>canEdit</c> says it can be (free, or checked out to the user on no
+    /// device), and the copy carries on as before. Otherwise its changes can't go to the document, as someone else or the
+    /// user's other computer holds it, or newer content was stored (decided as <see cref="CarryOnWithKeptCopy"/> decides),
+    /// so the copy is marked ended now, and <see cref="ICycleEvents.CheckoutEnded"/> says so as it reopens, rather than at
+    /// its first save. When Healdan can't be asked, or the check-out can't be taken for a reason that may pass, the copy
+    /// reopens as before, and its first save finds out.
+    /// </summary>
+    private async Task CheckCrashedHoldAsync(Session s, CancellationToken ct)
+    {
+        string path;
+        lock (_gate)
+        {
+            if (!s.Crashed || s.Closing || s.Ended || Find(s.Path) != s)
+                return;
+            path = s.Path;
+        }
+        if (Record(path) is not { } record)
+            return;
+        DocumentView doc;
+        try
+        {
+            doc = await _api.DocumentAsync(s.DocNumber, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception e) when (e is ApiException || IsTransient(e))
+        {
+            return; // Healdan can't say now: reopened as before
+        }
+        var heldHere = HoldIsHere(doc.Hold);
+        var newer = record.FileVersion != doc.FileVersion && record.PendingHash is null;
+        if (!heldHere && !newer && doc.CanEdit)
+        {
+            try
+            {
+                doc = await _api.CheckOutAsync(s.DocNumber, AppOf(path).CheckOutName(doc.Name), false, ct);
+                heldHere = HoldIsHere(doc.Hold);
+                newer = record.FileVersion != doc.FileVersion && record.PendingHash is null; // stored in the moment since
+                if (heldHere)
+                    lock (_gate)
+                        Update(s.Path, r => r with { CheckedOutHere = true }); // this computer's again, so closing checks it in
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception e) when (IsTransient(e) || e is ApiException { Status: 401 or 408 or 429 or >= 500 })
+            {
+                return; // reopened as before
+            }
+            catch (ApiException)
+            {
+                // Taken or refused in the moment since it was read: it can't be saved to Healdan.
+            }
+        }
+        if (heldHere && !newer)
+            return;
+        // Ended even if its program has brought it back by itself meanwhile, as Word may: it still can't be saved.
+        lock (_gate)
+            if (s.Closing || s.Ended || Find(s.Path) != s)
+                return; // checked in from the crash window meanwhile, or ended by a save's refusal
+        EndCheckout(s, heldHere);
+    }
 
     private void Reopen(Session live)
     {

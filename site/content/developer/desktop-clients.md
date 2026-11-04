@@ -203,6 +203,17 @@ size the helper uses, the widths then match CoreText's.
   saved, unless the program wrote its owner file again: it has the copy under another name then, and handed the file,
   it would open it beside that window, so the copy stays crashed. A save confirmed while the copy counted as crashed couldn't rename it, so before it opens, a Word or Excel
   copy takes its confirmed version's name (`CopyCycle.CatchUpName`).
+- **Reopening a crashed copy** (`CopyCycle.CheckCrashedHoldAsync`): Reopen, the menu, Open from Healdan and a link
+  reopen a crashed copy from its kept file, whatever its app, and its check-out may have ended while the app was
+  away, as the web page's Unlock ends it. So the document is read first. A check-out that ended with nothing newer
+  stored (the record's `fileVersion`, unless a save's answer is still to come, as `CarryOnWithKeptCopy` decides) is
+  taken again where `canEdit` allows it: the document is free, or checked out to the user on no device. Anything
+  else (someone else's hold, the user's other device's, or a `fileVersion` that moved) ends the copy's check-out at
+  once, as a refused save would: `CheckoutEnded` gives the Save as New Document notice as the copy reopens, and
+  nothing of it is sent. A check-out still held here stays recorded, so the close releases it. When the document
+  can't be read, or the check-out fails in a way that may pass (`401`, `408`, `429`, `5xx` or no connection), the
+  copy reopens as before, and its first save finds out. A copy opened before the resume, or whose check-out ended
+  already, goes through the whole open instead: checked out, then `CarryOnWithKeptCopy`.
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,
   and then takes it on again knowing whether the owner file is there.
