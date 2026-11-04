@@ -7,7 +7,9 @@ Besides the web page and Healdan's own [API](../../../developer/api/), LogicalDO
 CMIS, and its REST web services. They're set under **Administration → Settings → Protocols**, one tab each. All
 three are on to begin with.
 
-Healdan doesn't offer LogicalDOC's SOAP web services: their addresses answer `404 Not Found`.
+Healdan doesn't offer LogicalDOC's SOAP web services. A SOAP call, or a request for a service's WSDL such as
+`https://healdan.example/services/Auth?wsdl`, finds no service: it answers `404 Not Found`, or `302` while the web
+services are turned off.
 
 ## Their Addresses
 

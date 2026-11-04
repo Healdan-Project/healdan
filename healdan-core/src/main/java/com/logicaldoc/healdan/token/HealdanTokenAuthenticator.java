@@ -24,8 +24,8 @@ import com.logicaldoc.util.spring.Context;
  * The API opens a token's CE session through {@link #openSession}, which hands
  * CE's sign-in chain a one-time key that stands for the token on this thread
  * only. Every other key in Healdan's form, a token included, is refused, so
- * CE's own routes never accept a token: its {@code loginApiKey} over SOAP and
- * REST, and the key of a Basic sign-in. Any other key is left to the
+ * CE's own routes never accept a token: its {@code loginApiKey} over REST
+ * (SOAP's is gone), and the key of a Basic sign-in. Any other key is left to the
  * authenticators after this one, a provider sign-in's one-time key
  * ({@link SignIns#PREFIX}) included: {@code SignInAuthenticator} owns those.
  */

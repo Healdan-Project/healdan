@@ -75,7 +75,12 @@ public class WebservicesPanel extends VLayout {
 			return;
 		}
 
-		// Healdan: no SOAP URL; Healdan removes LogicalDOC's SOAP services (SOAP removal spec, section 7)
+		// SOAP Url
+		StaticTextItem soapUrl = ItemFactory.newStaticTextItem("soapUrl", I18N.message("soapbaseurl"),
+				GWT.getHostPageBaseURL() + "services");
+		soapUrl.setColSpan(4);
+		// Healdan: hidden; Healdan removes LogicalDOC's SOAP services (SOAP removal spec, section 7)
+		soapUrl.setVisible(false);
 
 		// REST Url
 		StaticTextItem restUrl = ItemFactory.newStaticTextItem("restUrl", I18N.message("restbaseurl"),
@@ -113,10 +118,10 @@ public class WebservicesPanel extends VLayout {
 		SelectItem tenantStat = prepareTenantStatItem();
 
 		if (Session.get().isDefaultTenant())
-			webServiceForm.setItems(restUrl, wsEnabled, wsBasicAuthEnabled, recordCalls, recordCallsPayload, ttl,
-					tenantStat, apicalls, apicallsCurrent);
+			webServiceForm.setItems(soapUrl, restUrl, wsEnabled, wsBasicAuthEnabled, recordCalls, recordCallsPayload,
+					ttl, tenantStat, apicalls, apicallsCurrent);
 		else
-			webServiceForm.setItems(restUrl, wsEnabled, wsBasicAuthEnabled, apicalls, apicallsCurrent);
+			webServiceForm.setItems(soapUrl, restUrl, wsEnabled, wsBasicAuthEnabled, apicalls, apicallsCurrent);
 
 		setMembers(webServiceForm);
 		if (Session.get().isDefaultTenant())

@@ -37,9 +37,10 @@ public class HealdanSecretsTest {
     @Test
     public void testMasksTheKeysContextPropertiesHolds() {
         // context.properties, which Download the Logs puts in its zip, keeps
-        // these under names without the words above
+        // these under names without the words above. CE writes the encryption
+        // key on every install.
         for (String name : List.of("converter.OnlyOfficeConverter.security.key", "saml.sp.privatekey",
-                "converter.AcmeCadConverter.licenseKey", "adminpasswd"))
+                "converter.AcmeCadConverter.licenseKey", "adminpasswd", "encryption.key", "default.anonymous.key"))
             assertEquals(name, HealdanSecrets.MASK, HealdanSecrets.shown(name, "value"));
     }
 

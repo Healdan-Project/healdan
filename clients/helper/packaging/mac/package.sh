@@ -165,19 +165,14 @@ print(value if isinstance(value, str) else "")' "$1" "$2" || true
     fi
     say "Notarised $2 ($id)"
   }
-  staple() { # <path> <what>: stapler fetches the ticket from Apple, whose connection dropped once on CI (rc3's first run)
-    local attempt
-    for attempt in 1 2 3; do
-      xcrun stapler staple "$1" && return 0
-      say "stapler failed (attempt $attempt); trying again"
-      sleep 10
-    done
-    die "stapler couldn't staple $2's ticket"
+  staple() { # <path> <what>: staples the ticket and checks it, through stapler.sh, which tries again while Apple's
+    # ticket server drops the connection
+    "$here/stapler.sh" staple "$1" || die "stapler couldn't staple $2's ticket"
+    "$here/stapler.sh" validate "$1" || die "stapler couldn't validate $2's stapled ticket"
   }
   ditto -c -k --keepParent "$app" "$work/app.zip"
   notarise "$work/app.zip" "the app"
   staple "$app" "the app"
-  xcrun stapler validate "$app"
   spctl --assess --type execute --verbose=2 "$app"
 elif [ -n "$identity" ]; then
   # Before notarisation Gatekeeper may say "rejected": shown, not fatal.
@@ -205,7 +200,6 @@ codesign --verify --strict --verbose=2 "$dmg"
 if [ "$notarise" = true ]; then
   notarise "$dmg" "the disk image"
   staple "$dmg" "the disk image"
-  xcrun stapler validate "$dmg"
   spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
 fi
 

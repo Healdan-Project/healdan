@@ -14,7 +14,11 @@
 
 **Spec:** [`docs/superpowers/specs/2026-11-03-soap-removal-design.md`](../specs/2026-11-03-soap-removal-design.md). Read it first; this plan argues from it.
 
-**Status:** written on 2026-11-03, after the spec's approval.
+**Status:** written on 2026-11-03, after the spec's approval. Built in Healdan-Project/healdan#187. A review after it
+merged changed what Tasks 1 to 4 built (2026-11-04): `SoapRemover` matches by the type Spring predicts, `smoke-api-user`
+runs after `demo-fixture`, only on a stack with no other users, and leaves an existing `apiuser` alone,
+`test-api.sh` no longer stops after its 404 checks, and the Web Service tab hides the SOAP item instead of dropping it.
+The code below is what was first built; the spec and the code describe it as it is.
 
 ## Global Constraints
 
