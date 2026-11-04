@@ -74,9 +74,13 @@ learn from.
   - A background thread, `EmailIndexWorker`, gives the emails filed before the index existed their row and their
     Message-ID property. It starts a minute after the server, reads 50 emails at a time in the order of their ids,
     and writes the id of the last one to `email.index.cursor` in `hd_setting`, so a restart carries on from there.
-    It reads deleted documents too, so that a restore finds the row, and leaves shortcuts out. When it has read
-    them all it writes `email.index` = `done`, and later starts do nothing. It writes the property directly, so no
-    version is made and no listener runs. An email it can't read gets nothing, and is logged by its document id.
+    It reads deleted documents too, so that a restore finds the row, and leaves shortcuts out. It writes the
+    property directly, so no version is made and no listener runs. An email it can't read gets nothing, and is
+    logged by its document id.
+  - When the first pass has read them all it writes `email.index` = `done`, which only records that. Every start
+    scans on from the cursor, so an email filed since whose row is missing (the listener logs a row it can't add
+    and goes on) gets it at the next start. To read every email again, delete the `email.index` and
+    `email.index.cursor` rows from `hd_setting` and restart.
 - **One-time setup steps** in `com.logicaldoc.healdan.seed` create what Healdan needs inside LogicalDOC, such as
   the Everyone group and the Healdan profile. Each records that it ran in `hd_setting`, and never runs again, so a
   new default ships as a new step.

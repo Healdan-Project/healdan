@@ -27,8 +27,8 @@ import com.logicaldoc.healdan.HealdanConstants;
  * which has added the email attributes with the template's definitions. It
  * never refuses anything: an email that can't be read is filed with blank
  * fields and its own name, and an index row that can't be added is logged (the
- * index worker mends it). CE creates it by reflection, hence the public no-arg
- * constructor.
+ * index worker mends it at its next start, which scans on from its cursor). CE
+ * creates it by reflection, hence the public no-arg constructor.
  */
 public class EmailDocumentListener implements DocumentListener {
 
@@ -56,7 +56,9 @@ public class EmailDocumentListener implements DocumentListener {
 			fillEmail(document, transaction, dictionary);
 		} catch (Throwable t) {
 			// Review Focus 1: a messy email never blocks an upload
-			log.warn("Cannot read the email fields of {}: {}", document.getFileName(), t.toString());
+			// The class only: the file may be named after the subject, and a parser's message can hold addresses
+			log.warn("Cannot read the email fields of a new document: {}", t.getClass().getName());
+			log.debug("Cannot read the email fields of a new document", t);
 		}
 	}
 
@@ -110,8 +112,10 @@ public class EmailDocumentListener implements DocumentListener {
 		try {
 			EmailIndex.get().put(document.getId(), id);
 		} catch (Throwable t) {
-			// The listener never refuses; the index worker mends a missing row
-			log.warn("Cannot index the Message-ID of document {}: {}", document.getId(), t.toString());
+			// The listener never refuses; the index worker mends a missing row at its next start.
+			// The class only: a driver's message can hold the values it was given
+			log.warn("Cannot index the Message-ID of document {}: {}", document.getId(), t.getClass().getName());
+			log.debug("Cannot index the Message-ID of document {}", document.getId(), t);
 		}
 	}
 

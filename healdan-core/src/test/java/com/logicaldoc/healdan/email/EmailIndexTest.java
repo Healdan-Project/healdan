@@ -244,7 +244,7 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 			assertEquals("1@example.com", doc.getValue(HealdanConstants.ATTR_EMAILMESSAGEID));
 			// The warning names the document, never the Message-ID
 			assertTrue(log.lines().toString(), log.lines().stream()
-					.anyMatch(l -> l.startsWith("WARN Cannot index the Message-ID of document " + doc.getId())));
+					.anyMatch(l -> l.matches("WARN Cannot index the Message-ID of document " + doc.getId() + ": [\\w.$]+")));
 			assertTrue(log.lines().toString(), log.lines().stream().noneMatch(l -> l.contains("1@example.com")));
 		} finally {
 			jdbc.execute("create table hd_email (hd_docid bigint not null, hd_messageid varchar(998) not null, "

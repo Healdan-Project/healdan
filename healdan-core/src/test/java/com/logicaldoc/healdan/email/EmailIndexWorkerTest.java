@@ -37,6 +37,7 @@ import com.logicaldoc.core.threading.ThreadPools;
 import com.logicaldoc.healdan.AbstractHealdanTestCase;
 import com.logicaldoc.healdan.HealdanConstants;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.healdan.util.CacheEvictor;
@@ -395,32 +396,43 @@ public class EmailIndexWorkerTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
-	public void testDoneMeansNothingMoreToDo() throws Exception {
+	public void testDoneMeansIdle() throws Exception {
 		Document doc = file("healdan-cc.eml", "one.eml");
-		asBeforeM5(doc);
-		HealdanSettings.get().set(DONE, "done");
+		runAll(worker());
+		assertEquals("done", HealdanSettings.get().get(DONE));
+		assertEquals(String.valueOf(doc.getId()), HealdanSettings.get().get(CURSOR));
+		DbSnapshot before = fx.snapshot();
+
+		// Nothing is past the cursor: a run reads nothing and changes nothing
+		assertFalse(worker().runOnce());
+
+		before.assertUnchanged();
+	}
+
+	@Test
+	public void testDoneStillMendsAMissingRow() throws Exception {
+		Document first = file("healdan-cc.eml", "before.eml");
+		runAll(worker());
+		assertEquals("done", HealdanSettings.get().get(DONE));
+
+		// Filed after the first pass, when its row couldn't be added (the listener logs it and goes on)
+		Document second = file("healdan-emoji.eml", "after.eml");
+		jdbc.update("delete from hd_email where hd_docid = ?", second.getId());
+		assertNull(EmailIndex.get().messageIdOf(second.getId()));
 
 		assertFalse(worker().runOnce());
 
-		assertEquals(0, rows());
-		assertEquals(0, attributeRows(doc.getId()));
+		assertEquals("2@example.com", EmailIndex.get().messageIdOf(second.getId()));
+		assertEquals(List.of(second.getId()), EmailIndex.get().copies("2@example.com"));
+		assertEquals(List.of(first.getId()), EmailIndex.get().copies("1@example.com"));
+		assertEquals(2, rows());
+		assertEquals(String.valueOf(second.getId()), HealdanSettings.get().get(CURSOR));
+		assertEquals("done", HealdanSettings.get().get(DONE));
 	}
 
 	@Test
-	public void testDoneMeansIdle() {
+	public void testStartsAThreadEvenWhenDone() {
 		HealdanSettings.get().set(DONE, "done");
-		EmailIndexWorker worker = worker();
-
-		worker.start();
-		try {
-			assertFalse(threadRuns());
-		} finally {
-			worker.stop();
-		}
-	}
-
-	@Test
-	public void testStartsAThreadUntilItsDone() {
 		EmailIndexWorker worker = worker();
 
 		worker.start();

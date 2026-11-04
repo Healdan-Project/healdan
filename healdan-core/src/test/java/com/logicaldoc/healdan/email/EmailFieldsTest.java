@@ -12,11 +12,13 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.Test;
 
 import com.auxilii.msgparser.MsgParser;
+import com.logicaldoc.healdan.support.LogCapture;
 
 /**
  * Spec §6.1: the Message-ID is read from an {@code eml}'s header and from a
@@ -76,5 +78,26 @@ public class EmailFieldsTest {
 	public void testCorruptMsgGivesNothingAndNoException() {
 		// Today's behaviour: no fields at all, so the listener files it blank, under its own name
 		assertFalse(EmailFields.extract(resource("corrupt.msg"), "msg").isPresent());
+	}
+
+	@Test
+	public void testWarningsNameTheExceptionClassOnly() throws Exception {
+		// The file is named after a subject with an address; a parser's message can hold addresses too
+		File dir = Files.createTempDirectory("emailfields").toFile();
+		File named = new File(dir, "bob@example.com secret subject.msg");
+		Files.copy(resource("corrupt.msg").toPath(), named.toPath());
+		try (LogCapture log = LogCapture.of(EmailFields.class)) {
+			assertFalse(EmailFields.extract(named, "msg").isPresent());
+
+			List<String> warnings = log.lines().stream().filter(l -> l.startsWith("WARN")).toList();
+			assertFalse(warnings.isEmpty());
+			for (String line : warnings) {
+				assertTrue(line, line.matches("WARN Cannot read (an email|the [A-Za-z -]+ of an email): [\\w.$]+"));
+				assertFalse(line, line.contains("secret") || line.contains("example.com"));
+			}
+		} finally {
+			named.delete();
+			dir.delete();
+		}
 	}
 }

@@ -37,7 +37,11 @@ import jakarta.annotation.PreDestroy;
  * of {@link #BATCH}, in the order of their ids, and keeps the id of the last
  * one read in {@code email.index.cursor} of {@code hd_setting}, so that a
  * restart carries on where it was. When a batch comes short, it writes
- * {@code email.index} = {@code done}, and no later start does any more.
+ * {@code email.index} = {@code done}, which only records that the first full
+ * pass ended: every start scans on from the cursor, so an email filed since
+ * whose row is missing (the listener indexes it, and logs and goes on when it
+ * can't) is mended at the next start. To read everything again, delete both
+ * settings and restart.
  * <p>
  * Deleted documents are included, as a restore checks the row; shortcuts are
  * not, as they have no file of their own. A document that already has its row
@@ -60,7 +64,7 @@ public class EmailIndexWorker {
 	/** The setting that holds the id of the last document read */
 	static final String CURSOR = "email.index.cursor";
 
-	/** The setting that is {@code done} once every email has been read */
+	/** The setting that is {@code done} once the first pass over every email has ended */
 	static final String DONE = "email.index";
 
 	private static final String FINISHED = "done";
@@ -111,11 +115,11 @@ public class EmailIndexWorker {
 	}
 
 	/**
-	 * Starts the worker thread, unless every email has been read or it is
-	 * running.
+	 * Starts the worker thread, unless it is running. It scans on from the
+	 * cursor at every start, also once {@code email.index} is {@code done}.
 	 */
 	public synchronized void start() {
-		if ((thread != null && thread.isAlive()) || isDone())
+		if (thread != null && thread.isAlive())
 			return;
 		thread = new Thread(this::loop, "healdan-email-index");
 		thread.setDaemon(true);
@@ -170,13 +174,10 @@ public class EmailIndexWorker {
 	/**
 	 * Reads the next {@link #BATCH} emails after the cursor.
 	 *
-	 * @return true while there may be more; false once every email has been read,
-	 *         or when the thread was interrupted
+	 * @return true while there may be more; false when a batch came short, or
+	 *         when the thread was interrupted
 	 */
 	boolean runOnce() {
-		if (isDone())
-			return false;
-
 		long cursor = cursor();
 		List<Row> batch = jdbc.query(batchSelect,
 				(rs, i) -> new Row(rs.getLong(1), rs.getString(2), rs.getString(3)), cursor, BATCH);
@@ -197,21 +198,15 @@ public class EmailIndexWorker {
 		if (Thread.currentThread().isInterrupted())
 			return false;
 		if (batch.size() < BATCH) {
-			settings.set(DONE, FINISHED);
-			log.info("Read the emails filed before their Message-ID was kept: {} documents in this run", read);
+			if (!FINISHED.equals(settings.get(DONE))) {
+				settings.set(DONE, FINISHED);
+				log.info("Read the emails filed before their Message-ID was kept: {} documents in this run", read);
+			} else if (read > 0) {
+				log.info("Read {} emails filed since the last start", read);
+			}
 			return false;
 		}
 		return true;
-	}
-
-	private boolean isDone() {
-		try {
-			return FINISHED.equals(settings.get(DONE));
-		} catch (RuntimeException e) {
-			// Let the thread find out, rather than stop the start
-			log.warn("Cannot tell whether the emails have been read: {}", e.getClass().getName());
-			return false;
-		}
 	}
 
 	private long cursor() {

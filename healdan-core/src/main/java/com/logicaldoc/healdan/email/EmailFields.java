@@ -65,7 +65,9 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 				return Optional.of(fromMsg(file));
 			return fromEml(file);
 		} catch (Throwable t) {
-			log.warn("Cannot read the email {}: {}", file != null ? file.getName() : null, t.toString());
+			// The class only: a parser's message can hold addresses. A file may be named after the subject too
+			log.warn("Cannot read an email: {}", t.getClass().getName());
+			log.debug("Cannot read an email", t);
 			return Optional.empty();
 		}
 	}
@@ -76,7 +78,7 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 			message = MailUtil.readMime(is);
 		}
 		if (message == null) {
-			log.warn("Cannot read the email {}: not a MIME message", file.getName());
+			log.warn("Cannot read an email: not a MIME message");
 			return Optional.empty();
 		}
 		return Optional.of(fromEml(message));
@@ -215,7 +217,8 @@ public record EmailFields(String from, String to, String cc, String subject, Dat
 		try {
 			return reader.get();
 		} catch (Throwable t) {
-			log.warn("Cannot read the {} of the email: {}", what, t.toString());
+			log.warn("Cannot read the {} of an email: {}", what, t.getClass().getName());
+			log.debug("Cannot read the {} of an email", what, t);
 			return null;
 		}
 	}
