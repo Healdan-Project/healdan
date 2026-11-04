@@ -538,7 +538,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
 | `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
-| `POST /v1/mail/file` | `{"eml", "folderId"}`: the `.eml` in base64, and optionally a suggested folder's id | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`; Outlook's key only |
+| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` only when Healdan can't be reached before any window is up; Outlook's key only |
 | `POST /v1/mail/file-many` | the number of messages and their subjects | a ticket; Outlook's key only |
 | `POST /v1/mail/file-one` | the ticket and one `.eml` | filed, `already-filed` or failed; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
@@ -595,19 +595,31 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     Here could only answer `already-filed`), no repeats, five at most, each with its path written out from its matter
     down. It never goes pending. An unreachable or refusing server is `500 internal-error`, but when only a folder can't
     be read for now (anything but `404` or `403`, which leave that folder out), the status answers without suggestions.
-  - **`mail/file`** files one message (`MailFiling.FileAsync`). With `folderId` (File Here), it reads the folder's form
-    (`GET /api/v1/folders/{id}/form`): when every required field has a value, its own or an inherited one, it files the
-    message there at once with no properties and no attachments (`POST /api/v1/emails`), so a one-click filing never fails
-    for a missing property; otherwise the Save window opens at that folder. Without one (File…), it asks the server what's
-    in the message (`POST /api/v1/emails/inspect`) and opens the Save window's email mode, File to Healdan (M5 spec §7.3):
-    the folder and its form as for a document; the subject, From and Sent read-only, with no name to type, as M1 names
-    every email after its subject; and "Also file attachments as separate documents", unticked, with a tick for each
-    attachment by name and size and none for inline parts. The box ticks and unticks them all, and each can be unticked
-    while it's ticked. The window's answer (`IWindows.SaveEmailAsync`, `{"action": "save", "folderId", "properties",
-    "attachments": [index…]}`) is what's filed; its Cancel is `outcome: cancelled`. A matter that holds the message
-    already (`409 already-filed`) is `outcome: already-filed` with the copy, not a failure. Any other failure is told in
-    the helper's notification, with the server's words, and answered `500 internal-error`. Like `save-new`, it answers
-    `202` when it's still running after 20 s, while the window is up.
+  - **`mail/file`** files one message (`MailFiling.FileAsync`).
+    - **With `folderId` (File Here),** it reads the folder's form (`GET /api/v1/folders/{id}/form`). When every required
+      field has a value, its own or an inherited one, it files the message there at once with no properties and no
+      attachments (`POST /api/v1/emails`), so a one-click filing never fails for a missing property. When the form needs
+      something typed, or Healdan refuses the filing or the folder (anything but `already-filed` that isn't an outage),
+      the Save window opens at that folder, with the refusal already shown (M5 spec §10).
+    - **Without one (File…),** the window opens at `openAt` when it's given, and at Recent Folders otherwise. `openAt`
+      and `folderId` are each a whole number above 0, or `400 bad-request`.
+    - **The window** is the Save window's email mode, File to Healdan (M5 spec §7.3), shown after the helper asks the
+      server what's in the message (`POST /api/v1/emails/inspect`): the folder and its form as for a document; the
+      subject, From and Sent read-only, with no name to type, as M1 names every email after its subject; and "Also file
+      attachments as separate documents", unticked, with a tick for each attachment by name and size and none for
+      inline parts. The box ticks and unticks them all, and each can be unticked while it's ticked.
+    - **Its Save files through the window** (`IWindows.SaveEmailAsync`'s `submit`, which `MailFiling` builds around
+      `POST /api/v1/emails`). Save, Cancel and closing are off while it waits, and the line by Save says "Filing the email
+      in Healdan…". Filed, or `409 already-filed`, which counts as filed, closes the window with that outcome and the copy.
+      A refusal (`409 filing-rule`, `403`, `413`, a `422`) shows in the window, which stays open to choose another folder
+      or untick an attachment (`SubmitOutcome.Refused.Place`). A property's error shows under its field and keeps Save off
+      until the field changes; an attachment's (`attachments`, "Attachment 3 (name): …") shows under its tick, until the
+      tick changes; anything else shows on the line by Save. An outage (no answer, or a `5xx`) stays open too, saying
+      "Can't reach Healdan. Try again." Cancel is `outcome: cancelled`.
+    - **Before any window is up,** an outage on File Here, or any failure of `inspect`, is told in the helper's
+      notification and answered `500 internal-error`, which the pane shows as Can't Reach Healdan. The window's refusals
+      are never notified: the window says them.
+    - **Like `save-new`,** it answers `202` when it's still running after 20 s, while the window is up.
   - **`mail/file-many` and `mail/file-one`** are taken by the port now, keyed for Outlook and with the body limits above,
     and answer `404 not-found` until the filing of several messages is built (M5).
 - **The add-in's routes and the channel's are separate lists:** the extension can't call these, nor the add-in the

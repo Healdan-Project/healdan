@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -64,18 +65,42 @@ public sealed class SaveEmailWindowTests
         }
     }
 
+    /// <summary>The filing the window's Save goes to, as <c>MailFiling</c> would answer it.</summary>
+    private sealed class Filing
+    {
+        /// <summary>Each Save the window sent, in order.</summary>
+        public List<string> Saves { get; } = [];
+
+        /// <summary>What each Save comes to, in turn; done once they run out.</summary>
+        public Queue<SubmitOutcome> Outcomes { get; } = new();
+
+        /// <summary>While set, a Save waits for it, as a slow filing does.</summary>
+        public TaskCompletionSource? Gate { get; set; }
+
+        public async Task<SubmitOutcome> SubmitAsync(JsonObject save)
+        {
+            Saves.Add(save.ToJsonString());
+            if (Gate is { } gate)
+                await gate.Task;
+            return Outcomes.TryDequeue(out var outcome) ? outcome : SubmitOutcome.Done;
+        }
+    }
+
     private static SaveEmailRequest Request(params EmailPart[] attachments) =>
         new("Lease renewal", "Pat Example <pat@example.com>", Sent, attachments, ["Lease renewal"], 11);
 
     private static EmailPart Part(int index, string name, long size = 2048) => new(index, name, "application/pdf", size, false, false);
 
+    private static FieldError Error(string field, string detail) => new(field, "x", detail);
+
     /// <summary>
-    /// Makes the window at folder 11 and shows it on the UI thread, waits for the folder's form, runs <paramref name="test"/>
-    /// there, and closes it.
+    /// Makes the window at folder 11 over <paramref name="filing"/> and shows it on the UI thread, waits for the folder's
+    /// form, runs <paramref name="test"/> there, and closes it.
     /// </summary>
-    private static Task Run(SaveEmailRequest request, Func<SaveWindow, Task> test) => Headless.RunAsync(async () =>
+    private static Task Run(SaveEmailRequest request, Func<SaveWindow, Task> test, Filing? filing = null) => Headless.RunAsync(async () =>
     {
-        var window = new SaveWindow(request, new HealdanApi(new Uri("https://healdan.test"), new FakeServer()));
+        filing ??= new Filing();
+        var window = new SaveWindow(request, new HealdanApi(new Uri("https://healdan.test"), new FakeServer()), filing.SubmitAsync);
         window.Show();
         try
         {
@@ -84,6 +109,7 @@ public sealed class SaveEmailWindowTests
         }
         finally
         {
+            filing.Gate?.TrySetResult();
             window.Close();
         }
         return 0;
@@ -96,7 +122,27 @@ public sealed class SaveEmailWindowTests
     private static bool Shown(Control control) => control.IsVisible && control.GetVisualAncestors().OfType<Control>().All(c => c.IsVisible);
 
     private static List<CheckBox> AttachmentBoxes(Window window) =>
-        [.. Find<StackPanel>(window, "AttachmentList").Children.OfType<CheckBox>()];
+        [.. Find<StackPanel>(window, "AttachmentList").GetLogicalDescendants().OfType<CheckBox>()];
+
+    /// <summary>The problem shown under the attachment at <paramref name="position"/> in the list, or null while there's none.</summary>
+    private static string? AttachmentProblem(Window window, int position) =>
+        AttachmentBoxes(window)[position].Parent is StackPanel row && row.Children.OfType<TextBlock>().Single() is { IsVisible: true } problem
+            ? problem.Text : null;
+
+    /// <summary>The problems shown under the form's fields.</summary>
+    private static List<string?> FieldProblems(Window window) =>
+        [.. Find<ContentControl>(window, "FormHost").GetLogicalDescendants().OfType<TextBlock>()
+            .Where(t => t.Classes.Contains("problem") && t.IsVisible).Select(t => t.Text)];
+
+    /// <summary>The line by Save: its text while it shows, else null.</summary>
+    private static string? Line(Window window) => Find<TextBlock>(window, "SubmitText") is { IsVisible: true } line ? line.Text : null;
+
+    /// <summary>Comments filled, so Save can go on, as the form's Comments is required.</summary>
+    private static async Task FillComments(Window window, string text = "Renewal")
+    {
+        Comments(window).Text = text;
+        await Until(() => Find<Button>(window, "SaveButton").IsEnabled);
+    }
 
     /// <summary>Comments, the form's only text box of its own (Author's picker has one in its template, which isn't logical).</summary>
     private static TextBox Comments(Window window) =>
@@ -187,6 +233,125 @@ public sealed class SaveEmailWindowTests
 
         Assert.Equal("""{"action":"save","folderId":11,"properties":{"comments":"Renewal"},"attachments":[]}""", window.Answer.ToJsonString());
     });
+
+    [MacFact]
+    public Task ARefusalShowsByTheSaveButtonAndTheWindowStaysOpenUntilASaveFiles()
+    {
+        var filing = new Filing();
+        filing.Outcomes.Enqueue(new SubmitOutcome.Refused("You may not file documents into folder 11.", []));
+        filing.Outcomes.Enqueue(new SubmitOutcome.Refused(SubmitOutcome.Refused.CantReach, []));
+        return Run(Request(), async window =>
+        {
+            var save = Find<Button>(window, "SaveButton");
+            await FillComments(window);
+
+            Click(save);
+            await Until(() => Line(window) == "You may not file documents into folder 11.");
+            Assert.True(window.IsVisible);
+            Assert.Contains("problem", Find<TextBlock>(window, "SubmitText").Classes);
+            Assert.True(save.IsEnabled); // to try again, or choose another folder first
+            Assert.Equal("Save", save.Content);
+
+            Click(save);
+            await Until(() => Line(window) == "Can't reach Healdan. Try again.");
+            Assert.True(window.IsVisible);
+
+            Click(save);
+            await Until(() => !window.IsVisible);
+            Assert.Equal(3, filing.Saves.Count);
+            Assert.Equal("""{"action":"save","folderId":11,"properties":{"comments":"Renewal"},"attachments":[]}""", window.Answer.ToJsonString());
+        }, filing);
+    }
+
+    [MacFact]
+    public Task AnAttachmentsRefusalShowsUnderItsTickAndUntickingItFilesTheRest()
+    {
+        var filing = new Filing();
+        const string refused = "Attachment 1 (setup.exe): Files ending in .exe can't be uploaded.";
+        filing.Outcomes.Enqueue(new SubmitOutcome.Refused(refused, [Error("attachments", refused)]));
+        return Run(Request(Part(1, "setup.exe"), Part(3, "Lease.pdf")), async window =>
+        {
+            await FillComments(window);
+            Find<CheckBox>(window, "AttachmentsBox").IsChecked = true;
+
+            Click(Find<Button>(window, "SaveButton"));
+            await Until(() => AttachmentProblem(window, 0) is not null);
+            Assert.Equal("Files ending in .exe can't be uploaded.", AttachmentProblem(window, 0)); // its name is on the tick
+            Assert.Null(AttachmentProblem(window, 1));
+            Assert.Null(Line(window)); // nothing more to say than what's under the tick
+
+            AttachmentBoxes(window)[0].IsChecked = false;
+            Assert.Null(AttachmentProblem(window, 0));
+            Click(Find<Button>(window, "SaveButton"));
+            await Until(() => !window.IsVisible);
+            Assert.Equal("""{"action":"save","folderId":11,"properties":{"comments":"Renewal"},"attachments":[3]}""", window.Answer.ToJsonString());
+        }, filing);
+    }
+
+    [MacFact]
+    public Task APropertysRefusalShowsUnderItsFieldAndHoldsSaveUntilItChanges()
+    {
+        var filing = new Filing();
+        filing.Outcomes.Enqueue(new SubmitOutcome.Refused("Comments can't be just a dash.", [Error("comments", "Comments can't be just a dash.")]));
+        return Run(Request(), async window =>
+        {
+            var save = Find<Button>(window, "SaveButton");
+            await FillComments(window, "-");
+
+            Click(save);
+            await Until(() => FieldProblems(window).Contains("Comments can't be just a dash."));
+            Assert.False(save.IsEnabled);
+            Assert.Null(Line(window));
+
+            await FillComments(window, "Renewal");
+            Click(save);
+            await Until(() => !window.IsVisible);
+            Assert.Equal(2, filing.Saves.Count);
+        }, filing);
+    }
+
+    [MacFact]
+    public Task WhileItFilesSaveAndCancelAreOffAndTheWindowStaysUp()
+    {
+        var filing = new Filing { Gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously) };
+        return Run(Request(), async window =>
+        {
+            var (save, cancel) = (Find<Button>(window, "SaveButton"), Find<Button>(window, "CancelButton"));
+            await FillComments(window);
+
+            Click(save);
+            await Until(() => Equals(save.Content, "Filing…"));
+            Assert.False(save.IsEnabled);
+            Assert.False(cancel.IsEnabled);
+            Assert.Equal("Filing the email in Healdan…", Line(window));
+            Assert.Contains("muted", Find<TextBlock>(window, "SubmitText").Classes);
+            window.Close();
+            Assert.True(window.IsVisible); // the filing's outcome is the window's, so it waits for it
+
+            filing.Gate!.TrySetResult();
+            await Until(() => !window.IsVisible);
+            Assert.Equal("save", (string?)window.Answer["action"]);
+        }, filing);
+    }
+
+    [MacFact]
+    public Task AFileHeresRefusalShowsAsTheWindowOpens() =>
+        Run(Request() with { Refusal = new SubmitOutcome.Refused("Only the Correspondence folder takes emails in this matter.", []) }, window =>
+        {
+            Assert.Equal("Only the Correspondence folder takes emails in this matter.", Line(window));
+            return Task.CompletedTask;
+        });
+
+    [MacFact]
+    public Task AFileHeresRefusalOfAPropertyShowsUnderItOnceTheFormIsThere() =>
+        Run(Request() with
+        {
+            Refusal = new SubmitOutcome.Refused("Comments is required.", [Error("comments", "Comments is required.")]),
+        }, async window =>
+        {
+            await Until(() => FieldProblems(window).Contains("Comments is required."));
+            Assert.Null(Line(window));
+        });
 
     [MacFact]
     public Task CancelAnswersCancel() => Run(Request(), async window =>

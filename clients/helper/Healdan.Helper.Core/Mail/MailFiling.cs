@@ -21,7 +21,10 @@ namespace Healdan.Helper.Core.Mail;
 /// </summary>
 /// <param name="api">The signed-in server's API.</param>
 /// <param name="windows">For the Save window's email mode, which filing opens.</param>
-/// <param name="notifier">For a filing that failed: the pane says only that it did, and the notification says why.</param>
+/// <param name="notifier">
+/// For a filing that failed before any window was up (File Here couldn't reach Healdan, or <c>inspect</c> failed): the pane
+/// says only that it did, and the notification says why. The Save window shows its own refusals.
+/// </param>
 /// <param name="log">The helper's log.</param>
 /// <param name="clock">The real clock in the helper; tests pass one they can move on. For a several-message ticket's expiry.</param>
 #pragma warning disable CS9113 // Filing several messages (M5 plan, Task 13) uses clock; the session builds it complete from the start.
@@ -182,52 +185,162 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
     /// <list type="bullet">
     /// <item><b>With <paramref name="folderId"/></b> (File Here): when the folder's form needs nothing typed (every required
     /// field has a value, its own or an inherited one), the message is filed there at once, with nothing typed and no
-    /// attachments, so a one-click filing never fails for a missing property. Otherwise the Save window opens at it.</item>
-    /// <item><b>The Save window's email mode</b> (File…, M5 spec §7.3) shows what <c>inspect</c> found and files what it
-    /// answers: the folder, the properties typed, and the attachments ticked. Its Cancel files nothing.</item>
+    /// attachments, so a one-click filing never fails for a missing property. When it needs something typed, or Healdan
+    /// refuses the filing (or the folder), the Save window opens at it, with the refusal shown (M5 spec §10).</item>
+    /// <item><b>The Save window's email mode</b> (File…, M5 spec §7.3) shows what <c>inspect</c> found, opening at
+    /// <paramref name="openAt"/> (the pane's first suggestion) or else at Recent Folders, and files through the window
+    /// (<see cref="SubmitAsync"/>): a refusal or an outage shows in it, and it stays open to choose another folder or untick
+    /// an attachment. Its Cancel files nothing.</item>
     /// </list>
     /// <para>A matter that holds the message already answers <c>already-filed</c>, an outcome rather than a failure: a
-    /// repeat after a lost answer, or a message someone else filed meanwhile, is done. Any other failure is told to the
-    /// user in a notification, with Healdan's own words where it gave any, and thrown, for the route to answer and log.</para>
+    /// repeat after a lost answer, or a message someone else filed meanwhile, is done. Before any window is up, a failure
+    /// of File Here that is an outage (no answer, or a 5xx), or any failure of <c>inspect</c>, is told to the user in a
+    /// notification, with Healdan's own words where it gave any, and thrown, for the route to answer and log.</para>
     /// </summary>
-    public async Task<JsonObject> FileAsync(byte[] eml, long? folderId)
+    public async Task<JsonObject> FileAsync(byte[] eml, long? folderId, long? openAt = null)
     {
+        EmailInspection inspection;
+        SubmitOutcome.Refused? refusal = null;
         try
         {
-            var email = folderId is { } id && await NeedsNothingTypedAsync(id) ? new NewEmail(id, new JsonObject(), []) : null;
-            if (email is null)
+            if (folderId is { } id)
             {
-                var inspection = await api.InspectEmailAsync(eml);
-                var answer = await windows.SaveEmailAsync(SaveEmailRequest.For(inspection, folderId).ToJson());
-                email = Chosen(answer);
-                if (email is null)
+                bool nothingToType;
+                try
                 {
-                    log.Info("Filing an email from Outlook was cancelled in the Save window");
-                    return new JsonObject { ["outcome"] = "cancelled" };
+                    nothingToType = await NeedsNothingTypedAsync(id);
+                }
+                catch (ApiException e) when (!Outage(e))
+                {
+                    log.Warn($"File Here couldn't read folder {id}'s form ({Why(e)}): the Save window opens at it, saying why");
+                    (nothingToType, refusal) = (false, RefusalOf(e));
+                }
+                if (nothingToType)
+                {
+                    try
+                    {
+                        return Filed(await api.FileEmailAsync(eml, new NewEmail(id, new JsonObject(), [])), id);
+                    }
+                    catch (ApiException e) when (e.Code == AlreadyFiled)
+                    {
+                        return AlreadyFiledOutcome(e);
+                    }
+                    catch (ApiException e) when (!Outage(e))
+                    {
+                        log.Warn($"Healdan refused File Here into folder {id} ({Why(e)}): the Save window opens at it, saying why");
+                        refusal = RefusalOf(e);
+                    }
                 }
             }
-            var filed = await api.FileEmailAsync(eml, email);
-            log.Info($"Filed an email from Outlook as #{filed.Email.DocNumber} in folder {email.FolderId}, with {filed.Attachments.Count} "
-                + $"of its attachments{(filed.Skipped.Count > 0 ? $" ({filed.Skipped.Count} the matter held already)" : "")}");
-            return new JsonObject
-            {
-                ["outcome"] = "filed",
-                ["email"] = Written(filed.Email),
-                ["attachments"] = filed.Attachments.Count,
-                ["skipped"] = filed.Skipped.Count,
-            };
-        }
-        catch (ApiException e) when (e.Code == "already-filed")
-        {
-            var copy = CopyIn(e);
-            log.Info($"An email from Outlook is in that matter already{(copy is null ? "" : $" as #{copy.DocNumber}")}: nothing more was filed");
-            return new JsonObject { ["outcome"] = "already-filed", ["email"] = copy is null ? null : Written(copy) };
+            inspection = await api.InspectEmailAsync(eml);
         }
         catch (Exception e)
         {
             notifier.Notify(Helper, Notice(e));
             throw;
         }
+
+        JsonObject? outcome = null;
+        var request = SaveEmailRequest.For(inspection, folderId ?? openAt, refusal);
+        await windows.SaveEmailAsync(request.ToJson(), async answer =>
+        {
+            var (result, done) = await SubmitAsync(eml, answer);
+            outcome ??= done;
+            return result;
+        });
+        if (outcome is null)
+        {
+            log.Info("Filing an email from Outlook was cancelled in the Save window");
+            return new JsonObject { ["outcome"] = "cancelled" };
+        }
+        return outcome;
+    }
+
+    /// <summary>
+    /// The Save window's Save in its email mode: files what it chose. Filed, or the matter holds the message already, is
+    /// done, with the route's outcome. Healdan's refusal (the filing rule, no permission, the size limit, a property, a
+    /// ticked attachment) is shown in the window, and so is an outage, as <see cref="SubmitOutcome.Refused.CantReach"/>:
+    /// the window stays open for another try. Nothing is told in a notification, as the window says it.
+    /// </summary>
+    private async Task<(SubmitOutcome Result, JsonObject? Outcome)> SubmitAsync(byte[] eml, JsonObject answer)
+    {
+        try
+        {
+            var email = Chosen(answer) ?? throw new InvalidOperationException("The Save window's Save chose nothing to file.");
+            try
+            {
+                return (SubmitOutcome.Done, Filed(await api.FileEmailAsync(eml, email), email.FolderId));
+            }
+            catch (ApiException e) when (e.Code == AlreadyFiled)
+            {
+                return (SubmitOutcome.Done, AlreadyFiledOutcome(e));
+            }
+        }
+        catch (Exception e) when (Outage(e))
+        {
+            log.Warn($"Filing an email from the Save window couldn't reach Healdan ({Why(e)}): the window stays open");
+            return (new SubmitOutcome.Refused(SubmitOutcome.Refused.CantReach, []), null);
+        }
+        catch (ApiException e)
+        {
+            log.Warn($"Healdan refused an email from the Save window ({Why(e)}): the window shows why and stays open");
+            return (RefusalOf(e), null);
+        }
+        catch (Exception e)
+        {
+            log.Error("Filing an email from the Save window failed", e);
+            return (new SubmitOutcome.Refused("Healdan Helper couldn't file the email. Try again.", []), null);
+        }
+    }
+
+    private const string AlreadyFiled = "already-filed";
+
+    /// <summary>No answer, or Healdan's own failure (a 5xx): nothing the user can change but to try again.</summary>
+    private static bool Outage(Exception e) =>
+        e is HttpRequestException or OperationCanceledException or JsonException || e is ApiException { Status: >= 500 };
+
+    /// <summary>A refusal as the window shows it: Healdan's words, and its field errors to place.</summary>
+    private static SubmitOutcome.Refused RefusalOf(ApiException e)
+    {
+        List<FieldError> fields = [];
+        if (e.Body.ValueKind == JsonValueKind.Object && e.Body.TryGetProperty("fields", out var errors) && errors.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var error in errors.EnumerateArray())
+            {
+                try
+                {
+                    if (error.ValueKind == JsonValueKind.Object && error.Deserialize<FieldError>(HealdanApi.Json) is { Field: not null, Detail: not null } field)
+                        fields.Add(field);
+                }
+                catch (JsonException)
+                {
+                    // An error the helper can't read has no place of its own; the problem's words still show.
+                }
+            }
+        }
+        return new SubmitOutcome.Refused(e.Status == 401 ? "Sign in to Healdan again, then choose Save." : e.Detail, fields);
+    }
+
+    /// <summary>The route's outcome for an email filed into <paramref name="folderId"/>, which is logged by doc #.</summary>
+    private JsonObject Filed(FiledEmail filed, long folderId)
+    {
+        log.Info($"Filed an email from Outlook as #{filed.Email.DocNumber} in folder {folderId}, with {filed.Attachments.Count} "
+            + $"of its attachments{(filed.Skipped.Count > 0 ? $" ({filed.Skipped.Count} the matter held already)" : "")}");
+        return new JsonObject
+        {
+            ["outcome"] = "filed",
+            ["email"] = Written(filed.Email),
+            ["attachments"] = filed.Attachments.Count,
+            ["skipped"] = filed.Skipped.Count,
+        };
+    }
+
+    /// <summary>The route's outcome for a message the matter holds already, with its copy.</summary>
+    private JsonObject AlreadyFiledOutcome(ApiException e)
+    {
+        var copy = CopyIn(e);
+        log.Info($"An email from Outlook is in that matter already{(copy is null ? "" : $" as #{copy.DocNumber}")}: nothing more was filed");
+        return new JsonObject { ["outcome"] = AlreadyFiled, ["email"] = copy is null ? null : Written(copy) };
     }
 
     /// <summary>Whether a filing into the folder needs nothing typed: every required field of its form has a value already.</summary>
@@ -278,14 +391,15 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
     };
 
     /// <summary>
-    /// What the user is told when a filing fails. Healdan's own words where it gave any: a refusal of several fields lists
-    /// each, as one ticked attachment's extension or size may be what's wrong.
+    /// What the user is told when a filing fails before any window is up. Healdan's own words where it gave any (a refusal
+    /// of several fields lists each).
     /// </summary>
     private static string Notice(Exception e) => e switch
     {
+        _ when Outage(e) => "The email couldn't be filed in Healdan, which may be unreachable. It's still in Outlook, so file it again.",
         ApiException { Status: 401 } => "The email wasn't filed: sign in to Healdan again, then file it once more.",
         ApiException api => $"The email couldn't be filed in Healdan: {Detail(api)}",
-        _ => "The email couldn't be filed in Healdan, which may be unreachable. It's still in Outlook, so file it again."
+        _ => "The email couldn't be filed in Healdan. It's still in Outlook, so file it again."
     };
 
     private static string Detail(ApiException e)

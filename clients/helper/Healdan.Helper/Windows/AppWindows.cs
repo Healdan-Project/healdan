@@ -117,11 +117,12 @@ internal sealed class AppWindows(Notifier notifier, HelperLog log, HelperPaths p
     }
 
     /// <summary>
-    /// The Save window's email mode, for Outlook's <c>mail/file</c> (M5 spec §7.3). It is the Save window, one at a time
-    /// with Word's and LibreOffice's. Before the helper is signed in and started it answers Cancel, so nothing is filed.
+    /// The Save window's email mode, for Outlook's <c>mail/file</c> (M5 spec §7.3), whose Save files through
+    /// <paramref name="submit"/>. It is the Save window, one at a time with Word's and LibreOffice's. Before the helper is
+    /// signed in and started it answers Cancel, so nothing is filed.
     /// </summary>
-    public Task<JsonObject> SaveEmailAsync(JsonObject request) => OnUi(() => Ready("mail/file") is { } api
-        ? Answering("save", () => new SaveWindow(SaveEmailRequest.FromJson(request), api), w => w.Answer)
+    public Task<JsonObject> SaveEmailAsync(JsonObject request, Func<JsonObject, Task<SubmitOutcome>> submit) => OnUi(() => Ready("mail/file") is { } api
+        ? Answering("save", () => new SaveWindow(SaveEmailRequest.FromJson(request), api, submit), w => w.Answer)
         : Task.FromResult(WindowAnswers.Cancel()));
 
     public Task<JsonObject> PropertiesAsync(JsonObject request)

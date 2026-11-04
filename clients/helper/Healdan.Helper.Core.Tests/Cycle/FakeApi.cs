@@ -91,6 +91,8 @@ public sealed class FakeApi : HttpMessageHandler
     private readonly Dictionary<long, string> _forms = [];
     private readonly HashSet<long> _brokenFolders = [];
     private readonly List<NewEmail> _emailsReceived = [];
+    private readonly Queue<(int Status, string Code, string Detail, JsonObject? Extra)> _emailRefusals = new();
+    private int _emailBreaks;
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
 
@@ -247,6 +249,23 @@ public sealed class FakeApi : HttpMessageHandler
     {
         lock (_lock)
             _brokenFolders.Add(id);
+    }
+
+    /// <summary>
+    /// The next <c>POST /emails</c> (and the next after it, for each call) answers this problem, filing nothing: a refusal
+    /// such as <c>409 filing-rule</c>, or a <c>5xx</c>. <paramref name="extra"/> adds members such as <c>fields</c>.
+    /// </summary>
+    public void RefuseNextEmail(int status, string code, string detail, JsonObject? extra = null)
+    {
+        lock (_lock)
+            _emailRefusals.Enqueue((status, code, detail, extra));
+    }
+
+    /// <summary>The next <c>POST /emails</c> gets no answer, as when Healdan can't be reached: filing nothing.</summary>
+    public void DropNextEmail()
+    {
+        lock (_lock)
+            _emailBreaks++;
     }
 
     /// <summary>The <c>email</c> part of each <c>POST /emails</c> received, filed or refused, in order.</summary>
@@ -527,6 +546,13 @@ public sealed class FakeApi : HttpMessageHandler
         lock (_lock)
         {
             _emailsReceived.Add(email);
+            if (_emailBreaks > 0)
+            {
+                _emailBreaks--;
+                throw new HttpRequestException("Connection refused (fake).");
+            }
+            if (_emailRefusals.TryDequeue(out var refusal))
+                return Problem(refusal.Status, refusal.Code, refusal.Detail, refusal.Extra);
             if (_refuseNextFiling)
             {
                 _refuseNextFiling = false;

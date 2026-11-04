@@ -49,10 +49,23 @@ public class SaveEmailRequestTests
         var json = request.ToJson();
         var back = SaveEmailRequest.FromJson(JsonNode.Parse(json.ToJsonString())!.AsObject());
 
-        Assert.Equal(["subject", "from", "sent", "attachments", "subjects", "folderId"], json.Select(p => p.Key));
+        Assert.Equal(["subject", "from", "sent", "attachments", "subjects", "folderId", "refusal"], json.Select(p => p.Key));
         Assert.Equal((request.Subject, request.From, request.Sent, request.FolderId), (back.Subject, back.From, back.Sent, back.FolderId));
         Assert.Equal(request.Attachments, back.Attachments);
         Assert.Equal(request.Subjects, back.Subjects);
+        Assert.Null(back.Refusal);
+    }
+
+    [Fact]
+    public void AFileHeresRefusalGoesToTheWindowWithItsFields()
+    {
+        var refusal = new SubmitOutcome.Refused("Deadline takes a date.", [new FieldError("deadline", "bad-date", "Deadline takes a date.")]);
+        var request = SaveEmailRequest.For(Inspection(), folderId: 11, refusal);
+
+        var back = SaveEmailRequest.FromJson(JsonNode.Parse(request.ToJson().ToJsonString())!.AsObject());
+
+        Assert.Equal("Deadline takes a date.", back.Refusal?.Problem);
+        Assert.Equal(refusal.Fields, back.Refusal!.Fields);
     }
 
     [Fact]
@@ -79,6 +92,52 @@ public class SaveEmailRequestTests
         var answer = WindowAnswers.SaveEmail(11, new JsonObject { ["comments"] = "Renewal" }, [1, 3]);
 
         Assert.Equal("""{"action":"save","folderId":11,"properties":{"comments":"Renewal"},"attachments":[1,3]}""", answer.ToJsonString());
+    }
+
+    private static FieldError Error(string field, string detail) => new(field, "x", detail);
+
+    private static readonly Func<string, bool> FormHasDeadline = name => name == "deadline";
+
+    private static readonly Func<int, bool> OffersOneAndThree = index => index is 1 or 3;
+
+    [Fact]
+    public void ARefusalWithoutFieldsShowsOnTheProblemLine()
+    {
+        var placed = new SubmitOutcome.Refused("Only the Correspondence folder takes emails.", []).Place(FormHasDeadline, OffersOneAndThree);
+
+        Assert.Equal(("Only the Correspondence folder takes emails.", 0, 0), (placed.General, placed.OnFields.Count, placed.OnAttachments.Count));
+    }
+
+    [Fact]
+    public void EachFieldErrorShowsWhereItBelongs()
+    {
+        var placed = new SubmitOutcome.Refused("Some fields need correcting.",
+        [
+            Error("deadline", "Deadline takes a date."),
+            Error("attachments", "Attachment 3 (setup.exe): Files ending in .exe can't be uploaded."),
+            Error("attachments", "Attachment 1 (a (b): c.pdf): The file is empty."),
+        ]).Place(FormHasDeadline, OffersOneAndThree);
+
+        Assert.Equal([("deadline", "Deadline takes a date.")], placed.OnFields);
+        Assert.Equal([(3, "Files ending in .exe can't be uploaded."), (1, "The file is empty.")], placed.OnAttachments); // a name with "): " in it too
+        Assert.Null(placed.General); // every one has its place, so the line has nothing to add
+    }
+
+    [Fact]
+    public void FieldErrorsWithNoPlaceOfTheirOwnShowOnTheProblemLine()
+    {
+        var placed = new SubmitOutcome.Refused("Some fields need correcting.",
+        [
+            Error("pages", "Pages takes a whole number."),                                // not on this form
+            Error("attachments", "The email has no attachment 9."),                      // not offered
+            Error("attachments", "Attachment 2 (logo.png): The file is empty."),          // not offered either
+            Error("file", "Files ending in .eml can't be uploaded."),                      // the email itself
+        ]).Place(FormHasDeadline, OffersOneAndThree);
+
+        Assert.Empty(placed.OnFields);
+        Assert.Empty(placed.OnAttachments);
+        Assert.Equal("Pages takes a whole number. The email has no attachment 9. Attachment 2 (logo.png): The file is empty. "
+            + "Files ending in .eml can't be uploaded.", placed.General);
     }
 
     [Fact]

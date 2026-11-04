@@ -341,11 +341,27 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
         Assert.Equal("Correspondence", (string?)filed.Body["email"]!["folder"]);
         Assert.Empty(_windows.Asked);
 
-        // Without a folder, the Save window's email mode, whose Cancel is the outcome.
-        var cancelled = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml("Another") });
+        // Without a folder, the Save window's email mode, at the pane's first suggestion; its Cancel is the outcome.
+        var cancelled = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml("Another"), ["openAt"] = 12 });
 
         Assert.Equal((200, """{"outcome":"cancelled"}"""), (cancelled.Status, cancelled.Body.ToJsonString()));
-        Assert.Equal("save-email", Assert.Single(_windows.Asked).Route);
+        var (route, request) = Assert.Single(_windows.Asked);
+        Assert.Equal(("save-email", 12L), (route, (long?)request["folderId"]));
+    }
+
+    [Fact]
+    public async Task AFileHereHealdanRefusesOpensTheSaveWindowRatherThanFailing()
+    {
+        Server.AddFolder(11, "Correspondence");
+        Server.RefuseNextFiling();
+        var handler = Handler(Cycle());
+
+        var answer = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml(), ["folderId"] = 11 });
+
+        Assert.Equal((200, """{"outcome":"cancelled"}"""), (answer.Status, answer.Body.ToJsonString())); // the user closed the window
+        var (_, request) = Assert.Single(_windows.Asked);
+        Assert.Equal((11L, "You can't add documents to this folder."), ((long?)request["folderId"], (string?)request["refusal"]!["problem"]));
+        Assert.Empty(Notifier.Notices);
     }
 
     [Fact]
@@ -361,6 +377,8 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
             new() { ["eml"] = Eml(), ["folderId"] = "11" },         // the folder isn't a number
             new() { ["eml"] = Eml(), ["folderId"] = 1.5 },          // nor a whole one
             new() { ["eml"] = Eml(), ["folderId"] = 0 },            // nor a folder's
+            new() { ["eml"] = Eml(), ["openAt"] = "12" },           // where to open, likewise
+            new() { ["eml"] = Eml(), ["openAt"] = -3 },
         })
         {
             var answer = await handler.HandleAsync("mail/file", "Outlook", body);
@@ -371,19 +389,20 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
     }
 
     [Fact]
-    public async Task AFilingHealdanRefusesIsToldAndLoggedWithoutItsDetail()
+    public async Task AFileHereHealdanFailsIsAnInternalErrorLoggedWithoutItsDetail()
     {
         Server.AddFolder(11, "Correspondence");
-        Server.RefuseNextFiling();
+        Server.RefuseNextEmail(503, "unavailable", "Healdan couldn't store setup.exe.");
         var handler = Handler(Cycle());
 
         var answer = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml(), ["folderId"] = 11 });
 
-        Assert.Equal((500, """{"error":"internal-error"}"""), (answer.Status, answer.Body.ToJsonString()));
-        Assert.Contains("You can't add documents to this folder.", Notifier.All); // the user is told why
-        // A refusal's detail can name an attachment, so the log has its status and code only.
-        Assert.Contains("/v1/mail/file from the add-in failed: Healdan answered 403 forbidden", Log);
-        Assert.DoesNotContain("You can't add documents", Log);
+        Assert.Equal((500, """{"error":"internal-error"}"""), (answer.Status, answer.Body.ToJsonString())); // the pane: Can't Reach Healdan
+        Assert.Contains("may be unreachable", Notifier.All);
+        // Healdan's words can name an attachment, so the log has its status and code only.
+        Assert.Contains("/v1/mail/file from the add-in failed: Healdan answered 503 unavailable", Log);
+        Assert.DoesNotContain("setup.exe", Log);
+        Assert.Empty(_windows.Asked);
     }
 
     [Fact]

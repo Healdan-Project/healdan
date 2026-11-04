@@ -40,6 +40,9 @@
     <Border Classes="footer line" DockPanel.Dock="Bottom">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <Button x:Name="LocalButton" Classes="link" Content="Save to Local Computer…" VerticalAlignment="Center" />
+        <!-- The email mode's Save files through the window: the wait, or why Healdan refused, shows here (M5 spec §7.3). -->
+        <TextBlock x:Name="SubmitText" Grid.Column="1" Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center"
+                   Margin="0,0,12,0" IsVisible="False" />
         <Button x:Name="CancelButton" Grid.Column="2" Classes="footer" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
         <Button x:Name="SaveButton" Grid.Column="3" Classes="footer accent" Content="Save" IsDefault="True" />
       </Grid>

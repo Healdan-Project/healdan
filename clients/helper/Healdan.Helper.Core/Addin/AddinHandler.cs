@@ -95,7 +95,7 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
                     return AddinAnswer.Ok(await mail.StatusAsync(MessageIdsOf(body)));
                 case "mail/file":
                     var eml = Bytes(body, "eml");
-                    return AddinAnswer.Ok(await mail.FileAsync(eml, FolderIdOf(body)));
+                    return AddinAnswer.Ok(await mail.FileAsync(eml, FolderIdOf(body, "folderId"), FolderIdOf(body, "openAt")));
                 default:
                     return AddinAnswer.Error(404, "not-found");
             }
@@ -220,13 +220,16 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
     /// <summary>The most Message-IDs one request names: the server's limit for one lookup (M5 spec §6.8).</summary>
     private const int MaxMessageIds = 100;
 
-    /// <summary><c>folderId</c>, File Here's folder: a whole number above 0, or none for File….</summary>
-    private static long? FolderIdOf(JsonObject body) => body["folderId"] switch
+    /// <summary>
+    /// A folder's id: <c>folderId</c>, File Here's folder, or <c>openAt</c>, where File…'s window opens (the pane's first
+    /// suggestion). A whole number above 0, or none.
+    /// </summary>
+    private static long? FolderIdOf(JsonObject body, string key) => body[key] switch
     {
         null => null,
         JsonValue v when v.GetValueKind() == JsonValueKind.Number
             && long.TryParse(v.ToJsonString(), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0 => id,
-        _ => throw new ArgumentException("folderId isn't a folder's id.", "folderId"),
+        _ => throw new ArgumentException($"{key} isn't a folder's id.", key),
     };
 
     /// <summary>

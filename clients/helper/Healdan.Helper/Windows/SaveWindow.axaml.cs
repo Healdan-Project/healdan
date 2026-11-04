@@ -21,13 +21,19 @@ namespace Healdan.Helper.Windows;
 /// <para>Its email mode, File to Healdan (M5 spec §7.3), files a message from Outlook: the folder and its properties as
 /// for a document, with the message's subject, sender and when it was sent shown read-only in place of the name (M1 names
 /// an email after its subject), and "Also file attachments as separate documents", unticked, with a tick for each
-/// attachment, in place of the format. The box ticks and unticks them all; each can be unticked while it's ticked.</para>
+/// attachment, in place of the format. The box ticks and unticks them all; each can be unticked while it's ticked.
+/// Its Save files through the window, with Save, Cancel and closing off meanwhile: once filed (or the matter holds the
+/// message already) it closes; a refusal shows in it, a property's under the field and an attachment's under its tick,
+/// and it stays open to choose another folder or untick.</para>
 /// </summary>
 public partial class SaveWindow : Window
 {
     private readonly SaveNewRequest? _request;
     private readonly SaveEmailRequest? _email;
-    private readonly List<(EmailPart Part, CheckBox Box)> _attachments = [];
+    private readonly Func<JsonObject, Task<SubmitOutcome>>? _submit;
+    private readonly List<(EmailPart Part, CheckBox Box, TextBlock Problem)> _attachments = [];
+    private SubmitOutcome.Refused? _pendingRefusal;
+    private bool _submitting;
     private readonly HealdanApi? _api;
     private readonly HelperPaths? _paths;
     private readonly Browser? _browser;
@@ -63,10 +69,13 @@ public partial class SaveWindow : Window
         Notice("Choose a folder to file the document in.");
     }
 
-    /// <summary>The email mode, for <c>mail/file</c>: opens at the request's folder, else at Recent Folders.</summary>
-    internal SaveWindow(SaveEmailRequest request, HealdanApi api) : this()
+    /// <summary>
+    /// The email mode, for <c>mail/file</c>: opens at the request's folder, else at Recent Folders, with the request's
+    /// refusal shown when it has one. Save hands its answer to <paramref name="submit"/>, which files it.
+    /// </summary>
+    internal SaveWindow(SaveEmailRequest request, HealdanApi api, Func<JsonObject, Task<SubmitOutcome>> submit) : this()
     {
-        (_email, _api) = (request, api);
+        (_email, _api, _submit) = (request, api, submit);
         Title = "File to Healdan";
         (_browser, _controls) = Browse(api);
 
@@ -74,9 +83,16 @@ public partial class SaveWindow : Window
         NameRow.IsVisible = FormatRow.IsVisible = LocalButton.IsVisible = false;
         ShowMessage(request);
         AddAttachments(request);
+        Closing += (_, e) => e.Cancel |= _submitting; // the filing finishes first, so its outcome is the window's
 
         Opened += async (_, _) => await StartAsync();
         Notice("Choose a folder to file the email in.");
+        if (request.Refusal is { } refusal)
+        {
+            // Its words show at once; its fields' wait for the folder's form, which places them.
+            _pendingRefusal = refusal;
+            ShowRefusal(refusal);
+        }
     }
 
     /// <summary>The folder picker, with Save and Cancel, as both modes have them.</summary>
@@ -123,15 +139,78 @@ public partial class SaveWindow : Window
             var label = SaveEmailRequest.Label(part);
             var box = new CheckBox { Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap }, IsEnabled = false };
             AutomationProperties.SetName(box, label);
-            AttachmentList.Children.Add(box);
-            _attachments.Add((part, box));
+            var problem = new TextBlock { Classes = { "problem" }, TextWrapping = TextWrapping.Wrap, IsVisible = false, Margin = new(22, 0, 0, 2) };
+            box.IsCheckedChanged += (_, _) => problem.IsVisible = false; // unticked, or ticked again, it's another try
+            AttachmentList.Children.Add(new StackPanel { Children = { box, problem } });
+            _attachments.Add((part, box, problem));
         }
         AttachmentsBox.IsCheckedChanged += (_, _) =>
         {
             var all = AttachmentsBox.IsChecked == true;
-            foreach (var (_, box) in _attachments)
+            foreach (var (_, box, _) in _attachments)
                 (box.IsChecked, box.IsEnabled) = (all, all);
         };
+    }
+
+    /// <summary>
+    /// A refusal, shown where each part belongs (<see cref="SubmitOutcome.Refused.Place"/>): a property's under its field
+    /// (it stays until the field changes, as the form keeps it), an attachment's under its tick, and the rest on the
+    /// problem line by Save. Before the folder's form is here, a property's waits for it.
+    /// </summary>
+    private void ShowRefusal(SubmitOutcome.Refused refusal)
+    {
+        var placed = refusal.Place(name => _form?.Field(name) is not null, index => _attachments.Any(a => a.Part.Index == index));
+        foreach (var (field, detail) in placed.OnFields)
+            _form!.Refused(field, detail);
+        foreach (var (index, detail) in placed.OnAttachments)
+        {
+            var problem = _attachments.First(a => a.Part.Index == index).Problem;
+            (problem.Text, problem.IsVisible) = (detail, true);
+        }
+        Line(placed.General, problem: true);
+    }
+
+    /// <summary>The line by Save: the wait, muted, or a problem; null hides it.</summary>
+    private void Line(string? text, bool problem)
+    {
+        (SubmitText.Text, SubmitText.IsVisible) = (text, text is not null);
+        SubmitText.Classes.Set("problem", problem);
+        SubmitText.Classes.Set("muted", !problem);
+    }
+
+    /// <summary>
+    /// The email mode's Save: files the answer through the window, with Save, Cancel and closing off meanwhile. Done closes
+    /// the window; a refusal shows in it, and it stays open.
+    /// </summary>
+    private async void Submit(JsonObject answer)
+    {
+        _submitting = true;
+        foreach (var (_, _, problem) in _attachments)
+            problem.IsVisible = false;
+        Line("Filing the email in Healdan…", problem: false);
+        (SaveButton.Content, CancelButton.IsEnabled) = ("Filing…", false);
+        UpdateSave();
+        SubmitOutcome outcome;
+        try
+        {
+            outcome = await _submit!(answer);
+        }
+        catch (Exception e)
+        {
+            // Everything, as this runs from a click: an exception would end the helper.
+            Program.Log.Error("The Save window couldn't file the email", e);
+            outcome = new SubmitOutcome.Refused("Healdan Helper couldn't file the email. Try again.", []);
+        }
+        _submitting = false;
+        (SaveButton.Content, CancelButton.IsEnabled) = ("Save", true);
+        if (outcome is SubmitOutcome.Refused refused)
+        {
+            Line(null, problem: true);
+            ShowRefusal(refused);
+            UpdateSave();
+            return;
+        }
+        Finish(answer);
     }
 
     /// <summary>The attachments to file as separate documents, by their index: none unless the box is ticked.</summary>
@@ -215,6 +294,8 @@ public partial class SaveWindow : Window
         var target = _browser!.TargetFolder(_controls!.SelectedEntry);
         if (target?.Id == _target?.Id)
             return;
+        if (_target is not null && _email is not null && !_submitting)
+            Line(null, problem: true); // another folder: the last one's refusal is no longer the question
         _target = target;
         var load = ++_formLoad;
         UpdateSave();
@@ -268,6 +349,11 @@ public partial class SaveWindow : Window
         (_form, _formFolder) = (form, folder);
         FormHost.IsVisible = true;
         FormNotice.IsVisible = false;
+        if (_pendingRefusal is { } refusal && folder.Id == _email?.FolderId)
+        {
+            _pendingRefusal = null;
+            ShowRefusal(refusal);
+        }
         UpdateSave();
     }
 
@@ -287,7 +373,7 @@ public partial class SaveWindow : Window
         var ready = _target is { CanFile: true } target && _form is not null && _formFolder?.Id == target.Id && FormHost.IsVisible
             && _form.CanSave(target.CanFile);
         if (_email is not null)
-            return ready;
+            return ready && !_submitting;
         var nameProblem = DocumentNames.Problem(_request!.FinalName(NameBox.Text), _format);
         (NameProblem.Text, NameProblem.IsVisible) = (nameProblem, nameProblem is not null);
         return ready && nameProblem is null && _format is not null;
@@ -300,7 +386,7 @@ public partial class SaveWindow : Window
         if (!CanSave())
             return;
         if (_email is not null)
-            Finish(WindowAnswers.SaveEmail(_target!.Id, _form!.Values(), Ticked()));
+            Submit(WindowAnswers.SaveEmail(_target!.Id, _form!.Values(), Ticked()));
         else
             Finish(WindowAnswers.Save(_target!.Id, _request!.FinalName(NameBox.Text), _format!, _form!.Values(), WindowAnswers.TempPath(_paths!, _format!)));
     }
