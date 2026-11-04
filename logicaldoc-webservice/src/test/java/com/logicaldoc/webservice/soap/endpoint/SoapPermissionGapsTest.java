@@ -54,7 +54,7 @@ import jakarta.activation.FileDataSource;
  * The services check real sessions here, not the admin that CE's own tests
  * stand in for every caller. In the fixture, folder 80 gives the author's own
  * group READ, WRITE, ADD, DOWNLOAD, MOVE and EMAIL; the tree under 1200 is for
- * admins only, and boss has nothing anywhere. Three tests, because each one
+ * admins only, and boss has nothing anywhere. Few tests, because each one
  * builds its database again.
  */
 public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
@@ -297,6 +297,19 @@ public class SoapPermissionGapsTest extends AbstractWebserviceTestCase {
         folders.delete(admin, TREE);
         assertEquals(1, deleted("ld_folder", TREE));
         assertEquals(1, deleted("ld_document", inSource));
+    }
+
+    @Test
+    public void testFolderDeleteRefusesTheRootAndTheDefaultWorkspace() throws Exception {
+        // The service's own guard refuses them to an admin too, before the
+        // tree checks walk the whole repository. The folder DAO also refuses
+        // them, so nothing was ever deleted, only refused less clearly.
+        String admin = session.getSid();
+        for (long folderId : List.of(Folder.ROOTID, Folder.DEFAULTWORKSPACEID)) {
+            WebserviceException e = assertThrows(WebserviceException.class, () -> folders.delete(admin, folderId));
+            assertEquals("Cannot delete root folder or Default workspace", e.getMessage());
+            assertEquals(0, deleted("ld_folder", folderId));
+        }
     }
 
     /**

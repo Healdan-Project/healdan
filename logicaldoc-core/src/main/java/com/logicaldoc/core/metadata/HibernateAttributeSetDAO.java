@@ -69,6 +69,7 @@ public class HibernateAttributeSetDAO extends HibernatePersistentObjectDAO<Attri
         AttributeSet set = findById(id);
         if (set == null)
             return;
+        com.logicaldoc.core.HealdanHooks.get().beforeAttributeSetDelete(set);
 
         set.setDeleted(code);
         set.setName("%s.%d".formatted(set.getName(), set.getId()));
@@ -87,6 +88,7 @@ public class HibernateAttributeSetDAO extends HibernatePersistentObjectDAO<Attri
     public void store(AttributeSet set) throws PersistenceException {
         if (!checkStoringAspect())
             return;
+        com.logicaldoc.core.HealdanHooks.get().beforeAttributeSetStore(set);
 
         // Enforce the set specifications in all the attributes
         enforceSetSpecInAllAttributes(set);
