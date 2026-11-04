@@ -38,6 +38,8 @@ public class SmokeApiUserSeedTest extends AbstractHealdanTestCase {
 		SmokeApiUserSeed seed = new SmokeApiUserSeed(() -> "true");
 		assertEquals("smoke-api-user", seed.name());
 		assertTrue(seed.enabled());
+		// The account the smoke-signin step makes before it doesn't count as someone else's
+		new HealdanFixtures().user(SmokeSignInSeed.USERNAME);
 
 		runner().runPending(List.of(seed));
 		assertEquals("done", HealdanSettings.get().get(MARKER));
@@ -79,6 +81,24 @@ public class SmokeApiUserSeedTest extends AbstractHealdanTestCase {
 		assertEquals(id, after.getId());
 		assertEquals(password, after.getPassword());
 		assertFalse(Encrypter.encryptSHA256(SmokeApiUserSeed.PASSWORD).equals(after.getPassword()));
+	}
+
+	/** The password is published, so a stack with people never gets the user, whoever set the variable */
+	@Test
+	public void testMakesNothingOnAStackWithOtherUsers() throws Exception {
+		new HealdanFixtures().user("realuser");
+
+		runner().runPending(List.of(new SmokeApiUserSeed(() -> "true")));
+
+		assertNull(UserDAO.get().findByUsername("apiuser"));
+		// It counts as done, so it doesn't warn on every start
+		assertEquals("done", HealdanSettings.get().get(MARKER));
+	}
+
+	/** After demo-fixture, which refuses a stack with users, so the two overlays together still start */
+	@Test
+	public void testRunsAfterTheDemoFixture() {
+		assertTrue(SeedRunner.ORDER.indexOf("smoke-api-user") > SeedRunner.ORDER.indexOf("demo-fixture"));
 	}
 
 	@Test
