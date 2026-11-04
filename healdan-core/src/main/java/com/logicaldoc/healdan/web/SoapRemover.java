@@ -5,11 +5,12 @@ package com.logicaldoc.healdan.web;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.BeanClassLoaderAware;
+import org.springframework.beans.factory.BeanFactoryUtils;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
 import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
 import org.springframework.stereotype.Component;
@@ -18,11 +19,14 @@ import org.springframework.util.ClassUtils;
 /**
  * Removes LogicalDOC's SOAP web services (SOAP removal spec, section 3).
  * After every plugin context's XML is read and before any bean is built, it
- * removes each bean definition whose class would build a SOAP server: a
- * JAX-WS {@code Endpoint}, which {@code jaxws:endpoint} makes and upstream's
+ * removes each bean definition that would build a SOAP server: a JAX-WS
+ * {@code Endpoint}, which {@code jaxws:endpoint} makes and upstream's
  * {@code context-webservice.xml} declares for all nine services, or a CXF
  * {@code ServerFactoryBean}, which {@code jaxws:server} makes. It matches by
- * type, never by id, so a SOAP endpoint upstream adds later goes too.
+ * type, as Spring predicts it, never by id, so a SOAP endpoint upstream adds
+ * later goes too, whether XML, a factory method or a {@code FactoryBean}
+ * declares it. {@code SoapRemoverTest} checks that CXF serves no SOAP at all,
+ * which catches one made some other way.
  * <p>
  * CE's REST servers are CXF {@code JAXRSServerFactoryBean}s, neither of the
  * two, and stay, as do the {@code Soap*Service} classes they extend. There's
@@ -49,16 +53,24 @@ public class SoapRemover implements BeanDefinitionRegistryPostProcessor, BeanCla
 
 	@Override
 	public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) {
-		List<Class<?>> soapTypes = SOAP_TYPES.stream().<Class<?>>map(this::load).filter(Objects::nonNull).toList();
-		if (soapTypes.isEmpty())
+		if (!(registry instanceof ListableBeanFactory factory)) {
+			log.warn("Can't remove LogicalDOC's SOAP web services from a {}", registry.getClass().getName());
 			return;
+		}
 
 		List<String> removed = new ArrayList<>();
-		for (String name : registry.getBeanDefinitionNames()) {
-			Class<?> type = load(registry.getBeanDefinition(name).getBeanClassName());
-			if (type != null && soapTypes.stream().anyMatch(soap -> soap.isAssignableFrom(type))) {
-				registry.removeBeanDefinition(name);
-				removed.add(name);
+		for (String typeName : SOAP_TYPES) {
+			Class<?> type = load(typeName);
+			if (type == null) {
+				log.warn("Can't load {}, so SOAP servers of that type aren't removed", typeName);
+				continue;
+			}
+			for (String name : factory.getBeanNamesForType(type, true, false)) {
+				String beanName = BeanFactoryUtils.transformedBeanName(name);
+				if (registry.containsBeanDefinition(beanName)) {
+					registry.removeBeanDefinition(beanName);
+					removed.add(beanName);
+				}
 			}
 		}
 		if (!removed.isEmpty())
@@ -68,14 +80,11 @@ public class SoapRemover implements BeanDefinitionRegistryPostProcessor, BeanCla
 	/**
 	 * Loads a class without initialising it
 	 *
-	 * @param className the class's name, or {@code null}
+	 * @param className the class's name
 	 *
-	 * @return the class, or {@code null} when there's no name or it can't be
-	 *         loaded
+	 * @return the class, or {@code null} when it can't be loaded
 	 */
 	private Class<?> load(String className) {
-		if (className == null)
-			return null;
 		try {
 			return ClassUtils.forName(className, classLoader);
 		} catch (ClassNotFoundException | LinkageError e) {

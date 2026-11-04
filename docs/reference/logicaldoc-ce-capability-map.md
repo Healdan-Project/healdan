@@ -271,7 +271,7 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
   - `SessionFilter` reads a `sid` from a parameter, a header, an attribute or the `ldoc-sid` cookie.
   - An `X-API-KEY` header goes through `ApiKeyAuthenticator`. Keys start with `ld-`.
   - **An open session is reused without re-authenticating.** `SessionManager.getSessionFromApiKey` finds an open session whose key hash matches the `X-API-KEY` and uses it, with no check of the key, its user or the chain (✔ checked). So a key keeps working as long as its session is open. An M2 device token isn't a key: it works only at `/api`, and LogicalDOC's routes refuse it (M2 spec §5.1). The sessions the API opens for a token are keyed by a one-time key that no client knows, so this lookup never finds them from the token.
-  - **`SessionFilter` can't open a session from a key.** With no open session it calls `newSession(null, null, key, request)`, and `AuthenticationChain.authenticate` calls `username.contains(...)` on the null username, so the request fails (✔ checked). A key signs in through `/services/rest/auth/loginApiKey` or SOAP's `loginApiKey`, after which the reuse above applies. Found while building M2.
+  - **`SessionFilter` can't open a session from a key.** With no open session it calls `newSession(null, null, key, request)`, and `AuthenticationChain.authenticate` calls `username.contains(...)` on the null username, so the request fails (✔ checked). A key signs in through `/services/rest/auth/loginApiKey` (and SOAP's `loginApiKey`, until Healdan removed SOAP), after which the reuse above applies. Found while building M2.
   - HTTP Basic works when `webservice.basicauth.enabled=true`, which is the default.
   - There are no JWT, OAuth bearer or refresh tokens.
   - **There's no CORS.**
@@ -350,7 +350,7 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 - **The extension point.** `Authentication` (`authenticatorId`, `position`).
   - CE declares `DefaultAuthenticator` (100) and `ApiKeyAuthenticator` (110).
   - `AuthenticationChain` sorts them by position, and handles anonymous login and impersonation.
-  - Every channel goes through `SessionManager.newSession`, which calls the chain: GUI, REST, SOAP, WebDAV and CMIS.
+  - Every channel goes through `SessionManager.newSession`, which calls the chain: GUI, REST, WebDAV and CMIS (and SOAP, until Healdan removed it).
 - **Spring Security 6.3.10** (`context-security.xml`).
   - Separate `http` blocks for setup, WebDAV, CMIS and REST.
   - Form login at `/j_spring_security_check`.
