@@ -134,6 +134,13 @@ jobs:
             FSStoreFileVersionTest
             UserSourceTest
             HealdanSignInButtonsTest
+            FolderAclEqualityTest
+            HealdanSecretsTest
+            LDRepositoryGapsTest
+            LDAuthenticationProviderLogTest
+            OrderedPropertiesLineBreaksTest
+            LogDownloadSecretsTest
+            FolderAliasDeleteTest
         run: python3 .github/scripts/test-shards.py plan --times test-times.txt --minutes 5 --max-shards 8 "$UPSTREAM_TESTS"
 
   tests:

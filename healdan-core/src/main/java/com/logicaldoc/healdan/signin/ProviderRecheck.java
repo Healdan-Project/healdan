@@ -36,8 +36,10 @@ import com.logicaldoc.util.spring.Context;
  * <b>When.</b> Only a token from a provider sign-in that kept a refresh token
  * is checked, and only through a provider that's on: a provider turned off or
  * removed isn't contacted, and the token is kept. A check is due when the
- * token's CE session is opened again, or the last check is
- * {@code signin.recheck.minutes} old (480). After a check that decided nothing,
+ * token's CE session is opened again, the last check is
+ * {@code signin.recheck.minutes} old (480), or the last check is more than
+ * {@link #CHECKED_AHEAD} in the future, as after the clock was set back.
+ * After a check that decided nothing,
  * none is tried for 15 minutes; that wait is kept in memory, so a restart
  * forgets it.
  * <p>
@@ -85,6 +87,16 @@ public class ProviderRecheck {
 
 	/** How long after a check that decided nothing the next may be tried */
 	static final Duration WAIT_AFTER_UNDECIDED = Duration.ofMinutes(15);
+
+	/**
+	 * How far ahead of the clock a token's last check may be and still count:
+	 * enough for servers whose clocks differ a little, for a database that
+	 * rounds a time to the second, and for a daylight-saving change, which
+	 * reads a check made in the hour the clocks go back, kept without its zone,
+	 * as an hour later. One further ahead, as after the clock was set back,
+	 * makes a check due at once.
+	 */
+	static final Duration CHECKED_AHEAD = Duration.ofHours(2);
 
 	/** The clock checks are timed by; {@code SignInTestHooks} moves it in tests */
 	static volatile Clock clock = Clock.systemUTC();
@@ -249,7 +261,7 @@ public class ProviderRecheck {
 
 	private boolean undecided(ApiToken token, SignInProvider p, String account, Instant now, String why) {
 		// Forget the waits that are over, so the map holds only the tokens of an outage still going on
-		undecided.values().removeIf(tried -> !now.isBefore(tried.plus(WAIT_AFTER_UNDECIDED)));
+		undecided.values().removeIf(tried -> !waitingSince(tried, now));
 		undecided.put(token.getId(), now);
 		log.warn("Couldn't re-check the device token {} of the account {} with the sign-in provider {}: {}. It's "
 				+ "kept, and checked again no sooner than {} minutes from now.", token.getId(), account, p.id(), why,
@@ -286,12 +298,25 @@ public class ProviderRecheck {
 	private boolean overdue(Date checked, Instant now) {
 		if (checked == null)
 			return true;
-		return !now.isBefore(checked.toInstant().plus(Duration.ofMinutes(providers.recheckMinutes())));
+		Instant last = checked.toInstant();
+		// After the clock was set back, a last check in the future would hold the checks off until the clock caught up
+		if (last.isAfter(now.plus(CHECKED_AHEAD)))
+			return true;
+		return !now.isBefore(last.plus(Duration.ofMinutes(providers.recheckMinutes())));
 	}
 
 	private boolean waiting(long tokenId, Instant now) {
 		Instant tried = undecided.get(tokenId);
-		return tried != null && now.isBefore(tried.plus(WAIT_AFTER_UNDECIDED));
+		return tried != null && waitingSince(tried, now);
+	}
+
+	/**
+	 * @return true while the wait after a check tried then runs. A try in the
+	 *         future means the clock was set back, and the wait is over, as it
+	 *         would otherwise hold the checks off until the clock caught up.
+	 */
+	private static boolean waitingSince(Instant tried, Instant now) {
+		return !tried.isAfter(now) && now.isBefore(tried.plus(WAIT_AFTER_UNDECIDED));
 	}
 
 	/**

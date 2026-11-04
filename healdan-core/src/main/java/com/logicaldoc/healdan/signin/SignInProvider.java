@@ -34,4 +34,12 @@ public record SignInProvider(String id, Preset preset, String label, boolean ena
 		return new SignInProvider(id, preset, preset.label(), true, null, null, false, preset.identityClaim(),
 				preset.usernameClaim(), preset.emailClaim(), preset.groupsClaim(), preset.linkByEmail());
 	}
+
+	/**
+	 * @return true if people can sign in through it: it's on, and has an
+	 *         issuer, a client id and a secret that can be opened
+	 */
+	public boolean usable() {
+		return enabled && issuer != null && clientId != null && hasSecret;
+	}
 }

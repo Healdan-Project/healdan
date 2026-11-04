@@ -484,6 +484,31 @@ public class MatterServiceTest extends AbstractRulesTestCase {
 	}
 
 	@Test
+	public void testOwnerChangeReplacesAnEntryTheNewOwnerHad() throws Exception {
+		Matter created = create(2, "Demo", alice, demo);
+		Folder ws = workspace(created);
+		// Bob's own group already has an entry, as the Security tab can give
+		// it, and reads the Store, as P2 needs
+		for (Folder folder : List.of(store, ws)) {
+			Folder current = reload(folder);
+			current.addAccessControlEntry(ace(bobsGroup, Permission.READ));
+			FolderHistory history = folderHistory(admin);
+			history.setEvent(FolderEvent.PERMISSION);
+			folderDao.store(current, history);
+		}
+		assertEquals(set(Permission.READ), acl(ws).get(bobsGroup.getId()));
+
+		service.update(created.getId(), "Demo", null, bob.getId(), admin);
+
+		// CE's entry made with a group id never equalled the stored one, so
+		// the owner's entry was added beside it, not in its place
+		assertEquals(set(Permission.values()), acl(ws).get(bobsGroup.getId()));
+		assertEquals(Integer.valueOf(1),
+				jdbc.queryForObject("select count(*) from ld_folder_acl where ld_folderid = ? and ld_groupid = ?",
+						Integer.class, ws.getId(), bobsGroup.getId()));
+	}
+
+	@Test
 	public void testOwnerChangeAfterTheOwnerWasDeleted() throws Exception {
 		User lena = fx.user("lena", lawyers.getName());
 		Matter created = create(2, "Demo", lena, demo);

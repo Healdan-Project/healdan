@@ -12,15 +12,18 @@ import static org.junit.Assert.assertTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.function.LongSupplier;
 
 import javax.sql.DataSource;
 
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.function.ThrowingRunnable;
@@ -279,6 +282,31 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertTrue(providers().find("entra").orElseThrow().hasSecret());
 	}
 
+	/*
+	 * The limit is on the bytes that are sealed, not the characters typed: 1000
+	 * characters of a script that takes three bytes each would overflow the
+	 * setting's 4000 characters once sealed, part-way through the save
+	 */
+	@Test
+	public void testSecretLimitCountsTheBytesSealed() throws Exception {
+		// Three bytes each in UTF-8; written without the source's encoding
+		String wide = "\u5BC6";
+		assertSaveRefused("secret", valid("entra"), wide.repeat(1000));
+		assertSaveRefused("secret", valid("entra"), wide.repeat(334));
+		assertSaveRefused("secret", valid("entra"), "xx" + wide.repeat(333));
+		assertEquals(List.of(), providers().all());
+
+		providers().save(valid("entra"), wide.repeat(333));
+		assertEquals(wide.repeat(333), providers().secret("entra"));
+		providers().save(valid("entra"), "x".repeat(1000));
+		assertEquals("x".repeat(1000), providers().secret("entra"));
+		assertTrue(settings().get("signin.entra.clientSecret").length() <= 4000);
+
+		// And a refused new secret keeps the one stored
+		assertSaveRefused("secret", valid("entra"), wide.repeat(1000));
+		assertEquals("x".repeat(1000), providers().secret("entra"));
+	}
+
 	@Test
 	public void testOrder() throws Exception {
 		providers().save(entra(), SECRET_ONE);
@@ -419,6 +447,25 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		assertEquals("entra,entra-2", settings().get("signin.providers"));
 	}
 
+	/*
+	 * The ids of Healdan's own options stay reserved while their rows are
+	 * missing: a provider under one would take the option over once its row
+	 * came back
+	 */
+	@Test
+	public void testOptionIdsReservedWithoutTheirSettings() throws Exception {
+		settings().delete("signin.password.label");
+		settings().delete("signin.recheck.minutes");
+
+		for (String id : List.of("password", "recheck", "done")) {
+			assertRefused("already used", () -> providers().checkNewId(id));
+			assertSaveRefused("already used", valid(id), SECRET_ONE);
+		}
+		assertEquals(List.of(), providers().all());
+		assertEquals(List.of(), settings().names("signin.password."));
+		assertEquals(List.of(), settings().names("signin.recheck."));
+	}
+
 	@Test
 	public void testHttpOnlyWhenAllowed() throws Exception {
 		SignInProvider keycloak = configured("keycloak", Preset.OTHER, "http://keycloak:8080/realms/healdan", "c1");
@@ -484,6 +531,79 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 		providers().save(entra(), SECRET_TWO);
 		assertEquals(SECRET_TWO, providers().secret("entra"));
 		assertEquals(1, providers().enabled().size());
+	}
+
+	/*
+	 * Listing the providers, as the public GET /server does, opens each client
+	 * secret once while neither it nor the key file changes, not on every
+	 * call; a key file that goes, comes back or changes is still noticed at
+	 * once
+	 */
+	@Test
+	public void testListingOpensEachSecretOnce() throws Exception {
+		Path keyFile = folder.getRoot().toPath().resolve("listing.key");
+		int[] opened = { 0 };
+		SecretBox box = new SecretBox(keyFile, () -> 0L) {
+			@Override
+			public String open(String sealed) {
+				opened[0]++;
+				return super.open(sealed);
+			}
+		};
+		SignInProviders listing = new SignInProviders(settings(), box, SignInIdentityDAO.get(), SignInGroupDAO.get());
+		listing.save(entra(), SECRET_ONE);
+		listing.save(configured("authentik", Preset.AUTHENTIK, AUTHENTIK_ISSUER, "c2"), SECRET_TWO);
+		opened[0] = 0;
+
+		for (int i = 0; i < 10; i++)
+			assertEquals(2, listing.enabled().size());
+		assertEquals(2, opened[0]);
+
+		// A new secret is opened again, once
+		listing.save(entra(), SECRET_TWO);
+		assertEquals(2, listing.enabled().size());
+		assertEquals(2, listing.enabled().size());
+		assertEquals(3, opened[0]);
+		// and the provider client still gets it
+		assertEquals(SECRET_TWO, listing.secret("entra"));
+
+		// The key file gone: both off at once; restored, both on again
+		byte[] key = Files.readAllBytes(keyFile);
+		Files.delete(keyFile);
+		assertEquals(List.of(), listing.enabled());
+		Files.write(keyFile, key);
+		assertEquals(2, listing.enabled().size());
+
+		// Another key in its place: both off
+		Files.delete(keyFile);
+		new SecretBox(keyFile, () -> 0L).seal("makes another key");
+		assertEquals(List.of(), listing.enabled());
+		assertFalse(listing.find("entra").orElseThrow().hasSecret());
+	}
+
+	/**
+	 * A key file made unreadable in place keeps its time, size and identity:
+	 * the providers are off at once all the same, and on again once it can be
+	 * read
+	 */
+	@Test
+	public void testListingNoticesAnUnreadableKey() throws Exception {
+		Path keyFile = folder.getRoot().toPath().resolve("unreadable.key");
+		SecretBox box = new SecretBox(keyFile, () -> 0L);
+		SignInProviders listing = new SignInProviders(settings(), box, SignInIdentityDAO.get(), SignInGroupDAO.get());
+		listing.save(entra(), SECRET_ONE);
+		assertEquals(1, listing.enabled().size());
+
+		Set<PosixFilePermission> readable = Files.getPosixFilePermissions(keyFile);
+		Files.setPosixFilePermissions(keyFile, Set.of());
+		try {
+			// Whoever can read it anyway, such as root, has nothing to test
+			Assume.assumeFalse(Files.isReadable(keyFile));
+			assertEquals(List.of(), listing.enabled());
+		} finally {
+			Files.setPosixFilePermissions(keyFile, readable);
+		}
+		assertEquals(1, listing.enabled().size());
 	}
 
 	@Test

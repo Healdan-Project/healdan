@@ -31,15 +31,21 @@ import com.logicaldoc.core.document.Version;
 import com.logicaldoc.core.document.VersionDAO;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
+import com.logicaldoc.core.security.Device;
+import com.logicaldoc.core.security.DeviceDAO;
 import com.logicaldoc.core.security.Permission;
 import com.logicaldoc.core.security.Session;
 import com.logicaldoc.core.security.authorization.PermissionException;
+import com.logicaldoc.core.security.menu.Menu;
 import com.logicaldoc.core.security.menu.MenuDAO;
+import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.ticket.Ticket;
 import com.logicaldoc.core.ticket.TicketDAO;
 import com.logicaldoc.gui.common.client.AccessDeniedException;
 import com.logicaldoc.gui.common.client.ServerException;
 import com.logicaldoc.gui.common.client.beans.GUIDocumentNote;
+import com.logicaldoc.gui.common.client.beans.GUIMenu;
+import com.logicaldoc.gui.common.client.beans.GUIUser;
 import com.logicaldoc.util.CollectionUtil;
 
 /**
@@ -58,6 +64,19 @@ import com.logicaldoc.util.CollectionUtil;
  * these give their refusals as the GUI's {@link AccessDeniedException}.
  */
 public final class HealdanRpcChecks {
+
+    /**
+     * Settings > GUI settings, whose Custom actions tab adds, changes and
+     * deletes the custom actions
+     */
+    public static final long GUI_SETTINGS_MENU = 102L;
+
+    /**
+     * Access control > Brute force prevention, which lists and clears the
+     * sign-in throttle's counters. CE's database has no row for it, so only
+     * administrators open it.
+     */
+    public static final long BRUTE_FORCE_MENU = 1820L;
 
     private HealdanRpcChecks() {
     }
@@ -675,6 +694,171 @@ public final class HealdanRpcChecks {
         if (userId != null && userId != session.getUserId())
             throw new IOException(refusal.formatted(session.getUsername()));
         return session.getUserId();
+    }
+
+    /**
+     * Refuses to save the menus unless the user may change every one, before
+     * any is saved. A custom action, as sent and as stored, needs GUI settings,
+     * whose Custom actions tab is the only screen that saves menus. Any other
+     * menu needs Access control, as {@code saveACL}, its Menus tab's save,
+     * does. CE let any user save any menu with the access control list they
+     * sent, so giving their own group Access control made them an
+     * administrator.
+     *
+     * @param session the user's session
+     * @param menus the menus as sent, a new one with identifier 0
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void menuChanges(Session session, Collection<GUIMenu> menus) throws ServerException {
+        for (GUIMenu menu : menus) {
+            boolean customAction = menu.getType() == Menu.TYPE_CUSTOM_ACTION;
+            if (menu.getId() != 0L) {
+                Menu stored = storedMenu(menu.getId());
+                customAction &= stored != null && stored.getType() == Menu.TYPE_CUSTOM_ACTION;
+            }
+            menuChange(session, customAction);
+        }
+    }
+
+    /**
+     * Refuses to delete the menu unless the user may change it, as
+     * {@link #menuChanges} says; a missing menu is left to the call
+     *
+     * @param session the user's session
+     * @param menuId the menu
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void menuDelete(Session session, long menuId) throws ServerException {
+        Menu menu = storedMenu(menuId);
+        if (menu != null)
+            menuChange(session, menu.getType() == Menu.TYPE_CUSTOM_ACTION);
+    }
+
+    /**
+     * Refuses to read the menu, its access control list and a custom action's
+     * automation, unless the user may change it, as {@link #menuChanges} says,
+     * or it is a custom action the user may run, which the document and folder
+     * context menus read before running it. Only Access control's Menus tab
+     * reads a built-in menu. A missing menu is left to the call.
+     *
+     * @param session the user's session
+     * @param menuId the menu
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void menuRead(Session session, long menuId) throws ServerException {
+        Menu menu = storedMenu(menuId);
+        if (menu == null)
+            return;
+        boolean customAction = menu.getType() == Menu.TYPE_CUSTOM_ACTION;
+        if (!customAction || !MenuDAO.get().isReadAllowed(menuId, session.getUserId()))
+            menuChange(session, customAction);
+    }
+
+    /**
+     * Refuses to change another user's account unless the user may open
+     * Access control, whose Users screen edits other users, as
+     * {@code saveProfile} asks. The user's own needs nothing.
+     *
+     * @param session the user's session
+     * @param userId the user whose account is changed
+     *
+     * @throws AccessDeniedException the refusal
+     */
+    public static void userChange(Session session, long userId) throws AccessDeniedException {
+        if (userId != session.getUserId())
+            menu(session, Menu.ACCESS_CONTROL);
+    }
+
+    /**
+     * Refuses to read another user's account unless the user may open Access
+     * control, whose Users screen is the only one that reads other users. The
+     * user's own, which loading the session reads, needs nothing. CE let any
+     * signed-in user read any account, with its contact details, groups, IP
+     * lists, impersonators and second factor's key.
+     *
+     * @param session the user's session
+     * @param userId the user whose account is read
+     *
+     * @throws AccessDeniedException the refusal
+     */
+    public static void userRead(Session session, long userId) throws AccessDeniedException {
+        userChange(session, userId);
+    }
+
+    /**
+     * The second factor's secret goes only to its own user, so another user's
+     * account is read without it, by administrators too. The Users screen's
+     * two-factor dialog, the only one that shows another user's, needs a
+     * feature Healdan doesn't declare.
+     *
+     * @param session the user's session
+     * @param user the user whose account is read
+     *
+     * @return the user's key, or null for another user's
+     */
+    public static String readKey(Session session, User user) {
+        return user.getId() == session.getUserId() ? user.getKey() : null;
+    }
+
+    /**
+     * The second factor's secret saved with an account: the one sent, for the
+     * user's own, and for another user's the stored one. The Users screen
+     * saves back the account it read, which {@link #readKey} leaves without
+     * it, so taking what is sent would wipe it.
+     *
+     * @param session the user's session
+     * @param guiUser the account as sent
+     * @param user the account as stored, or a new one
+     *
+     * @return the key to save
+     */
+    public static String savedKey(Session session, GUIUser guiUser, User user) {
+        return guiUser.getId() == session.getUserId() ? guiUser.getKey() : user.getKey();
+    }
+
+    /**
+     * Refuses unless every device is the user's own, before any is changed.
+     * Account > Trusted devices lists only the user's own, so nobody else, an
+     * administrator included, changes one. A device that doesn't exist is
+     * refused the same way.
+     *
+     * @param session the user's session
+     * @param deviceIds the devices
+     *
+     * @throws ServerException the refusal, or an error at data layer
+     */
+    public static void ownDevices(Session session, Collection<Long> deviceIds) throws ServerException {
+        try {
+            for (Long deviceId : deviceIds) {
+                Device device = deviceId != null ? DeviceDAO.get().findById(deviceId) : null;
+                if (device == null || device.getUserId() != session.getUserId())
+                    throw new AccessDeniedException(
+                            "User %s cannot change the device %d".formatted(session.getUsername(), deviceId));
+            }
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
+    }
+
+    private static void menuChange(Session session, boolean customAction) throws AccessDeniedException {
+        menu(session, customAction ? GUI_SETTINGS_MENU : Menu.ACCESS_CONTROL);
+    }
+
+    private static void menu(Session session, long menuId) throws AccessDeniedException {
+        if (!MenuDAO.get().isReadAllowed(menuId, session.getUserId()))
+            throw new AccessDeniedException(
+                    "User %s cannot access the menu %d".formatted(session.getUsername(), menuId));
+    }
+
+    private static Menu storedMenu(long menuId) throws ServerException {
+        try {
+            return MenuDAO.get().findById(menuId);
+        } catch (PersistenceException e) {
+            throw new ServerException(e.getMessage(), e);
+        }
     }
 
     private static void folder(Session session, Permission permission, long folderId)

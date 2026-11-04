@@ -164,6 +164,11 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 		return getThreadLocalRequest();
 	}
 
+	/** Where Save Provider keeps a provider and its group map */
+	protected SignInProviders providers() {
+		return SignInProviders.get();
+	}
+
 	@Override
 	public GUISignInOptions loadSignIn() throws ServerException {
 		User user = admin(SIGN_IN);
@@ -203,7 +208,7 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 			if (provider == null)
 				throw new HealdanRuleException("The provider is missing.");
 			String id = provider.getId();
-			SignInProviders providers = SignInProviders.get();
+			SignInProviders providers = providers();
 			// One lock with save's and saveGroups', so that two admins adding the same id can't both pass the check
 			synchronized (providers) {
 				if (provider.isAdding())
@@ -213,8 +218,8 @@ public class HealdanSettingsServiceImpl extends HealdanRemoteService implements 
 				// Checked first, so that a refused map doesn't leave the provider saved without it
 				List<GroupMapping> map = providers.checkGroups(SignInBeans.mappings(provider.getGroups()));
 				try {
-					providers.save(SignInBeans.fromGUI(provider), secret, provider.isNewKey());
-					providers.saveGroups(id, map);
+					// In one transaction, so a failure part-way leaves the provider as it was, or an id never added
+					providers.save(SignInBeans.fromGUI(provider), secret, provider.isNewKey(), map);
 				} catch (SignInProviders.SecretKeyMissing e) {
 					// Nothing saved: the tab asks the admin, and saves again with newKey if they make a new key
 					throw new SecretKeyMissingException(e.getMessage(), e.sealed());

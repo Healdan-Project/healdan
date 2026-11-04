@@ -79,6 +79,8 @@ public class WebservicesPanel extends VLayout {
 		StaticTextItem soapUrl = ItemFactory.newStaticTextItem("soapUrl", I18N.message("soapbaseurl"),
 				GWT.getHostPageBaseURL() + "services");
 		soapUrl.setColSpan(4);
+		// Healdan: hidden; Healdan removes LogicalDOC's SOAP services (SOAP removal spec, section 7)
+		soapUrl.setVisible(false);
 
 		// REST Url
 		StaticTextItem restUrl = ItemFactory.newStaticTextItem("restUrl", I18N.message("restbaseurl"),

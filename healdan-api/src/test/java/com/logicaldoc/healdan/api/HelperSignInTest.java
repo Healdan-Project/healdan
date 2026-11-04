@@ -333,6 +333,18 @@ public class HelperSignInTest extends ApiTestCase {
 			Files.write(keyFile, key);
 		}
 		assertEquals(201, exchange(code(LOOPBACK), VERIFIER, LOOPBACK).status());
+
+		// With no refresh token to seal, the missing key is told as such all the same, not as a provider turned off
+		fake.noRefreshToken();
+		String bare = code(LOOPBACK);
+		Files.delete(keyFile);
+		try {
+			ApiResponse response = exchange(bare, VERIFIER, LOOPBACK);
+			assertEquals(response.toString(), 500, response.status());
+			assertEquals(AuthResource.KEY_MISSING, response.json().path("detail").textValue());
+		} finally {
+			Files.write(keyFile, key);
+		}
 	}
 
 	/**
@@ -428,6 +440,74 @@ public class HelperSignInTest extends ApiTestCase {
 
 		assertEquals(0, ApiTokens.get().list(jane.getId()).size());
 		assertEquals(0, SessionManager.get().countOpened("jane"));
+	}
+
+	/*
+	 * A verifier that isn't one by its shape is a 422, as openapi.yaml's
+	 * pattern says, before the code is redeemed: the code still works with the
+	 * right one
+	 */
+	@Test
+	public void testVerifierOfTheWrongShape() throws Exception {
+		String code = code(LOOPBACK);
+		for (String wrong : new String[] { "short", VERIFIER.substring(1), "x".repeat(129), VERIFIER.substring(1) + " ",
+				VERIFIER.substring(1) + "+", VERIFIER.substring(1) + "/", VERIFIER.substring(1) + "=" }) {
+			ApiResponse response = exchange(code, wrong, LOOPBACK);
+			assertEquals(wrong + ": " + response, Set.of("codeVerifier"), fields(response));
+			assertEquals("invalid", response.json().path("fields").path(0).path("code").textValue());
+		}
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+
+		// The longest a verifier may be has the shape, and is refused only as the wrong one
+		String longest = codeOf(signInInBrowser(LOOPBACK, STATE, fresh()), LOOPBACK, STATE);
+		assertSignInFailed(exchange(longest, "x".repeat(128), LOOPBACK));
+		assertSignInFailed(exchange(longest, VERIFIER, LOOPBACK));
+
+		assertEquals(201, exchange(code, VERIFIER, LOOPBACK).status());
+		assertEquals(1, ApiTokens.get().list(jane.getId()).size());
+	}
+
+	/*
+	 * The code was issued up to a minute before its exchange: a provider turned
+	 * off meanwhile refuses it, as a turned-off provider's start and callback do
+	 */
+	@Test
+	public void testProviderTurnedOffBeforeTheExchange() throws Exception {
+		String code = code(LOOPBACK);
+		SignInProvider on = SignInProviders.get().find("fake").orElseThrow();
+		SignInProviders.get().save(new SignInProvider(on.id(), on.preset(), on.label(), false, on.issuer(),
+				on.clientId(), false, on.identityClaim(), on.usernameClaim(), on.emailClaim(), on.groupsClaim(),
+				on.linkByEmail()), null);
+
+		assertSignInFailed(exchange(code, VERIFIER, LOOPBACK));
+		assertEquals(0, ApiTokens.get().list(jane.getId()).size());
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+
+		// Used up: turned on again, the code still doesn't work, and a new sign-in does
+		SignInProviders.get().save(on, null);
+		assertSignInFailed(exchange(code, VERIFIER, LOOPBACK));
+		assertEquals(201, exchange(code(LOOPBACK), VERIFIER, LOOPBACK).status());
+	}
+
+	/*
+	 * A failure in LogicalDOC's checks of the account, other than a refusal,
+	 * goes back to the helper as account, as a refusal does, rather than a 500
+	 * the helper waits on
+	 */
+	@Test
+	public void testAccountChecksFailingRefuseTheHelper() throws Exception {
+		SignInResource.accountChecks = user -> {
+			throw new IllegalStateException("The working times couldn't be read");
+		};
+		try {
+			int codes = SignInTestHooks.codesKept();
+			assertHelperRefused("account", signInInBrowser(LOOPBACK));
+			assertEquals("no code was issued", codes, SignInTestHooks.codesKept());
+			assertEquals(0, SessionManager.get().countOpened("jane"));
+		} finally {
+			SignInResource.accountChecks = SignInResource.CE_CHECKS;
+		}
+		assertEquals(201, exchange(code(LOOPBACK), VERIFIER, LOOPBACK).status());
 	}
 
 	@Test

@@ -3,13 +3,28 @@
 
 package com.logicaldoc.healdan.signin;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.net.ConnectException;
 import java.net.MalformedURLException;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.net.UnknownHostException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
+import java.nio.channels.UnresolvedAddressException;
 import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
@@ -19,10 +34,17 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.LongSupplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import javax.net.ssl.SSLContext;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -43,7 +65,7 @@ import com.nimbusds.jose.proc.BadJOSEException;
 import com.nimbusds.jose.proc.BadJWSException;
 import com.nimbusds.jose.proc.JWSVerificationKeySelector;
 import com.nimbusds.jose.proc.SecurityContext;
-import com.nimbusds.jose.util.DefaultResourceRetriever;
+import com.nimbusds.jose.util.Resource;
 import com.nimbusds.jose.util.ResourceRetriever;
 import com.nimbusds.jwt.JWT;
 import com.nimbusds.jwt.JWTClaimsSet;
@@ -74,6 +96,7 @@ import com.nimbusds.oauth2.sdk.id.State;
 import com.nimbusds.oauth2.sdk.pkce.CodeChallengeMethod;
 import com.nimbusds.oauth2.sdk.pkce.CodeVerifier;
 import com.nimbusds.oauth2.sdk.token.RefreshToken;
+import com.nimbusds.oauth2.sdk.util.JSONObjectUtils;
 import com.nimbusds.openid.connect.sdk.AuthenticationRequest;
 import com.nimbusds.openid.connect.sdk.Nonce;
 import com.nimbusds.openid.connect.sdk.OIDCScopeValue;
@@ -133,14 +156,30 @@ import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
  * Log lines name the provider's id and the outcome. A provider's own error
  * text is quoted with the values Healdan sent it taken out.
  * <p>
- * Every call to a provider has a 10-second connect timeout and a 10-second
- * read timeout.
+ * <b>Every call to a provider is bounded.</b> Nimbus builds each request and
+ * reads each answer, and the JDK's {@code HttpClient} sends it, with the JVM's
+ * trust store and HTTP proxy settings: the first proxy they name is used, and
+ * a SOCKS proxy is refused, as the JDK's client would skip it and connect
+ * directly. Its whole answer must come within {@value #TIMEOUT_MILLIS}
+ * milliseconds, connecting included, however the provider spreads it out
+ * (twice that for a refresh, whose answer may hold a new refresh token), and
+ * may weigh at most {@value #MAX_ANSWER_BYTES} bytes ({@value #MAX_KEYS_BYTES}
+ * for the keys). A call that goes beyond either fails as if the provider
+ * couldn't be reached. A sign-in waits for another's fetch of the keys no
+ * longer than a fetch may take, and {@value #KEYS_WAIT_MARGIN_MILLIS}
+ * milliseconds more.
  */
 @Component
 public class ProviderClient {
 
-	/** Each call's connect timeout, and its read timeout (spec section 13) */
+	/**
+	 * How long each call may take, from connecting to the last byte of its
+	 * answer (spec section 13); twice that for a refresh
+	 */
 	static final int TIMEOUT_MILLIS = 10_000;
+
+	/** The most a discovery document or a token endpoint's answer may weigh */
+	static final int MAX_ANSWER_BYTES = 1_048_576;
 
 	/** ID tokens are allowed two minutes of clock skew */
 	static final int MAX_CLOCK_SKEW_SECONDS = 120;
@@ -160,13 +199,17 @@ public class ProviderClient {
 	private static final String ACCEPTED = "RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384 and ES512";
 
 	/** The most a provider's key set may weigh, as Nimbus's default */
-	private static final int MAX_KEYS_BYTES = JWKSourceBuilder.DEFAULT_HTTP_SIZE_LIMIT;
+	static final int MAX_KEYS_BYTES = JWKSourceBuilder.DEFAULT_HTTP_SIZE_LIMIT;
 
 	/** How long the keys are kept before they're fetched again, as Nimbus's default */
 	private static final long KEYS_LIFETIME_MILLIS = JWKSourceBuilder.DEFAULT_CACHE_TIME_TO_LIVE;
 
-	/** How long a sign-in waits for another's fetch of the keys, as Nimbus's default */
-	private static final long KEYS_WAIT_MILLIS = JWKSourceBuilder.DEFAULT_CACHE_REFRESH_TIMEOUT;
+	/**
+	 * How much longer than a fetch of the keys may take a sign-in waits for
+	 * another's: the fetch also makes its request before the timeout starts,
+	 * and reads the keys after
+	 */
+	static final long KEYS_WAIT_MARGIN_MILLIS = 1_000L;
 
 	/**
 	 * At most two fetches of the keys in this time, as Nimbus's default: enough
@@ -259,8 +302,9 @@ public class ProviderClient {
 	 *        (ruling R28), or for any other outcome
 	 * @param refreshToken the new refresh token, if one came, which replaces
 	 *        the old; null otherwise. It also comes with an {@code UNREACHABLE}
-	 *        outcome whose ID token failed its checks, as the provider may have
-	 *        retired the old one. Secret.
+	 *        outcome whose ID token failed its checks, or whose answer couldn't
+	 *        be read in full, as the provider may have retired the old one.
+	 *        Secret.
 	 */
 	public record Refreshed(Outcome outcome, IdClaims claims, String refreshToken) {
 
@@ -309,6 +353,48 @@ public class ProviderClient {
 	/** What the failures' 30 seconds are measured by, in milliseconds; tests move it */
 	volatile LongSupplier clock = System::currentTimeMillis;
 
+	/** The JVM's TLS, with its trust store, as Nimbus's calls had it */
+	static final TlsContext JVM_TLS = SSLContext::getDefault;
+
+	/** The TLS calls to providers use; {@code SignInTestHooks} makes it trust a test provider */
+	static volatile TlsContext sslContext = JVM_TLS;
+
+	/** Where the TLS of calls to providers comes from */
+	@FunctionalInterface
+	interface TlsContext {
+		SSLContext get() throws NoSuchAlgorithmException;
+	}
+
+	/**
+	 * Java's proxy settings as they stand at each call, as HttpURLConnection
+	 * read them, for clients kept across a change to them
+	 */
+	private static final ProxySelector JVM_PROXIES = new ProxySelector() {
+
+		@Override
+		public List<Proxy> select(URI uri) {
+			ProxySelector proxies = ProxySelector.getDefault();
+			return proxies == null ? List.of(Proxy.NO_PROXY) : proxies.select(uri);
+		}
+
+		@Override
+		public void connectFailed(URI uri, SocketAddress address, IOException e) {
+			ProxySelector proxies = ProxySelector.getDefault();
+			if (proxies != null)
+				proxies.connectFailed(uri, address, e);
+		}
+	};
+
+	/**
+	 * The clients calls are sent with, one for each redirect rule, kept so that
+	 * calls to a provider share its connections
+	 */
+	private final Map<HttpClient.Redirect, Client> clients = new ConcurrentHashMap<>();
+
+	/** A client, and the TLS it was made with: another TLS, as tests set, makes another client */
+	private record Client(SSLContext tls, HttpClient http) {
+	}
+
 	/** The providers whose unsigned refreshed ID tokens have been logged; once for each, for the JVM's life */
 	private final Set<String> unsignedNoted = ConcurrentHashMap.newKeySet();
 
@@ -319,13 +405,13 @@ public class ProviderClient {
 
 	/**
 	 * @param providers where the client secrets are
-	 * @param timeout each call's connect and read timeouts, in milliseconds,
-	 *        shorter only in tests
+	 * @param timeout how long each call may take, in milliseconds, shorter
+	 *        only in tests
 	 */
 	ProviderClient(SignInProviders providers, int timeout) {
 		this.providers = providers;
 		this.timeout = timeout;
-		this.retriever = new DefaultResourceRetriever(timeout, timeout, MAX_KEYS_BYTES);
+		this.retriever = this::retrieve;
 	}
 
 	/**
@@ -444,7 +530,8 @@ public class ProviderClient {
 	 * 16.2).</li>
 	 * <li>{@code UNREACHABLE} too for a discovery document that can't be
 	 * fetched or fails its checks, a client secret that can't be read, or an
-	 * answer that can't be read.</li>
+	 * answer that can't be read, that doesn't all come in time or that's too
+	 * large.</li>
 	 * <li>{@code UNREACHABLE} too for an answer whose signed ID token fails its
 	 * checks, logged as a warning: a bad answer isn't an explicit refusal, and
 	 * only an explicit refusal revokes. The new refresh token comes back with it,
@@ -462,8 +549,11 @@ public class ProviderClient {
 	 * came. Its nonce isn't checked, as a refresh has none of its own;
 	 * everything else is.</li>
 	 * </ul>
-	 * The caller checks that an accepted refresh's identity is still the one the
-	 * token was issued to.
+	 * A {@code 200} answer's new refresh token is read from its JSON first, and
+	 * comes back whatever the outcome, so an answer Nimbus can't read in full, or
+	 * whose ID token fails its checks, doesn't lose a token the provider turned
+	 * over. The caller checks that an accepted refresh's identity is still the
+	 * one the token was issued to.
 	 *
 	 * @param p the provider
 	 * @param refreshToken the refresh token the sign-in gave
@@ -482,6 +572,56 @@ public class ProviderClient {
 			log.warn("Sign-in provider {}: a refresh failed on {}, which counts as unreachable", p.id(),
 					e.getClass().getName());
 			return unreachable(null);
+		}
+	}
+
+	/**
+	 * Reads what a {@code 200} answer to a refresh says, once its new refresh
+	 * token, if any, is in hand: whatever fails from here on, the token comes
+	 * back with the outcome, as the provider may have retired the old one
+	 */
+	private Refreshed accepted(SignInProvider p, Discovered d, HTTPResponse response, String next) {
+		try {
+			OIDCTokens tokens = tokens(response);
+			if (tokens == null) {
+				log.warn("Sign-in provider {} answered a refresh with something that isn't a token response, which "
+						+ "counts as unreachable{}", p.id(), next == null ? "" : "; its new refresh token is kept");
+				return unreachable(next);
+			}
+			IdClaims claims = null;
+			JWT idToken = tokens.getIDToken();
+			if (idToken instanceof PlainJWT)
+				// Ignored, and not read: no claim of an unsigned token is believed (ruling R28)
+				noteUnsigned(p);
+			else if (idToken != null)
+				try {
+					claims = verify(p, d, idToken, null);
+				} catch (ProviderException e) {
+					log.warn("Sign-in provider {} answered a refresh with an ID token Healdan refused, which counts "
+							+ "as unreachable, not as a refusal. {}", p.id(), e.getMessage());
+					return unreachable(next);
+				}
+			log.info("Sign-in provider {} accepted a refresh", p.id());
+			return new Refreshed(Outcome.ACCEPTED, claims, next);
+		} catch (RuntimeException e) {
+			log.warn("Sign-in provider {}: reading the answer to a refresh failed on {}, which counts as unreachable{}",
+					p.id(), e.getClass().getName(), next == null ? "" : "; its new refresh token is kept");
+			return unreachable(next);
+		}
+	}
+
+	/**
+	 * @return the refresh token in a token endpoint's answer, read from its
+	 *         JSON whatever its content type and whatever else it holds, so
+	 *         that an answer Nimbus can't read in full doesn't lose a token the
+	 *         provider turned over; null if it holds none
+	 */
+	private static String refreshTokenIn(HTTPResponse response) {
+		try {
+			Object value = JSONObjectUtils.parse(StringUtils.defaultString(response.getBody())).get("refresh_token");
+			return value instanceof String token && !token.isBlank() ? token : null;
+		} catch (ParseException | RuntimeException e) {
+			return null;
 		}
 	}
 
@@ -528,28 +668,8 @@ public class ProviderClient {
 			return unreachable(null);
 		}
 
-		OIDCTokens tokens = tokens(response);
-		if (tokens == null) {
-			log.warn("Sign-in provider {} answered a refresh with something that isn't a token response, which "
-					+ "counts as unreachable", p.id());
-			return unreachable(null);
-		}
-		String next = tokens.getRefreshToken() == null ? null : tokens.getRefreshToken().getValue();
-		IdClaims claims = null;
-		JWT idToken = tokens.getIDToken();
-		if (idToken instanceof PlainJWT)
-			// Ignored, and not read: no claim of an unsigned token is believed (ruling R28)
-			noteUnsigned(p);
-		else if (idToken != null)
-			try {
-				claims = verify(p, d, idToken, null);
-			} catch (ProviderException e) {
-				log.warn("Sign-in provider {} answered a refresh with an ID token Healdan refused, which counts as "
-						+ "unreachable, not as a refusal. {}", p.id(), e.getMessage());
-				return unreachable(next);
-			}
-		log.info("Sign-in provider {} accepted a refresh", p.id());
-		return new Refreshed(Outcome.ACCEPTED, claims, next);
+		// First, so that it's kept whatever fails after: a provider that turns refresh tokens over has retired the old
+		return accepted(p, d, response, refreshTokenIn(response));
 	}
 
 	/** Logs, once for each provider for the JVM's life, that its refreshed ID tokens come unsigned */
@@ -831,12 +951,9 @@ public class ProviderClient {
 			throw new ProviderException("The issuer address isn't one a discovery document can be found under: "
 					+ quote(e.getMessage()), e);
 		}
-		HTTPRequest request = new HTTPRequest(HTTPRequest.Method.GET, url);
-		request.setConnectTimeout(timeout);
-		request.setReadTimeout(timeout);
 		HTTPResponse response;
 		try {
-			response = request.send();
+			response = send(new HTTPRequest(HTTPRequest.Method.GET, url), MAX_ANSWER_BYTES);
 		} catch (IOException e) {
 			throw new ProviderException(
 					"The discovery document at %s couldn't be fetched: %s".formatted(quote(url.toString()), describe(e)),
@@ -948,8 +1065,9 @@ public class ProviderClient {
 			// The cache fetches the keys again when a token names a key it doesn't hold. No refresh ahead,
 			// which would run threads of its own, and no outage tolerance: keys that can't be fetched refuse
 			// the sign-in.
+			// A sign-in waits for another's fetch of the keys no longer than the fetch may take, with its margin
 			return JWKSourceBuilder.<SecurityContext>create(address.toURL(), retriever)
-					.cache(KEYS_LIFETIME_MILLIS, KEYS_WAIT_MILLIS).refreshAheadCache(false)
+					.cache(KEYS_LIFETIME_MILLIS, timeout + KEYS_WAIT_MARGIN_MILLIS).refreshAheadCache(false)
 					.rateLimited(KEYS_RATE_LIMIT_MILLIS).retrying(false).outageTolerant(false).build();
 		} catch (MalformedURLException | IllegalArgumentException e) {
 			throw new ProviderException("The keys address (jwks_uri) isn't a valid address", e);
@@ -961,11 +1079,221 @@ public class ProviderClient {
 		TokenRequest request = new TokenRequest.Builder(metadata.getTokenEndpointURI(),
 				authentication(metadata, clientId, secret), grant).build();
 		HTTPRequest http = request.toHTTPRequest();
-		http.setConnectTimeout(timeout);
-		http.setReadTimeout(timeout);
 		// It carries the secret, so it goes nowhere it's redirected to
 		http.setFollowRedirects(false);
-		return http.send();
+		// A refresh the provider answered may have turned its refresh token over, retiring the one sent: it has the
+		// time to connect and then the time to answer, as the old per-phase timeouts gave it, rather than one for both
+		return send(http, MAX_ANSWER_BYTES, grant instanceof RefreshTokenGrant ? 2L * timeout : timeout);
+	}
+
+	/**
+	 * Fetches a provider's keys as {@link #send} sends any request, for
+	 * Nimbus's key source and Check
+	 */
+	private Resource retrieve(URL url) throws IOException {
+		HTTPResponse response = send(new HTTPRequest(HTTPRequest.Method.GET, url), MAX_KEYS_BYTES);
+		if (response.getStatusCode() != HTTPResponse.SC_OK)
+			throw new IOException("HTTP " + response.getStatusCode());
+		return new Resource(StringUtils.defaultString(response.getBody()),
+				response.getEntityContentType() == null ? null : response.getEntityContentType().toString());
+	}
+
+	/** Sends a request to a provider, as {@link #send(HTTPRequest, int, long)} does, within the timeout */
+	private HTTPResponse send(HTTPRequest request, int maxBytes) throws IOException {
+		return send(request, maxBytes, timeout);
+	}
+
+	/**
+	 * Sends a request to a provider, in place of Nimbus's
+	 * {@code HTTPRequest.send}, with the JVM's trust store and HTTP proxy
+	 * settings, but bounded: the whole answer must come within the wait,
+	 * connecting included, however the provider spreads it out, and may weigh
+	 * at most so many bytes. Past the wait the request is cancelled, which
+	 * closes its connection. A redirect is followed only for a {@code GET},
+	 * and never from {@code https} to {@code http}.
+	 *
+	 * @param request the request, as Nimbus builds it
+	 * @param maxBytes the most the answer's body may weigh
+	 * @param wait how long the whole answer may take, in milliseconds
+	 * @return the answer: its status, headers and body
+	 * @throws IOException if the provider can't be reached, Java's settings
+	 *         name a SOCKS proxy for it, the answer doesn't all come in time
+	 *         (a {@link SocketTimeoutException}), or it's larger than allowed
+	 */
+	private HTTPResponse send(HTTPRequest request, int maxBytes, long wait) throws IOException {
+		HttpClient.Redirect redirects = request.getMethod() == HTTPRequest.Method.GET && request.getFollowRedirects()
+				? HttpClient.Redirect.NORMAL
+				: HttpClient.Redirect.NEVER;
+		HttpRequest jdk = toJdk(request);
+		List<Proxy> proxies = JVM_PROXIES.select(jdk.uri());
+		// The JDK's client takes only an HTTP proxy: it would skip a SOCKS one without a word and connect directly
+		if (!proxies.isEmpty() && proxies.get(0).type() == Proxy.Type.SOCKS)
+			throw new IOException("Java's settings name a SOCKS proxy for the provider's address, which calls to "
+					+ "providers can't use: name an HTTP proxy (https.proxyHost and https.proxyPort) instead");
+		CompletableFuture<HttpResponse<byte[]>> answer = client(redirects).sendAsync(jdk,
+				info -> new Capped(info.headers().firstValueAsLong("Content-Length").orElse(-1L), maxBytes));
+		try {
+			return fromJdk(answer.get(wait, TimeUnit.MILLISECONDS));
+		} catch (TimeoutException e) {
+			// Cancelled, which closes its connection rather than leaving it to the next call
+			answer.cancel(true);
+			throw new SocketTimeoutException(
+					"The provider's whole answer didn't come within %d milliseconds".formatted(wait));
+		} catch (InterruptedException e) {
+			answer.cancel(true);
+			Thread.currentThread().interrupt();
+			throw new InterruptedIOException("Interrupted while waiting for the provider");
+		} catch (ExecutionException e) {
+			Throwable cause = e.getCause();
+			if (cause instanceof ConnectException unconnected && unconnected.getMessage() == null)
+				throw unconnected(unconnected, jdk.uri());
+			if (cause instanceof IOException io)
+				throw io;
+			throw new IOException(cause == null ? "The call failed" : cause.getClass().getSimpleName(), cause);
+		}
+	}
+
+	/**
+	 * @return the client for the redirect rule, made once for the TLS calls
+	 *         use; its connections are kept for the next call to the same
+	 *         provider
+	 */
+	private HttpClient client(HttpClient.Redirect redirects) throws IOException {
+		SSLContext tls;
+		try {
+			tls = sslContext.get();
+		} catch (NoSuchAlgorithmException e) {
+			throw new IOException("No TLS for the provider's address", e);
+		}
+		return clients.compute(redirects, (rule, held) -> {
+			if (held != null && held.tls() == tls)
+				return held;
+			if (held != null)
+				held.http().shutdown();
+			return new Client(tls, HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1)
+					.connectTimeout(Duration.ofMillis(timeout)).followRedirects(rule).proxy(JVM_PROXIES)
+					.sslContext(tls).build());
+		}).http();
+	}
+
+	/**
+	 * @return a failure to connect, which the JDK's client leaves without a
+	 *         word, told as HttpURLConnection told it: the host that's unknown,
+	 *         or the address that couldn't be reached
+	 */
+	private static IOException unconnected(ConnectException e, URI address) {
+		for (Throwable why = e.getCause(); why != null; why = why.getCause())
+			if (why instanceof UnresolvedAddressException) {
+				UnknownHostException unknown = new UnknownHostException(address.getHost());
+				unknown.initCause(e);
+				return unknown;
+			}
+		int port = address.getPort() != -1 ? address.getPort()
+				: "https".equalsIgnoreCase(address.getScheme()) ? 443 : 80;
+		ConnectException told = new ConnectException("Couldn't connect to " + address.getHost() + ":" + port);
+		told.initCause(e);
+		return told;
+	}
+
+	/** @return Nimbus's request as the JDK's: its method, address, headers and body */
+	private static HttpRequest toJdk(HTTPRequest request) throws IOException {
+		URI address;
+		try {
+			address = request.getURL().toURI();
+		} catch (URISyntaxException e) {
+			throw new IOException("The provider's address isn't a valid address", e);
+		}
+		HttpRequest.Builder builder = HttpRequest.newBuilder(address);
+		for (Map.Entry<String, List<String>> header : request.getHeaderMap().entrySet())
+			for (String value : header.getValue())
+				builder.header(header.getKey(), value);
+		String body = request.getBody();
+		return switch (request.getMethod()) {
+			case GET -> builder.GET().build();
+			case POST -> builder.POST(HttpRequest.BodyPublishers.ofString(StringUtils.defaultString(body),
+					StandardCharsets.UTF_8)).build();
+			default -> throw new IOException("Healdan sends a provider only GET and POST");
+		};
+	}
+
+	/** @return the JDK's answer as Nimbus's, its body read as UTF-8, as Nimbus reads it */
+	private static HTTPResponse fromJdk(HttpResponse<byte[]> answer) {
+		HTTPResponse response = new HTTPResponse(answer.statusCode());
+		answer.headers().map().forEach((name, values) -> {
+			if (!values.isEmpty())
+				response.setHeader(name, values.toArray(String[]::new));
+		});
+		byte[] body = answer.body();
+		if (body != null && body.length > 0)
+			response.setBody(new String(body, StandardCharsets.UTF_8));
+		return response;
+	}
+
+	/** Takes an answer's body up to so many bytes, and fails it past them, without reading on */
+	private static final class Capped implements HttpResponse.BodySubscriber<byte[]> {
+
+		private final int maxBytes;
+
+		private final CompletableFuture<byte[]> body = new CompletableFuture<>();
+
+		private final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
+		private Flow.Subscription subscription;
+
+		/**
+		 * @param length the answer's {@code Content-Length}, or -1 when it has
+		 *        none
+		 * @param maxBytes the most the body may weigh
+		 */
+		Capped(long length, int maxBytes) {
+			this.maxBytes = maxBytes;
+			if (length > maxBytes)
+				body.completeExceptionally(tooLarge(maxBytes));
+		}
+
+		@Override
+		public CompletionStage<byte[]> getBody() {
+			return body;
+		}
+
+		@Override
+		public void onSubscribe(Flow.Subscription s) {
+			subscription = s;
+			if (body.isDone())
+				s.cancel();
+			else
+				s.request(Long.MAX_VALUE);
+		}
+
+		@Override
+		public void onNext(List<ByteBuffer> buffers) {
+			if (body.isDone())
+				return;
+			for (ByteBuffer buffer : buffers) {
+				if (bytes.size() + (long) buffer.remaining() > maxBytes) {
+					body.completeExceptionally(tooLarge(maxBytes));
+					subscription.cancel();
+					return;
+				}
+				byte[] chunk = new byte[buffer.remaining()];
+				buffer.get(chunk);
+				bytes.writeBytes(chunk);
+			}
+		}
+
+		@Override
+		public void onError(Throwable throwable) {
+			body.completeExceptionally(throwable);
+		}
+
+		@Override
+		public void onComplete() {
+			body.complete(bytes.toByteArray());
+		}
+	}
+
+	private static IOException tooLarge(int maxBytes) {
+		return new IOException("The answer is larger than %d bytes".formatted(maxBytes));
 	}
 
 	/**

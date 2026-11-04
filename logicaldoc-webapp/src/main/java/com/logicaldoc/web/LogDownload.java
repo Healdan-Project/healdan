@@ -31,13 +31,13 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.core.document.DocumentDAO;
 import com.logicaldoc.core.generic.GenericDAO;
 import com.logicaldoc.core.security.menu.Menu;
-import com.logicaldoc.util.SystemUtil;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.config.LogConfigurator;
 import com.logicaldoc.util.config.OrderedProperties;
 import com.logicaldoc.util.csv.CSVFileWriter;
 import com.logicaldoc.util.io.FileUtil;
 import com.logicaldoc.util.spring.Context;
+import com.logicaldoc.web.data.HealdanSecrets;
 import com.logicaldoc.web.util.ServletUtil;
 
 import jakarta.servlet.ServletContext;
@@ -163,7 +163,7 @@ public class LogDownload extends HttpServlet {
 			 * Now create a copy of the configuration and store it in the zip
 			 * file
 			 */
-			OrderedProperties prop = writeContextPropertiesDump(out);
+			writeContextPropertiesDump(out);
 
 			/*
 			 * Save the most important configuration files
@@ -173,7 +173,8 @@ public class LogDownload extends HttpServlet {
 			/*
 			 * Now create a file with the environment
 			 */
-			String env = SystemUtil.printEnvironment();
+			// Healdan: masked as System > General > Environment masks it
+			String env = HealdanSecrets.environment(System.getenv(), System.getProperties());
 			env += "\n\n" + printDatabaseEnvironment();
 			File buf = FileUtil.createTempFile("environment", ".txt");
 			FileUtil.writeFile(env, buf.getPath());
@@ -214,7 +215,8 @@ public class LogDownload extends HttpServlet {
 			 */
 			dumpLegals(out);
 
-			prop.store(new FileOutputStream(buf), "Support Request");
+			// Healdan: CE wrote its dump here once more, into the environment's
+			// deleted temp file, which was then left in the temp folder unmasked
 		}
 
 		return tmp;
@@ -451,6 +453,14 @@ public class LogDownload extends HttpServlet {
 	}
 
 	public void writeEntry(ZipOutputStream out, String entry, File file) throws IOException {
+		// Healdan: a .properties file goes in masked, as the Environment tab
+		// masks it, context.properties' passwords among it
+		if (file.getName().toLowerCase().contains(DOT_PROPERTIES)) {
+			out.putNextEntry(new ZipEntry(entry));
+			HealdanSecrets.writeShown(file, out);
+			return;
+		}
+
 		byte[] b;
 		int count;
 

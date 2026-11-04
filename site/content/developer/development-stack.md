@@ -43,9 +43,12 @@ start also creates:
 - a template, "Smoke template", with a Documents folder;
 - client 1, "Smoke Client";
 - matter "1.1 – Smoke Matter", owned by `admin`, with that Documents folder. The Everyone group can read it,
-  upload into it and download from it.
+  upload into it and download from it;
+- the user `apiuser`, not an admin, with a throwaway password, which `docker/tests/test-api.sh` signs in as. Its
+  password is published, so it's made only on a stack with no other users: on one with people, Healdan logs a
+  warning instead.
 
-Without the variable that step does nothing, so it runs on a later start if you add the overlay then.
+Without the variable those steps do nothing, so they run on a later start if you add the overlay then.
 
 {{< callout type="warning" >}}
 Never use the smoke overlay on a server with real data.

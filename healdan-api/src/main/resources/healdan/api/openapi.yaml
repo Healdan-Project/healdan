@@ -72,9 +72,12 @@ paths:
         back to that address with `code` and the helper's `state`, or with
         `error` and the `state` when it refuses. The code works once, within
         60 seconds, and only with the verifier of that challenge and the
-        same `redirectUri`. A code that's unknown, used or expired, or
-        doesn't match the verifier or the address, is `401 sign-in-failed`,
-        as a wrong password is. A sign-in the server can't keep, as when its
+        same `redirectUri`. A `codeVerifier` that isn't a PKCE verifier by
+        its shape (43 to 128 of RFC 7636's characters) is `422 validation`,
+        and leaves the code unused. A code that's unknown, used or expired,
+        or doesn't match the verifier or the address, or whose provider was
+        turned off since, is `401 sign-in-failed`, as a wrong password is.
+        A sign-in the server can't keep, as when its
         secret key file is missing, is `500 server-error`, whose `detail`
         says so; the code is used up, and the helper starts again. Those
         sign-in pages aren't JSON API, so this file leaves them out.

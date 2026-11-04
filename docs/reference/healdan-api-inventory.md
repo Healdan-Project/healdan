@@ -839,7 +839,7 @@ All extend `AbstractDataServlet`: GET only, require a session (`isAuthenticated(
 | `/echo` | EchoServlet | any | Debug: logs the request when echo.enabled=true. | none | – |
 | `/frontend/gwteventservice` | de.novanic.eventservice (GWT Event Service) | GWT-RPC long-poll | Third-party GWT server-push; legacy, not part of the Healdan code. | none | – |
 | `/frontend/dropbox` | DropboxServiceImpl | GWT-RPC | See Dropbox section. | none | – |
-| `/services/*` | WebserviceServlet (CXF) | SOAP + REST (`/services/rest/*`) | Existing SOAP/REST APIs: out of scope, kept as is. | none | stays as it is |
+| `/services/*` | WebserviceServlet (CXF) | REST (`/services/rest/*`); Healdan removes the SOAP endpoints ([spec](../superpowers/specs/2026-11-03-soap-removal-design.md)) | Existing REST API: out of scope, kept as is. | none | stays as it is |
 | `/webdav/*, /service/cmis/*` | WebdavServlet, CmisServlet | WebDAV, CMIS | Existing interfaces: out of scope, kept as is. | none | stays as it is |
 | `/j_spring_security_check (not a servlet)` | Spring Security form login | j_username, j_password, (2FA key)  | How the old GUI signs in (session cookie + ldoc-sid). Add-ins use /services/rest/auth instead. | M2 | `POST /auth/tokens` |
 | `/wk-event (WebSocket)` | websockets.EventEndpoint | (none; server push only) | See WebSocket section. | M6 | `/events` (Server-Sent Events, proposed for M6) |

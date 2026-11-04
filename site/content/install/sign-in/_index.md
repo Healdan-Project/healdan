@@ -42,8 +42,9 @@ account has none.
   only over `https://` and only for the address you registered. Once it's set, a sign-in started on another name
   for the server goes to that address first. Give people that one address for the web page and the helper.
 - **The server reaches the provider.** Healdan calls the provider's issuer address and every address it publishes,
-  all of which must start `https://`, directly or through the proxy that Java's own settings name: see
-  [Known Limitations](../known-limitations/). Each call gives up after 10 seconds.
+  all of which must start `https://`, directly or through the HTTP proxy that Java's own settings name: see
+  [Known Limitations](../known-limitations/). Each call gives up if its whole answer hasn't come within 10
+  seconds (20 for a helper's re-check), or is larger than 1 MB (50 KB for the provider's keys).
 - **A way back in.** `admin` keeps its password: see [Break Glass](#break-glass).
 - **A plan for the groups.** Decide which provider groups may sign in, and which Healdan group each maps to. Any
   Healdan group can be mapped, `admin` included, but an admin skips every permission check: see
@@ -59,7 +60,8 @@ account has none.
 ### Choose an Id
 
 Each provider has an id of 1 to 32 lower-case letters, digits and hyphens, such as `entra` or `authentik`. It's part
-of the redirect address, so it can't change once the provider is added.
+of the redirect address, so it can't change once the provider is added. `done`, `password` and `recheck` are Healdan's
+own, and can't be a provider's.
 
 ### Register Healdan at the Provider
 
@@ -132,8 +134,8 @@ An account that signs in through a provider is a provider account from then on, 
 alone:
 
 - **It has no password,** on any route. Healdan removes it when the account is linked or made, and refuses to store
-  one afterwards, so no password signs it in: not the sign-in page's form, WebDAV, CMIS, or LogicalDOC's SOAP and REST
-  web services. A scanner, a script or a WebDAV mount that signs in with a password needs an account that isn't linked.
+  one afterwards, so no password signs it in: not the sign-in page's form, WebDAV, CMIS, or LogicalDOC's REST web
+  services. A scanner, a script or a WebDAV mount that signs in with a password needs an account that isn't linked.
 - **It can't use LogicalDOC's API keys.** Linking an account deletes the keys it had and closes the sessions they
   opened, and a key made afterwards, under the person icon's **Security → API Keys**, never signs in.
 

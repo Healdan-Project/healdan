@@ -74,6 +74,8 @@ public class FilingRules {
 
 	static final String ALIAS_MERGE = "A folder alias can't be merged, or merged into.";
 
+	static final String ALIAS_CYCLE = "A folder alias can't go inside the folder it points to.";
+
 	static final String FOLDER_IN_SEARCH_FOLDER = "Search folders can't hold folders.";
 
 	static final String FOLDER_IN_STORE = "Folders can't be created directly in a Store. Use New %s.";
@@ -256,6 +258,10 @@ public class FilingRules {
 		checkMoveAt(currentPosition(folder.getId(), row), parent, isAlias(folder), isAdmin(user), ids);
 		checkSearchFolderAt(parent, folder.getType(), ids);
 		checkPlacement(folder.getId(), childOf(parent, folder.getId(), folder.getType()), false, ids);
+		// CE's createAlias refuses this cycle, but its move doesn't look for it
+		if (folder.getFoldRef() != null && into != null && (folder.getFoldRef().longValue() == into.getId()
+				|| FolderDAO.get().isInPath(folder.getFoldRef(), into.getId())))
+			throw refuse(ALIAS_CYCLE, ids);
 	}
 
 	/**

@@ -7,6 +7,8 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.Optional;
 
+import javax.net.ssl.SSLContext;
+
 /**
  * Lets a test set what {@link SignInProviders#httpAllowed()} reads, which in
  * production is the environment variable {@code HEALDAN_SIGNIN_ALLOW_HTTP},
@@ -31,6 +33,16 @@ public final class SignInTestHooks {
 	 */
 	public static void allowHttp(boolean allow) {
 		SignInProviders.allowHttpSetting = () -> Boolean.toString(allow);
+	}
+
+	/**
+	 * Makes calls to providers use this TLS, such as one that trusts a test
+	 * provider's certificate only, until {@link #reset}.
+	 *
+	 * @param context the TLS
+	 */
+	public static void providerTls(SSLContext context) {
+		ProviderClient.sslContext = () -> context;
 	}
 
 	/**
@@ -101,12 +113,13 @@ public final class SignInTestHooks {
 
 	/**
 	 * Goes back to reading the environment variable, to the system's clocks,
-	 * to sending emails through CE, and to CE's password generator, which a
-	 * test in this package may have replaced ({@code OutgoingEmail.sender},
-	 * {@code SignInAdmin.generator}).
+	 * to the JVM's TLS for calls to providers, to sending emails through CE,
+	 * and to CE's password generator, which a test in this package may have
+	 * replaced ({@code OutgoingEmail.sender}, {@code SignInAdmin.generator}).
 	 */
 	public static void reset() {
 		SignInProviders.allowHttpSetting = SignInProviders.ENVIRONMENT;
+		ProviderClient.sslContext = ProviderClient.JVM_TLS;
 		OutgoingEmail.sender = OutgoingEmail.CE;
 		SignInAdmin.generator = SignInAdmin.CE_GENERATOR;
 		PendingSignIns.clock = Clock.systemUTC();

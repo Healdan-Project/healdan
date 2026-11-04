@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 The Healdan Project
 # SPDX-License-Identifier: LGPL-3.0-only
 
-# The Office add-in's flow against the JSON API in the real Docker image (M2 spec §14.1): sign in, find a matter,
+# First checks that LogicalDOC's SOAP services answer 404 (SOAP removal spec §5). Then
+# the Office add-in's flow against the JSON API in the real Docker image (M2 spec §14.1): sign in, find a matter,
 # file a document, check it out, save twice, read it back, then M3's additions (search within a folder, creating a
 # folder, favorites, doc ID stamping, a second device, save preconditions, the #<n> v<m> lookup) and M5's (inspecting
 # an .eml, filing it with its attachment, already-filed), hit the sign-in throttle, check that LogicalDOC's own
@@ -17,7 +18,8 @@ cd "$(dirname "$0")/../.."
 BASE=${BASE:-http://127.0.0.1:8080}
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
-# A throwaway password for a throwaway user on a throwaway stack.
+# A throwaway password for a throwaway user on a throwaway stack. healdan-core's SmokeApiUserSeed makes the user
+# with the same password (its PASSWORD), when the smoke overlay sets HEALDAN_SMOKE_FIXTURE=true.
 USER_NAME=apiuser
 USER_PW='Api-Smoke-Pw-42!x'
 OUT=$WORK/body
@@ -137,7 +139,9 @@ print(m.group(1) if m else "<no property>")
 STAMP
 }
 
-# --- Setup: a non-admin user, over SOAP, as the stack notes describe. -----------------------------------------
+# --- Setup: the admin's session, and SOAP gone. -----------------------------------------------------------------
+# The non-admin user comes from the smoke-api-user seed. This script stored it with SOAP's storeUser until Healdan
+# removed LogicalDOC's SOAP services; the same request now finds no service.
 admin_sid=$(curl -fsS -d username=admin -d password=admin "$BASE/services/rest/auth/loginForm" | tr -d '"[:space:]')
 soap_user=$(cat <<XML
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:ws="http://ws.logicaldoc.com">
@@ -147,10 +151,9 @@ soap_user=$(cat <<XML
 </user></ws:storeUser></soapenv:Body></soapenv:Envelope>
 XML
 )
-soap_code=$(curl -s -o "$OUT" -w '%{http_code}' -H 'Content-Type: text/xml; charset=utf-8' -H 'SOAPAction: ""' \
-  -d "$soap_user" "$BASE/services/Security")
-check "setup: the non-admin user $USER_NAME stored over SOAP" test "$soap_code" = 200
-[ "$FAILED" = 0 ] || { head -c 500 "$OUT"; exit 1; }
+check "setup: SOAP's WSDL answers 404" test "$(http_code "$BASE/services/Auth?wsdl")" = 404
+check "setup: SOAP's storeUser answers 404" test "$(http_code -H 'Content-Type: text/xml; charset=utf-8' \
+  -H 'SOAPAction: ""' -d "$soap_user" "$BASE/services/Security")" = 404
 
 # Each step is a function, so that `check` reports it as one line. They run in the current shell and share state.
 JSON=(-H 'Content-Type: application/json')
