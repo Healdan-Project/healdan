@@ -248,7 +248,7 @@ public class SignInAdmin {
 		history.setEvent(UserEvent.PASSWORDCHANGED);
 		history.setAuthor(by.getUsername());
 		history.setComment("Unlinked from the sign-in provider %s by %s".formatted(provider, by.getUsername()));
-		// Only this store: the listener lets every user save on the thread move off OIDC while it runs
+		// Only this store, and only this account: the listener lets it move off OIDC while it runs
 		storeUnlinking(user, history);
 
 		link.setUnlinked(new Date());
@@ -311,7 +311,7 @@ public class SignInAdmin {
 
 	private static void storeUnlinking(User user, UserHistory history) throws PersistenceException {
 		try {
-			ProviderPasswordListener.unlinking(() -> {
+			ProviderPasswordListener.unlinking(user.getId(), () -> {
 				UserDAO.get().store(user, history);
 				return null;
 			});

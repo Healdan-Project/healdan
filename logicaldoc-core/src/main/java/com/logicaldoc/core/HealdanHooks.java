@@ -7,6 +7,7 @@ import com.logicaldoc.core.document.Document;
 import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.metadata.AttributeSet;
 import com.logicaldoc.core.security.user.Group;
 
 /**
@@ -203,6 +204,31 @@ public interface HealdanHooks {
      * @throws PersistenceException to refuse the delete
      */
     default void beforeGroupDelete(Group group) throws PersistenceException {
+        // No check by default
+    }
+
+    /**
+     * Called first in {@code HibernateAttributeSetDAO.store}, before the set
+     * or its attributes are written, so the database still holds its old
+     * attributes
+     *
+     * @param set the attribute set to store, with the attributes it is to have
+     *
+     * @throws PersistenceException to refuse the store
+     */
+    default void beforeAttributeSetStore(AttributeSet set) throws PersistenceException {
+        // No check by default
+    }
+
+    /**
+     * Called first in {@code HibernateAttributeSetDAO.delete}, before the set is
+     * renamed and marked deleted and its options are deleted
+     *
+     * @param set the attribute set to delete
+     *
+     * @throws PersistenceException to refuse the delete
+     */
+    default void beforeAttributeSetDelete(AttributeSet set) throws PersistenceException {
         // No check by default
     }
 

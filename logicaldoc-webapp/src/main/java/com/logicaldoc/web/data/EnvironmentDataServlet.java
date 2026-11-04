@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Properties;
 
 import com.logicaldoc.core.PersistenceException;
@@ -49,7 +50,8 @@ public class EnvironmentDataServlet extends AbstractDataServlet {
 		for (Map.Entry<String, String> entry : env.entrySet()) {
 			writer.print("<entry><scope>system</scope>");
 			writer.print(String.format(NAME, entry.getKey()));
-			writer.print(String.format(VALUE, entry.getValue()));
+			// Healdan: masks what looks secret, the database password among it
+			writer.print(String.format(VALUE, HealdanSecrets.shown(entry.getKey(), entry.getValue())));
 			writer.print(ENTRY_CLOSE);
 		}
 
@@ -57,7 +59,9 @@ public class EnvironmentDataServlet extends AbstractDataServlet {
 		for (Map.Entry<Object, Object> entry : props.entrySet()) {
 			writer.print("<entry><scope>java</scope>");
 			writer.print(String.format(NAME, entry.getKey()));
-			writer.print(String.format(VALUE, entry.getValue()));
+			// Healdan: masks what looks secret
+			writer.print(String.format(VALUE,
+					HealdanSecrets.shown(entry.getKey().toString(), Objects.toString(entry.getValue(), null))));
 			writer.print(ENTRY_CLOSE);
 		}
 

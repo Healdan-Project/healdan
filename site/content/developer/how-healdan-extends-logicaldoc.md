@@ -10,8 +10,9 @@ merges upstream's fixes, so its own work stays out of upstream's files wherever 
 ## LogicalDOC's Modules
 
 - `logicaldoc-util` is at the bottom, and `logicaldoc-core` builds on it.
-- The feature modules build on core: `logicaldoc-webservice` (SOAP through CXF, and REST), `logicaldoc-webdav`,
-  `logicaldoc-cmis`, `logicaldoc-dropbox`, `logicaldoc-android` and `logicaldoc-ios`.
+- The feature modules build on core: `logicaldoc-webservice` (REST through CXF; Healdan's `SoapRemover` removes its
+  SOAP endpoints), `logicaldoc-webdav`, `logicaldoc-cmis`, `logicaldoc-dropbox`, `logicaldoc-android` and
+  `logicaldoc-ios`.
 - `logicaldoc-webapp` is the WAR that bundles everything. `logicaldoc-gui` is the GWT client, and depends only on
   util. `logicaldoc-i18n` holds the message bundles.
 

@@ -118,12 +118,14 @@ A desktop client, such as the Healdan Helper, signs in through the system browse
    The answer is `201`, as for a password.
 
 - **The code works once,** for 60 seconds, with the verifier of the challenge the sign-in started with and the same
-  `redirectUri`, character for character. Anything else is `401 sign-in-failed`, as a wrong password is, and a
-  wrong verifier or address uses the code up. A sign-in the server can't keep, as when its secret key file is
-  missing, is `500 server-error`, whose `detail` says so; the code is used up, and the helper starts again.
+  `redirectUri`, character for character, while its provider is still on. Anything else is `401 sign-in-failed`, as
+  a wrong password is, and a wrong verifier or address, or a provider turned off since the code was issued, uses the
+  code up. A sign-in the server can't keep, as when its secret key file is missing, is `500 server-error`, whose
+  `detail` says so; the code is used up, and the helper starts again.
 - **A body has a password or a code, never both.** One with fields of each is `422 validation`, and so is a code
-  without its `codeVerifier` or `redirectUri` (`required`). `name` and `device` are checked as for a password,
-  before the code is used.
+  without its `codeVerifier` or `redirectUri` (`required`), or with a `codeVerifier` that isn't 43 to 128 letters,
+  digits, `-`, `.`, `_` and `~`, as RFC 7636 has it (`invalid`). `name` and `device` are checked as for a password.
+  All of these are checked before the code is used, so it still works with a body put right.
 - **The token is a device token like any other,** with the same limits and the same routes to sign it out. Healdan
   keeps the provider's refresh token with it, encrypted, and never sends it to the client.
 
@@ -446,9 +448,9 @@ describes it, and its tests fail when it calls a route or reads a field the desc
 
 ## LogicalDOC's Web Services and API Keys
 
-LogicalDOC's own web services are still there: SOAP and REST under `/services/`. They take LogicalDOC's API keys,
-which start `ld-` and are sent as `X-API-KEY`. People make them in the web page, under the person icon in the top
-bar, in **Security → API Keys**.
+LogicalDOC's own REST web services are still there, under `/services/rest/`; Healdan doesn't offer LogicalDOC's SOAP
+services. They take LogicalDOC's API keys, which start `ld-` and are sent as `X-API-KEY`. People make them in the
+web page, under the person icon in the top bar, in **Security → API Keys**.
 
 They're LogicalDOC's older services. They speak LogicalDOC's words, so a Store is a workspace there, and an API key
 never expires and survives a password change. New clients use `/api`, which doesn't take API keys.
@@ -457,7 +459,6 @@ An account that signs in through a provider can't use an API key at all: linking
 key it makes afterwards in the web page is refused on every route.
 
 **A device token isn't an API key.** It works only under `/api`. LogicalDOC's services refuse it however it's sent:
-to `/services/rest/auth/loginApiKey` or the SOAP service's `loginApiKey`, as `X-API-KEY` on any of their routes, or
-as the password or key of a Basic sign-in, which WebDAV and CMIS use. So a lost token can't be turned into an API
-key, which would outlast it. Still, guard a token as you would the password: until it's revoked, it signs in to the
-API as you.
+to `/services/rest/auth/loginApiKey`, as `X-API-KEY` on any of their routes, or as the password or key of a Basic
+sign-in, which WebDAV and CMIS use. So a lost token can't be turned into an API key, which would outlast it. Still,
+guard a token as you would the password: until it's revoked, it signs in to the API as you.

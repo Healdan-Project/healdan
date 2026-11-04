@@ -14,12 +14,16 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.EnumSet;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 
@@ -77,6 +81,9 @@ public class SecretBox {
 
 	private static final SecureRandom RANDOM = new SecureRandom();
 
+	/** The most values {@link #opens} remembers; past it, it starts again */
+	private static final int MAX_REMEMBERED = 100;
+
 	/**
 	 * Held while a key is made, by every box, so that two first uses make one
 	 * key even for the same file; the lock file does the same between processes
@@ -93,6 +100,16 @@ public class SecretBox {
 	private final AtomicBoolean warnedNoKey = new AtomicBoolean();
 
 	private final AtomicBoolean warnedUnopened = new AtomicBoolean();
+
+	/**
+	 * Values that opened, with the key file as it was when they did, for
+	 * {@link #opens}. Never the secrets themselves.
+	 */
+	private final Map<String, KeyStamp> opened = new ConcurrentHashMap<>();
+
+	/** The key file as its attributes show it: another key, or none, shows otherwise */
+	private record KeyStamp(FileTime modified, long size, Object fileKey) {
+	}
 
 	/**
 	 * There is no key file, and stored values are sealed with the key that's
@@ -255,6 +272,48 @@ public class SecretBox {
 			return new String(cipher.doFinal(raw, IV_BYTES, raw.length - IV_BYTES), StandardCharsets.UTF_8);
 		} catch (GeneralSecurityException | IllegalArgumentException e) {
 			return unopened();
+		}
+	}
+
+	/**
+	 * Tells whether a sealed value opens, as {@code open(sealed) != null} does,
+	 * without opening it again while neither it nor the key file changed: a
+	 * value that opened is remembered with the key file's size, time and
+	 * identity, never with the secret. Listing the providers that are on asks
+	 * it of each provider's client secret, and {@code GET /api/v1/server},
+	 * which anyone may call, lists them.
+	 *
+	 * @param sealed a value {@link #seal} made, possibly null
+	 * @return true if it opens with the key that's there
+	 */
+	public boolean opens(String sealed) {
+		if (StringUtils.isEmpty(sealed))
+			return false;
+		KeyStamp stamp = stamp();
+		if (stamp != null && stamp.equals(opened.get(sealed)))
+			return true;
+		// Opened, it logs as it does when there is no key or another key sealed the value
+		if (open(sealed) == null)
+			return false;
+		// Taken before the value opened: a key replaced meanwhile shows as another stamp at the next call
+		if (stamp != null) {
+			if (opened.size() >= MAX_REMEMBERED)
+				opened.clear();
+			opened.put(sealed, stamp);
+		}
+		return true;
+	}
+
+	/** @return the key file's stamp, or null if there is no such file, or it can't be read */
+	private KeyStamp stamp() {
+		try {
+			BasicFileAttributes attributes = Files.readAttributes(keyFile, BasicFileAttributes.class);
+			// A file made unreadable in place (chmod, chown, a relabel) keeps its time, size and identity
+			return attributes.isRegularFile() && Files.isReadable(keyFile)
+					? new KeyStamp(attributes.lastModifiedTime(), attributes.size(), attributes.fileKey())
+					: null;
+		} catch (IOException e) {
+			return null;
 		}
 	}
 

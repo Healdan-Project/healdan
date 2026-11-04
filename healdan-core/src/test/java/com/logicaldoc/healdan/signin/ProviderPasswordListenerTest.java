@@ -173,7 +173,7 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testUnlinkingMayMoveOff() throws Exception {
-		String password = ProviderPasswordListener.unlinking(() -> {
+		String password = ProviderPasswordListener.unlinking(jane.getId(), () -> {
 			User loaded = load(jane);
 			loaded.setSource(UserSource.DEFAULT);
 			loaded.setDecodedPassword(NEW_PASSWORD);
@@ -189,10 +189,10 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testUnlinkingEndsWithItsWork() throws Exception {
-		assertThrows(IllegalStateException.class, () -> ProviderPasswordListener.unlinking(() -> {
+		assertThrows(IllegalStateException.class, () -> ProviderPasswordListener.unlinking(jane.getId(), () -> {
 			throw new IllegalStateException("failed");
 		}));
-		assertEquals("done", ProviderPasswordListener.unlinking(() -> "done"));
+		assertEquals("done", ProviderPasswordListener.unlinking(jane.getId(), () -> "done"));
 
 		// Neither left the thread allowed
 		User loaded = load(jane);
@@ -203,8 +203,9 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 
 	@Test
 	public void testUnlinkingInsideUnlinking() throws Exception {
-		ProviderPasswordListener.unlinking(() -> {
-			ProviderPasswordListener.unlinking(() -> null);
+		User pat = linked("pat");
+		ProviderPasswordListener.unlinking(jane.getId(), () -> {
+			ProviderPasswordListener.unlinking(pat.getId(), () -> null);
 			// Still allowed after the inner one ends
 			User loaded = load(jane);
 			loaded.setSource(UserSource.DEFAULT);
@@ -213,6 +214,45 @@ public class ProviderPasswordListenerTest extends AbstractHealdanTestCase {
 			return null;
 		});
 		assertEquals(UserSource.DEFAULT.ordinal(), storedSource(jane.getId()));
+	}
+
+	/*
+	 * Unlinking exempts only the account it unlinks: another provider account
+	 * the work saves, on the same thread, still can't get a password or move
+	 * off its provider
+	 */
+	@Test
+	public void testUnlinkingExemptsOnlyItsAccount() throws Exception {
+		User pat = linked("pat");
+		ProviderPasswordListener.unlinking(jane.getId(), () -> {
+			User withPassword = load(pat);
+			withPassword.setDecodedPassword(NEW_PASSWORD);
+			assertThrows(ProviderPasswordException.class, () -> UserDAO.get().store(withPassword));
+			User movedOff = load(pat);
+			movedOff.setSource(UserSource.DEFAULT);
+			movedOff.setDecodedPassword(NEW_PASSWORD);
+			assertThrows(ProviderPasswordException.class, () -> UserDAO.get().store(movedOff));
+
+			User loaded = load(jane);
+			loaded.setSource(UserSource.DEFAULT);
+			loaded.setDecodedPassword(NEW_PASSWORD);
+			UserDAO.get().store(loaded);
+			return null;
+		});
+
+		assertNull(storedPassword(pat.getId()));
+		assertEquals(UserSource.OIDC.ordinal(), storedSource(pat.getId()));
+		assertEquals(UserSource.DEFAULT.ordinal(), storedSource(jane.getId()));
+		assertEquals(hash(NEW_PASSWORD), storedPassword(jane.getId()));
+	}
+
+	/* A provider account with no password, as linking leaves one */
+	private User linked(String username) throws Exception {
+		User loaded = load(fx.user(username));
+		loaded.setSource(UserSource.OIDC);
+		loaded.setPassword(null);
+		UserDAO.get().store(loaded);
+		return loaded;
 	}
 
 	@Test

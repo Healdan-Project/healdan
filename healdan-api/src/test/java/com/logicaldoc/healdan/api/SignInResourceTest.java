@@ -296,6 +296,31 @@ public class SignInResourceTest extends ApiTestCase {
 			assertEquals(requested, FRONTEND, landing(requested));
 	}
 
+	/*
+	 * A failure opening the web page's session, other than LogicalDOC's
+	 * refusal, refuses the sign-in as account at the login page, with the
+	 * cookie cleared, rather than a 500, as in the helper's branch
+	 */
+	@Test
+	public void testSessionFailingRefusesTheBrowser() throws Exception {
+		SignInResource.sessions = (user, client) -> {
+			throw new IllegalStateException("The working times couldn't be read");
+		};
+		ApiResponse response;
+		try {
+			response = signIn("fake", new MockHttpSession());
+		} finally {
+			SignInResource.sessions = SignInResource.CE_SESSIONS;
+		}
+		assertRefused("account", response);
+		String cleared = setCookie(response, "hd_signin");
+		assertTrue(response.toString(), cleared != null && has(cleared, "Max-Age=0"));
+		assertEquals(0, SessionManager.get().countOpened("jane"));
+
+		// Put right, the same person signs in
+		assertEquals(FRONTEND, signIn("fake", new MockHttpSession()).header("Location"));
+	}
+
 	@Test
 	public void testCallbackFromAnotherBrowserRefused() throws Exception {
 		// No cookie at all, as when someone else's browser is handed the provider's answer

@@ -17,6 +17,7 @@ import com.logicaldoc.core.document.DocumentHistory;
 import com.logicaldoc.core.folder.Folder;
 import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.folder.FolderHistory;
+import com.logicaldoc.core.metadata.AttributeSet;
 import com.logicaldoc.core.security.user.Group;
 import com.logicaldoc.core.security.user.GroupDAO;
 import com.logicaldoc.core.security.user.User;
@@ -29,6 +30,7 @@ import com.logicaldoc.healdan.matter.MatterLocator;
 import com.logicaldoc.healdan.preview.ConversionPages;
 import com.logicaldoc.healdan.profile.EditMarks;
 import com.logicaldoc.healdan.profile.Inheritance;
+import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.profile.Propagation;
 import com.logicaldoc.healdan.profile.StoredProfile;
 import com.logicaldoc.healdan.security.PermissionRules;
@@ -54,6 +56,12 @@ public class HealdanHooksImpl implements HealdanHooks {
 	static final String EVERYONE_DELETE = "The Everyone group can't be deleted.";
 
 	static final String EVERYONE_RENAME = "The Everyone group can't be renamed.";
+
+	static final String PROFILE_SET_DELETE = "The Healdan profile's attribute set can't be deleted: it holds the "
+			+ "Class and Subclass lists.";
+
+	static final String PROFILE_SET_ATTRIBUTES = "The Healdan profile's attribute set must keep its Class and "
+			+ "Subclass attributes.";
 
 	private final FilingRules rules;
 
@@ -270,6 +278,31 @@ public class HealdanHooksImpl implements HealdanHooks {
 	public void beforeGroupDelete(Group group) throws PersistenceException {
 		if (group != null && HealdanConstants.EVERYONE_GROUP.equals(group.getName()))
 			throw new HealdanRuleException(EVERYONE_DELETE);
+	}
+
+	/**
+	 * The profile's attribute set holds the Class and Subclass lists, which
+	 * deleting it would empty, for whoever holds Document metadata (25), CE's
+	 * poweruser group among them
+	 */
+	@Override
+	public void beforeAttributeSetDelete(AttributeSet set) throws PersistenceException {
+		if (set != null && ProfileSchema.get().holdsTheLists(set.getId()))
+			throw new HealdanRuleException(PROFILE_SET_DELETE);
+	}
+
+	/**
+	 * CE deletes the options of an attribute a stored set no longer has, so
+	 * taking Class or Subclass out of the set the profile takes it from
+	 * empties its list. Only those it takes from the set are kept.
+	 */
+	@Override
+	public void beforeAttributeSetStore(AttributeSet set) throws PersistenceException {
+		if (set == null || set.getId() == 0)
+			return;
+		for (String list : ProfileSchema.get().listsIn(set.getId()))
+			if (set.getAttribute(list) == null)
+				throw new HealdanRuleException(PROFILE_SET_ATTRIBUTES);
 	}
 
 	/**

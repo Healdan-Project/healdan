@@ -16,11 +16,37 @@ menu, are Healdan's version and the installation ID; give both when you report a
 | Plugins | the parts Healdan is built from, with their versions |
 | Run level | which of LogicalDOC's features run, such as saving history and running tasks. Leave it on **Default** |
 | Log | the server's log, `dms.log`, with **Download the logs** |
-| Environment | the settings the server runs with, the container's environment among them |
+| Environment | the settings the server runs with, the container's environment among them, with secrets masked |
+
+The **Environment** tab shows `********` in place of anything that looks secret: a variable or setting whose name
+has *password*, *secret*, *token*, *credential*, *API key*, *access key*, *private key*, *security key* or
+*licence key* in it, such as `DB_PASSWORD`, a `-D` option named that way inside another value, such as
+`CATALINA_OPTS`, and the password in an address, such as a proxy's. An empty value still shows as empty, so you can
+see whether it's set.
 
 {{< callout type="warning" >}}
-The **Environment** tab shows the database password from your `.env` file, in plain text. Don't share a screenshot
-of it.
+A secret under some other name still shows in plain text. Check a screenshot of the **Environment** tab before you
+share it.
+{{< /callout >}}
+
+## Downloading the Logs
+
+**Download the logs**, on the **Log** tab, makes a zip for whoever helps you with a problem. It holds:
+
+- the server's logs and Tomcat's
+- the server's settings, as it runs with them and as `context.properties` and the other files in its
+  configuration folder hold them, and Tomcat's settings
+- the environment, as the **Environment** tab lists it
+- the database's details, the updates and patches applied, the statistics, and the legal notices people have
+  confirmed
+
+The zip masks what the **Environment** tab masks, in the environment and in every `.properties` file, such as the
+database, email and proxy passwords in `context.properties`. Those files go in rewritten with their settings in
+alphabetical order and without their comments.
+
+{{< callout type="warning" >}}
+The logs and the other settings files, Tomcat's `server.xml` among them, go in as they are, and so does a secret
+under some other name. Look through the zip before you send it.
 {{< /callout >}}
 
 ## Signing Someone Out
