@@ -108,7 +108,8 @@ LibreOffice going, or as soon as the helper starts after your Mac restarts, this
 
 ![The crash window: Healdan's mark with a warning triangle, and the headline Subscription Agreement – Draft #32 v2.0 closed unexpectedly. It's still checked out to you, and your local copy is kept. With the Send and Check In and Reopen buttons](after-a-crash.png)
 
-- **Reopen** opens your kept copy, with what you last saved, and carries on as before.
+- **Reopen** opens your kept copy, with what you last saved, and carries on as before. The helper checks with
+  Healdan first that the document is still checked out to you: see [Reopening After a Crash](#reopening-after-a-crash).
 - **Send and Check In** sends what Healdan hasn't had yet, and checks the document in.
 - **Closing the window** decides nothing: the document stays in the helper's menu, marked "(closed unexpectedly)",
   until you choose it, which reopens it. The helper's icon in the menu bar shows a dot until you choose the
@@ -149,6 +150,24 @@ save back.
 A PDF opened read-only in CoffeePDF has nothing to lose: it goes from your Mac when its window closes, or at the latest
 once CoffeePDF has quit.
 
+## Reopening After a Crash
+
+A document's check-out can end while its app is away, such as when someone unlocks it in the web page. So before your
+kept copy reopens, from the crash window's **Reopen**, the helper's menu, **Open from Healdan** or **Open in App**, the
+helper asks Healdan whether the document is still checked out to you. It asks too when Word, Excel or PowerPoint brings
+your work back by itself, before that goes to Healdan:
+
+- **It is:** the copy reopens, and carries on as before.
+- **Nobody has it now, and nothing newer was stored:** the helper checks it out to you again, and the copy reopens and
+  carries on as before.
+- **Someone else has it, you have it on another computer, someone stored newer content, or the document has been
+  deleted or you can't open it any more:** the copy still reopens, with your work in it, and at once a notice says "It
+  can't be saved to Healdan any more. Your copy is kept: use Save as New Document to file your changes." You know
+  before you work on it: see [Your Check-Out Ended](#your-check-out-ended). The helper doesn't move the check-out back
+  from your other computer, as you may have the document open there.
+- **Healdan can't be reached, or doesn't answer within a few seconds:** the copy reopens all the same. If its check-out
+  had ended, your first save tells you.
+
 ## Your Check-Out Ended
 
 While you had the document open, its check-out ended:
@@ -157,7 +176,9 @@ While you had the document open, its check-out ended:
 - you chose **Edit Here Instead** for it on another of your computers.
 
 Your next save, or closing the window, is then refused, so it can't land on a document that's moved on. A notice says
-"It can't be saved to Healdan any more. Your copy is kept: use Save as New Document to file your changes."
+"It can't be saved to Healdan any more. Your copy is kept: use Save as New Document to file your changes." If the app
+crashed first, the helper checks as you reopen the copy, so the notice can come then: see
+[Reopening After a Crash](#reopening-after-a-crash).
 
 - **While it's open:** choose **Healdan › Save as New Document…** to file your changes as a new document.
 - **If you've closed it:** the helper's menu lists it under **Not Yet in Healdan**. Choose it there to open your kept
