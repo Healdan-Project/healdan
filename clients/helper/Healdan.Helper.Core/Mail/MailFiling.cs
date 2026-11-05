@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
@@ -32,10 +31,7 @@ public sealed class MailTooLargeException(string detail) : Exception(detail);
 /// says only that it did, and the notification says why. The Save window shows its own refusals.
 /// </param>
 /// <param name="log">The helper's log.</param>
-/// <param name="clock">The real clock in the helper; tests pass one they can move on. For a several-message ticket's expiry.</param>
-#pragma warning disable CS9113 // Filing several messages (M5 plan, Task 13) uses clock; the session builds it complete from the start.
-public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notifier, HelperLog log, TimeProvider? clock = null)
-#pragma warning restore CS9113
+public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notifier, HelperLog log)
 {
     private const string Helper = "Healdan Helper";
 
@@ -60,7 +56,8 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
     /// <para><c>copies</c> are the readable copies of the message's own id, <c>address</c> the page of the server's that shows
     /// one. <c>elsewhere</c> is true when the message is filed but its thread's newest copy is in a matter none of the
     /// message's copies is in, so the pane can say Filed in Another Matter. <c>suggestions</c> are the folders of the other
-    /// ids' copies, newest first, then the person's recent folders (<see cref="Suggestions"/>).</para>
+    /// ids' copies, newest first, then the person's recent folders (<see cref="Suggestions"/>); none for a message filed
+    /// where its thread is, as the pane offers File Here only for a message not filed or filed in another matter.</para>
     /// <para>The server's answers are matched to the ids by the id the server gives back, normalised as the helper sent it,
     /// never by position, as the server collapses ids that differ only in their brackets.</para>
     /// </summary>
@@ -82,20 +79,19 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
         List<EmailCopy.Copy> ownCopies = own is not null && byId.TryGetValue(own, out var found) ? found : [];
         List<EmailCopy.Copy> threadCopies = [.. ask.Where(id => id != own).SelectMany(id => byId.TryGetValue(id, out var c) ? c : [])];
         HashSet<long> heldIn = [.. ownCopies.Select(c => c.Document.Matter?.Id).OfType<long>()];
-        var suggestions = await SuggestionsAsync([.. threadCopies.Select(c => c.Document)], heldIn);
+        var elsewhere = Elsewhere(ownCopies, threadCopies);
+        var suggestions = ownCopies.Count > 0 && !elsewhere ? [] : await SuggestionsAsync([.. threadCopies.Select(c => c.Document)], heldIn);
 
         return new JsonObject
         {
             ["filed"] = ownCopies.Count > 0,
-            ["copies"] = new JsonArray([.. ownCopies.Select(c => (JsonNode)new JsonObject
+            ["copies"] = new JsonArray([.. ownCopies.Select(c =>
             {
-                ["docNumber"] = c.Document.DocNumber,
-                ["name"] = c.Document.Name,
-                ["matter"] = c.Document.Matter?.Display,
-                ["folder"] = c.Document.Folder.Name,
-                ["address"] = c.Address,
+                var copy = Written(c.Document);
+                copy["address"] = c.Address;
+                return (JsonNode)copy;
             })]),
-            ["elsewhere"] = Elsewhere(ownCopies, threadCopies),
+            ["elsewhere"] = elsewhere,
             ["suggestions"] = new JsonArray([.. suggestions.Select(f => (JsonNode)new JsonObject
             {
                 ["folderId"] = f.Id,
@@ -149,10 +145,11 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
     }
 
     /// <summary>
-    /// The folders to suggest: the thread's, each read once, and only as many as it takes to have <see cref="Suggestions.Max"/>;
-    /// the recent folders only if the thread's don't fill the list. None in a matter of <paramref name="heldIn"/>, which hold
-    /// the message already. Suggestions are a convenience: when the server fails a read for now (anything but a folder
-    /// that's gone or not the person's to see), there are none, and the status still says where the message is filed.
+    /// The folders to suggest: the thread's, each read once, <see cref="Suggestions.Max"/> at a time and together, and only
+    /// until there are enough to have <see cref="Suggestions.Max"/>; the recent folders only if the thread's don't fill the
+    /// list. None in a matter of <paramref name="heldIn"/>, which hold the message already. Suggestions are a convenience:
+    /// when the server fails a read for now (anything but a folder that's gone or not the person's to see), there are none,
+    /// and the status still says where the message is filed.
     /// </summary>
     private async Task<IReadOnlyList<FolderView>> SuggestionsAsync(IReadOnlyList<DocumentView> threadCopies, IReadOnlySet<long> heldIn)
     {
@@ -160,14 +157,17 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
         {
             Dictionary<long, FolderView?> read = [];
             var offerable = 0;
-            foreach (var id in Suggestions.ThreadFolderIds(threadCopies))
+            foreach (var batch in Suggestions.ThreadFolderIds(threadCopies).Chunk(Suggestions.Max))
             {
                 if (offerable >= Suggestions.Max)
                     break;
-                var folder = await ReadFolderAsync(id);
-                read[id] = folder;
-                if (folder is not null && Suggestions.Offerable(folder, heldIn))
-                    offerable++;
+                var folders = await Task.WhenAll(batch.Select(ReadFolderAsync));
+                for (var i = 0; i < batch.Length; i++)
+                {
+                    read[batch[i]] = folders[i];
+                    if (folders[i] is { } folder && Suggestions.Offerable(folder, heldIn))
+                        offerable++;
+                }
             }
             var fromThread = Suggestions.Build(threadCopies, id => read.GetValueOrDefault(id), [], heldIn);
             if (fromThread.Count >= Suggestions.Max)
@@ -366,19 +366,13 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
     {
         if (answer["action"] is not JsonValue action || !action.TryGetValue<string>(out var chosen) || chosen != "save")
             return null;
-        var folderId = Whole(answer["folderId"]) ?? throw new InvalidOperationException("The Save window chose no folder.");
+        var folderId = JsonNumbers.Whole(answer["folderId"]) ?? throw new InvalidOperationException("The Save window chose no folder.");
         var properties = answer["properties"] is JsonObject given ? (JsonObject)given.DeepClone() : new JsonObject();
         List<int> attachments = answer["attachments"] is JsonArray ticked
-            ? [.. ticked.Select(t => (int)(Whole(t) ?? throw new InvalidOperationException("The Save window ticked an attachment by no index.")))]
+            ? [.. ticked.Select(t => (int)(JsonNumbers.Whole(t) ?? throw new InvalidOperationException("The Save window ticked an attachment by no index.")))]
             : [];
         return new NewEmail(folderId, properties, attachments);
     }
-
-    /// <summary>Any whole JSON number: a value made in code may hold an int, which <c>GetValue&lt;long&gt;</c> doesn't answer.</summary>
-    private static long? Whole(JsonNode? node) =>
-        node is JsonValue n && n.GetValueKind() == JsonValueKind.Number
-        && long.TryParse(n.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var whole)
-            ? whole : null;
 
     /// <summary>The copy a <c>409 already-filed</c> names, or null when it names none that can be read.</summary>
     private static DocumentView? CopyIn(ApiException e)

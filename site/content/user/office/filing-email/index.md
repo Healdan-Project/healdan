@@ -56,7 +56,9 @@ Filed** with the copy's doc #, and files nothing again. The same message may be 
 
 A message that Healdan has filed, or found already filed, gets Outlook's **Healdan** category, so you can find filed
 mail in Outlook. The category is blue. The first time, Healdan adds it to your mailbox's list of categories, and you can
-change its colour in Outlook afterwards. If Outlook won't add the category, the message is filed all the same.
+change its colour in Outlook afterwards. If Outlook won't add the category, the message is filed all the same. If you
+open another message before a filing ends, the message you filed doesn't get the category, and the pane, showing the
+other message, says so.
 
 ## When Healdan Can't Be Reached
 

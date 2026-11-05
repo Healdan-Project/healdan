@@ -408,7 +408,7 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         foreach (var route in new[]
         {
             "open-dialog", "save-new", "file", "new-version", "properties", "state", "result",
-            "mail/status", "mail/file", "mail/file-many", "mail/file-one",
+            "mail/status", "mail/file",
         })
             IsError(HttpStatusCode.Conflict, "signed-out", await Post(server, route, new JsonObject { ["app"] = "Word", ["url"] = "" }, key));
         var ping = await Post(server, "ping", key: key);
@@ -432,13 +432,13 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
             + $"X-Healdan-Key: {(route.StartsWith("mail/", StringComparison.Ordinal) ? outlook : word)}\r\nContent-Type: application/json\r\nContent-Length: {length}\r\n\r\n");
 
         // Save to Healdan's document, and the messages Outlook files, take up to 150 MiB; every other route, a mebibyte.
-        foreach (var route in new[] { "file", "mail/file", "mail/file-one" })
+        foreach (var route in new[] { "file", "mail/file" })
         {
             var (statusLine, body) = await Head(route, 150L * 1024 * 1024 + 1);
             Assert.Equal("HTTP/1.1 413 Content Too Large", statusLine);
             Assert.Equal("""{"error":"too-large"}""", body);
         }
-        foreach (var route in new[] { "mail/status", "mail/file-many", "save-new", "properties", "state", "open-dialog", "new-version" })
+        foreach (var route in new[] { "mail/status", "save-new", "properties", "state", "open-dialog", "new-version" })
         {
             var (statusLine, body) = await Head(route, 1024 * 1024 + 1);
             Assert.Equal("HTTP/1.1 413 Content Too Large", statusLine);
@@ -454,11 +454,27 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         var outlook = await PairAsync(server, "Outlook");
         var big = new JsonObject { ["bytes"] = new string('A', 2 * 1024 * 1024) };
 
-        // Read, not refused as too large: each then refuses a body without what it takes as a bad request, and mail/file-one
-        // answers that it isn't there yet (M5 plan, Task 13).
+        // Read, not refused as too large: each then refuses a body without what it takes as a bad request.
         IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "file", big, word));
         IsError(HttpStatusCode.BadRequest, "bad-request", await Post(server, "mail/file", big, outlook));
-        IsError(HttpStatusCode.NotFound, "not-found", await Post(server, "mail/file-one", big, outlook));
+    }
+
+    [Fact]
+    public async Task TheSeveralMessageRoutesAreNotThereYetAndReadNoBody()
+    {
+        var server = Start();
+        var outlook = await PairAsync(server, "Outlook");
+
+        // Filing several messages (M5 plan, Task 13) adds them: until then they're routes the port doesn't have, answered
+        // from the head alone, however large a body it says follows.
+        foreach (var route in new[] { "mail/file-many", "mail/file-one" })
+        {
+            var (statusLine, body) = await Raw(server,
+                $"POST /v1/{route} HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+                + $"X-Healdan-Key: {outlook}\r\nContent-Type: application/json\r\nContent-Length: {AddinServer.MaxBodyBytes}\r\n\r\n");
+            Assert.Equal("HTTP/1.1 404 Not Found", statusLine);
+            Assert.Equal("""{"error":"not-found"}""", body);
+        }
     }
 
     [Fact]
@@ -468,7 +484,7 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         var word = await PairAsync(server);
 
         // Only the head is sent, saying 150 MiB follow: the answer comes without the body, and isn't too-large.
-        foreach (var route in new[] { "mail/status", "mail/file", "mail/file-many", "mail/file-one" })
+        foreach (var route in new[] { "mail/status", "mail/file" })
         {
             var (statusLine, body) = await Raw(server,
                 $"POST /v1/{route} HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
@@ -478,6 +494,27 @@ public sealed class AddinServerTests : OfficeCycleTestBase, IDisposable
         }
         Assert.Contains("Refused a request to the Office add-in's port (bad-request): its key isn't Outlook's", Log);
         Assert.Empty(Server.Calls);
+    }
+
+    [Fact]
+    public async Task OutlooksKeyOnADocumentRouteIsRefusedBeforeItsBodyIsRead()
+    {
+        var server = Start();
+        var outlook = await PairAsync(server, "Outlook");
+
+        // The reverse of the mail routes' check: Outlook's add-in files no document, so its key can't have 150 MiB read.
+        foreach (var route in new[] { "open-dialog", "save-new", "file", "new-version", "properties", "state" })
+        {
+            var (statusLine, body) = await Raw(server,
+                $"POST /v1/{route} HTTP/1.1\r\nHost: 127.0.0.1:{server.Port}\r\nOrigin: {Origin}\r\nX-Healdan-Protocol: 1\r\n"
+                + $"X-Healdan-Key: {outlook}\r\nContent-Type: application/json\r\nContent-Length: {AddinServer.MaxBodyBytes}\r\n\r\n");
+            Assert.Equal("HTTP/1.1 400 Bad Request", statusLine);
+            Assert.Equal("""{"error":"bad-request"}""", body);
+        }
+        Assert.Contains("Refused a request to the Office add-in's port (bad-request): its key is Outlook's", Log);
+        // It keeps result, which collects its own routes' outcomes.
+        IsError(HttpStatusCode.NotFound, "no-result", await Post(server, "result", new JsonObject { ["id"] = "AAAAAAAAAAAAAAAAAAAAAA" }, outlook));
+        Assert.Empty(_windows.Asked);
     }
 
     [Fact]

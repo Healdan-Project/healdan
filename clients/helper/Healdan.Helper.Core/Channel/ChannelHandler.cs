@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Copies;
@@ -83,8 +81,7 @@ public sealed class ChannelHandler(CopyCycle cycle, LinkHandler links, IWindows 
         var tempPath = Text(body, "tempPath");
         try
         {
-            var folderId = body["folderId"] is JsonValue id && id.GetValueKind() == JsonValueKind.Number
-                && long.TryParse(id.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var folder) && folder >= 0
+            var folderId = JsonNumbers.Whole(body["folderId"]) is long folder && folder >= 0
                 ? folder
                 : throw new ArgumentException("folderId is missing or isn't a folder's id.", "folderId");
             var name = DocumentName(Text(body, "name"), Optional(body, "format"));

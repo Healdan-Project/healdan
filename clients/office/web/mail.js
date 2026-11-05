@@ -44,7 +44,8 @@
 
   /**
    * The ids of the message and its thread, for mail/status: its own first, then In-Reply-To's, then References's, oldest
-   * first as the header has them. Angle brackets are kept off and an id appears once.
+   * first as the header has them. Angle brackets are kept off and an id appears once. Past MAX_IDS, the oldest References
+   * are left out, as the helper asks about the newest.
    * @param {string} internetMessageId the message's own, with or without angle brackets
    * @param {string} headersText the message's internet headers
    * @returns {string[]} empty when the message has no id of its own
@@ -63,7 +64,12 @@
         (match[1].toLowerCase() === "references" ? references : replyTo).push(...idsIn(match[2]));
       }
     }
-    return [...new Set([own, ...replyTo, ...references])].slice(0, MAX_IDS);
+    const ids = [...new Set([own, ...replyTo, ...references])];
+    if (ids.length <= MAX_IDS) {
+      return ids;
+    }
+    const lead = Math.min(new Set([own, ...replyTo]).size, MAX_IDS);
+    return [...ids.slice(0, lead), ...ids.slice(ids.length - (MAX_IDS - lead))];
   }
 
   // --- What the pane says --------------------------------------------------------------------------------------------------
@@ -93,7 +99,8 @@
       .filter((s) => s && typeof s.folderId === "number" && typeof s.path === "string")
       .slice(0, MAX_SUGGESTIONS)
       .map((s) => ({ folderId: s.folderId, label: s.path }));
-    const kind = a.filed ? "filed" : a.elsewhere ? "elsewhere" : "not-filed";
+    // The helper says elsewhere only of a message that is filed: its thread went to a matter none of its copies is in.
+    const kind = a.elsewhere ? "elsewhere" : a.filed ? "filed" : "not-filed";
     return { kind, lines: copies.map(copyLine), suggestions };
   }
 
@@ -160,7 +167,8 @@
    * @param {number} [folderId] File Here's folder; without it, the helper's Save window opens (File…)
    * @param {number} [openAt] where File…'s window opens: the first suggestion's folder
    * @param {object} [chosen] the message the person chose it for, taken at the click; refused when another is open now
-   * @returns {Promise<{kind: "ok"|"problem", text: string}>} never rejects
+   * @returns {Promise<{kind: "ok"|"problem", text: string, moved?: boolean}>} never rejects; moved: another message is open
+   *   now, and the text says which message it is about
    */
   async function fileMessage(client, glue, folderId, openAt, chosen) {
     const item = chosen || glue.item();
@@ -190,8 +198,12 @@
     }
     if (view.categorise && !sameItem(item, glue.item())) {
       // Filing can take as long as the person's own Save window: the pane may have moved on. The category would land on
-      // the wrong message, so it isn't added.
-      return { kind: view.kind, text: `${view.text} Another message was open, so it has no Healdan category.`, moved: true };
+      // the wrong message, so it isn't added, and the pane, showing the other message now, says which this is about.
+      return {
+        kind: view.kind,
+        text: `The message you chose before this one: ${view.text} It has no Healdan category, as another message was open by then.`,
+        moved: true,
+      };
     }
     if (view.categorise) {
       await categorise(glue, item);
@@ -380,7 +392,12 @@
         }
         ids = threadIds(item.internetMessageId, headers);
         if (ids.length === 0) {
-          if (!queued) {
+          // No Message-ID to look the message up by, but File… still needs a paired, signed-in helper: ping says so.
+          const ping = await client.call("ping", {});
+          if (ping && ping.signedIn === false) {
+            throw new Healdan.HelperError("signed-out");
+          }
+          if (!queued && sameItem(item, glue.item())) {
             render({ kind: "not-filed", lines: [], suggestions: [] }, item);
           }
           return;
@@ -475,8 +492,9 @@
         setBusy("");
         setButtons(false);
       }
-      // The outcome belongs to the message it describes: it is not left on the next one.
-      if (sameItem(item, glue.item())) {
+      // The outcome belongs to the message it describes: it is not left on the next one, but for a filing that left the
+      // category off because another message was open by then, whose words say which message it is about.
+      if (result.moved || sameItem(item, glue.item())) {
         put(els.outcome, result.text);
         els.outcome.className = `status ${result.kind}`;
         show(els.outcome, true);

@@ -446,6 +446,17 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task OutlooksKeyFilesNoDocument()
+    {
+        var handler = Handler(Cycle());
+
+        var answer = await handler.HandleAsync("file", "Outlook", new JsonObject { ["ticket"] = "t", ["mark"] = null, ["bytes"] = "AAAA" });
+
+        Assert.Equal((400, """{"error":"bad-request"}"""), (answer.Status, answer.Body.ToJsonString()));
+        Assert.Empty(Server.Calls);
+    }
+
+    [Fact]
     public async Task AServerThatCantBeReachedIsAnInternalErrorAndLogsNoMessageId()
     {
         Server.Down = true;

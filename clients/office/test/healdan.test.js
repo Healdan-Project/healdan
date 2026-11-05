@@ -346,6 +346,19 @@ test("a file request that fails on the way is lost-result, as the helper may hav
   assert.deepEqual(none.helper.requests.filter((r) => r.route === "file"), []);
 });
 
+test("a mail/file request that fails on the way is lost-result too, as the helper may have filed the message", async () => {
+  let asked = 0;
+  const routes = {
+    "mail/file": () => {
+      asked += 1;
+      throw new TypeError("Load failed");
+    },
+  };
+  const { client } = setup({ host: "Outlook", routes });
+  await failsWith(client.call("mail/file", { eml: "RU1M" }), "lost-result");
+  assert.equal(asked, 1, "a filing the helper may have taken isn't sent twice");
+});
+
 test("an error answer becomes a HelperError with the helper's code and the pane's text", async () => {
   const cases = [
     [409, { error: "signed-out" }, "signed-out"],

@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
@@ -79,6 +78,7 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
                 case "save-new":
                     return AddinAnswer.Ok(await filing.SaveNewAsync(Program(app, body), LocalPath(Optional(body, "url")), Flag(body, "asNew")));
                 case "file":
+                    _ = Program(app, body); // Word's, Excel's or PowerPoint's key: Outlook's files no document
                     var state = await filing.FileAsync(Text(body, "ticket"), Optional(body, "mark"), Bytes(body, "bytes"));
                     return AddinAnswer.Ok(ChannelHandler.Json(state));
                 case "new-version":
@@ -242,8 +242,7 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
     private static long? FolderIdOf(JsonObject body, string key) => body[key] switch
     {
         null => null,
-        JsonValue v when v.GetValueKind() == JsonValueKind.Number
-            && long.TryParse(v.ToJsonString(), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0 => id,
+        var node when JsonNumbers.Whole(node) is long id && id > 0 => id,
         _ => throw new ArgumentException($"{key} isn't a folder's id.", key),
     };
 

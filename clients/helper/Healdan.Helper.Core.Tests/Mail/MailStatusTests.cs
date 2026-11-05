@@ -77,14 +77,29 @@ public sealed class MailStatusTests : IDisposable
     {
         _server.AddFolder(21, "Drafts", 4, OtherMatter);
         _server.AddEmailCopy("m1@example.com", 50, 11, Day);                // the message is in this matter
-        _server.AddEmailCopy("p1@example.com", 51, 12, Day.AddDays(2));     // so the thread's folder here isn't offered,
-        _server.AddEmailCopy("p2@example.com", 52, 20, Day.AddDays(1));     // the other matter's is
+        _server.AddEmailCopy("p1@example.com", 51, 12, Day.AddDays(1));     // so the thread's folder here isn't offered,
+        _server.AddEmailCopy("p2@example.com", 52, 20, Day.AddDays(2));     // the other matter's, where the thread went, is
         _server.SetRecentFolders(13, 21, 11);                              // and of the recent ones, only the other matter's
 
         var status = await Mail().StatusAsync(["m1@example.com", "p1@example.com", "p2@example.com"]);
 
-        Assert.Equal(true, (bool?)status["filed"]);
+        Assert.Equal((true, true), Flags(status));
         Assert.Equal([(20L, $"{OtherMatter} › Correspondence"), (21L, $"{OtherMatter} › Drafts")], Suggested(status));
+    }
+
+    [Fact]
+    public async Task AMessageFiledWhereItsThreadIsIsOfferedNothingAndReadsNoFolder()
+    {
+        _server.AddEmailCopy("m1@example.com", 50, 11, Day);
+        _server.AddEmailCopy("p1@example.com", 51, 12, Day.AddDays(1)); // the thread's newest copy, in the same matter
+        _server.SetRecentFolders(20);
+
+        var status = await Mail().StatusAsync(["m1@example.com", "p1@example.com"]);
+
+        // The pane offers File Here only for a message not filed or filed in another matter: nothing to work out here.
+        Assert.Equal((true, false), Flags(status));
+        Assert.Empty(Suggested(status));
+        Assert.DoesNotContain(_server.Calls, c => c.StartsWith("GET /folders", StringComparison.Ordinal));
     }
 
     [Fact]

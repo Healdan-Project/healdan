@@ -114,8 +114,9 @@ weight: 11
 
 ## Filing Email from Outlook
 
-- **Only the new Outlook for Mac.** The add-in's pane works in the new Outlook for Mac. Legacy Outlook for Mac
-  doesn't run it, and Outlook on Windows and on the web, including on Linux, wait for a later phase.
+- **Only the new Outlook for Mac.** The add-in's pane works in the new Outlook for Mac. The add-in needs Outlook's
+  Mailbox 1.14, which legacy Outlook for Mac lacks, so it doesn't show there, and Outlook on Windows and on the web,
+  including on Linux, wait for a later phase.
 - **The primary mailbox only.** The add-in works in your own mailbox, not in shared or delegated ones: Outlook turns
   its button off there.
 - **Filing is one message at a time for now.** Filing several messages at once isn't available yet: the new Outlook for

@@ -161,6 +161,8 @@ public class AddinResourceTest extends ApiTestCase {
 
 		assertTrue(manifest, manifest.contains("xsi:type=\"MailApp\""));
 		assertTrue(manifest, manifest.contains("<Permissions>ReadWriteMailbox</Permissions>"));
+		// getAsFileAsync, which filing needs, is Mailbox 1.14: an Outlook without it doesn't show the add-in
+		assertTrue(manifest, manifest.contains("<Set Name=\"Mailbox\" MinVersion=\"1.14\"/>"));
 		assertTrue(manifest, manifest.contains("<Host Name=\"Mailbox\"/>"));
 		assertTrue(manifest, manifest.contains("xsi:type=\"MessageReadCommandSurface\""));
 		assertTrue(manifest, manifest.contains("<Action xsi:type=\"ShowTaskpane\">"));

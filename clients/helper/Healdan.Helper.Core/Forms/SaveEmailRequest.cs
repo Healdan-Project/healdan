@@ -45,9 +45,7 @@ public sealed record SaveEmailRequest(string? Subject, string? From, DateTimeOff
             ? list.Select(s => s is JsonValue v && v.TryGetValue<string>(out var text) ? text : null).OfType<string>().ToList()
             : [];
         var sent = Moment(request, "sent");
-        // Any JSON number: a value made in code may hold an int, which TryGetValue<long> doesn't answer.
-        long? folderId = request["folderId"] is JsonValue n && n.GetValueKind() == JsonValueKind.Number
-            && long.TryParse(n.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var id) ? id : null;
+        var folderId = JsonNumbers.Whole(request["folderId"]);
         SubmitOutcome.Refused? refusal = null;
         if (request["refusal"] is JsonObject refused && Text(refused, "problem") is { } problem)
         {

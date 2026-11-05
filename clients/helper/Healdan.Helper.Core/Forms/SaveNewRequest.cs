@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 The Healdan Project
 // SPDX-License-Identifier: LGPL-3.0-only
 
-using System.Globalization;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Healdan.Helper.Core.Api;
 
 namespace Healdan.Helper.Core.Forms;
 
@@ -22,9 +21,7 @@ public sealed record SaveNewRequest(string App, string Name, IReadOnlyList<strin
                 .Where(f => f.Length > 0).Distinct().ToList()
             : [];
         var name = Text(body, "name") ?? "";
-        // Any JSON number: a value made in code may hold an int, which TryGetValue<long> doesn't answer.
-        long? docNumber = body["docNumber"] is JsonValue n && n.GetValueKind() == JsonValueKind.Number
-            && long.TryParse(n.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var d) ? d : null;
+        var docNumber = JsonNumbers.Whole(body["docNumber"]);
         name = DocumentNames.WithoutExtension(name, formats).Trim();
         if (docNumber is not null)
             name = CopySuffix.Replace(name, "").Trim(); // a copy's title carries its doc # and version

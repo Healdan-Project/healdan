@@ -190,6 +190,15 @@ test("threadIds sends at most 100 ids", () => {
   assert.equal(Mail.threadIds("own@x", `References: ${refs}`).length, 100);
 });
 
+test("past 100 ids, threadIds leaves out the oldest References and keeps the newest, which the helper asks about", () => {
+  const refs = Array.from({ length: 150 }, (_, i) => `<r${i}@x>`).join(" ");
+  const ids = Mail.threadIds("own@x", `In-Reply-To: <r149@x>\r\nReferences: ${refs}`);
+  assert.equal(ids.length, 100);
+  assert.deepEqual(ids.slice(0, 2), ["own@x", "r149@x"]);
+  assert.equal(ids[2], "r51@x");
+  assert.equal(ids[99], "r148@x");
+});
+
 // --- statusView and outcomeView ----------------------------------------------------------------------------------------
 
 test("statusView lists each copy with its address, and a copy in another matter is elsewhere", () => {
@@ -199,8 +208,10 @@ test("statusView lists each copy with its address, and a copy in another matter 
     lines: [{ text: "1.1 Smith › Documents, #12345", before: "1.1 Smith › Documents, ", label: "#12345", address: "https://dms/frontend.jsp?docId=9" }],
     suggestions: [],
   });
-  const elsewhere = Mail.statusView({ filed: false, copies: [], elsewhere: true, suggestions: [{ folderId: 4, path: "A/B" }] });
+  // The helper says elsewhere only with filed (MailFiling.Elsewhere): filed, but not where its thread went.
+  const elsewhere = Mail.statusView({ filed: true, copies: [copy], elsewhere: true, suggestions: [{ folderId: 4, path: "A/B" }] });
   assert.equal(elsewhere.kind, "elsewhere");
+  assert.equal(elsewhere.lines.length, 1);
   assert.deepEqual(elsewhere.suggestions, [{ folderId: 4, label: "A/B" }]);
   assert.equal(Mail.statusView({ filed: false, copies: [], elsewhere: false, suggestions: [] }).kind, "not-filed");
 });
@@ -394,6 +405,34 @@ test("start shows Filed with a link, and the helper's text only as text", async 
   assert.equal(page.getElementById("suggestions").children.length, 0);
 });
 
+test("start shows Filed in Another Matter, as the helper answers it, with the copies and the thread's folder to file in", async () => {
+  const client = fakeClient({
+    "mail/status": { filed: true, elsewhere: true, copies: [{ docNumber: 1, name: "N", matter: "A", folder: "F", address: "" }], suggestions: [{ folderId: 4, path: "B › Correspondence" }] },
+  });
+  const { page, text } = await open({ client, glue: fakeGlue() });
+  assert.equal(text("status"), "Filed in Another Matter");
+  assert.equal(page.getElementById("copies").children[0].textContent, "A › F, #1");
+  assert.equal(page.getElementById("suggestions").children.length, 1);
+  assert.equal(page.getElementById("suggestions").children[0].children[1].textContent, "B › Correspondence");
+});
+
+test("a message without a Message-ID is Not Filed once the helper is there, paired and signed in", async () => {
+  const ok = fakeClient({ ping: { ok: true, signedIn: true } });
+  const shown = await open({ client: ok, glue: fakeGlue({ item: { internetMessageId: "" } }) });
+  assert.equal(shown.text("status"), "Not Filed");
+  assert.deepEqual(ok.calls.map((c) => c.route), ["ping"]);
+  assert.equal(shown.page.getElementById("actions-section").hidden, false);
+
+  const signedOut = await open({ client: fakeClient({ ping: { ok: true, signedIn: false } }), glue: fakeGlue({ item: { internetMessageId: "" } }) });
+  assert.equal(signedOut.text("status"), "message for signed-out");
+  assert.equal(signedOut.timing.timers.length, 1, "it looks again");
+
+  const unpaired = fakeClient({ ping: { error: "not-paired" } });
+  const pairing = await open({ client: unpaired, glue: fakeGlue({ item: { internetMessageId: "" } }) });
+  assert.equal(pairing.page.getElementById("pairing").hidden, false);
+  assert.ok(unpaired.calls.some((c) => c.route === "pair/start"));
+});
+
 test("File Here and File... file, show the outcome, and check the status again", async () => {
   const client = fakeClient({
     "mail/status": { filed: false, copies: [], elsewhere: false, suggestions: [{ folderId: 5, path: "P" }] },
@@ -522,15 +561,18 @@ test("when the open message moves on during a filing, there is no category and t
     client.release();
     await filing;
     assert.equal(glue.log.includes("addCategory"), false);
-    // The outcome belongs to A, so it isn't shown on B.
-    assert.equal(page.getElementById("outcome").hidden, true);
+    // The outcome is A's, shown on B in words that say so, as nothing else tells the person A has no category.
+    const moved = `The message you chose before this one: ${start} It has no Healdan category, as another message was open by then.`;
+    assert.equal(page.getElementById("outcome").hidden, false);
+    assert.equal(page.getElementById("outcome").textContent, moved);
 
     // The same through fileMessage: the open message is A when the filing starts and B when it ends.
     const opened = [{ itemId: "A" }]; // the check at the start sees A, the one after the filing sees B
     const moving = fakeGlue();
     moving.item = () => opened.shift() ?? { itemId: "B" };
     const view = await Mail.fileMessage(fakeClient({ "mail/file": { outcome, email } }), moving, 1, undefined, { itemId: "A" });
-    assert.equal(view.text, `${start} Another message was open, so it has no Healdan category.`);
+    assert.equal(view.text, moved);
+    assert.equal(view.moved, true);
     assert.equal(moving.log.includes("addCategory"), false);
   }
 });
