@@ -14,6 +14,9 @@
  *
  * Several messages at once are not handled yet: with none or more than one open, the pane says to select one.
  *
+ * It works in Outlook for Mac only, where the helper is. Outlook on the web and new Outlook for Windows have Mailbox 1.14
+ * too, so the button shows there, and the pane then says it works in the new Outlook for Mac only and asks nothing.
+ *
  * It is a classic script: no import, no npm. Under Node (clients/office/test/mail.test.js) it sets only
  * `module.exports`; on a page it starts itself. The logic (threadIds, statusView, outcomeView, fileMessage) takes the
  * helper's client and the glue (mail-glue.js) as arguments, so the tests give it fakes.
@@ -29,6 +32,9 @@
 
   /** At most this many suggestions are shown. */
   const MAX_SUGGESTIONS = 5;
+
+  /** What the pane says in an Outlook that isn't on a Mac, where there is no Healdan Helper to reach. */
+  const MAC_ONLY = "For now, Healdan's Outlook pane works in the new Outlook for Mac only, with Healdan Helper on the Mac.";
 
   /** The words for a helper that couldn't reach Healdan, or couldn't read the message (internal-error). */
   const CANT_REACH =
@@ -73,6 +79,15 @@
   }
 
   // --- What the pane says --------------------------------------------------------------------------------------------------
+
+  /**
+   * Whether the pane can work where Outlook runs: on a Mac, where the helper is. Outlook names its platform from Mailbox
+   * 1.5, and the manifest asks for 1.14, so one that doesn't name it is taken for the Mac rather than turned away.
+   * @param {string} platform the glue's platform(): "Mac", "PC", "OfficeOnline", …, or ""
+   */
+  function worksHere(platform) {
+    return typeof platform !== "string" || platform === "" || platform === "Mac";
+  }
 
   function copyLine(copy) {
     // "<matter> › <folder>, #<docNumber>" (M5 spec section 8.2), the matter as the helper gives it; the doc # is the link.
@@ -196,7 +211,8 @@
     } catch (error) {
       return { kind: "problem", text: failureText(error) };
     }
-    if (view.categorise && !sameItem(item, glue.item())) {
+    const now = glue.item();
+    if (view.categorise && !sameItem(item, now)) {
       // Filing can take as long as the person's own Save window: the pane may have moved on. The category would land on
       // the wrong message, so it isn't added, and the pane, showing the other message now, says which this is about.
       return {
@@ -206,7 +222,9 @@
       };
     }
     if (view.categorise) {
-      await categorise(glue, item);
+      // The same message, but maybe not the same object: after A, B and A again, Office.js has given mailbox.item a new
+      // one, and the one taken at the click may be stale. The category goes on the one open now.
+      await categorise(glue, now);
     }
     return { kind: view.kind, text: view.text };
   }
@@ -282,6 +300,13 @@
       pair: $("pair"),
       problem: $("pairing-problem"),
     };
+    if (!worksHere(glue.platform())) {
+      // Outlook on the web or on Windows: no helper to reach, so the pane asks it nothing, and says why it can't file.
+      els.status.textContent = MAC_ONLY;
+      els.status.className = "status problem";
+      els.main.setAttribute("aria-busy", "false");
+      return { async refresh() {}, stop() {} };
+    }
     const client = env.createClient();
     let stopped = false;
     let timer = null;
@@ -579,7 +604,7 @@
     };
   }
 
-  const api = { threadIds, statusView, outcomeView, fileMessage, start, POLL, CANT_REACH };
+  const api = { threadIds, statusView, outcomeView, fileMessage, start, POLL, CANT_REACH, MAC_ONLY };
 
   if (root.document && typeof root.document.getElementById === "function" && root.document.getElementById("file-other")) {
     const begin = () => {

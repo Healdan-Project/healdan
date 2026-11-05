@@ -6,7 +6,9 @@
  *
  * mail.js decides everything the pane does, with no Outlook in it. This file is the few things Outlook has to be asked:
  *
- *   { item(),                  the message being read (Office.context.mailbox.item), or null where none is open
+ *   { platform(),              where Outlook runs, as Office.context.diagnostics names it ("Mac", "PC", "OfficeOnline",
+ *                              …), or "" where it doesn't say
+ *     item(),                  the message being read (Office.context.mailbox.item), or null where none is open
  *     headers(item),           its internet headers, as the text getAllInternetHeadersAsync gives (Mailbox 1.8)
  *     readEml(item),           the message as Base64 EML: getAsFileAsync (Mailbox 1.14)
  *     masterCategories(),      the names in the mailbox's category list: masterCategories.getAsync (Mailbox 1.8)
@@ -60,6 +62,10 @@
     }
 
     return {
+      platform: () => {
+        const diagnostics = Office.context.diagnostics;
+        return diagnostics && typeof diagnostics.platform === "string" ? diagnostics.platform : "";
+      },
       item: () => mailbox.item || null,
       headers: (item) => asked((done) => item.getAllInternetHeadersAsync(done)),
       readEml: (item) => asked((done) => item.getAsFileAsync(done)),

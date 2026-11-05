@@ -599,8 +599,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     until there are five to offer. It never goes pending. An unreachable or refusing server is `500 internal-error`, but when only a folder can't
     be read for now (anything but `404` or `403`, which leave that folder out), the status answers without suggestions.
   - **The pane** (`clients/office/web/mail.html`, `mail.js`, `mail-glue.js`) is Outlook's page for these routes. `mail-glue.js`
-    holds the Outlook calls (`internetMessageId`, `getAllInternetHeadersAsync`, `getAsFileAsync`, `masterCategories`,
-    `categories.addAsync`, the `ItemChanged` event) and `mail.js` the logic, which Node's tests run. It sends `mail/status` the ids from `threadIds`
+    holds the Outlook calls (`diagnostics.platform`, `internetMessageId`, `getAllInternetHeadersAsync`, `getAsFileAsync`,
+    `masterCategories`, `categories.addAsync`, the `ItemChanged` event) and `mail.js` the logic, which Node's tests run. It sends `mail/status` the ids from `threadIds`
     on each change, one check at a time (past 100 ids, the oldest `References` are left out, as the helper asks about
     the newest), and for a message with no Message-ID it sends `ping` instead, so pairing and signing in still show.
     It sends `mail/file` with the message as base64, which `call` treats as `file`: one that fails on the way is
@@ -608,8 +608,13 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     after `filed` or `already-filed` only: Outlook refuses a category its mailbox's list lacks, so the list gets `Healdan` first
     (preset colour `Preset7`, blue) when it's missing. A failure at either step is logged in the console, with Outlook's code, and
     the filing still counts. A filing that ends once another message is open adds no category, and the pane, showing the
-    other message, says which message the outcome is about. The manifest requires Mailbox 1.14, for `getAsFileAsync`,
-    so an Outlook without it doesn't show the add-in. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
+    other message, says which message the outcome is about. One that ends on the same message adds it to the item open
+    then, not the one the click took: Office.js gives `mailbox.item` a new object each time the message changes, so
+    after A, B and A again the first may be stale. The manifest requires Mailbox 1.14, for `getAsFileAsync`,
+    so an Outlook without it doesn't show the add-in. Outlook on the web and new Outlook for Windows have it too, and
+    report their platform as `OfficeOnline`: where `Office.context.diagnostics.platform` is anything but `Mac`, the pane
+    says it works in the new Outlook for Mac only and asks the helper nothing. An Outlook that names no platform is
+    taken for the Mac, as every one with Mailbox 1.5 names it. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
     helper says goes on the page as text, and an address is a link only when it's http or https. Several messages at once
     are not handled yet: new Outlook for Mac 16.114 reports Mailbox 1.14 and has no `loadItemByIdAsync`, so the manifest
     doesn't declare `SupportsMultiSelect`, and the add-in asks for read/write mailbox for the category list.

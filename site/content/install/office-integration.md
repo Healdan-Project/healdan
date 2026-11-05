@@ -171,7 +171,9 @@ about the address, HTTPS and the pages needing no sign-in apply to it too.
    address for `<server>`, and save the file it shows. Check that your server's address is in its links.
 2. **Upload it as for Word's:** in the admin centre, go to **Settings**, then **Integrated apps**, choose **Upload
    custom apps**, choose **Office Add-in**, and upload the file.
-3. **Choose who gets it,** and finish the deployment.
+3. **Choose who gets it:** the people who'll file email from the new Outlook for Mac. Outlook on the web and the new
+   Outlook for Windows show them its **Healdan** button too, but there the pane only says that it works in the new
+   Outlook for Mac for now. Then finish the deployment.
 
 - **What it asks for.** The add-in reads the message it is open on and has read and write access to the mailbox (the
   permission Microsoft calls `ReadWriteMailbox`). Marking a filed message with the Healdan category needs it: Outlook

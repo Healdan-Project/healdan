@@ -100,12 +100,13 @@ function fakeClient(routes = {}) {
   };
 }
 
-function fakeGlue({ item = { internetMessageId: "<own@x>" }, headers = "", eml = "RU1M", categoryFails = false, listed = ["Healdan"], listFails = false, listAddFails = false } = {}) {
+function fakeGlue({ item = { internetMessageId: "<own@x>" }, headers = "", eml = "RU1M", categoryFails = false, listed = ["Healdan"], listFails = false, listAddFails = false, platform = "Mac" } = {}) {
   const log = [];
   const glue = {
     log,
     current: item,
     handler: null,
+    platform: () => platform,
     item: () => glue.current,
     headers: async () => headers,
     readEml: async () => {
@@ -449,6 +450,38 @@ test("File Here and File... file, show the outcome, and check the status again",
   assert.deepEqual(glue.log.filter((l) => l === "addCategory").length, 2);
 });
 
+test("outside the Mac, the pane says it works in the new Outlook for Mac only, and asks the helper nothing", async () => {
+  // Outlook on the web and new Outlook for Windows have Mailbox 1.14 too, so the button shows there, with no helper to reach.
+  for (const platform of ["OfficeOnline", "PC"]) {
+    const client = fakeClient({ "mail/status": { filed: false, copies: [], elsewhere: false, suggestions: [] }, ping: { ok: true } });
+    const glue = fakeGlue({ platform });
+    let created = 0;
+    const timing = clock();
+    const page = fakePage();
+    await Mail.start({ document: page, Healdan: { HelperError }, glue, createClient: () => (created++, client), ...timing });
+    assert.equal(page.getElementById("status").textContent, Mail.MAC_ONLY, platform);
+    assert.match(Mail.MAC_ONLY, /new Outlook for Mac only/);
+    assert.equal(page.getElementById("status").className, "status problem");
+    assert.equal(created, 0, "no helper client is made");
+    assert.deepEqual(client.calls, [], "nothing is asked of the helper");
+    assert.deepEqual(glue.log, [], "nor of Outlook");
+    assert.equal(glue.handler, null);
+    assert.equal(page.getElementById("actions-section").hidden, true);
+    assert.equal(page.getElementById("pairing").hidden, true);
+    assert.equal(timing.timers.length, 0, "and it doesn't look again");
+    assert.equal(page.getElementById("main").attributes["aria-busy"], "false");
+  }
+});
+
+test("in Outlook for Mac the pane goes on as before, and so where Outlook doesn't name its platform", async () => {
+  for (const platform of ["Mac", "", undefined]) {
+    const client = fakeClient({ "mail/status": { filed: false, copies: [], elsewhere: false, suggestions: [] } });
+    const { text } = await open({ client, glue: fakeGlue({ platform }) });
+    assert.equal(client.calls[0].route, "mail/status", String(platform));
+    assert.equal(text("status"), "Not Filed");
+  }
+});
+
 test("with no message, or several selected, the pane says to select one and asks nothing", async () => {
   const client = fakeClient();
   const glue = fakeGlue({ item: null });
@@ -575,6 +608,28 @@ test("when the open message moves on during a filing, there is no category and t
     assert.equal(view.moved, true);
     assert.equal(moving.log.includes("addCategory"), false);
   }
+});
+
+test("after A, B and A again during a filing, the category goes on the A open now, not on the one the click took", async () => {
+  // Office.js gives mailbox.item a new object at each ItemChanged: the one taken at the click may be stale by the end.
+  const clicked = { itemId: "A", internetMessageId: "<a@x>" };
+  const reopened = { itemId: "A", internetMessageId: "<a@x>" };
+  const glue = fakeGlue({ item: clicked });
+  const tagged = [];
+  glue.addCategory = async (item) => {
+    tagged.push(item);
+  };
+  const client = fakeClient({
+    "mail/file": () => {
+      glue.current = reopened; // the person went to B and back to A while the helper filed
+      return { outcome: "filed", email: { docNumber: 1 } };
+    },
+  });
+  const view = await Mail.fileMessage(client, glue, 1, undefined, clicked);
+  assert.equal(view.kind, "ok");
+  assert.equal(view.moved, undefined);
+  assert.equal(tagged.length, 1);
+  assert.equal(tagged[0], reopened);
 });
 
 test("while a filing runs, redrawn suggestions are disabled, and a throw doesn't leave the pane stuck", async () => {

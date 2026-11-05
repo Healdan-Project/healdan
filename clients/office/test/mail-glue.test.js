@@ -30,6 +30,7 @@ function fakeOffice({ fail } = {}) {
     AsyncResultStatus: { Succeeded: OK },
     EventType: { ItemChanged: "olkItemSelectedChanged" },
     context: {
+      diagnostics: { host: "Outlook", platform: "Mac", version: "16.114" },
       mailbox: {
         item,
         masterCategories: {
@@ -87,4 +88,13 @@ test("item is null where no message is open", () => {
   const { Office } = fakeOffice();
   Office.context.mailbox.item = null;
   assert.equal(MailGlue.create({ Office }).item(), null);
+});
+
+test("platform is the one Office.context.diagnostics names, or empty where Outlook doesn't say", () => {
+  const { Office } = fakeOffice();
+  assert.equal(MailGlue.create({ Office }).platform(), "Mac");
+  Office.context.diagnostics.platform = "OfficeOnline";
+  assert.equal(MailGlue.create({ Office }).platform(), "OfficeOnline");
+  delete Office.context.diagnostics;
+  assert.equal(MailGlue.create({ Office }).platform(), "");
 });

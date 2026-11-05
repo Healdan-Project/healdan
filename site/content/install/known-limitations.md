@@ -116,7 +116,10 @@ weight: 11
 
 - **Only the new Outlook for Mac.** The add-in's pane works in the new Outlook for Mac. The add-in needs Outlook's
   Mailbox 1.14, which legacy Outlook for Mac lacks, so it doesn't show there, and Outlook on Windows and on the web,
-  including on Linux, wait for a later phase.
+  including on Linux, wait for a later phase. Outlook on the web and the new Outlook for Windows have Mailbox 1.14, so
+  the **Healdan** button shows there for the people the add-in is deployed to, but the pane only says that it works in
+  the new Outlook for Mac for now. Deploy it to the Mac users who'll file email: see
+  [Deploying the Outlook Add-in](../office-integration/#deploying-the-outlook-add-in).
 - **The primary mailbox only.** The add-in works in your own mailbox, not in shared or delegated ones: Outlook turns
   its button off there.
 - **Filing is one message at a time for now.** Filing several messages at once isn't available yet: the new Outlook for
@@ -126,7 +129,12 @@ weight: 11
   GUI Settings** as **Upload max. size**: see [Interface Settings](../../admin/system/interface-settings/).
 - **Moving or deleting the mail afterwards isn't followed.** Healdan files a copy of the message. Moving it to
   another folder in Outlook, or deleting it, changes nothing in Healdan, and the other way round.
-- **Encrypted and signed messages.** A message Outlook can't give the helper as it stands, such as an encrypted one,
-  isn't filed: the pane says Healdan can't be reached, and nothing is filed.
+- **Encrypted and rights-protected messages.** Healdan files an encrypted message (S/MIME or PGP/MIME) or a
+  rights-protected one whole, as received, but can't read inside it: it offers no attachments to file separately, and
+  what it encrypts or protects isn't searched, though its sender, recipients, subject and dates are. A part that is
+  encrypted or protected without its type saying so may still be offered as an attachment, as the file it is. Whether
+  the new Outlook for Mac gives the add-in such a message hasn't been tried: if it won't, the pane says "Outlook
+  wouldn't give Healdan this message. Try again." and nothing is filed. Signed messages file as any other,
+  attachments included.
 - **The pane needs the server to load.** Outlook loads the add-in's pane from your Healdan server. While the
   server can't be reached, the pane doesn't open, even though the helper is running.

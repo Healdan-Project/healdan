@@ -6,7 +6,8 @@ weight: 6
 With Healdan Helper on your Mac and your administrator's add-in in Outlook, you file the message you're reading into a
 matter without leaving Outlook. The Healdan pane shows whether the message is already in Healdan, and files it with
 one click. This page is about one message at a time, in your own mailbox: the add-in's button is off in shared and
-delegated mailboxes.
+delegated mailboxes. The pane works in the new Outlook for Mac: in Outlook on the web or the new Outlook for Windows,
+it says it works in the new Outlook for Mac only for now, and files nothing.
 
 ## The Healdan Pane
 
@@ -45,7 +46,8 @@ While the helper works, the pane says so. If the Save window is open, finish the
 ## Attachments
 
 In the Save window, tick **Also file attachments as separate documents** to file each attachment as a document of its
-own, linked to the email. File Here files the email alone.
+own, linked to the email. File Here files the email alone. An encrypted or rights-protected message is filed whole,
+but Healdan can't read inside it, so it offers no attachments to tick.
 
 ## Already Filed
 
