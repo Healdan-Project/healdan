@@ -329,6 +329,10 @@ Nothing is stored unless every check passes. They run in this order, and the fir
 6. an immutable or archived document (`409 refused`);
 7. the name, the file and the comment (`413`, `422`).
 
+A rule that refuses the check-in itself is `409 refused`. A new version that is an email of another message than the
+document's is `409 already-filed` when the document's matter holds that message in a copy you can read. Either way the
+document is left as it was, and checked out to you.
+
 ## Filing Email
 
 A client that files email from a mail program asks two things before it files: what is in the message, and whether
@@ -354,15 +358,17 @@ so the upload limits apply as for `POST /documents`, and nothing is left on the 
 }
 ```
 
-- **The Message-ID** is the header's value without its angle brackets or surrounding space, compared exactly, case
-  included. It is `null` when the message has none or one over 998 characters, and a message without one is never
-  taken for a copy of another. A field the message lacks or has damaged is `null`.
+- **The Message-ID** is the header's value without its angle brackets (every pair of them, as some mail programs add
+  their own) or surrounding space, compared exactly, case included. It is `null` when the message has none or one
+  over 998 characters, and a message without one is never taken for a copy of another. A field the message lacks or
+  has damaged is `null`.
 - **The attachments** are the message's attachments and inline parts, numbered by `index` in a walk of its parts
   that always gives the same list for the same bytes. An attachment has a file name and is sent as an attachment,
   or has no disposition and isn't shown by the message's HTML; an attached message (`message/rfc822`) is one too,
   with `message: true`, named after its subject when it has no name. A part the HTML shows by `cid:` is `inline`:
   it is listed so that a client can say it is there, and isn't an attachment. Each name is made safe for a Store and an operating system.
-  A message that is encrypted (S/MIME) or rights-protected has no readable parts, and lists none.
+  A message that is encrypted (S/MIME) or rights-protected has no readable parts, and lists none, nor does one
+  signed opaquely (S/MIME) more than three times over.
 - **The copies** are the documents that are copies of this message and that the caller can read, oldest first, as
   `GET /emails` finds them below.
 - **Refusals.** A request without a `file` part is `400`, a file over the upload limit `413 too-large`, and a file

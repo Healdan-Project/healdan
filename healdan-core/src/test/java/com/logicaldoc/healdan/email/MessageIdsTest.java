@@ -24,6 +24,29 @@ public class MessageIdsTest {
 	}
 
 	@Test
+	public void testEveryPairOfBracketsIsDropped() {
+		// A sender's program that adds its own brackets round a bracketed id: what is stored is what a client that
+		// normalised the header already sends, and the server normalises again
+		assertEquals("abc@example.com", MessageIds.normalize("<<abc@example.com>>"));
+		assertEquals("abc@example.com", MessageIds.normalize(" < <abc@example.com> > "));
+		assertEquals("abc@example.com", MessageIds.normalize("<<<abc@example.com>>>"));
+		assertNull(MessageIds.normalize("<<>>"));
+		// Only pairs: an unmatched bracket is part of the id
+		assertEquals("<abc@example.com", MessageIds.normalize("<<abc@example.com>"));
+		assertEquals("abc@example.com>", MessageIds.normalize("<abc@example.com>>"));
+	}
+
+	@Test
+	public void testNormalizingAgainChangesNothing() {
+		for (String header : new String[] { "<abc@example.com>", "<<abc@example.com>>", " < <abc@example.com> > ",
+				"<<abc@example.com>", "<abc@example.com>>", "abc@example.com", "<a\u0000b@example.com>",
+				"<" + "a".repeat(MessageIds.MAX_LENGTH) + ">", "<<" + "a".repeat(MessageIds.MAX_LENGTH) + ">>" }) {
+			String once = MessageIds.normalize(header);
+			assertEquals(header, once, MessageIds.normalize(once));
+		}
+	}
+
+	@Test
 	public void testABareIdIsKept() {
 		assertEquals("abc@example.com", MessageIds.normalize("abc@example.com"));
 		assertEquals("abc@example.com", MessageIds.normalize("  abc@example.com  "));

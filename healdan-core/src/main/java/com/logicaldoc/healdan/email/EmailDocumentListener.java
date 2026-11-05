@@ -23,9 +23,10 @@ import com.logicaldoc.healdan.HealdanConstants;
  * its Message-ID among them (spec §6.8; M5 spec §6.1). The document is named
  * after the subject. Once it is stored, the Message-ID the listener read from
  * the file goes into {@link EmailIndex} (M5 spec §6.2), the index the
- * once-per-matter rule and the lookups use; a new document whose file gave
- * none, such as a copy's clone stored without its file, keeps the Message-ID
- * property it came with, and that goes in instead. A check-in's new version
+ * once-per-matter rule and the lookups use; a new email whose file gave none,
+ * such as a copy's clone stored without its file, keeps the Message-ID
+ * property it came with, and that goes in instead. Any other document is no
+ * message, whatever its property says. A check-in's new version
  * may be another message, or none: its Message-ID replaces the old one, in the
  * index and the property. A shortcut is no copy of a message,
  * so it gets neither. It runs after the profile listener,
@@ -72,8 +73,11 @@ public class EmailDocumentListener implements DocumentListener {
 			log.debug("Cannot read the email fields of a new document", t);
 		}
 
-		// A file that gave no Message-ID leaves the one the document came with, which the index then holds too
-		if (!dictionary.containsKey(MESSAGE_ID)
+		/*
+		 * An email whose file gave no Message-ID leaves the one it came with, which the index then holds too. Only an
+		 * email: CE's upload form can set the property on any document, and a PDF is no copy of a message
+		 */
+		if (!dictionary.containsKey(MESSAGE_ID) && emailExtension(document.getFileName()) != null
 				&& document.getValue(HealdanConstants.ATTR_EMAILMESSAGEID) instanceof String value) {
 			String messageId = MessageIds.normalize(value);
 			if (messageId != null)

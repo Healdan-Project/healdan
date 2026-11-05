@@ -52,7 +52,8 @@ import com.logicaldoc.util.spring.Context;
  * refused. Copies are found through {@link EmailIndex}, and each copy's matter
  * afresh with {@link MatterLocator}. A copy the user can't read doesn't count,
  * so a refusal never reveals a document; with no user (a system task) every
- * copy counts. Moves within a matter and new versions aren't checked.
+ * copy counts. Moves within a matter aren't checked, nor is a new version of
+ * the same message; one of another message arrives as that message.
  * <p>
  * Two filings at once are put one after the other by CE's
  * {@code DocumentManager}, which runs each {@code create} and

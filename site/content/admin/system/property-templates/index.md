@@ -23,9 +23,10 @@ The **Healdan profile** template holds the properties every document and folder 
   file when it's filed, and show on a document's **Ext. Properties** tab. Saving a new version reads only the
   Message-ID again; the others keep their values. See [Emails](../../../user/working-with-matters/emails/).
 - **Healdan finds an email's copies through a table of its own,** which holds each document's Message-ID from when
-  it's created, so editing the property afterwards doesn't change which messages count as copies. A new document
-  whose file gives no Message-ID, such as one that isn't an email, goes into that table with the Message-ID property
-  it was created with, if it has one.
+  it's created, so editing the property afterwards doesn't change which messages count as copies. A new `.eml` or
+  `.msg` whose file gives no Message-ID, such as a copy stored without its file, goes into that table with the
+  Message-ID property it was created with, if it has one. Any other document never goes into it, whatever its
+  property says.
 - **Emails filed before Message-ID was added** get it in the background after the upgrade, starting a minute after
   Healdan starts. An email Healdan can't read stays without it. Their Message-ID can be searched for once they've been
   indexed again, which **Reschedule all for indexing** on [Search and Indexing](../search-and-indexing/#indexing-again)

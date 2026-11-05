@@ -15,8 +15,8 @@ When an email is filed, Healdan fills in its properties from the message:
 - **Sent and Received.** For a `.eml` file without a Received time, Healdan uses its delivery date. A `.msg` file
   keeps only one date, so its Received is the same as its Sent.
 - **Message-ID.** The identifier the sender's mail program gave the message, which tells one message from
-  another. Healdan keeps it without its angle brackets. A message with no Message-ID, or one too long to keep (over
-  998 characters), has this property empty.
+  another. Healdan keeps it without its angle brackets, every pair of them, as some mail programs add their own. A
+  message with no Message-ID, or one too long to keep (over 998 characters), has this property empty.
 
 ## Once in Each Matter
 
@@ -34,9 +34,12 @@ A matter holds each message once. Healdan tells one message from another by its 
   through, so a refusal never tells you about a document you can't read.
 - **The trash doesn't count.** Once a copy is deleted, the message can be filed again; the deleted copy then can't
   be restored into the same matter while the new one is there.
-- **Moving a copy within its matter** is never refused, nor is saving a new version of it. A new version that is
-  another message counts as that message from then on, and one that is no message counts as none.
+- **Moving a copy within its matter** is never refused, nor is saving a new version of the same message. A new
+  version that is another message counts as that message from then on, so it's refused when the matter holds that
+  message already. One that is no message counts as none.
 - **A message with no Message-ID** is never treated as a copy of another.
+- **Only an email counts.** A document that isn't an `.eml` or `.msg` file is never a copy of a message, even when
+  its Message-ID property was filled in by hand.
 
 ## Its Name
 
