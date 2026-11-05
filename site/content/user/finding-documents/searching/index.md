@@ -27,8 +27,10 @@ Your install may call matters *projects*. The Matters scope then uses that word.
 Full-text search finds words inside documents, including Word, Excel and PowerPoint files, PDFs, and emails' text
 and attachment names. A document is searchable shortly after it's filed.
 
-An email's From, To, CC and Subject are part of its text, so words in them are found. Its Message-ID is a property
-as they are, but unlike them it isn't part of the text, so full-text search doesn't find it.
+An email's From, To, CC and Subject are part of its text, so words in them are found. Its Message-ID isn't, so the
+search box doesn't find it. To find an email by its Message-ID, open the **Search** tab's **Full-text** section,
+choose **Healdan profile** as the **Template**, add **Message-ID** to **Search in**, and type the whole Message-ID in
+**Expression**, exactly as its properties show it.
 
 ## Matter Numbers
 
