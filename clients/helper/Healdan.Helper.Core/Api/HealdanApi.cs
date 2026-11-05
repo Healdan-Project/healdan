@@ -131,6 +131,42 @@ public sealed class HealdanApi
         return await SendJsonAsync<DocumentView>(HttpMethod.Post, "v1/documents", form, ct);
     }
 
+    // --- Email (M5) -------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Says what is in the email (<paramref name="eml"/>, an <c>.eml</c>) without storing it: its Message-ID, subject,
+    /// sender, sent date, attachments and inline parts, and the copies the user may read.
+    /// </summary>
+    public async Task<EmailInspection> InspectEmailAsync(byte[] eml, CancellationToken ct = default)
+    {
+        using var form = new MultipartFormDataContent();
+        AddFile(form, eml, EmailFileName);
+        return await SendJsonAsync<EmailInspection>(HttpMethod.Post, "v1/emails/inspect", form, ct);
+    }
+
+    /// <summary>
+    /// Files the email (<paramref name="eml"/>, an <c>.eml</c>) whole, and the attachments <paramref name="request"/> ticks,
+    /// all or nothing. A message the folder's matter already holds is <c>409 already-filed</c> (an <see cref="ApiException"/>
+    /// whose <see cref="ApiException.Body"/> has the copy as <c>document</c>), so a repeat after a lost answer is safe.
+    /// </summary>
+    public async Task<FiledEmail> FileEmailAsync(byte[] eml, NewEmail request, CancellationToken ct = default)
+    {
+        using var form = Multipart("email", request, eml, EmailFileName);
+        return await SendJsonAsync<FiledEmail>(HttpMethod.Post, "v1/emails", form, ct);
+    }
+
+    /// <summary>
+    /// Where messages are filed: for each Message-ID, the documents that are copies of it and that the user may read.
+    /// Send 1 to 100 ids, as the server answers <c>400</c> for none or more. The ids go as given, with or without angle
+    /// brackets, but the server answers each one <b>normalised</b> (without them), and ids that differ only in their
+    /// brackets collapse into one item. So whoever matches the answers to the requests compares normalised ids.
+    /// The ids make the query of the request line, which Tomcat and most proxies cap near 8 KB, so a caller with many long
+    /// ids sends them in several calls, well before 100.
+    /// </summary>
+    public Task<EmailCopies> EmailCopiesAsync(IReadOnlyList<string> messageIds, CancellationToken ct = default) =>
+        SendJsonAsync<EmailCopies>(HttpMethod.Get,
+            "v1/emails?" + string.Join('&', messageIds.Select(id => "messageId=" + Uri.EscapeDataString(id))), null, ct);
+
     public Task<Page<T>> GetPageAsync<T>(string relativePath, CancellationToken ct = default) =>
         SendJsonAsync<Page<T>>(HttpMethod.Get, relativePath, null, ct);
 
@@ -218,16 +254,24 @@ public sealed class HealdanApi
     public Task<Page<UserHit>> FindUsersAsync(string q, CancellationToken ct = default) =>
         GetPageAsync<UserHit>($"v1/users?q={Uri.EscapeDataString(q)}", ct);
 
+    /// <summary>The file name an email goes under: the server looks at neither it nor the part's type.</summary>
+    private const string EmailFileName = "message.eml";
+
     private static MultipartFormDataContent Multipart<T>(string jsonPart, T json, byte[] file, string fileName)
     {
         var form = new MultipartFormDataContent();
         var part = new StringContent(JsonSerializer.Serialize(json, Json));
         part.Headers.ContentType = new MediaTypeHeaderValue("application/json");
         form.Add(part, jsonPart);
+        AddFile(form, file, fileName);
+        return form;
+    }
+
+    private static void AddFile(MultipartFormDataContent form, byte[] file, string fileName)
+    {
         var content = new ByteArrayContent(file);
         content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         form.Add(content, "file", fileName);
-        return form;
     }
 
     private async Task<T> SendJsonAsync<T>(HttpMethod method, string path, HttpContent? content, CancellationToken ct)

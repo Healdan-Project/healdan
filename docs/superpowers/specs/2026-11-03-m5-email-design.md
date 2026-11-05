@@ -2,7 +2,7 @@
 
 - **Milestone:** M5 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-03
-- **Status:** design agreed with the owner on 2026-11-03, question by question and then section by section, and approved by the owner the same day, while the trial (§9) was being set up on the owner's Mac. The trial's results go in §9.5, and a row that fails changes the spec as §9.4 says, marked "changed by the trial". Implementation plan: [`docs/superpowers/plans/2026-11-03-m5-email.md`](../plans/2026-11-03-m5-email.md); approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
+- **Status:** design agreed with the owner on 2026-11-03, question by question and then section by section, and approved by the owner the same day, while the trial (§9) was being set up on the owner's Mac. The trial ran on 2026-11-05 and passed but for T4 (§9.5); its changes to the spec are marked "changed by the trial". Implementation plan: [`docs/superpowers/plans/2026-11-03-m5-email.md`](../plans/2026-11-03-m5-email.md); approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
 - **Inputs:**
   - the roadmap's M5 section, and its glossary;
   - the [M1 spec](2026-10-17-m1-move-in-design.md) §6.8 (dates and emails) and §7 (the rules on every route);
@@ -38,6 +38,7 @@ M1 already treats an uploaded `.eml` or `.msg` as an email. It gets From, To, CC
 - **Dragging an email into a folder in the web page** (owner: moved to M6, whose new UI takes dropped files and emails anyway). Meanwhile an `.eml` saved from Outlook can be uploaded with Upload, as today.
 - **Moving or deleting a message in Outlook after filing.** Office.js can't move an item without Microsoft Graph (§3.3).
 - **Rule-based filing,** an Outlook folder filed into a matter folder automatically (roadmap: later phase, backlog).
+- **Several messages at once, and shared or delegated mailboxes** (changed by the trial: new Outlook for Mac 16.114 can't read selected messages, and the button is disabled outside the primary mailbox, §9.5). Phase 1 files one message, in the primary mailbox.
 - **Legacy Outlook for Mac,** and **Outlook for Windows,** which comes with the Windows helper.
 - **Importing from IMAP or POP mailboxes,** and **a Thunderbird add-on** (roadmap non-goals).
 - **Refreshing an email's fields on a new version.** M1 fills them when the document is created, and a check-in of another file leaves them, and the Message-ID, as they were.
@@ -90,7 +91,7 @@ From Microsoft's documentation. The trial (§9) checks each one on the owner's M
 | Phase | What | When |
 |---|---|---|
 | 1 (M5) | New Outlook for Mac, through the Healdan Helper 0.8.0 | This spec |
-| 2 | Outlook on the web on Linux, with the same add-in and server | Once the Linux helper exists (M3 phase 2), with a short design of its own |
+| 2 | Outlook on the web on Linux, with the same add-in and server, and filing several messages at once (changed by the trial: §7.4 and §8.4 move here, §9.5) | Once the Linux helper exists (M3 phase 2), with a short design of its own |
 
 ## 5. The pieces (owner: approach A)
 
@@ -204,7 +205,9 @@ The same Save window Word uses (M3 §5), with:
 - **"Also file attachments as separate documents,"** unticked, then a tick per attachment with its name and size; inline parts aren't listed. Ticking the box ticks every attachment; each can be unticked.
 - **Save** is on once the required properties are filled, as today. A refusal shows in the window, which stays open to choose another folder or untick an attachment. `already-filed` closes it with "Already in 998.1 as #12345", which counts as filed.
 
-### 7.4 Several messages (owner; call on the flow)
+### 7.4 Several messages (owner; call on the flow) (changed by the trial: phase 2, not phase 1)
+
+The trial's T4 failed (§9.5, §9.4), so this section is for phase 2; phase 1 has `mail/file` only.
 
 - The add-in sends `mail/file-many` with the count and the subjects. The Save window shows "Filing 5 messages", the subjects listed, the folder and its properties, and one box, "Also file each message's attachments as separate documents", with no per-attachment ticks. Inline parts are left out as in §6.6.
 - The answer is a ticket. The add-in then loads each message in turn, reads its `.eml` and sends `mail/file-one` with the ticket. The helper files them one at a time, in the order sent.
@@ -217,8 +220,9 @@ The same Save window Word uses (M3 §5), with:
 
 - **A second manifest,** an XML manifest of Outlook's kind (`MailApp`), `clients/office/outlook-manifest.template.xml`, which `AddinResource` serves at `/api/addin/outlook-manifest.xml` made with the server's public address, as `manifest.xml` is (M3.5 §7). Its id is fixed and its version changes with the template.
   - A Healdan button on a message being read opens the pane, which can be pinned.
-  - The add-in turns on for several selected messages.
-  - The permission is read/write item, for the category.
+  - The add-in doesn't declare several selected messages (changed by the trial: T4 failed, §9.5), so there is no `SupportsMultiSelect`.
+  - The permission is read/write mailbox (changed by the trial), for the category's entry in the mailbox's category list (§8.3). Read/write item can add a category to a message but not to the list, and Outlook refuses a category the list lacks.
+  - The button is disabled outside the primary mailbox, as the manifest doesn't declare shared folders (§9.5).
 - **Its pages** are in `clients/office/web/`: a pane page, its logic in a Node-testable classic script (as `healdan.js` is, M3.5 §6.1) and the Office.js calls in a glue script. The Content Security Policy of M3.5 §7 covers them.
 - **It holds no token** and calls no server: only the helper's port (M3.5 §6.2).
 
@@ -236,9 +240,11 @@ The same Save window Word uses (M3 §5), with:
 
 - **File Here** sends `mail/file` with the `.eml` and the folder; **File…** sends it without, and the helper's Save window opens.
 - **After a filed or `already-filed` outcome,** the add-in adds the category "Healdan" to the message (owner). If adding it fails, the failure is logged in the pane's console, the filing still counts, and the pane still shows Filed.
-- **The category** is added to the mailbox's master list once, if the trial finds that needs doing and the permission allows it; otherwise the message carries it unlisted, as Outlook allows (§9 T5).
+- **The category** must be in the mailbox's master list first (changed by the trial: Outlook refuses a category the list lacks, §9.5 T5). The pane reads the list (`masterCategories.getAsync`) and adds "Healdan" to it when it's missing, in the preset colour Preset7 (blue), then adds it to the message. A failure at either step is logged in the console and the filing still counts.
 
-### 8.4 Several selected (owner)
+### 8.4 Several selected (owner) (changed by the trial: phase 2, not phase 1)
+
+T4 failed (§9.5): new Outlook for Mac reports Mailbox 1.1 to 1.14, so `loadItemByIdAsync` (1.15) is absent. In phase 1 the pane files one message, and with none or several open it says to select one. The rest of this section is for phase 2.
 
 - With several messages selected, the pane shows "5 messages selected" and **File…** only: each message has its own thread, so there are no suggestions, and no status.
 - File… sends `mail/file-many`, then, for each message in turn, loads it (`loadItemByIdAsync`), reads its `.eml`, sends `mail/file-one`, and adds the category when it's filed or `already-filed`.
@@ -283,7 +289,25 @@ As M3.5's did (M3.5 §8.3):
 
 ### 9.5 Results
 
-To be filled in after the trial, before the owner approves the spec.
+The owner ran the trial on 2026-11-05 on new Outlook for Mac 16.114.4 (26110224), with the throwaway code of §9.3, the pages on `https://localhost:8443` and the stand-in on `https://127.0.0.1:47690`. The trial certificate had to be trusted for SSL (`security add-trusted-cert -r trustRoot -p ssl`).
+
+| Row | Result |
+|---|---|
+| T1 | PASS: the V1_1 override loads (`pane.html?v=1_1`); a pinned pane gets `ItemChanged` for each message (`SelectedItemsChanged` fires too, first). |
+| T2 | PASS: the pane on `https://localhost:8443` reaches `https://127.0.0.1:47690` (CORS preflight; no private-network header); pairing by code works; the key is still stored after Outlook restarts; a keyed request answered 200 in 19 ms. |
+| T3 | PASS: `getAsFileAsync` gave a 6 KB `.eml` in 171 ms and a ~35 MB one (a 25.6 MB PDF attached) in 8.1 s; sending it to the helper took 1.2 s. Pressing while Outlook was still switching messages gave `APICallFailedDueToItemChange (9030)`. |
+| T4 | FAIL: `getSelectedItemsAsync` lists the selection (with `itemId`, `subject`, `internetMessageId`, `hasAttachments`, …) but `loadItemByIdAsync` is absent: Outlook reports Mailbox 1.1 to 1.14, not 1.15. |
+| T5 | PASS through the master list: `masterCategories.addAsync` (read/write mailbox permission) then `item.categories.addAsync(["Healdan"])` works; a category the master list lacks is refused (`InvalidCategory`, 9044), and a remove call naming one is refused whole. |
+| T6 | PASS where the message carries internet headers (5,117 characters, with `In-Reply-To` and `References`). One message, an external forward of a reply thread, gave 0 characters, so Outlook doesn't always hand over a message's headers; such a message's suggestions can only be recent folders. |
+| Also | The add-in's button is disabled outside the primary mailbox (the manifest doesn't declare shared folders). |
+
+**What the trial changed in this spec**
+
+- **T4 failed,** so filing several messages moves to phase 2 as §9.4 says: §7.4, §8.4, §4 and §2.2 are marked, and the manifest drops `SupportsMultiSelect`.
+- **T5** needs the master list: the permission is read/write mailbox, not read/write item (§8.1), and the pane adds the category to the list first (§8.3).
+- **Primary mailbox only** (§2.2, §8.1).
+- **T3:** a message over the upload limit needs saying so (§10); the large one filed no differently once it reached the helper.
+- **T6:** a message without headers gets recent folders only, as §9.4 says.
 
 ## 10. Failures
 
@@ -299,7 +323,7 @@ The message is always still in Outlook, so nothing is queued for later (call).
 | `already-filed` | The pane switches to Filed, naming the copy, and the category is added |
 | The category can't be added | Logged; the filing still counts, and the pane still shows Filed |
 | An encrypted (S/MIME) or rights-protected message | Filed as received; no attachments offered; its text isn't searched. Known Limitations says so |
-| A message over `upload.maxsize` | Refused by `inspect`, naming the limit |
+| A message over `upload.maxsize` | Refused by `inspect`, naming the limit. The helper answers `mail/file` `409 over-upload-limit` with the server's words (a code of its own: the port's `413 too-large` is the helper's own body limit, which raising `upload.maxsize` doesn't move), and the pane says "This message is larger than Healdan accepts. An administrator can raise the upload limit." (changed by the trial: it had been `500 internal-error`, which the pane called "Can't Reach Healdan") |
 | One of several messages fails | The others go on; the summary names it and why |
 
 ## 11. Security (calls)

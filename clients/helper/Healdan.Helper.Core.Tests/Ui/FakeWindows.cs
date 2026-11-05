@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Cycle;
+using Healdan.Helper.Core.Forms;
 using Healdan.Helper.Core.Ui;
 
 namespace Healdan.Helper.Core.Tests.Ui;
@@ -48,6 +49,38 @@ public sealed class FakeWindows : IWindows
     public Task<JsonObject> OpenDialogAsync(JsonObject request) => Ask("open-dialog", request);
 
     public Task<JsonObject> SaveNewAsync(JsonObject request) => Ask("save-new", request);
+
+    /// <summary>
+    /// What the user clicks Save with in the Save window's email mode, in turn, each time the last was refused. Left empty,
+    /// it's <see cref="Answer"/>, once, when that's a Save.
+    /// </summary>
+    public ConcurrentQueue<JsonObject> EmailSaves { get; } = new();
+
+    /// <summary>What each of those Saves came to, in order.</summary>
+    public ConcurrentQueue<SubmitOutcome> EmailOutcomes { get; } = new();
+
+    /// <summary>
+    /// The Save window's email mode, recorded as <c>save-email</c>: each Save goes to <paramref name="submit"/> as the window
+    /// sends it, and the window closes with the first that's done. When every one was refused, the user gives up: Cancel.
+    /// </summary>
+    public async Task<JsonObject> SaveEmailAsync(JsonObject request, Func<JsonObject, Task<SubmitOutcome>> submit)
+    {
+        Asked.Enqueue(("save-email", request));
+        await Answering();
+        List<JsonObject> saves = [];
+        while (EmailSaves.TryDequeue(out var queued))
+            saves.Add(queued);
+        if (saves.Count == 0 && Answer["action"]?.GetValue<string>() == "save")
+            saves.Add((JsonObject)Answer.DeepClone());
+        foreach (var save in saves)
+        {
+            var outcome = await submit((JsonObject)save.DeepClone());
+            EmailOutcomes.Enqueue(outcome);
+            if (outcome is not SubmitOutcome.Refused)
+                return save;
+        }
+        return new JsonObject { ["action"] = "cancel" };
+    }
 
     public Task<JsonObject> PropertiesAsync(JsonObject request) => Ask("properties", request);
 

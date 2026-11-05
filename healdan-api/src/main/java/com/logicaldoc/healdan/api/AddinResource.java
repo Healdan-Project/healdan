@@ -35,6 +35,8 @@ public class AddinResource {
 
 	private static final String TEMPLATE = ADDIN + "manifest.template.xml";
 
+	private static final String OUTLOOK_TEMPLATE = ADDIN + "outlook-manifest.template.xml";
+
 	private static final String UTF8 = "; charset=UTF-8";
 
 	/**
@@ -55,8 +57,23 @@ public class AddinResource {
 	@Public
 	@Path("manifest.xml")
 	public Response manifest(@Context HttpServletRequest request) {
+		return manifest(TEMPLATE, request);
+	}
+
+	/**
+	 * Outlook's manifest (M5 spec section 8.1), made the same way. It has its own
+	 * add-in ID, so the admin centre keeps it apart from the other apps'.
+	 */
+	@GET
+	@Public
+	@Path("outlook-manifest.xml")
+	public Response outlookManifest(@Context HttpServletRequest request) {
+		return manifest(OUTLOOK_TEMPLATE, request);
+	}
+
+	private static Response manifest(String template, HttpServletRequest request) {
 		PublicAddress.Address address = address(request);
-		String manifest = new String(read(TEMPLATE), StandardCharsets.UTF_8)
+		String manifest = new String(read(template), StandardCharsets.UTF_8)
 				.replace("{{BASE}}", address.base() + "/api/addin").replace("{{ORIGIN}}", address.origin());
 		return ok(manifest.getBytes(StandardCharsets.UTF_8), "application/xml" + UTF8, false);
 	}

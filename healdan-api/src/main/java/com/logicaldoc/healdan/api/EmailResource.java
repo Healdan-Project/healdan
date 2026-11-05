@@ -128,8 +128,8 @@ public class EmailResource {
 			if (fields.messageId() != null)
 				for (Document copy : readable(EmailIndex.get().copies(fields.messageId()), user))
 					copies.add(ApiViews.document(copy, user));
-			return new EmailInspection(fields.messageId(), fields.subject(), fields.from(), fields.sent(),
-					List.copyOf(attachments), List.copyOf(copies));
+			return new EmailInspection(fields.messageId(), fields.subject(), fields.from(), fields.to(), fields.cc(),
+					fields.sent(), fields.received(), List.copyOf(attachments), List.copyOf(copies));
 		} catch (PersistenceException e) {
 			throw new IllegalStateException("Can't inspect an email", e);
 		} catch (IOException e) {

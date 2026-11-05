@@ -276,3 +276,34 @@ button:disabled {
 .form-problem:empty {
   display: none;
 }
+
+/* The Outlook pane (mail.html): the copies of a message and the buttons that file it. */
+.copies {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+.copies li {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.suggestions button {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.suggestions .where {
+  display: block;
+  font-size: 12px;
+  font-weight: normal;
+  overflow-wrap: anywhere;
+}

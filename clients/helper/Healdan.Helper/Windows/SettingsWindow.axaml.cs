@@ -25,7 +25,7 @@ namespace Healdan.Helper.Windows;
 /// in again. Each kind has a pop-up of the installed apps (LibreOffice, Microsoft Office) showing the chooser's answer now, and
 /// choosing one writes it to <see cref="HelperSettings.Kinds"/>; a kind with one app to offer, Drawings always, shows it as
 /// text. PDFs follow as text too: CoffeePDF while it's installed with Healdan support on, else the default app, read-only
-/// (M3.6 spec §4.4). Below them, while Word, Excel or PowerPoint is installed or an app is paired, the Microsoft Office group:
+/// (M3.6 spec §4.4). Below them, while Word, Excel, PowerPoint or Outlook is installed or an app is paired, the Microsoft Office group:
 /// Set Up (its status, and Set Up… while it's needed) and the paired apps, each with when it paired and Forget. Then whether
 /// the helper starts at sign-in, and its LibreOffice extension's version and when it went in. While the extension isn't
 /// installed its row offers Install…, which does what the menu's Install the LibreOffice Extension item does, and while
@@ -188,7 +188,7 @@ public partial class SettingsWindow : Window
     // --- Microsoft Office ------------------------------------------------------------------------------------------
 
     /// <summary>
-    /// Microsoft Office's group (M3.5 spec §5.10): Set Up while Word, Excel or PowerPoint is installed, and the apps paired.
+    /// Microsoft Office's group (M3.5 spec §5.10): Set Up while Word, Excel, PowerPoint or Outlook is installed, and the apps paired.
     /// Left out when neither. Read when the window opens and after Set Up or a Forget: a failure to read Set Up's state only
     /// leaves its row out, as Settings must still open.
     /// </summary>

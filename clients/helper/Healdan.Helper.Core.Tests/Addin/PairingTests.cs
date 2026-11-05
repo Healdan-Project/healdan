@@ -65,14 +65,45 @@ public sealed class PairingTests : IDisposable
     }
 
     [Fact]
-    public void AnAppThatIsntWordExcelOrPowerPointIsRefused()
+    public void AnAppThatIsntWordExcelPowerPointOrOutlookIsRefused()
     {
         var pairing = NewPairing();
 
         Assert.Throws<ArgumentException>(() => pairing.Start("Your bank wants your password"));
         Assert.Throws<ArgumentException>(() => pairing.Start("word"));
+        Assert.Throws<ArgumentException>(() => pairing.Start("outlook"));
 
         Assert.Empty(_windows.PairingCodes); // the window never shows a name it was sent
+    }
+
+    [Fact]
+    public void OutlookPairsByNameAsTheLastOfTheApps()
+    {
+        Assert.Equal(["Word", "Excel", "PowerPoint", "Outlook"], Pairing.Apps); // M5 spec §7.1: Outlook isn't an OfficeProgram
+        var pairing = NewPairing();
+
+        var key = PairApp(pairing, "Outlook");
+
+        Assert.Equal("Outlook", Assert.Single(_windows.PairingCodes).App);
+        Assert.Equal("Outlook", pairing.AppFor(key));
+        var outlook = Assert.Single(pairing.Paired());
+        Assert.Equal("Outlook", outlook.App);
+    }
+
+    [Fact]
+    public void OutlookIsListedAfterPowerPointWhateverTheOrderTheyPaired()
+    {
+        var pairing = NewPairing();
+        var outlook = PairApp(pairing, "Outlook");
+        PairApp(pairing, "PowerPoint");
+        PairApp(pairing, "Word");
+
+        Assert.Equal(["Word", "PowerPoint", "Outlook"], pairing.Paired().Select(p => p.App));
+
+        pairing.Forget("Outlook");
+
+        Assert.Null(pairing.AppFor(outlook));
+        Assert.Equal(["Word", "PowerPoint"], pairing.Paired().Select(p => p.App));
     }
 
     [Fact]

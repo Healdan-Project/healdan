@@ -2,9 +2,7 @@
 // SPDX-License-Identifier: LGPL-3.0-only
 
 using System.Diagnostics;
-using System.Globalization;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Cycle;
@@ -331,8 +329,7 @@ public sealed class OfficeFiling(CopyCycle cycle, OfficeApps apps, IWindows wind
     }
 
     private static long FolderId(JsonObject answer) =>
-        answer["folderId"] is JsonValue id && id.GetValueKind() == JsonValueKind.Number
-        && long.TryParse(id.ToJsonString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var folder) && folder >= 0
+        JsonNumbers.Whole(answer["folderId"]) is long folder && folder >= 0
             ? folder
             : throw new ArgumentException("The Save window's folderId is missing or isn't a folder's id.", nameof(answer));
 

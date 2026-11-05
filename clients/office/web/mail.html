@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 The Healdan Project -->
+<!-- SPDX-License-Identifier: LGPL-3.0-only -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Healdan</title>
+  <link rel="stylesheet" href="healdan.css">
+</head>
+<body>
+  <!-- The Outlook add-in's pane (M5 spec section 8): whether the message being read is filed, where, and the buttons to
+       file it. The server's Content-Security-Policy allows scripts from the server and Office.js's address only, so none
+       is inline. Everything the helper says is put in as text. -->
+  <header class="brand">
+    <img src="assets/healdan-32.png" alt="" width="24" height="24">
+    <h1>Healdan</h1>
+  </header>
+
+  <main id="main" aria-busy="true">
+    <section id="status-section" aria-labelledby="status-title">
+      <h2 id="status-title">This Message</h2>
+      <p id="status" class="status waiting" role="status">Checking Healdan…</p>
+      <ul id="copies" class="copies" hidden></ul>
+    </section>
+
+    <section id="busy-section" aria-label="In progress" hidden>
+      <p class="waiting"><span class="spinner" aria-hidden="true"></span><span id="busy-text" role="status"></span></p>
+    </section>
+
+    <p id="outcome" class="status ok" role="status" hidden></p>
+
+    <section id="actions-section" aria-labelledby="actions-title" hidden>
+      <h2 id="actions-title">File</h2>
+      <div id="suggestions" class="suggestions"></div>
+      <button id="file-other" type="button">File…</button>
+    </section>
+
+    <form id="pairing" aria-labelledby="pairing-title" novalidate hidden>
+      <h2 id="pairing-title">Pair Outlook with Healdan Helper</h2>
+      <p id="pairing-help" class="help">Healdan Helper shows a six-digit code in a window on your Mac. Type it here, then choose Pair.</p>
+      <div class="field">
+        <label for="code">Code</label>
+        <input id="code" name="code" type="text" inputmode="numeric" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="7" aria-describedby="pairing-help pairing-problem">
+        <button id="pair" type="submit">Pair</button>
+      </div>
+      <p id="pairing-problem" class="form-problem" role="alert"></p>
+    </form>
+  </main>
+
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="healdan.js"></script>
+  <script src="mail-glue.js"></script>
+  <script src="mail.js"></script>
+</body>
+</html>

@@ -45,6 +45,10 @@ public class ContractTests
         { "get", "/v1/documents/{docNumber}/properties" },
         { "get", "/v1/documents/{docNumber}/versions" },
         { "get", "/v1/documents/{docNumber}/thumbnail" },
+        // Email (M5).
+        { "post", "/v1/emails/inspect" },
+        { "get", "/v1/emails" },
+        { "post", "/v1/emails" },
     };
 
     [Fact]
@@ -85,6 +89,19 @@ public class ContractTests
         var paths = Map(Contract.Value["paths"]);
         Assert.Equal(["version", "file"], PartNames(paths["/v1/documents/{docNumber}/versions"]));
         Assert.Equal(["document", "file"], PartNames(paths["/v1/documents"]));
+        Assert.Equal(["file"], PartNames(paths["/v1/emails/inspect"]));
+        Assert.Equal(["email", "file"], PartNames(paths["/v1/emails"]));
+    }
+
+    [Fact]
+    public void FindingCopiesRepeatsMessageIdForEachMessage()
+    {
+        var get = Map(Map(Map(Contract.Value["paths"])["/v1/emails"])["get"]);
+        var parameter = Map(Assert.Single((List<object>)get["parameters"]));
+        Assert.Equal("messageId", parameter["name"]);
+        Assert.Equal("query", parameter["in"]);
+        Assert.Equal("true", parameter["explode"]);
+        Assert.Equal("form", parameter["style"]);
     }
 
     private static List<string> PartNames(object path)
@@ -113,6 +130,27 @@ public class ContractTests
             }
         }
         Assert.True(checkedTypes >= 10, "the models should carry [Schema] attributes");
+    }
+
+    /// <summary>
+    /// The records nested in a model read objects the contract describes inline, so [Schema] can't name them: each is
+    /// checked against its place in the parent's schema.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(FiledEmail.SkippedPart), "FiledEmail", "skipped")]
+    [InlineData(typeof(EmailCopy.Copy), "EmailCopy", "copies")]
+    public void EveryFieldReadByANestedRecordIsInTheSchema(Type nested, string schema, string property)
+    {
+        var items = Map(Map(Map(Map(Schemas[schema])["properties"])[property])["items"]);
+        var known = PropertyNames(items);
+        Assert.NotEmpty(known);
+        foreach (var read in nested.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        {
+            var json = JsonNamingPolicy.CamelCase.ConvertName(read.Name);
+            Assert.True(known.Contains(json), $"{nested.Name}.{read.Name} ({json}) is not in {schema}.{property}");
+        }
+        Assert.Equal(known.Order(), nested.GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => JsonNamingPolicy.CamelCase.ConvertName(p.Name)).Order());
     }
 
     private static HashSet<string> PropertyNames(object schema)

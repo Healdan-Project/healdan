@@ -17,10 +17,26 @@ public sealed record FakeSave(
     long DocNumber, string Kind, bool KeepCheckedOut, string? Name, string? IfVersion, bool IfHeld, string? SaveId,
     string Content, string Outcome);
 
+/// <summary>A copy of a message in <see cref="FakeApi"/>: the document, the folder it's in, and the message's normalised Message-ID.</summary>
+public sealed record FakeEmailCopy(string MessageId, long DocNumber, long FolderId);
+
+/// <summary>
+/// A folder in <see cref="FakeApi"/>, for <c>GET /folders/{id}</c> and <c>/folders/recent</c>: in the matter
+/// <paramref name="MatterId"/>, shown as <paramref name="Matter"/>, and one the person may file into when
+/// <paramref name="CanFile"/>.
+/// </summary>
+public sealed record FakeFolder(long Id, string Name, long MatterId, string Matter, bool CanFile);
+
 /// <summary>A document in <see cref="FakeApi"/>.</summary>
 public sealed class FakeDoc
 {
     public required long Number { get; init; }
+
+    /// <summary>
+    /// The document's internal id, which the server's addresses (<c>/frontend.jsp?docId=</c>) use. It is never the doc #, so a
+    /// test can't pass by taking one for the other.
+    /// </summary>
+    public long Id => 90_000 + Number;
 
     public required string Name { get; set; }
 
@@ -38,6 +54,8 @@ public sealed class FakeDoc
     public string? LastSaveId { get; set; }
 
     public DateTimeOffset LastSaved { get; set; } = DateTimeOffset.Parse("2026-10-24T09:30:00Z");
+
+    public DateTimeOffset DateFiled { get; set; } = DateTimeOffset.Parse("2026-10-01T09:00:00Z");
 
     public string Content => Encoding.UTF8.GetString(Files[FileVersion]);
 }
@@ -67,6 +85,14 @@ public sealed class FakeApi : HttpMessageHandler
     private bool _refuseNextSave;
     private bool _refuseNextFiling;
     private bool _breakNextSave;
+    private readonly List<FakeEmailCopy> _emailCopies = [];
+    private readonly Dictionary<long, FakeFolder> _folders = [];
+    private List<long> _recentFolders = [];
+    private readonly Dictionary<long, string> _forms = [];
+    private readonly HashSet<long> _brokenFolders = [];
+    private readonly List<NewEmail> _emailsReceived = [];
+    private readonly Queue<(int Status, string Code, string Detail, JsonObject? Extra)> _emailRefusals = new();
+    private int _emailBreaks;
 
     public static FakeHold Here(string? app = "LibreOffice") => new(MyId, MyName, HereDevice, HereName, app);
 
@@ -173,12 +199,107 @@ public sealed class FakeApi : HttpMessageHandler
             _refuseNextSave = true;
     }
 
-    /// <summary>Refuses the next filing (<c>POST /documents</c>), as a folder the user can't add to does: nothing is filed.</summary>
+    /// <summary>Refuses the next filing (<c>POST /documents</c> or <c>POST /emails</c>), as a folder the user can't add to does: nothing is filed.</summary>
     public void RefuseNextFiling()
     {
         lock (_lock)
             _refuseNextFiling = true;
     }
+
+    /// <summary>
+    /// Makes <paramref name="docNumber"/> (made if it isn't there) a copy of the message <paramref name="messageId"/> in
+    /// folder <paramref name="folderId"/>, for <c>GET /emails</c>, <c>POST /emails/inspect</c> and as the copy a filing
+    /// meets. The id is kept as the server does, without angle brackets. <paramref name="filed"/> is when it was filed.
+    /// </summary>
+    public void AddEmailCopy(string messageId, long docNumber, long folderId, DateTimeOffset? filed = null)
+    {
+        lock (_lock)
+        {
+            if (!_docs.ContainsKey(docNumber))
+                _docs[docNumber] = new FakeDoc { Number = docNumber, Name = "Message.eml", Files = { ["1.0"] = [] } };
+            if (filed is { } when)
+                _docs[docNumber].DateFiled = when;
+            _emailCopies.Add(new FakeEmailCopy(NormaliseMessageId(messageId), docNumber, folderId));
+        }
+    }
+
+    /// <summary>
+    /// Makes folder <paramref name="id"/> known, for <c>GET /folders/{id}</c>: a folder of that name in the matter
+    /// <paramref name="matterId"/>, whose copies of a message are shown in it. Others are <c>404</c>.
+    /// </summary>
+    public void AddFolder(long id, string name, long matterId = 3, string matter = "1.1 – Smoke Matter", bool canFile = true)
+    {
+        lock (_lock)
+            _folders[id] = new FakeFolder(id, name, matterId, matter, canFile);
+    }
+
+    /// <summary>Sets <c>GET /folders/recent</c>: these folders, in this order (each made with <see cref="AddFolder"/>).</summary>
+    public void SetRecentFolders(params long[] ids)
+    {
+        lock (_lock)
+            _recentFolders = [.. ids];
+    }
+
+    /// <summary>
+    /// Sets <c>GET /folders/{id}/form</c> for the folder: <paramref name="form"/>, a <c>ProfileFieldPage</c>. A folder
+    /// <see cref="AddFolder"/> made without one answers <see cref="Tests.Forms.Forms.Page"/>, whose required fields all
+    /// have values; any other is <c>404</c>.
+    /// </summary>
+    public void SetForm(long folderId, JsonElement form)
+    {
+        lock (_lock)
+            _forms[folderId] = form.GetRawText();
+    }
+
+    /// <summary><c>GET /folders/{id}</c> for the folder fails from now on as a server in trouble does (<c>503</c>).</summary>
+    public void BreakFolder(long id)
+    {
+        lock (_lock)
+            _brokenFolders.Add(id);
+    }
+
+    /// <summary>
+    /// The next <c>POST /emails</c> (and the next after it, for each call) answers this problem, filing nothing: a refusal
+    /// such as <c>409 filing-rule</c>, or a <c>5xx</c>. <paramref name="extra"/> adds members such as <c>fields</c>.
+    /// </summary>
+    public void RefuseNextEmail(int status, string code, string detail, JsonObject? extra = null)
+    {
+        lock (_lock)
+            _emailRefusals.Enqueue((status, code, detail, extra));
+    }
+
+    /// <summary>The next <c>POST /emails</c> gets no answer, as when Healdan can't be reached: filing nothing.</summary>
+    public void DropNextEmail()
+    {
+        lock (_lock)
+            _emailBreaks++;
+    }
+
+    /// <summary>The <c>email</c> part of each <c>POST /emails</c> received, filed or refused, in order.</summary>
+    public IReadOnlyList<NewEmail> EmailsReceived
+    {
+        get
+        {
+            lock (_lock)
+                return [.. _emailsReceived];
+        }
+    }
+
+    /// <summary>
+    /// Answers <c>POST /emails</c> itself: called with the <c>email</c> part and the file, it gives the <c>201</c> body.
+    /// Left null, the fake files only the email (its copy joins <see cref="AddEmailCopy"/>'s), refuses a message the
+    /// folder already holds as <c>409 already-filed</c> with the copy, and a ticked attachment as <c>422</c>, as it has none.
+    /// </summary>
+    public Func<NewEmail, byte[], FiledEmail>? FileEmail { get; set; }
+
+    /// <summary>
+    /// Answers <c>POST /emails/inspect</c> itself. Left null, the fake reads the file's <c>Message-ID</c> and
+    /// <c>Subject</c> headers, finds no attachments and gives the copies <see cref="AddEmailCopy"/> made.
+    /// </summary>
+    public Func<byte[], EmailInspection>? InspectEmail { get; set; }
+
+    /// <summary>When set, <c>POST /emails/inspect</c> answers this problem, as for a message over the upload limit (<c>413 too-large</c>).</summary>
+    public (int Status, string Code, string Detail)? InspectRefusal { get; set; }
 
     /// <summary>The next save throws what no request should, so the cycle meets a failure it doesn't expect.</summary>
     public void BreakNextSave()
@@ -236,6 +357,18 @@ public sealed class FakeApi : HttpMessageHandler
         var parts = route.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts is ["documents"] && request.Method == HttpMethod.Post)
             return await FileAsync(request, ct);
+        if (parts is ["emails", "inspect"] && request.Method == HttpMethod.Post)
+            return await InspectAsync(request, ct);
+        if (parts is ["emails"] && request.Method == HttpMethod.Post)
+            return await FileEmailAsync(request, ct);
+        if (parts is ["emails"] && request.Method == HttpMethod.Get)
+            return CopiesOf(request.RequestUri);
+        if (parts is ["folders", "recent"] && request.Method == HttpMethod.Get)
+            return RecentFolders();
+        if (parts is ["folders", var folderId] && request.Method == HttpMethod.Get && long.TryParse(folderId, out var folder))
+            return FolderAnswer(folder);
+        if (parts is ["folders", var formFolderId, "form"] && request.Method == HttpMethod.Get && long.TryParse(formFolderId, out var formFolder))
+            return FormAnswer(formFolder);
         if (parts.Length < 2 || parts[0] != "documents" || !long.TryParse(parts[1], out var n))
             return Problem(404, "not-found", "No such route in the fake.");
         lock (_lock)
@@ -406,6 +539,160 @@ public sealed class FakeApi : HttpMessageHandler
         }
     }
 
+    private async Task<HttpResponseMessage> InspectAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var file = await ReadFileAsync(request, ct);
+        lock (_lock)
+            return InspectRefusal is { } refusal
+                ? Problem(refusal.Status, refusal.Code, refusal.Detail)
+                : JsonAnswer(InspectEmail?.Invoke(file) ?? Inspect(file));
+    }
+
+    private EmailInspection Inspect(byte[] eml)
+    {
+        var (messageId, subject) = ReadHeaders(eml);
+        return new EmailInspection(messageId, subject, null, null, [], messageId is null ? [] : CopyViews(messageId));
+    }
+
+    private async Task<HttpResponseMessage> FileEmailAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var (json, file) = await ReadFormAsync(request, "email", ct);
+        var email = json.Deserialize<NewEmail>(Json)!;
+        lock (_lock)
+        {
+            _emailsReceived.Add(email);
+            if (_emailBreaks > 0)
+            {
+                _emailBreaks--;
+                throw new HttpRequestException("Connection refused (fake).");
+            }
+            if (_emailRefusals.TryDequeue(out var refusal))
+                return Problem(refusal.Status, refusal.Code, refusal.Detail, refusal.Extra);
+            if (_refuseNextFiling)
+            {
+                _refuseNextFiling = false;
+                return Problem(403, "forbidden", "You can't add documents to this folder.");
+            }
+            if (FileEmail is { } custom)
+                return JsonAnswer(custom(email, file), HttpStatusCode.Created);
+
+            var (messageId, subject) = ReadHeaders(file);
+            if (messageId is not null && _emailCopies.FirstOrDefault(c => c.MessageId == messageId && c.FolderId == email.FolderId) is { } held)
+                return Problem(409, "already-filed", $"This message is already in this matter as #{held.DocNumber}.",
+                    new JsonObject { ["document"] = JsonSerializer.SerializeToNode(View(_docs[held.DocNumber], held.FolderId), Json) });
+            if (email.Attachments.Count > 0)
+                return Problem(422, "validation", "Some fields are wrong.", new JsonObject
+                {
+                    ["fields"] = new JsonArray(email.Attachments.Select(i => (JsonNode)new JsonObject
+                    {
+                        ["field"] = "attachments",
+                        ["code"] = "not-an-attachment",
+                        ["detail"] = $"Part {i} isn't an attachment of this email."
+                    }).ToArray())
+                });
+
+            var doc = new FakeDoc { Number = _nextNumber++, Name = (subject ?? "Message") + ".eml" };
+            doc.Files["1.0"] = file;
+            _docs[doc.Number] = doc;
+            if (messageId is not null)
+                _emailCopies.Add(new FakeEmailCopy(messageId, doc.Number, email.FolderId));
+            _calls.Add($"filed {doc.Number}");
+            return JsonAnswer(new FiledEmail(View(doc, email.FolderId), [], []), HttpStatusCode.Created);
+        }
+    }
+
+    /// <summary>
+    /// The answer of <c>GET /emails</c>: one item for each different id asked for, in order, whatever its brackets. As the
+    /// server does, it counts the values sent, 1 to 100, not the distinct ids they come to.
+    /// </summary>
+    private HttpResponseMessage CopiesOf(Uri uri)
+    {
+        var sent = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries)
+            .Select(p => p.Split('=', 2))
+            .Where(p => p[0] == "messageId")
+            .Select(p => Uri.UnescapeDataString(p.ElementAtOrDefault(1) ?? ""))
+            .ToList();
+        if (sent.Count is 0 or > 100)
+            return Problem(400, "bad-request", "Send messageId 1 to 100 times.");
+        var asked = sent.Select(NormaliseMessageId).Distinct().ToList();
+        lock (_lock)
+            return JsonAnswer(new EmailCopies([.. asked.Select(id => new EmailCopy(id, [.. _emailCopies
+                .Where(c => c.MessageId == id)
+                .Select(c => new EmailCopy.Copy(View(_docs[c.DocNumber], c.FolderId), $"http://localhost:8080/frontend.jsp?docId={_docs[c.DocNumber].Id}"))]))]));
+    }
+
+    private HttpResponseMessage RecentFolders()
+    {
+        lock (_lock)
+        {
+            var items = _recentFolders.Where(_folders.ContainsKey).Select(id => FolderOf(_folders[id])).ToList();
+            return JsonAnswer(new Page<FolderView>(items, 0, 50, items.Count));
+        }
+    }
+
+    private HttpResponseMessage FolderAnswer(long id)
+    {
+        lock (_lock)
+        {
+            if (_brokenFolders.Contains(id))
+                return Problem(503, "unavailable", "Healdan is busy. Try again in a moment.");
+            return _folders.TryGetValue(id, out var folder)
+                ? JsonAnswer(FolderOf(folder))
+                : Problem(404, "not-found", "No such folder.");
+        }
+    }
+
+    private HttpResponseMessage FormAnswer(long id)
+    {
+        lock (_lock)
+        {
+            var form = _forms.TryGetValue(id, out var set) ? set : _folders.ContainsKey(id) ? Tests.Forms.Forms.Page : null;
+            return form is null
+                ? Problem(404, "not-found", "No such folder.")
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(form, Encoding.UTF8, "application/json") };
+        }
+    }
+
+    private static FolderView FolderOf(FakeFolder f) => new(
+        "folder", f.Id, f.Name, "folder", new MatterRef(f.MatterId, f.Matter), new StoreRef(1, "Healdan"),
+        [new FolderRef(1, "Healdan", "store"), new FolderRef(10_000 + f.MatterId, f.Matter, "matter"), new FolderRef(f.Id, f.Name, "folder")],
+        f.CanFile);
+
+    private List<DocumentView> CopyViews(string messageId) =>
+        [.. _emailCopies.Where(c => c.MessageId == messageId).Select(c => View(_docs[c.DocNumber], c.FolderId))];
+
+    /// <summary>The Message-ID as the server keeps it: without its angle brackets (a pair) or surrounding space.</summary>
+    private static string NormaliseMessageId(string id)
+    {
+        id = id.Trim();
+        return id.Length >= 2 && id[0] == '<' && id[^1] == '>' ? id[1..^1].Trim() : id;
+    }
+
+    /// <summary>The <c>Message-ID</c> and <c>Subject</c> headers of a plain message, where the header block has them.</summary>
+    private static (string? MessageId, string? Subject) ReadHeaders(byte[] eml)
+    {
+        string? messageId = null, subject = null;
+        foreach (var line in Encoding.UTF8.GetString(eml).Split('\n'))
+        {
+            var text = line.TrimEnd('\r');
+            if (text.Length == 0) break; // the header block ends
+            if (text.StartsWith("Message-ID:", StringComparison.OrdinalIgnoreCase))
+                messageId = NormaliseMessageId(text["Message-ID:".Length..]);
+            else if (text.StartsWith("Subject:", StringComparison.OrdinalIgnoreCase))
+                subject = text["Subject:".Length..].Trim();
+        }
+        return (messageId, subject);
+    }
+
+    private static async Task<byte[]> ReadFileAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        var form = Assert.IsType<MultipartFormDataContent>(request.Content);
+        foreach (var part in form)
+            if (part.Headers.ContentDisposition?.Name?.Trim('"') == "file")
+                return await part.ReadAsByteArrayAsync(ct);
+        throw new InvalidOperationException("no file part");
+    }
+
     private static async Task<(JsonNode Json, byte[] File)> ReadFormAsync(HttpRequestMessage request, string jsonPart, CancellationToken ct)
     {
         var form = Assert.IsType<MultipartFormDataContent>(request.Content);
@@ -448,8 +735,21 @@ public sealed class FakeApi : HttpMessageHandler
     private static DocumentView View(FakeDoc d) => new(
         "document", d.Number, d.Name, d.Files[d.FileVersion].Length, d.Version, d.FileVersion, $"{d.Number}.{d.FileVersion}",
         new FolderRef(9, "Documents", "folder"), new MatterRef(3, "1.1 – Smoke Matter"),
-        DateTimeOffset.Parse("2026-10-01T09:00:00Z"), d.LastSaved, Hold(d.Hold),
+        d.DateFiled, d.LastSaved, Hold(d.Hold),
         d.CanWrite && (d.Hold is null || (d.Hold.ById == MyId && (d.Hold.DeviceId is null || d.Hold.DeviceId == HereDevice))));
+
+    /// <summary>
+    /// The document as a message copy in <paramref name="folderId"/>: in the folder <see cref="AddFolder"/> made (and its
+    /// matter), else in a folder called Documents of the smoke matter.
+    /// </summary>
+    private DocumentView View(FakeDoc d, long folderId) => _folders.TryGetValue(folderId, out var f)
+        ? View(d) with { Folder = new FolderRef(f.Id, f.Name, "folder"), Matter = new MatterRef(f.MatterId, f.Matter) }
+        : View(d) with { Folder = new FolderRef(folderId, "Documents", "folder") };
+
+    private static HttpResponseMessage JsonAnswer<T>(T body, HttpStatusCode status = HttpStatusCode.OK) => new(status)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(body, Json), Encoding.UTF8, "application/json")
+    };
 
     private static HttpResponseMessage Ok(FakeDoc doc, HttpStatusCode status = HttpStatusCode.OK) => new(status)
     {

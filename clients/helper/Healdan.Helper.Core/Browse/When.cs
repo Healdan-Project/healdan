@@ -58,6 +58,17 @@ public static partial class When
         return date.ToString(LongDate(c), c);
     }
 
+    /// <summary>
+    /// The day as <see cref="Date(DateTimeOffset, TimeZoneInfo?, CultureInfo?)"/> writes it, and the time: "2 November 2026 at
+    /// 14:05" in the UK, "November 2, 2026 at 2:05 PM" in the US. For when a message was sent (M5 spec §7.3).
+    /// </summary>
+    public static string DateAndTime(DateTimeOffset at, TimeZoneInfo? zone = null, CultureInfo? culture = null)
+    {
+        var c = culture ?? CultureInfo.CurrentCulture;
+        var local = TimeZoneInfo.ConvertTime(at, zone ?? TimeZoneInfo.Local);
+        return $"{local.ToString(LongDate(c), c)} at {Time(local, c)}";
+    }
+
     /// <summary>The region's day with the month abbreviated and the year, "MMM d, yyyy" in the US, for a date picker.</summary>
     public static string ShortDatePattern(CultureInfo? culture = null) => Abbreviated(LongDate(culture ?? CultureInfo.CurrentCulture));
 

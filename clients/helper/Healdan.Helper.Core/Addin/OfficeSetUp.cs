@@ -10,8 +10,9 @@ namespace Healdan.Helper.Core.Addin;
 /// Set Up Microsoft Office (M3.5 spec §5.13): when it applies, when the helper offers it, and what its Set Up does,
 /// which is to make the helper's own certificate and have the computer trust it. The other two things the window explains,
 /// each app's Automation and its Grant File Access, are asked by macOS when each app first needs them.
-/// <para>It applies only to a Mac with Word, Excel or PowerPoint on it. Microsoft Office is a Mac app here (Windows comes
-/// later), so off macOS it is never needed, offered or done, whatever <see cref="InstalledApps"/> says.</para>
+/// <para>It applies only to a Mac with Word, Excel, PowerPoint or Outlook on it, the apps Healdan's add-in runs in (M5 spec
+/// §7.1: Outlook's reaches the helper on the same port, with the same certificate). Microsoft Office is a Mac app here
+/// (Windows comes later), so off macOS it is never needed, offered or done, whatever <see cref="InstalledApps"/> says.</para>
 /// </summary>
 /// <param name="installed">The installed apps, read at each call, so an Office installed later counts.</param>
 /// <param name="macOS">Whether this is a Mac; only the tests say otherwise.</param>
@@ -20,8 +21,8 @@ public sealed class OfficeSetUp(
 {
     private readonly bool _macOS = macOS ?? OperatingSystem.IsMacOS();
 
-    /// <summary>This is a Mac with Word, Excel or PowerPoint on it.</summary>
-    public bool Applies => _macOS && installed().MicrosoftOffice;
+    /// <summary>This is a Mac with Word, Excel, PowerPoint or Outlook on it.</summary>
+    public bool Applies => _macOS && installed().AnyAddinApp;
 
     /// <summary>
     /// <see cref="Applies"/>, and the certificate is missing, nearly out of days, or not trusted: the menu offers Set Up

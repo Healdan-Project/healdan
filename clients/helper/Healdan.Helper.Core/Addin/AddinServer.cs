@@ -15,18 +15,18 @@ using Healdan.Helper.Core.Logging;
 namespace Healdan.Helper.Core.Addin;
 
 /// <summary>
-/// The add-in's port (M3.5 spec §5.8, §9): a second listener beside the extension's channel, which Word, Excel and
-/// PowerPoint's Healdan add-in calls from its pages on the helper's own server. Office's web view blocks a secure page's
-/// requests to <c>http://127.0.0.1</c>, so it's HTTPS, with the helper's own certificate, on <c>127.0.0.1</c> only, at the
-/// first of <see cref="AddinPorts.All"/> it can take.
+/// The add-in's port (M3.5 spec §5.8, §9): a second listener beside the extension's channel, which Word, Excel,
+/// PowerPoint and Outlook's Healdan add-in calls from its pages on the helper's own server. Office's web view blocks a
+/// secure page's requests to <c>http://127.0.0.1</c>, so it's HTTPS, with the helper's own certificate, on
+/// <c>127.0.0.1</c> only, at the first of <see cref="AddinPorts.All"/> it can take.
 /// <para>HTTP/1.1, one request per connection (<c>Connection: close</c>): a request line, headers to an empty line, and a
 /// <c>Content-Length</c> body. Anything else is <c>400 bad-request</c>. Before any route runs, a request must pass, in
 /// this order: <c>Host</c> is this port at <c>127.0.0.1</c> or <c>localhost</c> (no DNS rebinding); <c>Origin</c> is the
 /// helper's server's (no other page, and no other Healdan's), and only then does an answer carry CORS headers, a
 /// preflight's included; <c>X-Healdan-Protocol</c> is one it speaks; <c>X-Healdan-Key</c> is a paired key
-/// (<see cref="Pairing.AppFor"/>), but for <c>hello</c> and pairing itself; and the helper is signed in, but for
-/// <c>ping</c>, which says whether it is. Review Focus 5: another user of the Mac has no key, and a web page has neither
-/// the origin nor the key.</para>
+/// (<see cref="Pairing.AppFor"/>), but for <c>hello</c> and pairing itself; the helper is signed in, but for <c>ping</c>,
+/// which says whether it is; and on a <c>mail/</c> route, the key is Outlook's, and on any other but <c>result</c>, it
+/// isn't. Review Focus 5: another user of the Mac has no key, and a web page has neither the origin nor the key.</para>
 /// <para>It does transport and those checks; the routes are <see cref="AddinHandler"/>'s. Every request is short
 /// (<see cref="PendingResults"/>): a keyed route still running after the hold time answers <c>202 {"pending": id}</c>, and
 /// <c>result</c>, a keyed route like the others, answers its outcome later. Its log names routes and refusals, never a
@@ -49,7 +49,10 @@ namespace Healdan.Helper.Core.Addin;
 public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bool> signedIn, X509Certificate2 certificate, HelperLog log,
     IReadOnlyList<int>? ports = null, TimeSpan? hold = null) : IDisposable
 {
-    /// <summary>The largest body taken: Save to Healdan's document, in base64 (plan: the add-in's port).</summary>
+    /// <summary>
+    /// The largest body taken: Save to Healdan's document, or a message Outlook files, in base64 (plan: the add-in's port;
+    /// M5 spec §7.2).
+    /// </summary>
     public const long MaxBodyBytes = 150L * 1024 * 1024;
 
     /// <summary>The largest body any other route takes, so one without a key can't make the helper hold 150 MiB.</summary>
@@ -75,7 +78,14 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
     private static readonly HashSet<string> PairingRoutes = ["pair/start", "pair/finish"];
 
     /// <summary>The routes that need a paired key. They're the add-in's own, apart from the extension's channel's.</summary>
-    private static readonly HashSet<string> KeyedRoutes = ["ping", "open-dialog", "save-new", "file", "new-version", "properties", "state", "result"];
+    private static readonly HashSet<string> KeyedRoutes =
+    [
+        "ping", "open-dialog", "save-new", "file", "new-version", "properties", "state", "result",
+        "mail/status", "mail/file", // Outlook's (M5 spec §7.2); filing several messages adds its routes with Task 13
+    ];
+
+    /// <summary>The routes that take a document or a message, up to <see cref="MaxBodyBytes"/>; the rest, <see cref="SmallBodyBytes"/>.</summary>
+    private static bool TakesLargeBody(string? route) => route is "file" or "mail/file";
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
@@ -367,8 +377,16 @@ public sealed class AddinServer(AddinHandler handler, Func<Uri?> server, Func<bo
             return new Answer(200, new JsonObject { ["ok"] = true, ["signedIn"] = signedIn() });
         if (app is not null && !signedIn())
             return Answer.Error(409, "signed-out");
+        // Outlook's routes are its key's alone: another's is refused before its body is read, so a Word key can't have the
+        // helper read 150 MiB for nothing (AddinHandler refuses it the same way).
+        if (route.StartsWith("mail/", StringComparison.Ordinal) && app != Pairing.OutlookName)
+            return Refused(400, "bad-request", "its key isn't Outlook's, and the mail routes are Outlook's alone");
+        // And the document routes are Word's, Excel's and PowerPoint's: Outlook's key is refused on them as early, so it can't
+        // have the helper read 150 MiB for nothing either. It keeps result, for its own routes' outcomes.
+        if (app == Pairing.OutlookName && !route.StartsWith("mail/", StringComparison.Ordinal) && route != "result")
+            return Refused(400, "bad-request", "its key is Outlook's, and the document routes are Word's, Excel's and PowerPoint's");
 
-        if (request.ContentLength > (route == "file" ? MaxBodyBytes : SmallBodyBytes))
+        if (request.ContentLength > (TakesLargeBody(route) ? MaxBodyBytes : SmallBodyBytes))
             return Answer.Error(413, "too-large");
         var body = await request.ReadBodyAsync(tls, reading);
         if (body is null)

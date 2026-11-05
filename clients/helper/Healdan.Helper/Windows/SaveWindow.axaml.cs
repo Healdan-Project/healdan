@@ -16,6 +16,13 @@ namespace Healdan.Helper.Windows;
 /// list, or the folder shown), fills in the properties and picks the format, the app's own first. Save turns on only
 /// once the folder can take documents and every required field has a value. The answer goes back on
 /// <c>/v1/save-new</c>: the extension then writes the document to the answer's temporary file and files it.
+/// <para>Its email mode, File to Healdan (M5 spec §7.3), files a message from Outlook: the folder and its properties as
+/// for a document, with the message's subject, sender and when it was sent shown read-only in place of the name (M1 names
+/// an email after its subject), and "Also file attachments as separate documents", unticked, with a tick for each
+/// attachment, in place of the format. The box ticks and unticks them all; each can be unticked while it's ticked.
+/// Its Save files through the window, with Save, Cancel and closing off meanwhile: once filed (or the matter holds the
+/// message already) it closes; a refusal shows in it, a property's under the field and an attachment's under its tick,
+/// and it stays open to choose another folder or untick.</para>
 /// </summary>
 public partial class SaveWindow : Window
 {
@@ -39,44 +46,54 @@ public partial class SaveWindow : Window
         (_request, _api, _paths) = (request, api, paths);
         if (request.DocNumber is not null)
             Title = "Save as New Document";
-        BrowserChrome.Apply(this, Toolbar, WindowTitle, [BackButton, ForwardButton, UpButton, ScopePicker, SearchBox]);
-        _browser = new Browser(api, BrowseMode.Save);
-        var places = new PlacesPane(BrowseMode.Save);
-        PlacesHost.Child = places.View;
-        _controls = new BrowseControls(_browser, places, new BrowseControls.Parts(BackButton, ForwardButton, UpButton, ScopePicker, SearchBox,
-            CrumbPanel, StarButton, StarIcon, EntryList, NoticeText, NewFolderButton, NewFolderBar, NewFolderName, NewFolderCreate, NewFolderCancel));
-        _controls.Selected += _ => TargetChanged();
-        places.Chosen += place =>
-        {
-            if (place.Kind == PlaceKind.Clients)
-                _controls.FocusSearch();
-        };
+        (_browser, _controls) = Browse(api);
 
         NameBox.Text = request.Name;
         NameBox.TextChanged += (_, _) => UpdateSave();
         AddFormats(request);
 
-        SaveButton.Click += (_, _) => Save();
         LocalButton.Click += (_, _) => Finish(WindowAnswers.Local());
-        CancelButton.Click += (_, _) => Close();
         Opened += async (_, _) =>
         {
             NameBox.Focus();
             NameBox.SelectAll();
             await StartAsync();
         };
-        Closed += (_, _) => _browser.Dispose();
         Notice("Choose a folder to file the document in.");
     }
 
-    /// <summary>What the window answers <c>/v1/save-new</c>; Cancel until the user chooses otherwise.</summary>
+    /// <summary>The folder picker, with Save and Cancel, as both modes have them.</summary>
+    private (Browser, BrowseControls) Browse(HealdanApi api)
+    {
+        BrowserChrome.Apply(this, Toolbar, WindowTitle, [BackButton, ForwardButton, UpButton, ScopePicker, SearchBox]);
+        var browser = new Browser(api, BrowseMode.Save);
+        var places = new PlacesPane(BrowseMode.Save);
+        PlacesHost.Child = places.View;
+        var controls = new BrowseControls(browser, places, new BrowseControls.Parts(BackButton, ForwardButton, UpButton, ScopePicker, SearchBox,
+            CrumbPanel, StarButton, StarIcon, EntryList, NoticeText, NewFolderButton, NewFolderBar, NewFolderName, NewFolderCreate, NewFolderCancel));
+        controls.Selected += _ => TargetChanged();
+        places.Chosen += place =>
+        {
+            if (place.Kind == PlaceKind.Clients)
+                controls.FocusSearch();
+        };
+        SaveButton.Click += (_, _) => Save();
+        CancelButton.Click += (_, _) => Close();
+        Closed += (_, _) => browser.Dispose();
+        return (browser, controls);
+    }
+
+    /// <summary>What the window answers <c>/v1/save-new</c>, or in its email mode <c>mail/file</c>; Cancel until the user chooses otherwise.</summary>
     internal JsonObject Answer { get; private set; } = WindowAnswers.Cancel();
 
-    /// <summary>Opens on Recent Folders, or for Save as New Document on the original's folder, with its properties.</summary>
+    /// <summary>
+    /// Opens on Recent Folders, or for Save as New Document on the original's folder, with its properties, or in the email
+    /// mode on the folder the request names.
+    /// </summary>
     private async Task StartAsync()
     {
-        long? folderId = null;
-        if (_request!.DocNumber is { } n)
+        long? folderId = _email?.FolderId;
+        if (_request?.DocNumber is { } n)
         {
             try
             {
@@ -85,7 +102,7 @@ public partial class SaveWindow : Window
                 var original = await doc;
                 folderId = original.Folder.Id;
                 // Named after the original as Healdan has it, not the window's title, unless the user has typed meanwhile.
-                if (NameBox.Text == _request.Name)
+                if (NameBox.Text == _request!.Name)
                 {
                     NameBox.Text = _request.StartingName(original.Name);
                     NameBox.SelectAll();
@@ -142,19 +159,21 @@ public partial class SaveWindow : Window
         var target = _browser!.TargetFolder(_controls!.SelectedEntry);
         if (target?.Id == _target?.Id)
             return;
+        if (_email is not null && !_submitting)
+            Line(null, problem: true); // another folder, or the first chosen: the last refusal is no longer the question
         _target = target;
         var load = ++_formLoad;
         UpdateSave();
         if (target is null)
         {
             Notice(_browser.Folder is null
-                ? "Choose a folder inside a matter to file the document in."
+                ? $"Choose a folder inside a matter to file the {What} in."
                 : "Choose a folder inside the matter: its top level takes no documents.");
             return;
         }
         if (!target.CanFile)
         {
-            Notice($"Documents can't be filed in {target.Name}. Choose a folder inside a matter that you can add to.");
+            Notice($"{(_email is null ? "Documents" : "Emails")} can't be filed in {target.Name}. Choose a folder inside a matter that you can add to.");
             return;
         }
         if (target.Id == _formFolder?.Id && _form is not null)
@@ -195,6 +214,11 @@ public partial class SaveWindow : Window
         (_form, _formFolder) = (form, folder);
         FormHost.IsVisible = true;
         FormNotice.IsVisible = false;
+        if (_pendingRefusal is { } refusal && folder.Id == _email?.FolderId)
+        {
+            _pendingRefusal = null;
+            ShowRefusal(refusal);
+        }
         UpdateSave();
     }
 
@@ -205,12 +229,19 @@ public partial class SaveWindow : Window
         UpdateSave();
     }
 
+    /// <summary>What's being filed, for the notices: a document, or in the email mode an email.</summary>
+    private string What => _email is null ? "document" : "email";
+
+    /// <summary>The folder takes documents and its form is filled; and, but in the email mode, the name and format are good.</summary>
     private bool CanSave()
     {
+        var ready = _target is { CanFile: true } target && _form is not null && _formFolder?.Id == target.Id && FormHost.IsVisible
+            && _form.CanSave(target.CanFile);
+        if (_email is not null)
+            return ready && !_submitting;
         var nameProblem = DocumentNames.Problem(_request!.FinalName(NameBox.Text), _format);
         (NameProblem.Text, NameProblem.IsVisible) = (nameProblem, nameProblem is not null);
-        return _target is { CanFile: true } target && _form is not null && _formFolder?.Id == target.Id && FormHost.IsVisible
-            && _form.CanSave(target.CanFile) && nameProblem is null && _format is not null;
+        return ready && nameProblem is null && _format is not null;
     }
 
     private void UpdateSave() => SaveButton.IsEnabled = CanSave();
@@ -219,7 +250,10 @@ public partial class SaveWindow : Window
     {
         if (!CanSave())
             return;
-        Finish(WindowAnswers.Save(_target!.Id, _request!.FinalName(NameBox.Text), _format!, _form!.Values(), WindowAnswers.TempPath(_paths!, _format!)));
+        if (_email is not null)
+            Submit(WindowAnswers.SaveEmail(_target!.Id, _form!.Values(), Ticked()));
+        else
+            Finish(WindowAnswers.Save(_target!.Id, _request!.FinalName(NameBox.Text), _format!, _form!.Values(), WindowAnswers.TempPath(_paths!, _format!)));
     }
 
     private void Finish(JsonObject answer)

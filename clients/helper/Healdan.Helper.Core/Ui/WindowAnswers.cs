@@ -42,6 +42,19 @@ public static class WindowAnswers
         return ticketed;
     }
 
+    /// <summary>
+    /// The Save window's Save in its email mode (M5 spec §7.3): the folder, what the user changed of its properties, and the
+    /// attachments ticked to file as separate documents, by their <see cref="Api.EmailPart.Index"/>. No name: M1 names
+    /// every email after its subject.
+    /// </summary>
+    public static JsonObject SaveEmail(long folderId, JsonObject properties, IEnumerable<int> attachments) => new()
+    {
+        ["action"] = "save",
+        ["folderId"] = folderId,
+        ["properties"] = properties.DeepClone(),
+        ["attachments"] = new JsonArray([.. attachments.Select(i => (JsonNode)i)])
+    };
+
     /// <summary>"Save to local computer" or "Open from local computer": the app's own box, at once.</summary>
     public static JsonObject Local() => Action("local");
 
@@ -67,6 +80,7 @@ public static class WindowAnswers
     {
         "save-new" => "Healdan Helper isn't signed in, so this document is saved on this computer. Sign in to save to Healdan.",
         "open-dialog" => "Healdan Helper isn't signed in, so LibreOffice's own Open box is shown. Sign in to open from Healdan.",
+        "mail/file" => "Healdan Helper isn't signed in, so the email wasn't filed. Sign in, then file it again from Outlook.",
         _ => "Sign in to Healdan Helper to see the document's properties."
     };
 

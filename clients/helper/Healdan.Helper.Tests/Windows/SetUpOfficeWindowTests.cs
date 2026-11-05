@@ -67,7 +67,7 @@ public sealed class SetUpOfficeWindowTests : IDisposable
         Assert.Equal("Set Up Microsoft Office", window.Title);
         Assert.Contains("Set Up Microsoft Office", texts);
         Assert.Contains("Trust Healdan Helper's certificate", texts);
-        Assert.Contains("macOS asks for your password once. Word, Excel and PowerPoint use it to reach Healdan Helper on this Mac.", texts);
+        Assert.Contains("macOS asks for your password once. Word, Excel, PowerPoint and Outlook use it to reach Healdan Helper on this Mac.", texts);
         Assert.Contains("Allow Healdan Helper to control each app", texts);
         Assert.Contains("The first time it saves a document in Word, Excel or PowerPoint, macOS asks. Choose Allow.", texts);
         Assert.Contains("Grant each app the Copies folder", texts);

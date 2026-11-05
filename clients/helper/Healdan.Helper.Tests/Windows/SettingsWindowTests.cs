@@ -248,6 +248,15 @@ public sealed class SettingsWindowTests : IDisposable
     }, setUpAlready: true);
 
     [MacFact]
+    public Task OutlookAloneIsEnoughForTheGroupAndItsSetUp() => Run(window =>
+    {
+        Assert.True(Find<Border>(window, "OfficeGroup").IsVisible);
+        Assert.True(Find<Grid>(window, "SetUpRow").IsVisible);
+        Assert.Contains("Trusts Healdan Helper's certificate, so Word, Excel, PowerPoint and Outlook can reach it.", Texts(window));
+        return Task.CompletedTask;
+    }, installed: OnlyLibreOffice with { Outlook = true });
+
+    [MacFact]
     public Task NoOfficeAndNothingPairedLeavesTheGroupOut() => Run(window =>
     {
         Assert.False(Find<Border>(window, "OfficeGroup").IsVisible);
@@ -269,16 +278,17 @@ public sealed class SettingsWindowTests : IDisposable
     {
         Assert.False(Find<TextBlock>(window, "PairedNone").IsVisible);
         var list = Find<StackPanel>(window, "PairedList");
-        Assert.Equal(2, list.Children.Count);
+        Assert.Equal(3, list.Children.Count);
         var texts = Texts(list);
         Assert.Contains("Word", texts);
         Assert.Contains("PowerPoint", texts);
+        Assert.Contains("Outlook", texts); // M5: one more app, listed as the others are
         Assert.Contains($"Paired on {When.Date(Paired)}", texts); // in the region's order
         var forgets = list.GetVisualDescendants().OfType<Button>().ToList();
-        Assert.Equal(["Forget", "Forget"], forgets.Select(b => b.Content));
-        Assert.Equal(["Forget Word", "Forget PowerPoint"], forgets.Select(AutomationProperties.GetName));
+        Assert.Equal(["Forget", "Forget", "Forget"], forgets.Select(b => b.Content));
+        Assert.Equal(["Forget Word", "Forget PowerPoint", "Forget Outlook"], forgets.Select(AutomationProperties.GetName));
         return Task.CompletedTask;
-    }, paired: [new PairedApp("Word", Paired), new PairedApp("PowerPoint", Paired)]);
+    }, paired: [new PairedApp("Word", Paired), new PairedApp("PowerPoint", Paired), new PairedApp("Outlook", Paired)]);
 
     [MacFact]
     public Task ForgetMakesTheHelperForgetThatAppAndTakesItOffTheList() => Run(window =>

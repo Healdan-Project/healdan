@@ -48,6 +48,9 @@
 
   const HOSTS = ["Word", "Excel", "PowerPoint"];
 
+  /** The apps that may pair with the helper: the three with ribbon buttons, and Outlook, whose pane (mail.html) files email. */
+  const CLIENT_HOSTS = [...HOSTS, "Outlook"];
+
   /** localStorage's names: the key is kept per app (healdan.key.Word), and the port the helper answered on. */
   const KEY_PREFIX = "healdan.key.";
   const PORT_NAME = "healdan.port";
@@ -112,6 +115,7 @@
     "pairing-expired": "That code has expired, or was cancelled. Press the button again for a new one.",
     "too-many-tries": "Too many wrong codes were typed, so pairing is paused for 10 minutes. Try again after that.",
     "too-large": "This document is too large for the add-in to send to Healdan Helper.",
+    "over-upload-limit": "This message is larger than Healdan accepts. An administrator can raise the upload limit.",
     "too-many-pending": "Healdan Helper is still busy with this app's earlier requests. Wait for them to finish, then try again.",
     "bad-request": "Healdan Helper didn't understand the add-in. If it keeps happening, update Healdan Helper.",
     "internal-error": "Healdan Helper hit a problem. Its log has the details.",
@@ -187,13 +191,13 @@
    * @param {Function} [options.fetch] the page's fetch (a fake in tests)
    * @param {Storage} [options.storage] the page's localStorage, which Office keeps for each app and the pane and the ribbon's buttons share
    * @param {string} [options.origin] the page's origin, which the helper must be signed in to: another server's helper is passed by
-   * @param {string} options.host "Word", "Excel" or "PowerPoint"
+   * @param {string} options.host "Word", "Excel", "PowerPoint" or "Outlook"
    * @param {number} [options.probeTimeout] milliseconds to wait for each port's hello
    */
   function createHelperClient(options) {
     const host = options && options.host;
-    if (!HOSTS.includes(host)) {
-      throw new TypeError(`The add-in runs in Word, Excel or PowerPoint, not ${host}.`);
+    if (!CLIENT_HOSTS.includes(host)) {
+      throw new TypeError(`The add-in runs in Word, Excel, PowerPoint or Outlook, not ${host}.`);
     }
     const doFetch = options.fetch || ((...args) => root.fetch(...args));
     const storage = options.storage || pageStorage();
@@ -316,7 +320,7 @@
      * Sends one request and resolves to the helper's response. `repeatable` is for a request that can be sent twice
      * without doing anything twice (asking result): one that failed on the way is sent again where the helper answers.
      * `doneIfSent` is for one the helper may have carried out though its answer never came (file, which files the
-     * document): one that failed on the way is lost-result, and isn't sent again.
+     * document, and mail/file, which files the message): one that failed on the way is lost-result, and isn't sent again.
      */
     async function request(route, body, keyed, repeatable, doneIfSent) {
       const key = keyed ? read(keyName) : null;
@@ -369,11 +373,11 @@
      * From the first 202 on, the route may have done what it was asked (a pending file may have filed the document),
      * and the add-in can't tell: "try again" could do it twice. So whatever stops it learning the outcome, as result
      * being refused, the helper signing out, or the helper not answering twice, is lost-result, which says to check the
-     * document in Healdan. The route's own error answers are still its own. A file request that failed on the way is
-     * lost-result too, as the helper may have filed the document before its answer was lost.
+     * document in Healdan. The route's own error answers are still its own. A file or mail/file request that failed on
+     * the way is lost-result too, as the helper may have filed the document or the message before its answer was lost.
      */
     async function call(route, body) {
-      const first = await request(route, body, true, false, route === "file");
+      const first = await request(route, body, true, false, route === "file" || route === "mail/file");
       const firstAnswer = await jsonOf(first);
       if (first.status !== PENDING) {
         return answerOf(first, firstAnswer, true);
