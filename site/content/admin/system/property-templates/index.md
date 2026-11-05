@@ -13,7 +13,7 @@ Templates**, on the **Templates** and **Attribute sets** tabs.
 The **Healdan profile** template holds the properties every document and folder carries, which
 [Properties](../../../user/working-with-matters/properties/) in the User Guide describes.
 
-![The Healdan profile template's Properties tab: its fourteen attributes, from client, matter, author and typist to docclass, docsubclass, comments, legacydocnum and the six email fields, with Class mandatory, Client and Matter read-only, and Subclass depending on docclass](profile-attributes.png)
+![The Healdan profile template's Properties tab: its fifteen attributes, from client, matter, author and typist to docclass, docsubclass, comments, legacydocnum and the seven email fields, Message-ID last, with Class mandatory, Client and Matter read-only, and Subclass depending on docclass](profile-attributes.png)
 
 - **Healdan puts it on every document and folder in a matter** each time one is saved, so one given another
   template there gets the Healdan profile back at its next save.

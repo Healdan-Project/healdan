@@ -330,7 +330,7 @@ Healdan hides Dropbox (80): its GUI shows only with menu `-2070`, which the `hid
 - **Absent.**
   - IMAP/POP import. There's no `EmailAccount` entity, and `EmailCrawler` appears only as a logger name. The GUI client code exists.
   - Inbound "email to DMS" addresses.
-- **What `MailUtil` doesn't keep.** It collects every part with a file name as an attachment, inline images included, keeps no part dispositions or Content-IDs, and never fills `EMail`'s headers, which has no Message-ID field. An `.msg`'s Message-ID is msgparser's `Message.getMessageId()`. So Healdan walks an `.eml`'s parts itself with Jakarta Mail (`MailUtil.readMime` gives the `MimeMessage`).
+- **What `MailUtil` doesn't keep.** It collects every part with a file name as an attachment, inline images included, keeps no part dispositions or Content-IDs, and never fills `EMail`'s headers, which has no Message-ID field. An `.msg`'s Message-ID is its `PR_INTERNET_MESSAGE_ID` property (0x1035), the one msgparser's `Message.getMessageId()` reads, which Healdan's `EmailFields` reads from the file's `__substg1.0_1035001F` (or 8-bit `…001E`) stream with POI. So Healdan walks an `.eml`'s parts itself with Jakarta Mail (`MailUtil.readMime` gives the `MimeMessage`).
 - **Filing from Outlook is Healdan's** (M5): CE has no add-in or server side for it. Healdan adds the `emailmessageid` property (the Message-ID), `hd_email` (Healdan's index of it), a rule that a matter holds a message once on every route (`OncePerMatterListener`, `HealdanHooks`), `POST /api/v1/emails` with `inspect` and `GET /api/v1/emails`, and Outlook's add-in through the Healdan Helper. CE itself lets the same email be uploaded into one folder any number of times.
 
 ### 5.3 Full-text extraction gap ✔ checked
