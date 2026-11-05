@@ -100,7 +100,7 @@ function fakeClient(routes = {}) {
   };
 }
 
-function fakeGlue({ item = { internetMessageId: "<own@x>" }, headers = "", eml = "RU1M", categoryFails = false } = {}) {
+function fakeGlue({ item = { internetMessageId: "<own@x>" }, headers = "", eml = "RU1M", categoryFails = false, listed = ["Healdan"], listFails = false, listAddFails = false } = {}) {
   const log = [];
   const glue = {
     log,
@@ -111,6 +111,19 @@ function fakeGlue({ item = { internetMessageId: "<own@x>" }, headers = "", eml =
     readEml: async () => {
       log.push("readEml");
       return eml;
+    },
+    masterCategories: async () => {
+      log.push("masterCategories");
+      if (listFails) {
+        throw Object.assign(new Error("no"), { code: 5001 });
+      }
+      return listed;
+    },
+    addMasterCategory: async () => {
+      log.push("addMasterCategory");
+      if (listAddFails) {
+        throw Object.assign(new Error("no"), { code: 5002 });
+      }
     },
     addCategory: async () => {
       log.push("addCategory");
@@ -265,6 +278,59 @@ test("a category that can't be added leaves the filing filed", async () => {
   }
   assert.equal(logged.length, 1);
   assert.doesNotMatch(logged[0], /Secret/);
+});
+
+async function filedWith(glue) {
+  const warn = console.warn;
+  const logged = [];
+  console.warn = (...args) => logged.push(args.join(" "));
+  try {
+    const view = await Mail.fileMessage(fakeClient({ "mail/file": { outcome: "filed", email: { docNumber: 1, name: "Secret subject" } } }), glue, 1);
+    return { view, logged };
+  } finally {
+    console.warn = warn;
+  }
+}
+
+test("a category the mailbox's list lacks is added to the list first, then to the message", async () => {
+  const glue = fakeGlue({ listed: ["Blue category"] });
+  const { view, logged } = await filedWith(glue);
+  assert.equal(view.kind, "ok");
+  assert.deepEqual(glue.log.filter((l) => /ategor/.test(l)), ["masterCategories", "addMasterCategory", "addCategory"]);
+  assert.deepEqual(logged, []);
+});
+
+test("a category the list has already goes straight to the message", async () => {
+  const glue = fakeGlue({ listed: ["Healdan"] });
+  await filedWith(glue);
+  assert.deepEqual(glue.log.filter((l) => /ategor/.test(l)), ["masterCategories", "addCategory"]);
+});
+
+test("when the list can't take the category, the message gets none, the filing counts and the code is logged", async () => {
+  const glue = fakeGlue({ listed: [], listAddFails: true });
+  const { view, logged } = await filedWith(glue);
+  assert.equal(view.kind, "ok");
+  assert.match(view.text, /^Filed/);
+  assert.equal(glue.log.includes("addCategory"), false);
+  assert.equal(logged.length, 1);
+  assert.match(logged[0], /5002/);
+  assert.doesNotMatch(logged[0], /Secret/);
+});
+
+test("when the list can't be read, the message gets no category and the filing counts", async () => {
+  const glue = fakeGlue({ listFails: true });
+  const { view, logged } = await filedWith(glue);
+  assert.equal(view.kind, "ok");
+  assert.equal(glue.log.includes("addCategory"), false);
+  assert.match(logged[0], /5001/);
+});
+
+test("a message over the upload limit says so", async () => {
+  const error = Object.assign(new Error("The email is larger than the 10 MB limit."), { code: "too-large" });
+  const glue = fakeGlue();
+  const view = await Mail.fileMessage({ call: async () => { throw error; } }, glue, 1);
+  assert.deepEqual(view, { kind: "problem", text: "This message is larger than Healdan accepts. An administrator can raise the upload limit." });
+  assert.equal(glue.log.includes("addCategory"), false);
 });
 
 test("a message Outlook won't give, or an outage, is a problem and not filed", async () => {

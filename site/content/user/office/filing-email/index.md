@@ -5,7 +5,8 @@ weight: 6
 
 With Healdan Helper on your Mac and your administrator's add-in in Outlook, you file the message you're reading into a
 matter without leaving Outlook. The Healdan pane shows whether the message is already in Healdan, and files it with
-one click. This page is about one message at a time.
+one click. This page is about one message at a time, in your own mailbox: the add-in's button is off in shared and
+delegated mailboxes.
 
 ## The Healdan Pane
 
@@ -54,10 +55,15 @@ Filed** with the copy's doc #, and files nothing again. The same message may be 
 ## The Healdan Category
 
 A message that Healdan has filed, or found already filed, gets Outlook's **Healdan** category, so you can find filed
-mail in Outlook. If Outlook won't add the category, the message is filed all the same.
+mail in Outlook. The category is blue. The first time, Healdan adds it to your mailbox's list of categories, and you can
+change its colour in Outlook afterwards. If Outlook won't add the category, the message is filed all the same.
 
 ## When Healdan Can't Be Reached
 
 If the pane says **Can't Reach Healdan**, the helper is running but couldn't get an answer from the server, or
-couldn't read the message (it's too large, or not a normal email). **File…** stays on, so you can try again. Nothing is
+couldn't read the message (it's not a normal email). **File…** stays on, so you can try again. Nothing is
 filed until the pane says so.
+
+## A Message That Is Too Large
+
+If the pane says **This message is larger than Healdan accepts**, the message, with its attachments, is over the upload limit. An administrator can raise the limit. Nothing is filed.

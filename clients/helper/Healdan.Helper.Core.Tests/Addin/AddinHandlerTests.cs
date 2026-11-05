@@ -419,6 +419,21 @@ public sealed class AddinHandlerTests : OfficeCycleTestBase
     }
 
     [Fact]
+    public async Task AMessageOverTheUploadLimitIsA409TooLargeWithTheServersWords()
+    {
+        Server.InspectRefusal = (413, "too-large", "The email is larger than the 10 MB limit.");
+        var handler = Handler(Cycle());
+
+        var answer = await handler.HandleAsync("mail/file", "Outlook", new JsonObject { ["eml"] = Eml() });
+
+        Assert.Equal(409, answer.Status);
+        Assert.Equal("too-large", (string?)answer.Body["error"]);
+        Assert.Equal("The email is larger than the 10 MB limit.", (string?)answer.Body["detail"]);
+        Assert.Contains("WARN /v1/mail/file from the add-in refused: too-large", Log);
+        Assert.DoesNotContain(" ERROR ", Log);
+    }
+
+    [Fact]
     public async Task TheSeveralMessageRoutesAreStillToCome()
     {
         var handler = Handler(Cycle());

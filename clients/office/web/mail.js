@@ -124,10 +124,16 @@
     return { kind: "problem", text: "Healdan Helper answered with something the add-in didn't expect.", categorise: false };
   }
 
+  /** The words for a message over the server's upload limit (the helper's 409 too-large). */
+  const TOO_LARGE = "This message is larger than Healdan accepts. An administrator can raise the upload limit.";
+
   /** The words for a helper error: internal-error is the helper not reaching Healdan or not reading the message. */
   function failureText(error) {
     if (error && error.code === "internal-error") {
       return CANT_REACH;
+    }
+    if (error && error.code === "too-large") {
+      return TOO_LARGE;
     }
     return error && typeof error.message === "string" && typeof error.code === "string"
       ? error.message
@@ -194,16 +200,31 @@
       return { kind: view.kind, text: `${view.text} Another message was open, so it has no Healdan category.`, moved: true };
     }
     if (view.categorise) {
-      try {
-        await glue.addCategory(item);
-      } catch (error) {
-        // The filing counts all the same; the category is a courtesy. Only Outlook's code is logged.
-        if (typeof console !== "undefined") {
-          console.warn(`Healdan: Outlook wouldn't add the category (code ${error && error.code}).`);
-        }
-      }
+      await categorise(glue, item);
     }
     return { kind: view.kind, text: view.text };
+  }
+
+  /**
+   * Gives the message the category Healdan. Outlook refuses a category the mailbox's list lacks (the trial's T5), so the
+   * list gets it first when it's missing. The filing counts all the same: a failure at either step is only logged, with
+   * Outlook's code and nothing else.
+   */
+  async function categorise(glue, item) {
+    let step = "read the category list";
+    try {
+      const names = await glue.masterCategories();
+      if (!names.includes("Healdan")) {
+        step = "add the category to the list";
+        await glue.addMasterCategory();
+      }
+      step = "add the category";
+      await glue.addCategory(item);
+    } catch (error) {
+      if (typeof console !== "undefined") {
+        console.warn(`Healdan: Outlook wouldn't ${step} (code ${error && error.code}).`);
+      }
+    }
   }
 
   // --- The page ------------------------------------------------------------------------------------------------------------
@@ -546,7 +567,7 @@
     };
   }
 
-  const api = { threadIds, statusView, outcomeView, fileMessage, start, POLL, CANT_REACH };
+  const api = { threadIds, statusView, outcomeView, fileMessage, start, POLL, CANT_REACH, TOO_LARGE };
 
   if (root.document && typeof root.document.getElementById === "function" && root.document.getElementById("file-other")) {
     const begin = () => {

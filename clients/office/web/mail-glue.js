@@ -9,7 +9,9 @@
  *   { item(),                  the message being read (Office.context.mailbox.item), or null where none is open
  *     headers(item),           its internet headers, as the text getAllInternetHeadersAsync gives (Mailbox 1.8)
  *     readEml(item),           the message as Base64 EML: getAsFileAsync (Mailbox 1.14)
- *     addCategory(item),       the category Healdan, with categories.addAsync (Mailbox 1.8)
+ *     masterCategories(),      the names in the mailbox's category list: masterCategories.getAsync (Mailbox 1.8)
+ *     addMasterCategory(),     adds Healdan to that list, in COLOR: masterCategories.addAsync (needs read/write mailbox)
+ *     addCategory(item),       the category Healdan, with categories.addAsync (Mailbox 1.8); Outlook refuses one the list lacks
  *     onItemChanged(fn) }      calls fn when a pinned pane's message changes (the ItemChanged event)
  *
  * Every call that asks Outlook is a promise, which rejects with an Error whose `code` is Outlook's own number for what
@@ -24,6 +26,9 @@
 
   /** The category a filed message gets. */
   const CATEGORY = "Healdan";
+
+  /** The colour of the category in the mailbox's list: Outlook's preset 7, blue (the trial found a colour is needed). */
+  const COLOR = "Preset7";
 
   /**
    * @param {object} [env] the page's globals: Office
@@ -58,13 +63,18 @@
       item: () => mailbox.item || null,
       headers: (item) => asked((done) => item.getAllInternetHeadersAsync(done)),
       readEml: (item) => asked((done) => item.getAsFileAsync(done)),
+      masterCategories: async () => {
+        const entries = await asked((done) => mailbox.masterCategories.getAsync(done));
+        return (entries || []).map((entry) => entry && entry.displayName);
+      },
+      addMasterCategory: () => asked((done) => mailbox.masterCategories.addAsync([{ displayName: CATEGORY, color: COLOR }], done)),
       addCategory: (item) => asked((done) => item.categories.addAsync([CATEGORY], done)),
       onItemChanged: (fn) =>
         asked((done) => mailbox.addHandlerAsync(Office.EventType.ItemChanged, fn, done)),
     };
   }
 
-  const api = { create, CATEGORY };
+  const api = { create, CATEGORY, COLOR };
 
   root.HealdanMailGlue = api;
   if (typeof module !== "undefined" && module.exports) {

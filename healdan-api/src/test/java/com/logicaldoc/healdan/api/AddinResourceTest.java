@@ -160,12 +160,17 @@ public class AddinResourceTest extends ApiTestCase {
 		String manifest = get("/api/addin/outlook-manifest.xml").send().text();
 
 		assertTrue(manifest, manifest.contains("xsi:type=\"MailApp\""));
-		assertTrue(manifest, manifest.contains("<Permissions>ReadWriteItem</Permissions>"));
+		assertTrue(manifest, manifest.contains("<Permissions>ReadWriteMailbox</Permissions>"));
 		assertTrue(manifest, manifest.contains("<Host Name=\"Mailbox\"/>"));
 		assertTrue(manifest, manifest.contains("xsi:type=\"MessageReadCommandSurface\""));
 		assertTrue(manifest, manifest.contains("<Action xsi:type=\"ShowTaskpane\">"));
 		assertTrue(manifest, manifest.contains("<SupportsPinning>true</SupportsPinning>"));
-		assertTrue(manifest, manifest.contains("<SupportsMultiSelect>true</SupportsMultiSelect>"));
+		// The trial: new Outlook for Mac can't read selected messages (T4), so the add-in doesn't declare several.
+		assertFalse(manifest, manifest.contains("SupportsMultiSelect"));
+		// Pinning is in the V1_1 override's ShowTaskpane action, and the pane it opens is the V1_1 one.
+		Matcher pinning = Pattern.compile("VersionOverridesV1_1.*<Action xsi:type=\"ShowTaskpane\">\\s*<SourceLocation resid=\"Pane.Url\"/>\\s*<SupportsPinning>true</SupportsPinning>\\s*</Action>", Pattern.DOTALL).matcher(manifest);
+		assertTrue(manifest, pinning.find());
+		assertTrue(manifest, manifest.contains("mail.html?v=1_1"));
 		assertTrue(manifest, manifest.contains("See whether this message is in Healdan, and file it."));
 		assertTrue(manifest, manifest.contains("DefaultValue=\"http://localhost:8080/api/addin/assets/healdan-128.png\""));
 	}

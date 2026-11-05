@@ -19,6 +19,10 @@ public sealed record AddinAnswer(int Status, JsonObject Body)
     public static AddinAnswer Ok(JsonNode? body) => new(200, body as JsonObject ?? new JsonObject());
 
     public static AddinAnswer Error(int status, string code) => new(status, new JsonObject { ["error"] = code });
+
+    /// <summary>A refusal with Healdan's own words, as <c>detail</c>.</summary>
+    public static AddinAnswer Error(int status, string code, string detail) =>
+        new(status, new JsonObject { ["error"] = code, ["detail"] = detail });
 }
 
 /// <summary>
@@ -104,6 +108,12 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
         {
             log.Warn($"Refused /v1/{route} from the add-in: {e.Code}");
             return AddinAnswer.Error(409, e.Code);
+        }
+        catch (MailTooLargeException e)
+        {
+            // The server's words name a limit, never a message, so they go to the pane; the log has the code only.
+            log.Warn($"/v1/{route} from the add-in refused: too-large");
+            return AddinAnswer.Error(409, "too-large", e.Message);
         }
         catch (PairingRestingException)
         {

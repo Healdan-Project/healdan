@@ -13,6 +13,12 @@ using Healdan.Helper.Core.Ui;
 namespace Healdan.Helper.Core.Mail;
 
 /// <summary>
+/// <c>inspect</c> refused the message as over Healdan's upload limit (<c>413 too-large</c>). The route answers it <c>409
+/// too-large</c>, with <see cref="Exception.Message"/> (the server's words) as <c>detail</c>, so the pane can say so.
+/// </summary>
+public sealed class MailTooLargeException(string detail) : Exception(detail);
+
+/// <summary>
 /// What Outlook's routes do (M5 spec §7.2): a message's status, and filing one message, here; filing several follows (M5
 /// plan, Task 13). Outlook isn't in the copy cycle, so this works straight on the server's API.
 /// <para>A status logs nothing but a status it had to answer without suggestions, as the pane asks for one at every message
@@ -232,9 +238,18 @@ public sealed class MailFiling(HealdanApi api, IWindows windows, INotifier notif
                     }
                 }
             }
-            inspection = await api.InspectEmailAsync(eml);
+            try
+            {
+                inspection = await api.InspectEmailAsync(eml);
+            }
+            catch (ApiException e) when (e.Status == 413 && e.Code == "too-large")
+            {
+                // A message over the upload limit: the pane says so, with the server's words (a limit, not a name).
+                notifier.Notify(Helper, Notice(e));
+                throw new MailTooLargeException(e.Detail);
+            }
         }
-        catch (Exception e)
+        catch (Exception e) when (e is not MailTooLargeException)
         {
             notifier.Notify(Helper, Notice(e));
             throw;

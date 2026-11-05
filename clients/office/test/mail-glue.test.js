@@ -25,12 +25,17 @@ function fakeOffice({ fail } = {}) {
     categories: { addAsync: answer("category", undefined) },
   };
   const handlers = [];
+  const mailboxCategories = [{ displayName: "Red category", color: "Preset0" }];
   const Office = {
     AsyncResultStatus: { Succeeded: OK },
     EventType: { ItemChanged: "olkItemSelectedChanged" },
     context: {
       mailbox: {
         item,
+        masterCategories: {
+          getAsync: answer("master-get", mailboxCategories),
+          addAsync: answer("master-add", undefined),
+        },
         addHandlerAsync: (type, fn, done) => {
           handlers.push([type, fn]);
           done({ status: OK });
@@ -55,6 +60,14 @@ test("addCategory adds the category Healdan", async () => {
   assert.deepEqual(calls, [["category", ["Healdan"]]]);
 });
 
+test("masterCategories gives the names, and addMasterCategory adds Healdan in a preset colour", async () => {
+  const { Office, calls } = fakeOffice();
+  const glue = MailGlue.create({ Office });
+  assert.deepEqual(await glue.masterCategories(), ["Red category"]);
+  await glue.addMasterCategory();
+  assert.deepEqual(calls, [["master-get"], ["master-add", [{ displayName: "Healdan", color: "Preset7" }]]]);
+});
+
 test("onItemChanged registers for ItemChanged", async () => {
   const { Office, handlers } = fakeOffice();
   const fn = () => {};
@@ -65,7 +78,7 @@ test("onItemChanged registers for ItemChanged", async () => {
 test("a failure rejects with Outlook's code", async () => {
   const { Office, item } = fakeOffice({ fail: true });
   const glue = MailGlue.create({ Office });
-  for (const ask of [glue.readEml, glue.headers, glue.addCategory]) {
+  for (const ask of [glue.readEml, glue.headers, glue.addCategory, () => glue.masterCategories(), () => glue.addMasterCategory()]) {
     await assert.rejects(ask(item), (error) => error.code === 9004 && error.message === "No.");
   }
 });

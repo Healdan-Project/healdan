@@ -538,7 +538,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
 | `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
-| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` before any window is up, when File Here can't reach Healdan or `inspect` fails (no answer, too large, not an email, `401`); Outlook's key only |
+| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` before any window is up, when File Here can't reach Healdan or `inspect` fails (no answer, not an email, `401`); `409 too-large` with `detail` when `inspect` refuses a message over the upload limit; Outlook's key only |
 | `POST /v1/mail/file-many` | the number of messages and their subjects | a ticket; Outlook's key only |
 | `POST /v1/mail/file-one` | the ticket and one `.eml` | filed, `already-filed` or failed; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
@@ -596,12 +596,15 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     down. It never goes pending. An unreachable or refusing server is `500 internal-error`, but when only a folder can't
     be read for now (anything but `404` or `403`, which leave that folder out), the status answers without suggestions.
   - **The pane** (`clients/office/web/mail.html`, `mail.js`, `mail-glue.js`) is Outlook's page for these routes. `mail-glue.js`
-    holds the Outlook calls (`internetMessageId`, `getAllInternetHeadersAsync`, `getAsFileAsync`, `categories.addAsync`, the
-    `ItemChanged` event) and `mail.js` the logic, which Node's tests run. It sends `mail/status` the ids from `threadIds`
+    holds the Outlook calls (`internetMessageId`, `getAllInternetHeadersAsync`, `getAsFileAsync`, `masterCategories`,
+    `categories.addAsync`, the `ItemChanged` event) and `mail.js` the logic, which Node's tests run. It sends `mail/status` the ids from `threadIds`
     on each change, one check at a time, and `mail/file` with the message as base64, then adds the category `Healdan`
-    after `filed` or `already-filed` only. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
+    after `filed` or `already-filed` only: Outlook refuses a category its mailbox's list lacks, so the list gets `Healdan` first
+    (preset colour `Preset7`, blue) when it's missing. A failure at either step is logged in the console, with Outlook's code, and
+    the filing still counts. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
     helper says goes on the page as text, and an address is a link only when it's http or https. Several messages at once
-    are not handled yet.
+    are not handled yet: new Outlook for Mac 16.114 reports Mailbox 1.14 and has no `loadItemByIdAsync`, so the manifest
+    doesn't declare `SupportsMultiSelect`, and the add-in asks for read/write mailbox for the category list.
   - **`mail/file`** files one message (`MailFiling.FileAsync`).
     - **With `folderId` (File Here),** it reads the folder's form (`GET /api/v1/folders/{id}/form`). When every required
       field has a value, its own or an inherited one, it files the message there at once with no properties and no
@@ -627,8 +630,9 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
       under its tick until the tick changes; anything else, a field name that doesn't parse included, shows on the line
       by Save, until the next Save or another folder is chosen. An outage (no answer, or a `5xx`) stays open too, saying
       "Can't reach Healdan. Try again." Cancel is `outcome: cancelled`.
-    - **Before any window is up,** an outage on File Here, or any failure of `inspect` (no answer, a message too large,
-      one that isn't an email, a `401`), is told in the helper's notification and answered `500 internal-error`. The log
+    - **Before any window is up,** an outage on File Here, or any failure of `inspect` (no answer, one that isn't an
+      email, a `401`), is told in the helper's notification and answered `500 internal-error`. A message over the upload
+      limit (`413 too-large`) is answered `409 too-large` instead, with the server's words as `detail`, and the pane says so. The log
       has Healdan's status and code, a `4xx` as a warning and a `5xx` as an error. The window's refusals are never
       notified: the window says them.
     - **Like `save-new`,** it answers `202` when it's still running after 20 s, while the window is up.

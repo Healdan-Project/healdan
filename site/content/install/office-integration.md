@@ -173,10 +173,12 @@ about the address, HTTPS and the pages needing no sign-in apply to it too.
    custom apps**, choose **Office Add-in**, and upload the file.
 3. **Choose who gets it,** and finish the deployment.
 
-- **What it asks for.** The add-in reads and changes the message it is open on (the permission Microsoft calls
-  `ReadWriteItem`), which is what filing a message and marking it with the Healdan category need. It asks for nothing
-  about the rest of the mailbox. It shows a **Healdan** button when a message is open, which opens a pane that can be
-  pinned, and works on several selected messages at once where Outlook allows it.
+- **What it asks for.** The add-in reads the message it is open on and has read and write access to the mailbox (the
+  permission Microsoft calls `ReadWriteMailbox`). Marking a filed message with the Healdan category needs it: Outlook
+  refuses a category that isn't in the mailbox's category list, so the add-in adds **Healdan** to that list once, and
+  then to the message. It reads and changes nothing else. It shows a **Healdan** button when a message is open, which
+  opens a pane that can be pinned. It works in the primary mailbox only, not in shared or delegated ones, and on one
+  message at a time.
 - **A new manifest needs Update add-in.** As for Word's, when an upgrade raises the manifest's `<Version>`, download it
   again, select Healdan under **Settings › Integrated apps**, and choose **Update add-in**. The pane's page comes from
   your server and changes when it does.

@@ -291,6 +291,9 @@ public sealed class FakeApi : HttpMessageHandler
     /// </summary>
     public Func<byte[], EmailInspection>? InspectEmail { get; set; }
 
+    /// <summary>When set, <c>POST /emails/inspect</c> answers this problem, as for a message over the upload limit (<c>413 too-large</c>).</summary>
+    public (int Status, string Code, string Detail)? InspectRefusal { get; set; }
+
     /// <summary>The next save throws what no request should, so the cycle meets a failure it doesn't expect.</summary>
     public void BreakNextSave()
     {
@@ -530,7 +533,9 @@ public sealed class FakeApi : HttpMessageHandler
     {
         var file = await ReadFileAsync(request, ct);
         lock (_lock)
-            return JsonAnswer(InspectEmail?.Invoke(file) ?? Inspect(file));
+            return InspectRefusal is { } refusal
+                ? Problem(refusal.Status, refusal.Code, refusal.Detail)
+                : JsonAnswer(InspectEmail?.Invoke(file) ?? Inspect(file));
     }
 
     private EmailInspection Inspect(byte[] eml)
