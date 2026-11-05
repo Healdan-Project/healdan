@@ -154,16 +154,19 @@ once CoffeePDF has quit.
 
 A document's check-out can end while its app is away, such as when someone unlocks it in the web page. So before your
 kept copy reopens, from the crash window's **Reopen**, the helper's menu, **Open from Healdan** or **Open in App**, the
-helper asks Healdan whether the document is still checked out to you:
+helper asks Healdan whether the document is still checked out to you. It asks too when Word, Excel or PowerPoint brings
+your work back by itself, before that goes to Healdan:
 
 - **It is:** the copy reopens, and carries on as before.
 - **Nobody has it now, and nothing newer was stored:** the helper checks it out to you again, and the copy reopens and
   carries on as before.
-- **Someone else has it, you have it on another computer, or someone stored newer content:** the copy still reopens,
-  with what you last saved, and at once a notice says "It can't be saved to Healdan any more. Your copy is kept: use
-  Save as New Document to file your changes." You know before you work on it: see
-  [Your Check-Out Ended](#your-check-out-ended).
-- **Healdan can't be reached:** the copy reopens all the same. If its check-out had ended, your first save tells you.
+- **Someone else has it, you have it on another computer, someone stored newer content, or the document has been
+  deleted or you can't open it any more:** the copy still reopens, with your work in it, and at once a notice says "It
+  can't be saved to Healdan any more. Your copy is kept: use Save as New Document to file your changes." You know
+  before you work on it: see [Your Check-Out Ended](#your-check-out-ended). The helper doesn't move the check-out back
+  from your other computer, as you may have the document open there.
+- **Healdan can't be reached, or doesn't answer within a few seconds:** the copy reopens all the same. If its check-out
+  had ended, your first save tells you.
 
 ## Your Check-Out Ended
 

@@ -11,7 +11,7 @@ namespace Healdan.Helper.Core.Tests.Cycle;
 /// releases it. Reopening the copy (the crash window's Reopen, Open from Healdan or a link) asks Healdan first. A
 /// check-out that ended with nothing newer stored is taken again, so the copy's saves go up as before. Anything else
 /// says at once that the copy can't be saved to Healdan, rather than at its first save, and the copy still reopens, so
-/// Save as New Document can file it.
+/// Save as New Document can file it. What Word brings back by itself is checked the same way before it's sent.
 /// </summary>
 public sealed class CrashedHoldTests : OfficeCycleTestBase
 {
@@ -135,6 +135,189 @@ public sealed class CrashedHoldTests : OfficeCycleTestBase
         await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
         Assert.Equal("the work Word recovered", Server.Doc(5).Content);
         Assert.Empty(Events.Ended);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ReopenWhileHealdanDoesntAnswerReopensWithinTheWait()
+    {
+        // A server that takes the request and never answers holds the reopen up for HoldCheck, not the API's 10 minutes.
+        var (cycle, path) = await OpenAsync(timings: Fast with { HoldCheck = TimeSpan.FromMilliseconds(300) });
+        await CrashAsync(path);
+        Server.Before = async (call, ct) =>
+        {
+            if (call == "GET /documents/5")
+                await Task.Delay(Timeout.Infinite, ct);
+            return null;
+        };
+        Scripting.WindowText = "the work Word recovered";
+
+        var reopen = cycle.OpenAsync(5, false);
+
+        Assert.Same(reopen, await Task.WhenAny(reopen, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal([OfficeProgram.Word], Scripting.Started);
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal("the work Word recovered", Server.Doc(5).Content);
+        Assert.Empty(Events.Ended);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Theory]
+    [InlineData(503, "unavailable")]
+    [InlineData(429, "too-many-requests")]
+    [InlineData(401, "unauthenticated")]
+    public async Task ReopenWhileTheCheckOutCantBeTakenYetReopensAsBefore(int status, string code)
+    {
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Server.Change(5, d => d.Hold = null);
+        Server.Before = (call, _) => Task.FromResult<(int, string)?>(call == "POST /documents/5/checkout" ? (status, code) : null);
+
+        await cycle.OpenAsync(5, false);
+
+        // Reopened as before #136: nothing is said yet, and its first save finds out.
+        Assert.Equal([OfficeProgram.Word], Scripting.Started);
+        Assert.Equal(2, Server.Count("POST /documents/5/checkout"));
+        Assert.Empty(Events.Ended);
+        Assert.True(Store.Find(path)!.Value.Item2.CheckedOutHere);
+        await Wait.Until(() => Events.Ended.Contains(path), "the first save refused");
+        Assert.Equal(["not-held"], Server.Saves.Select(s => s.Outcome));
+    }
+
+    [Fact]
+    public async Task ReopenWhenTheCheckOutIsTakenInTheMomentSaysAtOnceItCantBeSaved()
+    {
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Server.Change(5, d => d.Hold = null);
+        Server.Before = (call, _) =>
+        {
+            if (call == "POST /documents/5/checkout")
+                Server.Change(5, d => d.Hold = FakeApi.OtherPerson()); // between the read and the check-out
+            return Task.FromResult<(int, string)?>(null);
+        };
+
+        await cycle.OpenAsync(5, false);
+
+        Assert.Equal([path], Events.Ended);
+        Assert.Equal(FakeApi.OtherPerson(), Server.Doc(5).Hold);
+        Assert.False(Store.Find(path)!.Value.Item2.CheckedOutHere);
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        await Task.Delay(Quiet);
+        Assert.Equal(0, Server.SavesReceived);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Theory]
+    [InlineData(404, "not-found")] // deleted in the web page
+    [InlineData(403, "forbidden")] // no longer the user's to read
+    public async Task ReopenOfADocumentThatCantBeReadSaysAtOnceItCantBeSaved(int status, string code)
+    {
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Server.Before = (call, _) => Task.FromResult<(int, string)?>(call == "GET /documents/5" ? (status, code) : null);
+
+        await cycle.OpenAsync(5, false);
+
+        Assert.Equal([path], Events.Ended);
+        Assert.Equal(1, Server.Count("POST /documents/5/checkout"));
+        Assert.False(Store.Find(path)!.Value.Item2.CheckedOutHere);
+        Assert.Equal([OfficeProgram.Word], Scripting.Started);
+        await Wait.Until(() => Scripting.SavesAs.Count == 1, "the recovered window saved back");
+        await Task.Delay(Quiet);
+        Assert.Equal(0, Server.SavesReceived);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ReopenWhileASaveIsOnItsWayLeavesItToTheSavesAnswer()
+    {
+        // The copy's own save, still unanswered, moves the document on too, so it isn't taken for someone else's newer
+        // content: its answer says what happened, as before #136.
+        var (cycle, path) = await OpenAsync();
+        await WatchedAsync(path);
+        Server.HoldSaves();
+        Save(path, "saved just before the crash");
+        await Wait.Until(() => Server.SavesReceived == 1, "the save sent");
+        await CrashAsync(path);
+
+        await cycle.OpenAsync(5, false);
+
+        Assert.Equal(1, Server.Count("GET /documents/5")); // the first open's: Healdan wasn't asked
+        Assert.Empty(Events.Ended);
+        Server.OpenSaves();
+        await Wait.Until(() => Server.Saves.Count == 2, "the save and the recovered window stored");
+        Assert.Equal(["stored 1.1", "stored 1.2"], Server.Saves.Select(s => s.Outcome));
+        Assert.Empty(Events.Ended);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task ACheckInDuringTheCheckLeavesNoCheckOutBehind()
+    {
+        // Send and Check In while Reopen waits for Healdan: the check-out taken again after it is released, as nothing
+        // else would release it.
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Server.Change(5, d => d.Hold = null);
+        Server.Before = async (call, _) =>
+        {
+            if (call == "POST /documents/5/checkout")
+            {
+                await cycle.ClosedAsync(path);
+                await Wait.Until(() => cycle.OpenCopies().Count == 0, "the check-in done");
+            }
+            return null;
+        };
+
+        await cycle.OpenAsync(5, false);
+
+        Assert.Equal(2, Server.Count("POST /documents/5/checkout"));
+        Assert.Null(Server.Doc(5).Hold);
+        Assert.Equal(1, Server.Count("DELETE /documents/5/checkout"));
+        Assert.Empty(cycle.OpenCopies());
+        Assert.Empty(Scripting.Started);
+        Assert.Contains(Events.Errors, e => e.Contains("still being checked in"));
+    }
+
+    [Fact]
+    public async Task WhatWordBringsBackByItselfTakesAnEndedCheckOutAgain()
+    {
+        var (cycle, path) = await OpenAsync();
+        await CrashAsync(path);
+        Server.Change(5, d => d.Hold = null); // the web page's Unlock
+        Scripting.WindowText = "the work Word recovered";
+
+        Scripting.Recover(OfficeProgram.Word, path); // started again by the user, with no Reopen
+
+        await RenamedTo(cycle, CopyPath("Lease agreement #5 v1.1.docx"));
+        Assert.Equal(2, Server.Count("POST /documents/5/checkout"));
+        Assert.Equal(FakeApi.Here("Word"), Server.Doc(5).Hold);
+        Assert.Equal(["stored 1.1"], Server.Saves.Select(s => s.Outcome));
+        Assert.Equal("the work Word recovered", Server.Doc(5).Content);
+        Assert.Equal([path], Events.Reopens);
+        Assert.Empty(Events.Ended);
+        Assert.Empty(Events.Errors);
+    }
+
+    [Fact]
+    public async Task WhatWordBringsBackByItselfIsntSentOnceSomeoneElseHasIt()
+    {
+        var (_, path) = await OpenAsync();
+        await CrashAsync(path);
+        Server.Change(5, d => d.Hold = FakeApi.OtherPerson());
+        Scripting.WindowText = "the work Word recovered";
+
+        Scripting.Recover(OfficeProgram.Word, path);
+
+        await Wait.Until(() => Events.Ended.Contains(path), "said before anything is sent");
+        await Wait.Until(() => Events.Reopens.Contains(path), "the recovered window saved back");
+        await Task.Delay(Quiet);
+        Assert.Equal(0, Server.SavesReceived);
+        Assert.Equal(1, Server.Count("POST /documents/5/checkout"));
+        Assert.Equal(FakeApi.OtherPerson(), Server.Doc(5).Hold);
+        Assert.Equal("the work Word recovered", File.ReadAllText(path));
+        Assert.Single(Events.Ended);
         Assert.Empty(Events.Errors);
     }
 }

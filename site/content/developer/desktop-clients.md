@@ -205,15 +205,20 @@ size the helper uses, the widths then match CoreText's.
   copy takes its confirmed version's name (`CopyCycle.CatchUpName`).
 - **Reopening a crashed copy** (`CopyCycle.CheckCrashedHoldAsync`): Reopen, the menu, Open from Healdan and a link
   reopen a crashed copy from its kept file, whatever its app, and its check-out may have ended while the app was
-  away, as the web page's Unlock ends it. So the document is read first. A check-out that ended with nothing newer
-  stored (the record's `fileVersion`, unless a save's answer is still to come, as `CarryOnWithKeptCopy` decides) is
-  taken again where `canEdit` allows it: the document is free, or checked out to the user on no device. Anything
-  else (someone else's hold, the user's other device's, or a `fileVersion` that moved) ends the copy's check-out at
-  once, as a refused save would: `CheckoutEnded` gives the Save as New Document notice as the copy reopens, and
-  nothing of it is sent. A check-out still held here stays recorded, so the close releases it. When the document
-  can't be read, or the check-out fails in a way that may pass (`401`, `408`, `429`, `5xx` or no connection), the
-  copy reopens as before, and its first save finds out. A copy opened before the resume, or whose check-out ended
-  already, goes through the whole open instead: checked out, then `CarryOnWithKeptCopy`.
+  away, as the web page's Unlock ends it. So the document is read first, and so it is when Word, Excel or PowerPoint
+  brings the copy back by itself, once the save-back has saved its window over the copy and before that goes up
+  (`CheckRestoredHoldAsync`). A check-out that ended with nothing newer stored (`NewerStored`: the record's
+  `fileVersion`, unless a save's answer is still to come, as `CarryOnWithKeptCopy` decides, by the record both before
+  and after the read) is taken again where `canEdit` allows it: the document is free, or checked out to the user on no
+  device. Anything else (someone else's hold, the user's other device's, a `fileVersion` that moved, or a document that
+  can't be read any more, `403` or `404`) ends the copy's check-out at once, as a refused save would: `CheckoutEnded`
+  gives the Save as New Document notice as the copy reopens, and nothing of it is sent. The other device's check-out
+  isn't moved back, as that computer may have the document open. A check-out still held here stays recorded, so the
+  close releases it. When Healdan doesn't answer within `CycleTimings.HoldCheck` (5 seconds), can't be reached, answers
+  `401`, `408`, `429` or `5xx` (`MayPass`), or a save of the copy's is still on its way, whose answer says, the copy
+  reopens as before, and its first save finds out. A check-out taken again for a copy checked in or ended meanwhile is
+  released, unless the copy's record says this computer holds it. A copy opened before the resume, or whose check-out
+  ended already, goes through the whole open instead: checked out, then `CarryOnWithKeptCopy`.
 - **PowerPoint's close and reopen** (`CopyCycle.ReopenOfficeAsync`, after a save under a name through the seam): the
   close watcher lets go of the copy until its owner file is back, or for 10 seconds, so it isn't taken for a close,
   and then takes it on again knowing whether the owner file is there.

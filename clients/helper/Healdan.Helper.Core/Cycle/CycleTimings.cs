@@ -39,6 +39,12 @@ public sealed record CycleTimings(
     /// </summary>
     public TimeSpan RecoveryWait { get; init; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// How long a crashed copy's reopen waits for Healdan to say whether its check-out still holds (#136) before it
+    /// reopens as before, as when Healdan can't be reached.
+    /// </summary>
+    public TimeSpan HoldCheck { get; init; } = TimeSpan.FromSeconds(5);
+
     /// <summary>The wait before retry number <paramref name="attempt"/> (from 0).</summary>
     public TimeSpan RetryDelay(int attempt) =>
         RetryDelays.Count == 0 ? TimeSpan.FromSeconds(1) : RetryDelays[Math.Min(attempt, RetryDelays.Count - 1)];
