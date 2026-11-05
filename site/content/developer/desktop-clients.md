@@ -604,8 +604,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     the second and the newest 19 `References` at most, 21 in all, and never more than about 6,000 characters of them,
     so the request line stays under the 8 KB that Tomcat and most proxies allow whatever the add-in sends. Ids are
     sent and matched as the server normalises them (`MessageIds`, which follows healdan-core's to the character):
-    without angle brackets or the surrounding space Java's `strip()` trims, NUL as a space, and U+FFFD for a character
-    beyond the Basic Multilingual Plane. Ones the server counts as none (empty, over 998 characters) aren't sent. `copies` are the readable copies of the message's own id. `elsewhere` is true when the
+    without angle brackets (every pair of them, so normalising again changes nothing) or the surrounding space Java's
+    `strip()` trims, NUL as a space, and U+FFFD for a character beyond the Basic Multilingual Plane. Ones the server counts as none (empty, over 998 characters) aren't sent. `copies` are the readable copies of the message's own id. `elsewhere` is true when the
     message is filed but its thread's newest copy is in a matter none of the message's copies is in, so the pane can
     say Filed in Another Matter. `suggestions` are the folders of the thread's copies, newest first, then the person's
     recent folders (`Suggestions`): only where they may file, none in a matter that holds the message already (where File
