@@ -2,7 +2,7 @@
 
 - **Milestone:** M5 in [`docs/ROADMAP.md`](../../ROADMAP.md)
 - **Date:** 2026-11-03
-- **Status:** design agreed with the owner on 2026-11-03, question by question and then section by section, and approved by the owner the same day, while the trial (§9) was being set up on the owner's Mac. The trial ran on 2026-11-05 and passed but for T4 (§9.5); its changes to the spec are marked "changed by the trial". Implementation plan: [`docs/superpowers/plans/2026-11-03-m5-email.md`](../plans/2026-11-03-m5-email.md); approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
+- **Status:** design agreed with the owner on 2026-11-03, question by question and then section by section, and approved by the owner the same day, while the trial (§9) was being set up on the owner's Mac. The trial ran on 2026-11-05 and passed but for T4 (§9.5); its changes to the spec are marked "changed by the trial". **Built** on 2026-11-03 to 2026-11-05 in Healdan-Project/healdan#190, #191, #198 and #199 (the records); where the build changed what this spec says, the section says so and is marked "changed in the build" (the plan's decision log has each ruling). **Not yet accepted:** the owner's walkthrough (§15.2) and Healdan Helper 0.8.0 are to come. Implementation plan: [`docs/superpowers/plans/2026-11-03-m5-email.md`](../plans/2026-11-03-m5-email.md); approved the same day; its "Spec corrections and calls this plan makes" lists where it departs from this spec.
 - **Inputs:**
   - the roadmap's M5 section, and its glossary;
   - the [M1 spec](2026-10-17-m1-move-in-design.md) §6.8 (dates and emails) and §7 (the rules on every route);
@@ -41,7 +41,7 @@ M1 already treats an uploaded `.eml` or `.msg` as an email. It gets From, To, CC
 - **Several messages at once, and shared or delegated mailboxes** (changed by the trial: new Outlook for Mac 16.114 can't read selected messages, and the button is disabled outside the primary mailbox, §9.5). Phase 1 files one message, in the primary mailbox.
 - **Legacy Outlook for Mac,** and **Outlook for Windows,** which comes with the Windows helper.
 - **Importing from IMAP or POP mailboxes,** and **a Thunderbird add-on** (roadmap non-goals).
-- **Refreshing an email's fields on a new version.** M1 fills them when the document is created, and a check-in of another file leaves them, and the Message-ID, as they were.
+- **Refreshing an email's fields on a new version.** M1 fills them when the document is created, and a check-in of another file leaves them as they were. The Message-ID is the exception (changed in the build): `EmailDocumentListener.beforeCheckin` and `afterCheckin` replace the property and the `hd_email` row with the new version's, and take them away when the new version is no message, so the lookup follows the file. The rule doesn't refuse a new version (§6.4).
 
 ### 2.3 Anti-goals
 
@@ -66,6 +66,7 @@ M1 already treats an uploaded `.eml` or `.msg` as an email. It gets From, To, CC
 - **CE's `DocumentLink`** joins two documents with a free-text `type`, and the web page's Links tab lists them.
 - **`hd_matter`** is Healdan's matter table, with a row per matter. `MatterLocator` finds a folder's matter.
 - **`Pairing`** accepts only Word, Excel and PowerPoint, and `AddinServer.KeyedRoutes` lists the keyed routes.
+- **CE's `EMail` has no Message-ID field,** and `MailUtil` never fills its headers (changed in the build: found in Task 1). An `.msg`'s Message-ID comes from its `PR_INTERNET_MESSAGE_ID` property (§6.1).
 - **`AddinResource`** serves one manifest, `manifest.xml`, from `clients/office/manifest.template.xml`.
 - **The add-in's pages come from the server.** While the server can't be reached, Office can't load the add-in at all (M3.5 §6.3), and Outlook is the same.
 
@@ -111,18 +112,19 @@ Approach A was chosen over B, the helper fetching messages through Microsoft Gra
 ### 6.1 The Message-ID field (call)
 
 - **`emailmessageid`** joins the Healdan profile's email fields: a string, document only, read-only, filled from the message by `EmailDocumentListener` on every route, as the others are (M1 §6.8). A new seed step adds the attribute, as shipped steps never change.
-- **The value** is the `Message-ID` header without its angle brackets or surrounding whitespace, compared exactly. An `.msg` gives it from its transport headers or msgparser's own field (the builder checks which). A message with no Message-ID gets none, and is never a duplicate.
-- **It's shown and searched** like the other email fields, in Properties and in the Emails scopes.
+- **The value** is the `Message-ID` header without its angle brackets or surrounding whitespace, compared exactly. An `.msg` gives it from its `PR_INTERNET_MESSAGE_ID` property (0x1035), the one msgparser's `Message.getMessageId()` reads: `EmailFields` reads that one stream (`__substg1.0_1035001F`, or `…001E` as 8-bit text) with POI, rather than parse the file a second time, as CE's reader drops it (changed in the build: the builder was to check which, §16). A message with no Message-ID gets none, and is never a duplicate.
+- **It's shown in Properties** with the other email fields, and Healdan finds a message's copies by it, through `hd_email` (changed in the build: it was to be searched like them too). It stays out of the email's text: an ID's fragments would add noise to every email's text, for a lookup nobody types. LogicalDOC still indexes it as a text property, so the Search tab's Full-text section finds it typed whole with Message-ID in Search in, though the search box doesn't.
 
 ### 6.2 `hd_email` (call)
 
-- **A table of Healdan's own,** created by a Flyway script (`V8`), with one row per email document that has a Message-ID: the document's id, the Message-ID, its SHA-256 (indexed, as MariaDB can't index a long string well), and the document's matter.
-- **The listener keeps it:** a row when an email is created, its matter changed where M1 re-stamps a document moved to another matter, and the row deleted when the document is deleted for good. Trashed documents keep their row; every lookup skips deleted documents.
-- **It's an index, not the truth:** the attribute is. A row out of step is fixed by the background job of §6.3, which the builder may also run at startup if the table is found short.
+- **A table of Healdan's own,** created by a Flyway script (`V8`), with one row per email document that has a Message-ID: the document's id, the Message-ID, and its SHA-256 (indexed, as MariaDB can't index a long string well). It holds no matter (changed in the build): a message has few copies, so the rule and the lookup find each copy's matter afresh with `MatterLocator.locate(folderId)`, and there is no column to keep right when documents or folders move.
+- **The listener keeps it:** a row when an email is created. Rows for documents deleted for good stay (changed in the build), and every lookup joins `ld_document` and skips deleted documents, and aliases (`ld_docref`), which are no copy of a message. Trashed documents keep their row too.
+- **The rows are the truth, not the attribute** (changed in the build: the attribute was to be): the rule and the lookups read `hd_email`, as CE's screens can edit the attribute. The background job of §6.3 runs from its cursor at every start (changed in the build), so a row missed since the last start is made then. It never reads a document that has a row again, so it mends a missing row, not a wrong one; a check-in replaces the row (§2.2).
 
 ### 6.3 Existing emails (call)
 
-- **A background job** reads the Message-ID of each email already in Healdan, sets `emailmessageid` and adds its `hd_email` row. It starts after the migrations and seeds, runs in batches, skips documents it has done, and writes a `seed.`-style marker in `hd_setting` when it finishes. A failure on one document is logged and skipped.
+- **A background job** reads the Message-ID of each email already in Healdan, sets `emailmessageid` and adds its `hd_email` row. It starts after the migrations and seeds, runs in batches, skips documents it has done, and a failure on one document is logged and skipped.
+- **It's a worker** (`EmailIndexWorker`, on `PreviewWorker`'s pattern) with a cursor, `email.index.cursor` (the last document id read), and a marker, `email.index` = `done`, in `hd_setting` (changed in the build). `done` records only that the first full pass ended: the worker runs from its cursor at every start, so an email filed since whose row was missed gets one. To run it again from the start, delete both settings and restart (the Developer Guide says so).
 - So an email uploaded before M5 counts as filed for the rule and shows in the pane (§15.2 row 10).
 
 ### 6.4 Once per matter (owner)
@@ -130,19 +132,21 @@ Approach A was chosen over B, the helper fetching messages through Microsoft Gra
 - **The rule.** A matter holds at most one copy of a message that the caller can read. A new email document whose matter already holds a copy the caller can read is refused, on every route: an upload in the web page, the API, WebDAV, CMIS, a copy, a restore from the trash, and a move from another matter. (owner)
 - **Copies the caller can't read don't count** (owner), so a refusal never reveals a document. Where no user is behind the request (a system task), every copy counts.
 - **Moves within a matter** and **new versions** aren't affected.
-- **The refusal** is a `HealdanVetoException` with the code `already-filed` and the copy's doc # and folder, which the API answers as `409 already-filed` with the copy, and the web page shows as "This message is already in 998.1 as #12345."
-- **Two filings at once** (two colleagues filing the same message): the check takes a lock on the matter's `hd_matter` row (`select … for update`) inside the transaction that stores the document, so the second waits and then sees the first's copy. (call)
-- **Where it runs.** After the email fields are read: in `EmailDocumentListener`, or a listener of its own placed after it. Restores and the routes that write before a listener runs go through `HealdanHooks`, as M1's filing rule does. The builder lists each route with its test (§15.1).
+- **The refusal** is `AlreadyFiledException`, a `HealdanRuleException` (changed in the build: so `Vetoes.check` evicts on rollback as for the filing rule), with the code `already-filed` and the copy's doc # and folder. `ProblemMapper` maps it, ahead of the general veto, to `409 already-filed` with the copy as `document`, and the web page shows it as "This message is already in 998.1 as #12345."
+- **Two filings at once** (two colleagues filing the same message): (changed in the build) there is no lock on the matter's `hd_matter` row. A lock taken inside `DocumentManager`'s monitor and held by a folder copy or merge across later monitor waits deadlocks with any upload, stalling every `DocumentManager` call for InnoDB's 50 s lock timeout. Instead each `create` and `moveToFolder` holds the monitor across its listeners and store, and commits inside it when no outer transaction is open, so the check, at READ_COMMITTED with a fresh look, sees every earlier filing that went through the monitor; and `EmailFiling` takes a JVM lock per matter and Message-ID (`MessageLocks`), so a repeat waits for the first filing's outcome (§6.5). `Filer` takes it too for an email filed on its own through `POST /v1/documents`, and a wait lasts 30 seconds at most, then answers `409 filing-in-progress` (changed in the build, §6.8). A folder copy, merge or move, or a restore, and an upload of the same message into the same matter at the same moment could still make a duplicate (rare), as none of them goes through the monitor, nor does a direct `DocumentDAO.store` or `DocumentManager.update` that moves a document; and a cluster would need a lock again. (call)
+- **Where it runs.** After the email fields are read: in a listener of its own, `OncePerMatterListener`, extension id `healdanOncePerMatter`, position 135, between the email fields (130) and the doc # (140), so a refusal takes no number unless the API reserved one (changed in the build: §16 left the choice). It checks stores that change an existing document's folder too. Restores and the routes that write before a listener runs go through `HealdanHooks`, as M1's filing rule does. The builder lists each route with its test (§15.1).
+- **Two copies arriving together.** A folder move, merge or copy that would bring two copies of a message into a matter together is refused, and so is a folder restore (changed in the build): CE brings back every document deleted in the folder's tree, also one deleted on its own, so two copies deleted at different times could come back into one matter together. A copy in the trash is readable by its ACL rows (`StoredRows.mayReadDocument`), as CE's DAO doesn't find it.
 
 ### 6.5 Filing an email with its attachments (owner on attachments; call on the call)
 
 - **The email is always filed whole,** as received, attachments inside (owner).
 - **"Also file attachments as separate documents"** is off by default, with a tick per attachment (owner). Each ticked attachment becomes a document of its own:
-  - in the same folder as the email, with its own doc #, inheriting the folder's properties as any upload does, named by the attachment's file name;
+  - in the same folder as the email, with its own doc #, named by the attachment's file name, taking the email's sent properties, so a required property the person filled applies to them too, and otherwise inheriting the folder's, as any upload does (changed in the build). The email fields can't be sent at all: like any read-only property, one sent with a value other than the form's is refused (`422 validation`, code `read-only`), so the sent properties suit the attachments as they are;
   - linked to the email with a CE document link of type `attachment` (email first), so the Links tab of each shows the other.
 - **Inline parts aren't offered** (owner): a signature logo, say (§6.6).
-- **An attached message** (a `message/rfc822` part, as in a forward) is offered as an attachment and filed as an `.eml`, so it gets its own email fields. If its matter already holds a copy, it's skipped and reported in the answer, not refused, so the email itself still files.
-- **All or nothing.** `POST /v1/emails` checks everything first: the filing rule, the once-per-matter rule, the caller's permission on the folder, and each ticked attachment against `upload.maxsize` and `upload.disallow`. Only then does it store the email, then each attachment, then the links, in one transaction. If a store fails partway, what was stored is deleted before the answer, so the answer is either everything filed or nothing filed.
+- **An attached message** (a `message/rfc822` part, as in a forward) is offered as an attachment and filed as an `.eml`, so it gets its own email fields. If its matter already holds a copy, it's skipped and reported in the answer, not refused, so the email itself still files. The report names the copy as `document`, or `null` for a copy from before Healdan, which has no doc # (changed in the build: it had failed the filing with `500`).
+- **All or nothing.** `POST /v1/emails` checks everything first: the filing rule, the once-per-matter rule, the caller's permission on the folder (WRITE, not ADD, as `POST /v1/documents` checks it: changed in the build), and each ticked attachment against `upload.maxsize` and `upload.disallow`. The once-per-matter check and the `422`s come before any attachment is written out of the message (changed in the build), so a repeat after a lost answer meets `409 already-filed` however its attachments fare, and the ticked attachments are then written out in one walk of the message. Only then does it store the email, then each attachment, then the links. Each document is stored in its own transaction (changed in the build: a matter lock held across them would have stalled `DocumentManager`, §6.4), and if a store fails partway, what was stored is deleted by compensation before the answer, a create that threw after committing included (found by its reserved doc #), so the answer is either everything filed or nothing filed. Only a server that stops between stores leaves part of a filing, which nothing takes back (changed in the build: accepted, the plan's Follow-ups).
+- **Filing one document** (the doc #'s reservation, the stamp, the properties, `confirmStored`) is `Filer`, taken out of `DocumentResource.create` in `healdan-api`, which `EmailFiling` uses (changed in the build: §13).
 
 ### 6.6 What counts as an attachment (call)
 
@@ -151,13 +155,15 @@ Healdan's own walk of the `.eml`'s parts (§3.2), shared by `inspect` and `POST 
 - **An attachment** is a part with a file name whose disposition is `attachment`, or a part with a file name and no disposition that the HTML body doesn't reference by its Content-ID, or a `message/rfc822` part.
 - **Inline** is a part whose disposition is `inline` with a Content-ID, or any part the HTML body references as `cid:`. Inline parts are listed with `inline: true` and can't be ticked.
 - **The index** is the part's position in a depth-first walk of the message, counting only attachments and inline parts.
-- An S/MIME-encrypted or rights-protected message has no readable parts. It's filed as received, with no attachments offered, and its text isn't searched (§10).
+- **A signed message** is walked into (changed in the build): `multipart/signed` into its first part, the content, and opaque-signed S/MIME (`application/pkcs7-mime` or `application/x-pkcs7-mime` with `smime-type=signed-data`) into the content its signature wraps, so its attachments are offered as any message's. Each layer is read whole, up to the walk's 32 levels, which the follow-up change in the plan's Follow-ups bounds.
+- **An attached message's name** always ends in `.eml`, which is added to a name of its own that lacks it, so it gets its email fields when filed (changed in the build).
+- An S/MIME-encrypted (or PGP/MIME) or rights-protected message has no readable parts. It's filed as received, with no attachments offered, and what it encrypts isn't searched, though its From, To, CC, Subject and dates are (§10; changed in the build: "its text" overstated it).
 
 ### 6.7 The lookup (call)
 
 - **`GET /v1/emails?messageId=…`,** repeated up to 100 times, answers, for each Message-ID asked, the copies the caller can read: doc #, name, matter (`998.1 – Healdan Demo`) and folder. Deleted documents are left out.
-- **The pane asks once per message:** its own Message-ID, then its `In-Reply-To` and `References` ones. The first tells it whether the message is filed; the others where the thread went.
-- **Suggestions** (call): the folders holding the thread's copies, newest first, where the caller may file (ADD on the folder, and the filing rule allows it); then the caller's recent folders (`/v1/folders/recent`) that the filing rule allows; at most five, without repeats. The helper builds them; the server answers the facts.
+- **The pane asks once per message:** its own Message-ID, then its `In-Reply-To` and `References` ones. The first tells it whether the message is filed; the others where the thread went. (Changed in the build: the pane sends at most 100, leaving out the oldest `References` past that, and the helper asks the server about 21 at most, within 6,000 characters, so the request line stays far under Tomcat's and proxies' 8 KB: the message's own, the second id sent (its `In-Reply-To`, or its oldest `References` id when it has none) and the newest 19 of the rest.)
+- **Suggestions** (call): the folders holding the thread's copies, newest first, where the caller may file (WRITE on the folder, as `FolderView.canFile` has it, and the filing rule allows it: changed in the build), leaving out those in a matter that already holds the message, where File Here could only answer `already-filed` (changed in the build); then the caller's recent folders (`/v1/folders/recent`) that the filing rule allows; at most five, without repeats. The helper builds them; the server answers the facts.
 
 ### 6.8 The API (call)
 
@@ -165,18 +171,20 @@ All three in `openapi.yaml`, under a new Emails tag, with `ApiTestCase` checking
 
 | Call | Takes | Answers |
 |---|---|---|
-| `POST /v1/emails/inspect` | the `.eml`, multipart | `200`: its Message-ID, Subject, From, Sent, the attachments (`index`, `name`, `size`, `type`, `inline`) and the readable copies of the message. Nothing is stored. The upload limits apply. |
-| `POST /v1/emails` | the `.eml`, `folderId`, `properties` (as `POST /v1/documents` takes them) and `attachments`, the indexes ticked | `201`: the email document and the attachment documents, and any attached message skipped as `already-filed`. `409 already-filed` with the copy; the filing rule's and the upload limits' refusals as `POST /v1/documents` gives them; `422` for an index that isn't an attachment. |
+| `POST /v1/emails/inspect` | the `.eml`, multipart | `200`: its Message-ID, Subject, From, To, CC, Sent, Received (To, CC and Received changed in the build: §7.3 shows them), the attachments (`index`, `name`, `size`, `type`, `inline`) and the readable copies of the message. Nothing is stored. The upload limits apply. |
+| `POST /v1/emails` | the `.eml`, `folderId`, `properties` (as `POST /v1/documents` takes them) and `attachments`, the indexes ticked | `201`: the email document and the attachment documents, and any attached message skipped as `already-filed`. `409 already-filed` with the copy; `409 filing-in-progress` when another filing of the message into the matter holds it more than 30 seconds, or when the copy that refused an attachment can't be read a moment later, having been taken out again, and the filing is undone (changed in the build); the filing rule's and the upload limits' refusals as `POST /v1/documents` gives them; `422` for an index that isn't an attachment, and `read-only` for an email field sent with another value (changed in the build). |
 | `GET /v1/emails` | `messageId`, 1 to 100 times | `200`: for each Message-ID, its readable copies |
 
-- **A repeat** after a lost answer meets `409 already-filed` naming the copy just made, which the helper takes as done (§7.2). No `saveId`: the rule itself makes the call safe to repeat for any message with a Message-ID, and Exchange gives every message one.
+- **Each copy** carries `address`, the web page's address for it (`/frontend.jsp?docId=<id>`, which `MainPanel` opens), so the pane's doc # link needs no internal id (changed in the build).
+- **Refusals** (changed in the build): `not-an-email` is a field error inside `422 validation`, not a problem code of its own; an attachment's `422` names its field `attachments[<index>]`, which the helper reads the index from; a message over `upload.maxsize` is `413` with its own code at the helper (§10).
+- **A repeat** after a lost answer meets `409 already-filed` naming the copy just made, which the helper takes as done (§7.2). One that arrives while the first is still filing waits for it in `MessageLocks`, on the same server, for 30 seconds at most, then is `409 filing-in-progress` and can be sent again (changed in the build: the wait had no bound). No `saveId`: the rule itself makes the call safe to repeat for any message with a Message-ID, and Exchange gives every message one.
 - **Only `.eml`** is taken by these calls. An `.msg` is still filed through `POST /v1/documents` or the web page, and the rule applies to it there.
 
 ## 7. The helper
 
 ### 7.1 Outlook pairs (call)
 
-- **Outlook is one more app** on M3.5's port: the same certificate, Set Up Microsoft Office, pairing by code (M3.5 §5.9), and its own key in Outlook's add-in storage. `Pairing` accepts `Outlook`, and Settings lists it with the others.
+- **Outlook is one more app** on M3.5's port (it pairs by the name `Outlook` and is not an `OfficeProgram`: changed in the build): the same certificate, Set Up Microsoft Office, pairing by code (M3.5 §5.9), and its own key in Outlook's add-in storage. `Pairing` accepts `Outlook`, and Settings lists it with the others.
 - **It isn't in the copy cycle.** Emails aren't checked out and have no local copy, so none of M3's cycle, the copy store or the title applies. The helper's menu gains nothing: filing starts in Outlook.
 
 ### 7.2 Routes (call)
@@ -185,12 +193,12 @@ Keyed routes on the port, each taking `X-Healdan-Protocol` as the others do, and
 
 | Route | Takes | Does |
 |---|---|---|
-| `mail/status` | Message-IDs: the message's, then its thread's | `GET /v1/emails`, then the suggestions (§6.7). Answers filed or not, the copies and up to five suggested folders. `409 signed-out` while signed out, as today. |
-| `mail/file` | the `.eml`, and optionally a suggested folder's id | With a folder: `POST /v1/emails` there with no attachment copies and the folder's properties, and answers the outcome. Without: `inspect`, then the Save window's email mode (§7.3), then `POST /v1/emails`. |
-| `mail/file-many` | the number of messages and their subjects | The Save window for several messages (§7.4), then answers a ticket |
-| `mail/file-one` | the ticket and one `.eml` | Files that message as the ticket says, and answers filed, `already-filed` (with the copy) or failed (with why) |
+| `mail/status` | Message-IDs: the message's, then its thread's (1 to 100, of which the helper asks about 21 at most: §6.7) | `GET /v1/emails`, then the suggestions (§6.7). Answers filed or not, the copies and up to five suggested folders. `409 signed-out` while signed out, as today. |
+| `mail/file` | the `.eml`, and optionally a suggested folder's id (`folderId`, File Here) or the folder to open the window at (`openAt`: changed in the build; the pane sets it to its first suggestion for File…) | With a folder: `POST /v1/emails` there with no attachment copies and the folder's properties, and answers the outcome. Without: `inspect`, then the Save window's email mode (§7.3), then `POST /v1/emails`. |
+| `mail/file-many` | the number of messages and their subjects | The Save window for several messages (§7.4), then answers a ticket. Phase 2: not on the port until then (changed by the trial; changed in the build: first a keyed route answering `404 not-found`, then taken off the port in PR C's review) |
+| `mail/file-one` | the ticket and one `.eml` | Files that message as the ticket says, and answers filed, `already-filed` (with the copy) or failed (with why). Phase 2, as `mail/file-many` |
 
-- **File Here needs nothing typed.** If the folder's form has a required property that inheritance doesn't fill, `mail/file` opens the Save window at that folder instead, so a one-click filing never fails for a missing property.
+- **File Here needs nothing typed.** If the folder's form has a required property that inheritance doesn't fill, `mail/file` opens the Save window at that folder instead, so a one-click filing never fails for a missing property. (Changed in the build: the same for any refusal other than `already-filed`, with the refusal shown, so `mail/file` answers only filed, `already-filed` or cancelled, or `500` for an outage.)
 - **`already-filed`** after a lost answer, or for a message filed by someone else meanwhile, is an outcome, not an error: the add-in shows the copy and adds the category.
 - **The outcome** names the email's doc # and folder, and the attachments filed, so the pane can show them.
 
@@ -198,12 +206,12 @@ Keyed routes on the port, each taking `X-Healdan-Protocol` as the others do, and
 
 The same Save window Word uses (M3 §5), with:
 
-- **the subject** as the name, editable, as M1 names emails after their subject;
+- **the subject** as the name, read-only (changed in the build: M1 names every email after its subject on every route, `EmailDocumentListener`, so a name sent would be replaced; it can be renamed afterwards in the web page, as today);
 - **From, To, CC, Sent and Received,** read-only, from `inspect`;
 - **the folder,** with search, recent folders and the matter's folders, as today, opened at the first suggestion when there is one;
 - **the folder's properties form** (`/v1/folders/{id}/form`), Author and Typist defaulting to the person filing;
 - **"Also file attachments as separate documents,"** unticked, then a tick per attachment with its name and size; inline parts aren't listed. Ticking the box ticks every attachment; each can be unticked.
-- **Save** is on once the required properties are filled, as today. A refusal shows in the window, which stays open to choose another folder or untick an attachment. `already-filed` closes it with "Already in 998.1 as #12345", which counts as filed.
+- **Save** is on once the required properties are filled, as today. The window submits to the server and waits, with the folder browser, places and form disabled meanwhile (changed in the build). A refusal shows in the window, which stays open to choose another folder or untick an attachment. `already-filed` closes it with "Already in 998.1 as #12345", which counts as filed.
 
 ### 7.4 Several messages (owner; call on the flow) (changed by the trial: phase 2, not phase 1)
 
@@ -218,11 +226,12 @@ The trial's T4 failed (§9.5, §9.4), so this section is for phase 2; phase 1 ha
 
 ### 8.1 What it is (call)
 
-- **A second manifest,** an XML manifest of Outlook's kind (`MailApp`), `clients/office/outlook-manifest.template.xml`, which `AddinResource` serves at `/api/addin/outlook-manifest.xml` made with the server's public address, as `manifest.xml` is (M3.5 §7). Its id is fixed and its version changes with the template.
+- **A second manifest,** an XML manifest of Outlook's kind (`MailApp`), `clients/office/outlook-manifest.template.xml`, which `AddinResource` serves at `/api/addin/outlook-manifest.xml` made with the server's public address, as `manifest.xml` is (M3.5 §7). Its id is fixed and its version changes with the template. It requires Mailbox 1.14, for `getAsFileAsync`, so an Outlook that can't give the message doesn't show the add-in (changed in the build).
   - A Healdan button on a message being read opens the pane, which can be pinned.
   - The add-in doesn't declare several selected messages (changed by the trial: T4 failed, §9.5), so there is no `SupportsMultiSelect`.
   - The permission is read/write mailbox (changed by the trial), for the category's entry in the mailbox's category list (§8.3). Read/write item can add a category to a message but not to the list, and Outlook refuses a category the list lacks.
   - The button is disabled outside the primary mailbox, as the manifest doesn't declare shared folders (§9.5).
+  - Outlook on the web and new Outlook for Windows have Mailbox 1.14 too, so the button shows there (changed in the build: found in the final review). Where `Office.context.diagnostics.platform` is anything but `Mac`, the pane says it works in the new Outlook for Mac only for now and asks the helper nothing; one that names no platform is taken for the Mac.
 - **Its pages** are in `clients/office/web/`: a pane page, its logic in a Node-testable classic script (as `healdan.js` is, M3.5 §6.1) and the Office.js calls in a glue script. The Content Security Policy of M3.5 §7 covers them.
 - **It holds no token** and calls no server: only the helper's port (M3.5 §6.2).
 
@@ -230,9 +239,10 @@ The trial's T4 failed (§9.5, §9.4), so this section is for phase 2; phase 1 ha
 
 - **On each message,** as the reading pane moves, it reads `internetMessageId`, `In-Reply-To` and `References` and asks `mail/status`.
 - **It shows:**
-  - **Filed:** each readable copy as "998.1 › Correspondence, #12345", the doc # a link that opens the document in the web page;
+  - **Filed:** each readable copy as "998.1 › Correspondence, #12345" (the matter as the helper gives it, with its name), the doc # a link that opens the document in the web page by the copy's `address` (§6.8);
   - **Not Filed,** or **Filed in another matter** when the copies are elsewhere;
   - the suggestions as **File Here** buttons, the folder written out, then **File…**.
+- **The view is bound to the message it describes** (changed in the build): on `ItemChanged` the pane clears the view, the buttons and the outcome at once, and a click whose message isn't the one now open is refused ("This message changed. Choose again."). If the open message changed during a filing, the category is skipped and the outcome says so, since Office.js re-points `mailbox.item` and reaching the old one needs `loadItemByIdAsync` (§9.5 T4). If it is the same message, the category goes on the item open when the filing ends, as after A, B and A again the one taken at the click may be stale (found in the final review).
 - **While filing,** a waiting state, as M3.5's window has, until the outcome. Then the pane shows the new status.
 - **Text from the server** (folder and matter names, subjects) is set as text, never HTML.
 
@@ -322,7 +332,7 @@ The message is always still in Outlook, so nothing is queued for later (call).
 | A refusal: the filing rule, no permission, the size limit, a ticked attachment's extension | The Save window shows why and stays open, to choose another folder or untick |
 | `already-filed` | The pane switches to Filed, naming the copy, and the category is added |
 | The category can't be added | Logged; the filing still counts, and the pane still shows Filed |
-| An encrypted (S/MIME) or rights-protected message | Filed as received; no attachments offered; its text isn't searched. Known Limitations says so |
+| An encrypted (S/MIME) or rights-protected message | Filed as received; no attachments offered; what it encrypts isn't searched, its headers are. Whether new Outlook for Mac hands such a message over is untried: if it won't, the pane says "Outlook wouldn't give Healdan this message. Try again." Known Limitations says so (changed in the build) |
 | A message over `upload.maxsize` | Refused by `inspect`, naming the limit. The helper answers `mail/file` `409 over-upload-limit` with the server's words (a code of its own: the port's `413 too-large` is the helper's own body limit, which raising `upload.maxsize` doesn't move), and the pane says "This message is larger than Healdan accepts. An administrator can raise the upload limit." (changed by the trial: it had been `500 internal-error`, which the pane called "Can't Reach Healdan") |
 | One of several messages fails | The others go on; the summary names it and why |
 
@@ -336,15 +346,15 @@ The message is always still in Outlook, so nothing is queued for later (call).
 
 ## 12. Data model
 
-- **`hd_email`** (`V8__email_index.sql`, MariaDB and HSQLDB): `hd_docid` (primary key), `hd_messageid` (up to 998 characters, RFC 5322's line limit), `hd_messageidhash` (SHA-256, indexed with `hd_matterid`), `hd_matterid`. Flyway's rules as ever: a new script, never an edit to one that shipped.
+- **`hd_email`** (`V8__email_index.sql`, MariaDB and HSQLDB): `hd_docid` (primary key), `hd_messageid` (up to 998 characters, RFC 5322's line limit), `hd_messageidhash` (SHA-256, indexed). No `hd_matterid` (changed in the build: §6.2). Flyway's rules as ever: a new script, never an edit to one that shipped.
 - **`emailmessageid`,** a Healdan profile attribute added by a new seed step.
-- **The background job's marker** in `hd_setting`.
+- **The background job's settings** in `hd_setting`: `email.index.cursor` and `email.index` (changed in the build: §6.3).
 - **CE's `ld_` tables** are unchanged; links are CE's `DocumentLink` rows.
 
 ## 13. Code organisation (calls)
 
-- **`healdan-core`'s `email` package:** `MessageParts` (the walk of §6.6), the Message-ID in `EmailFields`, the rule (`OncePerMatter`), `EmailIndex` (`hd_email`), the background job, and `EmailFiling`, which files an email with its attachments and links in one transaction, for the API to call.
-- **`healdan-api`:** `EmailResource` (`/v1/emails`, `/v1/emails/inspect`), with `Uploads`' limits; `ApiProblem` gains `already-filed`.
+- **`healdan-core`'s `email` package:** `MessageParts` (the walk of §6.6), the Message-ID in `EmailFields` and `MessageIds`, the rule (`OncePerMatter`, `OncePerMatterListener` and its hooks in `HealdanHooksImpl`), `AlreadyFiledException`, `EmailIndex` (`hd_email`) and `EmailIndexWorker` (the background job).
+- **`healdan-api`:** `EmailResource` (`/v1/emails`, `/v1/emails/inspect`), with `Uploads`' limits; `Filer`, the filing of one document taken out of `DocumentResource.create`; `EmailFiling`, which files an email with its attachments and links, and `MessageLocks`, its per-matter-and-Message-ID lock (changed in the build: the plan's correction 3 moved filing here from `healdan-core`); `ProblemMapper` maps `already-filed`.
 - **The helper:** `Healdan.Helper.Core` gains the mail routes and the several-message ticket (testable, no windows); the app gains the Save window's email mode.
 - **The add-in:** `clients/office/outlook-manifest.template.xml`, `web/mail.html`, `web/mail.js` (the logic, Node-testable) and `web/mail-glue.js` (the Office.js calls).
 
@@ -352,7 +362,7 @@ The message is always still in Outlook, so nothing is queued for later (call).
 
 ### 14.1 Upstream files
 
-None expected. The rule runs in Healdan's listeners and `HealdanHooks`, the walk uses Jakarta Mail through `MailUtil.readMime`, and links are CE's existing `DocumentLink`. If the build finds an edit is needed, it's listed here with its reason, as every milestone's are.
+None, and the build needed none (changed in the build: confirmed). The rule runs in Healdan's listeners and `HealdanHooks`, the walk uses Jakarta Mail through `MailUtil.readMime`, and links are CE's existing `DocumentLink`. Task 4's one change outside Healdan's modules is a line of `docker/demo/manifest.json`, the demo firm's mistaken copy, now filed in another matter so the rule lets it through; it is a fixture, not an upstream file.
 
 ### 14.2 Fork-owned files
 
@@ -362,10 +372,12 @@ None expected. The rule runs in Healdan's listeners and `HealdanHooks`, the walk
 - `clients/helper/`: `Pairing`, `AddinServer.KeyedRoutes`, the mail routes, and the Save window.
 - `docker/tests/test-api.sh`: filing an email with an attachment, the lookup, and the duplicate refusal through the API and an upload.
 
+- **Added by the build** (changed in the build): `healdan-core`'s `EmailIndexWorker`, `OncePerMatterListener`, `AlreadyFiledException`, `MessageIds` and the `profile-message-id` seed; `healdan-api`'s `Filer`, `EmailFiling`, `MessageLocks` and the `model` classes; the helper's `Mail/` folder (`MailFiling`, `MessageIds`, `Suggestions`), `SaveEmailRequest` and the Save window's `SaveWindow.Email.cs`; and the pane's icon, Tabler `mail`, rendered as `clients/office/web/assets/file-email-{16,32,80}.png`.
+
 ### 14.3 Docs pages (the docs site, `site/content/`)
 
 - **User Guide:** a new Filing Email from Outlook section (the pane, File Here and File…, several messages, attachments, duplicates, the category); Searching, for the Message-ID field.
-- **Install manual:** Setting Up Outlook (deploying `outlook-manifest.xml` from the admin centre, and pairing), and Known Limitations (legacy Outlook, Outlook on the web on Linux waiting for phase 2, no moving or deleting mail after filing, encrypted messages, the add-in not loading while the server can't be reached).
+- **Install manual:** Office Integration's Outlook section (deploying `outlook-manifest.xml` from the admin centre, and pairing; changed in the build: a section there, not a page of its own), and Known Limitations (legacy Outlook, Outlook on the web on Linux waiting for phase 2, no moving or deleting mail after filing, encrypted messages, the add-in not loading while the server can't be reached, and, changed in the build, the button showing in Outlook on the web and new Outlook for Windows), and Upgrading (changed in the build: emails filed before M5, until the worker has read them).
 - **Developer Guide:** the API page (the three calls), Desktop Clients (Outlook's routes and the several-message ticket), and the `hd_email` table where Healdan's data is described.
 
 ## 15. Verification
@@ -397,15 +409,15 @@ On a Healdan Helper 0.8.0 release candidate, in new Outlook for Mac, against the
 | 5 | A message with two attachments and a signature logo: File…, tick one attachment | The email and one attachment document, linked as `attachment`; the logo isn't offered |
 | 6 | File row 3's message again into the same matter, then into another matter | The first is refused naming the copy; the second is filed |
 | 7 | Upload row 3's message, saved as `.eml`, through the web page into the same matter | Refused, naming the copy |
-| 8 | Select five messages, one already filed; File… | "Filed 4 of 5 messages. 1 was already in …"; four new categories |
+| 8 | ~~Select five messages, one already filed; File…~~ Phase 2 (changed by the trial): not run in phase 1. Select several messages instead and check the pane says to select one | The pane says to select one message |
 | 9 | Quit the helper, then stop the server, each during a filing | Each fails cleanly, nothing half filed; both work again once back |
 | 10 | An email uploaded before the upgrade | Shows its Message-ID, and the pane shows it Filed |
 
 ## 16. Left to the builder
 
-- Whether the rule is in `EmailDocumentListener` or a listener of its own after it.
-- Where `hd_email`'s matter comes from on a move: M1's re-stamp path, or the document's stamped matter read afresh.
-- Whether `.msg`'s Message-ID comes from msgparser's field or its transport headers.
+- Whether the rule is in `EmailDocumentListener` or a listener of its own after it. *Built:* a listener of its own, `OncePerMatterListener` (§6.4).
+- Where `hd_email`'s matter comes from on a move: M1's re-stamp path, or the document's stamped matter read afresh. *Built:* neither; the table holds no matter (§6.2).
+- Whether `.msg`'s Message-ID comes from msgparser's field or its transport headers. *Built:* the field's own property, `PR_INTERNET_MESSAGE_ID`, which `EmailFields` reads from the file itself, as msgparser's `Message.getMessageId()` would (§6.1).
 - The pane's layout and wording, within §8.2, and its icons, rendered as the add-in's are.
 - How the trial's helper build is made, and whether its pane shares code with the real one.
 

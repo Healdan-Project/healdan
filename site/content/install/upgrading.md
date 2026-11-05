@@ -32,3 +32,26 @@ fails, because the app's image is built here and can't be pulled.
   running on a half-upgraded database, and the log says which step failed. See
   [Troubleshooting](../troubleshooting/).
 - **LogicalDOC's tables aren't.** See [Known Limitations](../known-limitations/).
+
+## Emails Filed Before the Outlook Add-in
+
+The upgrade that brings [Filing Email from Outlook](../../user/office/filing-email/) also starts keeping each email's
+Message-ID, which is how Healdan knows that a matter already holds a message. The emails already in Healdan get
+theirs in the background:
+
+- **A minute after the app starts,** Healdan reads the emails already filed, 50 at a time with a second's pause
+  between batches, in the order they were filed. A restart carries on where it stopped. Until it has read an email,
+  that email doesn't count when the same message is filed into its matter again, and the Outlook pane doesn't show it
+  as filed.
+- **Emails already filed twice in one matter** stay as they are. Once both are read, a folder move, merge, copy or
+  restore that would bring the two copies into a matter together is refused, saying the message is already there.
+  Delete one copy, or move it to another matter, first.
+- **To see whether it has finished,** look for `email.index` in Healdan's `hd_setting` table. Run this, and enter
+  the database password when asked (use your `DB_USER` and `DB_NAME` if you changed them):
+
+  ```bash
+  docker compose exec db mariadb -u logicaldoc -p -D logicaldoc -e "select name, value from hd_setting where name like 'email.index%'"
+  ```
+
+  `email.index` is `done` once every email filed before the upgrade has been read, and `email.index.cursor` is the
+  last document it has read so far.
