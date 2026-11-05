@@ -21,7 +21,7 @@ namespace Healdan.Helper.Tray;
 /// the copies Not Yet in Healdan (spec §5.4: kept with changes that can't go up), a line for each server with copies
 /// waiting (spec §5.4: set aside), Open from Healdan (once the helper has started), Open Healdan in Browser (once
 /// there's a server, signed in or not: #87), Install the LibreOffice Extension while it isn't installed (spec §5.12,
-/// R22), Set Up Microsoft Office while Word, Excel or PowerPoint is installed and the certificate isn't trusted (M3.5 spec
+/// R22), Set Up Microsoft Office while Word, Excel, PowerPoint or Outlook is installed and the certificate isn't trusted (M3.5 spec
 /// §5.13), Settings, Sign In or Sign Out, About (#89) and Quit. When native notifications can't be shown, the last notice
 /// is the menu's status line. The menu is rebuilt when it opens, whenever the session changes, and as windows open and close.
 /// </summary>

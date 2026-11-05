@@ -1,6 +1,6 @@
 ---
 title: The Doc ID Footer
-weight: 5
+weight: 7
 ---
 
 A Writer or Word document can carry its doc ID in its footer, `#1234 v2.1`, so that every printout and PDF says which
@@ -32,7 +32,7 @@ Press **Insert Doc ID** on the **Healdan** tab.
 - **Choosing it again** adds no second field. It updates the one the footer has.
 
 Then save, as for any other change. The first press of any Healdan button in Word pairs it with the helper: see
-[Pairing Word, Excel and PowerPoint](../installing-the-helper/#pairing-word-excel-and-powerpoint).
+[Pairing Word, Excel, PowerPoint and Outlook](../installing-the-helper/#pairing-word-excel-powerpoint-and-outlook).
 
 ## What It Shows
 

@@ -37,6 +37,8 @@ for every app.
   - `Session/` and `Security/`: sign-in, the keychain and the device id;
   - `Channel/` and `Links/`: the channel's server and routes, and the links;
   - `Addin/`: the Office add-in's port and its routes, pairing, and the certificate the port serves;
+  - `Mail/`: what Outlook's routes do, which isn't the copy cycle's: a message's status, the folders to suggest, and
+    filing a message (`MailFiling`, `Suggestions`);
   - `Browse/`, `Forms/` and `Ui/`: what the windows show and decide, and their words;
   - `Platform/` and `Settings/`: the extension's install check, which app opens each kind of file, and the settings.
 - **`Healdan.Helper`** is the Avalonia 12 app: the menu-bar icon (`Tray/`), the windows (`Windows/`), and macOS's
@@ -92,7 +94,10 @@ size the helper uses, the widths then match CoreText's.
   URLForApplicationWithBundleIdentifier:` finds it, as `open -a` does. `Platform/LaunchServices.cs` makes both calls,
   and its lookups stop at a nil answer, since Foundation raises an Objective-C exception for a nil argument. Settings
   (`SettingsWindow`) offer `AppChooser.Offered` for each kind and write the user's pick to `kinds`; its Microsoft Office
-  group lists `Pairing.Paired()` with Forget and starts Set Up. `OfficeApps` holds the set the cycle works with, and everything after the open (the
+  group lists `Pairing.Paired()` with Forget and starts Set Up. `InstalledApps` finds Outlook too
+  (`/Applications/Microsoft Outlook.app`, `com.microsoft.Outlook`), which opens no copies but runs Healdan's add-in, so
+  Set Up Microsoft Office applies on a Mac with any of Word, Excel, PowerPoint or Outlook (`OfficeSetUp.Applies`,
+  `InstalledApps.AnyAddinApp`). `OfficeApps` holds the set the cycle works with, and everything after the open (the
   reopen of a kept copy, the lock check, the crash check, the resume, Bring to the Front) goes by the record's app,
   whatever Settings say by then.
   - **Microsoft Office** (`MicrosoftOfficeApp`) is one app for the three programs, on macOS only. Each program opens
@@ -487,11 +492,12 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
 
 ## The Add-in's Port
 
-The Healdan add-in in Word, Excel and PowerPoint calls the helper on a second listener beside the channel. Office's web
-view blocks a secure page's requests to `http://127.0.0.1`, so it's HTTPS, with the helper's own certificate. The code
-is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks), `AddinHandler` (the routes),
-`Pairing` and `AddinKeys`. The design is the M3.5 spec, `docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md`,
-§5.8, §5.9 and §9.
+The Healdan add-in in Word, Excel and PowerPoint, and Outlook's (M5), call the helper on a second listener beside the
+channel. Office's web view blocks a secure page's requests to `http://127.0.0.1`, so it's HTTPS, with the helper's own
+certificate. The code is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks), `AddinHandler`
+(the routes), `Pairing` and `AddinKeys`. The design is the M3.5 spec,
+`docs/superpowers/specs/2026-10-30-m3-5-microsoft-office-design.md`, §5.8, §5.9 and §9, and, for Outlook, the M5 spec,
+`docs/superpowers/specs/2026-11-03-m5-email-design.md`, §7.1 and §7.2.
 
 - **The ports:** `127.0.0.1`, the first free of `47615`, `47616`, `47617` and `47618` (`AddinPorts`). The add-in
   tries them in the same order, so another user of the Mac with a helper on the first doesn't stop this one. The
@@ -507,7 +513,8 @@ is in `Healdan.Helper.Core/Addin/`: `AddinServer` (the transport and the checks)
 - **Nothing from outside closes it.** A connection that fails before it's taken, or the helper running out of file
   descriptors for a moment, is logged once for each kind, and the port goes on listening, as Kestrel's does.
 - **HTTP/1.1, one request per connection** (`Connection: close`): a request line, headers to an empty line, and a
-  `Content-Length` body of at most 150 MiB for `file` and 1 MiB for any other route. Anything else, such as a chunked
+  `Content-Length` body of at most 150 MiB for `file` and `mail/file` (a document, or a message, in
+  base64) and 1 MiB for any other route. Anything else, such as a chunked
   body, a second request, a folded or doubled `Host`, a body that isn't UTF-8, or a value no text can hold (an escaped
   lone surrogate), is `400 bad-request`. Bodies are JSON, and errors are `{"error": "<code>"}`, as the channel's are.
 
@@ -524,6 +531,8 @@ a web page in a browser, or a page from another Healdan is refused here.
 | `X-Healdan-Protocol: 1`, on every request but `GET /v1/hello` | `400 bad-request` without it; `426 update-healdan-helper` for a protocol the helper doesn't speak |
 | `X-Healdan-Key` is a key the helper gave, on every route but `hello` and the two pairing routes. A route that doesn't exist asks for one too, so a caller without a key learns nothing | `403 not-paired` |
 | The helper is signed in and started, on every keyed route but `ping` | `409 signed-out` |
+| On a `mail/` route, the key is Outlook's, so another app's key can't have the helper read 150 MiB for nothing | `400 bad-request`, before the body is read |
+| On any other route but `result`, the key isn't Outlook's, as its add-in files no document | `400 bad-request`, before the body is read |
 
 Every answer once `Origin` has passed, errors included, carries `Access-Control-Allow-Origin: <origin>`,
 `Vary: Origin`, `Access-Control-Allow-Headers: Content-Type, X-Healdan-Key, X-Healdan-Protocol`,
@@ -545,6 +554,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/new-version` | `{"app", "url"}` | `{}` |
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
+| `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
+| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` before any window is up, when File Here can't reach Healdan or `inspect` fails (no answer, not an email, `401`); `409 over-upload-limit` with `detail` when `inspect` refuses a message over the upload limit; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
 
 - **The app** is the one the request's key was paired for. A body naming another is `400 bad-request`: a key drives
@@ -571,8 +582,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 - **Short requests:** the add-in calls the port with `fetch` from Office's web view, which is WebKit, and WebKit is
   likely to give up on a request that has had no answer for about a minute. `open-dialog`, `save-new` and `properties`
   wait while the helper's windows are up, and `file` can wait up to 300 s behind Word's Grant File Access, so a lost
-  answer would lose a ticket, or the state of a copy just filed. So any keyed route but `ping` and `state` that hasn't
-  finished after 20 s answers `202 {"pending": "<id>"}` and goes on (`PendingResults`). The add-in then asks
+  answer would lose a ticket, or the state of a copy just filed. So any keyed route but `ping`, `state` and
+  `mail/status` that hasn't finished after 20 s answers `202 {"pending": "<id>"}` and goes on (`PendingResults`). The add-in then asks
   `result`, which waits up to 20 s again, until the outcome comes: the status and body the route would have answered,
   an error included. An outcome belongs to the key that started it, is answered once, and is kept for 10 minutes
   after its route finishes. A key can have 64 outcomes waiting at most; the next route answers
@@ -582,13 +593,93 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 - **The add-in follows a `202` itself,** in `call`, so a button's flow sees only the route's own answer. When `result`
   answers `no-result` after that, the pane says the answer was lost (`lost-result`) and asks the user to check the
   document in Healdan before trying again. The log names a route that went pending, never its id.
+- **Outlook's routes** (`mail/…`, M5 spec §7.2) are for a key paired as Outlook alone: another app's key is
+  `400 bad-request` on both, refused by the port before it reads the body, and Outlook's key is refused the same way on
+  every other route but `result`.
+  Outlook isn't in the copy cycle, so they work on `MailFiling` (in `AddinDocuments`, made anew at each start), straight
+  on the server's API. A failure the server answered is logged by its status and code alone, as Healdan's words can name
+  an attachment, and the log never names a subject, an address, an attachment or a Message-ID.
+  - **`mail/status`** takes `messageIds`, 1 to 100 non-empty strings: the message's own Message-ID first, then its
+    `In-Reply-To`, then its `References`, oldest first. It asks the server (`GET /api/v1/emails`) about the first,
+    the second and the newest 19 `References` at most, 21 in all, and never more than about 6,000 characters of them,
+    so the request line stays under the 8 KB that Tomcat and most proxies allow whatever the add-in sends. Ids are
+    sent and matched as the server normalises them (`MessageIds`, which follows healdan-core's to the character):
+    without angle brackets or the surrounding space Java's `strip()` trims, NUL as a space, and U+FFFD for a character
+    beyond the Basic Multilingual Plane. Ones the server counts as none (empty, over 998 characters) aren't sent. `copies` are the readable copies of the message's own id. `elsewhere` is true when the
+    message is filed but its thread's newest copy is in a matter none of the message's copies is in, so the pane can
+    say Filed in Another Matter. `suggestions` are the folders of the thread's copies, newest first, then the person's
+    recent folders (`Suggestions`): only where they may file, none in a matter that holds the message already (where File
+    Here could only answer `already-filed`), no repeats, five at most, each with its path written out from its matter
+    down. A message filed where its thread is gets none, and no folder is read for it, as the pane offers File Here
+    only for a message not filed or filed in another matter. The thread's folders are read five at a time, together,
+    until there are five to offer. It never goes pending. An unreachable or refusing server is `500 internal-error`, but when only a folder can't
+    be read for now (anything but `404` or `403`, which leave that folder out), the status answers without suggestions.
+  - **The pane** (`clients/office/web/mail.html`, `mail.js`, `mail-glue.js`) is Outlook's page for these routes. `mail-glue.js`
+    holds the Outlook calls (`diagnostics.platform`, `internetMessageId`, `getAllInternetHeadersAsync`, `getAsFileAsync`,
+    `masterCategories`, `categories.addAsync`, the `ItemChanged` event) and `mail.js` the logic, which Node's tests run. It sends `mail/status` the ids from `threadIds`
+    on each change, one check at a time (past 100 ids, the oldest `References` are left out, as the helper asks about
+    the newest), and for a message with no Message-ID it sends `ping` instead, so pairing and signing in still show.
+    It sends `mail/file` with the message as base64, which `call` treats as `file`: one that fails on the way is
+    `lost-result`, never sent twice. Then it adds the category `Healdan`
+    after `filed` or `already-filed` only: Outlook refuses a category its mailbox's list lacks, so the list gets `Healdan` first
+    (preset colour `Preset7`, blue) when it's missing. A failure at either step is logged in the console, with Outlook's code, and
+    the filing still counts. A filing that ends once another message is open adds no category, and the pane, showing the
+    other message, says which message the outcome is about. One that ends on the same message adds it to the item open
+    then, not the one the click took: Office.js gives `mailbox.item` a new object each time the message changes, so
+    after A, B and A again the first may be stale. The manifest requires Mailbox 1.14, for `getAsFileAsync`,
+    so an Outlook without it doesn't show the add-in. Outlook on the web and new Outlook for Windows have it too, and
+    report their platform as `OfficeOnline`: where `Office.context.diagnostics.platform` is anything but `Mac`, the pane
+    says it works in the new Outlook for Mac only and asks the helper nothing. An Outlook that names no platform is
+    taken for the Mac, as every one with Mailbox 1.5 names it. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
+    helper says goes on the page as text, and an address is a link only when it's http or https. Several messages at once
+    are not handled yet: new Outlook for Mac 16.114 reports Mailbox 1.14 and has no `loadItemByIdAsync`, so the manifest
+    doesn't declare `SupportsMultiSelect`, and the add-in asks for read/write mailbox for the category list.
+  - **`mail/file`** files one message (`MailFiling.FileAsync`).
+    - **With `folderId` (File Here),** it reads the folder's form (`GET /api/v1/folders/{id}/form`). When every required
+      field has a value, its own or an inherited one, it files the message there at once with no properties and no
+      attachments (`POST /api/v1/emails`), so a one-click filing never fails for a missing property. When the form needs
+      something typed, or Healdan refuses the filing or the folder (anything but `already-filed` that isn't an outage),
+      the Save window opens at that folder, with the refusal already shown (M5 spec §10).
+    - **Without one (File…),** the window opens at `openAt` when it's given, and at Recent Folders otherwise. `openAt`
+      and `folderId` are each a whole number above 0, or `400 bad-request`.
+    - **The window** is the Save window's email mode, File to Healdan (M5 spec §7.3), shown after the helper asks the
+      server what's in the message (`POST /api/v1/emails/inspect`): the folder and its form as for a document; the
+      subject, From, To, CC, Sent and Received read-only (a line the message lacks isn't shown), with no name to type, as
+      M1 names every email after its subject; and "Also file attachments as separate documents", unticked, with a tick
+      for each attachment by name and size and none for inline parts. The box ticks and unticks them all, and each can
+      be unticked while it's ticked.
+    - **Its Save files through the window** (`IWindows.SaveEmailAsync`'s `submit`, which `MailFiling` builds around
+      `POST /api/v1/emails`). While it waits, the folder browser, the places, the properties and the attachments are off,
+      so the folder a refusal is about is still the one shown, and so are Save, Cancel and closing; the line by Save
+      says "Filing the email in Healdan…". Filed, or `409 already-filed`, which counts as filed, closes the window with
+      that outcome and the copy.
+      A refusal (`409 filing-rule`, `403`, `413`, a `422`) shows in the window, which stays open to choose another folder
+      or untick an attachment (`SubmitOutcome.Refused.Place`). A property's error shows under its field and keeps Save off
+      until the field changes; an attachment's, whose field the server names by its index (`attachments[3]`), shows
+      under its tick until the tick changes; anything else, a field name that doesn't parse included, shows on the line
+      by Save, until the next Save or another folder is chosen. An outage (no answer, or a `5xx`) stays open too, saying
+      "Can't reach Healdan. Try again." Cancel is `outcome: cancelled`.
+    - **Before any window is up,** an outage on File Here, or any failure of `inspect` (no answer, one that isn't an
+      email, a `401`), is told in the helper's notification and answered `500 internal-error`. A message over the upload
+      limit (`413 too-large`) is answered `409 over-upload-limit` instead, with the server's words as `detail`, and the pane says so.
+      It's a code apart from the port's own `413 too-large`, the helper's body limit, which raising the upload limit doesn't
+      move. The log
+      has Healdan's status and code, a `4xx` as a warning and a `5xx` as an error. The window's refusals are never
+      notified: the window says them.
+    - **Like `save-new`,** it answers `202` when it's still running after 20 s, while the window is up.
+  - **`mail/file-many` and `mail/file-one`**, for filing several messages, come with it (M5 plan, Task 13). Until
+    then the port doesn't have them, and answers `404 not-found`, as for any route it doesn't have, before it reads a
+    body.
 - **The add-in's routes and the channel's are separate lists:** the extension can't call these, nor the add-in the
   channel's.
 
 ### Pairing
 
-- **`pair/start`** takes `Word`, `Excel` or `PowerPoint`, nothing else, as the window shows it. The helper's pairing
-  window shows a six-digit code from `RandomNumberGenerator`, and the answer's `pairingId` isn't the code.
+- **`pair/start`** takes `Word`, `Excel`, `PowerPoint` or `Outlook`, nothing else, as the window shows it. The helper's
+  pairing window shows a six-digit code from `RandomNumberGenerator`, and the answer's `pairingId` isn't the code.
+  Outlook pairs by name, as one more app with its own key and the same certificate and codes; it isn't an
+  `OfficeProgram`, because it isn't in the copy cycle (M5 spec §7.1). `Pairing.Apps` lists it last, so Settings shows
+  it after PowerPoint.
 - **`pair/finish`** with the code the user typed: the right one answers a key, 32 random bytes in base64url, which the
   add-in keeps and sends as `X-Healdan-Key`. A wrong one is `403 wrong-code` with the tries left; after three, or two
   minutes, or once a newer pairing has started, it's `403 pairing-expired`.
@@ -726,7 +817,9 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
   the test's certificate, and send what a web page, another program or another Healdan's page would.
   `PairingTests` and `AddinHandlerTests` cover pairing and the routes, and `PendingResultsTests` a route that answers
   `202` and is collected through `result`. Those run with a hold time of milliseconds, and a slow route waits on a gate
-  the test opens rather than for a fixed time.
+  the test opens rather than for a fixed time. `MailStatusTests` and `SuggestionsTests` cover Outlook's `mail/status`,
+  and `MailFileTests` its `mail/file`, against `FakeApi`, which also answers `GET /emails`, `GET /folders`, a folder's
+  form, `POST /emails/inspect` and `POST /emails`; `SaveEmailWindowTests` drive the Save window's email mode headless.
 - **`ContractTests`** fail when the client calls a route `openapi.yaml` doesn't have, or a record (`[Schema]`) reads
   a field its schema lacks. A server change that would break the helper changes it in the same pull request.
 - **`LoopbackReceiverTests` and `ProviderSignInTests`** run the receiver on real sockets, at ports the system gives, so

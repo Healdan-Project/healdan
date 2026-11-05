@@ -41,6 +41,18 @@ public interface IWindows
     Task<JsonObject> SaveNewAsync(JsonObject request);
 
     /// <summary>
+    /// <c>mail/file</c> without a folder, or with one whose form needs something typed or that Healdan refused: the Save
+    /// window's email mode (M5 spec §7.3), for the message <paramref name="request"/> describes
+    /// (<see cref="Forms.SaveEmailRequest.ToJson"/>). Its Save files through the window: it awaits
+    /// <paramref name="submit"/> with <c>{"action": "save", "folderId", "properties", "attachments": [index…]}</c>
+    /// (<see cref="WindowAnswers.SaveEmail"/>), with Save off meanwhile. <see cref="Forms.SubmitOutcome.Done"/> closes the
+    /// window, which answers that Save; a <see cref="Forms.SubmitOutcome.Refused"/> shows in it, and it stays open for
+    /// another try. Cancel answers <c>{"action": "cancel"}</c>. Before the helper is signed in and started it answers
+    /// Cancel, and Sign In opens.
+    /// </summary>
+    Task<JsonObject> SaveEmailAsync(JsonObject request, Func<JsonObject, Task<Forms.SubmitOutcome>> submit);
+
+    /// <summary>
     /// <c>/v1/properties</c>: the open document's properties. Answers <c>{"action": "saved" | "cancel"}</c>. The
     /// channel has checked <c>path</c> is a local copy's and added its <c>docNumber</c>; for a file that isn't, it
     /// answers <c>{"action": "file"}</c> itself, without a window.

@@ -345,7 +345,10 @@ so the upload limits apply as for `POST /documents`, and nothing is left on the 
   "messageId": "abc123@mail.example.com",
   "subject": "Contract for review",
   "from": "Ann Smith <ann@example.com>",
+  "to": "Bob Jones <bob@example.com>, carol@example.com",
+  "cc": null,
   "sent": "2026-11-03T10:00:00Z",
+  "received": "2026-11-03T10:00:05Z",
   "attachments": [
     { "index": 0, "name": "logo.png", "type": "image/png", "size": 70, "inline": true, "message": false },
     { "index": 1, "name": "Contract.pdf", "type": "application/pdf", "size": 48213, "inline": false, "message": false }
@@ -357,6 +360,8 @@ so the upload limits apply as for `POST /documents`, and nothing is left on the 
 - **The Message-ID** is the header's value without its angle brackets or surrounding space, compared exactly, case
   included. It is `null` when the message has none or one over 998 characters, and a message without one is never
   taken for a copy of another. A field the message lacks or has damaged is `null`.
+- **The recipients,** `to` and `cc`, are each as `from` is, joined with `, `. `received` is the date of the message's
+  most recent `Received` header, else its `Delivery-Date`.
 - **The attachments** are the message's attachments and inline parts, numbered by `index` in a walk of its parts
   that always gives the same list for the same bytes. An attachment has a file name and is sent as an attachment,
   or has no disposition and isn't shown by the message's HTML; an attached message (`message/rfc822`) is one too,
@@ -438,8 +443,9 @@ The answer is `201`, with the email's address as `Location`.
 - **All or nothing.** Everything is checked before anything is stored: the folder (`404`, `409 filing-rule`,
   `403`), the email (`413 too-large`, `422 not-an-email`), whether the matter holds it already, each ticked
   attachment against the upload rules, then the properties. A `422` names a ticked attachment's problem under the
-  field `attachments`, with its index and name in the `detail`, and an index that isn't an attachment with the code
-  `not-an-attachment`. If storing then fails part way, everything stored is taken back to the trash before the
+  field `attachments[<index>]`, such as `attachments[2]`, so a client can show it by that attachment, with its index
+  and name in the `detail` too, and an index that isn't an attachment with the code `not-an-attachment`. An index
+  sent as `null` is `attachments`. If storing then fails part way, everything stored is taken back to the trash before the
   answer, so the answer is either everything filed or nothing filed.
 - **`409 already-filed`** means the matter already holds this message, by its Message-ID; the problem's `document`
   is the copy. A client that repeats a filing whose answer it lost meets this, naming the copy its first try made,

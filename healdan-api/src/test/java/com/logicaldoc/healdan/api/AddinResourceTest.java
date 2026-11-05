@@ -21,6 +21,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 import com.logicaldoc.util.config.ContextProperties;
@@ -65,23 +66,32 @@ public class AddinResourceTest extends ApiTestCase {
 
 	@Test
 	public void testEveryResidNamesAResource() throws Exception {
+		assertEveryResidNamesAResource("manifest.xml", 100);
+		// The two version overrides each carry their own resources
+		assertEveryResidNamesAResource("outlook-manifest.xml", 12);
+	}
+
+	private void assertEveryResidNamesAResource(String file, int least) throws Exception {
 		// Office refuses a manifest whose resid names no resource, and only says so once it's uploaded, so the served
 		// manifest is read as XML here: every resid is the id of a bt:Image, bt:Url or bt:String in its Resources.
 		DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 		factory.setNamespaceAware(true);
 		factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
 		Document manifest = factory.newDocumentBuilder()
-				.parse(new ByteArrayInputStream(get("/api/addin/manifest.xml").send().body()));
+				.parse(new ByteArrayInputStream(get("/api/addin/" + file).send().body()));
 
+		// Each VersionOverrides has Resources of its own (Outlook's manifest nests a second, newer one in the first), and
+		// its resids name only those.
 		String basicTypes = "http://schemas.microsoft.com/office/officeappbasictypes/1.0";
-		Map<String, String> resources = new HashMap<>();
+		Map<Node, Map<String, String>> resources = new HashMap<>();
 		for (String kind : new String[] { "Image", "Url", "String" }) {
 			NodeList found = manifest.getElementsByTagNameNS(basicTypes, kind);
 			for (int i = 0; i < found.getLength(); i++) {
 				Element resource = (Element) found.item(i);
 				if (resource.hasAttribute("id"))
 					assertNull("two resources are " + resource.getAttribute("id"),
-							resources.put(resource.getAttribute("id"), kind));
+							resources.computeIfAbsent(overrides(resource), o -> new HashMap<>())
+									.put(resource.getAttribute("id"), kind));
 			}
 		}
 
@@ -93,11 +103,103 @@ public class AddinResourceTest extends ApiTestCase {
 				continue;
 			String resid = element.getAttribute("resid");
 			assertTrue(element.getTagName() + " names " + resid + ", which no bt: resource is",
-					resources.containsKey(resid));
+					resources.getOrDefault(overrides(element), Map.of()).containsKey(resid));
 			resids++;
 		}
 		// Each app's group, its buttons' labels, tips and icons, and the function file
-		assertTrue("resids: " + resids, resids > 100);
+		assertTrue(file + " resids: " + resids, resids > least);
+	}
+
+	/**
+	 * @return the nearest VersionOverrides around the element
+	 */
+	private static Node overrides(Element element) {
+		Node node = element.getParentNode();
+		while (node != null && !"VersionOverrides".equals(node.getLocalName()))
+			node = node.getParentNode();
+		return node;
+	}
+
+	@Test
+	public void testOutlookManifestNamesThisServer() {
+		ApiResponse response = get("/api/addin/outlook-manifest.xml").send();
+
+		assertEquals(response.toString(), 200, response.status());
+		assertEquals("application/xml; charset=UTF-8", contentType(response));
+		String manifest = response.text();
+		assertTrue(manifest, manifest.contains("http://localhost:8080/api/addin/mail.html"));
+		assertTrue(manifest, manifest.contains("<AppDomain>http://localhost:8080</AppDomain>"));
+		assertFalse(manifest, manifest.contains("{{"));
+		assertEquals("nosniff", response.header("X-Content-Type-Options"));
+	}
+
+	@Test
+	public void testOutlookManifestUsesThePublicAddress() {
+		Context.get().getConfig().setProperty(SERVER_URL, "https://healdan.example/");
+
+		String manifest = get("/api/addin/outlook-manifest.xml").send().text();
+
+		assertTrue(manifest, manifest.contains("https://healdan.example/api/addin/mail.html"));
+		assertTrue(manifest, manifest.contains("<AppDomain>https://healdan.example</AppDomain>"));
+		assertFalse(manifest, manifest.contains("https://healdan.example//"));
+		assertFalse(manifest, manifest.contains("localhost"));
+	}
+
+	@Test
+	public void testOutlookManifestRefusesPlainHttpElsewhere() {
+		Context.get().getConfig().remove(SERVER_URL);
+
+		ApiResponse response = get("/api/addin/outlook-manifest.xml").server("http", "healdan.example", 80).send();
+
+		assertEquals(response.toString(), 409, response.status());
+		assertEquals("no-public-address", response.code());
+	}
+
+	@Test
+	public void testOutlookManifestIsAMailApp() {
+		String manifest = get("/api/addin/outlook-manifest.xml").send().text();
+
+		assertTrue(manifest, manifest.contains("xsi:type=\"MailApp\""));
+		assertTrue(manifest, manifest.contains("<Permissions>ReadWriteMailbox</Permissions>"));
+		// getAsFileAsync, which filing needs, is Mailbox 1.14: an Outlook without it doesn't show the add-in
+		assertTrue(manifest, manifest.contains("<Set Name=\"Mailbox\" MinVersion=\"1.14\"/>"));
+		assertTrue(manifest, manifest.contains("<Host Name=\"Mailbox\"/>"));
+		assertTrue(manifest, manifest.contains("xsi:type=\"MessageReadCommandSurface\""));
+		assertTrue(manifest, manifest.contains("<Action xsi:type=\"ShowTaskpane\">"));
+		assertTrue(manifest, manifest.contains("<SupportsPinning>true</SupportsPinning>"));
+		// The trial: new Outlook for Mac can't read selected messages (T4), so the add-in doesn't declare several.
+		assertFalse(manifest, manifest.contains("SupportsMultiSelect"));
+		// Pinning is in the V1_1 override's ShowTaskpane action, and the pane it opens is the V1_1 one.
+		Matcher pinning = Pattern.compile("VersionOverridesV1_1.*<Action xsi:type=\"ShowTaskpane\">\\s*<SourceLocation resid=\"Pane.Url\"/>\\s*<SupportsPinning>true</SupportsPinning>\\s*</Action>", Pattern.DOTALL).matcher(manifest);
+		assertTrue(manifest, pinning.find());
+		assertTrue(manifest, manifest.contains("mail.html?v=1_1"));
+		assertTrue(manifest, manifest.contains("See whether this message is in Healdan, and file it."));
+		assertTrue(manifest, manifest.contains("DefaultValue=\"http://localhost:8080/api/addin/assets/healdan-128.png\""));
+	}
+
+	@Test
+	public void testTheTwoManifestsHaveDifferentIds() {
+		Pattern id = Pattern.compile("<Id>([^<]+)</Id>");
+		Matcher word = id.matcher(get("/api/addin/manifest.xml").send().text());
+		Matcher outlook = id.matcher(get("/api/addin/outlook-manifest.xml").send().text());
+
+		assertTrue(word.find());
+		assertTrue(outlook.find());
+		assertFalse(word.group(1).equals(outlook.group(1)));
+	}
+
+	@Test
+	public void testEveryAddressTheOutlookManifestNamesIsServed() {
+		String manifest = get("/api/addin/outlook-manifest.xml").send().text();
+		Matcher addresses = Pattern.compile("DefaultValue=\"http://localhost:8080/api/addin/([^\"?]+)[^\"]*\"")
+				.matcher(manifest);
+
+		int count = 0;
+		while (addresses.find()) {
+			assertEquals(addresses.group(1), 200, get("/api/addin/" + addresses.group(1)).send().status());
+			count++;
+		}
+		assertTrue("addresses: " + count, count >= 8);
 	}
 
 	@Test
@@ -208,7 +310,7 @@ public class AddinResourceTest extends ApiTestCase {
 
 	@Test
 	public void testPages() {
-		for (String page : new String[] { "taskpane.html", "commands.html" }) {
+		for (String page : new String[] { "taskpane.html", "commands.html", "mail.html" }) {
 			ApiResponse response = get("/api/addin/" + page).send();
 
 			assertEquals(page + " " + response, 200, response.status());
@@ -273,7 +375,13 @@ public class AddinResourceTest extends ApiTestCase {
 
 	@Test
 	public void testEveryIconTheManifestNames() {
-		String manifest = get("/api/addin/manifest.xml").send().text();
+		assertEveryIconIsServed("manifest.xml", 3 + 6 * 3);
+		// The mark for the app's two icons, and the button's three sizes, in each of two version overrides
+		assertEveryIconIsServed("outlook-manifest.xml", 2 + 2 * 3);
+	}
+
+	private void assertEveryIconIsServed(String file, int least) {
+		String manifest = get("/api/addin/" + file).send().text();
 		Matcher icons = Pattern.compile("DefaultValue=\"[^\"]*/api/addin/(assets/[^\"]+)\"").matcher(manifest);
 
 		int count = 0;
@@ -282,7 +390,7 @@ public class AddinResourceTest extends ApiTestCase {
 			count++;
 		}
 		// The mark at three sizes for the group, six buttons at three, and the app's own two icons
-		assertTrue("icons: " + count, count >= 3 + 6 * 3);
+		assertTrue(file + " icons: " + count, count >= least);
 	}
 
 	@Test
@@ -294,8 +402,8 @@ public class AddinResourceTest extends ApiTestCase {
 	@Test
 	public void testNoTokenNeeded() {
 		// The pages are the same for everyone, and Office loads them with no sign-in
-		for (String path : new String[] { "/api/addin/manifest.xml", "/api/addin/taskpane.html",
-				"/api/addin/commands.html", "/api/addin/assets/healdan-32.png" }) {
+		for (String path : new String[] { "/api/addin/manifest.xml", "/api/addin/outlook-manifest.xml",
+				"/api/addin/taskpane.html", "/api/addin/mail.html", "/api/addin/commands.html", "/api/addin/assets/healdan-32.png" }) {
 			ApiResponse response = get(path).send();
 			assertEquals(path, 200, response.status());
 			assertNull(path, response.header("WWW-Authenticate"));
@@ -312,7 +420,7 @@ public class AddinResourceTest extends ApiTestCase {
 
 	private static String[] nothing() {
 		return new String[] { "/api/addin/..%2Fpom.xml", "/api/addin/..", "/api/addin/.hidden",
-				"/api/addin/manifest.template.xml", "/api/addin/nothing.js", "/api/addin/assets/..%2Ftaskpane.html",
+				"/api/addin/manifest.template.xml", "/api/addin/outlook-manifest.template.xml", "/api/addin/nothing.js", "/api/addin/assets/..%2Ftaskpane.html",
 				"/api/addin/assets/nothing.png", "/api/addin/assets/healdan-32.svg" };
 	}
 }

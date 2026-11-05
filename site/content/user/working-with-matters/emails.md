@@ -4,7 +4,8 @@ weight: 4
 ---
 
 To file an email, save it as an `.eml` or `.msg` file and upload it into a matter's folder like any other document.
-Healdan treats every `.eml` and `.msg` file as an email.
+Healdan treats every `.eml` and `.msg` file as an email. From Outlook on your Mac you can file a message without
+saving it first: see [Filing Email from Outlook](../../office/filing-email/).
 
 ## What Healdan Reads from It
 

@@ -11,12 +11,13 @@
         CanMinimize="False"
         WindowStartupLocation="CenterScreen">
   <!-- Save to Healdan (spec §5.8; mockup save-to-healdan.html, with the README's changes): places on the left, the place's
-       contents in the middle, the new document's properties and its format on the right. -->
+       contents in the middle, the new document's properties and its format on the right. Its email mode (M5 spec §7.3)
+       shows the message read-only in place of the name, and its attachments in place of the format. -->
   <DockPanel>
     <Border x:Name="Toolbar" Classes="toolbar" DockPanel.Dock="Top">
       <Grid ColumnDefinitions="Auto,Auto,Auto,*" VerticalAlignment="Center">
         <TextBlock x:Name="WindowTitle" Classes="heading" VerticalAlignment="Center" Margin="0,0,12,0" IsVisible="False" />
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+        <StackPanel x:Name="NavButtons" Grid.Column="1" Orientation="Horizontal" Spacing="2">
           <Button x:Name="BackButton" Classes="tool" AutomationProperties.Name="Back">
             <local:IconView Data="{StaticResource Icon.chevron-left}" />
           </Button>
@@ -39,11 +40,14 @@
     <Border Classes="footer line" DockPanel.Dock="Bottom">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <Button x:Name="LocalButton" Classes="link" Content="Save to Local Computer…" VerticalAlignment="Center" />
+        <!-- The email mode's Save files through the window: the wait, or why Healdan refused, shows here (M5 spec §7.3). -->
+        <TextBlock x:Name="SubmitText" Grid.Column="1" Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center"
+                   Margin="0,0,12,0" IsVisible="False" />
         <Button x:Name="CancelButton" Grid.Column="2" Classes="footer" Content="Cancel" IsCancel="True" Margin="0,0,8,0" />
         <Button x:Name="SaveButton" Grid.Column="3" Classes="footer accent" Content="Save" IsDefault="True" />
       </Grid>
     </Border>
-    <Grid ColumnDefinitions="170,*,290">
+    <Grid x:Name="Panes" ColumnDefinitions="170,*,290">
       <Border x:Name="PlacesHost" Classes="nav" />
 
       <Border Grid.Column="1" Classes="pane">
@@ -101,10 +105,10 @@
       </Border>
 
       <DockPanel Grid.Column="2">
-        <TextBlock DockPanel.Dock="Top" Text="New Document Properties" Classes="heading" Margin="14,12,14,8" />
+        <TextBlock x:Name="PropertiesHeading" DockPanel.Dock="Top" Text="New Document Properties" Classes="heading" Margin="14,12,14,8" />
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="14,0,14,14" Spacing="9">
-            <StackPanel>
+            <StackPanel x:Name="NameRow">
               <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
                 <TextBlock Text="Name" Classes="label" />
                 <TextBlock Text=" *" Classes="label required" />
@@ -112,13 +116,47 @@
               <TextBox x:Name="NameBox" />
               <TextBlock x:Name="NameProblem" Classes="problem" IsVisible="False" />
             </StackPanel>
+            <!-- The email mode's message, read-only: M1 names the email after its subject (M5 plan correction 10). -->
+            <StackPanel x:Name="EmailBlock" Spacing="9" IsVisible="False">
+              <StackPanel x:Name="SubjectRow">
+                <TextBlock Text="Subject" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailSubject" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="FromRow">
+                <TextBlock Text="From" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailFrom" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="ToRow">
+                <TextBlock Text="To" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailTo" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="CcRow">
+                <TextBlock Text="CC" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailCc" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="SentRow">
+                <TextBlock Text="Sent" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailSent" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+              <StackPanel x:Name="ReceivedRow">
+                <TextBlock Text="Received" Classes="label" Margin="0,0,0,2" />
+                <SelectableTextBlock x:Name="EmailReceived" Classes="value" TextWrapping="Wrap" IsTabStop="False" />
+              </StackPanel>
+            </StackPanel>
             <!-- A ContentControl clips to its bounds, which would cut a focused field's ring at the form's edges. -->
             <ContentControl x:Name="FormHost" ClipToBounds="False" />
             <TextBlock x:Name="FormNotice" Classes="muted" TextWrapping="Wrap" IsVisible="False" />
-            <StackPanel Spacing="2" Margin="0,4,0,0">
+            <StackPanel x:Name="FormatRow" Spacing="2" Margin="0,4,0,0">
               <TextBlock Text="File Format" Classes="label" Margin="0,0,0,3" />
               <ComboBox x:Name="FormatPicker" HorizontalAlignment="Stretch" AutomationProperties.Name="File Format" />
               <TextBlock x:Name="FormatProblem" Classes="problem" IsVisible="False" Text="LibreOffice didn't say which formats it can save in." />
+            </StackPanel>
+            <!-- The email mode's attachments (M5 spec §7.3): the box ticks and unticks them all, and each can be unticked. -->
+            <StackPanel x:Name="AttachmentsBlock" Spacing="2" Margin="0,4,0,0" IsVisible="False">
+              <CheckBox x:Name="AttachmentsBox" AutomationProperties.Name="Also file attachments as separate documents">
+                <TextBlock Text="Also file attachments as separate documents" TextWrapping="Wrap" />
+              </CheckBox>
+              <StackPanel x:Name="AttachmentList" Margin="22,0,0,0" />
             </StackPanel>
           </StackPanel>
         </ScrollViewer>

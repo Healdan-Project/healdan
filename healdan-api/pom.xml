@@ -332,6 +332,7 @@
 									<directory>${project.basedir}/../clients/office</directory>
 									<includes>
 										<include>manifest.template.xml</include>
+										<include>outlook-manifest.template.xml</include>
 									</includes>
 								</resource>
 								<resource>

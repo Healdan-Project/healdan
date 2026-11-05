@@ -10,7 +10,7 @@ namespace Healdan.Helper.Windows;
 
 /// <summary>
 /// Set Up Microsoft Office (M3.5 spec §5.13): the three things the helper needs from the user before Word, Excel and
-/// PowerPoint can use it, each once, and why. Set Up does the first (<see cref="OfficeSetUp.TrustAsync"/>): the Mac asks for
+/// PowerPoint can use it, each once, and why; Outlook (M5) needs only the first, as it saves no copies. Set Up does the first (<see cref="OfficeSetUp.TrustAsync"/>): the Mac asks for
 /// the user's password, and a tick shows when it is trusted. A cancelled prompt or a failure shows as a line under the rows,
 /// and Set Up can be tried again. Not Now, the Escape key and a close leave it for the menu; closing while the Mac asks stops
 /// the ask.

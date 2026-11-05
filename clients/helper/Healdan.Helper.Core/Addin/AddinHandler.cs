@@ -3,9 +3,11 @@
 
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Healdan.Helper.Core.Api;
 using Healdan.Helper.Core.Channel;
 using Healdan.Helper.Core.Cycle;
 using Healdan.Helper.Core.Logging;
+using Healdan.Helper.Core.Mail;
 using Healdan.Helper.Core.Office;
 
 namespace Healdan.Helper.Core.Addin;
@@ -16,19 +18,27 @@ public sealed record AddinAnswer(int Status, JsonObject Body)
     public static AddinAnswer Ok(JsonNode? body) => new(200, body as JsonObject ?? new JsonObject());
 
     public static AddinAnswer Error(int status, string code) => new(status, new JsonObject { ["error"] = code });
+
+    /// <summary>A refusal with Healdan's own words, as <c>detail</c>.</summary>
+    public static AddinAnswer Error(int status, string code, string detail) =>
+        new(status, new JsonObject { ["error"] = code, ["detail"] = detail });
 }
 
 /// <summary>
 /// What the add-in's document routes work on while the helper is signed in and started: its cycle, the filing (which holds
-/// Save to Healdan's tickets) and the extension's handler, for the windows. The session makes new ones at each start, so a
-/// ticket given before a sign-out is no use after it, to the same server or another.
+/// Save to Healdan's tickets), the extension's handler, for the windows, and the mail filing Outlook's routes use (M5). The
+/// session makes new ones at each start, so a ticket given before a sign-out is no use after it, to the same server or
+/// another.
 /// </summary>
-public sealed record AddinDocuments(CopyCycle Cycle, OfficeFiling Filing, IChannelHandler Channel);
+public sealed record AddinDocuments(CopyCycle Cycle, OfficeFiling Filing, IChannelHandler Channel, MailFiling Mail);
 
 /// <summary>
 /// What the add-in's routes do (M3.5 plan: the add-in's routes), once <see cref="AddinServer"/> has let the request through.
 /// The routes are the extension's (spec §5.8), for the program the request's key was paired for: the windows go to the
 /// extension's handler, filing to <see cref="OfficeFiling"/>, and Save as New Version and the copy's state to the cycle.
+/// <para>Outlook's routes, <c>mail/…</c> (M5 spec §7.2), are for a key paired as Outlook alone, and any other app's is
+/// <c>400 bad-request</c> on them (the port refuses it before reading the body); Outlook isn't in the copy cycle, so they
+/// work on <see cref="MailFiling"/>. Their failures are logged without Healdan's words, which can name an attachment.</para>
 /// <para>The add-in can't always say which document it's in, so the helper decides (spec §5.8): the copy its <c>url</c>
 /// names, when that's one of the helper's copies, else the program's front window's (<see cref="OfficeFiling.CopyForAsync"/>).
 /// Paths stay copies in <c>Copies</c>, as the extension's do, except for Save to Healdan on a document not in Healdan.</para>
@@ -58,7 +68,9 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
                 return PairFinish(body);
             if (documents() is not { } current)
                 return AddinAnswer.Error(409, "signed-out");
-            var (cycle, filing, channel) = current;
+            var (cycle, filing, channel, mail) = current;
+            if (route.StartsWith("mail/", StringComparison.Ordinal))
+                MailRoute(app);
             switch (route)
             {
                 case "open-dialog":
@@ -66,6 +78,7 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
                 case "save-new":
                     return AddinAnswer.Ok(await filing.SaveNewAsync(Program(app, body), LocalPath(Optional(body, "url")), Flag(body, "asNew")));
                 case "file":
+                    _ = Program(app, body); // Word's, Excel's or PowerPoint's key: Outlook's files no document
                     var state = await filing.FileAsync(Text(body, "ticket"), Optional(body, "mark"), Bytes(body, "bytes"));
                     return AddinAnswer.Ok(ChannelHandler.Json(state));
                 case "new-version":
@@ -82,6 +95,11 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
                     return AddinAnswer.Ok(await filing.CopyForAsync(program, LocalPath(Optional(body, "url"))) is { } known
                         ? ChannelHandler.Json(cycle.StateOf(known))
                         : new JsonObject { ["known"] = false });
+                case "mail/status":
+                    return AddinAnswer.Ok(await mail.StatusAsync(MessageIdsOf(body)));
+                case "mail/file":
+                    var eml = Bytes(body, "eml");
+                    return AddinAnswer.Ok(await mail.FileAsync(eml, FolderIdOf(body, "folderId"), FolderIdOf(body, "openAt")));
                 default:
                     return AddinAnswer.Error(404, "not-found");
             }
@@ -90,6 +108,12 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
         {
             log.Warn($"Refused /v1/{route} from the add-in: {e.Code}");
             return AddinAnswer.Error(409, e.Code);
+        }
+        catch (MailTooLargeException e)
+        {
+            // The server's words name a limit, never a message, so they go to the pane; the log has the code only.
+            log.Warn($"/v1/{route} from the add-in refused: over-upload-limit");
+            return AddinAnswer.Error(409, "over-upload-limit", e.Message);
         }
         catch (PairingRestingException)
         {
@@ -100,6 +124,18 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
         {
             log.Warn($"/v1/{route} from the add-in wasn't a request it takes: {e.Message}");
             return AddinAnswer.Error(400, "bad-request");
+        }
+        catch (ApiException e) when (route.StartsWith("mail/", StringComparison.Ordinal))
+        {
+            // Healdan's words can name an attachment, which the log never does (M5): its status and code are enough here,
+            // and the user has had its words in the helper's notification. A refusal, such as inspect's of a message too
+            // large, is a warning; Healdan's own failure an error.
+            var line = $"/v1/{route} from the add-in failed: Healdan answered {e.Status} {e.Code}";
+            if (e.Status >= 500)
+                log.Error(line);
+            else
+                log.Warn(line);
+            return AddinAnswer.Error(500, "internal-error");
         }
         catch (Exception e)
         {
@@ -175,6 +211,40 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
     }
 
     private static string Name(OfficeProgram p) => OfficePrograms.CheckOutName(p);
+
+    /// <summary>The mail routes are Outlook's: any other app's key is refused as a request they don't take.</summary>
+    private static void MailRoute(string? keyApp)
+    {
+        if (keyApp != Pairing.OutlookName)
+            throw new ArgumentException($"A key paired for {keyApp} was sent to a mail route, which only Outlook's takes.", nameof(keyApp));
+    }
+
+    /// <summary>
+    /// <c>messageIds</c>: one to 100 Message-IDs, each text that isn't empty. The message's own is first, then its thread's
+    /// (<see cref="MailFiling.StatusAsync"/>).
+    /// </summary>
+    private static List<string> MessageIdsOf(JsonObject body)
+    {
+        if (body["messageIds"] is not JsonArray { Count: >= 1 and <= MaxMessageIds } ids)
+            throw new ArgumentException($"messageIds is missing or isn't a list of 1 to {MaxMessageIds}.", "messageIds");
+        return [.. ids.Select(id => id is JsonValue v && TryText(v, out var text) && text.Length > 0
+            ? text
+            : throw new ArgumentException("messageIds has an entry that isn't text, or is empty.", "messageIds"))];
+    }
+
+    /// <summary>The most Message-IDs one request names: the server's limit for one lookup (M5 spec §6.8).</summary>
+    private const int MaxMessageIds = 100;
+
+    /// <summary>
+    /// A folder's id: <c>folderId</c>, File Here's folder, or <c>openAt</c>, where File…'s window opens (the pane's first
+    /// suggestion). A whole number above 0, or none.
+    /// </summary>
+    private static long? FolderIdOf(JsonObject body, string key) => body[key] switch
+    {
+        null => null,
+        var node when JsonNumbers.Whole(node) is long id && id > 0 => id,
+        _ => throw new ArgumentException($"{key} isn't a folder's id.", key),
+    };
 
     /// <summary>
     /// The add-in's <c>url</c> (its <c>Office.context.document.url</c>) as a local path, or null when it names none: empty,

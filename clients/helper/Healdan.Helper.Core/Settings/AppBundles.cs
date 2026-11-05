@@ -22,6 +22,12 @@ public static class AppBundles
     /// </summary>
     public const string CoffeePdf = "com.healdan.coffeepdf";
 
+    /// <summary>
+    /// Outlook's, which runs Healdan's add-in for email (M5 spec §7.1) but opens no copies, so <see cref="NameOf"/> doesn't
+    /// know it either.
+    /// </summary>
+    public const string Outlook = "com.microsoft.Outlook";
+
     /// <summary>The program's bundle identifier. PowerPoint's has a small p.</summary>
     public static string Of(OfficeProgram p) => p switch
     {

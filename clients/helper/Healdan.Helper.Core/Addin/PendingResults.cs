@@ -18,8 +18,8 @@ namespace Healdan.Helper.Core.Addin;
 /// <para>So a keyed route still running after <see cref="DefaultHold"/> answers <c>202 {"pending": "&lt;id&gt;"}</c> and
 /// goes on; its outcome, the status and body it would have answered, success or error, is kept under that id.
 /// <c>/v1/result</c> waits up to the hold time again for it, and answers it, or <c>202</c> once more. An outcome belongs to
-/// the key that started it, is answered once, and is kept for <see cref="Kept"/> after its route finishes. <c>ping</c> and
-/// <c>state</c> never pend.</para>
+/// the key that started it, is answered once, and is kept for <see cref="Kept"/> after its route finishes. <c>ping</c>,
+/// <c>state</c> and <c>mail/status</c> never pend.</para>
 /// <para>An id is 16 random bytes in base64url. Nothing here logs: the port logs a route's name and that it was pending,
 /// never an id.</para>
 /// </summary>
@@ -37,7 +37,7 @@ public sealed class PendingResults(TimeSpan hold, TimeProvider clock)
     public const int MaxPerKey = 64;
 
     /// <summary>The routes that answer when they're done, however long that takes: they never wait on the user.</summary>
-    private static readonly HashSet<string> Direct = ["ping", "state"];
+    private static readonly HashSet<string> Direct = ["ping", "state", "mail/status"];
 
     private readonly ConcurrentDictionary<string, Entry> _entries = new(StringComparer.Ordinal);
 

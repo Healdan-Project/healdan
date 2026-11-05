@@ -19,6 +19,9 @@ the document's doc # and version: `Lease agreement #1234 v2.1`.
   Word only, Insert Doc ID. Your administrator deploys it once from Microsoft 365, and the helper does the work. The
   add-in doesn't take over Office's own Open, Save or Save As: see
   [In Word, Excel and PowerPoint](#in-word-excel-and-powerpoint).
+- **Healdan's add-in for Microsoft Outlook** adds a **Healdan** pane to Outlook on your Mac. It shows whether the
+  message you're reading is filed in Healdan and where, and files it into a matter with one click. See
+  [Filing Email from Outlook](filing-email/).
 - **Open in App,** in the web page, opens a document in LibreOffice, Word, Excel or PowerPoint through the helper,
   whichever you've chosen for that kind of file in the helper's Settings.
 
@@ -28,7 +31,8 @@ open is checked out to you, as it would be there.
 ## What You Need
 
 - A Mac with Apple silicon, running macOS 26 or later.
-- LibreOffice 26.2 or later, or Microsoft Word, Excel or PowerPoint from Microsoft 365, or both.
+- LibreOffice 26.2 or later, or Microsoft Word, Excel or PowerPoint from Microsoft 365, or both. To file email, the
+  new Outlook for Mac from Microsoft 365: see [Filing Email from Outlook](filing-email/).
 - For the Healdan tab in Word, Excel and PowerPoint, an administrator who has deployed the add-in: see
   [Deploying the Add-in](../../install/office-integration/#deploying-the-add-in).
 - Your Healdan server's `https://` address: the one you use for the web page.
@@ -60,7 +64,7 @@ What's different from LibreOffice:
 - **Office's own Open, Save and Save As stay Office's own.** Use the Healdan tab to file a new document and to open
   one from Healdan. **⌘S** on a document that isn't in Healdan yet saves it on your Mac, as before.
 - **The first press in each app pairs it with the helper.** The Healdan window asks for a code that the helper shows:
-  see [Pairing Word, Excel and PowerPoint](installing-the-helper/#pairing-word-excel-and-powerpoint).
+  see [Pairing Word, Excel, PowerPoint and Outlook](installing-the-helper/#pairing-word-excel-powerpoint-and-outlook).
 - **A message shows in a small Healdan window,** over the document, when a button has something to tell you, such as
   that the helper isn't running. Close it when you've read it.
 - **Insert Doc ID is Word's.** Excel and PowerPoint have the other five buttons.

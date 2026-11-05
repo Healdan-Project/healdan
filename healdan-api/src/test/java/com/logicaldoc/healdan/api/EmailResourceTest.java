@@ -113,8 +113,22 @@ public class EmailResourceTest extends ApiTestCase {
 		assertEquals(MESSAGE_ID, inspection.path("messageId").textValue());
 		assertEquals("Contract for review", inspection.path("subject").textValue());
 		assertEquals("Ann Smith <ann@example.com>", inspection.path("from").textValue());
+		assertEquals("Bob Jones <bob@example.com>", inspection.path("to").textValue());
+		assertTrue(inspection.path("cc").isNull()); // a field the message hasn't got is null, not left out
 		assertEquals("2026-11-03T10:00:00Z", inspection.path("sent").textValue());
+		assertTrue(inspection.path("received").isNull());
 		assertEquals(0, inspection.path("copies").size());
+
+		// The recipients, each as From is, and when it was received: the most recent hop's Received header
+		String eml = "From: Ann Smith <ann@example.com>\r\nTo: Bob Jones <bob@example.com>, carol@example.com\r\n"
+				+ "Cc: Dan Brown <dan@example.com>\r\nSubject: Contract for review\r\n"
+				+ "Date: Tue, 03 Nov 2026 10:00:00 +0000\r\n"
+				+ "Received: from mx.example.com by mail.example.com; Tue, 03 Nov 2026 10:00:05 +0000\r\n"
+				+ "Received: from client.example.com by mx.example.com; Tue, 03 Nov 2026 10:00:02 +0000\r\n\r\nHello.\r\n";
+		JsonNode addressed = inspect(token, eml.getBytes(StandardCharsets.UTF_8)).json();
+		assertEquals("Bob Jones <bob@example.com>, carol@example.com", addressed.path("to").textValue());
+		assertEquals("Dan Brown <dan@example.com>", addressed.path("cc").textValue());
+		assertEquals("2026-11-03T10:00:05Z", addressed.path("received").textValue());
 
 		JsonNode parts = inspection.path("attachments");
 		assertEquals(3, parts.size());

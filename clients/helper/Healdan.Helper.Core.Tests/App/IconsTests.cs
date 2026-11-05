@@ -23,7 +23,7 @@ public sealed class IconsTests
     [
         "alert-triangle", "briefcase", "building", "check", "chevron-left", "chevron-right", "chevron-up", "clock",
         "device-floppy", "eye", "file", "file-plus", "file-spreadsheet", "file-text", "file-type-pdf", "folder", "folder-open",
-        "folder-plus", "hash", "history", "list-details", "lock", "photo", "power", "presentation", "puzzle", "search",
+        "folder-plus", "hash", "history", "list-details", "lock", "mail", "photo", "power", "presentation", "puzzle", "search",
         "selector", "server", "star", "triangle-square-circle", "versions"
     ];
 

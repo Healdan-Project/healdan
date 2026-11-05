@@ -23,14 +23,17 @@ Directory.CreateDirectory(output);
 Directory.CreateDirectory(officeOutput);
 var icons = (ResourceDictionary)AvaloniaXamlLoader.Load(new Uri("avares://HealdanHelper/Windows/HelperIcons.axaml"));
 
-(string File, string Icon, bool Shield)[] commands =
+// Extension: the LibreOffice extension has the command too. Outlook's File to Healdan is the Office add-in's alone, so the
+// extension gets no image for it, and its package doesn't change.
+(string File, string Icon, bool Shield, bool Extension)[] commands =
 [
-    ("save-to-healdan", "device-floppy", true),
-    ("open-from-healdan", "folder-open", true),
-    ("save-as-new-version", "versions", false),
-    ("save-as-new-document", "file-plus", false),
-    ("properties", "list-details", false),
-    ("insert-doc-id", "hash", false)
+    ("save-to-healdan", "device-floppy", true, true),
+    ("open-from-healdan", "folder-open", true, true),
+    ("save-as-new-version", "versions", false, true),
+    ("save-as-new-document", "file-plus", false, true),
+    ("properties", "list-details", false, true),
+    ("insert-doc-id", "hash", false, true),
+    ("file-email", "mail", true, false)
 ];
 
 var grey = Color.Parse("#7C7C80");
@@ -38,10 +41,10 @@ var shieldBlue = Color.Parse("#1A74C4");
 Dispatcher.UIThread.Invoke(() =>
 {
     var mark = new HealdanMark();
-    foreach (var (file, icon, shield) in commands)
+    foreach (var (file, icon, shield, extension) in commands)
     {
         var drawing = (Geometry)icons["Icon." + icon]!;
-        foreach (var size in new[] { 16, 26 })
+        foreach (var size in extension ? new[] { 16, 26 } : [])
         {
             Save(Icon(drawing, size, grey, shield ? (mark.Shield(), shieldBlue, Colors.White) : null), output, $"{file}-{size}.png");
             Save(Icon(drawing, size, Colors.White, shield ? (mark.Shield(), Colors.White, Colors.Black) : null), output, $"{file}-{size}-hc.png");
@@ -52,8 +55,9 @@ Dispatcher.UIThread.Invoke(() =>
     }
     Save(Mark(42, null), output, "healdan-42.png");
     Save(Mark(42, Colors.White), output, "healdan-42-hc.png");
-    // The manifest's icon is 32 px and its high-resolution icon 64; the ribbon's group takes 16, 32 and 80
-    foreach (var size in new[] { 16, 32, 64, 80 })
+    // The Word manifest's icon is 32 px and its high-resolution icon 64; the Outlook manifest's is 64 and 128; the
+    // ribbon's group takes 16, 32 and 80
+    foreach (var size in new[] { 16, 32, 64, 80, 128 })
         Save(Mark(size, null), officeOutput, $"healdan-{size}.png");
 });
 Console.WriteLine($"Wrote the extension's images to {output}");

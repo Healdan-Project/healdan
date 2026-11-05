@@ -42,10 +42,15 @@ public sealed class OfficeSetUpTests : IDisposable
     }
 
     [Fact]
-    public void ExcelOrPowerPointAloneIsEnough()
+    public void ExcelPowerPointOrOutlookAloneIsEnough()
     {
         Assert.True(SetUp(new InstalledApps(false, false, true, false)).Applies);
         Assert.True(SetUp(new InstalledApps(false, false, false, true)).Applies);
+        // Outlook's add-in reaches the helper on the same port, with the same certificate (M5 spec §7.1).
+        var outlookOnly = SetUp(new InstalledApps(false, false, false, false, Outlook: true));
+        Assert.True(outlookOnly.Applies);
+        Assert.True(outlookOnly.Needed);
+        Assert.True(outlookOnly.TakeFirstOffer());
     }
 
     [Fact]

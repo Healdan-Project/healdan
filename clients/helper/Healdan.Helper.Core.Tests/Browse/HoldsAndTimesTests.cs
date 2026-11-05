@@ -104,6 +104,18 @@ public class HoldsAndTimesTests
     }
 
     [Fact]
+    public void WhenAMessageWasSentIsItsDayInFullAndItsTime()
+    {
+        var sent = DateTimeOffset.Parse("2026-11-02T14:05:00Z");
+
+        Assert.Equal("2 November 2026 at 14:05", When.DateAndTime(sent, TimeZoneInfo.Utc, Gb));
+        Assert.Equal("November 2, 2026 at 2:05 PM", When.DateAndTime(sent, TimeZoneInfo.Utc, Us));
+        // Where the user is: a message sent just before midnight in London is the next day in Paris.
+        var paris = TimeZoneInfo.FindSystemTimeZoneById("Europe/Paris");
+        Assert.Equal("3 November 2026 at 00:30", When.DateAndTime(DateTimeOffset.Parse("2026-11-02T23:30:00Z"), paris, Gb));
+    }
+
+    [Fact]
     public void ADateInTheRegionsOwnOrder()
     {
         var utc = TimeZoneInfo.Utc;
