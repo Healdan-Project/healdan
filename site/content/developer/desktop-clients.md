@@ -538,7 +538,7 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
 | `POST /v1/properties` | `{"app", "url"}` | as the channel's |
 | `POST /v1/state` | `{"app", "url"}` | the copy's state, or `{"known": false}` |
 | `POST /v1/mail/status` | `{"messageIds": [...]}` | `{"filed": bool, "copies": [{"docNumber", "name", "matter", "folder", "address"}], "elsewhere": bool, "suggestions": [{"folderId", "path"}]}`; Outlook's key only |
-| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` before any window is up, when File Here can't reach Healdan or `inspect` fails (no answer, not an email, `401`); `409 too-large` with `detail` when `inspect` refuses a message over the upload limit; Outlook's key only |
+| `POST /v1/mail/file` | `{"eml", "folderId", "openAt"}`: the `.eml` in base64; optionally `folderId`, a suggestion to File Here into, or else `openAt`, where File…'s window opens (the pane's first suggestion) | `{"outcome": "filed" \| "already-filed" \| "cancelled", "email": {"docNumber", "name", "matter", "folder"}, "attachments": n, "skipped": n}`, the counts for `filed` only; `500 internal-error` before any window is up, when File Here can't reach Healdan or `inspect` fails (no answer, not an email, `401`); `409 over-upload-limit` with `detail` when `inspect` refuses a message over the upload limit; Outlook's key only |
 | `POST /v1/mail/file-many` | the number of messages and their subjects | a ticket; Outlook's key only |
 | `POST /v1/mail/file-one` | the ticket and one `.eml` | filed, `already-filed` or failed; Outlook's key only |
 | `POST /v1/result` | `{"id"}` | the outcome of the route that answered `202` with that `id`, as that route would have answered it; `202` again while it's still running; `404 no-result` for an id that's unknown, expired, already answered or another key's |
@@ -632,7 +632,9 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
       "Can't reach Healdan. Try again." Cancel is `outcome: cancelled`.
     - **Before any window is up,** an outage on File Here, or any failure of `inspect` (no answer, one that isn't an
       email, a `401`), is told in the helper's notification and answered `500 internal-error`. A message over the upload
-      limit (`413 too-large`) is answered `409 too-large` instead, with the server's words as `detail`, and the pane says so. The log
+      limit (`413 too-large`) is answered `409 over-upload-limit` instead, with the server's words as `detail`, and the pane says so.
+      It's a code apart from the port's own `413 too-large`, the helper's body limit, which raising the upload limit doesn't
+      move. The log
       has Healdan's status and code, a `4xx` as a warning and a `5xx` as an error. The window's refusals are never
       notified: the window says them.
     - **Like `save-new`,** it answers `202` when it's still running after 20 s, while the window is up.

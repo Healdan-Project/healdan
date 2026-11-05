@@ -14,7 +14,7 @@ namespace Healdan.Helper.Core.Mail;
 
 /// <summary>
 /// <c>inspect</c> refused the message as over Healdan's upload limit (<c>413 too-large</c>). The route answers it <c>409
-/// too-large</c>, with <see cref="Exception.Message"/> (the server's words) as <c>detail</c>, so the pane can say so.
+/// over-upload-limit</c>, with <see cref="Exception.Message"/> (the server's words) as <c>detail</c>, so the pane can say so.
 /// </summary>
 public sealed class MailTooLargeException(string detail) : Exception(detail);
 

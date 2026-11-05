@@ -325,12 +325,34 @@ test("when the list can't be read, the message gets no category and the filing c
   assert.match(logged[0], /5001/);
 });
 
-test("a message over the upload limit says so", async () => {
-  const error = Object.assign(new Error("The email is larger than the 10 MB limit."), { code: "too-large" });
+/** What fileMessage shows when the real client gets this answer to mail/file, and whether the message was tagged. */
+async function fileAnsweredWith(status, body) {
+  const answers = {
+    hello: [200, { name: "Healdan Helper", protocols: [1], server: "https://dms" }],
+    "mail/file": [status, body],
+  };
+  const fetch = async (url) => {
+    const [code, json] = answers[new URL(url).pathname.replace(/^\/v1\//, "")];
+    return { ok: code < 300, status: code, json: async () => json };
+  };
+  const storage = { getItem: (n) => (n === "healdan.key.Outlook" ? "k".repeat(43) : null), setItem() {}, removeItem() {} };
+  const client = Healdan.createHelperClient({ fetch, storage, origin: "https://dms", host: "Outlook" });
   const glue = fakeGlue();
-  const view = await Mail.fileMessage({ call: async () => { throw error; } }, glue, 1);
+  const view = await Mail.fileMessage(client, glue, 1);
+  return { view, tagged: glue.log.includes("addCategory") };
+}
+
+test("a message over the server's upload limit says so", async () => {
+  const { view, tagged } = await fileAnsweredWith(409, { error: "over-upload-limit", detail: "The email is larger than the 100 MB limit." });
   assert.deepEqual(view, { kind: "problem", text: "This message is larger than Healdan accepts. An administrator can raise the upload limit." });
-  assert.equal(glue.log.includes("addCategory"), false);
+  assert.equal(tagged, false);
+});
+
+test("a message over the helper's own limit doesn't say to raise the upload limit", async () => {
+  const { view, tagged } = await fileAnsweredWith(413, { error: "too-large" });
+  assert.deepEqual(view, { kind: "problem", text: Healdan.messageFor("too-large") });
+  assert.doesNotMatch(view.text, /upload limit/);
+  assert.equal(tagged, false);
 });
 
 test("a message Outlook won't give, or an outage, is a problem and not filed", async () => {

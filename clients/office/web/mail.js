@@ -124,16 +124,10 @@
     return { kind: "problem", text: "Healdan Helper answered with something the add-in didn't expect.", categorise: false };
   }
 
-  /** The words for a message over the server's upload limit (the helper's 409 too-large). */
-  const TOO_LARGE = "This message is larger than Healdan accepts. An administrator can raise the upload limit.";
-
   /** The words for a helper error: internal-error is the helper not reaching Healdan or not reading the message. */
   function failureText(error) {
     if (error && error.code === "internal-error") {
       return CANT_REACH;
-    }
-    if (error && error.code === "too-large") {
-      return TOO_LARGE;
     }
     return error && typeof error.message === "string" && typeof error.code === "string"
       ? error.message
@@ -567,7 +561,7 @@
     };
   }
 
-  const api = { threadIds, statusView, outcomeView, fileMessage, start, POLL, CANT_REACH, TOO_LARGE };
+  const api = { threadIds, statusView, outcomeView, fileMessage, start, POLL, CANT_REACH };
 
   if (root.document && typeof root.document.getElementById === "function" && root.document.getElementById("file-other")) {
     const begin = () => {

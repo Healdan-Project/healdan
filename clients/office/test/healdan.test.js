@@ -1220,6 +1220,7 @@ const HELPER_CODES = [
   "pairing-expired",
   "too-many-tries",
   "too-large",
+  "over-upload-limit",
   "too-many-pending",
   "bad-request",
   "internal-error",

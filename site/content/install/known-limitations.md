@@ -121,9 +121,8 @@ weight: 11
 - **Filing is one message at a time for now.** Filing several messages at once isn't available yet: the new Outlook for
   Mac 16.114 can't read the selected messages. With several selected, the pane asks you to select one.
 - **A message over the upload limit can't be filed.** Healdan refuses a message larger than its upload limit
-  (`upload.maxsize`, 10 MB unless an administrator has set another size) and the pane says so. An administrator sets it
-  under **Administration → Settings → GUI Settings** as **Upload max. size**: see
-  [Interface Settings](../../admin/system/interface-settings/).
+  (100 MB as Healdan is installed) and the pane says so. An administrator sets it under **Administration → Settings →
+  GUI Settings** as **Upload max. size**: see [Interface Settings](../../admin/system/interface-settings/).
 - **Moving or deleting the mail afterwards isn't followed.** Healdan files a copy of the message. Moving it to
   another folder in Outlook, or deleting it, changes nothing in Healdan, and the other way round.
 - **Encrypted and signed messages.** A message Outlook can't give the helper as it stands, such as an encrypted one,

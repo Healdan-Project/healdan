@@ -115,6 +115,7 @@
     "pairing-expired": "That code has expired, or was cancelled. Press the button again for a new one.",
     "too-many-tries": "Too many wrong codes were typed, so pairing is paused for 10 minutes. Try again after that.",
     "too-large": "This document is too large for the add-in to send to Healdan Helper.",
+    "over-upload-limit": "This message is larger than Healdan accepts. An administrator can raise the upload limit.",
     "too-many-pending": "Healdan Helper is still busy with this app's earlier requests. Wait for them to finish, then try again.",
     "bad-request": "Healdan Helper didn't understand the add-in. If it keeps happening, update Healdan Helper.",
     "internal-error": "Healdan Helper hit a problem. Its log has the details.",

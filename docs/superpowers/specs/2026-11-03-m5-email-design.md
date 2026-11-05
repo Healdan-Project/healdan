@@ -323,7 +323,7 @@ The message is always still in Outlook, so nothing is queued for later (call).
 | `already-filed` | The pane switches to Filed, naming the copy, and the category is added |
 | The category can't be added | Logged; the filing still counts, and the pane still shows Filed |
 | An encrypted (S/MIME) or rights-protected message | Filed as received; no attachments offered; its text isn't searched. Known Limitations says so |
-| A message over `upload.maxsize` | Refused by `inspect`, naming the limit. The helper answers `mail/file` `409 too-large` with the server's words, and the pane says "This message is larger than Healdan accepts. An administrator can raise the upload limit." (changed by the trial: it had been `500 internal-error`, which the pane called "Can't Reach Healdan") |
+| A message over `upload.maxsize` | Refused by `inspect`, naming the limit. The helper answers `mail/file` `409 over-upload-limit` with the server's words (a code of its own: the port's `413 too-large` is the helper's own body limit, which raising `upload.maxsize` doesn't move), and the pane says "This message is larger than Healdan accepts. An administrator can raise the upload limit." (changed by the trial: it had been `500 internal-error`, which the pane called "Can't Reach Healdan") |
 | One of several messages fails | The others go on; the summary names it and why |
 
 ## 11. Security (calls)

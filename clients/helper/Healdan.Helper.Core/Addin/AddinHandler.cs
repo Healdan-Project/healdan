@@ -112,8 +112,8 @@ public sealed class AddinHandler(Pairing pairing, Func<AddinDocuments?> document
         catch (MailTooLargeException e)
         {
             // The server's words name a limit, never a message, so they go to the pane; the log has the code only.
-            log.Warn($"/v1/{route} from the add-in refused: too-large");
-            return AddinAnswer.Error(409, "too-large", e.Message);
+            log.Warn($"/v1/{route} from the add-in refused: over-upload-limit");
+            return AddinAnswer.Error(409, "over-upload-limit", e.Message);
         }
         catch (PairingRestingException)
         {

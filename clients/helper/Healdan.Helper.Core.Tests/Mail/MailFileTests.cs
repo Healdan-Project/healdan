@@ -255,11 +255,11 @@ public sealed class MailFileTests : IDisposable
     [Fact]
     public async Task AMessageOverTheUploadLimitIsRefusedAsTooLargeWithTheServersWords()
     {
-        _server.InspectRefusal = (413, "too-large", "The email is larger than the 10 MB limit.");
+        _server.InspectRefusal = (413, "too-large", "The email is larger than the 100 MB limit.");
 
         var e = await Assert.ThrowsAsync<MailTooLargeException>(() => Mail().FileAsync(Eml(), null));
 
-        Assert.Equal("The email is larger than the 10 MB limit.", e.Message);
+        Assert.Equal("The email is larger than the 100 MB limit.", e.Message);
         Assert.Empty(_windows.Asked);
         Assert.Single(_notifier.Notices); // the user is told, as for any refusal before a window
     }
