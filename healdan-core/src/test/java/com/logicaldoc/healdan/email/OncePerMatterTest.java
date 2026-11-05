@@ -387,6 +387,62 @@ public class OncePerMatterTest extends AbstractRulesTestCase {
 				one.getId(), two.getId());
 	}
 
+	/** Checks in the fixture as the document's new version, named as an email; the caller checked it out */
+	private void checkIn(Document document, String resource, com.logicaldoc.core.security.user.User as)
+			throws Exception {
+		try (java.io.InputStream content = Files.newInputStream(new File("src/test/resources/email/" + resource).toPath())) {
+			DocumentManager.get().checkin(document.getId(), content, "message.eml", false, null, documentHistory(as));
+		}
+		awaitAsyncWork();
+	}
+
+	@Test
+	public void testACheckInOfAMessageTheMatterHoldsRefused() throws Exception {
+		Document first = fileEmail(documents, alice);
+		// The second message, in another folder of 998.1
+		Document other = fileEmail("healdan-emoji.eml", correspondence, documentHistory(alice));
+		DocumentManager.get().checkout(other.getId(), documentHistory(alice));
+		awaitAsyncWork();
+
+		// Its new version would make it a second copy of the message 998.1 holds
+		assertRefused(alreadyIn("998.1", first), () -> checkIn(other, "healdan-cc.eml", alice), first.getId(),
+				other.getId());
+		assertEquals(List.of(first.getId()), copies());
+		assertEquals("2@example.com", EmailIndex.get().messageIdOf(other.getId()));
+
+		// Another matter holds its own copy
+		Document elsewhere = fileEmail("healdan-emoji.eml", otherDocuments, documentHistory(alice));
+		DocumentManager.get().checkout(elsewhere.getId(), documentHistory(alice));
+		allowed(() -> checkIn(elsewhere, "healdan-cc.eml", alice));
+		assertEquals(List.of(first.getId(), elsewhere.getId()), copies());
+	}
+
+	@Test
+	public void testACheckInOfTheSameMessageAllowed() throws Exception {
+		Document first = fileEmail(documents, alice);
+		// A copy from before M5 beside it does not stop a new version of the same message
+		Document old = beforeM5(correspondence);
+		DocumentManager.get().checkout(first.getId(), documentHistory(alice));
+
+		allowed(() -> checkIn(first, "healdan-cc.eml", alice));
+		assertEquals("1.1", reload(first).getVersion());
+		assertEquals(List.of(first.getId(), old.getId()), copies());
+	}
+
+	@Test
+	public void testACheckInDoesntCountACopyTheUserCantRead() throws Exception {
+		// Admin's copy is in a folder of 998.1 that Alice can't read
+		Folder board = fx.folder(documents, "Board");
+		only(board, GroupDAO.get().findByName(Group.GROUP_ADMIN, Tenant.DEFAULT_ID));
+		Document unreadable = fileEmail(board, admin);
+		Document mine = fileEmail("healdan-emoji.eml", correspondence, documentHistory(alice));
+		DocumentManager.get().checkout(mine.getId(), documentHistory(alice));
+
+		// Review Focus 1: her check-in doesn't tell her a copy exists
+		allowed(() -> checkIn(mine, "healdan-cc.eml", alice));
+		assertEquals(List.of(unreadable.getId(), mine.getId()), copies());
+	}
+
 	@Test
 	public void testUnreadableCopyDoesntCount() throws Exception {
 		Document hers = fileEmail(documents, alice);

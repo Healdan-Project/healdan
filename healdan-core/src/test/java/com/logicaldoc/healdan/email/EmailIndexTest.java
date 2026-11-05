@@ -10,13 +10,19 @@ import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -343,6 +349,58 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testAnIdInTwoPairsOfBracketsIsFound() throws Exception {
+		File eml = File.createTempFile("email", ".eml");
+		try {
+			Files.writeString(eml.toPath(), "From: ann@example.com\nTo: bob@example.com\nSubject: Doubled\n"
+					+ "Message-ID: <<doubled@example.com>>\nMIME-Version: 1.0\nContent-Type: text/plain\n\nHello.\n");
+			Document vo = new Document();
+			vo.setFileName("doubled.eml");
+			vo.setFolder(documents);
+			vo.setTenantId(Tenant.DEFAULT_ID);
+			vo.setLanguage("en");
+			Document doc = DocumentManager.get().create(eml, vo, fx.documentHistory(admin)).getDocument();
+			awaitAsyncWork();
+
+			// Stored as the lookups ask for it: as sent, and as a client that normalised the header sends it
+			assertEquals("doubled@example.com", EmailIndex.get().messageIdOf(doc.getId()));
+			assertEquals("doubled@example.com", messageIdProperty(doc));
+			for (String asked : List.of("<<doubled@example.com>>", "<doubled@example.com>", "doubled@example.com"))
+				assertEquals(asked, Map.of("doubled@example.com", List.of(doc.getId())),
+						EmailIndex.get().copies(List.of(asked)));
+		} finally {
+			eml.delete();
+		}
+	}
+
+	@Test
+	public void testOnlyAnEmailIsIndexedByItsProperty() throws Exception {
+		// CE's upload form can set the property on any document: only an .eml or a .msg is a message
+		for (String name : List.of("notes.pdf", "notes", "notes.eml.pdf")) {
+			Document vo = new Document();
+			vo.setFileName(name);
+			vo.setFolder(documents);
+			vo.setTenantId(Tenant.DEFAULT_ID);
+			vo.setLanguage("en");
+			vo.setValue(HealdanConstants.ATTR_EMAILMESSAGEID, "<typed@example.com>");
+			DocumentDAO.get().store(vo, fx.documentHistory(admin));
+			assertNull(name, EmailIndex.get().messageIdOf(vo.getId()));
+		}
+		assertTrue(EmailIndex.get().copies("typed@example.com").isEmpty());
+		assertEquals(0, rows());
+
+		// In any case, as the extension is compared
+		Document upper = new Document();
+		upper.setFileName("CLONE.MSG");
+		upper.setFolder(documents);
+		upper.setTenantId(Tenant.DEFAULT_ID);
+		upper.setLanguage("en");
+		upper.setValue(HealdanConstants.ATTR_EMAILMESSAGEID, "<typed@example.com>");
+		DocumentDAO.get().store(upper, fx.documentHistory(admin));
+		assertEquals(List.of(upper.getId()), EmailIndex.get().copies("typed@example.com"));
+	}
+
+	@Test
 	public void testPutReplacesAndNullRemoves() {
 		EmailIndex index = EmailIndex.get();
 		index.put(77L, "a@example.com");
@@ -365,6 +423,54 @@ public class EmailIndexTest extends AbstractHealdanTestCase {
 		index.put(77L, "a@example.com");
 		index.put(77L, "x".repeat(MessageIds.MAX_LENGTH + 1));
 		assertEquals(0, rows());
+	}
+
+	/**
+	 * The shared DataSource, with every statement prepared through it added to
+	 * the list in lower case
+	 */
+	private static DataSource recording(List<String> statements) {
+		DataSource real = Context.get(DataSource.class);
+		InvocationHandler connections = (proxy, method, args) -> {
+			if (!"getConnection".equals(method.getName()))
+				return invoke(real, method, args);
+			Connection connection = (Connection) invoke(real, method, args);
+			return Proxy.newProxyInstance(EmailIndexTest.class.getClassLoader(), new Class<?>[] { Connection.class },
+					(c, m, a) -> {
+						if (m.getName().startsWith("prepare") && a != null && a[0] instanceof String sql)
+							statements.add(sql.toLowerCase(Locale.ROOT));
+						return invoke(connection, m, a);
+					});
+		};
+		return (DataSource) Proxy.newProxyInstance(EmailIndexTest.class.getClassLoader(),
+				new Class<?>[] { DataSource.class }, connections);
+	}
+
+	private static Object invoke(Object target, Method method, Object[] args) throws Throwable {
+		try {
+			return method.invoke(target, args);
+		} catch (InvocationTargetException e) {
+			throw e.getCause();
+		}
+	}
+
+	@Test
+	public void testRemovingARowThatIsntThereDeletesNothing() {
+		// On MariaDB a delete that matches no row takes a gap lock, which two wide transactions can deadlock on, so
+		// none runs when the document has no row: a check-in of an email whose new version has no Message-ID
+		List<String> statements = new ArrayList<>();
+		EmailIndex index = new EmailIndex(recording(statements));
+
+		index.put(79L, null);
+		index.put(79L, "");
+		assertTrue(statements.toString(), statements.stream().noneMatch(s -> s.startsWith("delete")));
+
+		// A row that is there still goes
+		index.put(79L, "a@example.com");
+		index.put(79L, null);
+		assertNull(index.messageIdOf(79L));
+		assertEquals(0, rows());
+		assertEquals(1, statements.stream().filter(s -> s.startsWith("delete")).count());
 	}
 
 	@Test

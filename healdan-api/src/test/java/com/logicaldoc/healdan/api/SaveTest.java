@@ -48,6 +48,7 @@ import com.logicaldoc.core.security.user.User;
 import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.email.EmailIndex;
 import com.logicaldoc.healdan.support.DbSnapshot;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
@@ -693,6 +694,41 @@ public class SaveTest extends ApiTestCase {
 		assertEquals("Document #%d is immutable and can't be changed.".formatted(number(d)),
 				refused.json().path("detail").textValue());
 		immutable.assertUnchanged();
+	}
+
+	/** A plain-text email whose subject is its Message-ID */
+	private static String eml(String messageId) {
+		return ("From: ann@example.com\nTo: bob@example.com\nSubject: " + messageId + "\nMessage-ID: <" + messageId
+				+ ">\nMIME-Version: 1.0\nContent-Type: text/plain\n\nHello.\n").replace("\n", "\r\n");
+	}
+
+	@Test
+	public void testANewVersionThatIsAMessageTheMatterHoldsIsAlreadyFiled() throws Exception {
+		Document first = fx.upload(documents, "first.eml", eml("first@example.com"), boss);
+		Document second = fx.upload(documents, "second.eml", eml("second@example.com"), boss);
+		awaitAsyncWork();
+		String token = signIn(clerk);
+
+		// Its new version would make it a second copy of the first message in 998.1
+		ApiResponse refused = save(token, second, version("snapshot", null, false), "second.eml",
+				eml("first@example.com"));
+
+		assertEquals(refused.toString(), 409, refused.status());
+		assertEquals("already-filed", refused.code());
+		assertEquals("This message is already in 998.1 as #%d.".formatted(number(first)),
+				refused.json().path("detail").textValue());
+		assertEquals(number(first), refused.json().path("document").path("docNumber").asLong());
+		// Left as it was, but checked out to the caller, as for any rule that refuses the check-in
+		Document kept = DocumentDAO.get().findById(second.getId());
+		assertEquals(DocumentStatus.CHECKEDOUT, kept.getStatus());
+		assertEquals(Long.valueOf(clerk.getId()), kept.getLockUserId());
+		assertEquals("1.0", kept.getFileVersion());
+		assertEquals("second@example.com", EmailIndex.get().messageIdOf(second.getId()));
+
+		// A new version of its own message is saved
+		ApiResponse saved = save(token, second, version("snapshot", null, false), "second.eml",
+				eml("second@example.com"));
+		assertEquals(saved.toString(), 201, saved.status());
 	}
 
 	@Test

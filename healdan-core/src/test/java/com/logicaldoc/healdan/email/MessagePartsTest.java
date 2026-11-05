@@ -13,6 +13,7 @@ import static org.junit.Assert.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +26,7 @@ import java.util.stream.Stream;
 
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedDataGenerator;
+import org.junit.Assume;
 import org.junit.Test;
 
 import com.logicaldoc.core.communication.MailUtil;
@@ -179,6 +181,133 @@ public class MessagePartsTest {
 		// A signature that isn't one can't be read
 		assertEquals(List.of(), MessageParts.list(
 				built("application/pkcs7-mime; smime-type=signed-data; name=\"smime.p7m\"", "ZGF0YQ==\n")));
+	}
+
+	private static final String DEEP_PDF = "Content-Type: application/pdf\r\nContent-Disposition: attachment; "
+			+ "filename=\"Deep.pdf\"\r\nContent-Transfer-Encoding: binary\r\n\r\n";
+
+	private static final String MESSAGE_HEADERS = "From: ann@example.com\r\nTo: bob@example.com\r\nSubject: Layers\r\n"
+			+ "Message-ID: <layers@example.com>\r\nMIME-Version: 1.0\r\n";
+
+	private static final String OPAQUE_SIGNED = "Content-Type: application/pkcs7-mime; smime-type=signed-data; "
+			+ "name=\"smime.p7m\"\r\nContent-Transfer-Encoding: binary\r\n\r\n";
+
+	private static byte[] concat(byte[]... pieces) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		for (byte[] piece : pieces)
+			out.writeBytes(piece);
+		return out.toByteArray();
+	}
+
+	private static byte[] ascii(String text) {
+		return text.getBytes(StandardCharsets.US_ASCII);
+	}
+
+	/** A signature with no signer round the entity, sent as binary so that a layer is no smaller than what it wraps */
+	private static byte[] opaqueSign(byte[] entity) throws Exception {
+		byte[] signature = new CMSSignedDataGenerator().generate(new CMSProcessableByteArray(entity), true).getEncoded();
+		return concat(ascii(OPAQUE_SIGNED), signature);
+	}
+
+	/** A PDF of the given size in binary, signed opaquely the given number of times over */
+	private static MimeMessage signedOver(int layers, int size) throws Exception {
+		byte[] entity = concat(ascii(DEEP_PDF), new byte[size]);
+		for (int i = 0; i < layers; i++)
+			entity = opaqueSign(entity);
+		return parse(concat(ascii(MESSAGE_HEADERS), entity));
+	}
+
+	/** A PDF of the given size in binary, in multiparts nested the given number of times, signed opaquely once */
+	private static MimeMessage nestedInASignature(int nesting, int size) throws Exception {
+		StringBuilder open = new StringBuilder();
+		StringBuilder close = new StringBuilder();
+		for (int i = 0; i < nesting; i++) {
+			open.append("Content-Type: multipart/mixed; boundary=\"b").append(i).append("\"\r\n\r\n--b").append(i)
+					.append("\r\n");
+			close.insert(0, "\r\n--b" + i + "--\r\n");
+		}
+		byte[] entity = concat(ascii(open + DEEP_PDF), new byte[size], ascii(close.toString()));
+		return parse(concat(ascii(MESSAGE_HEADERS), opaqueSign(entity)));
+	}
+
+	@Test
+	public void testOpaqueSignaturesAreUnwrappedThreeDeep() throws Exception {
+		// Real S/MIME signs, encrypts and signs again at most, and the encryption stops the walk
+		for (int layers = 1; layers <= MessageParts.MAX_SIGNED_LAYERS; layers++) {
+			List<Part> parts = MessageParts.list(signedOver(layers, 100));
+			assertEquals("layers " + layers, List.of("Deep.pdf"), parts.stream().map(Part::name).toList());
+			assertEquals(100, parts.get(0).size());
+		}
+		// A signature deeper than that can't be read, as an encrypted part can't
+		assertEquals(3, MessageParts.MAX_SIGNED_LAYERS);
+		assertEquals(List.of(), MessageParts.list(signedOver(MessageParts.MAX_SIGNED_LAYERS + 1, 100)));
+		assertEquals(List.of(), MessageParts.list(signedOver(30, 100)));
+		// Only the signed branch: a PDF beside it is still listed
+		byte[] beside = concat(ascii(MESSAGE_HEADERS + "Content-Type: multipart/mixed; boundary=\"m\"\r\n\r\n--m\r\n"),
+				signedEntity(MessageParts.MAX_SIGNED_LAYERS + 1),
+				ascii("\r\n--m\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=\"Plain.pdf\"\r\n\r\n"
+						+ "data\r\n--m--\r\n"));
+		assertEquals(List.of("Plain.pdf"), names(parse(beside)));
+	}
+
+	private static byte[] signedEntity(int layers) throws Exception {
+		byte[] entity = concat(ascii(DEEP_PDF), new byte[10]);
+		for (int i = 0; i < layers; i++)
+			entity = opaqueSign(entity);
+		return entity;
+	}
+
+	/** The bytes the walk allocates to list the message, which bound what it holds at once */
+	private static long allocatedToList(MimeMessage message) {
+		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+		long before = threads.getCurrentThreadAllocatedBytes();
+		assertEquals(1, MessageParts.list(message).size());
+		return threads.getCurrentThreadAllocatedBytes() - before;
+	}
+
+	private static void assumeAllocationIsMeasured() throws Exception {
+		Assume.assumeTrue(ManagementFactory.getThreadMXBean() instanceof com.sun.management.ThreadMXBean threads
+				&& threads.isThreadAllocatedMemorySupported() && threads.isThreadAllocatedMemoryEnabled());
+		// Loads and compiles what the walk uses, which a first walk would count
+		for (int i = 0; i < 20; i++) {
+			MessageParts.list(signedOver(4, 1000));
+			MessageParts.list(nestedInASignature(4, 1000));
+		}
+	}
+
+	/** Two MB: large enough that what a walk allocates besides the content doesn't count */
+	private static final int LARGE = 2 * 1024 * 1024;
+
+	@Test
+	public void testNestedSignaturesDontMultiplyMemory() throws Exception {
+		assumeAllocationIsMeasured();
+		// Thirty layers of binary signatures round 2 MB: each layer is as large as the message, and a walk that
+		// copied every layer and held it until the end would need 30 times the message
+		long one = allocatedToList(signedOver(1, LARGE));
+		long three = allocatedToList(signedOver(MessageParts.MAX_SIGNED_LAYERS, LARGE));
+		MimeMessage thirty = signedOver(30, LARGE);
+		long beyond = threadAllocated(() -> MessageParts.list(thirty));
+
+		// Deeper than three costs no more than three, and three no more than three times one
+		assertTrue("three layers " + three + ", thirty " + beyond, beyond <= three * 3 / 2);
+		assertTrue("one layer " + one + ", three " + three, three <= one * MessageParts.MAX_SIGNED_LAYERS * 3 / 2);
+	}
+
+	@Test
+	public void testAMultipartInASignatureIsntCopiedAtEachLevel() throws Exception {
+		assumeAllocationIsMeasured();
+		// Below a signature the content is read as a view of what the signature wrapped, as the message itself is,
+		// not copied by each multipart round it
+		long once = allocatedToList(nestedInASignature(1, LARGE));
+		long thirty = allocatedToList(nestedInASignature(30, LARGE));
+		assertTrue("nested once " + once + ", thirty times " + thirty, thirty <= once * 3 / 2);
+	}
+
+	private static long threadAllocated(Runnable walk) {
+		com.sun.management.ThreadMXBean threads = (com.sun.management.ThreadMXBean) ManagementFactory.getThreadMXBean();
+		long before = threads.getCurrentThreadAllocatedBytes();
+		walk.run();
+		return threads.getCurrentThreadAllocatedBytes() - before;
 	}
 
 	private static MimeMessage pgp() throws Exception {
@@ -465,6 +594,9 @@ public class MessagePartsTest {
 		assertEquals(3, assertWritesWhatListSaid("inline and named", inlineAndNamed()));
 		assertEquals(4, assertWritesWhatListSaid("attached messages", attachedMessages()));
 		assertEquals(1, assertWritesWhatListSaid("opaque-signed", opaqueSigned()));
+		assertEquals(1, assertWritesWhatListSaid("signed three times", signedOver(MessageParts.MAX_SIGNED_LAYERS, 100)));
+		assertEquals(0, assertWritesWhatListSaid("signed four times", signedOver(MessageParts.MAX_SIGNED_LAYERS + 1, 100)));
+		assertEquals(1, assertWritesWhatListSaid("nested in a signature", nestedInASignature(30, 100)));
 		assertEquals(1, assertWritesWhatListSaid("path name", pathName()));
 		assertEquals(1, assertWritesWhatListSaid("long name", longName()));
 		for (String[] row : NAME_TABLE)

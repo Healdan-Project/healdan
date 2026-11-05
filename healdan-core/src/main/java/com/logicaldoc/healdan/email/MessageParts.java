@@ -3,7 +3,6 @@
 
 package com.logicaldoc.healdan.email;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,6 +33,7 @@ import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeUtility;
 import jakarta.mail.internet.ParseException;
+import jakarta.mail.util.SharedByteArrayInputStream;
 
 /**
  * Healdan's own walk of an {@code eml}'s MIME parts (M5 spec §6.6). CE's
@@ -46,9 +46,14 @@ import jakarta.mail.internet.ParseException;
  * walked into its first part only, which is the content; the signature isn't
  * an attachment. Opaque-signed S/MIME ({@code application/pkcs7-mime} or
  * {@code application/x-pkcs7-mime} with {@code smime-type=signed-data}) is
- * walked into the content its signature wraps. A part that is encrypted
- * ({@code multipart/encrypted}, any other {@code application/pkcs7-mime} or
- * {@code application/x-pkcs7-mime}) or rights-protected (Outlook's
+ * walked into the content its signature wraps, up to
+ * {@value #MAX_SIGNED_LAYERS} signatures deep in one branch: real S/MIME
+ * signs, encrypts and signs again at most, and the encryption stops the walk.
+ * A signature deeper than that is unreadable, as an encrypted part is, since
+ * each layer is read whole and a binary one is as large as all it wraps. A
+ * part that is encrypted ({@code multipart/encrypted}, any other
+ * {@code application/pkcs7-mime} or {@code application/x-pkcs7-mime}) or
+ * rights-protected (Outlook's
  * {@code application/x-microsoft-rpmsg-message}, usually named
  * {@code message.rpmsg}) has nothing readable and contributes nothing, so a
  * message that is one lists nothing. A {@code message/rfc822} part is one
@@ -68,6 +73,9 @@ public final class MessageParts {
 
 	/** A real message nests a handful of multiparts; the walk recurses, so it stops here */
 	static final int MAX_DEPTH = 32;
+
+	/** The most opaque signatures one branch of the walk unwraps; one deeper is unreadable */
+	static final int MAX_SIGNED_LAYERS = 3;
 
 	private static final String MESSAGE = "message/rfc822";
 
@@ -210,7 +218,7 @@ public final class MessageParts {
 		// The first pass collects the leaves in order and what the HTML ones refer to by cid:, which the second
 		// needs for every leaf, so no leaf is classified before all the HTML is read
 		Walk walk = new Walk();
-		walk.visit(message, 0);
+		walk.visit(message, 0, 0);
 
 		List<Found> found = new ArrayList<>();
 		for (jakarta.mail.Part leaf : walk.leaves) {
@@ -238,12 +246,17 @@ public final class MessageParts {
 		/** In lower case, without brackets and percent escapes */
 		final Set<String> referenced = new HashSet<>();
 
-		void visit(jakarta.mail.Part part, int depth) throws MessagingException, IOException {
+		void visit(jakarta.mail.Part part, int depth, int signedLayers) throws MessagingException, IOException {
 			if (depth > MAX_DEPTH)
 				throw new MessagingException("Nested too deeply");
-			if (opaqueSigned(part)) {
-				visit(signedContent(part), depth + 1);
-				return;
+			// A loop, not a call, so that a layer unwrapped is let go as soon as the next is read out of it
+			while (opaqueSigned(part)) {
+				if (signedLayers >= MAX_SIGNED_LAYERS)
+					return;
+				part = signedContent(part);
+				signedLayers++;
+				if (++depth > MAX_DEPTH)
+					throw new MessagingException("Nested too deeply");
 			}
 			for (String unreadable : UNREADABLE)
 				if (part.isMimeType(unreadable))
@@ -253,11 +266,11 @@ public final class MessageParts {
 				// The content is the first part, and the signature the second
 				Multipart signed = multipart(part);
 				if (signed.getCount() > 0)
-					visit(signed.getBodyPart(0), depth + 1);
+					visit(signed.getBodyPart(0), depth + 1, signedLayers);
 			} else if (part.isMimeType("multipart/*")) {
 				Multipart multipart = multipart(part);
 				for (int i = 0; i < multipart.getCount(); i++)
-					visit(multipart.getBodyPart(i), depth + 1);
+					visit(multipart.getBodyPart(i), depth + 1, signedLayers);
 			} else {
 				leaves.add(part);
 				if (part.isMimeType("text/html")) {
@@ -286,22 +299,33 @@ public final class MessageParts {
 		}
 	}
 
-	/** The MIME entity an opaque signature wraps, read whole, as the signed content is a few attachments at most */
+	/**
+	 * The MIME entity an opaque signature wraps. The signature is read whole, as
+	 * the signed content is a few attachments at most, and the entity is parsed
+	 * in place, as the message itself is: its parts, and multiparts nested in
+	 * it, are views of the one copy, not copies of their own at each level.
+	 */
 	private static jakarta.mail.Part signedContent(jakarta.mail.Part part) throws MessagingException, IOException {
 		byte[] signature;
 		try (InputStream in = part.getInputStream()) {
 			signature = in.readAllBytes();
 		}
-		ByteArrayOutputStream content = new ByteArrayOutputStream();
+		byte[] content;
 		try {
 			CMSTypedData signed = new CMSSignedData(signature).getSignedContent();
 			if (signed == null)
 				throw new MessagingException("No signed content");
-			signed.write(content);
+			if (signed.getContent() instanceof byte[] bytes) {
+				content = bytes;
+			} else {
+				ByteArrayOutputStream out = new ByteArrayOutputStream();
+				signed.write(out);
+				content = out.toByteArray();
+			}
 		} catch (CMSException e) {
 			throw new MessagingException("Not signed data", e);
 		}
-		return new MimeBodyPart(new ByteArrayInputStream(content.toByteArray()));
+		return new MimeBodyPart(new SharedByteArrayInputStream(content));
 	}
 
 	/** An HTML part's text; its bytes read as Latin-1 when the JVM lacks its charset, as references are ASCII */

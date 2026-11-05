@@ -33,10 +33,33 @@ public sealed class MessageIdsTests
     }
 
     [Theory]
+    [InlineData("<<abc@example.com>>", "abc@example.com")]
+    [InlineData(" < <abc@example.com> > ", "abc@example.com")]
+    [InlineData("<<<abc@example.com>>>", "abc@example.com")]
+    [InlineData("<<abc@example.com>", "<abc@example.com")]
+    [InlineData("<abc@example.com>>", "abc@example.com>")]
+    public void EveryPairOfBracketsIsDroppedAsTheServerDrops(string header, string expected) =>
+        Assert.Equal(expected, MessageIds.Normalise(header));
+
+    [Theory]
+    [InlineData("<abc@example.com>")]
+    [InlineData("<<abc@example.com>>")]
+    [InlineData(" < <abc@example.com> > ")]
+    [InlineData("<<abc@example.com>")]
+    [InlineData("abc@example.com")]
+    public void NormalisingAgainChangesNothing(string header)
+    {
+        // The helper sends what it normalised, and the server normalises it again: both must give what was stored
+        var once = MessageIds.Normalise(header);
+        Assert.Equal(once, MessageIds.Normalise(once));
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("  ")]
     [InlineData("<>")]
+    [InlineData("<<>>")]
     public void AnIdWithNothingInItIsNone(string? header) => Assert.Null(MessageIds.Normalise(header));
 
     [Fact]

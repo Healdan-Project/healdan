@@ -85,7 +85,13 @@ public class EmailIndex {
 	 */
 	public void put(long docId, String messageId) {
 		if (!isKept(messageId)) {
-			jdbc.update("delete from hd_email where hd_docid = ?", docId);
+			/*
+			 * Only a row that is there: on MariaDB a delete that matches nothing
+			 * takes a gap lock, as an update does, and a check-in of an email with
+			 * no Message-ID, which had no row, would take one. The read takes none
+			 */
+			if (messageIdOf(docId) != null)
+				jdbc.update("delete from hd_email where hd_docid = ?", docId);
 			return;
 		}
 

@@ -7,25 +7,29 @@ using System.Text;
 namespace Healdan.Helper.Core.Mail;
 
 /// <summary>
-/// A message's Message-ID as the server compares it (M5 spec §6.1): the header's value without its angle brackets or
-/// surrounding space, compared exactly, at most <see cref="MaxLength"/> characters. The server answers each id it was asked
-/// about in this form, so the helper puts the ids it sends, and the answers it matches them to, in it too. It follows the
-/// server's <c>MessageIds.normalize</c> to the character: a character beyond the Basic Multilingual Plane, or a lone
-/// surrogate, becomes U+FFFD (as MariaDB's tables can't hold it), NUL becomes a space, and the space trimmed is what Java's
-/// <c>strip()</c> trims, which leaves a no-break space alone.
+/// A message's Message-ID as the server compares it (M5 spec §6.1): the header's value without its angle brackets
+/// (every pair of them) or surrounding space, compared exactly, at most <see cref="MaxLength"/> characters. The server
+/// answers each id it was asked about in this form, so the helper puts the ids it sends, and the answers it matches
+/// them to, in it too. It follows the server's <c>MessageIds.normalize</c> to the character: a character beyond the
+/// Basic Multilingual Plane, or a lone surrogate, becomes U+FFFD (as MariaDB's tables can't hold it), NUL becomes a
+/// space, and the space trimmed is what Java's <c>strip()</c> trims, which leaves a no-break space alone.
 /// </summary>
 internal static class MessageIds
 {
     /// <summary>The longest Message-ID kept; a longer one counts as none.</summary>
     public const int MaxLength = 998;
 
-    /// <summary>The id without its brackets (which go as a pair) or surrounding space; null when that is empty or too long.</summary>
+    /// <summary>
+    /// The id without its brackets (which go as a pair, every pair round it, as the server drops them) or surrounding
+    /// space; null when that is empty or too long. Normalising it again gives it unchanged, as the server does to what
+    /// the helper sends.
+    /// </summary>
     public static string? Normalise(string? header)
     {
         if (header is null)
             return null;
         var id = Strip(BasicPlane(header).Replace('\0', ' '));
-        if (id.Length >= 2 && id[0] == '<' && id[^1] == '>')
+        while (id.Length >= 2 && id[0] == '<' && id[^1] == '>')
             id = Strip(id[1..^1]);
         return id.Length is 0 or > MaxLength ? null : id;
     }

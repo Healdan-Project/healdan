@@ -135,6 +135,7 @@ weight: 11
   encrypted or protected without its type saying so may still be offered as an attachment, as the file it is. Whether
   the new Outlook for Mac gives the add-in such a message hasn't been tried: if it won't, the pane says "Outlook
   wouldn't give Healdan this message. Try again." and nothing is filed. Signed messages file as any other,
-  attachments included.
+  attachments included, except one signed opaquely (S/MIME) more than three times over: it's filed whole, as an
+  encrypted one is, with no attachments offered. Real mail is signed at most twice.
 - **The pane needs the server to load.** Outlook loads the add-in's pane from your Healdan server. While the
   server can't be reached, the pane doesn't open, even though the helper is running.

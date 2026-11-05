@@ -447,13 +447,14 @@ paths:
         *inline* part is shown by the message's HTML, or is inline with a
         Content-ID; it is listed with `inline: true`, so a client can say it is
         there, and isn't offered as an attachment. A message that is encrypted (S/MIME) or rights-protected
-        has no readable parts, so it lists none. Each name is made safe for a
-        Store and for an operating system.
+        has no readable parts, so it lists none, and nor does one signed
+        opaquely (S/MIME) more than three times over. Each name is made safe
+        for a Store and for an operating system.
 
-        `messageId` is the header's value without its angle brackets or
-        surrounding space, compared exactly; it is `null` when the message has
-        none, or one over 998 characters. Every field the message lacks, or
-        has damaged, is `null`.
+        `messageId` is the header's value without its angle brackets (every
+        pair of them) or surrounding space, compared exactly; it is `null`
+        when the message has none, or one over 998 characters. Every field
+        the message lacks, or has damaged, is `null`.
 
         `copies` count only documents the caller can read, so the answer
         never shows that a hidden document exists. They are the same
@@ -509,10 +510,11 @@ paths:
 
         The answer has one item for each different Message-ID, in the order
         they were first asked. A Message-ID may be sent with or without its
-        angle brackets, and the item gives it without. A value that isn't a
-        Message-ID (blank, or over 998 characters) is answered as it was sent,
-        with no copies. A message is looked up by its Message-ID only, so a
-        message without one is never found.
+        angle brackets, and the item gives it without them, as
+        `inspectEmail` does. A value that isn't a Message-ID (blank, or over
+        998 characters) is answered as it was sent, with no copies. A
+        message is looked up by its Message-ID only, so a message without one
+        is never found.
 
         Each copy comes with `address`, where the web page shows the document,
         so a client can link to it. It is built from the server's public
@@ -1095,9 +1097,11 @@ paths:
         `saveId`: `invalid` when it isn't a UUID.
 
         None of these refusals changes anything. A rule that refuses the
-        check-in itself is `409 refused`: the document is left as it was, but
-        checked out to the caller, even if it was free before. Send the save
-        again, or release it.
+        check-in itself is `409 refused`, or `409 already-filed` when the file
+        is an email of another message than the document's, which the
+        document's matter already holds in a copy the caller can read: the
+        document is left as it was, but checked out to the caller, even if it
+        was free before. Send the save again, or release it.
 
         `201` means the save is stored: the document has a new version, and
         the version is in its timeline, and its `saveId`, if it had one, is
