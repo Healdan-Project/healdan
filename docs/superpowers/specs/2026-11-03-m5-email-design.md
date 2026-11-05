@@ -113,7 +113,7 @@ Approach A was chosen over B, the helper fetching messages through Microsoft Gra
 
 - **`emailmessageid`** joins the Healdan profile's email fields: a string, document only, read-only, filled from the message by `EmailDocumentListener` on every route, as the others are (M1 §6.8). A new seed step adds the attribute, as shipped steps never change.
 - **The value** is the `Message-ID` header without its angle brackets or surrounding whitespace, compared exactly. An `.msg` gives it from its `PR_INTERNET_MESSAGE_ID` property (0x1035), the one msgparser's `Message.getMessageId()` reads: `EmailFields` reads that one stream (`__substg1.0_1035001F`, or `…001E` as 8-bit text) with POI, rather than parse the file a second time, as CE's reader drops it (changed in the build: the builder was to check which, §16). A message with no Message-ID gets none, and is never a duplicate.
-- **It's shown in Properties** with the other email fields, and Healdan finds a message's copies by it, through `hd_email` (changed in the build: it was to be searched like them too). It stays out of the full-text index: an ID's fragments would add noise to every email's text, for a lookup nobody types.
+- **It's shown in Properties** with the other email fields, and Healdan finds a message's copies by it, through `hd_email` (changed in the build: it was to be searched like them too). It stays out of the email's text: an ID's fragments would add noise to every email's text, for a lookup nobody types. LogicalDOC still indexes it as a text property, so the Search tab's Full-text section finds it typed whole with Message-ID in Search in, though the search box doesn't.
 
 ### 6.2 `hd_email` (call)
 

@@ -109,6 +109,13 @@ public sealed class FakeApi : HttpMessageHandler
     /// <summary>Downloads send a few bytes and then break off.</summary>
     public volatile bool BreakDownloads;
 
+    /// <summary>
+    /// Runs before the fake answers a request, with its call as <see cref="Count"/> names it: a problem's status and code
+    /// to answer with instead, or null to answer as the fake does. It may wait, as a server that doesn't answer, or change
+    /// things, as another request in the moment would.
+    /// </summary>
+    public Func<string, CancellationToken, Task<(int Status, string Code)?>>? Before { get; set; }
+
     public FakeDoc Add(long number, string name, string content, string version = "1.0")
     {
         var doc = new FakeDoc { Number = number, Name = name, Version = version, FileVersion = version };
@@ -337,12 +344,15 @@ public sealed class FakeApi : HttpMessageHandler
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         var route = request.RequestUri!.AbsolutePath["/api/v1".Length..];
+        var call = $"{request.Method} {route}{request.RequestUri.Query}";
         lock (_lock)
-            _calls.Add($"{request.Method} {route}{request.RequestUri.Query}");
+            _calls.Add(call);
         if (Down)
             throw new HttpRequestException("Connection refused (fake).");
         if (Unauthorized)
             return Problem(401, "unauthenticated", "Sign in again.");
+        if (Before is { } before && await before(call, ct) is var (status, code))
+            return Problem(status, code, "Refused by the test.");
 
         var parts = route.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts is ["documents"] && request.Method == HttpMethod.Post)

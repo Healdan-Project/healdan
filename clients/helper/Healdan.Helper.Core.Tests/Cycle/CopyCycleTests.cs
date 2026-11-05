@@ -622,6 +622,37 @@ public sealed class CopyCycleTests : IDisposable
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReopeningACrashedCopyTakesAnEndedCheckOutAgain(bool restart)
+    {
+        // #136: the web page's Unlock ended the check-out while LibreOffice was away, and before the helper restarted.
+        var (cycle, path) = await OpenAsync();
+        await Task.Delay(Fast.CrashPoll * 2); // the crash check has seen the app running
+        _app.Crash();
+        await Wait.Until(() => _events.Crashes.Contains(path), "Crashed");
+        _server.Change(5, d => d.Hold = null);
+        if (restart)
+        {
+            cycle.Dispose();
+            cycle = Cycle();
+            await cycle.ResumeAsync();
+        }
+
+        await cycle.OpenAsync(5, false);
+
+        Assert.Equal([path, path], _app.Opened);
+        Assert.Equal(2, _server.Count("POST /documents/5/checkout"));
+        Assert.Equal(FakeApi.Here(), _server.Doc(5).Hold);
+        FakeApp.Write(path, "edited after the reopen");
+        await Wait.Until(() => _events.LastTitle(path) == "Lease agreement #5 v1.1", "the save");
+        Assert.Equal("edited after the reopen", _server.Doc(5).Content);
+        Assert.Equal(1, _server.Count("GET /documents/5/content")); // the kept copy, never downloaded over
+        Assert.Empty(_events.Ended);
+        Assert.Empty(_events.Errors);
+    }
+
+    [Theory]
     [InlineData("held-elsewhere")]
     [InlineData("not-held")]
     public async Task HeldElsewhereKeepsCopy(string refusal)
