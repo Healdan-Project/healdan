@@ -13,12 +13,23 @@ Templates**, on the **Templates** and **Attribute sets** tabs.
 The **Healdan profile** template holds the properties every document and folder carries, which
 [Properties](../../../user/working-with-matters/properties/) in the User Guide describes.
 
-![The Healdan profile template's Properties tab: its fourteen attributes, from client, matter, author and typist to docclass, docsubclass, comments, legacydocnum and the six email fields, with Class mandatory, Client and Matter read-only, and Subclass depending on docclass](profile-attributes.png)
+![The Healdan profile template's Properties tab: its attributes, from client, matter, author and typist to docclass, docsubclass, comments, legacydocnum and the email fields, with Class mandatory, Client and Matter read-only, and Subclass depending on docclass](profile-attributes.png)
 
 - **Healdan puts it on every document and folder in a matter** each time one is saved, so one given another
   template there gets the Healdan profile back at its next save.
 - **The Healdan profile attribute set** holds the choices for Class (`docclass`) and Subclass (`docsubclass`), and
   the properties added to the profile ([Adding a Property](#adding-a-property)).
+- **The email fields** (From, To, CC, Subject, Sent, Received and Message-ID) are filled from an `.eml` or `.msg`
+  file when it's filed, and show on a document's **Ext. Properties** tab. Saving a new version reads only the
+  Message-ID again; the others keep their values. See [Emails](../../../user/working-with-matters/emails/).
+- **Healdan finds an email's copies through a table of its own,** which holds each document's Message-ID from when
+  it's created, so editing the property afterwards doesn't change which messages count as copies. A new document
+  whose file gives no Message-ID, such as one that isn't an email, goes into that table with the Message-ID property
+  it was created with, if it has one.
+- **Emails filed before Message-ID was added** get it in the background after the upgrade, starting a minute after
+  Healdan starts. An email Healdan can't read stays without it. Their Message-ID can be searched for once they've been
+  indexed again, which **Reschedule all for indexing** on [Search and Indexing](../search-and-indexing/#indexing-again)
+  does.
 
 ## Changing the Class and Subclass Lists
 
