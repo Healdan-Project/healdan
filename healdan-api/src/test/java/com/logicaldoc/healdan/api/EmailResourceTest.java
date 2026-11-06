@@ -32,6 +32,7 @@ import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
@@ -143,6 +144,22 @@ public class EmailResourceTest extends ApiTestCase {
 		awaitAsyncWork();
 		before.assertUnchanged();
 		assertEquals(List.of(), uploadFiles());
+	}
+
+	@Test
+	public void testInspectsALargeMessageQuietly() throws Exception {
+		String token = signIn(clerk);
+		Set<String> temporaryFiles = temporaryFiles();
+		try (LogCapture log = LogCapture.of(Uploads.class)) {
+			// Over 1 MB, CXF keeps the request's first part, here its only one, in a temporary file
+			ApiResponse response = inspect(token, largeEml());
+			assertEquals(response.toString(), 200, response.status());
+			assertEquals("Large", response.json().path("subject").textValue());
+			// Letting go of a part the route has read and closed is no failure
+			assertEquals(List.of(), log.lines());
+		}
+		// and neither CXF's copy nor the API's is left behind
+		assertEquals(temporaryFiles, temporaryFiles());
 	}
 
 	@Test
@@ -446,6 +463,21 @@ public class EmailResourceTest extends ApiTestCase {
 			if (name.startsWith("healdan-upload"))
 				uploads.add(name);
 		return List.copyOf(uploads);
+	}
+
+	private static Set<String> temporaryFiles() {
+		String[] names = new File(System.getProperty("java.io.tmpdir")).list();
+		return names == null ? Set.of() : new TreeSet<>(List.of(names));
+	}
+
+	/** A plain-text message of a little over 1 MB */
+	private static byte[] largeEml() {
+		StringBuilder eml = new StringBuilder(
+				"Message-ID: <large-1@example.com>\r\nFrom: ann@example.com\r\nSubject: Large\r\n\r\n");
+		String line = "x".repeat(76) + "\r\n";
+		while (eml.length() <= 1024 * 1024)
+			eml.append(line);
+		return eml.toString().getBytes(StandardCharsets.US_ASCII);
 	}
 
 	private static byte[] bytes(int size) {

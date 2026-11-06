@@ -21,6 +21,7 @@ import java.util.Locale;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.cxf.attachment.AttachmentDataSource;
+import org.apache.cxf.attachment.DelegatingInputStream;
 import org.apache.cxf.jaxrs.ext.multipart.Attachment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,8 +81,11 @@ public final class Uploads {
 
 	/**
 	 * Lets go of a part CXF read. CXF keeps a part over 1 MB in a temporary
-	 * file, and deletes it once the part's content has been read and closed;
-	 * this closes it, read or not.
+	 * file, and deletes it once the part's content has been closed; this
+	 * closes it, read or not, unless a resource already has. The request's
+	 * first part hands out the same stream each time, which CXF can't close
+	 * twice: the second close reads its temporary file, closed by then, and
+	 * fails.
 	 *
 	 * @param part the part's content
 	 */
@@ -91,7 +95,7 @@ public final class Uploads {
 			cached.release();
 		try {
 			InputStream in = source.getInputStream();
-			if (in != null)
+			if (in != null && !(in instanceof DelegatingInputStream delegating && delegating.isClosed()))
 				in.close();
 		} catch (IOException | RuntimeException e) {
 			log.warn("Can't let go of an upload part", e);

@@ -47,6 +47,7 @@ import com.logicaldoc.healdan.docnumber.DocNumberCounter;
 import com.logicaldoc.healdan.profile.LocalValueDAO;
 import com.logicaldoc.healdan.profile.ProfileSchema;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
@@ -423,6 +424,20 @@ public class FilingTest extends ApiTestCase {
 				bytes(1024 * 1024));
 		assertEquals(filed.toString(), 201, filed.status());
 		assertEquals("Lease.docx", filed.json().path("name").textValue());
+		assertTrue(temporaryFiles().stream().noneMatch(name -> name.startsWith("healdan-upload")));
+	}
+
+	@Test
+	public void testFilesALargeFileSentFirstQuietly() throws Exception {
+		String token = signIn(clerk);
+		try (LogCapture log = LogCapture.of(Uploads.class)) {
+			// Over 1 MB, CXF keeps the request's first part in a temporary file, whichever route reads it
+			ApiResponse filed = post("/api/v1/documents").token(token).file("file", "Lease.docx", bytes(1024 * 1024 + 1))
+					.part("document", document(documents, null, null, null)).send();
+			assertEquals(filed.toString(), 201, filed.status());
+			// Letting go of a part the route has read and closed is no failure
+			assertEquals(List.of(), log.lines());
+		}
 		assertTrue(temporaryFiles().stream().noneMatch(name -> name.startsWith("healdan-upload")));
 	}
 
