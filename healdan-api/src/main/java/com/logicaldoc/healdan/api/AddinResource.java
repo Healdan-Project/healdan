@@ -43,11 +43,14 @@ public class AddinResource {
 	 * The scripts are the server's own and Office.js, which Office requires to
 	 * come from its network, with the MicrosoftAjax.js that Outlook for Mac's
 	 * Office.js loads from Microsoft's ASP.NET CDN (refused, Office.js never
-	 * becomes ready); the connections go to the Healdan Helper's ports on this
-	 * Mac (spec section 5.8) and to Microsoft's own services.
+	 * becomes ready). Only that file: the CDN also serves old libraries that
+	 * would let injected markup run scripts. It has no scheme, so it takes the
+	 * page's, as Office.js does: https, or http on a machine's own address. The
+	 * connections go to the Healdan Helper's ports on this Mac (spec section
+	 * 5.8) and to Microsoft's own services.
 	 */
 	private static final String POLICY = "default-src 'self'; "
-			+ "script-src 'self' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com; "
+			+ "script-src 'self' https://appsforoffice.microsoft.com ajax.aspnetcdn.com/ajax/3.5/MicrosoftAjax.js; "
 			+ "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
 			+ "connect-src 'self' https://127.0.0.1:47615 https://127.0.0.1:47616 https://127.0.0.1:47617 "
 			+ "https://127.0.0.1:47618 https://*.microsoft.com https://*.office.com https://*.office.net";

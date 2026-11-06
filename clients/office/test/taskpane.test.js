@@ -275,7 +275,7 @@ test("every file the pages load is one the server serves", () => {
   const web = path.join(__dirname, "..", "web");
   const servable = /^[A-Za-z0-9-]+\.(html|js|css)$/;
   const assets = /^assets\/[A-Za-z0-9-]+\.png$/;
-  for (const name of ["taskpane.html", "commands.html"]) {
+  for (const name of ["taskpane.html", "commands.html", "mail.html"]) {
     const html = fs.readFileSync(path.join(web, name), "utf8");
     for (const [, reference] of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
       if (/^https:\/\/appsforoffice\.microsoft\.com\//.test(reference)) {

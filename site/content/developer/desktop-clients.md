@@ -487,9 +487,10 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
   errors are still its own. A `file` request that fails on the way, before any answer, is `lost-result` too, and isn't
   sent again: the helper may have filed the document before the answer was lost.
 - **The server serves** only files named `[A-Za-z0-9-]+\.(html|js|css)` and `assets/*.png` from it, with a
-  Content-Security-Policy on the pages that allows scripts from the server, `appsforoffice.microsoft.com` and
-  `ajax.aspnetcdn.com` (Outlook for Mac's Office.js loads `MicrosoftAjax.js` from there, and never becomes ready
-  without it), and connections to the server, Microsoft's services and the helper's four ports. No script, handler or style goes inline.
+  Content-Security-Policy on the pages that allows scripts from the server, `appsforoffice.microsoft.com` and only
+  `MicrosoftAjax.js` from `ajax.aspnetcdn.com` (Outlook for Mac's Office.js loads it from there, and never becomes ready
+  without it; the CDN's other libraries stay out), and connections to the server, Microsoft's services and the helper's
+  four ports. No script, handler or style goes inline.
 
 ## The Add-in's Port
 
@@ -882,8 +883,8 @@ through `channel.json`, hands it any link it was started for, and quits (see [Th
     lacks.
   - What Office.js and Office's web view really do is checked by hand, with the owner, in Word, Excel and PowerPoint:
     the Content-Security-Policy against Office.js, the message window and its two-way messages with the button, and the
-    ribbon. `AddinResourceTest` checks that
-    the server serves every file the pages load.
+    ribbon. In Outlook it's the policy against Outlook's own Office.js, which loads `MicrosoftAjax.js` as Word's doesn't.
+    `AddinResourceTest` checks that the server serves every file the pages load.
 
 The windows' look, focus, notifications and LibreOffice's own screens are checked by hand: each pull request that
 changes them lists its checks for the owner.

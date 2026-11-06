@@ -316,9 +316,10 @@ public class AddinResourceTest extends ApiTestCase {
 			assertEquals(page + " " + response, 200, response.status());
 			assertEquals(page, "text/html; charset=UTF-8", contentType(response));
 			String policy = response.header("Content-Security-Policy");
-			// Outlook for Mac's Office.js loads MicrosoftAjax.js from Microsoft's ASP.NET CDN, and stops if refused
-			assertTrue(page + " " + policy,
-					policy.contains("script-src 'self' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com;"));
+			// Outlook for Mac's Office.js loads MicrosoftAjax.js from Microsoft's ASP.NET CDN, and stops if refused.
+			// Only that file, which takes the page's scheme, as Office.js does: the CDN serves other libraries too.
+			assertTrue(page + " " + policy, policy.contains(
+					"script-src 'self' https://appsforoffice.microsoft.com ajax.aspnetcdn.com/ajax/3.5/MicrosoftAjax.js;"));
 			assertTrue(page + " " + policy, policy.contains(
 					"connect-src 'self' https://127.0.0.1:47615 https://127.0.0.1:47616 https://127.0.0.1:47617 https://127.0.0.1:47618"));
 			assertTrue(page + " " + policy, policy.startsWith("default-src 'self';"));
@@ -329,7 +330,8 @@ public class AddinResourceTest extends ApiTestCase {
 
 	@Test
 	public void testScriptsAndStyles() {
-		for (String file : new String[] { "healdan.js", "office-glue.js", "taskpane.js", "commands.js", "healdan.css" }) {
+		for (String file : new String[] { "healdan.js", "office-glue.js", "taskpane.js", "commands.js", "mail.js",
+				"mail-glue.js", "healdan.css" }) {
 			ApiResponse response = get("/api/addin/" + file).send();
 
 			assertEquals(file + " " + response, 200, response.status());
@@ -343,7 +345,7 @@ public class AddinResourceTest extends ApiTestCase {
 	@Test
 	public void testEverythingThePagesLoadIsServed() {
 		int count = 0;
-		for (String page : new String[] { "taskpane.html", "commands.html" }) {
+		for (String page : new String[] { "taskpane.html", "commands.html", "mail.html" }) {
 			String html = get("/api/addin/" + page).send().text();
 			Matcher references = Pattern.compile("(?:src|href)=\"([^\"]+)\"").matcher(html);
 			while (references.find()) {
@@ -356,8 +358,9 @@ public class AddinResourceTest extends ApiTestCase {
 				count++;
 			}
 		}
-		// The pane: a stylesheet, the mark and two scripts; the commands: three scripts
-		assertTrue("references: " + count, count >= 7);
+		// The pane: a stylesheet, the mark and two scripts; the commands: three scripts; Outlook's pane: a stylesheet,
+		// the mark and three scripts
+		assertTrue("references: " + count, count >= 12);
 	}
 
 	@Test
