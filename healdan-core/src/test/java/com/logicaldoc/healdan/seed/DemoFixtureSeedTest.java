@@ -396,8 +396,11 @@ public class DemoFixtureSeedTest extends AbstractHealdanTestCase {
 		assertEquals(12, count("select count(*) from hd_matter"));
 		int documents = count("select count(*) from ld_document where ld_deleted = 0");
 		assertTrue("documents: " + documents, documents >= 55 && documents <= 70);
-		// The trash isn't empty: three documents and a subfolder
-		assertEquals(3, count("select count(*) from ld_document where ld_deleted <> 0"));
+		// The trash isn't empty: two documents and a subfolder
+		assertEquals(2, count("select count(*) from ld_document where ld_deleted <> 0"));
+		// The demo files no message twice, not even a copy it deletes later
+		assertEquals(0, count("select count(*) from (select hd_messageidhash from hd_email "
+				+ "group by hd_messageidhash having count(*) > 1) twice"));
 		assertEquals(1, count("select count(*) from ld_folder where ld_deleted <> 0 and ld_name = 'Old Drafts'"));
 
 		// Every step ran as its user, and none left a history row without an event
