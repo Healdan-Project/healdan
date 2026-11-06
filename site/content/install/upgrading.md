@@ -25,7 +25,9 @@ fails, because the app's image is built here and can't be pulled.
   aren't changed, apart from two kinds:
   - the release number and copyright years (`product.release` and `product.year`), which the new image updates;
   - a setting still holding an older image's default that the new image replaces. If you changed it yourself, your
-    value stays. So far that's `cachecontrol`, which tells browsers how long to keep Healdan's files.
+    value stays. So far those are `cachecontrol`, which tells browsers how long to keep Healdan's files, and
+    `security.csp`, which tells them what Healdan's pages may load (see
+    [A Content-Security-Policy You Changed](#a-content-security-policy-you-changed)).
 - **Browsers load the new interface** the next time they open Healdan. A tab left open during the upgrade keeps the
   old one until it's reloaded.
 - **Healdan's own tables are upgraded** when the app starts. If an upgrade step fails, the app stops instead of
@@ -73,3 +75,21 @@ theirs in the background:
 
   `email.index` is `done` once every email filed before the upgrade has been read, and `email.index.cursor` is the
   last document it has read so far.
+
+## A Content-Security-Policy You Changed
+
+Until November 2026, the default Content-Security-Policy (`security.csp`) had a non-breaking space between
+`object-src` and `'none'` where an ordinary space belongs. Browsers ignored that part of the policy, and their
+consoles showed "Unrecognized Content-Security-Policy directive". The upgrade replaces the old default with the
+corrected one.
+
+If you changed the policy yourself, under **Administration → Access Control → Security**, your value stays, and it
+may still hold the non-breaking space if you began from the default. To check, run:
+
+```bash
+docker compose exec -e LC_ALL=C app grep -c "^security\.csp=.*object-src[^ ]'none'" /opt/logicaldoc/conf/context.properties
+```
+
+`0` means your policy is fine. `1` means it still has the non-breaking space: in the **Content Security Policy**
+field, delete the space after `object-src` and type an ordinary one, save, and restart Healdan with
+`docker compose restart app`.

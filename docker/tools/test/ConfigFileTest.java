@@ -6,6 +6,7 @@ import java.io.FileInputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -101,6 +102,28 @@ public class ConfigFileTest {
         DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
         Check.eq("*:no-store", new ContextProperties(conf).getProperty("cachecontrol"),
                 "admin-set cachecontrol preserved");
+
+        // Upstream's security.csp had a non-breaking space (0xA0) after object-src, so browsers dropped that
+        // directive as unrecognised. No shipped default holds one now, an install still holding that policy takes the
+        // image's, and a policy the admin wrote stays.
+        for (String key : shipped.stringPropertyNames())
+            Check.isTrue(!shipped.getProperty(key).contains("\u00a0"),
+                    key + "'s shipped default has no non-breaking space");
+        String csp = shipped.getProperty("security.csp");
+        Check.isTrue(Arrays.stream(csp.split(";")).map(String::trim).anyMatch("object-src 'none'"::equals),
+                "the shipped security.csp has object-src 'none' as a directive: " + csp);
+        set(conf, "security.csp", "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'unsafe-hashes' blob: data:"
+                + " https://*.google.com https://*.zoho.com ${converter.OnlyOfficeConverter.url}"
+                + " ${converter.OnlyOfficeConverter.callback} ${server.url}; img-src 'self' blob: data:"
+                + " https://*.googleapis.com; font-src 'self' data:; frame-ancestors 'self' blob: data:;"
+                + " form-action 'self'; object-src\u00a0'none'; ");
+        DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+        Check.eq(csp, new ContextProperties(conf).getProperty("security.csp"),
+                "security.csp with the non-breaking space replaced");
+        String adminCsp = "default-src 'self' https://office.example.org; object-src 'none'";
+        set(conf, "security.csp", adminCsp);
+        DockerInit.applyConfig(conf, defaults, ConfigPlan.envKeys(Map.of("DB_PASSWORD", "rotated")));
+        Check.eq(adminCsp, new ContextProperties(conf).getProperty("security.csp"), "admin-set security.csp preserved");
 
         // context.properties is written byte-per-char (Latin-1): anything it cannot hold must be refused, not
         // silently corrupted into a value that only fails later when Tomcat logs in.

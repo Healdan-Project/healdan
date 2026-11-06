@@ -108,6 +108,14 @@ is_png() { [ "$(od -An -tx1 -N4 "$1" | tr -d ' \n')" = 89504e47 ]; }
 # cache_control <url>: the Cache-Control header of a successful GET, empty for an error.
 cache_control() { curl -fsS -o /dev/null -D - "$1" | tr -d '\r' | awk -F': ' 'tolower($1) == "cache-control" { print $2 }'; }
 LOADER=$BASE/login/login.nocache.js
+# csp_directives <url>: the Content-Security-Policy of a successful GET, one directive a line, trimmed of plain spaces
+# only, so a non-breaking space stays in its directive as browsers see it.
+csp_directives() {
+  curl -fsS -o /dev/null -D - "$1" | tr -d '\r' | awk 'tolower($0) ~ /^content-security-policy:/ {
+    sub(/^[^:]*: */, ""); n = split($0, d, ";")
+    for (i = 1; i <= n; i++) { gsub(/^ +| +$/, "", d[i]); if (d[i] != "") print d[i] }
+  }'
+}
 
 echo "== 1. build and start"
 if [ "${SMOKE_BUILD:-1}" = 0 ]; then compose up -d --no-build; else compose up -d --build; fi
@@ -133,6 +141,8 @@ loader=$(curl -fsS "$LOADER" || true)
 build=
 [[ $loader =~ [0-9A-F]{32} ]] && build=${BASH_REMATCH[0]}
 check "its $build.cache.js keeps max-age=600" test "$(cache_control "$BASE/login/$build.cache.js")" = max-age=600
+# Upstream's policy had a non-breaking space after object-src, which browsers dropped as unrecognised (Docker spec §14).
+check "the Content-Security-Policy has object-src 'none'" grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
 
 echo "== 2b. forwarded addresses (docker/tests/test-proxies.sh)"
 # Fails three sign-ins with made-up X-Forwarded-For headers and checks which address the throttle counted; its
@@ -312,6 +322,11 @@ echo "== 8. data survives down/up, and an earlier image's default is replaced"
 compose exec -T -u logicaldoc app sed -i 's/\*\.nocache\.js:no-cache;//' /opt/logicaldoc/conf/context.properties
 check "the conf volume holds the old cachecontrol" \
   test "$(compose exec -T app grep -c 'nocache\.js:' /opt/logicaldoc/conf/context.properties)" = 0
+# As one written before 2026-11-06 holds it: security.csp with a non-breaking space (0xA0) after object-src (§14).
+compose exec -T -u logicaldoc -e LC_ALL=C app \
+  sed -i "s/object-src 'none'/object-src\\xa0'none'/" /opt/logicaldoc/conf/context.properties
+check "the conf volume holds the old security.csp" test "$(compose exec -T -e LC_ALL=C app \
+  grep -c "^security\.csp=.*object-src[^ ]'none'" /opt/logicaldoc/conf/context.properties)" = 1
 compose down
 compose up -d
 check "app healthy again" wait_healthy "$(compose ps -q app)" 900
@@ -319,7 +334,10 @@ names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?fol
 check "smoke.pdf still listed" grep -qx smoke.pdf <<<"$names"
 check "smoke.png still listed" grep -qx smoke.png <<<"$names"
 check "no re-initialization" app_logs_have 'schema present, skipping'
-check "the old cachecontrol replaced" app_logs_have "replaced an earlier image's default with this image's: cachecontrol"
+check "the old cachecontrol and security.csp replaced" \
+  app_logs_have "replaced an earlier image's default with this image's: cachecontrol, security\.csp"
 check "login.nocache.js is revalidated on every load again" test "$(cache_control "$LOADER")" = no-cache
+check "the Content-Security-Policy has object-src 'none' again" \
+  grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
 
 finish
