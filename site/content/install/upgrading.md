@@ -36,13 +36,20 @@ fails, because the app's image is built here and can't be pulled.
 ## Presentations and Spreadsheets Whose Text Wasn't Read
 
 Until November 2026, Healdan couldn't read the text of PowerPoint presentations (`.pptx`, `.ppsx`), older Excel
-workbooks (`.xls`, `.xlt`), or newer ones (`.xlsx`, `.xlsm`) with a cell in a format such as Excel's Accounting, so
-a search found them only by their properties. The log showed `NoClassDefFoundError:
-com/zaxxer/sparsebits/SparseBitSet` at each run of the Indexer.
+workbooks (`.xls`, `.xlt`), or newer ones (`.xlsx`, `.xlsm`) with a cell in a format such as Excel's Accounting.
+Unless **Ignore content error** was on (see below), a full-text search didn't find them at all, not even by their
+names, and only a search by their properties did. The log showed
+`NoClassDefFoundError: com/zaxxer/sparsebits/SparseBitSet` at each run of the Indexer.
 
-After the upgrade, the Indexer reads them at its next run, as it kept trying them. If you turned on **On error, mark
-unindexable**, it gave up on them instead, so
-[reschedule all for indexing](../../admin/system/search-and-indexing/#indexing-again) to have them read.
+After the upgrade, the Indexer reads them at its next run, as it kept trying them, unless one of two settings on
+[Search and Indexing](../../admin/system/search-and-indexing/) was on:
+
+- **On error, mark unindexable** gave up on them. On its **Indexing History** tab, click the **Result** column's
+  header to bring the failures together, select those documents, and choose **Mark indexable** from the right-click
+  menu. **Reschedule all for indexing** doesn't reach documents marked unindexable.
+- **Ignore content error** indexed them without their text, so a full-text search found them by their names but not
+  their words. [Reschedule all for indexing](../../admin/system/search-and-indexing/#indexing-again) to have them
+  read.
 
 ## Emails Filed Before the Outlook Add-in
 
