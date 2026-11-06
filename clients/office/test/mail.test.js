@@ -165,6 +165,16 @@ async function open({ client, glue, page = fakePage() } = {}) {
 
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
+// --- The page --------------------------------------------------------------------------------------------------------
+
+test("the page loads Microsoft's script first, then the add-in's, and has nothing inline", () => {
+  const scripts = [...HTML.matchAll(/<script src="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(scripts, ["https://appsforoffice.microsoft.com/lib/1/hosted/office.js", "healdan.js", "mail-glue.js", "mail.js"]);
+  assert.ok(!/<script(?![^>]*\bsrc=)/.test(HTML), "no inline script: the server's Content-Security-Policy allows none");
+  assert.ok(!/\son[a-z]+=/.test(HTML), "no inline handler");
+  assert.ok(!/\sstyle=/.test(HTML), "no inline style");
+});
+
 // --- threadIds -------------------------------------------------------------------------------------------------------
 
 test("threadIds puts the message's own id first, then In-Reply-To, then References, unfolded and without repeats", () => {

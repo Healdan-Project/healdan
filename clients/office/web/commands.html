@@ -9,7 +9,8 @@
 <body>
   <!-- The ribbon's buttons (M3.5 spec section 6): Office loads this page without showing it, and runs the function a
        button names (saveToHealdan and the rest, in commands.js). Microsoft's script first, then Healdan's. The server's
-       Content-Security-Policy allows scripts from the server and Office.js's address only, so none is inline. -->
+       Content-Security-Policy allows scripts only from the server, Office.js's address and the MicrosoftAjax.js
+       Outlook's Office.js loads, so none is inline. -->
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="healdan.js"></script>
   <script src="office-glue.js"></script>
