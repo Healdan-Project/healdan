@@ -30,6 +30,7 @@ properties.
 | Include patterns, Exclude patterns | which files have their text indexed, by name, such as `*.iso`. `*.exe`, `*.bin` and `*.iso` are left out to begin with |
 | Include patterns(metadata only), Exclude patterns(metadata only) | which files are indexed by their properties only, without their text |
 | On error, mark unindexable | gives up on a file whose text can't be read, instead of trying again at each run |
+| Ignore content error | indexes a file without its text when the text can't be read, instead of trying again at each run |
 | Sorting | which documents the Indexer takes first, such as the most recent. **none** to begin with |
 | Threads | how many documents are indexed at once. 2 to begin with |
 | Batch | how many documents one run of the Indexer takes. 500 to begin with |
@@ -40,9 +41,11 @@ Click **Save** after changing them.
 
 ## Indexing Again
 
-- **Reschedule all for indexing** marks every document to be indexed again, which the Indexer's next runs do. Use
-  it after changing the patterns or the [languages](#the-other-tabs).
-- **Drop index** empties the index and marks every document again. Until the Indexer has worked through them, a
+- **Reschedule all for indexing** marks every indexed document to be indexed again, which the Indexer's next runs
+  do. Use it after changing the patterns or the [languages](#the-other-tabs). It leaves documents marked
+  unindexable as they are: select them on the **Indexing History** tab and choose **Mark indexable** from the
+  right-click menu.
+- **Drop index** empties the index and marks the same documents again. Until the Indexer has worked through them, a
   search finds less than it should.
 - **Purge** removes deleted documents from the index, those in the Trash included.
 - **Check** checks the index for damage, and **Unlock** frees an index left locked after a crash.
@@ -58,5 +61,5 @@ Click **Save** after changing them.
 | Parsers | which reader each kind of file goes to, Healdan's among them. A kind with no reader of its own can be sent to another kind's in **Aliases**: `tex` in `txt`'s Aliases would read `.tex` files as plain text |
 | Indexing queue | the documents waiting to be indexed |
 | Entries | the index's entries, one per document |
-| Indexing History | when each document was indexed, with the start of its text |
+| Indexing History | when each document was indexed, or failed to be, with the start of its text |
 | Search History | who searched for what, and when |

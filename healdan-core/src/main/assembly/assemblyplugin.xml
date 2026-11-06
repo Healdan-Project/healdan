@@ -22,6 +22,8 @@
 				<include>com.nimbusds:*</include>
 				<include>net.minidev:*</include>
 				<include>com.github.stephenc.jcip:*</include>
+				<include>com.zaxxer:SparseBitSet</include>
+				<include>com.github.virtuald:curvesapi</include>
 			</includes>
 		</dependencySet>
 	</dependencySets>

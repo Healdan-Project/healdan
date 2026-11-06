@@ -3,9 +3,10 @@ name: Docker image
 # Builds the Docker image (Dockerfile) natively on amd64 and arm64 runners; no QEMU, so the GWT compile runs at
 # full speed on both. Hosted runners give it 16 GB of memory, enough for the Maven build's two GWT workers.
 #
-# - Every pull request and push that changes more than docs: per architecture, the init tool's unit tests
-#   (target "tools"), then the image, then docker/smoke-test.sh against that image through compose.yaml. Its step 5d
-#   runs the helper's stack tests (clients/helper) against the smoke stack, with the .NET SDK set up beforehand.
+# - Every pull request and push that changes more than docs: per architecture, the init tool's unit tests and
+#   WarParsersTest (target "tools"), then the image, then docker/smoke-test.sh against that image through
+#   compose.yaml. Its step 5d runs the helper's stack tests (clients/helper) against the smoke stack, with the .NET SDK
+#   set up beforehand.
 #   A docs-only pull request runs the test job with those steps skipped, so it still reports the required checks.
 #   The Maven build gets its dependencies from an actions/cache copy instead of downloading them each time.
 # - Pushes to master and v* tags, once publishing is switched on: rebuilds each architecture from the test job's
@@ -135,7 +136,7 @@ jobs:
           skip-extraction: ${{ env.SAVE_M2 != 'true' || steps.m2.outputs.cache-hit == 'true' }}
 
       # Runs the Maven build too (tools builds on it). The image build below reuses it from the builder's cache.
-      - name: Init tool unit tests (docker build --target tools)
+      - name: Init tool and WAR parser tests (docker build --target tools)
         if: steps.changes.outputs.code == 'true'
         uses: docker/build-push-action@v7
         with:
