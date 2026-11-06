@@ -316,7 +316,9 @@ public class AddinResourceTest extends ApiTestCase {
 			assertEquals(page + " " + response, 200, response.status());
 			assertEquals(page, "text/html; charset=UTF-8", contentType(response));
 			String policy = response.header("Content-Security-Policy");
-			assertTrue(page + " " + policy, policy.contains("script-src 'self' https://appsforoffice.microsoft.com"));
+			// Outlook for Mac's Office.js loads MicrosoftAjax.js from Microsoft's ASP.NET CDN, and stops if refused
+			assertTrue(page + " " + policy,
+					policy.contains("script-src 'self' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com;"));
 			assertTrue(page + " " + policy, policy.contains(
 					"connect-src 'self' https://127.0.0.1:47615 https://127.0.0.1:47616 https://127.0.0.1:47617 https://127.0.0.1:47618"));
 			assertTrue(page + " " + policy, policy.startsWith("default-src 'self';"));

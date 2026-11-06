@@ -41,10 +41,13 @@ public class AddinResource {
 
 	/**
 	 * The scripts are the server's own and Office.js, which Office requires to
-	 * come from its network; the connections go to the Healdan Helper's ports
-	 * on this Mac (spec section 5.8) and to Microsoft's own services.
+	 * come from its network, with the MicrosoftAjax.js that Outlook for Mac's
+	 * Office.js loads from Microsoft's ASP.NET CDN (refused, Office.js never
+	 * becomes ready); the connections go to the Healdan Helper's ports on this
+	 * Mac (spec section 5.8) and to Microsoft's own services.
 	 */
-	private static final String POLICY = "default-src 'self'; script-src 'self' https://appsforoffice.microsoft.com; "
+	private static final String POLICY = "default-src 'self'; "
+			+ "script-src 'self' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com; "
 			+ "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
 			+ "connect-src 'self' https://127.0.0.1:47615 https://127.0.0.1:47616 https://127.0.0.1:47617 "
 			+ "https://127.0.0.1:47618 https://*.microsoft.com https://*.office.com https://*.office.net";

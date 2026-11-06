@@ -487,8 +487,9 @@ JavaScript with no npm dependencies. `healdan-api`'s POM copies it into the jar,
   errors are still its own. A `file` request that fails on the way, before any answer, is `lost-result` too, and isn't
   sent again: the helper may have filed the document before the answer was lost.
 - **The server serves** only files named `[A-Za-z0-9-]+\.(html|js|css)` and `assets/*.png` from it, with a
-  Content-Security-Policy on the pages that allows scripts from the server and `appsforoffice.microsoft.com` and
-  connections to the server, Microsoft's services and the helper's four ports. No script, handler or style goes inline.
+  Content-Security-Policy on the pages that allows scripts from the server, `appsforoffice.microsoft.com` and
+  `ajax.aspnetcdn.com` (Outlook for Mac's Office.js loads `MicrosoftAjax.js` from there, and never becomes ready
+  without it), and connections to the server, Microsoft's services and the helper's four ports. No script, handler or style goes inline.
 
 ## The Add-in's Port
 

@@ -122,8 +122,10 @@ Office loads them before anyone has signed in to anything.
   them for everyone, and needs no new upload unless the manifest changed too.
 - **No sign-in in front of the pages.** Office on each Mac loads `/api/addin/` before anyone has signed in to
   anything. If a reverse proxy or a firewall asks for a login before Healdan, let that path through. The pages carry a
-  Content-Security-Policy that lets them run scripts from your server and from Microsoft's Office.js, and connect only
-  to your server, Microsoft's services and the helper on the same Mac: a policy of the proxy's own must not narrow it.
+  Content-Security-Policy that lets them run scripts from your server and from Microsoft's Office.js (with the
+  `MicrosoftAjax.js` that Outlook's Office.js fetches from `ajax.aspnetcdn.com`), and connect only to your server,
+  Microsoft's services and the helper on the same Mac: a policy of the proxy's own must not narrow it, and a firewall
+  on the Macs must let them reach both Microsoft addresses.
 - **Nothing private is in the pages' addresses.** A message window the add-in opens is `taskpane.html` with only the
   message's code and the app in its address, so your access log shows that, and not what Office said about a failure or
   the name of a file.
