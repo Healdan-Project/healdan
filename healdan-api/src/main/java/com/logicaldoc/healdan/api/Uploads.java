@@ -82,10 +82,14 @@ public final class Uploads {
 	/**
 	 * Lets go of a part CXF read. CXF keeps a part over 1 MB in a temporary
 	 * file, and deletes it once the part's content has been closed; this
-	 * closes it, read or not, unless a resource already has. The request's
-	 * first part hands out the same stream each time, which CXF can't close
-	 * twice: the second close reads its temporary file, closed by then, and
-	 * fails.
+	 * closes it, read or not, unless it's closed already.
+	 * <p>
+	 * The request's first part hands out the same stream each time: one of
+	 * CXF's {@link DelegatingInputStream}s over another, over the content.
+	 * Closing one reads to the end first, so a second close reads the
+	 * temporary file, closed by then, and fails, and a first close of a part
+	 * no resource read reads the whole file only to delete it. This closes the
+	 * content under them instead, unless one of them is closed already.
 	 *
 	 * @param part the part's content
 	 */
@@ -95,7 +99,12 @@ public final class Uploads {
 			cached.release();
 		try {
 			InputStream in = source.getInputStream();
-			if (in != null && !(in instanceof DelegatingInputStream delegating && delegating.isClosed()))
+			while (in instanceof DelegatingInputStream delegating) {
+				if (delegating.isClosed())
+					return;
+				in = delegating.getInputStream();
+			}
+			if (in != null)
 				in.close();
 		} catch (IOException | RuntimeException e) {
 			log.warn("Can't let go of an upload part", e);

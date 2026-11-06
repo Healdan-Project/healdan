@@ -7,18 +7,15 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -430,15 +427,18 @@ public class FilingTest extends ApiTestCase {
 	@Test
 	public void testFilesALargeFileSentFirstQuietly() throws Exception {
 		String token = signIn(clerk);
+		Set<String> temporaryFiles = temporaryFiles();
 		try (LogCapture log = LogCapture.of(Uploads.class)) {
-			// Over 1 MB, CXF keeps the request's first part in a temporary file, whichever route reads it
-			ApiResponse filed = post("/api/v1/documents").token(token).file("file", "Lease.docx", bytes(1024 * 1024 + 1))
+			// Over its threshold, CXF keeps the request's first part in a temporary file, whichever route reads it
+			ApiResponse filed = post("/api/v1/documents").token(token)
+					.file("file", "Lease.docx", bytes(ApiServer.MEMORY_THRESHOLD + 1))
 					.part("document", document(documents, null, null, null)).send();
 			assertEquals(filed.toString(), 201, filed.status());
 			// Letting go of a part the route has read and closed is no failure
 			assertEquals(List.of(), log.lines());
 		}
-		assertTrue(temporaryFiles().stream().noneMatch(name -> name.startsWith("healdan-upload")));
+		// and neither CXF's copy nor the API's is left behind
+		assertEquals(temporaryFiles, temporaryFiles());
 	}
 
 	@Test
@@ -637,17 +637,6 @@ public class FilingTest extends ApiTestCase {
 	private int count(Folder folder) {
 		return jdbc().queryForObject("select count(*) from ld_document where ld_folderid = ? and ld_deleted = 0",
 				Integer.class, folder.getId());
-	}
-
-	private static byte[] bytes(int size) {
-		byte[] bytes = new byte[size];
-		Arrays.fill(bytes, (byte) 'x');
-		return bytes;
-	}
-
-	private static Set<String> temporaryFiles() {
-		String[] names = new File(System.getProperty("java.io.tmpdir")).list();
-		return names == null ? Set.of() : new TreeSet<>(List.of(names));
 	}
 
 	/** As the old UI's folder edit does: the listener records the local value and passes it down */
