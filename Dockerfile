@@ -24,7 +24,7 @@ RUN mkdir -p /build/ROOT \
  && cd /build/ROOT \
  && jar xf /src/logicaldoc-webapp/target/logicaldoc-webapp-*.war
 
-# ---- tools: compile, test and package the container init tool against the WAR's own libraries ----
+# ---- tools: build and test the container init tool, and parse Office files, on the WAR's own libraries ----
 FROM build AS tools
 COPY docker/tools /tools
 RUN bash /tools/build.sh /build/ROOT/WEB-INF/lib /build/ROOT/WEB-INF/classes/context.properties /build/docker-init.jar

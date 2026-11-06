@@ -53,6 +53,19 @@
 			<artifactId>nimbus-jose-jwt</artifactId>
 			<version>${nimbus-jose.version}</version>
 		</dependency>
+		<!-- POI itself ships in logicaldoc-core's plugin zip, which leaves out two of POI's own dependencies:
+			SparseBitSet (Apache License 2.0), which every .pptx and .xls and some .xlsx need, and curvesapi
+			(BSD 3-Clause), which its Visio code needs. Declared here so they come at the versions POI asks for, and
+			ship in this plugin's zip (see assemblyplugin.xml; #202). docker/tools' WarParsersTest parses on the WAR's
+			libraries -->
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.poi</groupId>
+			<artifactId>poi-ooxml</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>net.sf.jpf</groupId>
 			<artifactId>jpf-boot</artifactId>

@@ -23,7 +23,11 @@ Almost every module is a JPF plugin, and a plugin takes four pieces:
 1. `src/main/resources/plugin.xml` declares its id, what it needs, and the extensions it adds.
 2. A class extending `com.logicaldoc.util.plugin.LogicalDOCPlugin` can register servlets, scheduled tasks and
    loggers when the plugin installs.
-3. `src/main/assembly/assemblyplugin.xml` packages a `*-plugin.zip`.
+3. `src/main/assembly/assemblyplugin.xml` packages a `*-plugin.zip`. It takes only the dependencies its
+   `<include>`s name, not their own dependencies, so a library's dependency reaches the WAR only when some zip names
+   it: `logicaldoc-core`'s zip ships POI, and `healdan-core`'s ships POI's SparseBitSet and curvesapi, which core's
+   leaves out. Maven's tests have every dependency, so `WarParsersTest` (see [Tests](../tests/#docker-tests)) parses
+   Office files on the WAR's own libraries.
 4. An `artifactItem` in `logicaldoc-webapp/pom.xml` copies the zip into the WAR. Without it, the plugin isn't
    shipped.
 

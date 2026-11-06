@@ -33,6 +33,17 @@ fails, because the app's image is built here and can't be pulled.
   [Troubleshooting](../troubleshooting/).
 - **LogicalDOC's tables aren't.** See [Known Limitations](../known-limitations/).
 
+## Presentations and Spreadsheets Whose Text Wasn't Read
+
+Until November 2026, Healdan couldn't read the text of PowerPoint presentations (`.pptx`, `.ppsx`), older Excel
+workbooks (`.xls`, `.xlt`), or newer ones (`.xlsx`, `.xlsm`) with a cell in a format such as Excel's Accounting, so
+a search found them only by their properties. The log showed `NoClassDefFoundError:
+com/zaxxer/sparsebits/SparseBitSet` at each run of the Indexer.
+
+After the upgrade, the Indexer reads them at its next run, as it kept trying them. If you turned on **On error, mark
+unindexable**, it gave up on them instead, so
+[reschedule all for indexing](../../admin/system/search-and-indexing/#indexing-again) to have them read.
+
 ## Emails Filed Before the Outlook Add-in
 
 The upgrade that brings [Filing Email from Outlook](../../user/office/filing-email/) also starts keeping each email's

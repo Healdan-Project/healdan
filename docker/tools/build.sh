@@ -2,7 +2,8 @@
 # SPDX-FileCopyrightText: 2026 The Healdan Project
 # SPDX-License-Identifier: LGPL-3.0-only
 
-# Compiles the container init tool against the WAR's libraries, runs its tests and packages it.
+# Compiles the container init tool against the WAR's libraries, runs its tests and packages it. WarParsersTest also
+# parses Office files with the server's parsers on those libraries, which catches a dependency no plugin zip ships.
 # Usage: build.sh <WEB-INF/lib dir> <default context.properties> <output jar>
 set -euo pipefail
 
@@ -21,6 +22,7 @@ run_test DbInitPlanTest
 run_test ConfigPlanTest
 run_test TrustedProxiesTest
 run_test ConfigFileTest "$defaults"
+run_test WarParsersTest
 
 jar cf "$jar" -C "$work/classes" .
 echo "built $jar"
