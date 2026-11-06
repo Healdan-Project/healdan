@@ -6,15 +6,12 @@ package com.logicaldoc.healdan.api;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
-import java.util.TreeSet;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -32,6 +29,7 @@ import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.matter.ClientDAO;
 import com.logicaldoc.healdan.support.DbSnapshot;
+import com.logicaldoc.healdan.support.LogCapture;
 import com.logicaldoc.util.config.ContextProperties;
 import com.logicaldoc.util.spring.Context;
 
@@ -143,6 +141,22 @@ public class EmailResourceTest extends ApiTestCase {
 		awaitAsyncWork();
 		before.assertUnchanged();
 		assertEquals(List.of(), uploadFiles());
+	}
+
+	@Test
+	public void testInspectsALargeMessageQuietly() throws Exception {
+		String token = signIn(clerk);
+		Set<String> temporaryFiles = temporaryFiles();
+		try (LogCapture log = LogCapture.of(Uploads.class)) {
+			// Over 1 MB, CXF keeps the request's first part, here its only one, in a temporary file
+			ApiResponse response = inspect(token, largeEml());
+			assertEquals(response.toString(), 200, response.status());
+			assertEquals("Large", response.json().path("subject").textValue());
+			// Letting go of a part the route has read and closed is no failure
+			assertEquals(List.of(), log.lines());
+		}
+		// and neither CXF's copy nor the API's is left behind
+		assertEquals(temporaryFiles, temporaryFiles());
 	}
 
 	@Test
@@ -439,19 +453,14 @@ public class EmailResourceTest extends ApiTestCase {
 		return ids;
 	}
 
-	private static List<String> uploadFiles() {
-		String[] names = new File(System.getProperty("java.io.tmpdir")).list();
-		Set<String> uploads = new TreeSet<>();
-		for (String name : names == null ? new String[0] : names)
-			if (name.startsWith("healdan-upload"))
-				uploads.add(name);
-		return List.copyOf(uploads);
-	}
-
-	private static byte[] bytes(int size) {
-		byte[] bytes = new byte[size];
-		Arrays.fill(bytes, (byte) 'x');
-		return bytes;
+	/** A plain-text message a little over the size CXF keeps in memory */
+	private static byte[] largeEml() {
+		StringBuilder eml = new StringBuilder(
+				"Message-ID: <large-1@example.com>\r\nFrom: ann@example.com\r\nSubject: Large\r\n\r\n");
+		String line = "x".repeat(76) + "\r\n";
+		while (eml.length() <= ApiServer.MEMORY_THRESHOLD)
+			eml.append(line);
+		return eml.toString().getBytes(StandardCharsets.US_ASCII);
 	}
 
 	private static String encode(String value) {

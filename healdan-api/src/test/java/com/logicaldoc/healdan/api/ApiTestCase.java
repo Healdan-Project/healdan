@@ -3,10 +3,14 @@
 
 package com.logicaldoc.healdan.api;
 
+import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.sql.DataSource;
@@ -33,6 +37,9 @@ import jakarta.servlet.annotation.WebServlet;
  * ({@link Contract}).
  */
 public abstract class ApiTestCase extends AbstractHealdanTestCase {
+
+	/** How the names of {@link Uploads#toTempFile}'s copies start */
+	private static final String UPLOAD_PREFIX = "healdan-upload";
 
 	protected final HealdanFixtures fx = new HealdanFixtures();
 
@@ -149,5 +156,37 @@ public abstract class ApiTestCase extends AbstractHealdanTestCase {
 	 */
 	protected JdbcTemplate jdbc() {
 		return new JdbcTemplate(Context.get(DataSource.class));
+	}
+
+	/**
+	 * @return the copies of uploads in the temporary folder: the API's
+	 *         ({@code healdan-upload-}) and CXF's of parts over
+	 *         {@link ApiServer#MEMORY_THRESHOLD} ({@code cos…tmp}). Nothing
+	 *         else, as other code writes there too.
+	 */
+	protected static Set<String> temporaryFiles() {
+		String[] names = new File(System.getProperty("java.io.tmpdir")).list();
+		Set<String> files = new TreeSet<>();
+		for (String name : names == null ? new String[0] : names)
+			if (name.startsWith(UPLOAD_PREFIX) || name.startsWith("cos") && name.endsWith("tmp"))
+				files.add(name);
+		return files;
+	}
+
+	/**
+	 * @return the API's copies of uploads in the temporary folder
+	 */
+	protected static List<String> uploadFiles() {
+		return temporaryFiles().stream().filter(name -> name.startsWith(UPLOAD_PREFIX)).toList();
+	}
+
+	/**
+	 * @param size how many
+	 * @return that many bytes, each an {@code x}
+	 */
+	protected static byte[] bytes(int size) {
+		byte[] bytes = new byte[size];
+		Arrays.fill(bytes, (byte) 'x');
+		return bytes;
 	}
 }

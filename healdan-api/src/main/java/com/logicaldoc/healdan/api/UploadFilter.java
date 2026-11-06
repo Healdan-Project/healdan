@@ -22,8 +22,9 @@ import jakarta.ws.rs.container.PreMatching;
  * every request, so it follows {@code upload.maxsize}. The limit itself is
  * checked on the stored file ({@link Uploads#maxBytes}), in the order a
  * resource checks its request. After the request, it lets go of every part
- * CXF read, which CXF keeps in a temporary file above 1 MB until it's read:
- * a refused request, or a part no resource takes, would leave it behind.
+ * CXF read, which CXF keeps in a temporary file above 1 MB until its content
+ * is closed: a refused request, or a part no resource takes, would leave it
+ * behind. A part a resource has read and closed is already let go.
  */
 @PreMatching
 public class UploadFilter implements ContainerRequestFilter, ContainerResponseFilter {

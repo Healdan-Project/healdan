@@ -40,6 +40,9 @@ public class ApiServer implements ApplicationContextAware {
 	/** The longest header line of an upload part, as Tomcat's default for a request's headers */
 	private static final int MAX_PART_HEADER_LENGTH = 8192;
 
+	/** The size above which CXF keeps an upload part in a temporary file, 1 MB */
+	static final int MEMORY_THRESHOLD = 1024 * 1024;
+
 	private ApplicationContext applicationContext;
 
 	@Override
@@ -117,7 +120,7 @@ public class ApiServer implements ApplicationContextAware {
 	private static Map<String, Object> properties() {
 		Map<String, Object> properties = new HashMap<>();
 		properties.put("attachment-directory", System.getProperty("java.io.tmpdir"));
-		properties.put("attachment-memory-threshold", "1048576");
+		properties.put("attachment-memory-threshold", String.valueOf(MEMORY_THRESHOLD));
 		properties.put(AttachmentDeserializer.ATTACHMENT_MAX_HEADER_SIZE, String.valueOf(MAX_PART_HEADER_LENGTH));
 		return properties;
 	}

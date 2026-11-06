@@ -19,8 +19,6 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -946,15 +944,6 @@ public class EmailFilingTest extends ApiTestCase {
 			zip.closeEntry();
 		}
 		return bytes.toByteArray();
-	}
-
-	private static List<String> uploadFiles() {
-		String[] names = new File(System.getProperty("java.io.tmpdir")).list();
-		Set<String> uploads = new TreeSet<>();
-		for (String name : names == null ? new String[0] : names)
-			if (name.startsWith("healdan-upload"))
-				uploads.add(name);
-		return List.copyOf(uploads);
 	}
 
 	/**
