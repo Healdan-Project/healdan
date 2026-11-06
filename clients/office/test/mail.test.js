@@ -492,7 +492,7 @@ test("in Outlook for Mac the pane goes on as before, and so where Outlook doesn'
   }
 });
 
-test("with no message, or several selected, the pane says to select one and asks nothing", async () => {
+test("with no message, the pane says to select one and asks nothing", async () => {
   const client = fakeClient();
   const glue = fakeGlue({ item: null });
   const { text, page } = await open({ client, glue });
