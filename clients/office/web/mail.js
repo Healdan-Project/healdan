@@ -12,7 +12,8 @@
  * Whatever the helper says (a name, a folder, an address) is put on the page as text, never as HTML; an address becomes
  * a link only when it is an http or https one. Nothing here logs a subject, an address or a name.
  *
- * Several messages at once are not handled yet: with none or more than one open, the pane says to select one.
+ * Several messages at once are not handled yet: with several selected, Outlook turns the button off and closes a
+ * pinned pane, which comes back when one is selected. With no message open, the pane says to select one.
  *
  * It works in Outlook for Mac only, where the helper is. Outlook on the web and new Outlook for Windows have Mailbox 1.14
  * too, so the button shows there, and the pane then says it works in the new Outlook for Mac only and asks nothing.
@@ -576,7 +577,8 @@
       finishPairing();
     });
 
-    // A pinned pane stays open while the message changes. Several selected at once come as the same event with no item.
+    // A pinned pane stays open while the message changes; one with no item says to select one. Outlook closes a pinned
+    // pane when several are selected.
     try {
       await glue.onItemChanged(() => {
         // The buttons and the outcome were for the message that was open: gone at once, before the new one's status lands.

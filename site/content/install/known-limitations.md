@@ -123,7 +123,8 @@ weight: 11
 - **The primary mailbox only.** The add-in works in your own mailbox, not in shared or delegated ones: Outlook turns
   its button off there.
 - **Filing is one message at a time for now.** Filing several messages at once isn't available yet: the new Outlook for
-  Mac 16.114 can't read the selected messages. With several selected, the pane asks you to select one.
+  Mac 16.114 can't read the selected messages. With several selected, Outlook turns the Healdan button off and closes
+  a pinned pane, which comes back when you select one message.
 - **A message over the upload limit can't be filed.** Healdan refuses a message larger than its upload limit
   (100 MB as Healdan is installed) and the pane says so. An administrator sets it under **Administration → Settings →
   GUI Settings** as **Upload max. size**: see [Interface Settings](../../admin/system/interface-settings/).
@@ -139,3 +140,7 @@ weight: 11
   encrypted one is, with no attachments offered. Real mail is signed at most twice.
 - **The pane needs the server to load.** Outlook loads the add-in's pane from your Healdan server. While the
   server can't be reached, the pane doesn't open, even though the helper is running.
+- **During an outage, a filing waits for the proxy.** If the server stops while a message is being filed, the pane
+  and the Save window say they're filing until the request fails. Behind a reverse proxy that is the proxy's own
+  timeout, often a minute or more, and then they say Can't Reach Healdan. Nothing is filed, and filing again works once
+  the server is back.

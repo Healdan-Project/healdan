@@ -635,7 +635,8 @@ Office for Mac's WebKit doesn't ask. A request refused at `Host` or `Origin` get
     taken for the Mac, as every one with Mailbox 1.5 names it. It pairs as `Outlook`, with its key at `healdan.key.Outlook`. Everything the
     helper says goes on the page as text, and an address is a link only when it's http or https. Several messages at once
     are not handled yet: new Outlook for Mac 16.114 reports Mailbox 1.14 and has no `loadItemByIdAsync`, so the manifest
-    doesn't declare `SupportsMultiSelect`, and the add-in asks for read/write mailbox for the category list.
+    doesn't declare `SupportsMultiSelect`, and the add-in asks for read/write mailbox for the category list. With several
+    selected, Outlook turns the button off and closes a pinned pane, which comes back when one is selected.
   - **`mail/file`** files one message (`MailFiling.FileAsync`).
     - **With `folderId` (File Here),** it reads the folder's form (`GET /api/v1/folders/{id}/form`). When every required
       field has a value, its own or an inherited one, it files the message there at once with no properties and no
