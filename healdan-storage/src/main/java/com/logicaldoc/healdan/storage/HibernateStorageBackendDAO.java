@@ -3,8 +3,6 @@
 
 package com.logicaldoc.healdan.storage;
 
-import java.util.Map;
-
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
@@ -35,10 +33,22 @@ public class HibernateStorageBackendDAO extends HibernatePersistentObjectDAO<Sto
 	@Override
 	@Transactional(rollbackOn = Exception.class)
 	public void remove(long id) throws PersistenceException {
+		if (id == StorageBackend.ORIGINAL)
+			throw new PersistenceException("Original can't be removed");
 		StorageBackend backend = getCurrentSession().find(StorageBackend.class, id);
 		if (backend != null) {
 			getCurrentSession().remove(backend);
 			getCurrentSession().flush();
 		}
+	}
+
+	/**
+	 * CE's delete only marks the row, which would keep the sealed secret: a backend is deleted for good, as by
+	 * {@link #remove}.
+	 */
+	@Override
+	@Transactional(rollbackOn = Exception.class)
+	public void delete(long id, int code) throws PersistenceException {
+		remove(id);
 	}
 }

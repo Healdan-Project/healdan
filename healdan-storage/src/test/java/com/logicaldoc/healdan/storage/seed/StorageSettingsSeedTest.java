@@ -4,6 +4,7 @@
 package com.logicaldoc.healdan.storage.seed;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -22,7 +23,9 @@ import com.logicaldoc.core.communication.MessageTemplateDAO;
 import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.seed.SeedRunner;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.core.store.FSStore;
 import com.logicaldoc.healdan.storage.AbstractStorageTestCase;
+import com.logicaldoc.healdan.storage.HealdanStorage;
 import com.logicaldoc.healdan.storage.StorageSettings;
 import com.logicaldoc.util.spring.Context;
 
@@ -96,6 +99,29 @@ public class StorageSettingsSeedTest extends AbstractStorageTestCase {
 		range(storage::setRetestSeconds, 5, 3600);
 		assertEquals(365, storage.holdDays());
 		assertEquals(3600, storage.retestSeconds());
+	}
+
+	@Test
+	public void testRunsOnlyOnHealdanStorage() {
+		assertTrue(StorageSettingsSeed.enabledFor(new HealdanStorage()));
+		assertFalse(StorageSettingsSeed.enabledFor(new FSStore()));
+		// Context.get() has HealdanStorage as the Store, so the step is enabled here
+		assertTrue(Context.get(StorageSettingsSeed.class).enabled());
+	}
+
+	@Test
+	public void testInstallIdIsOnlyMadeBySeed() {
+		HealdanSettings settings = HealdanSettings.get();
+		StorageSettings storage = StorageSettings.get();
+		String id = storage.installId();
+		assertEquals(id, settings.get("storage.installId"));
+		assertFalse(storage.makeInstallId());
+		assertEquals(id, storage.installId());
+
+		settings.delete("storage.installId");
+		IllegalStateException e = assertThrows(IllegalStateException.class, storage::installId);
+		assertTrue(e.getMessage(), e.getMessage().contains("storage.installId"));
+		assertNull(settings.get("storage.installId"));
 	}
 
 	private void range(IntConsumer setter, int min, int max) {

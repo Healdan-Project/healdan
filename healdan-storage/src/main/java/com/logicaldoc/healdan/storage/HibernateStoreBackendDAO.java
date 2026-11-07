@@ -40,4 +40,18 @@ public class HibernateStoreBackendDAO extends HibernatePersistentObjectDAO<Store
 				Map.of("storeId", storeId), null, null);
 		return rows.stream().findFirst();
 	}
+
+	/**
+	 * CE's delete only marks the row, and the unique index on the Store would still count it, so the Store could never
+	 * get another: a row is deleted for good.
+	 */
+	@Override
+	@Transactional(rollbackOn = Exception.class)
+	public void delete(long id, int code) throws PersistenceException {
+		StoreBackend row = getCurrentSession().find(StoreBackend.class, id);
+		if (row != null) {
+			getCurrentSession().remove(row);
+			getCurrentSession().flush();
+		}
+	}
 }

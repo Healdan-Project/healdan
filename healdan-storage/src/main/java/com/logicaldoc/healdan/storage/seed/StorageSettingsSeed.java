@@ -9,8 +9,10 @@ import org.springframework.stereotype.Component;
 import com.logicaldoc.core.communication.MessageTemplate;
 import com.logicaldoc.core.communication.MessageTemplateDAO;
 import com.logicaldoc.core.security.Tenant;
+import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.seed.SeedStep;
 import com.logicaldoc.healdan.setting.HealdanSettings;
+import com.logicaldoc.healdan.storage.HealdanStorage;
 import com.logicaldoc.healdan.storage.StorageSettings;
 
 /**
@@ -44,6 +46,19 @@ public class StorageSettingsSeed implements SeedStep {
 		return "storage-settings";
 	}
 
+	/**
+	 * Only a server that runs {@link HealdanStorage} records anything; on CE's file store the step waits, with no
+	 * marker, so it runs once the storage is in use.
+	 */
+	@Override
+	public boolean enabled() {
+		return enabledFor(Store.get());
+	}
+
+	static boolean enabledFor(Store store) {
+		return store instanceof HealdanStorage;
+	}
+
 	@Override
 	public void run() throws Exception {
 		settings.setIfMissing(StorageSettings.HOLD_DAYS, Integer.toString(StorageSettings.DEFAULT_HOLD_DAYS));
@@ -53,7 +68,7 @@ public class StorageSettingsSeed implements SeedStep {
 				Integer.toString(StorageSettings.DEFAULT_SWEEP_SECONDS));
 		settings.setIfMissing(StorageSettings.RETEST_SECONDS,
 				Integer.toString(StorageSettings.DEFAULT_RETEST_SECONDS));
-		storage.installId();
+		storage.makeInstallId();
 
 		MessageTemplateDAO dao = MessageTemplateDAO.get();
 		if (!dao.findByName(TEMPLATE, Tenant.DEFAULT_ID).isEmpty())

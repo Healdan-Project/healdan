@@ -114,11 +114,26 @@ public class StorageSettings {
 	}
 
 	/**
-	 * @return this install's id, made on first use and kept; it names the install in every backend's marker
+	 * @return this install's id, which names the install in every backend's marker
+	 * @throws IllegalStateException if there is none: only the seed makes it, since a new one would make every
+	 *         backend's marker name another install
 	 */
 	public String installId() {
-		settings.setIfMissing(INSTALL_ID, UUID.randomUUID().toString());
-		return settings.get(INSTALL_ID);
+		String id = settings.get(INSTALL_ID);
+		if (id == null || id.isBlank())
+			throw new IllegalStateException("The setting " + INSTALL_ID + " is missing. It names this install in every "
+					+ "storage backend's marker, so it isn't made again: restore it from a backup, or from a backend's "
+					+ ".healdan-backend marker.");
+		return id;
+	}
+
+	/**
+	 * Makes this install's id if there is none. Only the seed calls it.
+	 *
+	 * @return true if it was made
+	 */
+	public boolean makeInstallId() {
+		return settings.setIfMissing(INSTALL_ID, UUID.randomUUID().toString());
 	}
 
 	private int read(String key, int fallback, int min, int max) {

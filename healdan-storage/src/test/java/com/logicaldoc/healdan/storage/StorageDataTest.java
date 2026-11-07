@@ -238,6 +238,113 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		assertEquals(List.of(26L, 25L), docs(2, Set.of(two)));
 	}
 
+	@Test
+	public void testFailureRecord() throws Exception {
+		long write = files().recordWrite(40, "1.0", 0, null, 5);
+		Date next = new Date(System.currentTimeMillis() + 60_000);
+
+		// A failure of an old write counts against nothing
+		assertFalse(files().recordFailure(40, "1.0", write + 1, "old", next));
+		assertEquals(0, files().find(40, "1.0").orElseThrow().attempts());
+		assertFalse(files().recordFailure(41, "1.0", write, "none", next));
+
+		for (int attempt = 1; attempt < StoredFiles.STUCK_AT; attempt++) {
+			assertTrue(files().recordFailure(40, "1.0", write, "boom " + attempt, next));
+			StoredFile row = files().find(40, "1.0").orElseThrow();
+			assertEquals(attempt, row.attempts());
+			assertEquals("boom " + attempt, row.lastError());
+			assertFalse(row.stuck());
+			assertEquals(next.getTime() / 1000, row.nextTry().getTime() / 1000);
+		}
+		assertTrue(files().recordFailure(40, "1.0", write, "x".repeat(5000), next));
+		StoredFile stuck = files().find(40, "1.0").orElseThrow();
+		assertEquals(StoredFiles.STUCK_AT, stuck.attempts());
+		assertTrue(stuck.stuck());
+		assertEquals(4000, stuck.lastError().length());
+
+		// A new write supersedes it all
+		files().recordWrite(40, "1.0", 0, null, 5);
+		StoredFile fresh = files().find(40, "1.0").orElseThrow();
+		assertFalse(fresh.stuck());
+		assertEquals(0, fresh.attempts());
+		assertNull(fresh.lastError());
+		assertNull(fresh.nextTry());
+	}
+
+	@Test
+	public void testRetryPutsOneStoresStuckFilesBack() throws Exception {
+		Date next = new Date(System.currentTimeMillis() + 60_000);
+		long[] writes = new long[4];
+		Long[] stores = { 10L, 10L, 11L, null };
+		for (int i = 0; i < 4; i++) {
+			writes[i] = files().recordWrite(50 + i, "1.0", 0, stores[i], 5);
+			for (int n = 0; n < StoredFiles.STUCK_AT; n++)
+				files().recordFailure(50 + i, "1.0", writes[i], "boom", next);
+		}
+		// Doc 51 is not stuck, only failing
+		files().recordWrite(51, "1.0", 0, 10L, 5);
+		files().recordFailure(51, "1.0", files().find(51, "1.0").orElseThrow().write(), "boom", next);
+
+		assertEquals(1, files().retry(10L));
+		StoredFile back = files().find(50, "1.0").orElseThrow();
+		assertFalse(back.stuck());
+		assertEquals(0, back.attempts());
+		assertNull(back.lastError());
+		assertNull(back.nextTry());
+		assertEquals(1, files().find(51, "1.0").orElseThrow().attempts());
+		assertTrue(files().find(52, "1.0").orElseThrow().stuck());
+		assertTrue(files().find(53, "1.0").orElseThrow().stuck());
+
+		assertEquals(1, files().retry(null));
+		assertFalse(files().find(53, "1.0").orElseThrow().stuck());
+		assertTrue(files().find(52, "1.0").orElseThrow().stuck());
+	}
+
+	@Test
+	public void testStatsByStore() throws Exception {
+		long other = backend("other");
+		useBackend(10, other);
+		files().recordWrite(60, "1.0", 0, 10L, 100);
+		files().recordWrite(60, "1.1", other, 10L, 50);
+		long w = files().recordWrite(61, "1.0", 0, 10L, 7);
+		files().recordWrite(62, "1.0", 1, null, 3);
+		files().recordWrite(63, "1.0", 1, null, 4);
+		for (int n = 0; n < StoredFiles.STUCK_AT; n++)
+			files().recordFailure(61, "1.0", w, "boom", new Date());
+
+		List<StoreStats> stats = files().statsByStore();
+
+		assertEquals(List.of(new StoreStats(null, 2, 0, 0, 7), new StoreStats(10L, 3, 2, 1, 157)), stats);
+	}
+
+	@Test
+	public void testDeleteIsForGood() throws Exception {
+		long other = backend("other");
+		useBackend(10, other);
+		long rowId = StoreBackendDAO.get().findByStore(10).orElseThrow().getId();
+		StoreBackendDAO.get().delete(rowId);
+		assertEquals(Integer.valueOf(0), jdbc().queryForObject("select count(*) from hd_storage_store", Integer.class));
+		// The Store can have another
+		useBackend(10, 1);
+		assertEquals(1L, StoreBackendDAO.get().findByStore(10).orElseThrow().getBackendId());
+
+		StorageBackend backend = StorageBackendDAO.get().findById(other);
+		backend.setSecret("v1:sealed");
+		StorageBackendDAO.get().store(backend);
+		StorageBackendDAO.get().delete(other);
+		assertEquals(Integer.valueOf(0), jdbc().queryForObject(
+				"select count(*) from hd_storage_backend where hd_secret is not null", Integer.class));
+		assertEquals(Integer.valueOf(0), jdbc().queryForObject(
+				"select count(*) from hd_storage_backend where ld_id = ?", Integer.class, other));
+	}
+
+	@Test
+	public void testOriginalCantBeRemoved() throws Exception {
+		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().remove(StorageBackend.ORIGINAL));
+		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().delete(StorageBackend.ORIGINAL));
+		assertNotNull(StorageBackendDAO.get().findById(StorageBackend.ORIGINAL));
+	}
+
 	private List<Long> docs(int limit, Set<Long> unavailable) {
 		return files().misplaced(limit, unavailable).stream().map(StoredFile::docId).toList();
 	}
