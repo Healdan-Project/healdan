@@ -61,6 +61,16 @@ Every task's requirements include these.
 - **`HealdanStorage` is never a Spring component.** Only `<bean id="store" class="${store}"/>` makes it: a `@Component` would make a second `Store` bean, and `Store.get()` (`Context.get(Store.class)`) would fail. Every other `healdan-storage` bean does nothing unless `Store.get()` is a `HealdanStorage`, so a WAR still on `FSStore` (outside Docker, or before PR C) is untouched.
 - **`HealdanStorage.init()` reads no table and is safe to call again.** Spring calls it before Flyway has run, and CE's `SettingServiceImpl.saveStoreSettings` calls `Store.get().init()` again.
 - **One lock per file** (call 20). `FileLocks` is a striped lock in the JVM, keyed by `(docId, resource)`. `HealdanStorage` holds it while it writes or deletes a file's bytes and updates its row; the mover holds it for its commit (the row's check, the rename into place, the row's update, then the source's hold, or the staged copy's rename aside for the cache); the purge holds it while it checks and deletes a held S3 object. Healdan runs one node (spec §2.2), so a lock in the JVM is enough.
+- **SQL that runs on PostgreSQL too** (roadmap principle 9; [PostgreSQL recon](../../reference/postgresql-recon.md) §2.5 and §4). Healdan's tests run on HSQLDB and its stack on MariaDB, and neither refuses what PostgreSQL does, so every task's review checks these by reading:
+  - **No `boolean` on an `int` column.** On PostgreSQL, Hibernate binds a Java `boolean` as SQL `boolean`, as pgjdbc's `setBoolean` does, and PostgreSQL won't store either in an `int` column or compare one with it (recon §2.5). Healdan's entities have no `boolean` field today. `StorageBackend`'s three flags are `int` fields, as their columns are, with `boolean` accessors, which Hibernate doesn't map because Healdan's entities annotate fields; HQL compares them with `1`. `StoredFiles` binds `hd_stuck` as `stuck ? 1 : 0` and reads it as `rs.getInt(…) == 1`, as `SearchFolderRuleDAO` does `hd_onlymine`.
+  - **No statement that's expected to fail inside a transaction.** On PostgreSQL a failed statement aborts its transaction, and the commit then rolls all of it back, even when Java caught the error (recon §4.2). So no insert that catches a duplicate key to mean "already there" (`recordWrite`'s and `HeldCopies.hold`'s update-then-insert under the file's lock is the pattern), and no read that tries one type and then another. `HealdanStorage`'s writes can run inside CE's transactions (`HibernateFolderDAO.copy` creates every copied document in one), and the store-tracking listeners read inside CE's save before they write after its commit (Task 10), so a failure there that's logged and swallowed would still lose CE's whole save.
+  - **Typed reads ask for the column's own type** wherever SQL goes through CE's DAO helpers or `ResultSet.getObject(i, type)`: `bigint` columns and `count(*)` as `Long`, `int` columns as `Integer`, and never CE's `queryForInt` on an `int` column, which asks for a `Long` first and, on PostgreSQL, loses the transaction when it retries (recon §2.6 and §4.5). Spring's `JdbcTemplate`, which `StoredFiles` and `HeldCopies` use, reads `Long.class` and `Integer.class` with `getLong` and `getInt`, which pgjdbc converts.
+  - **No MariaDB-isms:** none of recon §4.4's list (`ON DUPLICATE KEY`, `INSERT IGNORE`, `REPLACE`, `IFNULL`, `IF()`, `LIMIT a, b`, backticks, date arithmetic); `cast(x as …)`, never PostgreSQL's `::`, which CE's `NamedParameterStatement` reads as a parameter. `limit ?` and `limit ? offset ?` run on all three.
+  - **The same answers on both:**
+    - an `order by` on a key that can be NULL (`hd_storeid`, `hd_waiting` and `hd_nexttry` among them) says where NULLs go, as `case when x is null then 1 else 0 end, x`: the two databases put NULLs at opposite ends, and MariaDB has no `nulls first` or `nulls last` (checked on 11.4.13, 2026-11-07);
+    - text compared or kept unique in SQL (a backend's name, bucket, prefix or path) is trimmed in Java first, as MariaDB's `utf8_bin` ignores trailing spaces and PostgreSQL doesn't (recon §4.3);
+    - nothing relies on fractions of a second, which MariaDB's `datetime` drops and PostgreSQL's `timestamp` keeps: times are compared with `<` or `<=`, never `=`;
+    - nothing relies on `REPEATABLE READ`, MariaDB's default: PostgreSQL's is `READ COMMITTED`, and a conditional update such as `moved`'s `where hd_write = ?` behaves the same under both.
 - **Code location:** `healdan-storage`'s `com.logicaldoc.healdan.storage` and its packages `backend`, `crypto`, `mover`, `seed` and `web`; the GUI's `frontend.client.healdan.settings` (the tab), `.beans` and `.services`.
 - **The plugin:** JPF id `healdan-storage`, version the root POM's (9.3.2 today), requiring `logicaldoc-core` and `healdan-core`; class `com.logicaldoc.healdan.storage.HealdanStoragePlugin`. Extensions, each id unique (JPF drops the whole plugin on a duplicate):
   - `DocumentListener`, id `healdanStorageDocuments`, class `com.logicaldoc.healdan.storage.StoreTrackingDocumentListener`, position `120`;
@@ -313,9 +323,9 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
 public class StorageBackend extends PersistentObject {
 	String name; String kind;          // "local" | "s3"
 	String path;                       // local; null for Original, whose path is store.1.dir
-	String endpoint; String region; String bucket; String prefix; boolean pathStyle; String accessKey;
+	String endpoint; String region; String bucket; String prefix; int pathStyle; String accessKey;
 	String secret;                     // sealed by SecretBox; never leaves the server
-	boolean encrypted; boolean keyConfirmed;
+	int encrypted; int keyConfirmed;   // 0 or 1, as the columns, with boolean accessors (Global Constraints: PostgreSQL)
 }
 @Entity @Table(name = "hd_storage_event")
 public class StorageEvent extends PersistentObject { // question 8: never deleted
@@ -1181,6 +1191,10 @@ Every ruling the build makes that the plan or the spec didn't settle goes here, 
   - 7: the download filter (Task 13);
   - 8: an event table, `hd_storage_event`, in place of `hd_keyshown` and `hd_keyshownby` (Tasks 2, 14 and 17);
   - 9: an uploaded staged copy becomes its read-cache entry (Tasks 8 and 11). Smoke step 5f's checks change with it: an upload is cached once it reaches Garage, so the files read back through Garage arrive by a move from Original (Task 16).
+
+**PostgreSQL guardrails (2026-11-07)**
+
+- **The owner asked for rules that keep this work cheap to carry onto PostgreSQL,** if it's built before that backlog item: the Global Constraints' "SQL that runs on PostgreSQL too", from the [PostgreSQL recon](../../reference/postgresql-recon.md). They changed one interface: `StorageBackend`'s `pathStyle`, `encrypted` and `keyConfirmed` were `boolean` fields on `int` columns, the recon's first blocker (§2.5), and are now `int` fields with `boolean` accessors. Checking them found that MariaDB 11.4.13 refuses `nulls first` and `nulls last`, which the recon's §4.3 had offered as the fix for NULLs' order; the recon now says so. If a rule is wrong, the PostgreSQL item finds it when it runs `healdan-storage` there, and the fix is in `healdan-storage`'s SQL.
 
 ## Follow-Ups
 
