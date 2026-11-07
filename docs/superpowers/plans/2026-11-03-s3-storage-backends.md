@@ -981,7 +981,7 @@ void saveSettings(int holdDays, int cacheGb, int transfers) throws ServerExcepti
   - Original can be renamed, not removed, and has no path field;
   - Remove needs no Store using the backend and no row or held copy on it, deletes its key file, and deletes its row for good (`StorageBackendDAO.remove`), so its sealed secret leaves the database;
   - the Store list is every top-level workspace but CE's Default (Templates included), with Original for a Store that has no row;
-  - switching a Store's backend runs `StoreTracking.checkStore` first, sets `hd_waiting` on the rows it leaves misplaced, then wakes the mover;
+  - switching a Store's backend runs `StoreTracking.checkStore` first, sets `hd_waiting` (if empty) on the rows it leaves misplaced and clears it on the rows already on the new backend, as Task 2's `setStore` does (a row a switch puts in place is never listed by `misplaced`, so `moved` would never clear it, and the alert would fire for good), then wakes the mover;
   - saving the settings goes through `StorageSettings`, which refuses a value out of range (Task 2 tests the ranges);
   - the secret is sealed with `SecretBox`; a `KeyMissingException` is answered as M4's Sign-In tab answers it (M4 R37), as the GUI's `SecretKeyMissingException` with the count of sealed values, and `BackendDialog` (Task 17) asks the same question, naming the providers' and the storage backends' secrets alike, then saves again with `newKey` true; only a save whose `GUIStorageBackend.newKey` is true calls `sealWithNewKey`;
   - the endpoint rule (Global Constraints).
@@ -1362,4 +1362,6 @@ Filled in from the build's reviews: each gap in a narrow case, or for later, tha
 
 - **A crash between a move's row update and its hold** leaves the source copy unrecorded: no file is lost, but the copy stays until someone deletes it. The nightly check could list such orphans on local backends. (Task 11)
 - **A crash after the mover stages a local target's copy** leaves a `.healdan-tmp-` file beside the key, which nothing points at. The nightly check could delete those more than a day old. (Task 11)
+- **`If-Match` on `S3Channel`'s ranged reads** (Task 5). A file read by range straight from the bucket (over a tenth of the cache) while the mover rewrites its key could mix two versions; an encrypted backend's AEAD refuses that read, an unencrypted one would serve it. `GetObject`'s `ifMatch` with the ETag from the `HEAD` fixes it, but the trial didn't try it on Garage or Wasabi.
+- **A conditional create of an S3 backend's marker** (Task 5). Two creates of one bucket and prefix at once could both write the marker; `If-None-Match: *` on its `PUT` would stop the second. The tab's overlap check (call 23) makes it unlikely, and the trial didn't try the header.
 - **`HibernateVersionDAO.deleteVersion`** (upstream) deletes only a version's own file, never its derived files, so a deleted version's preview and thumbnail stay in the repository, recorded and moved with their Store like any other file. (Seen while planning.)
