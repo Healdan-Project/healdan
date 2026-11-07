@@ -122,9 +122,6 @@ public final class FakeProvider implements AutoCloseable {
 
 	private static final String JSON = "application/json; charset=UTF-8";
 
-	/** The exchange attribute that says to answer in chunks */
-	private static final String CHUNKED = "fake.chunked";
-
 	private static final SecureRandom RANDOM = new SecureRandom();
 
 	/** Marks a discovery member to leave out */
@@ -912,11 +909,6 @@ public final class FakeProvider implements AutoCloseable {
 					Thread.currentThread().interrupt();
 					return;
 				}
-			Trickle trickle = trickles.get(path);
-			if (trickle != null)
-				exchange.setStreams(null, new TricklingStream(exchange.getResponseBody(), trickle));
-			if (chunked.contains(path))
-				exchange.setAttribute(CHUNKED, Boolean.TRUE);
 			switch (path) {
 				case "/.well-known/openid-configuration" -> {
 					discoveryRequests.incrementAndGet();
@@ -1238,19 +1230,19 @@ public final class FakeProvider implements AutoCloseable {
 		}
 	}
 
-	private static void answer(HttpExchange exchange, Answer answer, String description) throws IOException {
+	private void answer(HttpExchange exchange, Answer answer, String description) throws IOException {
 		if (answer.error() == null)
 			send(exchange, answer.status(), "text/plain", "No");
 		else
 			error(exchange, answer.status(), answer.error(), description);
 	}
 
-	private static void error(HttpExchange exchange, int status, String code) throws IOException {
+	private void error(HttpExchange exchange, int status, String code) throws IOException {
 		error(exchange, status, code, null);
 	}
 
 	/** @param description the error_description, or null for none */
-	private static void error(HttpExchange exchange, int status, String code, String description) throws IOException {
+	private void error(HttpExchange exchange, int status, String code, String description) throws IOException {
 		Map<String, Object> body = new LinkedHashMap<>();
 		body.put("error", code);
 		if (description != null)
@@ -1258,13 +1250,29 @@ public final class FakeProvider implements AutoCloseable {
 		send(exchange, status, JSON, JSONObjectUtils.toJSONString(body));
 	}
 
-	private static void send(HttpExchange exchange, int status, String type, String body) throws IOException {
+	/**
+	 * Answers a request, trickled and in chunks as {@link #trickle} and
+	 * {@link #chunked} set its path when the answer goes out. Both are looked
+	 * up from the request's own path for each answer, never kept on the
+	 * exchange: the JDK's server keeps an exchange's attributes on the context
+	 * every request shares, so a setting kept there for one answer would apply
+	 * to all that follow.
+	 */
+	private void send(HttpExchange exchange, int status, String type, String body) throws IOException {
 		byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+		String path = exchange.getRequestURI().getPath();
+		Trickle trickle = trickles.get(path);
+		// Not twice, when the answer to a fake that failed follows one begun
+		if (trickle != null && !(exchange.getResponseBody() instanceof TricklingStream))
+			exchange.setStreams(null, new TricklingStream(exchange.getResponseBody(), trickle));
 		exchange.getResponseHeaders().set("Content-Type", type);
-		// A length of 0 is the JDK server's way of sending chunks
-		exchange.sendResponseHeaders(status, Boolean.TRUE.equals(exchange.getAttribute(CHUNKED)) ? 0 : bytes.length);
+		// To the JDK's server a length of 0 asks for chunks, and -1 for no body,
+		// which it sends with a length of 0
+		long length = chunked.contains(path) ? 0 : bytes.length == 0 ? -1 : bytes.length;
+		exchange.sendResponseHeaders(status, length);
 		try (OutputStream out = exchange.getResponseBody()) {
-			out.write(bytes);
+			if (bytes.length > 0)
+				out.write(bytes);
 		}
 	}
 
