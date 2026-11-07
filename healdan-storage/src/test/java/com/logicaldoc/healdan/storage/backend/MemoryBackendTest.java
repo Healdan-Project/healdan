@@ -84,6 +84,12 @@ public class MemoryBackendTest extends BackendContract {
 		} catch (BackendUnreachableException expected) {
 			// as it should
 		}
+		try {
+			backend.hold("1/2/doc/1.0");
+			fail("An unreachable backend looked a key up to hold it");
+		} catch (BackendUnreachableException expected) {
+			// as S3's look-up does
+		}
 		memory.unreachable(false);
 		backend.check();
 	}

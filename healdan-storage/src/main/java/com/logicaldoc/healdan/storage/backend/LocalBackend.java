@@ -50,8 +50,8 @@ public class LocalBackend implements Backend {
 	/** Test's objects are this and then any name, at a backend's top level (Task 12) */
 	public static final String TEST = ".healdan-test-";
 
-	/** A temporary file's name is the key's, then this, then a UUID */
-	static final String TEMPORARY = ".healdan-tmp-";
+	/** A temporary file's name is the key's, then this, then a UUID; never a file of the backend's */
+	public static final String TEMPORARY = ".healdan-tmp-";
 
 	private final long id;
 

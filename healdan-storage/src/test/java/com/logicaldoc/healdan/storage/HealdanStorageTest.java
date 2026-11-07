@@ -1,0 +1,412 @@
+// SPDX-FileCopyrightText: 2026 The Healdan Project
+// SPDX-License-Identifier: LGPL-3.0-only
+
+package com.logicaldoc.healdan.storage;
+
+import static com.logicaldoc.healdan.storage.StorageFixtures.file;
+import static com.logicaldoc.healdan.storage.StorageFixtures.held;
+import static com.logicaldoc.healdan.storage.StorageFixtures.heldRows;
+import static com.logicaldoc.healdan.storage.StorageFixtures.key;
+import static com.logicaldoc.healdan.storage.StorageFixtures.local;
+import static com.logicaldoc.healdan.storage.StorageFixtures.moveToBucket;
+import static com.logicaldoc.healdan.storage.StorageFixtures.resource;
+import static com.logicaldoc.healdan.storage.StorageFixtures.row;
+import static com.logicaldoc.healdan.storage.StorageFixtures.staged;
+import static com.logicaldoc.healdan.storage.StorageFixtures.text;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.SQLException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import org.junit.Test;
+
+import com.logicaldoc.core.document.Document;
+import com.logicaldoc.core.runtime.Aspect;
+import com.logicaldoc.core.runtime.RunLevel;
+import com.logicaldoc.core.store.Store;
+import com.logicaldoc.core.store.StoreResource;
+import com.logicaldoc.healdan.storage.StorageFixtures.Side;
+import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
+import com.logicaldoc.healdan.support.HealdanFixtures;
+import com.logicaldoc.healdan.support.LogCapture;
+import com.logicaldoc.util.plugin.PluginException;
+import com.logicaldoc.util.spring.Context;
+
+/**
+ * {@link HealdanStorage}'s saves and reads, called directly: where each file lands, its row, and what is held.
+ */
+public class HealdanStorageTest extends AbstractStorageTestCase {
+
+	private static final long DAY = 24L * 3600 * 1000;
+
+	private StorageFixtures sf;
+
+	private HealdanFixtures fx;
+
+	/** A Store on a plain local backend */
+	private Side local;
+
+	/** A Store on an S3-kind backend, kept in memory */
+	private Side cloud;
+
+	@Override
+	public void setUp() throws IOException, SQLException, PluginException {
+		super.setUp();
+		try {
+			sf = new StorageFixtures();
+			fx = sf.fx;
+			local = sf.localSide("Local", false);
+			cloud = sf.s3Side("Cloud", false);
+		} catch (Exception e) {
+			throw new IllegalStateException(e);
+		}
+	}
+
+	private static Store store() {
+		return Store.get();
+	}
+
+	private Document upload(Side side, String text) throws Exception {
+		return fx.upload(side.folder(), "a.txt", text, fx.admin());
+	}
+
+	@Test
+	public void testLocalStoreWritesStraightThere() throws Exception {
+		Document doc = upload(local, "on local");
+
+		StoredFile row = row(doc.getId(), "1.0");
+		assertEquals(local.backendId(), row.backendId());
+		assertEquals(Long.valueOf(local.store().getId()), row.storeId());
+		assertEquals(8, row.size());
+		assertNull(row.waiting());
+		assertEquals("on local", Files.readString(local(local.root(), doc.getId(), "1.0")));
+		assertFalse(Files.exists(staged(doc.getId(), "1.0")));
+		assertEquals("on local", text(resource(doc, "1.0")));
+		assertTrue(StoredFiles.get().misplaced(100, Set.of()).isEmpty());
+	}
+
+	@Test
+	public void testS3StoreGoesToStaging() throws Exception {
+		Document doc = upload(cloud, "for the cloud");
+
+		StoredFile row = row(doc.getId(), "1.0");
+		assertEquals(0L, row.backendId());
+		assertEquals(Long.valueOf(cloud.store().getId()), row.storeId());
+		assertEquals(13, row.size());
+		assertTrue(row.waiting() != null);
+		assertEquals("for the cloud", Files.readString(staged(doc.getId(), "1.0")));
+		assertEquals("for the cloud", text(resource(doc, "1.0")));
+
+		List<StoredFile> misplaced = StoredFiles.get().misplaced(100, Set.of());
+		assertEquals(1, misplaced.size());
+		assertEquals(doc.getId(), misplaced.get(0).docId());
+		assertEquals("1.0", misplaced.get(0).resource());
+
+		String key = key(doc.getId(), "1.0");
+		assertEquals(0, cloud.s3().calls(key));
+		assertNull(cloud.s3().bytes(key));
+	}
+
+	@Test
+	public void testReplacedCopyHeld() throws Exception {
+		StorageSettings.get().setHoldDays(7);
+		Side other = sf.localSide("Other", false);
+
+		// A local Store's file, then the Store moves to S3: the rewrite is staged, the local copy held under .held/
+		Document onLocal = upload(local, "local old");
+		StoreResource localResource = resource(onLocal, "1.0");
+		sf.map(local.store().getId(), cloud.backendId());
+		long before = System.currentTimeMillis();
+		store().store(file("local new"), localResource);
+
+		StoredFile row = row(onLocal.getId(), "1.0");
+		assertEquals(0L, row.backendId());
+		assertEquals("local new", Files.readString(staged(onLocal.getId(), "1.0")));
+		assertFalse(Files.exists(local(local.root(), onLocal.getId(), "1.0")));
+		assertEquals("local old", Files.readString(held(local.root(), onLocal.getId(), "1.0")));
+		List<HeldCopy> held = heldRows(onLocal.getId());
+		assertEquals(1, held.size());
+		assertEquals(local.backendId(), held.get(0).backendId());
+		assertEquals(".held/" + key(onLocal.getId(), "1.0"), held.get(0).location());
+		assertEquals("1.0", held.get(0).resource());
+		assertPurgeIn(7, held.get(0), before);
+		assertEquals("local new", text(localResource));
+
+		// An S3 Store's uploaded file, then the Store moves to a local backend: the rewrite lands there, and the
+		// object stays where it is, held
+		Document onCloud = upload(cloud, "cloud old");
+		moveToBucket(cloud, onCloud.getId(), "1.0");
+		String key = key(onCloud.getId(), "1.0");
+		int calls = cloud.s3().calls(key);
+		sf.map(cloud.store().getId(), other.backendId());
+		before = System.currentTimeMillis();
+		store().store(file("cloud new"), resource(onCloud, "1.0"));
+
+		row = row(onCloud.getId(), "1.0");
+		assertEquals(other.backendId(), row.backendId());
+		assertNull(row.waiting());
+		assertEquals("cloud new", Files.readString(local(other.root(), onCloud.getId(), "1.0")));
+		assertEquals("cloud old", new String(cloud.s3().bytes(key), StandardCharsets.UTF_8));
+		assertEquals(0, cloud.s3().calls(Op.DELETE, key));
+		assertEquals("the hold looks the object up, and changes nothing", calls + 1, cloud.s3().calls(key));
+		held = heldRows(onCloud.getId());
+		assertEquals(1, held.size());
+		assertEquals(cloud.backendId(), held.get(0).backendId());
+		assertEquals(key, held.get(0).location());
+		assertPurgeIn(7, held.get(0), before);
+		assertEquals("cloud new", text(resource(onCloud, "1.0")));
+	}
+
+	private static void assertPurgeIn(int days, HeldCopy held, long before) {
+		long purge = held.purge().getTime();
+		assertTrue("purged " + days + " days on", purge >= before + days * DAY - 1000);
+		assertTrue("purged " + days + " days on", purge <= System.currentTimeMillis() + days * DAY + 1000);
+	}
+
+	@Test
+	public void testHoldWhenTheBackendCant() throws Exception {
+		// An S3 object its look-up doesn't find, which HEAD can't tell from a missing bucket: held all the same
+		Document gone = upload(cloud, "gone");
+		moveToBucket(cloud, gone.getId(), "1.0");
+		String goneKey = key(gone.getId(), "1.0");
+		cloud.s3().delete(goneKey);
+		store().delete(resource(gone, "1.0"));
+		assertTrue(StoredFiles.get().find(gone.getId(), "1.0").isEmpty());
+		List<HeldCopy> held = heldRows(gone.getId());
+		assertEquals(1, held.size());
+		assertEquals(cloud.backendId(), held.get(0).backendId());
+		assertEquals(goneKey, held.get(0).location());
+
+		// An unreachable S3 backend: the object stays where it is, held
+		Document away = upload(cloud, "away");
+		moveToBucket(cloud, away.getId(), "1.0");
+		String awayKey = key(away.getId(), "1.0");
+		cloud.s3().unreachable(true);
+		store().delete(resource(away, "1.0"));
+		cloud.s3().unreachable(false);
+		assertTrue(StoredFiles.get().find(away.getId(), "1.0").isEmpty());
+		held = heldRows(away.getId());
+		assertEquals(1, held.size());
+		assertEquals(awayKey, held.get(0).location());
+		assertEquals("away", new String(cloud.s3().bytes(awayKey), StandardCharsets.UTF_8));
+		assertEquals(0, cloud.s3().calls(Op.DELETE, awayKey));
+
+		// A local backend whose folder lost its marker, as a share that didn't mount: nothing can be held there, so
+		// the file and its row stay, and nothing is recorded as deleted
+		Document kept = upload(local, "kept");
+		Files.delete(local.root().resolve(".healdan-backend"));
+		long history = StorageFixtures.jdbc().queryForObject(
+				"select count(*) from ld_history where ld_docid = ? and ld_event = 'event.resource.deleted'",
+				Long.class, kept.getId());
+		store().delete(resource(kept, "1.0"));
+		assertEquals(local.backendId(), row(kept.getId(), "1.0").backendId());
+		assertTrue(heldRows(kept.getId()).isEmpty());
+		assertTrue(Files.exists(local(local.root(), kept.getId(), "1.0")));
+		assertTrue(store().exists(resource(kept, "1.0")));
+		assertEquals(history, StorageFixtures.jdbc().queryForObject(
+				"select count(*) from ld_history where ld_docid = ? and ld_event = 'event.resource.deleted'",
+				Long.class, kept.getId()).longValue());
+	}
+
+	@Test
+	public void testUnknownStoreGoesToStaging() throws Exception {
+		StoreResource resource = resource(987654L, "1.0");
+		store().store(file("nobody's"), resource);
+
+		StoredFile row = row(987654L, "1.0");
+		assertEquals(0L, row.backendId());
+		assertNull(row.storeId());
+		assertEquals("nobody's", Files.readString(staged(987654L, "1.0")));
+		assertEquals("nobody's", text(resource));
+	}
+
+	@Test
+	public void testWriteIds() throws Exception {
+		Document doc = upload(local, "one");
+		StoreResource resource = resource(doc, "1.0");
+		Set<Long> writes = new HashSet<>();
+		writes.add(row(doc.getId(), "1.0").write());
+		store().store(file("two"), resource);
+		writes.add(row(doc.getId(), "1.0").write());
+		store().store(file("three"), resource);
+		writes.add(row(doc.getId(), "1.0").write());
+		assertEquals(3, writes.size());
+
+		store().delete(resource);
+		assertTrue(StoredFiles.get().find(doc.getId(), "1.0").isEmpty());
+		// CE's history records the deletion, as it does FSStore's
+		assertEquals(List.of(key(doc.getId(), "1.0")),
+				StorageFixtures.jdbc().queryForList("select ld_comment from ld_history where ld_docid = ? "
+						+ "and ld_event = 'event.resource.deleted'", String.class, doc.getId()));
+		store().store(file("four"), resource);
+		assertTrue(writes.add(row(doc.getId(), "1.0").write()));
+		assertEquals("four", text(resource));
+	}
+
+	@Test
+	public void testEmptyFileRefused() throws Exception {
+		for (Side side : List.of(local, cloud)) {
+			Document doc = upload(side, "kept " + side);
+			StoreResource resource = resource(doc, "1.0");
+			StoredFile before = row(doc.getId(), "1.0");
+			File empty = file(new byte[0]);
+
+			IOException refused = assertThrows(IOException.class, () -> store().store(empty, resource));
+			assertEquals("Do not store 0 byte file", refused.getMessage());
+			assertEquals(before, row(doc.getId(), "1.0"));
+			assertEquals("kept " + side, text(resource));
+			assertTrue(heldRows(doc.getId()).isEmpty());
+
+			// A new resource gets no row and no file anywhere
+			StoreResource fresh = resource(doc, "1.1");
+			assertThrows(IOException.class, () -> store().store(empty, fresh));
+			assertTrue(StoredFiles.get().find(doc.getId(), "1.1").isEmpty());
+			assertFalse(Files.exists(staged(doc.getId(), "1.1")));
+			assertFalse(Files.exists(local(local.root(), doc.getId(), "1.1")));
+			assertFalse(store().exists(fresh));
+		}
+	}
+
+	@Test
+	public void testSizeIsPlaintext() throws Exception {
+		assertTrue(RunLevel.current().aspectEnabled(Aspect.WRITECHECK));
+		Side encrypted = sf.localSide("Sealed", true);
+		byte[] plain = new byte[3 << 20];
+		new java.util.Random(7).nextBytes(plain);
+
+		// CE's create stores the file and checks its size
+		Document doc = fx.upload(encrypted.folder(), "big.bin", plain, fx.admin());
+
+		StoreResource resource = resource(doc, "1.0");
+		assertEquals(plain.length, store().size(resource));
+		assertEquals(plain.length, row(doc.getId(), "1.0").size());
+		Path onDisk = local(encrypted.root(), doc.getId(), "1.0");
+		assertTrue("the file on disk is the ciphertext", Files.size(onDisk) > plain.length);
+		assertFalse(java.util.Arrays.equals(plain, java.util.Arrays.copyOf(Files.readAllBytes(onDisk), plain.length)));
+		assertArrayEquals(plain, store().getBytes(resource));
+
+		// And a rewrite through the store itself, which checks too
+		byte[] other = "smaller".getBytes(StandardCharsets.UTF_8);
+		store().store(file(other), resource);
+		assertEquals(other.length, store().size(resource));
+		assertArrayEquals(other, store().getBytes(resource));
+	}
+
+	@Test
+	public void testExistsAndSizeNeverTouchTheBackend() throws Exception {
+		Document doc = upload(cloud, "in the bucket");
+		moveToBucket(cloud, doc.getId(), "1.0");
+		String key = key(doc.getId(), "1.0");
+		int calls = cloud.s3().calls(key);
+		cloud.s3().unreachable(true);
+
+		StoreResource resource = resource(doc, "1.0");
+		assertTrue(store().exists(resource));
+		assertEquals(13, store().size(resource));
+		assertFalse(store().exists(resource(doc, "1.1")));
+		assertEquals(0, store().size(resource(doc, "1.1")));
+		assertEquals(calls, cloud.s3().calls(key));
+		assertEquals(0, cloud.s3().calls(key(doc.getId(), "1.1")));
+		assertEquals(1, store().listResources(doc.getId(), null).size());
+		assertEquals(calls, cloud.s3().calls(key));
+	}
+
+	@Test
+	public void testNoRowReadsOriginal() throws Exception {
+		Path original = Path.of(Context.get().getConfig().getProperty("store.1.dir"));
+		Path file = original.resolve(key(4321L, "1.0"));
+		Files.createDirectories(file.getParent());
+		Files.writeString(file, "unrecorded");
+		StoreResource resource = resource(4321L, "1.0");
+
+		try (LogCapture log = LogCapture.of(HealdanStorage.class)) {
+			assertTrue(store().exists(resource));
+			assertEquals(10, store().size(resource));
+			assertEquals("unrecorded", text(resource));
+			assertTrue(log.lines().toString(),
+					log.lines().stream().anyMatch(l -> l.startsWith("WARN ") && l.contains("4321")));
+		}
+		assertTrue(StoredFiles.get().find(4321L, "1.0").isEmpty());
+		assertFalse(store().exists(resource(4321L, "1.1")));
+		assertThrows(IOException.class, () -> store().getBytes(resource(4321L, "1.1")));
+
+		// A save replaces it: staged, as the document has no Store, and Original's copy held
+		store().store(file("recorded"), resource);
+		assertEquals(0L, row(4321L, "1.0").backendId());
+		assertEquals("recorded", text(resource));
+		assertFalse(Files.exists(file));
+		assertEquals("unrecorded", Files.readString(held(original, 4321L, "1.0")));
+		List<HeldCopy> held = heldRows(4321L);
+		assertEquals(1, held.size());
+		assertEquals(StorageBackend.ORIGINAL, held.get(0).backendId());
+
+		// And a delete holds one too
+		Path other = original.resolve(key(4321L, "1.1"));
+		Files.writeString(other, "another");
+		store().delete(resource(4321L, "1.1"));
+		assertFalse(Files.exists(other));
+		assertEquals("another", Files.readString(held(original, 4321L, "1.1")));
+		assertEquals(2, heldRows(4321L).size());
+		assertFalse(store().exists(resource(4321L, "1.1")));
+	}
+
+	@Test
+	public void testCeAdministration() throws Exception {
+		Document onLocal = upload(local, "four");
+		upload(cloud, "seven!!");
+		assertEquals(11, store().getTotalSize());
+		assertEquals(0, store().moveResourcesToStore(onLocal.getId(), 2));
+		assertTrue(store().getStoreDefinitions().isEmpty());
+		assertNull(store().newStore(2));
+		assertTrue(store().getParameterNames().isEmpty());
+		assertTrue(store().getParameters().isEmpty());
+
+		// Test runs each backend's check, and records nothing
+		long events = StorageFixtures.jdbc().queryForObject("select count(*) from hd_storage_event", Long.class);
+		assertTrue(store().test());
+		cloud.s3().unreachable(true);
+		assertFalse(store().test());
+		cloud.s3().unreachable(false);
+		Files.delete(local.root().resolve(".healdan-backend"));
+		assertFalse("a local backend whose marker is gone fails", store().test());
+		assertEquals(events,
+				StorageFixtures.jdbc().queryForObject("select count(*) from hd_storage_event", Long.class).longValue());
+	}
+
+	@Test
+	public void testInitReadsNothing() throws Exception {
+		List<String> tables = StorageFixtures.jdbc().queryForList(
+				"select table_name from information_schema.tables where table_schema = 'PUBLIC' and table_name like 'HD\\_%' escape '\\'",
+				String.class);
+		assertTrue(tables.toString(), tables.contains("HD_STORAGE_FILE") && tables.contains("HD_SETTING"));
+		for (String table : tables)
+			StorageFixtures.jdbc().execute("alter table " + table + " rename to AWAY_" + table);
+		try (LogCapture log = LogCapture.of(HealdanStorage.class)) {
+			HealdanStorage fresh = new HealdanStorage();
+			fresh.init();
+			fresh.init();
+			store().init();
+			store().init();
+			assertTrue(log.lines().toString(),
+					log.lines().stream().noneMatch(l -> l.startsWith("WARN ") || l.startsWith("ERROR ")));
+		} finally {
+			for (String table : tables)
+				StorageFixtures.jdbc().execute("alter table AWAY_" + table + " rename to " + table);
+		}
+		assertNotEquals(0, StorageFixtures.jdbc().queryForObject("select count(*) from hd_storage_backend",
+				Long.class).longValue());
+	}
+}

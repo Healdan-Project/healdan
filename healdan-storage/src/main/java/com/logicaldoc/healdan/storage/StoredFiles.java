@@ -189,6 +189,14 @@ public class StoredFiles {
 	}
 
 	/**
+	 * @return the plaintext sizes of every file, summed
+	 */
+	public long totalSize() {
+		Long total = jdbc.queryForObject("select coalesce(sum(hd_size), 0) from hd_storage_file", Long.class);
+		return total == null ? 0L : total;
+	}
+
+	/**
 	 * Deletes a file's row; one that isn't there is left alone.
 	 *
 	 * @param docId the document

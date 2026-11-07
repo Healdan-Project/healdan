@@ -370,9 +370,10 @@ public class MemoryBackend implements Backend {
 		return Optional.empty();
 	}
 
+	/** Like S3's: looks the key up (a counted call, which an unreachable backend refuses) and leaves it in place */
 	@Override
 	public String hold(String key) throws IOException {
-		if (!objects.containsKey(key))
+		if (size(key) < 0)
 			throw new FileNotFoundException(key);
 		return key;
 	}
