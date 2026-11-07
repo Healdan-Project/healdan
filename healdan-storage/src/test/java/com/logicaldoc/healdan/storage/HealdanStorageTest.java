@@ -42,6 +42,7 @@ import com.logicaldoc.healdan.storage.StorageFixtures.Side;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.support.HealdanFixtures;
 import com.logicaldoc.healdan.support.LogCapture;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 import com.logicaldoc.util.plugin.PluginException;
 import com.logicaldoc.util.spring.Context;
 
@@ -440,5 +441,62 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		}
 		assertNotEquals(0, StorageFixtures.jdbc().queryForObject("select count(*) from hd_storage_backend",
 				Long.class).longValue());
+	}
+
+	@Test
+	public void testUnreachableUncached() throws Exception {
+		Document cached = upload(cloud, "read before the outage");
+		moveToBucket(cloud, cached.getId(), "1.0");
+		assertEquals("read before the outage", text(resource(cached, "1.0")));
+		Document uncached = upload(cloud, "never read");
+		moveToBucket(cloud, uncached.getId(), "1.0");
+
+		cloud.s3().unreachable(true);
+
+		StorageUnreachableException e = assertThrows(StorageUnreachableException.class,
+				() -> store().getBytes(resource(uncached, "1.0")));
+		assertEquals("This file is in Cloud's cloud storage, which can't be reached right now.", e.getMessage());
+		assertThrows(StorageUnreachableException.class, () -> store().getBytes(resource(uncached, "1.0"), 2, 3));
+		assertThrows(StorageUnreachableException.class, () -> text(resource(uncached, "1.0")));
+		assertEquals("a cached file still reads", "read before the outage", text(resource(cached, "1.0")));
+		assertEquals("and by range", "before",
+				new String(store().getBytes(resource(cached, "1.0"), 5, 6), StandardCharsets.UTF_8));
+
+		cloud.s3().unreachable(false);
+		assertEquals("never read", text(resource(uncached, "1.0")));
+	}
+
+	@Test
+	public void testS3ReadsAreCached() throws Exception {
+		Side vault = sf.s3Side("Vault", true);
+		Document doc = upload(vault, "sealed in the bucket");
+		moveToBucket(vault, doc.getId(), "1.0");
+		String key = key(doc.getId(), "1.0");
+
+		assertEquals("sealed in the bucket", text(resource(doc, "1.0")));
+		assertEquals("sealed in the bucket", text(resource(doc, "1.0")));
+		assertEquals("a range of it", "in the",
+				new String(store().getBytes(resource(doc, "1.0"), 7, 6), StandardCharsets.UTF_8));
+		assertEquals("one download served them all", 1, vault.s3().calls(Op.GET, key));
+		assertEquals(0, vault.s3().calls(Op.OPEN, key));
+		assertEquals("the cache holds plain bytes", "sealed in the bucket", Files.readString(
+				ReadCache.folder().resolve(vault.backendId() + "/" + doc.getId() + "/1.0@" + row(doc.getId(), "1.0").write())));
+	}
+
+	@Test
+	public void testLargeFileRangesStraightFromTheBucket() throws Exception {
+		ReadCache.use(new ReadCache(ReadCache.folder(), () -> 20L << 20));
+		byte[] big = new byte[3 << 20];
+		new java.util.Random(4).nextBytes(big);
+		Document doc = fx.upload(cloud.folder(), "big.bin", big, fx.admin());
+		moveToBucket(cloud, doc.getId(), "1.0");
+		String key = key(doc.getId(), "1.0");
+
+		byte[] range = store().getBytes(resource(doc, "1.0"), 1_000_000, 1024);
+
+		assertArrayEquals(java.util.Arrays.copyOfRange(big, 1_000_000, 1_001_024), range);
+		assertEquals(1, cloud.s3().calls(Op.OPEN, key));
+		assertEquals("not downloaded whole", 0, cloud.s3().calls(Op.GET, key));
+		assertFalse(Files.exists(ReadCache.folder()) && Files.walk(ReadCache.folder()).anyMatch(Files::isRegularFile));
 	}
 }

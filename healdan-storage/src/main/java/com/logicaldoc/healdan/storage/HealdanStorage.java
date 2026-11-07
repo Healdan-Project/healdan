@@ -15,6 +15,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
@@ -33,12 +34,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.logicaldoc.core.PersistenceException;
+import com.logicaldoc.core.folder.Folder;
+import com.logicaldoc.core.folder.FolderDAO;
 import com.logicaldoc.core.store.AbstractStore;
 import com.logicaldoc.core.store.Store;
 import com.logicaldoc.core.store.StoreResource;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
+import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.util.StorageUnreachableException;
 
 /**
  * Healdan's {@code Store}, the one bean CE's {@code <bean id="store" class="${store}"/>} makes, so CE's own document
@@ -167,6 +172,7 @@ public class HealdanStorage extends AbstractStore {
 					&& Files.isRegularFile(original(key));
 			put(target, key, plain, docId, name);
 			files().recordWrite(docId, name, target, storeId, size, before.isPresent());
+			ReadCache.get().delete(docId, name);
 			if (before.isPresent() && before.get().backendId() != target)
 				holdReplaced(before.get().backendId(), key, docId, name);
 			else if (unrecorded)
@@ -269,6 +275,7 @@ public class HealdanStorage extends AbstractStore {
 				if (!Held.hold(row.get().backendId(), key, docId, name))
 					return false;
 				files().delete(docId, name);
+				ReadCache.get().delete(docId, name);
 				return true;
 			}
 			if (!Files.isRegularFile(original(key)))
@@ -392,16 +399,41 @@ public class HealdanStorage extends AbstractStore {
 			if (now.isPresent() && moved(row.get(), now.get()))
 				return open(now.get(), key);
 			throw e;
+		} catch (BackendUnreachableException e) {
+			throw unreachable(row.get(), e);
 		}
+	}
+
+	/** @return the exception for a file whose S3 backend can't be reached, naming its Store (spec section 6.5) */
+	private static StorageUnreachableException unreachable(StoredFile row, BackendUnreachableException cause) {
+		String store = null;
+		if (row.storeId() != null)
+			try {
+				Folder folder = FolderDAO.get().findById(row.storeId());
+				store = folder == null ? null : folder.getName();
+			} catch (PersistenceException e) {
+				log.debug("The name of Store {} can't be read: {}", row.storeId(), e.getMessage());
+			}
+		log.warn("Document {}'s {} can't be read: storage backend {} is unreachable", row.docId(), row.resource(),
+				row.backendId());
+		return new StorageUnreachableException(store, cause);
 	}
 
 	private static boolean moved(StoredFile before, StoredFile now) {
 		return before.backendId() != now.backendId() || before.write() != now.write();
 	}
 
-	/** A whole read, decrypted as it is read (until Task 8's cache); a local file missing from its place is read from .held/ */
+	/**
+	 * A whole read. S3's goes through the read cache, which holds plain bytes; a local file is decrypted as it is read,
+	 * and one missing from its place is read from .held/.
+	 */
 	private static InputStream open(StoredFile row, String key) throws IOException {
 		Backends.Entry entry = backends().entry(row.backendId());
+		if (entry.s3()) {
+			Optional<InputStream> cached = cached(entry, row, key, false);
+			if (cached.isPresent())
+				return cached.get();
+		}
 		InputStream in;
 		try {
 			in = entry.backend().get(key);
@@ -423,6 +455,31 @@ public class HealdanStorage extends AbstractStore {
 		}
 	}
 
+	/**
+	 * @param ranged whether a channel is wanted, else a stream
+	 * @return the file's entry in the read cache, opened (fetched first if it isn't there); empty if the file is too
+	 *         big to be cached, whose ranges are read from the bucket
+	 */
+	@SuppressWarnings("unchecked")
+	private static <T> Optional<T> cached(Backends.Entry entry, StoredFile row, String key, boolean ranged)
+			throws IOException {
+		ReadCache cache = ReadCache.get();
+		for (int attempt = 0;; attempt++) {
+			Optional<Path> path = cache.read(entry.backend(), entry.cipher(), row.backendId(), row.docId(),
+					row.resource(), row.write(), row.size(), key);
+			if (path.isEmpty())
+				return Optional.empty();
+			try {
+				return Optional.of((T) (ranged ? FileChannel.open(path.get(), StandardOpenOption.READ)
+						: Files.newInputStream(path.get())));
+			} catch (NoSuchFileException e) {
+				// Dropped to make room between the lookup and the open: fetch it again
+				if (attempt > 0)
+					throw e;
+			}
+		}
+	}
+
 	/** @return the file's plain bytes as a channel, which reads a range without reading what is before it */
 	private SeekableByteChannel channel(long docId, String name) throws IOException {
 		String key = keyOf(docId, name);
@@ -437,12 +494,22 @@ public class HealdanStorage extends AbstractStore {
 			if (now.isPresent() && moved(row.get(), now.get()))
 				return channel(now.get(), key);
 			throw e;
+		} catch (BackendUnreachableException e) {
+			throw unreachable(row.get(), e);
 		}
 	}
 
-	/** S3: each read is a ranged request, and an encrypted file decrypts only the segments it covers */
+	/**
+	 * A file in the read cache is read from there. S3's other files (over a tenth of the cache) are each read by a
+	 * ranged request, and an encrypted one decrypts only the segments it covers.
+	 */
 	private static SeekableByteChannel channel(StoredFile row, String key) throws IOException {
 		Backends.Entry entry = backends().entry(row.backendId());
+		if (entry.s3()) {
+			Optional<SeekableByteChannel> cached = cached(entry, row, key, true);
+			if (cached.isPresent())
+				return cached.get();
+		}
 		SeekableByteChannel channel;
 		try {
 			channel = entry.backend().open(key);

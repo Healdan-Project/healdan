@@ -61,6 +61,7 @@ public abstract class AbstractStorageTestCase extends AbstractHealdanTestCase {
 				System.getProperty("healdan.storageCache"), System.getProperty("healdan.storageKeys") })
 			if (folder != null)
 				FileUtils.deleteDirectory(new File(folder));
+		ReadCache.reset();
 		super.setUp();
 		// Only the recording seed (Task 9) writes Original's marker, so until it does, every write into Original
 		// would fail its check

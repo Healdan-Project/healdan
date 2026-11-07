@@ -487,6 +487,8 @@ public class CeFlowsTest extends AbstractStorageTestCase {
 	public void testRangedRead() throws Exception {
 		byte[] content = new byte[(5 << 20) / 2];
 		new Random(11).nextBytes(content);
+		// A 20 MiB cache, so this file (over a tenth of it) is read by range from the bucket, not cached
+		ReadCache.use(new ReadCache(ReadCache.folder(), () -> 20L << 20));
 		each(side -> {
 			Document doc = fx.upload(side.folder(), "video.bin", content, fx.admin());
 			String key = key(doc.getId(), "1.0");
