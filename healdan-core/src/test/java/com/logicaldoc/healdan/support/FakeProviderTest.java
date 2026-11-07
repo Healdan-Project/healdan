@@ -11,12 +11,13 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.Base64;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import com.logicaldoc.healdan.signin.SignInTestHooks;
 
 /**
  * The fake provider's own behaviour, where a test of the sign-in code leans on
@@ -26,6 +27,9 @@ import com.logicaldoc.healdan.signin.SignInTestHooks;
 public class FakeProviderTest {
 
 	private static final String DISCOVERY = "/.well-known/openid-configuration";
+
+	/** Long enough for any answer, so an answer that never ends fails the test rather than holding it */
+	private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
 	private FakeProvider fake;
 
@@ -37,11 +41,13 @@ public class FakeProviderTest {
 		http = HttpClient.newHttpClient();
 	}
 
+	/** Closing the fake also resets {@code SignInTestHooks} */
 	@After
 	public void stopFake() {
+		if (http != null)
+			http.close();
 		if (fake != null)
 			fake.close();
-		SignInTestHooks.reset();
 	}
 
 	/*
@@ -61,19 +67,57 @@ public class FakeProviderTest {
 
 	@Test
 	public void testAPathGetsItsLengthBackWhenItIsNoLongerInChunks() throws Exception {
-		assertFalse(inChunks(get("/keys")));
+		HttpResponse<String> withLength = get("/keys");
+		assertFalse(inChunks(withLength));
+		assertTrue(withLength.body(), withLength.body().contains("\"keys\""));
 
 		fake.chunked("/keys", true);
-		assertTrue(inChunks(get("/keys")));
+		HttpResponse<String> inPieces = get("/keys");
+		assertTrue(inChunks(inPieces));
+		assertEquals(200, inPieces.statusCode());
+		assertEquals("The same answer, in chunks", withLength.body(), inPieces.body());
 
 		fake.chunked("/keys", false);
-		assertFalse("The length was given again", inChunks(get("/keys")));
-		assertEquals(200, get("/keys").statusCode());
+		HttpResponse<String> again = get("/keys");
+		assertFalse("The length was given again", inChunks(again));
+		assertEquals(200, again.statusCode());
+		assertEquals(withLength.body(), again.body());
+	}
+
+	/*
+	 * To the JDK's server a length of 0 asks for chunks, so an empty answer on
+	 * a path not in chunks would come in them all the same
+	 */
+	@Test
+	public void testAnEmptyAnswerHasALengthOfZero() throws Exception {
+		fake.answerRefreshWith("application/json", "");
+		HttpResponse<String> empty = refresh();
+		assertEquals(200, empty.statusCode());
+		assertFalse("An empty answer has a length", inChunks(empty));
+		assertEquals("0", empty.headers().firstValue("Content-Length").orElse(null));
+		assertEquals("", empty.body());
+		assertEquals("The fake still answers after it", 200, get(DISCOVERY).statusCode());
+
+		fake.chunked("/token", true).answerRefreshWith("application/json", "");
+		HttpResponse<String> emptyInChunks = refresh();
+		assertTrue("Asked for, an empty answer comes in chunks", inChunks(emptyInChunks));
+		assertEquals("", emptyInChunks.body());
 	}
 
 	private HttpResponse<String> get(String path) throws Exception {
-		return http.send(HttpRequest.newBuilder(URI.create(fake.issuer() + path)).build(),
+		return http.send(HttpRequest.newBuilder(URI.create(fake.issuer() + path)).timeout(TIMEOUT).build(),
 				HttpResponse.BodyHandlers.ofString());
+	}
+
+	/** A refresh by the client the fake expects, which {@code answerRefreshWith} answers */
+	private HttpResponse<String> refresh() throws Exception {
+		String client = FakeProvider.CLIENT_ID + ":" + FakeProvider.SECRET;
+		HttpRequest request = HttpRequest.newBuilder(URI.create(fake.issuer() + "/token")).timeout(TIMEOUT)
+				.header("Authorization",
+						"Basic " + Base64.getEncoder().encodeToString(client.getBytes(StandardCharsets.UTF_8)))
+				.header("Content-Type", "application/x-www-form-urlencoded")
+				.POST(HttpRequest.BodyPublishers.ofString("grant_type=refresh_token&refresh_token=any")).build();
+		return http.send(request, HttpResponse.BodyHandlers.ofString());
 	}
 
 	/** A chunked answer has no length, and says it comes in chunks */

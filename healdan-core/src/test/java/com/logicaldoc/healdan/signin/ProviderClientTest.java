@@ -676,13 +676,23 @@ public class ProviderClientTest extends AbstractHealdanTestCase {
 		assertNotNull(client.start(p, REDIRECT, false));
 		fake.discovery("padding", null).chunked("/.well-known/openid-configuration", false);
 
-		// The keys have their own cap, 50 KB, with a length or in chunks
+		// The keys have their own cap, 50 KB, with a length or in chunks. With a length they're refused by it, at
+		// the headers: their body, trickled, would take 3 seconds to begin, and counting it would wait for it.
 		assertEquals(51_200, ProviderClient.MAX_KEYS_BYTES);
+		Duration gap = Duration.ofMillis(100);
 		for (boolean inChunks : new boolean[] { false, true }) {
 			fake.chunked("/keys", inChunks).keysMember("padding", "x".repeat(ProviderClient.MAX_KEYS_BYTES));
+			if (!inChunks)
+				fake.trickle("/keys", 30, gap);
 			client.forget("fake");
+			long began = System.nanoTime();
 			ProviderException keys = assertThrows(ProviderException.class, () -> signIn(p, false));
 			assertTrue(keys.getMessage(), keys.getMessage().contains("keys couldn't be fetched"));
+			if (!inChunks) {
+				Duration took = Duration.ofNanos(System.nanoTime() - began);
+				assertTrue("Refused by the length, not counted: " + took, took.compareTo(Duration.ofMillis(2000)) < 0);
+				fake.trickle("/keys", 0, gap);
+			}
 			fake.keysMember("padding", "x".repeat(ProviderClient.MAX_KEYS_BYTES - 10_000));
 			client.forget("fake");
 			assertNotNull(signIn(p, false).claims());

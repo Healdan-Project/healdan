@@ -909,9 +909,6 @@ public final class FakeProvider implements AutoCloseable {
 					Thread.currentThread().interrupt();
 					return;
 				}
-			Trickle trickle = trickles.get(path);
-			if (trickle != null)
-				exchange.setStreams(null, new TricklingStream(exchange.getResponseBody(), trickle));
 			switch (path) {
 				case "/.well-known/openid-configuration" -> {
 					discoveryRequests.incrementAndGet();
@@ -1253,17 +1250,29 @@ public final class FakeProvider implements AutoCloseable {
 		send(exchange, status, JSON, JSONObjectUtils.toJSONString(body));
 	}
 
+	/**
+	 * Answers a request, trickled and in chunks as {@link #trickle} and
+	 * {@link #chunked} set its path when the answer goes out. Both are looked
+	 * up from the request's own path for each answer, never kept on the
+	 * exchange: the JDK's server keeps an exchange's attributes on the context
+	 * every request shares, so a setting kept there for one answer would apply
+	 * to all that follow.
+	 */
 	private void send(HttpExchange exchange, int status, String type, String body) throws IOException {
 		byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+		String path = exchange.getRequestURI().getPath();
+		Trickle trickle = trickles.get(path);
+		// Not twice, when the answer to a fake that failed follows one begun
+		if (trickle != null && !(exchange.getResponseBody() instanceof TricklingStream))
+			exchange.setStreams(null, new TricklingStream(exchange.getResponseBody(), trickle));
 		exchange.getResponseHeaders().set("Content-Type", type);
-		// Whether to chunk comes from the request's own path, never from an
-		// exchange attribute: the JDK's server keeps those on the context every
-		// request shares, so one chunked answer would chunk all that follow.
-		// A length of 0 is the JDK server's way of sending chunks.
-		boolean inChunks = chunked.contains(exchange.getRequestURI().getPath());
-		exchange.sendResponseHeaders(status, inChunks ? 0 : bytes.length);
+		// To the JDK's server a length of 0 asks for chunks, and -1 for no body,
+		// which it sends with a length of 0
+		long length = chunked.contains(path) ? 0 : bytes.length == 0 ? -1 : bytes.length;
+		exchange.sendResponseHeaders(status, length);
 		try (OutputStream out = exchange.getResponseBody()) {
-			out.write(bytes);
+			if (bytes.length > 0)
+				out.write(bytes);
 		}
 	}
 
