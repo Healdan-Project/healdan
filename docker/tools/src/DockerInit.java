@@ -89,9 +89,9 @@ public final class DockerInit {
     /**
      * Adds keys the file lacks from the image defaults (upstream adds settings over time, and LogicalDOC fails to
      * start on an unresolvable one), takes the image-owned keys from them, replaces a default an earlier image
-     * shipped with this image's, seeds the container's paths and DB settings the first time (recognised by a missing
-     * LDOCHOME, which the shipped defaults lack), then applies the env-owned keys. Returns true when this call seeded
-     * the file.
+     * shipped with this image's, makes the non-breaking spaces in the plain-space keys plain, seeds the container's
+     * paths and DB settings the first time (recognised by a missing LDOCHOME, which the shipped defaults lack), then
+     * applies the env-owned keys. Returns true when this call seeded the file.
      */
     static boolean applyConfig(File file, File defaults, Map<String, String> envKeys) throws IOException {
         ContextProperties config = new ContextProperties(file);
@@ -105,6 +105,9 @@ public final class DockerInit {
         TreeSet<String> replaced = replaceOldDefaults(config, pristine);
         if (!replaced.isEmpty())
             log("replaced an earlier image's default with this image's: " + String.join(", ", replaced));
+        TreeSet<String> spaced = plainSpaces(config);
+        if (!spaced.isEmpty())
+            log("replaced non-breaking spaces with plain ones in: " + String.join(", ", spaced));
         String home = config.getProperty("LDOCHOME");
         boolean seed = home == null || home.isBlank();
         if (seed) {
@@ -162,6 +165,21 @@ public final class DockerInit {
             }
         });
         return replaced;
+    }
+
+    /**
+     * Makes the non-breaking spaces in each ConfigPlan.PLAIN_SPACE_KEYS value plain ones. It reads the value as
+     * written, not through getProperty, which expands ${...} from system properties and the environment, so the
+     * placeholders in it are written back as they were.
+     */
+    private static TreeSet<String> plainSpaces(ContextProperties config) {
+        TreeSet<String> spaced = new TreeSet<>();
+        for (String key : ConfigPlan.PLAIN_SPACE_KEYS)
+            if (config.get(key) instanceof String value && value.indexOf('\u00a0') >= 0) {
+                config.setProperty(key, value.replace('\u00a0', ' '));
+                spaced.add(key);
+            }
+        return spaced;
     }
 
     /**

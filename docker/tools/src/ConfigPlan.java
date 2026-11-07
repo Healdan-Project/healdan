@@ -33,6 +33,14 @@ public final class ConfigPlan {
                     + "*.svg:max-age=2592000;*.css:max-age=2592000;*.js:max-age=600;*.jsp:max-age=0;"
                     + "*:no-cache,no-store,must-revalidate"));
 
+    /**
+     * Keys whose non-breaking spaces (U+00A0) every boot makes plain spaces, whoever wrote the value. Upstream's
+     * security.csp, until 2026-11-06 and since 9.1, had one after object-src, so browsers dropped object-src 'none' as
+     * an unrecognised directive. A policy is ASCII, so one is never meant, and an admin's policy begun from that
+     * default is fixed too.
+     */
+    public static final List<String> PLAIN_SPACE_KEYS = List.of("security.csp");
+
     private ConfigPlan() {
     }
 

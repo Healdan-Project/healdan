@@ -32,7 +32,8 @@ only MariaDB so far: on any other database it stops when it starts.
   `context.properties`, such as one a new release introduces, is added. A value you already have is never changed,
   except the release number and copyright years (`product.release` and `product.year`), which always come from the
   image, and an older image's default that the new image replaces (so far only `cachecontrol`), unless you changed
-  it yourself.
+  it yourself. Non-breaking spaces in the Content-Security-Policy (`security.csp`) also become ordinary ones, in a
+  policy you changed too.
 - **The setup wizard is switched off.** `/setup` answers with HTTP 403, because `.env` configures the database.
 
 ## External Programs
