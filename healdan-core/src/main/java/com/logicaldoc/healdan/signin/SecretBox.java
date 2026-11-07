@@ -175,14 +175,16 @@ public class SecretBox {
 	/**
 	 * @param dataSource the database
 	 * @return counts the values sealed in it: providers' client secrets, and
-	 *         the refresh tokens of device tokens. Other settings aren't
-	 *         sealed, whatever they start with.
+	 *         the refresh tokens of device tokens, and the S3 secrets of
+	 *         storage backends. Other settings aren't sealed, whatever they
+	 *         start with.
 	 */
 	static LongSupplier sealedIn(DataSource dataSource) {
 		JdbcTemplate jdbc = new JdbcTemplate(dataSource);
 		return () -> count(jdbc, "select count(*) from hd_setting where name like ? and value like ?",
 				SignInProviders.SECRET_SETTINGS, PREFIX + "%")
-				+ count(jdbc, "select count(*) from hd_api_token where hd_refresh is not null");
+				+ count(jdbc, "select count(*) from hd_api_token where hd_refresh is not null")
+				+ count(jdbc, "select count(*) from hd_storage_backend where hd_secret is not null");
 	}
 
 	private static long count(JdbcTemplate jdbc, String sql, Object... arguments) {

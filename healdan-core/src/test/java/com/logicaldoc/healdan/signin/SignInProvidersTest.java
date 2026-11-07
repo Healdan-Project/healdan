@@ -655,6 +655,26 @@ public class SignInProvidersTest extends AbstractHealdanTestCase {
 	}
 
 	@Test
+	public void testStorageSecretsCountAsSealed() throws Exception {
+		LongSupplier sealed = SecretBox.sealedIn(Context.get(DataSource.class));
+		assertEquals(0L, sealed.getAsLong());
+		JdbcTemplate jdbc = new JdbcTemplate(Context.get(DataSource.class));
+		jdbc.update("insert into hd_storage_backend (ld_id, ld_lastmodified, ld_creation, ld_recordversion, ld_deleted, "
+				+ "ld_tenantid, hd_name, hd_kind, hd_pathstyle, hd_secret, hd_encrypted, hd_keyconfirmed) "
+				+ "values (?, current_timestamp, current_timestamp, 1, 0, 1, 'Bucket', 's3', 0, ?, 0, 0)", 7L,
+				SecretBox.get().seal("an-s3-secret"));
+		assertEquals(1L, sealed.getAsLong());
+
+		// The key file is gone: nothing seals, and the message counts the backend's secret
+		Path gone = folder.getRoot().toPath().resolve("gone-storage.key");
+		SecretBox box = new SecretBox(gone, sealed);
+		SecretBox.KeyMissingException refused = assertThrows(SecretBox.KeyMissingException.class,
+				() -> box.seal("another-secret"));
+		assertEquals(1L, refused.sealed());
+		assertFalse(Files.exists(gone));
+	}
+
+	@Test
 	public void testEnabledNeedsAnIssuerAndAClientId() throws Exception {
 		providers().save(entra(), SECRET_ONE);
 		settings().delete("signin.entra.issuer");
