@@ -36,8 +36,8 @@ A module's tests run against the installed jars of the modules it uses, so insta
   `healdan-core`'s base test case and fixtures. Install it again after changing `healdan-core`.
 - **`-DskipTests` and `-Dmaven.test.skip=true` differ here.** `-DskipTests` compiles the tests without running them,
   so it still builds and installs `healdan-core`'s test-jar. `-Dmaven.test.skip=true` doesn't compile them, so
-  there's no test-jar. their `with-tests` profiles then leave the test-jar out, and the build still
-  works, but `healdan-api`'s and `healdan-storage`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
+  there's no test-jar. Their `with-tests` profiles then leave the test-jar out, and the build still works, but
+  `healdan-api`'s and `healdan-storage`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
 
 ## Skipping the GWT Compile
 
