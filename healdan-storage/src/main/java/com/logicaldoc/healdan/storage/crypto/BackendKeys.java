@@ -74,6 +74,11 @@ public class BackendKeys {
 		return secretFile.resolveSibling("healdan-storage-keys");
 	}
 
+	/** @return the folder of the key files, which may not exist yet */
+	public Path folder() {
+		return folder;
+	}
+
 	/**
 	 * @param backendId the backend's id
 	 * @return that backend's key file, which may not exist

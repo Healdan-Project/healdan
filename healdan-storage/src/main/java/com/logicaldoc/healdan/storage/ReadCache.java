@@ -41,10 +41,14 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * than a tenth of the cap isn't cached, so a few big files can't empty the cache: the caller reads its ranges from the
  * bucket.
  * <p>
- * A miss downloads the whole file into a temporary file in the cache folder and moves it into place atomically, so a
- * reader never meets a partial entry. Two misses of one entry may both download; the later move replaces the first with
- * the same bytes. A temporary file a crash left is deleted when the index is rebuilt. An entry dropped while a reader
- * has it open stays readable to that reader (POSIX).
+ * A miss downloads the whole file into a temporary file at the top of the cache folder and moves it into place
+ * atomically, so a reader never meets a partial entry. Two misses of one entry may both download; the later move
+ * replaces the first with the same bytes. A temporary file a crash left is deleted when the index is rebuilt; any other
+ * file that isn't an entry is left, and logged. An entry dropped while a reader has it open stays readable to that
+ * reader (POSIX).
+ * <p>
+ * The cache's folder is apart from Original's folder, staging's and the key files': it can't be any of them, hold one
+ * or sit inside one, and {@link #get} refuses it before anything is read or written there.
  */
 public class ReadCache {
 
@@ -92,6 +96,8 @@ public class ReadCache {
 
 	/**
 	 * @return the cache of this server, sized by {@code storage.cacheGb}, which is read each time
+	 * @throws IllegalStateException if its folder isn't apart from Original's, staging's and the key files'
+	 *         ({@link #checkPlace}), before its index is rebuilt
 	 */
 	public static ReadCache get() {
 		Path wanted = folder();
@@ -101,11 +107,26 @@ public class ReadCache {
 		synchronized (ReadCache.class) {
 			current = instance;
 			if (current == null || !current.folder.equals(wanted)) {
+				checkPlace(wanted, Staging.original(), Staging.folder(), Staging.keys());
 				current = new ReadCache(wanted, () -> (long) StorageSettings.get().cacheGb() << 30);
 				instance = current;
 			}
 			return current;
 		}
+	}
+
+	/**
+	 * @param cache the cache's folder
+	 * @param original Original's folder
+	 * @param staging staging's folder
+	 * @param keys the key files' folder
+	 * @throws IllegalStateException if the cache's folder is, holds or sits inside any of them, naming both folders
+	 */
+	static void checkPlace(Path cache, Path original, Path staging, Path keys) {
+		String name = "The read cache's folder";
+		Staging.apart(name, cache, "Original's folder", original);
+		Staging.apart(name, cache, "staging's folder", staging);
+		Staging.apart(name, cache, "the storage key files' folder", keys);
 	}
 
 	/** Forgets the cache of this server, so the next {@link #get} rebuilds its index; for tests */
@@ -318,38 +339,43 @@ public class ReadCache {
 		}
 	}
 
-	/** The index, from the folder: oldest modification first; temporary and unrecognised files are deleted */
+	/** An entry the folder holds */
+	private record Found(String name, long size, long modified, long docId, String resource) {
+	}
+
+	/**
+	 * The index, from the folder: oldest modification first. Temporary files a crash left at the top of the folder,
+	 * where {@link #temporary} makes them, are deleted, and then the oldest entries while the cache is over its cap.
+	 * Anything else is left where it is, and logged once, with a count and one of them: the cache deletes nothing it
+	 * didn't make.
+	 */
 	private void rebuild() {
-		record Found(String name, long size, long modified, long docId, String resource) {
-		}
 		List<Found> found = new ArrayList<>();
+		int strangers = 0;
+		Path stranger = null;
 		if (Files.isDirectory(folder)) {
 			try (Stream<Path> walk = Files.walk(folder)) {
 				for (Path file : walk.filter(Files::isRegularFile).toList()) {
-					String name = folder.relativize(file).toString().replace('\\', '/');
-					Found entry = null;
-					String[] parts = name.split("/", 3);
-					int at = name.lastIndexOf('@');
-					if (parts.length == 3 && at > 0 && !name.contains(TEMPORARY)) {
-						try {
-							Long.parseLong(parts[0]);
-							long docId = Long.parseLong(parts[1]);
-							Long.parseLong(name.substring(at + 1));
-							entry = new Found(name, Files.size(file), Files.getLastModifiedTime(file).toMillis(), docId,
-									name.substring(parts[0].length() + parts[1].length() + 2, at));
-						} catch (NumberFormatException | IOException e) {
-							entry = null;
-						}
-					}
-					if (entry == null)
+					if (folder.equals(file.getParent()) && file.getFileName().toString().startsWith(TEMPORARY)) {
 						remove(file);
-					else
+						continue;
+					}
+					Found entry = entry(file);
+					if (entry != null) {
 						found.add(entry);
+					} else {
+						strangers++;
+						if (stranger == null)
+							stranger = file;
+					}
 				}
 			} catch (IOException e) {
 				log.warn("The cache folder {} can't be read: {}", folder, e.getMessage());
 			}
 		}
+		if (strangers > 0)
+			log.warn("The cache folder {} holds {} files that aren't the cache's, such as {}: they are left as they are",
+					folder, strangers, stranger);
 		found.sort((a, b) -> Long.compare(a.modified(), b.modified()));
 		List<String> doomed = new ArrayList<>();
 		synchronized (this) {
@@ -372,5 +398,29 @@ public class ReadCache {
 			remove(folder.resolve(name));
 		if (!found.isEmpty())
 			log.info("The read cache in {} holds {} files", folder, found.size());
+	}
+
+	/**
+	 * @return the entry a file of the folder is, by its name, {@code <backendId>/<docId>/<resource>@<write>}; null if
+	 *         it is no entry
+	 */
+	private Found entry(Path file) {
+		String name = folder.relativize(file).toString().replace('\\', '/');
+		String[] parts = name.split("/", 3);
+		if (parts.length < 3)
+			return null;
+		int resource = parts[0].length() + parts[1].length() + 2;
+		int at = name.lastIndexOf('@');
+		if (at <= resource)
+			return null;
+		try {
+			Long.parseLong(parts[0]);
+			long docId = Long.parseLong(parts[1]);
+			Long.parseLong(name.substring(at + 1));
+			return new Found(name, Files.size(file), Files.getLastModifiedTime(file).toMillis(), docId,
+					name.substring(resource, at));
+		} catch (NumberFormatException | IOException e) {
+			return null;
+		}
 	}
 }

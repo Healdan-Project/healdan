@@ -164,6 +164,8 @@ public class HealdanStorage extends AbstractStore {
 		String key = keyOf(docId, name);
 		long size = Files.size(plain);
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
+			// Got first, as one in the wrong folder is refused before anything is written
+			ReadCache cache = ReadCache.get();
 			Long storeId = StoreOf.get().of(docId).orElse(null);
 			long target = target(storeId);
 			Optional<StoredFile> before = files().find(docId, name);
@@ -172,7 +174,7 @@ public class HealdanStorage extends AbstractStore {
 					&& Files.isRegularFile(original(key));
 			put(target, key, plain, docId, name);
 			files().recordWrite(docId, name, target, storeId, size, before.isPresent());
-			ReadCache.get().delete(docId, name);
+			cache.delete(docId, name);
 			if (before.isPresent() && before.get().backendId() != target)
 				holdReplaced(before.get().backendId(), key, docId, name);
 			else if (unrecorded)
@@ -272,10 +274,12 @@ public class HealdanStorage extends AbstractStore {
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
 			Optional<StoredFile> row = files().find(docId, name);
 			if (row.isPresent()) {
+				// Got first, as one in the wrong folder is refused before anything is held
+				ReadCache cache = ReadCache.get();
 				if (!Held.hold(row.get().backendId(), key, docId, name))
 					return false;
 				files().delete(docId, name);
-				ReadCache.get().delete(docId, name);
+				cache.delete(docId, name);
 				return true;
 			}
 			if (!Files.isRegularFile(original(key)))

@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 import java.util.stream.Stream;
@@ -26,6 +27,7 @@ import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend;
 import com.logicaldoc.healdan.storage.backend.MemoryBackend.Op;
 import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.support.LogCapture;
 
 public class ReadCacheTest {
 
@@ -228,19 +230,51 @@ public class ReadCacheTest {
 	}
 
 	@Test
-	public void testRestartRemovesLeftovers() throws Exception {
+	public void testRestartDeletesOnlyItsOwnLeftovers() throws Exception {
 		ReadCache cache = cache();
-		read(cache, 100, "1.0", 5, bytes(100, 1));
+		byte[] content = bytes(100, 1);
+		read(cache, 100, "1.0", 5, content);
 		Files.write(folder.resolve(".tmp-crashed"), bytes(MIB, 9));
-		Files.createDirectories(folder.resolve("7/100"));
-		Files.write(folder.resolve("7/100/.tmp-half"), bytes(10, 9));
-		Files.write(folder.resolve("7/100/no-write-id"), bytes(10, 9));
+		// Files the cache didn't make: neither a temporary file where it makes them nor an entry's name
+		List<Path> strangers = List.of(folder.resolve("notes.txt"), folder.resolve("7/100/.tmp-half"),
+				folder.resolve("7/100/no-write-id"), folder.resolve("7/x/1.0@5"), folder.resolve("7/100/1.0@x"));
+		for (Path stranger : strangers) {
+			Files.createDirectories(stranger.getParent());
+			Files.write(stranger, bytes(10, 9));
+		}
 
+		try (LogCapture log = LogCapture.of(ReadCache.class)) {
+			ReadCache restarted = cache();
+			assertFalse("a temporary file a crash left is deleted", Files.exists(folder.resolve(".tmp-crashed")));
+			for (Path stranger : strangers)
+				assertTrue(stranger + " is left", Files.exists(stranger));
+			List<String> warnings = log.lines().stream().filter(line -> line.startsWith("WARN ")).toList();
+			assertEquals("one warning for the rebuild: " + warnings, 1, warnings.size());
+			String warning = warnings.get(0);
+			assertTrue(warning, warning.contains(" 5 "));
+			assertTrue(warning, strangers.stream().anyMatch(stranger -> warning.contains(stranger.toString())));
+			assertArrayEquals(content, read(restarted, 100, "1.0", 5, content, false));
+			assertEquals("the entry is still served from the folder", 1, gets(100, "1.0"));
+		}
+	}
+
+	@Test
+	public void testRestartDropsTheEntriesOverTheCap() throws Exception {
+		ReadCache cache = cache();
+		for (int i = 1; i <= 3; i++) {
+			read(cache, 100 + i, "1.0", i, bytes(MIB, i));
+			Files.setLastModifiedTime(folder.resolve("7/" + (100 + i) + "/1.0@" + i),
+					java.nio.file.attribute.FileTime.fromMillis(1_000_000L * i));
+		}
+		Path stranger = folder.resolve("7/notes.txt");
+		Files.write(stranger, bytes(2 * MIB, 9));
+
+		cap = 2L * MIB;
 		cache();
-		assertFalse(Files.exists(folder.resolve(".tmp-crashed")));
-		assertFalse(Files.exists(folder.resolve("7/100/.tmp-half")));
-		assertFalse(Files.exists(folder.resolve("7/100/no-write-id")));
-		assertEquals(1, entries());
+		assertFalse("the oldest entry goes", Files.exists(folder.resolve("7/101/1.0@1")));
+		assertTrue(Files.exists(folder.resolve("7/102/1.0@2")));
+		assertTrue(Files.exists(folder.resolve("7/103/1.0@3")));
+		assertTrue("a file that isn't an entry is neither counted nor deleted", Files.exists(stranger));
 	}
 
 	@Test
