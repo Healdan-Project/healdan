@@ -293,6 +293,63 @@ public class CeFlowsTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testReplaceOverAnUnrecordedFile() throws Exception {
+		// A thumbnail only CE's own store wrote, in Original's folder, with no row (call 11), beside one of 1.20
+		Document doc = upload(local, "a.txt", "file 1.0");
+		long id = doc.getId();
+		Path original = Path.of(Context.get().getConfig().getProperty("store.1.dir"));
+		Path thumb = original.resolve(key(id, "1.0-thumb.png"));
+		Path other = original.resolve(key(id, "1.00-thumb.png"));
+		Files.createDirectories(thumb.getParent());
+		Files.writeString(thumb, "stale thumbnail");
+		Files.writeString(other, "another version's");
+		assertEquals(List.of("1.0", "1.0-thumb.png"),
+				Store.get().listResources(id, "1.0").stream().map(StoreResource::name).sorted().toList());
+
+		DocumentManager.get().replaceFile(id, "1.0", file("replaced"), history()).get();
+
+		// CE deleted what the store listed: the stale thumbnail is held in Original, and no longer read as current
+		assertFalse(Files.exists(thumb));
+		assertEquals("stale thumbnail", Files.readString(held(original, id, "1.0-thumb.png")));
+		assertFalse(Store.get().exists(resource(id, "1.0-thumb.png")));
+		assertThrows(IOException.class, () -> Store.get().getBytes(resource(id, "1.0-thumb.png")));
+		assertEquals("replaced", text(resource(id, "1.0")));
+		// Another file version's is left alone
+		assertEquals("another version's", Files.readString(other));
+		assertTrue(Store.get().exists(resource(id, "1.00-thumb.png")));
+	}
+
+	@Test
+	public void testAliasReadAndDestroyed() throws Exception {
+		each(side -> {
+			Document target = upload(side, "target.txt", "the target");
+			long id = target.getId();
+			Document alias = fx.legacyShortcut(target, side.folder());
+			if (side.isS3())
+				moveToBucket(side, id, "1.0");
+			Map<String, StoredFile> before = rows(id);
+			byte[] stored = side.isS3() ? side.s3().bytes(key(id, "1.0"))
+					: Files.readAllBytes(local(side.root(), id, "1.0"));
+
+			// CE's resource of an alias is its target's
+			assertEquals("the target", text(StoreResource.builder().document(alias).build()));
+
+			DocumentDAO.get().delete(alias.getId(), history());
+			DocumentManager.get().destroyDocument(alias.getId(), fx.folderHistory(fx.admin()));
+
+			assertEquals(before, rows(id));
+			assertTrue(heldRows(id).isEmpty());
+			assertArrayEquals(stored, side.isS3() ? side.s3().bytes(key(id, "1.0"))
+					: Files.readAllBytes(local(side.root(), id, "1.0")));
+			assertEquals("the target", text(resource(id, "1.0")));
+			if (side.isS3())
+				assertEquals(0, side.s3().calls(Op.DELETE, key(id, "1.0")));
+			// The alias's own rows, if any, are gone with it
+			assertTrue(StoredFiles.get().list(alias.getId()).isEmpty());
+		});
+	}
+
+	@Test
 	public void testDeleteVersionExact() throws Exception {
 		each(side -> {
 			Document doc = versions(side);

@@ -42,7 +42,12 @@ public class HeldCopies {
 	}
 
 	/**
-	 * Holds a location until a date, replacing the hold it has already.
+	 * Holds a location until a date, replacing the hold it has already. Called holding the file's lock, which covers
+	 * its location.
+	 * <p>
+	 * The hold is read first, then inserted or updated, never first tried as an update: on MariaDB an UPDATE that
+	 * matches no row takes a gap lock until its transaction commits, and saves and deletes run inside CE's
+	 * transactions (see {@link StoredFiles#recordWrite(long, String, long, Long, long, boolean)}).
 	 *
 	 * @param backendId the backend
 	 * @param location the object key, or the path under {@code .held/}
@@ -53,10 +58,13 @@ public class HeldCopies {
 	public void hold(long backendId, String location, long docId, String resource, Date until) {
 		Timestamp now = new Timestamp(System.currentTimeMillis());
 		Timestamp purge = new Timestamp(until.getTime());
-		int updated = jdbc.update("update hd_storage_held set hd_docid = ?, hd_resource = ?, hd_held = ?, "
-				+ "hd_purge = ? where hd_backendid = ? and hd_location = ?", docId, resource, now, purge, backendId,
-				location);
-		if (updated == 0)
+		Long holds = jdbc.queryForObject(
+				"select count(*) from hd_storage_held where hd_backendid = ? and hd_location = ?", Long.class,
+				backendId, location);
+		if (holds != null && holds > 0)
+			jdbc.update("update hd_storage_held set hd_docid = ?, hd_resource = ?, hd_held = ?, hd_purge = ? "
+					+ "where hd_backendid = ? and hd_location = ?", docId, resource, now, purge, backendId, location);
+		else
 			jdbc.update("insert into hd_storage_held (hd_backendid, hd_location, hd_docid, hd_resource, hd_held, "
 					+ "hd_purge) values (?, ?, ?, ?, ?, ?)", backendId, location, docId, resource, now, purge);
 	}

@@ -365,6 +365,48 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		assertNotNull(StorageBackendDAO.get().findById(StorageBackend.ORIGINAL));
 	}
 
+	/**
+	 * On MariaDB, an UPDATE that matches no row takes a gap lock until its transaction commits, and CE's folder copy
+	 * stores every new file in one transaction: a new file's row is inserted without one, and an existing row only
+	 * updated.
+	 */
+	@Test
+	public void testNewRowsAreInsertedWithoutAnUpdate() throws Exception {
+		RecordingDataSource recording = new RecordingDataSource(Context.get(DataSource.class));
+		StoredFiles files = new StoredFiles(recording.dataSource());
+		HeldCopies held = new HeldCopies(recording.dataSource());
+
+		long first = files.recordWrite(100L, "1.0", 0L, null, 10L);
+		assertFalse(recording.verbs().toString(), recording.verbs().contains("update"));
+		assertTrue(recording.verbs().contains("insert"));
+		recording.clear();
+		long second = files.recordWrite(100L, "1.0", 0L, null, 11L);
+		assertTrue(recording.verbs().contains("update"));
+		assertFalse(recording.verbs().toString(), recording.verbs().contains("insert"));
+		assertNotEquals(first, second);
+		assertEquals(11L, files.find(100L, "1.0").orElseThrow().size());
+
+		// The caller that read the row already says whether there is one
+		recording.clear();
+		files.recordWrite(100L, "1.1", 0L, null, 5L, false);
+		assertEquals(List.of("insert"), recording.verbs());
+		recording.clear();
+		files.recordWrite(100L, "1.1", 0L, null, 6L, true);
+		assertEquals(List.of("update"), recording.verbs());
+		assertEquals(6L, files.find(100L, "1.1").orElseThrow().size());
+
+		recording.clear();
+		Date until = new Date(System.currentTimeMillis() + DAY);
+		held.hold(1L, ".held/100/doc/1.0", 100L, "1.0", until);
+		assertFalse(recording.verbs().toString(), recording.verbs().contains("update"));
+		assertTrue(recording.verbs().contains("insert"));
+		recording.clear();
+		held.hold(1L, ".held/100/doc/1.0", 100L, "1.0", new Date(until.getTime() + DAY));
+		assertTrue(recording.verbs().contains("update"));
+		assertFalse(recording.verbs().toString(), recording.verbs().contains("insert"));
+		assertEquals(1, held.due(new Date(until.getTime() + 2 * DAY)).size());
+	}
+
 	@Test
 	public void testOriginalCantBeRemoved() throws Exception {
 		assertThrows(PersistenceException.class, () -> StorageBackendDAO.get().remove(StorageBackend.ORIGINAL));

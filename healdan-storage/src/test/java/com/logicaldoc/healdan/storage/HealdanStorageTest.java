@@ -161,7 +161,7 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		assertEquals("cloud new", Files.readString(local(other.root(), onCloud.getId(), "1.0")));
 		assertEquals("cloud old", new String(cloud.s3().bytes(key), StandardCharsets.UTF_8));
 		assertEquals(0, cloud.s3().calls(Op.DELETE, key));
-		assertEquals("the hold looks the object up, and changes nothing", calls + 1, cloud.s3().calls(key));
+		assertEquals("the hold sends nothing", calls, cloud.s3().calls(key));
 		held = heldRows(onCloud.getId());
 		assertEquals(1, held.size());
 		assertEquals(cloud.backendId(), held.get(0).backendId());
@@ -178,7 +178,7 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 
 	@Test
 	public void testHoldWhenTheBackendCant() throws Exception {
-		// An S3 object its look-up doesn't find, which HEAD can't tell from a missing bucket: held all the same
+		// An S3 object that's gone is held all the same: nothing is looked up, and the purge copes
 		Document gone = upload(cloud, "gone");
 		moveToBucket(cloud, gone.getId(), "1.0");
 		String goneKey = key(gone.getId(), "1.0");
@@ -195,7 +195,9 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		moveToBucket(cloud, away.getId(), "1.0");
 		String awayKey = key(away.getId(), "1.0");
 		cloud.s3().unreachable(true);
+		int awayCalls = cloud.s3().calls(awayKey);
 		store().delete(resource(away, "1.0"));
+		assertEquals("the delete sent nothing to the unreachable backend", awayCalls, cloud.s3().calls(awayKey));
 		cloud.s3().unreachable(false);
 		assertTrue(StoredFiles.get().find(away.getId(), "1.0").isEmpty());
 		held = heldRows(away.getId());
@@ -219,6 +221,29 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		assertEquals(history, StorageFixtures.jdbc().queryForObject(
 				"select count(*) from ld_history where ld_docid = ? and ld_event = 'event.resource.deleted'",
 				Long.class, kept.getId()).longValue());
+	}
+
+	@Test
+	public void testSaveStandsWhenItsHoldCantBeRecorded() throws Exception {
+		Document doc = upload(local, "old");
+		StoreResource resource = resource(doc, "1.0");
+		sf.map(local.store().getId(), cloud.backendId());
+		StorageFixtures.jdbc().execute("alter table hd_storage_held rename to away_hd_storage_held");
+		try (LogCapture log = LogCapture.of(HealdanStorage.class)) {
+			// The save lands in staging, and the old copy's held row can't be written
+			store().store(file("new"), resource);
+
+			assertEquals(0L, row(doc.getId(), "1.0").backendId());
+			assertEquals("new", text(resource));
+			assertEquals("old", Files.readString(held(local.root(), doc.getId(), "1.0")));
+			String error = log.lines().stream().filter(l -> l.startsWith("ERROR ")).findFirst()
+					.orElseThrow(() -> new AssertionError(log.lines().toString()));
+			assertTrue(error, error.contains(Long.toString(doc.getId())) && error.contains("1.0")
+					&& error.contains("backend " + local.backendId()) && error.contains("no row"));
+		} finally {
+			StorageFixtures.jdbc().execute("alter table away_hd_storage_held rename to hd_storage_held");
+		}
+		assertTrue(heldRows(doc.getId()).isEmpty());
 	}
 
 	@Test
@@ -333,11 +358,16 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 		StoreResource resource = resource(4321L, "1.0");
 
 		try (LogCapture log = LogCapture.of(HealdanStorage.class)) {
+			// exists and size, which pages of thumbnails ask of every file, log at debug
 			assertTrue(store().exists(resource));
 			assertEquals(10, store().size(resource));
+			assertTrue(log.lines().toString(), log.lines().stream().noneMatch(l -> l.startsWith("WARN ")));
+			// a read warns, once for the file
 			assertEquals("unrecorded", text(resource));
-			assertTrue(log.lines().toString(),
-					log.lines().stream().anyMatch(l -> l.startsWith("WARN ") && l.contains("4321")));
+			assertEquals("unrecorded", text(resource));
+			assertEquals("unrecorded", Store.get().getString(resource));
+			assertEquals(log.lines().toString(), 1,
+					log.lines().stream().filter(l -> l.startsWith("WARN ") && l.contains("4321")).count());
 		}
 		assertTrue(StoredFiles.get().find(4321L, "1.0").isEmpty());
 		assertFalse(store().exists(resource(4321L, "1.1")));

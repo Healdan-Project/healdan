@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.LongSupplier;
 
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -23,6 +24,8 @@ import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.backend.Backend;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
+import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
+import com.logicaldoc.healdan.storage.backend.Endpoints;
 import com.logicaldoc.healdan.storage.backend.LocalBackend;
 import com.logicaldoc.healdan.storage.backend.S3Backend;
 import com.logicaldoc.healdan.storage.backend.S3Settings;
@@ -37,8 +40,11 @@ import jakarta.annotation.PreDestroy;
  * saved or read: building reads the row, the key file and, for S3, opens the sealed secret, so it can't run before
  * Flyway has.
  * <p>
- * A backend that can't be built (no row, a key file missing, a secret that won't open, settings S3 refuses) is a
- * {@link BackendFailingException} each time it is asked for, and is tried again the next time.
+ * A backend that can't be built (no row, a key file missing, a secret that won't open, settings S3 refuses, an
+ * endpoint whose host can't be looked up) is a {@link BackendFailingException}, a {@link BackendUnreachableException}
+ * for an outage. The failure is remembered for {@value #FAILED_BUILD_MILLIS} milliseconds, and answered as it was
+ * meanwhile, so an outage of DNS doesn't make every read and hold look the host up again; {@link #forget} forgets it.
+ * Each backend is built under a lock of its own, so one slow build never holds up another backend's.
  */
 @Component
 public class Backends {
@@ -67,7 +73,22 @@ public class Backends {
 
 	private final StorageSettings settings;
 
+	/** How long a failed build is remembered */
+	static final long FAILED_BUILD_MILLIS = 30_000L;
+
+	/** A build that failed, and when */
+	private record Failed(BackendFailingException failure, long at) {
+	}
+
+	/** What the failures' 30 seconds are measured by, in milliseconds; tests move it */
+	volatile LongSupplier clock = System::currentTimeMillis;
+
 	private final Map<Long, Entry> built = new ConcurrentHashMap<>();
+
+	private final Map<Long, Failed> failed = new ConcurrentHashMap<>();
+
+	/** One lock for each backend's build */
+	private final Map<Long, Object> building = new ConcurrentHashMap<>();
 
 	/** The backends tests gave, by id, which are used in place of what the rows would build */
 	private final Map<Long, Backend> given = new ConcurrentHashMap<>();
@@ -98,14 +119,39 @@ public class Backends {
 		Entry entry = built.get(id);
 		if (entry != null)
 			return entry;
-		synchronized (this) {
+		failedRecently(id);
+		synchronized (building.computeIfAbsent(id, key -> new Object())) {
 			entry = built.get(id);
-			if (entry == null) {
+			if (entry != null)
+				return entry;
+			failedRecently(id);
+			try {
 				entry = build(id);
-				built.put(id, entry);
+			} catch (BackendFailingException e) {
+				failed.put(id, new Failed(e, clock.getAsLong()));
+				throw e;
 			}
+			failed.remove(id);
+			built.put(id, entry);
 			return entry;
 		}
+	}
+
+	/**
+	 * @throws BackendFailingException the backend's build that failed less than {@value #FAILED_BUILD_MILLIS}
+	 *         milliseconds ago, as it was: an outage stays one
+	 */
+	private void failedRecently(long id) throws BackendFailingException {
+		Failed last = failed.get(id);
+		if (last == null)
+			return;
+		long since = clock.getAsLong() - last.at();
+		// A clock set back forgets it
+		if (since < 0 || since >= FAILED_BUILD_MILLIS)
+			return;
+		BackendFailingException e = last.failure();
+		throw e instanceof BackendUnreachableException ? new BackendUnreachableException(e.getMessage(), e.getCause())
+				: new BackendFailingException(e.getMessage(), e.getCause());
 	}
 
 	/**
@@ -136,6 +182,7 @@ public class Backends {
 	 */
 	public void forget(long id) {
 		kinds.remove(id);
+		failed.remove(id);
 		Entry entry = built.remove(id);
 		if (entry != null && !given.containsKey(id))
 			close(entry);
@@ -166,6 +213,12 @@ public class Backends {
 	private Entry build(long id) throws BackendFailingException {
 		try {
 			return id == Staging.ID ? new Entry(id, Staging.backend(settings.installId()), false, null) : fromRow(id);
+		} catch (Endpoints.HostNotFound e) {
+			// DNS may be down: an outage, which the retest recovers
+			throw new BackendUnreachableException("Storage backend " + id + " can't be reached: " + e.getMessage());
+		} catch (IllegalArgumentException e) {
+			// A blank secret or install id, or a folder that is no path: refused, as S3 refuses bad settings
+			throw new BackendFailingException("Storage backend " + id + "'s settings are refused: " + e.getMessage());
 		} catch (IllegalStateException | UncheckedIOException e) {
 			// No install id yet, or staging's folder can't be made or holds another install's marker
 			throw new BackendFailingException(

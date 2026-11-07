@@ -57,9 +57,9 @@ public interface Backend {
 
 	/**
 	 * Local: moves the key under {@code .held/}, replacing an older held copy of it, and returns the location.
-	 * S3: leaves it, and returns the key.
+	 * S3: leaves it, sends nothing, and returns the key, whether or not the object is there.
 	 *
-	 * @throws java.io.FileNotFoundException if there is no such file
+	 * @throws java.io.FileNotFoundException if a local backend has no such file
 	 */
 	String hold(String key) throws IOException;
 

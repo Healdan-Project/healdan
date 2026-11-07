@@ -25,8 +25,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * A backend that keeps bytes in a map and takes faults, for the tests of everything built on {@link Backend}.
- * Like S3, {@code hold} leaves the object where it is.
+ * A backend that keeps bytes in a map and takes faults, for the tests of everything built on {@link Backend}. Like a
+ * local folder by default: a staged copy is absent until commit, and {@code hold} moves the bytes aside under
+ * {@code .held/}. Like S3 when made with {@link #s3Like}: a staged copy is at its key at once, and {@code hold} leaves
+ * the object where it is and sends nothing.
  */
 public class MemoryBackend implements Backend {
 
@@ -42,6 +44,11 @@ public class MemoryBackend implements Backend {
 	private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
 
 	private final Map<String, AtomicInteger> calls = new ConcurrentHashMap<>();
+
+	private final AtomicInteger total = new AtomicInteger();
+
+	/** Like a local folder's {@code .held/}: the bytes each held key had */
+	private final Map<String, byte[]> heldObjects = new ConcurrentHashMap<>();
 
 	private volatile int refuseNext;
 
@@ -123,6 +130,11 @@ public class MemoryBackend implements Backend {
 		return this;
 	}
 
+	/** @return how many calls every operation made, for every key */
+	public int calls() {
+		return total.get();
+	}
+
 	/** @return how many calls any operation made for this key */
 	public int calls(String key) {
 		AtomicInteger n = calls.get(key);
@@ -146,6 +158,7 @@ public class MemoryBackend implements Backend {
 	}
 
 	private void begin(Op op, String key) throws IOException {
+		total.incrementAndGet();
 		calls.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
 		calls.computeIfAbsent(op + " " + key, k -> new AtomicInteger()).incrementAndGet();
 		Duration wait = slow;
@@ -340,6 +353,7 @@ public class MemoryBackend implements Backend {
 
 	@Override
 	public long size(String key) throws IOException {
+		total.incrementAndGet();
 		calls.computeIfAbsent(key, k -> new AtomicInteger()).incrementAndGet();
 		if (unreachable)
 			throw new BackendUnreachableException("Backend " + id + " is unreachable");
@@ -365,21 +379,39 @@ public class MemoryBackend implements Backend {
 			throw new BackendUnreachableException("Backend " + id + " is unreachable");
 	}
 
+	private static final String HELD = LocalBackend.HELD + "/";
+
 	@Override
 	public Optional<String> held(String key) {
-		return Optional.empty();
+		return !stagesInPlace && heldObjects.containsKey(key) ? Optional.of(HELD + key) : Optional.empty();
 	}
 
-	/** Like S3's: looks the key up (a counted call, which an unreachable backend refuses) and leaves it in place */
+	/**
+	 * Like S3's when S3-like: leaves the object and sends nothing, whether it's there or not. Like a local folder's
+	 * otherwise: moves the bytes under {@code .held/}, replacing an older held copy, and refuses a missing key, or any
+	 * while unreachable.
+	 */
 	@Override
 	public String hold(String key) throws IOException {
-		if (size(key) < 0)
+		if (stagesInPlace)
+			return key;
+		if (unreachable)
+			throw new BackendUnreachableException("Backend " + id + " is unreachable");
+		byte[] bytes = objects.remove(key);
+		if (bytes == null)
 			throw new FileNotFoundException(key);
-		return key;
+		heldObjects.put(key, bytes);
+		return HELD + key;
 	}
 
 	@Override
 	public void purgeHeld(String location) throws IOException {
-		delete(location);
+		if (stagesInPlace) {
+			delete(location);
+			return;
+		}
+		if (location == null || !location.startsWith(HELD))
+			throw new IOException("Not a held location: " + location);
+		heldObjects.remove(location.substring(HELD.length()));
 	}
 }

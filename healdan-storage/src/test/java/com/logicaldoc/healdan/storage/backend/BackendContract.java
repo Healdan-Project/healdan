@@ -40,6 +40,22 @@ public abstract class BackendContract {
 	/** @return a fresh, empty backend */
 	protected abstract Backend createBackend() throws IOException;
 
+	/**
+	 * @return whether {@code hold} moves the file aside, as a local folder's does under {@code .held/}; S3's leaves
+	 *         the object where it is and sends nothing (spec section 8)
+	 */
+	protected boolean holdMovesTheFile() {
+		return true;
+	}
+
+	/**
+	 * @return how many requests or calls the backend has made so far; asked only of a backend whose hold doesn't move
+	 *         the file, to show its hold sends nothing
+	 */
+	protected long sent() {
+		throw new UnsupportedOperationException("This backend counts no requests");
+	}
+
 	@Before
 	public void setUpBackend() throws IOException {
 		Files.createDirectories(Path.of("target"));
@@ -249,11 +265,43 @@ public abstract class BackendContract {
 
 	@Test
 	public void testHoldOfAMissingKey() throws IOException {
+		if (!holdMovesTheFile()) {
+			// Nothing is looked up: the purge copes with an object that's gone
+			long before = sent();
+			assertEquals("1/2/doc/missing", backend.hold("1/2/doc/missing"));
+			assertEquals("hold sends nothing", before, sent());
+			return;
+		}
 		try {
 			backend.hold("1/2/doc/missing");
 			fail("Holding a missing key worked");
 		} catch (FileNotFoundException expected) {
 			// as it should
 		}
+	}
+
+	@Test
+	public void testHold() throws IOException {
+		byte[] data = bytes(10);
+		backend.put("1/2/doc/1.0", source(data), md5(data));
+		if (!holdMovesTheFile()) {
+			long before = sent();
+			assertEquals("1/2/doc/1.0", backend.hold("1/2/doc/1.0"));
+			assertEquals("hold sends nothing", before, sent());
+			assertArrayEquals("the object stays where it is", data, read("1/2/doc/1.0"));
+			assertTrue(backend.held("1/2/doc/1.0").isEmpty());
+			backend.purgeHeld("1/2/doc/1.0");
+			assertEquals(-1, backend.size("1/2/doc/1.0"));
+			return;
+		}
+		String location = backend.hold("1/2/doc/1.0");
+		assertEquals(-1, backend.size("1/2/doc/1.0"));
+		assertEquals(java.util.Optional.of(location), backend.held("1/2/doc/1.0"));
+		// Holding a newer copy replaces the older one held
+		byte[] newer = bytes(12);
+		backend.put("1/2/doc/1.0", source(newer), null);
+		assertEquals(location, backend.hold("1/2/doc/1.0"));
+		backend.purgeHeld(location);
+		assertTrue(backend.held("1/2/doc/1.0").isEmpty());
 	}
 }

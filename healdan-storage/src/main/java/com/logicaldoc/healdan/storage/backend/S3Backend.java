@@ -528,11 +528,15 @@ public final class S3Backend implements Backend, Closeable {
 		return Optional.empty();
 	}
 
-	/** S3: looks the key up with {@code HEAD}, and leaves it where it is (spec section 8) */
+	/**
+	 * S3: leaves the object where it is and sends nothing (spec section 8), so a delete never waits on an outage while
+	 * it holds the file's lock. An object that's gone is held all the same: the purge's delete of it does nothing.
+	 *
+	 * @throws IllegalArgumentException if the key isn't a storage key
+	 */
 	@Override
-	public String hold(String key) throws IOException {
-		if (size(key) < 0)
-			throw missing(key);
+	public String hold(String key) {
+		objectKey(key);
 		return key;
 	}
 

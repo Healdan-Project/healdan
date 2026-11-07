@@ -84,6 +84,17 @@ public class S3BackendTest extends BackendContract {
 		return backend(fake, 7, "", true);
 	}
 
+	/** S3's hold leaves the object where it is, and sends nothing */
+	@Override
+	protected boolean holdMovesTheFile() {
+		return false;
+	}
+
+	@Override
+	protected long sent() {
+		return fake.requests().size();
+	}
+
 	@After
 	public void closeFakes() throws Exception {
 		for (AutoCloseable closeable : closing)
@@ -585,21 +596,25 @@ public class S3BackendTest extends BackendContract {
 		assertTrue(fake.requests(Op.LIST_OBJECTS).size() >= 2);
 	}
 
+	@Override
 	@Test
 	public void testHold() throws IOException {
+		super.testHold();
+
+		// It sends nothing, so it can't wait on an outage, holding the file's lock
 		byte[] data = bytes(10);
 		backend.put("1/2/doc/1.0", source(data), md5(data));
 		fake.clearRequests();
-		String location = backend.hold("1/2/doc/1.0");
-		assertEquals("1/2/doc/1.0", location);
-		// It looked, and touched nothing (spec section 8)
-		assertEquals(1, fake.requests(Op.HEAD_OBJECT).size());
-		assertEquals(1, fake.requests().size());
-		assertArrayEquals(data, read("1/2/doc/1.0"));
-		assertTrue(backend.held("1/2/doc/1.0").isEmpty());
-
-		backend.purgeHeld(location);
-		assertEquals(-1, backend.size("1/2/doc/1.0"));
+		fake.stall();
+		assertEquals("1/2/doc/1.0", backend.hold("1/2/doc/1.0"));
+		fake.behave();
+		assertTrue(fake.requests().isEmpty());
+		try {
+			backend.hold("/1/2/doc/1.0");
+			fail("Held a key that isn't one");
+		} catch (IllegalArgumentException expected) {
+			// as it should
+		}
 		try {
 			backend.purgeHeld(".healdan-backend");
 			fail("Purged the marker");
@@ -818,7 +833,6 @@ public class S3BackendTest extends BackendContract {
 		fake.headWithoutLength();
 		refusedFile(() -> backend.size("1/2/doc/1.0"), "without its length");
 		refusedFile(() -> backend.open("1/2/doc/1.0").close(), "without its length");
-		refusedFile(() -> backend.hold("1/2/doc/1.0"), "without its length");
 
 		// A marker cut off on its way is an outage, not another backend's marker, and creating over it writes nothing
 		fake.behave().cutOff(5);
@@ -1017,7 +1031,6 @@ public class S3BackendTest extends BackendContract {
 		thrown.add(failing(() -> backend.size("1/2/doc/1.0"), "access denied"));
 		thrown.add(failing(() -> backend.delete("1/2/doc/1.0"), "access denied"));
 		thrown.add(failing(() -> backend.list("", 10), "access denied"));
-		thrown.add(failing(() -> backend.hold("1/2/doc/1.0"), "access denied"));
 		thrown.add(failing(() -> backend.purgeHeld("1/2/doc/1.0"), "access denied"));
 		thrown.add(failing(() -> backend(fake, 8, "new", true), "access denied"));
 		return thrown;

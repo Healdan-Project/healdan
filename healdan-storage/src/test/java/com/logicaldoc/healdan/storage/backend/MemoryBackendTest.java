@@ -86,9 +86,9 @@ public class MemoryBackendTest extends BackendContract {
 		}
 		try {
 			backend.hold("1/2/doc/1.0");
-			fail("An unreachable backend looked a key up to hold it");
+			fail("An unreachable folder held a file");
 		} catch (BackendUnreachableException expected) {
-			// as S3's look-up does
+			// as a local folder that can't be read does
 		}
 		memory.unreachable(false);
 		backend.check();

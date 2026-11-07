@@ -19,10 +19,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 import org.apache.commons.lang3.StringUtils;
@@ -48,9 +52,9 @@ import com.logicaldoc.healdan.storage.crypto.FileCipher;
  * <li>A save that replaces a copy on another backend, and every delete, holds the old copy (spec section 8): a local
  * one moves under its backend's {@code .held/}, an S3 one stays where it is, and a row in {@code hd_storage_held}
  * keeps it until its purge date.</li>
- * <li>Reads go to the row's place. {@code exists}, {@code size} and {@code listResources} answer from the rows alone,
- * never a backend, and a file version is matched exactly ({@code 1.2} is not {@code 1.20}). A file with no row is
- * looked for in Original's folder, where only CE's own store could have put it (call 11).</li>
+ * <li>Reads go to the row's place. {@code exists}, {@code size} and {@code listResources} answer from the rows, never
+ * a backend, and a file version is matched exactly ({@code 1.2} is not {@code 1.20}). A file with no row is looked
+ * for in Original's folder, where only CE's own store could have put it (call 11), and listed from there too.</li>
  * </ul>
  * Saves and deletes hold the file's lock ({@link FileLocks}) while they write or delete its bytes and its row. It is not
  * a Spring component: only CE's bean definition makes it, and {@link #init()} reads no table, as Spring calls it before
@@ -64,6 +68,20 @@ public class HealdanStorage extends AbstractStore {
 	static final int RANGE_BUFFER = 1 << 20;
 
 	private static final long DAY_MS = 24L * 3600 * 1000;
+
+	/** How many files read with no row are remembered as warned of */
+	private static final int WARNED_LIMIT = 4096;
+
+	/** The files read with no row that a warning has named, the oldest forgotten first */
+	private static final Set<String> WARNED = Collections.synchronizedSet(Collections.newSetFromMap(
+			new LinkedHashMap<String, Boolean>(64, 0.75f) {
+				private static final long serialVersionUID = 1L;
+
+				@Override
+				protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+					return size() > WARNED_LIMIT;
+				}
+			}));
 
 	public HealdanStorage() {
 		super();
@@ -151,7 +169,7 @@ public class HealdanStorage extends AbstractStore {
 			boolean unrecorded = before.isEmpty() && target != StorageBackend.ORIGINAL
 					&& Files.isRegularFile(original(key));
 			put(target, key, plain, docId, name);
-			files().recordWrite(docId, name, target, storeId, size);
+			files().recordWrite(docId, name, target, storeId, size, before.isPresent());
 			if (before.isPresent() && before.get().backendId() != target)
 				holdReplaced(before.get().backendId(), key, docId, name);
 			else if (unrecorded)
@@ -200,15 +218,22 @@ public class HealdanStorage extends AbstractStore {
 	 * written, so a copy that can't be held is left where it was, which loses nothing, and logged.
 	 */
 	private void holdReplaced(long backendId, String key, long docId, String name) {
-		if (!hold(backendId, key, docId, name))
-			log.warn("The copy of document {}'s {} that a save replaced stays on storage backend {}, not held", docId,
-					name, backendId);
+		try {
+			if (!hold(backendId, key, docId, name))
+				log.warn("The copy of document {}'s {} that a save replaced stays on storage backend {}, not held",
+						docId, name, backendId);
+		} catch (RuntimeException e) {
+			// The save stands: reporting it as failed would leave CE out of step with the row just written
+			log.error("The save of document {}'s {} stands, but the copy it replaced on storage backend {} couldn't be "
+					+ "recorded as held ({}): it is held with no row in hd_storage_held, under the backend's .held/ or, "
+					+ "on S3, where it was, and no purge will delete it", docId, name, backendId, e.getMessage(), e);
+		}
 	}
 
 	/**
 	 * Holds a file's copy (spec section 8): a local backend's, staging's included, moves under its {@code .held/}; an
-	 * S3 one stays where it is. A row then keeps it until its purge date, {@code storage.holdDays} from now. Called
-	 * holding the file's lock.
+	 * S3 one stays where it is, and nothing is sent. A row then keeps it until its purge date, {@code storage.holdDays}
+	 * from now. Called holding the file's lock.
 	 *
 	 * @return true if the copy is held, or wasn't there to hold; false if it couldn't be held and is still in its place
 	 */
@@ -222,7 +247,7 @@ public class HealdanStorage extends AbstractStore {
 						e.getMessage());
 				return false;
 			}
-			// An S3 object stays where it is either way
+			// S3's hold sends nothing and leaves the object where it is, so one that can't be built holds the same
 			log.warn("Storage backend {} can't be used ({}); document {}'s {} is held where it is", backendId,
 					e.getMessage(), docId, name);
 			recordHeld(backendId, key, docId, name);
@@ -234,23 +259,9 @@ public class HealdanStorage extends AbstractStore {
 			location = entry.backend().hold(key);
 		} catch (FileNotFoundException e) {
 			log.warn("Document {}'s {} wasn't on storage backend {} to be held", docId, name, backendId);
-			if (!entry.s3())
-				return true;
-			// HEAD can't tell a missing key from a missing bucket, so the object may still be there: held all the
-			// same, which costs the purge one delete of nothing
-			location = key;
-		} catch (IOException e) {
-			if (!entry.s3()) {
-				log.warn("Document {}'s {} can't be held on storage backend {}: {}", docId, name, backendId,
-						e.getMessage());
-				return false;
-			}
-			// S3's hold only looks the object up, and leaves it where it is
-			log.warn("Storage backend {} couldn't look up document {}'s {} ({}); it is held where it is", backendId,
-					docId, name, e.getMessage());
-			location = key;
-		} catch (IllegalArgumentException e) {
-			// A stray file in Original's folder whose name is no storage key
+			return true;
+		} catch (IOException | IllegalArgumentException e) {
+			// A local folder that fails its marker, or a stray file whose name is no storage key
 			log.warn("Document {}'s {} can't be held on storage backend {}: {}", docId, name, backendId,
 					e.getMessage());
 			return false;
@@ -288,10 +299,13 @@ public class HealdanStorage extends AbstractStore {
 	 */
 	@Override
 	public void delete(long docId) {
-		for (StoredFile row : files().list(docId))
+		Set<String> recorded = new HashSet<>();
+		for (StoredFile row : files().list(docId)) {
+			recorded.add(row.resource());
 			if (deleteFile(docId, row.resource()))
 				logDeletion(docId, keyOf(docId, row.resource()));
-		for (String name : unrecorded(docId))
+		}
+		for (String name : unrecorded(docId, recorded))
 			if (deleteFile(docId, name))
 				logDeletion(docId, keyOf(docId, name));
 	}
@@ -320,15 +334,18 @@ public class HealdanStorage extends AbstractStore {
 		}
 	}
 
-	/** @return the names of a document's files in Original's folder that have no row */
-	private List<String> unrecorded(long docId) {
+	/**
+	 * @param recorded the names of the document's rows
+	 * @return the names of the document's files in Original's folder that have no row (call 11)
+	 */
+	private List<String> unrecorded(long docId, Set<String> recorded) {
 		Path folder = Staging.original().resolve(computeRelativePath(docId));
 		if (!Files.isDirectory(folder))
 			return List.of();
 		try (Stream<Path> list = Files.list(folder)) {
 			return list.filter(Files::isRegularFile).map(p -> p.getFileName().toString())
 					.filter(n -> !n.startsWith(".") && !n.contains(LocalBackend.TEMPORARY))
-					.filter(n -> files().find(docId, n).isEmpty()).sorted().toList();
+					.filter(n -> !recorded.contains(n)).sorted().toList();
 		} catch (IOException e) {
 			log.warn("Original's folder of document {} can't be listed: {}", docId, e.getMessage());
 			return List.of();
@@ -342,12 +359,19 @@ public class HealdanStorage extends AbstractStore {
 		return Staging.original().resolve(key);
 	}
 
-	/** @return the file in Original's folder with no row, if it is there, which is logged (call 11) */
-	private Optional<Path> unrecorded(long docId, String name) {
+	/**
+	 * @param read whether it is to be read, which is warned of once for each file; {@code exists} and {@code size},
+	 *        which a page of thumbnails asks of every file, log at debug
+	 * @return the file in Original's folder with no row, if it is there (call 11)
+	 */
+	private Optional<Path> unrecorded(long docId, String name, boolean read) {
 		Path file = original(keyOf(docId, name));
 		if (!Files.isRegularFile(file))
 			return Optional.empty();
-		log.warn("Document {}'s {} has no storage row; it is read from Original's folder", docId, name);
+		if (read && WARNED.add(file.toString()))
+			log.warn("Document {}'s {} has no storage row; it is read from Original's folder", docId, name);
+		else
+			log.debug("Document {}'s {} has no storage row; it is in Original's folder", docId, name);
 		return Optional.of(file);
 	}
 
@@ -355,7 +379,7 @@ public class HealdanStorage extends AbstractStore {
 	public boolean exists(StoreResource resource) {
 		long docId = resource.getDocId();
 		String name = resource.name();
-		return files().find(docId, name).isPresent() || unrecorded(docId, name).isPresent();
+		return files().find(docId, name).isPresent() || unrecorded(docId, name, false).isPresent();
 	}
 
 	/** @return the plaintext size, from the row; 0 for a file that isn't there, as {@code FSStore}'s */
@@ -366,18 +390,41 @@ public class HealdanStorage extends AbstractStore {
 		Optional<StoredFile> row = files().find(docId, name);
 		if (row.isPresent())
 			return row.get().size();
-		return unrecorded(docId, name).map(file -> file.toFile().length()).orElse(0L);
+		return unrecorded(docId, name, false).map(file -> file.toFile().length()).orElse(0L);
 	}
 
+	/**
+	 * From the rows, and the files of Original's folder that have none (call 11): CE's {@code replaceFile},
+	 * {@code deleteVersion} and M1.5's placeholder sweep delete what this lists, so a stale thumbnail or conversion
+	 * only CE's own store wrote isn't left to be read as current. A file version is matched exactly.
+	 */
 	@Override
 	public List<StoreResource> listResources(long docId, String fileVersion) {
 		List<StoreResource> resources = new ArrayList<>();
+		Set<String> recorded = new HashSet<>();
 		for (StoredFile row : files().list(docId)) {
-			String name = row.resource();
-			if (StringUtils.isEmpty(fileVersion) || name.equals(fileVersion) || name.startsWith(fileVersion + "-"))
-				resources.add(StoreResource.builder().docId(docId).name(name).build());
+			recorded.add(row.resource());
+			if (ofVersion(row.resource(), fileVersion))
+				resources.add(StoreResource.builder().docId(docId).name(row.resource()).build());
 		}
+		for (String name : unrecorded(docId, recorded))
+			if (ofVersion(name, fileVersion))
+				resource(docId, name).ifPresent(resources::add);
 		return resources;
+	}
+
+	private static boolean ofVersion(String name, String fileVersion) {
+		return StringUtils.isEmpty(fileVersion) || name.equals(fileVersion) || name.startsWith(fileVersion + "-");
+	}
+
+	/** @return the resource of a file's name, if CE's resource names can name it */
+	private static Optional<StoreResource> resource(long docId, String name) {
+		try {
+			StoreResource resource = StoreResource.builder().docId(docId).name(name).build();
+			return resource.name().equals(name) ? Optional.of(resource) : Optional.empty();
+		} catch (IllegalArgumentException e) {
+			return Optional.empty();
+		}
 	}
 
 	@Override
@@ -393,7 +440,7 @@ public class HealdanStorage extends AbstractStore {
 		String key = keyOf(docId, name);
 		Optional<StoredFile> row = files().find(docId, name);
 		if (row.isEmpty())
-			return Files.newInputStream(unrecorded(docId, name).orElseThrow(() -> new FileNotFoundException(key)));
+			return Files.newInputStream(unrecorded(docId, name, true).orElseThrow(() -> new FileNotFoundException(key)));
 		try {
 			return open(row.get(), key);
 		} catch (FileNotFoundException e) {
@@ -427,7 +474,7 @@ public class HealdanStorage extends AbstractStore {
 		String key = keyOf(docId, name);
 		Optional<StoredFile> row = files().find(docId, name);
 		if (row.isEmpty())
-			return FileChannel.open(unrecorded(docId, name).orElseThrow(() -> new FileNotFoundException(key)),
+			return FileChannel.open(unrecorded(docId, name, true).orElseThrow(() -> new FileNotFoundException(key)),
 					StandardOpenOption.READ);
 		try {
 			return channel(row.get(), key);
