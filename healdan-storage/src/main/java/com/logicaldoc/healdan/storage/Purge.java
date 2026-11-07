@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
+import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
 import com.logicaldoc.util.spring.Context;
 
 /**
@@ -31,7 +32,8 @@ import com.logicaldoc.util.spring.Context;
  * <li>a local copy is deleted only from the backend's {@code .held/}.</li>
  * </ul>
  * S3 can't tell a missing bucket from a missing object, and a delete of a missing object succeeds, so each backend is
- * checked once per run first, and one that is failing or unreachable is skipped with its rows kept for the next run.
+ * checked once per run first, and one that is failing or unreachable is skipped with its rows kept for the next run. A
+ * backend that can't be reached by a delete later in the run is skipped from then on, the same way.
  */
 @Component
 public class Purge {
@@ -109,6 +111,12 @@ public class Purge {
 			}
 			try {
 				entry.backend().purgeHeld(copy.location());
+			} catch (BackendUnreachableException e) {
+				// The rest of the backend's due copies are left for the next run, not each waiting out a timeout
+				healthy.put(copy.backendId(), false);
+				log.warn("Storage backend {} can't be reached, so the purge keeps its held copies for the next run: {}",
+						copy.backendId(), e.getMessage());
+				return false;
 			} catch (IOException e) {
 				log.warn("The held copy of document {}'s {} on storage backend {} can't be deleted: {}", copy.docId(),
 						copy.resource(), copy.backendId(), e.getMessage());

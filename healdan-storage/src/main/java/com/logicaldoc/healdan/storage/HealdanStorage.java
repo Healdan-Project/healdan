@@ -71,7 +71,7 @@ public class HealdanStorage extends AbstractStore {
 	/** A ranged read goes through a buffer this big: an S3 backend's channel makes one request for each read */
 	static final int RANGE_BUFFER = 1 << 20;
 
-		/** How many files read with no row are remembered as warned of */
+	/** How many files read with no row are remembered as warned of */
 	private static final int WARNED_LIMIT = 4096;
 
 	/** The files read with no row that a warning has named, the oldest forgotten first */

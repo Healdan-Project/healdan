@@ -51,10 +51,10 @@ public class LocalBackend implements Backend {
 	public static final String TEST = ".healdan-test-";
 
 	/** A temporary file's name is the key's, then this, then a UUID; never a file of the backend's */
+	public static final String TEMPORARY = ".healdan-tmp-";
+
 	/** How often a write tries again when a purge removed the folder it had just made */
 	private static final int FOLDER_RETRIES = 3;
-
-	public static final String TEMPORARY = ".healdan-tmp-";
 
 	private final long id;
 

@@ -165,9 +165,31 @@ public class EndpointsTest {
 	}
 
 	@Test
+	public void testHttpNeedsPathStyle() {
+		// Without it the SDK connects to <bucket>.<host>, whose addresses the rule never sees
+		S3Settings virtualHosted = new S3Settings(URI.create("http://garage:3900"), "garage", "healdan", "", false,
+				"GKtest");
+		try {
+			Endpoints.check(virtualHosted, resolver);
+			fail("http:// without path style passed");
+		} catch (Endpoints.HostNotFound e) {
+			fail("refused as a host not found");
+		} catch (IllegalArgumentException expected) {
+			assertTrue(expected.getMessage(), expected.getMessage().contains("path style"));
+			assertTrue(expected.getMessage(), expected.getMessage().contains("healdan.garage"));
+		}
+		assertTrue("refused before any lookup: " + looked, looked.isEmpty());
+
+		Endpoints.check(new S3Settings(URI.create("http://garage:3900"), "garage", "healdan", "", true, "GKtest"),
+				resolver);
+		Endpoints.check(new S3Settings(URI.create("https://s3.us-east-2.wasabisys.com"), "us-east-2", "healdan", "",
+				false, "GKtest"), resolver);
+	}
+
+	@Test
 	public void testNoEndpointFails() {
 		try {
-			Endpoints.check(null, resolver);
+			Endpoints.check((URI) null, resolver);
 			fail("No endpoint passed");
 		} catch (IllegalArgumentException expected) {
 			// as it should

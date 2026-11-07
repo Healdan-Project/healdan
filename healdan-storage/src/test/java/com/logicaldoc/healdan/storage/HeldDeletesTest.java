@@ -257,6 +257,36 @@ public class HeldDeletesTest extends AbstractStorageTestCase {
 	}
 
 	@Test
+	public void testBackendLostDuringThePurgeIsLeftForTheRun() throws Exception {
+		List<Document> docs = List.of(deletedFromBucket(), deletedFromBucket(), deletedFromBucket());
+		List<String> asked = new ArrayList<>();
+		// The backend passes the run's check, and can't be reached by the first copy's delete
+		Purge.get().setInTransfer((docId, resource) -> {
+			asked.add(docId + "/" + resource);
+			cloud.s3().unreachable(true);
+			return false;
+		});
+		age();
+		Purge.get().run();
+
+		assertEquals("the other copies don't each wait for it: " + asked, 1, asked.size());
+		assertEquals(1, docs.stream().mapToInt(doc -> cloud.s3().calls(Op.DELETE, key(doc.getId(), "1.0"))).sum());
+		for (Document doc : docs) {
+			assertEquals("its hold is kept for the next run", 1, heldRows(doc.getId()).size());
+			assertNotNull(cloud.s3().bytes(key(doc.getId(), "1.0")));
+		}
+
+		// The next run purges them all
+		cloud.s3().unreachable(false);
+		Purge.get().setInTransfer((docId, resource) -> false);
+		Purge.get().run();
+		for (Document doc : docs) {
+			assertTrue(heldRows(doc.getId()).isEmpty());
+			assertNull(cloud.s3().bytes(key(doc.getId(), "1.0")));
+		}
+	}
+
+	@Test
 	public void testReplacedPreviewHeld() throws Exception {
 		Document doc = upload(local, "the file");
 		long id = doc.getId();

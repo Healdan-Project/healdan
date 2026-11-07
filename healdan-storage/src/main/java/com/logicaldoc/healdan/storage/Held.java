@@ -10,7 +10,6 @@ import java.util.Date;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.logicaldoc.core.store.Store;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 
 /**
@@ -32,16 +31,12 @@ final class Held {
 	 * Holds a file's copy on a backend. Called holding the file's lock ({@link FileLocks}).
 	 *
 	 * @param backendId the backend that has the copy; 0 for staging
+	 * @param key the file's key, in CE's layout
 	 * @param docId the document
 	 * @param resource its resource
 	 * @return true if the copy is held, or wasn't there to hold; false if it couldn't be held and is still in its
 	 *         place, which loses nothing
 	 */
-	static boolean hold(long backendId, long docId, String resource) {
-		return hold(backendId, ((HealdanStorage) Store.get()).keyOf(docId, resource), docId, resource);
-	}
-
-	/** As {@link #hold(long, long, String)}, for a caller that has the file's key already */
 	static boolean hold(long backendId, String key, long docId, String resource) {
 		Backends.Entry entry;
 		try {

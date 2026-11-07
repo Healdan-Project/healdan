@@ -815,6 +815,13 @@ public class S3BackendTest extends BackendContract {
 			looked.clear();
 			backend(settingsAt("https://s3.us-east-2.wasabisys.com"), 7, false).close();
 			assertTrue(looked.toString(), looked.isEmpty());
+
+			// http:// without path style is refused, naming the rule: the SDK would connect to <bucket>.<host>
+			S3Settings virtualHosted = new S3Settings(URI.create("http://nas.lan:9000"), FakeS3.REGION, BUCKET, "",
+					false, FakeS3.ACCESS_KEY);
+			BackendFailingException noPathStyle = failing(() -> backend(virtualHosted, 7, false), "path style");
+			assertTrue(noPathStyle.getMessage(), noPathStyle.getMessage().contains("private network"));
+			assertTrue(looked.toString(), looked.isEmpty());
 		} finally {
 			S3Backend.resolver = Endpoints.DNS;
 		}

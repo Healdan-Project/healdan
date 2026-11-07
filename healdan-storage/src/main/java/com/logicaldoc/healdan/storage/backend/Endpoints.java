@@ -14,8 +14,8 @@ import java.util.function.Function;
 /**
  * The endpoint rule (spec section 13): an S3 endpoint is {@code https://}, or {@code http://} only when every address
  * its host resolves to is private (10/8, 172.16/12, 192.168/16, fc00::/7) or loopback, as Garage's
- * {@code http://garage:3900} is on the smoke stack. Over plain HTTP the secret never leaves (requests are signed), but
- * the files and their names do.
+ * {@code http://garage:3900} is on the smoke stack, and path style is on, so that the host checked is the one
+ * connected to. Over plain HTTP the secret never leaves (requests are signed), but the files and their names do.
  */
 public final class Endpoints {
 
@@ -48,6 +48,24 @@ public final class Endpoints {
 	 */
 	public static void check(URI endpoint) {
 		check(endpoint, DNS);
+	}
+
+	/**
+	 * Applies the rule to a backend's settings. Over {@code http://} the rule checks the endpoint's host, so path style
+	 * must be on: without it the SDK connects to {@code <bucket>.<host>}, whose addresses nothing checks.
+	 *
+	 * @param settings the backend's settings
+	 * @param resolver as for {@link #check(URI, Function)}
+	 * @throws HostNotFound if the host has no address to check
+	 * @throws IllegalArgumentException saying what is wrong
+	 */
+	public static void check(S3Settings settings, Function<String, InetAddress[]> resolver) {
+		URI endpoint = settings.endpoint();
+		if (!settings.pathStyle() && "http".equalsIgnoreCase(endpoint.getScheme()))
+			throw new IllegalArgumentException("http:// is only for an address on a private network, and needs path "
+					+ "style on: without it the files go to " + settings.bucket() + "." + endpoint.getHost()
+					+ ", whose address isn't checked. Turn path style on, or use https://");
+		check(endpoint, resolver);
 	}
 
 	/**

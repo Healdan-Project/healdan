@@ -8,6 +8,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.Test;
@@ -16,6 +18,7 @@ import com.logicaldoc.core.security.Tenant;
 import com.logicaldoc.healdan.signin.SecretBox;
 import com.logicaldoc.healdan.storage.backend.BackendFailingException;
 import com.logicaldoc.healdan.storage.backend.BackendUnreachableException;
+import com.logicaldoc.healdan.storage.backend.FakeDns;
 import com.logicaldoc.healdan.storage.backend.S3Backend;
 
 /**
@@ -34,6 +37,8 @@ public class BackendsTest extends AbstractStorageTestCase {
 		row.setBucket("healdan-tests");
 		row.setPrefix("healdan/");
 		row.setAccessKey("AKTEST");
+		// http:// needs it
+		row.setPathStyleOn(true);
 		row.setSecret(secret == null ? null : SecretBox.get().seal(secret));
 		StorageBackendDAO.get().store(row);
 		return row.getId();
@@ -80,11 +85,14 @@ public class BackendsTest extends AbstractStorageTestCase {
 		AtomicLong now = new AtomicLong(1_000_000L);
 		backends.clock = now::get;
 		// http needs every address of the host private, so the host is looked up when the backend is built
-		long id = s3Row("http://no-such-host.invalid:3900", "a secret");
+		long id = s3Row("http://no-such-host.lan:3900", "a secret");
 
-		assertThrows(BackendUnreachableException.class, () -> backends.entry(id));
-		now.addAndGet(10_000L);
-		assertThrows("an outage is remembered as one", BackendUnreachableException.class, () -> backends.entry(id));
+		try (FakeDns dns = FakeDns.of(Map.of())) {
+			assertThrows(BackendUnreachableException.class, () -> backends.entry(id));
+			now.addAndGet(10_000L);
+			assertThrows("an outage is remembered as one", BackendUnreachableException.class, () -> backends.entry(id));
+			assertEquals("looked up once, in the map", List.of("no-such-host.lan"), dns.looked());
+		}
 	}
 
 	@Test

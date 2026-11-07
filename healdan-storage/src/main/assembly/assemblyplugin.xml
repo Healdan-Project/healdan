@@ -10,12 +10,13 @@
 		<dependencySet>
 			<outputDirectory>WEB-INF/lib</outputDirectory>
 			<!-- Left out on purpose, because the WAR ships them or nothing here loads them: reactive-streams 1.0.4 (the same
-				version, through Infinispan), protobuf-java and error_prone_annotations (the WAR has 4.29.0 and 2.18.0/2.28.0;
-				Tink's streaming AEAD loads neither protobuf nor Gson, which TinkClasspathTest proves), and Gson -->
+				version, through Infinispan) and error_prone_annotations (the WAR has 2.18.0/2.28.0). protobuf-java and Gson
+				are left out only while Healdan uses Tink's streaming AEAD without keysets, as FileCipher does and
+				TinkClasspathTest proves: a KeysetHandle would need Tink's protobuf 4.33.6, not the WAR's 4.29.0. The SDK's
+				eventstream jar is software.amazon.awssdk:eventstream, which the SDK's include takes -->
 			<includes>
 				<include>com.logicaldoc:healdan-storage</include>
 				<include>software.amazon.awssdk:*</include>
-				<include>software.amazon.eventstream:*</include>
 				<include>com.google.crypto.tink:*</include>
 			</includes>
 			<outputFileNameMapping>

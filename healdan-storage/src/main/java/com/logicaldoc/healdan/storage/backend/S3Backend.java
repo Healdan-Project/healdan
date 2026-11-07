@@ -145,7 +145,7 @@ public final class S3Backend implements Backend, Closeable {
 		this.installId = installId;
 		this.settings = settings;
 		try {
-			Endpoints.check(settings.endpoint(), resolver);
+			Endpoints.check(settings, resolver);
 		} catch (Endpoints.HostNotFound e) {
 			throw new BackendUnreachableException("Backend " + id + " can't be reached: " + e.getMessage());
 		} catch (IllegalArgumentException e) {
