@@ -425,7 +425,9 @@ next `select`).
   the opposite (*checked*). The nullable keys are `UserResource.java:58` (first name, name), `_entity.date desc` with
   one row in `DeviceHolds.java:305`, `ApiViews.java:221` and `DocumentResource.java:479`, where a NULL date would
   become the latest, and `VersionResource.java:121`. CE fills those fields when it creates the rows, so it's latent.
-  Adding `nulls last` or `nulls first` makes them the same.
+  `nulls last` and `nulls first` would make them the same, but MariaDB's SQL refuses both (*checked* on 11.4.13,
+  2026-11-07: `ERROR 1064`). Sorting on `case when x is null then 1 else 0 end` first does it in standard SQL, which
+  MariaDB ran (*checked*); whether Hibernate's HQL `nulls last` runs on MariaDB wasn't tried.
 - **`lower()` and sorting follow the database's locale** (§2.3). `lower()` serves the case-insensitive searches in
   `MatterSearch.java:117`, `ClientSearch.java:23`, `CommentsMatch.java:77`, `SearchFolderService.java:315-316`,
   `SignInAccounts.java:246`, `:694`, `UserResource.java:51-53` and the seeds. Text sorts in `HealdanSettings.java:116`,
@@ -697,7 +699,8 @@ Whatever moves the data, the stack's `TZ` should be the same on both sides (Mari
     for each? The S3 storage spec edits the same page and `DockerInit`, and whichever lands second updates them
     (its §14).
 12. **Q12. Does Healdan make its SQL behave the same on both databases where §4 found it doesn't:** trim text before
-    it's compared or stored (trailing spaces), say `nulls last` or `nulls first` where a key can be NULL, and set an
+    it's compared or stored (trailing spaces), say where NULLs sort when a key can be NULL (in a form MariaDB
+    accepts, §4.3), and set an
     isolation level (bearing in mind that PostgreSQL's `REPEATABLE READ` isn't InnoDB's, §4.3)? Or does it accept
     PostgreSQL's behaviour once it's the first-class database?
 13. **Q13. How does `PreviewJobs.add` queue a job without relying on a failed insert,** when `requeue` always calls it
