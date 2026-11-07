@@ -6,6 +6,8 @@ package com.logicaldoc.healdan.storage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
 import org.junit.Test;
@@ -29,5 +31,11 @@ public class StorageModuleTest extends AbstractStorageTestCase {
 		assertEquals(1, stores.size());
 		assertTrue(stores.get(0) instanceof HealdanStorage);
 		assertTrue(Store.get() instanceof HealdanStorage);
+	}
+
+	@Test
+	public void testOriginalHoldsItsMarker() throws Exception {
+		Path marker = Path.of(Context.get().getConfig().getProperty("store.1.dir"), ".healdan-backend");
+		assertEquals(StorageSettings.get().installId() + " 1\n", Files.readString(marker));
 	}
 }
