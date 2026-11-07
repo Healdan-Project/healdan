@@ -108,13 +108,72 @@ public class MemoryBackendTest extends BackendContract {
 	}
 
 	@Test
-	public void testCorruptNextPut() throws IOException {
+	public void testCorruptNextPutIsRefusedWithAChecksum() throws IOException {
 		byte[] data = bytes(100);
 		memory.corruptNextPut();
+		try {
+			backend.put("1/2/doc/1.0", source(data), md5(data));
+			fail("A corrupted put with a checksum worked");
+		} catch (IOException expected) {
+			// as S3 refuses it
+		}
+		assertEquals(-1, backend.size("1/2/doc/1.0"));
+		// Used up
 		backend.put("1/2/doc/1.0", source(data), md5(data));
+		assertArrayEquals(data, read("1/2/doc/1.0"));
+
+		memory.corruptNextPut();
+		try {
+			backend.stage("1/2/doc/1.1", source(data), md5(data));
+			fail("A corrupted stage with a checksum worked");
+		} catch (IOException expected) {
+			// as it should
+		}
+		assertEquals(-1, backend.size("1/2/doc/1.1"));
+	}
+
+	@Test
+	public void testCorruptNextPutWithoutAChecksumStoresFlippedBytes() throws IOException {
+		byte[] data = bytes(100);
+		memory.corruptNextPut();
+		backend.put("1/2/doc/1.0", source(data), null);
+		assertEquals(100, backend.size("1/2/doc/1.0"));
 		assertTrue(!java.util.Arrays.equals(data, read("1/2/doc/1.0")));
-		backend.put("1/2/doc/1.1", source(data), md5(data));
+		backend.put("1/2/doc/1.1", source(data), null);
 		assertArrayEquals(data, read("1/2/doc/1.1"));
+	}
+
+	@Test
+	public void testStagingIsLocalLikeByDefault() throws IOException {
+		byte[] data = bytes(20);
+		Staged staged = backend.stage("1/2/doc/1.0", source(data), md5(data));
+		assertEquals(-1, backend.size("1/2/doc/1.0"));
+		staged.commit();
+		assertArrayEquals(data, read("1/2/doc/1.0"));
+		Staged other = backend.stage("1/2/doc/1.1", source(data), null);
+		other.discard();
+		assertEquals(-1, backend.size("1/2/doc/1.1"));
+	}
+
+	@Test
+	public void testStagingInS3LikeMode() throws IOException {
+		MemoryBackend s3 = MemoryBackend.s3Like(8);
+		byte[] data = bytes(20);
+		Staged staged = s3.stage("1/2/doc/1.0", source(data), md5(data));
+		assertEquals("Already there", 20, s3.size("1/2/doc/1.0"));
+		staged.commit();
+		assertEquals(20, s3.size("1/2/doc/1.0"));
+		staged.discard();
+		assertEquals("discard deletes the object", -1, s3.size("1/2/doc/1.0"));
+
+		s3.corruptNextPut();
+		try {
+			s3.stage("1/2/doc/1.1", source(data), md5(data));
+			fail("A corrupted stage worked");
+		} catch (IOException expected) {
+			// as it should
+		}
+		assertEquals(-1, s3.size("1/2/doc/1.1"));
 	}
 
 	@Test

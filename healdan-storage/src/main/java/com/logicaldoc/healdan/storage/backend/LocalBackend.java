@@ -153,6 +153,8 @@ public class LocalBackend implements Backend {
 		} catch (NoSuchFileException e) {
 			throw new BackendFailingException("The folder of backend " + id + " has no " + MARKER
 					+ ": it may not be mounted");
+		} catch (java.nio.charset.CharacterCodingException e) {
+			throw new BackendFailingException("The marker of backend " + id + " is garbled", e);
 		} catch (IOException e) {
 			throw new BackendUnreachableException("The folder of backend " + id + " can't be read: " + e.getMessage(),
 					e);
@@ -289,6 +291,7 @@ public class LocalBackend implements Backend {
 		try {
 			return Files.newInputStream(path(key));
 		} catch (NoSuchFileException e) {
+			check(); // an unmounted folder isn't a missing file
 			throw missing(key, e);
 		}
 	}
@@ -298,6 +301,7 @@ public class LocalBackend implements Backend {
 		try {
 			return Files.newByteChannel(path(key), StandardOpenOption.READ);
 		} catch (NoSuchFileException e) {
+			check();
 			throw missing(key, e);
 		}
 	}
@@ -313,13 +317,16 @@ public class LocalBackend implements Backend {
 		try {
 			return Files.size(path(key));
 		} catch (NoSuchFileException e) {
+			check();
 			return -1;
 		}
 	}
 
 	@Override
 	public void delete(String key) throws IOException {
-		Files.deleteIfExists(path(key));
+		Path path = path(key);
+		check();
+		Files.deleteIfExists(path);
 	}
 
 	@Override

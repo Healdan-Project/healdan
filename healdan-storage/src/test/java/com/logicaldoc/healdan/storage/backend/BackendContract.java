@@ -246,4 +246,14 @@ public abstract class BackendContract {
 		staged.discard();
 		assertEquals(-1, backend.size("1/2/doc/1.0"));
 	}
+
+	@Test
+	public void testHoldOfAMissingKey() throws IOException {
+		try {
+			backend.hold("1/2/doc/missing");
+			fail("Holding a missing key worked");
+		} catch (FileNotFoundException expected) {
+			// as it should
+		}
+	}
 }

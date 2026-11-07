@@ -37,6 +37,8 @@ public class MemoryBackend implements Backend {
 
 	private final long id;
 
+	private final boolean stagesInPlace;
+
 	private final Map<String, byte[]> objects = new ConcurrentHashMap<>();
 
 	private final Map<String, AtomicInteger> calls = new ConcurrentHashMap<>();
@@ -53,8 +55,19 @@ public class MemoryBackend implements Backend {
 
 	private volatile boolean corruptNextPut;
 
+	/** Like local folders: a staged copy is absent until commit, and discard has nothing to delete. */
 	public MemoryBackend(long id) {
+		this(id, false);
+	}
+
+	/** Like S3: a staged copy is already at its key, commit does nothing, and discard deletes the object. */
+	public static MemoryBackend s3Like(long id) {
+		return new MemoryBackend(id, true);
+	}
+
+	private MemoryBackend(long id, boolean stagesInPlace) {
 		this.id = id;
+		this.stagesInPlace = stagesInPlace;
 	}
 
 	/** The next {@code n} operations (any of the five) fail with an IOException. */
@@ -89,7 +102,11 @@ public class MemoryBackend implements Backend {
 		return this;
 	}
 
-	/** The next put stores its bytes with one flipped, after its checksum passed, as a backend that lies would. */
+	/**
+	 * The next put or stage with a checksum is refused with an IOException and stores nothing, as S3 refuses a body
+	 * whose Content-MD5 doesn't match. One without a checksum stores its bytes with one flipped, silently. Either
+	 * way the fault is used up.
+	 */
 	public MemoryBackend corruptNextPut() {
 		this.corruptNextPut = true;
 		return this;
@@ -166,6 +183,10 @@ public class MemoryBackend implements Backend {
 			throw new IOException("Backend " + id + " failed after " + limit + " bytes");
 		if (md5 != null && !Arrays.equals(md5, md5(bytes)))
 			throw new IOException("The bytes of " + file.getFileName() + " don't match their checksum");
+		if (corruptNextPut && md5 != null) {
+			corruptNextPut = false;
+			throw new IOException("The bytes of " + file.getFileName() + " arrived corrupted");
+		}
 		if (corruptNextPut && bytes.length > 0) {
 			corruptNextPut = false;
 			bytes = bytes.clone();
@@ -189,6 +210,20 @@ public class MemoryBackend implements Backend {
 	public Staged stage(String key, Path file, byte[] md5) throws IOException {
 		begin(Op.PUT, key);
 		byte[] bytes = read(file, md5);
+		if (stagesInPlace) {
+			objects.put(key, bytes);
+			return new Staged() {
+				@Override
+				public void commit() {
+					// Already there
+				}
+
+				@Override
+				public void discard() {
+					objects.remove(key);
+				}
+			};
+		}
 		return new Staged() {
 			@Override
 			public void commit() throws IOException {
@@ -336,7 +371,9 @@ public class MemoryBackend implements Backend {
 	}
 
 	@Override
-	public String hold(String key) {
+	public String hold(String key) throws IOException {
+		if (!objects.containsKey(key))
+			throw new FileNotFoundException(key);
 		return key;
 	}
 

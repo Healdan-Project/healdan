@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -247,16 +248,6 @@ public class LocalBackendTest extends BackendContract {
 	}
 
 	@Test
-	public void testHoldOfAMissingKey() throws IOException {
-		try {
-			backend.hold("1/2/doc/missing");
-			fail("Holding a missing file worked");
-		} catch (java.io.FileNotFoundException expected) {
-			// as it should
-		}
-	}
-
-	@Test
 	public void testPurgeOnlyReachesTheHeldFolder() throws IOException {
 		backend.put("1/2/doc/1.0", source(bytes(5)), null);
 		for (String location : new String[] { "1/2/doc/1.0", ".held/../1/2/doc/1.0", ".healdan-backend" })
@@ -340,5 +331,63 @@ public class LocalBackendTest extends BackendContract {
 		assertEquals(List.of("1/2/doc/1.0"), backend.list("", 100));
 		assertEquals(List.of("1/2/doc/1.0"), backend.list("1/", 100));
 		assertTrue(backend.list(".", 100).isEmpty());
+	}
+
+	@Test
+	public void testReadsOfAnUnmountedFolderAreNotMissingFiles() throws IOException {
+		backend.put("1/2/doc/1.0", source(bytes(10)), null);
+		Files.delete(root.resolve("1/2/doc/1.0"));
+		Files.delete(root.resolve(".healdan-backend"));
+		try {
+			backend.size("1/2/doc/1.0");
+			fail("size reported an unmounted folder's file as missing");
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
+		try (InputStream in = backend.get("1/2/doc/1.0")) {
+			fail("get reported an unmounted folder's file as missing: " + in);
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
+		try (var channel = backend.open("1/2/doc/1.0")) {
+			fail("open reported an unmounted folder's file as missing: " + channel);
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
+	}
+
+	@Test
+	public void testDeleteRefusedUnderAnotherInstallsMarker() throws IOException {
+		backend.put("1/2/doc/1.0", source(bytes(10)), null);
+		Files.writeString(root.resolve(".healdan-backend"), "another-install 3\n");
+		try {
+			backend.delete("1/2/doc/1.0");
+			fail("A delete worked in another install's folder");
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
+		assertEquals(10, Files.size(root.resolve("1/2/doc/1.0")));
+	}
+
+	@Test
+	public void testGarbledMarkerIsAFailureNotAnOutage() throws IOException {
+		Files.write(root.resolve(".healdan-backend"), new byte[] { (byte) 0xff, (byte) 0xfe, (byte) 0xc3, 0x28 });
+		try {
+			backend.check();
+			fail("A garbled marker passed");
+		} catch (BackendUnreachableException e) {
+			fail("A garbled marker was reported as an outage");
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
+		Files.writeString(root.resolve(".healdan-backend"), "nonsense");
+		try {
+			backend.check();
+			fail("A marker that isn't ours passed");
+		} catch (BackendUnreachableException e) {
+			fail("A wrong marker was reported as an outage");
+		} catch (BackendFailingException expected) {
+			// as it should
+		}
 	}
 }
