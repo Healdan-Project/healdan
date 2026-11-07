@@ -27,16 +27,17 @@ mvn -pl healdan-core test -Dtest=FilingRulesTest           # one test class
 mvn -pl logicaldoc-core test -Dtest='DocumentManagerTest#testCopyToFolder'  # one test method
 mvn -pl healdan-core -DskipTests install                   # healdan-core, with the test-jar healdan-api's tests use
 mvn -pl healdan-api test                                   # the API's tests
+mvn -pl healdan-storage test                               # the storage module's tests
 ```
 
 A module's tests run against the installed jars of the modules it uses, so install those first.
 
-- **`healdan-api`'s tests need `healdan-core` installed,** including its test-jar: they reuse `healdan-core`'s base
-  test case and fixtures. Install it again after changing `healdan-core`.
+- **`healdan-api`'s and `healdan-storage`'s tests need `healdan-core` installed,** including its test-jar: they reuse
+  `healdan-core`'s base test case and fixtures. Install it again after changing `healdan-core`.
 - **`-DskipTests` and `-Dmaven.test.skip=true` differ here.** `-DskipTests` compiles the tests without running them,
   so it still builds and installs `healdan-core`'s test-jar. `-Dmaven.test.skip=true` doesn't compile them, so
-  there's no test-jar. `healdan-api`'s `with-tests` profile then leaves the test-jar out, and the build still
-  works, but `healdan-api`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
+  there's no test-jar. their `with-tests` profiles then leave the test-jar out, and the build still
+  works, but `healdan-api`'s and `healdan-storage`'s tests can't run until `healdan-core` is installed with `-DskipTests`.
 
 ## Skipping the GWT Compile
 
@@ -49,7 +50,7 @@ Healdan's modules need.
   `build` check does. The GUI's antrun step fails without the GWT output, and skipping it leaves every plugin zip
   unfinished, so a WAR built from them is broken.
 - After changing `logicaldoc-core`, `logicaldoc-webapp` or `logicaldoc-gui`, re-install that module before running
-  `healdan-core`'s or `healdan-api`'s tests:
+  `healdan-core`'s, `healdan-api`'s or `healdan-storage`'s tests:
 
   ```bash
   mvn -pl logicaldoc-gui -DskipTests -Dgwt.skipCompilation=true -Dmaven.antrun.skip=true install

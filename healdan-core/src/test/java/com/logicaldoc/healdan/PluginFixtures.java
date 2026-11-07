@@ -52,6 +52,18 @@ public final class PluginFixtures {
 	}
 
 	/**
+	 * Creates the jar of another Healdan plugin, from the {@code plugin.xml} of
+	 * it that is on the classpath (the plugin's own module is the one running
+	 * the test).
+	 * 
+	 * @param pluginId the plugin id, for example {@code healdan-storage}
+	 * @return the classpath path of the jar, to be added to the archives
+	 */
+	public static String archive(String pluginId) {
+		return writeJar(pluginId, findPluginXml(pluginId));
+	}
+
+	/**
 	 * Creates the jar of a test-only plugin that requires logicaldoc-core.
 	 * 
 	 * @param id the plugin id

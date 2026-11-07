@@ -4,7 +4,7 @@
 
 # Compiles the container init tool against the WAR's libraries, runs its tests and packages it. WarParsersTest also
 # parses a .pptx, an .xlsx and an .xls with the server's parsers on those libraries, which catches a dependency of
-# POI's that no plugin zip ships.
+# POI's that no plugin zip ships. WarStorageTest builds the S3 client and Tink's streaming AEAD on them the same way.
 # Usage: build.sh <WEB-INF/lib dir> <default context.properties> <output jar>
 set -euo pipefail
 
@@ -24,6 +24,7 @@ run_test ConfigPlanTest
 run_test TrustedProxiesTest
 run_test ConfigFileTest "$defaults"
 run_test WarParsersTest "$here/test/fixtures"
+run_test WarStorageTest
 
 jar cf "$jar" -C "$work/classes" .
 echo "built $jar"
