@@ -1,0 +1,42 @@
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.0.0 http://maven.apache.org/xsd/assembly-2.0.0.xsd">
+	<id>plugin</id>
+	<formats>
+		<format>zip</format>
+	</formats>
+	<includeBaseDirectory>false</includeBaseDirectory>
+	<dependencySets>
+		<!-- Only the plugin's own jar is named *-plugin.jar: CE takes every such jar for a plugin and reads its plugin.xml -->
+		<dependencySet>
+			<outputDirectory>WEB-INF/lib</outputDirectory>
+			<includes>
+				<include>com.logicaldoc:healdan-storage</include>
+			</includes>
+			<outputFileNameMapping>
+				${artifact.artifactId}-${artifact.version}-plugin.${artifact.type}</outputFileNameMapping>
+		</dependencySet>
+		<dependencySet>
+			<outputDirectory>WEB-INF/lib</outputDirectory>
+			<!-- Left out on purpose, because the WAR ships them or nothing here loads them: reactive-streams 1.0.4 (the same
+				version, through Infinispan) and error_prone_annotations (the WAR has 2.18.0/2.28.0). protobuf-java and Gson
+				are left out only while Healdan uses Tink's streaming AEAD without keysets, as FileCipher does and
+				TinkClasspathTest proves: a KeysetHandle would need Tink's protobuf 4.33.6, not the WAR's 4.29.0. The SDK's
+				eventstream jar is software.amazon.awssdk:eventstream, which the SDK's include takes -->
+			<includes>
+				<include>software.amazon.awssdk:*</include>
+				<include>com.google.crypto.tink:*</include>
+			</includes>
+		</dependencySet>
+	</dependencySets>
+	<fileSets>
+		<fileSet>
+			<directory>src/main/resources/</directory>
+			<outputDirectory>/</outputDirectory>
+			<includes>
+				<include>plugin.xml</include>
+			</includes>
+			<useDefaultExcludes>true</useDefaultExcludes>
+		</fileSet>
+	</fileSets>
+</assembly>

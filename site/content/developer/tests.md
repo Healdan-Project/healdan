@@ -69,7 +69,7 @@ in the test itself. It's in `healdan-core`'s test-jar, so `healdan-api`'s tests 
 
 | Command | What it checks |
 |---|---|
-| `docker build --target tools .` | the init tool's unit tests, and `WarParsersTest`: a `.pptx`, an `.xlsx` in Excel's Accounting format and an `.xls` parsed by the server's parsers on the WAR's own libraries, which Maven's tests can't see (they have every library's dependencies, the WAR only what the plugin zips ship) |
+| `docker build --target tools .` | the init tool's unit tests, and two checks on the WAR's own libraries, which Maven's tests can't do: they have every library's dependencies, and the WAR has only what the plugin zips ship. `WarParsersTest` parses a `.pptx`, an `.xlsx` in Excel's Accounting format and an `.xls` with the server's parsers. `WarStorageTest` sends one request to a closed loopback port with the S3 client, and puts 3 MiB through Tink's streaming AEAD |
 | `docker/tests/test-init.sh` | the init tool against a throwaway MariaDB |
 | `docker/tests/test-image.sh` | the image: a prompt stop during init, file ownership, the `/setup` block, Admin > Restart, settings that persist |
 | `docker/tests/test-overlays.sh` | the dev and proxy overlays |

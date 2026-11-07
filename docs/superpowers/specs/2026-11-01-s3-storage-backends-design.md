@@ -1,8 +1,8 @@
 # S3, and a storage backend per Store: design
 
-- **Backlog item:** "S3, and a storage backend per Store" in [`docs/ROADMAP.md`](../../ROADMAP.md) §5. It stays in the backlog until the owner decides when to build it (owner, 2026-11-01).
+- **Backlog item:** "S3, and a storage backend per Store" in [`docs/ROADMAP.md`](../../ROADMAP.md) §5. It stayed in the backlog until the owner decided when to build it (owner, 2026-11-01), which the owner did on 2026-11-07.
 - **Date:** 2026-11-01
-- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section, and the written spec approved by the owner the same day. Implementation plan: [`docs/superpowers/plans/2026-11-03-s3-storage-backends.md`](../plans/2026-11-03-s3-storage-backends.md), plan drafted, awaiting the owner's approval; its "Questions for the Owner" list where this spec and master disagree, and its "Spec Corrections and Calls" where it departs from this spec.
+- **Status:** design agreed with the owner on 2026-11-01, question by question and then section by section, and the written spec approved by the owner the same day. Implementation plan: [`docs/superpowers/plans/2026-11-03-s3-storage-backends.md`](../plans/2026-11-03-s3-storage-backends.md), approved by the owner on 2026-11-07; its "Questions for the Owner" list where this spec and master disagree, and its "Spec Corrections and Calls" where it departs from this spec.
 - **Inputs:**
   - the roadmap's glossary, M1's Stores decisions and the backlog row;
   - [`docs/reference/logicaldoc-ce-capability-map.md`](../../reference/logicaldoc-ce-capability-map.md) §3.2;
