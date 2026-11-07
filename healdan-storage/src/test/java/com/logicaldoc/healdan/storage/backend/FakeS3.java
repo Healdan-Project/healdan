@@ -88,8 +88,8 @@ import com.sun.net.httpserver.HttpsServer;
  * the body follows at once.
  * <p>
  * It records every request ({@link #requests}), and misbehaves on demand ({@link #fail}, {@link #stall},
- * {@link #drop}, {@link #corrupt}, {@link #refuseSignatures}, {@link #denyAccess}) until {@link #behave}. Close it in an
- * {@code @After} method.
+ * {@link #stallBody}, {@link #delay}, {@link #drop}, {@link #corrupt}, {@link #refuseSignatures},
+ * {@link #echoSignatures}, {@link #denyAccess}) until {@link #behave}. Close it in an {@code @After} method.
  */
 public final class FakeS3 implements AutoCloseable {
 
@@ -146,10 +146,11 @@ public final class FakeS3 implements AutoCloseable {
 	}
 
 	private enum Fault {
-		ANSWER, STALL, DROP, CORRUPT, SIGNATURE, ECHO
+		ANSWER, STALL, STALL_BODY, DELAY, DROP, CORRUPT, SIGNATURE, ECHO
 	}
 
-	private record Rule(Predicate<Request> when, Fault fault, int status, String code, AtomicInteger times) {
+	private record Rule(Predicate<Request> when, Fault fault, int status, String code, Duration delay,
+			AtomicInteger times) {
 
 		/** @return whether it applies, using up one of its times */
 		boolean take(Request request) {
@@ -271,11 +272,11 @@ public final class FakeS3 implements AutoCloseable {
 
 	/**
 	 * @return settings for a backend in that bucket, under that prefix: this server, its region and access key, path
-	 *         style, timeouts of a second and one attempt
+	 *         style, connection and read timeouts of a second, 20 seconds for an upload's attempt, and one attempt
 	 */
 	public S3Settings settings(String bucket, String prefix) {
 		return new S3Settings(endpoint, REGION, bucket, prefix, true, ACCESS_KEY, Duration.ofSeconds(1),
-				Duration.ofSeconds(1), 1);
+				Duration.ofSeconds(1), Duration.ofSeconds(20), 1);
 	}
 
 	/** Makes a bucket, if it isn't there */
@@ -325,17 +326,36 @@ public final class FakeS3 implements AutoCloseable {
 
 	/** Answers every request with this error until {@link #behave} */
 	public FakeS3 fail(int status, String code) {
-		return rule(r -> true, Fault.ANSWER, status, code, null);
+		return rule(r -> true, Fault.ANSWER, status, code, null, null);
 	}
 
 	/** Answers every request of that kind with this error until {@link #behave} */
 	public FakeS3 fail(Op op, int status, String code) {
-		return rule(r -> r.op() == op, Fault.ANSWER, status, code, null);
+		return rule(r -> r.op() == op, Fault.ANSWER, status, code, null, null);
 	}
 
 	/** Answers that part's upload with this error until {@link #behave} */
 	public FakeS3 failPart(int number, int status, String code) {
-		return rule(part(number), Fault.ANSWER, status, code, null);
+		return rule(part(number), Fault.ANSWER, status, code, null, null);
+	}
+
+	/**
+	 * Reads the first MiB of every upload's body (a put or a part) and then stops reading, without answering, until
+	 * {@link #behave} or {@link #close}. A client sending more than the sockets' buffers hold is then stuck in a
+	 * write, which no read timeout ends.
+	 */
+	public FakeS3 stallBody() {
+		return rule(r -> r.op() == Op.PUT_OBJECT || r.op() == Op.UPLOAD_PART, Fault.STALL_BODY, 0, null, null, null);
+	}
+
+	/** As {@link #stallBody}, for that part's upload only */
+	public FakeS3 stallBody(int number) {
+		return rule(part(number), Fault.STALL_BODY, 0, null, null, null);
+	}
+
+	/** Waits that long before answering every request of that kind (its body read), until {@link #behave} */
+	public FakeS3 delay(Op op, Duration delay) {
+		return rule(r -> r.op() == op, Fault.DELAY, 0, null, delay, null);
 	}
 
 	/**
@@ -343,28 +363,28 @@ public final class FakeS3 implements AutoCloseable {
 	 * the connection)
 	 */
 	public FakeS3 stall() {
-		return rule(r -> true, Fault.STALL, 0, null, null);
+		return rule(r -> true, Fault.STALL, 0, null, null, null);
 	}
 
 	/** Reads every request's body, then closes the connection without an answer, until {@link #behave} */
 	public FakeS3 drop() {
-		return rule(r -> true, Fault.DROP, 0, null, null);
+		return rule(r -> true, Fault.DROP, 0, null, null, null);
 	}
 
 	/** Drops the connection of that part's upload, until {@link #behave} */
 	public FakeS3 dropPart(int number) {
-		return rule(part(number), Fault.DROP, 0, null, null);
+		return rule(part(number), Fault.DROP, 0, null, null, null);
 	}
 
 	/** Flips a byte of the next upload's body (a put or a part) on its way in, before any check */
 	public FakeS3 corrupt() {
-		return rule(r -> r.op() == Op.PUT_OBJECT || r.op() == Op.UPLOAD_PART, Fault.CORRUPT, 0, null,
+		return rule(r -> r.op() == Op.PUT_OBJECT || r.op() == Op.UPLOAD_PART, Fault.CORRUPT, 0, null, null,
 				new AtomicInteger(1));
 	}
 
 	/** Flips a byte of that part's body on its way in, until {@link #behave} */
 	public FakeS3 corruptPart(int number) {
-		return rule(part(number), Fault.CORRUPT, 0, null, null);
+		return rule(part(number), Fault.CORRUPT, 0, null, null, null);
 	}
 
 	/**
@@ -372,7 +392,7 @@ public final class FakeS3 implements AutoCloseable {
 	 * with the signature it was sent in {@code SignatureProvided}, as AWS's answer has it.
 	 */
 	public FakeS3 refuseSignatures() {
-		return rule(r -> true, Fault.SIGNATURE, 403, "SignatureDoesNotMatch", null);
+		return rule(r -> true, Fault.SIGNATURE, 403, "SignatureDoesNotMatch", null, null);
 	}
 
 	/**
@@ -380,7 +400,7 @@ public final class FakeS3 implements AutoCloseable {
 	 * do, which none of those tried does.
 	 */
 	public FakeS3 echoSignatures() {
-		return rule(r -> true, Fault.ECHO, 403, "SignatureDoesNotMatch", null);
+		return rule(r -> true, Fault.ECHO, 403, "SignatureDoesNotMatch", null, null);
 	}
 
 	/** Answers every request as Garage answers a wrong secret, {@code 403 AccessDenied}, until {@link #behave} */
@@ -412,8 +432,9 @@ public final class FakeS3 implements AutoCloseable {
 		return r -> r.op() == Op.UPLOAD_PART && r.partNumber() == number;
 	}
 
-	private FakeS3 rule(Predicate<Request> when, Fault fault, int status, String code, AtomicInteger times) {
-		rules.add(new Rule(when, fault, status, code, times));
+	private FakeS3 rule(Predicate<Request> when, Fault fault, int status, String code, Duration delay,
+			AtomicInteger times) {
+		rules.add(new Rule(when, fault, status, code, delay, times));
 		return this;
 	}
 
@@ -432,6 +453,12 @@ public final class FakeS3 implements AutoCloseable {
 			Request request = parse(exchange);
 			Rule rule = rule(request);
 			if (rule != null && rule.fault() == Fault.STALL) {
+				requests.add(request);
+				stalled.await(30, TimeUnit.SECONDS);
+				return;
+			}
+			if (rule != null && rule.fault() == Fault.STALL_BODY) {
+				exchange.getRequestBody().readNBytes(1 << 20);
 				requests.add(request);
 				stalled.await(30, TimeUnit.SECONDS);
 				return;
@@ -476,6 +503,7 @@ public final class FakeS3 implements AutoCloseable {
 								details);
 						return;
 					}
+					case DELAY -> Thread.sleep(rule.delay().toMillis());
 					default -> {
 						// CORRUPT was applied to the body
 					}

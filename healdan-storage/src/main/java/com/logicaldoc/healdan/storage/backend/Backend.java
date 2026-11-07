@@ -10,7 +10,11 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 
-/** A place file bytes go (spec section 10): keys are CE's relative paths, with no prefix */
+/**
+ * A place file bytes go (spec section 10). Keys are CE's relative paths, with no prefix, or one of the backend's two
+ * own objects a key may name, at its top level: {@code .healdan-check} and {@code .healdan-test-<name>}. The marker,
+ * {@code .healdan-backend}, is written only when a backend is made.
+ */
 public interface Backend {
 
 	long id();
@@ -33,7 +37,11 @@ public interface Backend {
 	/** Missing is fine. */
 	void delete(String key) throws IOException;
 
-	/** S3's Test only (the recording seed walks the folder itself). Never lists the backend's own objects. */
+	/**
+	 * S3's Test only (the recording seed walks the folder itself). Local: never lists a dot name (the marker, held
+	 * copies, the check object, Test's objects). S3: every key under the prefix, the backend's own objects included,
+	 * so Test finds its own.
+	 */
 	List<String> list(String prefix, int max) throws IOException;
 
 	/**

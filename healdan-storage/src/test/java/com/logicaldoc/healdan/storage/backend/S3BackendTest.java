@@ -12,6 +12,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -28,6 +29,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -53,6 +55,8 @@ import org.junit.Test;
 
 import com.logicaldoc.healdan.storage.backend.FakeS3.Op;
 import com.logicaldoc.healdan.storage.backend.FakeS3.Request;
+import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 
 /** The S3 backend against {@link FakeS3}: what every backend does, then what leaves the client and how it fails */
 public class S3BackendTest extends BackendContract {
@@ -175,6 +179,23 @@ public class S3BackendTest extends BackendContract {
 		throw new AssertionError("It worked");
 	}
 
+	/** A refusal of one file, not of the backend: a plain IOException naming the error code */
+	private static IOException refusedFile(Call call, String code) {
+		try {
+			call.run();
+		} catch (BackendFailingException e) {
+			throw new AssertionError("A file's refusal reported as the backend failing: " + e, e);
+		} catch (FileNotFoundException e) {
+			throw new AssertionError("A refusal reported as a missing file: " + e, e);
+		} catch (IOException e) {
+			assertTrue(e.getMessage(), e.getMessage().contains(code));
+			return e;
+		} catch (Exception e) {
+			throw new AssertionError("Not an IOException: " + e, e);
+		}
+		throw new AssertionError("It worked");
+	}
+
 	private static boolean causedBy(Throwable thrown, Class<? extends Throwable> type) {
 		for (Throwable t = thrown; t != null; t = t.getCause() == t ? null : t.getCause())
 			if (type.isInstance(t))
@@ -245,14 +266,13 @@ public class S3BackendTest extends BackendContract {
 		byte[] data = bytes(5000);
 		for (boolean given : new boolean[] { true, false }) {
 			fake.corrupt();
-			BackendFailingException refused = failing(() -> backend.put("1/2/doc/1.0", source(data), given ? md5(data) : null),
-					"baddigest");
-			assertNotNull(refused);
+			assertNotNull(refusedFile(() -> backend.put("1/2/doc/1.0", source(data), given ? md5(data) : null),
+					"BadDigest"));
 			assertEquals(-1, backend.size("1/2/doc/1.0"));
 			assertTrue(fake.object(BUCKET, "1/2/doc/1.0").isEmpty());
 		}
 		fake.corrupt();
-		failing(() -> backend.stage("1/2/doc/1.1", source(data), md5(data)), "baddigest");
+		refusedFile(() -> backend.stage("1/2/doc/1.1", source(data), md5(data)), "BadDigest");
 		assertTrue(fake.object(BUCKET, "1/2/doc/1.1").isEmpty());
 
 		// Used up: the next put goes through whole
@@ -296,7 +316,7 @@ public class S3BackendTest extends BackendContract {
 
 		// The third part's bytes changed on the way
 		fake.behave().corruptPart(3);
-		failing(() -> putBig(big), "baddigest");
+		refusedFile(() -> putBig(big), "BadDigest");
 		assertAborted(3);
 
 		// The connection dropped during the third part
@@ -401,6 +421,12 @@ public class S3BackendTest extends BackendContract {
 		try {
 			backend.delete(".healdan-backend");
 			fail("Deleted the marker");
+		} catch (IllegalArgumentException expected) {
+			// as it should
+		}
+		try {
+			backend.stage(".healdan-backend", source(bytes(3)), null);
+			fail("Staged over the marker");
 		} catch (IllegalArgumentException expected) {
 			// as it should
 		}
@@ -523,14 +549,12 @@ public class S3BackendTest extends BackendContract {
 		assertEquals(10, prefixed.size("123/45/doc/1.2"));
 		assertArrayEquals(data, readAll(prefixed, "123/45/doc/1.2"));
 
-		// Its list strips the prefix and never shows its own objects, nor what lies outside it
+		// Its list strips the prefix and shows what S3 holds under it, its marker too, and nothing outside it
 		backend.put("9/9/doc/1.0", source(data), null);
-		assertEquals(List.of("123/45/doc/1.2"), prefixed.list("", 100));
+		assertEquals(List.of(".healdan-backend", "123/45/doc/1.2"), prefixed.list("", 100));
 		assertEquals(List.of("123/45/doc/1.2"), prefixed.list("123/", 100));
 		assertTrue(prefixed.list("9/", 100).isEmpty());
 		assertTrue(backend.list("", 100).contains("9/9/doc/1.0"));
-		assertTrue("Listed a marker: " + backend.list("", 100),
-				backend.list("", 100).stream().noneMatch(key -> key.contains(".healdan-backend")));
 
 		prefixed.delete("123/45/doc/1.2");
 		assertTrue(fake.object(BUCKET, "healdan/123/45/doc/1.2").isEmpty());
@@ -595,6 +619,150 @@ public class S3BackendTest extends BackendContract {
 	}
 
 	@Test
+	public void testOwnObjects() throws Exception {
+		S3Backend prefixed = backend(fake, 8, "pre", true);
+		byte[] data = bytes(40);
+		for (String key : List.of(".healdan-check", ".healdan-test-1f2e")) {
+			prefixed.put(key, source(data), md5(data));
+			assertArrayEquals(key, data, fake.object(BUCKET, "pre/" + key).orElseThrow());
+			assertArrayEquals(key, data, readAll(prefixed, key));
+			assertEquals(key, 40, prefixed.size(key));
+		}
+		// S3 lists what it holds under the prefix asked for: Test finds its own object
+		assertEquals(List.of(".healdan-test-1f2e"), prefixed.list(".healdan-test-", 100));
+		assertTrue(prefixed.list("", 100).containsAll(List.of(".healdan-check", ".healdan-test-1f2e")));
+		for (String key : List.of(".healdan-check", ".healdan-test-1f2e")) {
+			prefixed.delete(key);
+			assertEquals(key, -1, prefixed.size(key));
+		}
+
+		// The check object, as the key check writes and reads it
+		byte[] key = new byte[32];
+		new SecureRandom().nextBytes(key);
+		FileCipher cipher = new FileCipher(key);
+		KeyCheck.write(prefixed, ".healdan-check", cipher);
+		assertTrue(KeyCheck.verify(prefixed, ".healdan-check", cipher));
+
+		// The marker, and every other dot name, stay out of reach
+		for (String refused : List.of(".healdan-backend", ".healdan-checks", ".healdan-test-", "1/.healdan-check",
+				".healdan-check/x", ".healdan-test-a/b", "1/.healdan-test-x", ".held/1/2", ".other", "..")) {
+			for (Call call : List.<Call>of(() -> prefixed.put(refused, source(data), null),
+					() -> prefixed.stage(refused, source(data), null), () -> prefixed.delete(refused),
+					() -> prefixed.get(refused)))
+				try {
+					call.run();
+					fail("Reached " + refused);
+				} catch (IllegalArgumentException expected) {
+					// as it should
+				}
+			try {
+				prefixed.purgeHeld(refused);
+				fail("Purged " + refused);
+			} catch (IOException expected) {
+				// as it should
+			}
+		}
+		assertEquals(INSTALL + " 8\n", text(fake.object(BUCKET, "pre/.healdan-backend")));
+		prefixed.check();
+	}
+
+	@Test
+	public void testErrorMapping() throws Exception {
+		byte[] data = bytes(100);
+		backend.put("1/2/doc/1.0", source(data), md5(data));
+
+		// 401 and 403: access denied, the backend failing
+		for (Object[] answer : new Object[][] { { 401, "Unauthorized" }, { 403, "AccessDenied" },
+				{ 403, "SignatureDoesNotMatch" }, { 403, "InvalidAccessKeyId" } }) {
+			fake.behave().fail((Integer) answer[0], (String) answer[1]);
+			failing(() -> backend.put("1/2/doc/1.1", source(data), md5(data)), "access denied");
+			failing(() -> read("1/2/doc/1.0"), "access denied");
+			failing(() -> backend.size("1/2/doc/1.0"), "access denied");
+			failing(() -> backend.list("", 10), "access denied");
+			failing(backend::check, "access denied");
+		}
+
+		// A bucket that doesn't exist, whatever is asked of it
+		fake.behave();
+		S3Backend nowhere = backend(fake.settings("no-such-bucket", ""), 7, false);
+		failing(() -> nowhere.put("1/2/doc/1.0", source(data), md5(data)), "bucket not found");
+		failing(() -> nowhere.get("1/2/doc/1.0"), "bucket not found");
+		failing(() -> nowhere.list("", 10), "bucket not found");
+		failing(() -> nowhere.delete("1/2/doc/1.0"), "bucket not found");
+		failing(nowhere::check, "bucket not found");
+
+		// Any other refusal is the file's: a plain IOException naming the code, a single put and a part alike
+		for (Object[] answer : new Object[][] { { 400, "EntityTooLarge" }, { 400, "InvalidRequest" },
+				{ 409, "OperationAborted" }, { 412, "PreconditionFailed" } }) {
+			fake.behave().fail(Op.PUT_OBJECT, (Integer) answer[0], (String) answer[1]);
+			refusedFile(() -> backend.put("1/2/doc/1.1", source(data), md5(data)), (String) answer[1]);
+		}
+		Big big = big(70 * MIB, 4);
+		fake.behave().failPart(1, 400, "EntityTooLarge");
+		refusedFile(() -> putBig(big), "EntityTooLarge");
+		assertEquals(0, fake.openUploads());
+		fake.behave().fail(Op.GET_OBJECT, 400, "InvalidRequest");
+		refusedFile(() -> read("1/2/doc/1.0"), "InvalidRequest");
+		refusedFile(() -> read("1/2/doc/1.0", 10, 10), "InvalidRequest");
+
+		// but the check is the backend's own answer: any refusal there is the backend failing
+		failing(backend::check, "invalidrequest");
+		fake.behave().fail(Op.GET_OBJECT, 400, "AuthorizationHeaderMalformed");
+		failing(backend::check, "authorizationheadermalformed");
+
+		// and 5xx, once the attempts are spent, is unreachable
+		fake.behave().fail(Op.PUT_OBJECT, 500, "InternalError");
+		unreachable(() -> backend.put("1/2/doc/1.1", source(data), md5(data)));
+		fake.behave();
+		assertArrayEquals(data, read("1/2/doc/1.0"));
+	}
+
+	@Test
+	public void testUploadsHaveAnAttemptTimeout() throws Exception {
+		// A read timeout longer than the uploads' timeout: only the upload's own timeout can end these
+		S3Backend quick = backend(fake.settings(BUCKET, "").withTimeouts(Duration.ofSeconds(1), Duration.ofSeconds(30),
+				Duration.ofSeconds(1), 1), 7, false);
+
+		// A server that takes a MiB of the body and stops reading: the client is stuck in a write
+		Big forty = big(40 * MIB, 40);
+		fake.stallBody();
+		long start = System.nanoTime();
+		unreachable(() -> quick.put("1/2/doc/1.0", forty.path(), forty.md5()));
+		long took = (System.nanoTime() - start) / 1_000_000;
+		assertTrue("took " + took + " ms", took < 10_000);
+		assertFalse("The thread was left interrupted", Thread.interrupted());
+		assertTrue(fake.object(BUCKET, "1/2/doc/1.0").isEmpty());
+
+		// A part, likewise: the upload is aborted
+		Big big = big(70 * MIB, 41);
+		fake.behave().stallBody(2);
+		start = System.nanoTime();
+		unreachable(() -> quick.put("1/2/doc/big", big.path(), big.md5()));
+		took = (System.nanoTime() - start) / 1_000_000;
+		assertTrue("took " + took + " ms", took < 10_000);
+		assertFalse("The thread was left interrupted", Thread.interrupted());
+		assertEquals(0, fake.openUploads());
+		assertEquals(1, fake.requests(Op.ABORT_UPLOAD).size());
+
+		// The timeout is the whole attempt's: an answer that doesn't come in time ends it too
+		byte[] data = bytes(1000);
+		fake.behave().delay(Op.PUT_OBJECT, Duration.ofMillis(1200));
+		unreachable(() -> quick.put("1/2/doc/1.1", source(data), md5(data)));
+		assertFalse(Thread.interrupted());
+
+		// Reads have none: an answer slower than the uploads' timeout still arrives
+		fake.behave();
+		quick.put("1/2/doc/1.1", source(data), md5(data));
+		fake.delay(Op.GET_OBJECT, Duration.ofMillis(1200));
+		assertArrayEquals(data, readAll(quick, "1/2/doc/1.1"));
+		fake.behave();
+
+		// Ten minutes in use
+		assertEquals(Duration.ofMinutes(10),
+				new S3Settings(URI.create("https://s3.example.com"), "r", "b", "", true, "AK").uploadTimeout());
+	}
+
+	@Test
 	public void testUnreachable() throws IOException {
 		byte[] data = bytes(100);
 		backend.put("1/2/doc/1.0", source(data), md5(data));
@@ -628,7 +796,9 @@ public class S3BackendTest extends BackendContract {
 		unreachable(() -> backend.put("1/2/doc/1.1", source(data), md5(data)));
 		unreachable(() -> backend.list("", 10));
 		S3Backend twice = backend(
-				fake.settings(BUCKET, "").withTimeouts(Duration.ofSeconds(1), Duration.ofSeconds(1), 2), 7, false);
+				fake.settings(BUCKET, "").withTimeouts(Duration.ofSeconds(1), Duration.ofSeconds(1),
+						Duration.ofSeconds(20), 2),
+				7, false);
 		fake.clearRequests();
 		unreachable(() -> twice.get("1/2/doc/1.0"));
 		assertEquals("Two attempts", 2, fake.requests(Op.GET_OBJECT).size());
@@ -640,7 +810,7 @@ public class S3BackendTest extends BackendContract {
 			closed = socket.getLocalPort();
 		}
 		S3Settings nowhere = new S3Settings(URI.create("http://127.0.0.1:" + closed), FakeS3.REGION, BUCKET, "",
-				true, FakeS3.ACCESS_KEY, Duration.ofSeconds(1), Duration.ofSeconds(1), 1);
+				true, FakeS3.ACCESS_KEY, Duration.ofSeconds(1), Duration.ofSeconds(1), Duration.ofSeconds(20), 1);
 		assertTrue(causedBy(unreachable(backend(nowhere, 7, false)::check), java.net.ConnectException.class));
 		unreachable(() -> backend(nowhere, 7, true));
 

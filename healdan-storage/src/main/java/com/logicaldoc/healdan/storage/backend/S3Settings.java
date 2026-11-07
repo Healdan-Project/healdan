@@ -22,16 +22,21 @@ import java.util.Locale;
  * @param accessKey the access key's id, which isn't secret
  * @param connectTimeout how long a connection may take to open
  * @param readTimeout how long a read may wait for the next byte
+ * @param uploadTimeout how long each attempt of an upload's request may take, its body sent and its answer read: the
+ *        read timeout doesn't end a write that stalls. Reads have no such bound, so a long download isn't cut
  * @param attempts how many times the client sends a request that fails in a way it may retry, the first included
  */
 public record S3Settings(URI endpoint, String region, String bucket, String prefix, boolean pathStyle, String accessKey,
-		Duration connectTimeout, Duration readTimeout, int attempts) {
+		Duration connectTimeout, Duration readTimeout, Duration uploadTimeout, int attempts) {
 
 	/** A connection's timeout in use (Global Constraints) */
 	public static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 
 	/** A read's timeout in use */
 	public static final Duration READ_TIMEOUT = Duration.ofSeconds(60);
+
+	/** An upload request's attempt timeout in use: a 64 MiB put at 1 Mbit/s takes about 9 minutes */
+	public static final Duration UPLOAD_TIMEOUT = Duration.ofMinutes(10);
 
 	/** The client's attempts in use: the SDK's default of 4 would hold a read for 4 minutes on a stalled server */
 	public static final int ATTEMPTS = 2;
@@ -46,18 +51,21 @@ public record S3Settings(URI endpoint, String region, String bucket, String pref
 			throw new IllegalArgumentException("The connection timeout must be positive");
 		if (readTimeout == null || readTimeout.isNegative() || readTimeout.isZero())
 			throw new IllegalArgumentException("The read timeout must be positive");
+		if (uploadTimeout == null || uploadTimeout.isNegative() || uploadTimeout.isZero())
+			throw new IllegalArgumentException("The upload timeout must be positive");
 		if (attempts < 1)
 			throw new IllegalArgumentException("A request needs at least one attempt");
 	}
 
 	/** Settings with the timeouts and attempts in use */
 	public S3Settings(URI endpoint, String region, String bucket, String prefix, boolean pathStyle, String accessKey) {
-		this(endpoint, region, bucket, prefix, pathStyle, accessKey, CONNECT_TIMEOUT, READ_TIMEOUT, ATTEMPTS);
+		this(endpoint, region, bucket, prefix, pathStyle, accessKey, CONNECT_TIMEOUT, READ_TIMEOUT, UPLOAD_TIMEOUT,
+				ATTEMPTS);
 	}
 
 	/** @return these settings with other timeouts and attempts, as tests shorten them */
-	public S3Settings withTimeouts(Duration connect, Duration read, int tries) {
-		return new S3Settings(endpoint, region, bucket, prefix, pathStyle, accessKey, connect, read, tries);
+	public S3Settings withTimeouts(Duration connect, Duration read, Duration upload, int tries) {
+		return new S3Settings(endpoint, region, bucket, prefix, pathStyle, accessKey, connect, read, upload, tries);
 	}
 
 	/**

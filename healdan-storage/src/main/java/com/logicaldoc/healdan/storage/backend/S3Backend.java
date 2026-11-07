@@ -4,12 +4,12 @@
 package com.logicaldoc.healdan.storage.backend;
 
 import java.io.Closeable;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.awscore.AwsRequestOverrideConfiguration;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
 import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
@@ -62,15 +63,19 @@ import software.amazon.awssdk.services.s3.model.S3Object;
  * Every upload carries its {@code Content-MD5}, so S3 refuses bytes that changed on the way, and the SDK's own
  * checksums are off for any endpoint but AWS's, as not every provider takes them (section 10.1). A file up to 64 MiB
  * goes up in one request; a larger one in 16 MiB parts, one at a time, each with its own {@code Content-MD5}, and the
- * upload is aborted on any failure.
+ * upload is aborted on any failure. Each attempt of an upload's request has its own timeout
+ * ({@link S3Settings#uploadTimeout()}), as the read timeout doesn't end a write that stalls; reads have only the read
+ * timeout, so a long download isn't cut.
  * </p>
  *
  * <p>
  * Failures are mapped here: a network failure, or a {@code 5xx} answer once the client's attempts are spent, is a
- * {@link BackendUnreachableException}; any other refusal a {@link BackendFailingException} naming it by status and
- * error code ("access denied", "bucket not found"). Neither carries the SDK's exception for a refusal, nor the
- * provider's message: an answer to a wrong secret can hold the request's signature, and neither the secret nor a
- * signature may reach a log, an answer or the screen.
+ * {@link BackendUnreachableException}; a {@code 401} or {@code 403} is a {@link BackendFailingException}, "access
+ * denied", and so is a missing bucket, "bucket not found"; a missing key on a read is a
+ * {@link FileNotFoundException}; any other refusal is the file's, a plain {@link IOException} naming the error code,
+ * which the mover counts as one failed try. None carries the SDK's exception for a refusal, nor the provider's
+ * message: an answer to a wrong secret can hold the request's signature, and neither the secret nor a signature may
+ * reach a log, an answer or the screen.
  * </p>
  */
 public final class S3Backend implements Backend, Closeable {
@@ -180,14 +185,18 @@ public final class S3Backend implements Backend, Closeable {
 		return settings.bucket();
 	}
 
-	/** @return the key's object, under the prefix; never one of the backend's own objects */
+	/**
+	 * @return the key's object, under the prefix: CE's layout, or the check object or one of Test's; never the marker
+	 * @throws IllegalArgumentException if it isn't a storage key ({@link LocalBackend#checkKey})
+	 */
 	String objectKey(String key) {
-		if (key == null || key.isEmpty() || key.startsWith("/") || key.indexOf('\\') >= 0 || key.indexOf('\0') >= 0)
-			throw new IllegalArgumentException("Not a storage key: " + key);
-		for (String segment : key.split("/", -1))
-			if (segment.isEmpty() || segment.startsWith("."))
-				throw new IllegalArgumentException("Not a storage key: " + key);
+		LocalBackend.checkKey(key);
 		return settings.prefix() + key;
+	}
+
+	/** Gives an upload's request its attempt timeout */
+	private void uploadAttempt(AwsRequestOverrideConfiguration.Builder override) {
+		override.apiCallAttemptTimeout(settings.uploadTimeout());
 	}
 
 	private String markerKey() {
@@ -214,7 +223,7 @@ public final class S3Backend implements Backend, Closeable {
 		} catch (NoSuchKeyException e) {
 			return Optional.empty();
 		} catch (SdkException e) {
-			throw failure("read its marker", e);
+			throw checkFailure("read its marker", e);
 		} catch (IOException e) {
 			throw new BackendUnreachableException(
 					"Backend " + id + " can't be reached: its marker's read stopped: " + e.getMessage(), e);
@@ -231,10 +240,10 @@ public final class S3Backend implements Backend, Closeable {
 		byte[] bytes = marker().getBytes(StandardCharsets.UTF_8);
 		try {
 			client.putObject(b -> b.bucket(bucket()).key(markerKey()).contentLength((long) bytes.length)
-					.contentMD5(base64(md5(bytes))).contentType("text/plain; charset=UTF-8"),
-					RequestBody.fromBytes(bytes));
+					.contentMD5(base64(md5(bytes))).contentType("text/plain; charset=UTF-8")
+					.overrideConfiguration(this::uploadAttempt), RequestBody.fromBytes(bytes));
 		} catch (SdkException e) {
-			throw failure("write its marker", e);
+			throw checkFailure("write its marker", e);
 		}
 		log.info("Backend {} wrote its marker {} in bucket {}", id, markerKey(), bucket());
 	}
@@ -283,7 +292,9 @@ public final class S3Backend implements Backend, Closeable {
 		byte[] digest = md5 != null ? md5 : md5(file, 0, size, null);
 		try (Source source = new Source(file, 0, size)) {
 			try {
-				client.putObject(b -> b.bucket(bucket()).key(objectKey).contentLength(size).contentMD5(base64(digest)),
+				client.putObject(
+						b -> b.bucket(bucket()).key(objectKey).contentLength(size).contentMD5(base64(digest))
+								.overrideConfiguration(this::uploadAttempt),
 						RequestBody.fromContentProvider(source, size, OCTET_STREAM));
 			} catch (SdkException e) {
 				throw source.failureOr(failure("upload " + key, e));
@@ -308,8 +319,8 @@ public final class S3Backend implements Backend, Closeable {
 
 		String uploadId;
 		try {
-			uploadId = client.createMultipartUpload(b -> b.bucket(bucket()).key(objectKey).contentType(OCTET_STREAM))
-					.uploadId();
+			uploadId = client.createMultipartUpload(b -> b.bucket(bucket()).key(objectKey).contentType(OCTET_STREAM)
+					.overrideConfiguration(this::uploadAttempt)).uploadId();
 		} catch (SdkException e) {
 			throw failure("start the upload of " + key, e);
 		}
@@ -324,7 +335,8 @@ public final class S3Backend implements Backend, Closeable {
 					try {
 						String etag = client.uploadPart(
 								b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId).partNumber(number)
-										.contentLength(length).contentMD5(partMd5),
+										.contentLength(length).contentMD5(partMd5)
+										.overrideConfiguration(this::uploadAttempt),
 								RequestBody.fromContentProvider(source, length, OCTET_STREAM)).eTag();
 						completed.add(CompletedPart.builder().partNumber(number).eTag(etag).build());
 					} catch (SdkException e) {
@@ -334,7 +346,7 @@ public final class S3Backend implements Backend, Closeable {
 			}
 			try {
 				client.completeMultipartUpload(b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId)
-						.multipartUpload(m -> m.parts(completed)));
+						.multipartUpload(m -> m.parts(completed)).overrideConfiguration(this::uploadAttempt));
 			} catch (SdkException e) {
 				throw failure("finish the upload of " + key, e);
 			}
@@ -347,9 +359,10 @@ public final class S3Backend implements Backend, Closeable {
 	/** Aborts an upload, and if that fails too, keeps the first failure and logs the second */
 	private void abort(String key, String objectKey, String uploadId, Throwable first) {
 		try {
-			client.abortMultipartUpload(b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId));
+			client.abortMultipartUpload(b -> b.bucket(bucket()).key(objectKey).uploadId(uploadId)
+					.overrideConfiguration(this::uploadAttempt));
 		} catch (SdkException e) {
-			BackendFailingException aborting = failure("abort the upload of " + key, e);
+			IOException aborting = failure("abort the upload of " + key, e);
 			first.addSuppressed(aborting);
 			log.warn("Backend {}: the unfinished upload of {} couldn't be aborted ({}); "
 					+ "the bucket's rule for incomplete uploads clears it", id, key, aborting.getMessage());
@@ -461,28 +474,16 @@ public final class S3Backend implements Backend, Closeable {
 				throw failure("list " + (full.isEmpty() ? "the bucket" : full), e);
 			}
 			for (S3Object object : page.contents()) {
-				if (!object.key().startsWith(base))
+				// An object named as the prefix itself, as some tools make for a folder, is no key
+				if (!object.key().startsWith(base) || object.key().length() == base.length())
 					continue;
-				String key = object.key().substring(base.length());
-				if (hidden(key))
-					continue;
-				keys.add(key);
+				keys.add(object.key().substring(base.length()));
 				if (keys.size() >= max)
 					return keys;
 			}
 			token = Boolean.TRUE.equals(page.isTruncated()) ? page.nextContinuationToken() : null;
 		} while (token != null);
 		return keys;
-	}
-
-	/** @return whether the key is one of the backend's own objects, or no key of CE's layout */
-	private static boolean hidden(String key) {
-		if (key.isEmpty())
-			return true;
-		for (String segment : key.split("/", -1))
-			if (segment.startsWith("."))
-				return true;
-		return false;
 	}
 
 	@Override
@@ -524,13 +525,15 @@ public final class S3Backend implements Backend, Closeable {
 	}
 
 	/**
-	 * Maps an SDK failure. A refusal keeps only its status and error code: the provider's message and the SDK's
-	 * exception, which holds the provider's whole answer, are left out, as an answer to a wrong secret can hold the
-	 * request's signature.
+	 * Maps an SDK failure: unreachable for the network or a {@code 5xx}; the backend failing for a {@code 401} or
+	 * {@code 403} ("access denied") or a missing bucket ("bucket not found"); the file's, a plain
+	 * {@link IOException}, for any other refusal. A refusal keeps only its status and error code: the provider's
+	 * message and the SDK's exception, which holds the provider's whole answer, are left out, as an answer to a wrong
+	 * secret can hold the request's signature.
 	 *
 	 * @param what what was being done, as "upload 1/2/doc/1.0"
 	 */
-	private BackendFailingException failure(String what, SdkException e) {
+	private IOException failure(String what, SdkException e) {
 		if (e instanceof SdkServiceException service) {
 			int status = service.statusCode();
 			String code = service instanceof AwsServiceException aws && aws.awsErrorDetails() != null
@@ -540,18 +543,27 @@ public final class S3Backend implements Backend, Closeable {
 			if (status >= 500)
 				return new BackendUnreachableException(
 						"Backend " + id + " can't be reached: the server answered " + answer + " to " + what);
-			if (status == 403)
+			if (status == 401 || status == 403)
 				return new BackendFailingException("Backend " + id + ": access denied (" + answer + ") to " + what
 						+ ": check its access key and secret");
 			if ("NoSuchBucket".equals(code))
 				return new BackendFailingException("Backend " + id + ": bucket not found: " + bucket());
-			return new BackendFailingException("Backend " + id + " was refused to " + what + ": " + answer);
+			return new IOException("Backend " + id + " was refused to " + what + ": " + answer);
 		}
 		if (e instanceof SdkClientException)
 			return new BackendUnreachableException(
 					"Backend " + id + " can't be reached to " + what + ": " + e.getMessage(), networkCause(e));
-		return new BackendFailingException(
-				"Backend " + id + " couldn't " + what + ": " + e.getClass().getSimpleName());
+		return new IOException("Backend " + id + " couldn't " + what + ": " + e.getClass().getSimpleName());
+	}
+
+	/**
+	 * Maps a failure of the backend's own check, or of writing its marker: any refusal there is the backend's, as no
+	 * file is involved.
+	 */
+	private BackendFailingException checkFailure(String what, SdkException e) {
+		IOException mapped = failure(what, e);
+		return mapped instanceof BackendFailingException failing ? failing
+				: new BackendFailingException(mapped.getMessage());
 	}
 
 	/**
@@ -609,7 +621,9 @@ public final class S3Backend implements Backend, Closeable {
 
 	/**
 	 * A range of the file to upload, which the SDK opens once per attempt. A failure to read it is the file's, not
-	 * the backend's, so it is kept and thrown as it is, rather than as the SDK's failure to send.
+	 * the backend's, so it is kept and thrown as it is, rather than as the SDK's failure to send. It reads through a
+	 * {@link FileInputStream}, not a {@link FileChannel}: the SDK interrupts the thread when an attempt times out,
+	 * which would close a channel and pass for the file's failure.
 	 */
 	private static final class Source implements ContentStreamProvider, Closeable {
 
@@ -631,14 +645,23 @@ public final class S3Backend implements Backend, Closeable {
 
 		@Override
 		public InputStream newStream() {
-			FileChannel channel;
+			FileInputStream in;
 			try {
-				channel = FileChannel.open(file, StandardOpenOption.READ);
-				channel.position(offset);
+				in = new FileInputStream(file.toFile());
 			} catch (IOException e) {
 				throw new UncheckedIOException(record(e));
 			}
-			InputStream stream = new Slice(Channels.newInputStream(channel));
+			try {
+				in.skipNBytes(offset);
+			} catch (IOException e) {
+				try {
+					in.close();
+				} catch (IOException suppressed) {
+					e.addSuppressed(suppressed);
+				}
+				throw new UncheckedIOException(record(e));
+			}
+			InputStream stream = new Slice(in);
 			synchronized (opened) {
 				opened.add(stream);
 			}

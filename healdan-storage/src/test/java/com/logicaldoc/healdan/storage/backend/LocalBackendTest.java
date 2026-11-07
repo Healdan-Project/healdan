@@ -14,12 +14,16 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
 import org.junit.Assume;
 import org.junit.Test;
+
+import com.logicaldoc.healdan.storage.crypto.FileCipher;
+import com.logicaldoc.healdan.storage.crypto.KeyCheck;
 
 public class LocalBackendTest extends BackendContract {
 
@@ -319,6 +323,52 @@ public class LocalBackendTest extends BackendContract {
 		} finally {
 			Files.setPosixFilePermissions(readOnly, PosixFilePermissions.fromString("rwxr-xr-x"));
 		}
+	}
+
+	@FunctionalInterface
+	private interface Call {
+		void run() throws IOException;
+	}
+
+	@Test
+	public void testOwnObjects() throws IOException {
+		byte[] data = bytes(40);
+		for (String key : List.of(".healdan-check", ".healdan-test-1f2e")) {
+			backend.put(key, source(data), md5(data));
+			assertArrayEquals(key, data, Files.readAllBytes(root.resolve(key)));
+			assertArrayEquals(key, data, read(key));
+			assertEquals(key, 40, backend.size(key));
+		}
+		// Never listed, as every dot name
+		assertTrue(backend.list("", 100).isEmpty());
+		assertTrue(backend.list(".healdan-test-", 100).isEmpty());
+		for (String key : List.of(".healdan-check", ".healdan-test-1f2e")) {
+			backend.delete(key);
+			assertEquals(key, -1, backend.size(key));
+		}
+
+		// The check object, as the key check writes and reads it
+		byte[] key = new byte[32];
+		new SecureRandom().nextBytes(key);
+		FileCipher cipher = new FileCipher(key);
+		KeyCheck.write(backend, ".healdan-check", cipher);
+		assertTrue(KeyCheck.verify(backend, ".healdan-check", cipher));
+		assertTrue(Files.isRegularFile(root.resolve(".healdan-check")));
+
+		// The marker, and every other dot name, stay out of reach
+		for (String refused : List.of(".healdan-backend", ".healdan-checks", ".healdan-test-", "1/.healdan-check",
+				".healdan-check/x", ".healdan-test-a/b", "1/.healdan-test-x", ".held/1/2", ".other", ".."))
+			for (Call call : List.<Call>of(() -> backend.put(refused, source(data), null),
+					() -> backend.stage(refused, source(data), null), () -> backend.delete(refused),
+					() -> backend.get(refused).close()))
+				try {
+					call.run();
+					fail("Reached " + refused);
+				} catch (IllegalArgumentException expected) {
+					// as it should
+				}
+		assertEquals(INSTALL + " 3\n", Files.readString(root.resolve(".healdan-backend")));
+		backend.check();
 	}
 
 	@Test

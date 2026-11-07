@@ -44,6 +44,12 @@ public class LocalBackend implements Backend {
 
 	public static final String HELD = ".held";
 
+	/** The key check object (spec section 9), at a backend's top level */
+	public static final String CHECK = ".healdan-check";
+
+	/** Test's objects are this and then any name, at a backend's top level (Task 12) */
+	public static final String TEST = ".healdan-test-";
+
 	/** A temporary file's name is the key's, then this, then a UUID */
 	static final String TEMPORARY = ".healdan-tmp-";
 
@@ -112,7 +118,7 @@ public class LocalBackend implements Backend {
 			throw new BackendFailingException("The folder " + root + " doesn't exist");
 		if (Files.exists(root.resolve(MARKER)))
 			throw new BackendFailingException("The folder " + root + " already belongs to a backend");
-		Path probe = root.resolve(".healdan-test-" + UUID.randomUUID());
+		Path probe = root.resolve(TEST + UUID.randomUUID());
 		try {
 			Files.write(probe, new byte[] { 1 }, StandardOpenOption.CREATE_NEW);
 			Files.delete(probe);
@@ -131,13 +137,31 @@ public class LocalBackend implements Backend {
 		return id;
 	}
 
-	/** @return where the key's file is, never outside the root */
-	private Path path(String key) {
+	/**
+	 * A storage key: CE's layout, whose names never start with a dot, or one of the two own objects a key may name,
+	 * {@link #CHECK} and {@link #TEST}{@code <name>}, at the top level. The marker and every other dot name are out of
+	 * reach.
+	 *
+	 * @throws IllegalArgumentException if it isn't one
+	 */
+	static void checkKey(String key) {
 		if (key == null || key.isEmpty() || key.startsWith("/") || key.indexOf('\\') >= 0 || key.indexOf('\0') >= 0)
 			throw new IllegalArgumentException("Not a storage key: " + key);
+		if (ownObject(key))
+			return;
 		for (String segment : key.split("/", -1))
 			if (segment.isEmpty() || segment.startsWith("."))
 				throw new IllegalArgumentException("Not a storage key: " + key);
+	}
+
+	/** @return whether the key is the check object or one of Test's */
+	private static boolean ownObject(String key) {
+		return key.equals(CHECK) || (key.startsWith(TEST) && key.length() > TEST.length() && key.indexOf('/') < 0);
+	}
+
+	/** @return where the key's file is, never outside the root */
+	private Path path(String key) {
+		checkKey(key);
 		Path path = root.resolve(key).normalize();
 		if (!path.startsWith(root))
 			throw new IllegalArgumentException("Not a storage key: " + key);
