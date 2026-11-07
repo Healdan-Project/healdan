@@ -28,7 +28,7 @@ public class StorageUnreachableException extends IOException {
 
 	/**
 	 * @param store the name of the file's Store; null if it has none
-	 * @return "This file is in <Store>'s cloud storage, which can't be reached right now."
+	 * @return "This file is in &lt;Store&gt;'s cloud storage, which can't be reached right now."
 	 */
 	public static String message(String store) {
 		return store == null || store.isBlank()

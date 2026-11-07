@@ -5,6 +5,7 @@ package com.logicaldoc.healdan.storage;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -163,17 +164,19 @@ public class HealdanStorage extends AbstractStore {
 		String name = resource.name();
 		String key = keyOf(docId, name);
 		long size = Files.size(plain);
+		// Got first, as one in the wrong folder is refused before anything is written, and outside the file's lock, as
+		// the first one reads the cache's whole folder
+		ReadCache cache = ReadCache.get();
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
-			// Got first, as one in the wrong folder is refused before anything is written
-			ReadCache cache = ReadCache.get();
 			Long storeId = StoreOf.get().of(docId).orElse(null);
-			long target = target(storeId);
+			long storeBackend = files().storeBackend(storeId);
+			long target = target(storeId, storeBackend);
 			Optional<StoredFile> before = files().find(docId, name);
 			// A file with no row can only be in Original's folder (call 11), and this save replaces it
 			boolean unrecorded = before.isEmpty() && target != StorageBackend.ORIGINAL
 					&& Files.isRegularFile(original(key));
 			put(target, key, plain, docId, name);
-			files().recordWrite(docId, name, target, storeId, size, before.isPresent());
+			files().recordWrite(docId, name, target, storeId, size, before.isPresent(), target == storeBackend);
 			cache.delete(docId, name);
 			if (before.isPresent() && before.get().backendId() != target)
 				holdReplaced(before.get().backendId(), key, docId, name);
@@ -184,23 +187,20 @@ public class HealdanStorage extends AbstractStore {
 
 	/**
 	 * @param storeId a document's Store; null if it can't be told yet
+	 * @param storeBackend the backend the Store uses ({@link StoredFiles#storeBackend})
 	 * @return where a save into it lands: its backend if that is local (Original for a Store with none), staging if S3
 	 *         or no Store
 	 */
-	private static long target(Long storeId) throws IOException {
+	private static long target(Long storeId, long storeBackend) throws IOException {
 		if (storeId == null)
 			return Staging.ID;
-		long backendId;
-		try {
-			backendId = StoreBackendDAO.get().findByStore(storeId).map(StoreBackend::getBackendId)
-					.orElse(StorageBackend.ORIGINAL);
-		} catch (PersistenceException e) {
-			throw new IOException("The backend of Store " + storeId + " can't be read", e);
-		}
-		return backends().isS3(backendId) ? Staging.ID : backendId;
+		return backends().isS3(storeBackend) ? Staging.ID : storeBackend;
 	}
 
-	/** Writes the file on a local backend or staging, encrypting it on its way into an encrypted backend */
+	/**
+	 * Writes the file on a local backend or staging, encrypting it on its way into an encrypted backend: straight into
+	 * the backend's temporary file, so the file is written once
+	 */
 	private static void put(long backendId, String key, Path plain, long docId, String name) throws IOException {
 		Backends.Entry entry = backends().entry(backendId);
 		if (entry.s3())
@@ -209,9 +209,15 @@ public class HealdanStorage extends AbstractStore {
 			entry.backend().put(key, plain, null);
 			return;
 		}
+		String associated = FileCipher.associated(docId, name);
+		if (entry.backend() instanceof LocalBackend folder) {
+			folder.put(key, out -> entry.cipher().encrypt(plain, out, associated));
+			return;
+		}
+		// A backend a test gave in place of a folder
 		Path cipher = Files.createTempFile("healdan-storage", ".enc");
 		try {
-			entry.cipher().encrypt(plain, cipher, FileCipher.associated(docId, name));
+			entry.cipher().encrypt(plain, cipher, associated);
 			entry.backend().put(key, cipher, null);
 		} finally {
 			Files.deleteIfExists(cipher);
@@ -228,7 +234,8 @@ public class HealdanStorage extends AbstractStore {
 				log.warn("The copy of document {}'s {} that a save replaced stays on storage backend {}, not held",
 						docId, name, backendId);
 		} catch (RuntimeException e) {
-			// The save stands: reporting it as failed would leave CE out of step with the row just written
+			// The save stands: reporting it as failed would leave CE out of step with the row just written. The hold's
+			// statements ran in a savepoint (HeldCopies.hold), so the caller's transaction is still usable
 			log.error("The save of document {}'s {} stands, but the copy it replaced on storage backend {} couldn't be "
 					+ "recorded as held ({}): it is held with no row in hd_storage_held, under the backend's .held/ or, "
 					+ "on S3, where it was, and no purge will delete it", docId, name, backendId, e.getMessage(), e);
@@ -271,11 +278,12 @@ public class HealdanStorage extends AbstractStore {
 	 */
 	private boolean deleteFile(long docId, String name) {
 		String key = keyOf(docId, name);
+		// Got first, as one in the wrong folder is refused before anything is held, and outside the file's lock, as the
+		// first one reads the cache's whole folder
+		ReadCache cache = ReadCache.get();
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
 			Optional<StoredFile> row = files().find(docId, name);
 			if (row.isPresent()) {
-				// Got first, as one in the wrong folder is refused before anything is held
-				ReadCache cache = ReadCache.get();
 				if (!Held.hold(row.get().backendId(), key, docId, name))
 					return false;
 				files().delete(docId, name);
@@ -387,24 +395,40 @@ public class HealdanStorage extends AbstractStore {
 		return new BufferedInputStream(read(resource.getDocId(), resource.name()));
 	}
 
-	/**
-	 * @return the file's plain bytes, from its row's place; a file the mover took elsewhere while it was looked up is
-	 *         read from where it went
-	 */
+	/** @return the file's plain bytes, as {@link #open(long, String, boolean)} reads them */
 	private InputStream read(long docId, String name) throws IOException {
+		return open(docId, name, false);
+	}
+
+	/** @return the file's plain bytes as a channel, which reads a range without reading what is before it */
+	private SeekableByteChannel channel(long docId, String name) throws IOException {
+		return open(docId, name, true);
+	}
+
+	/**
+	 * @param ranged whether a channel is wanted, else a stream
+	 * @return the file's plain bytes, from its row's place; a file the mover took elsewhere while it was looked up is
+	 *         read from where it went. An S3 backend that can't be reached, at either place, is a
+	 *         {@link StorageUnreachableException} naming the Store.
+	 */
+	private <T> T open(long docId, String name, boolean ranged) throws IOException {
 		String key = keyOf(docId, name);
 		Optional<StoredFile> row = files().find(docId, name);
 		if (row.isEmpty())
-			return Files.newInputStream(unrecorded(docId, name, true).orElseThrow(() -> new FileNotFoundException(key)));
+			return openEntry(unrecorded(docId, name, true).orElseThrow(() -> new FileNotFoundException(key)), ranged);
+		StoredFile current = row.get();
 		try {
-			return open(row.get(), key);
-		} catch (FileNotFoundException e) {
-			Optional<StoredFile> now = files().find(docId, name);
-			if (now.isPresent() && moved(row.get(), now.get()))
-				return open(now.get(), key);
-			throw e;
+			try {
+				return open(current, key, ranged);
+			} catch (FileNotFoundException e) {
+				Optional<StoredFile> now = files().find(docId, name);
+				if (now.isEmpty() || !moved(current, now.get()))
+					throw e;
+				current = now.get();
+				return open(current, key, ranged);
+			}
 		} catch (BackendUnreachableException e) {
-			throw unreachable(row.get(), e);
+			throw unreachable(current, e);
 		}
 	}
 
@@ -428,39 +452,46 @@ public class HealdanStorage extends AbstractStore {
 	}
 
 	/**
-	 * A whole read. S3's goes through the read cache, which holds plain bytes and is looked in before the backend is
-	 * built, so a cached file opens while its backend can't be built (spec section 6.5); a local file is decrypted as
-	 * it is read, and one missing from its place is read from .held/.
+	 * Opens a row's file. S3's goes through the read cache, which holds plain bytes and is looked in before the backend
+	 * is built, so a cached file opens while its backend can't be built (spec section 6.5); S3's other files (over a
+	 * tenth of the cache) are read whole or, as a channel, by a ranged request for each read. A local file missing from
+	 * its place is read from .held/. An encrypted file is decrypted as it is read, a channel only in the segments it
+	 * covers.
+	 *
+	 * @param ranged whether a channel is wanted, else a stream
 	 */
-	private static InputStream open(StoredFile row, String key) throws IOException {
+	@SuppressWarnings("unchecked")
+	private static <T> T open(StoredFile row, String key, boolean ranged) throws IOException {
 		if (backends().isS3(row.backendId())) {
-			Optional<InputStream> hit = hit(row, false);
+			Optional<T> hit = hit(row, ranged);
 			if (hit.isPresent())
 				return hit.get();
 		}
 		Backends.Entry entry = backends().entry(row.backendId());
 		if (entry.s3()) {
-			Optional<InputStream> cached = cached(entry, row, key, false);
+			Optional<T> cached = cached(entry, row, key, ranged);
 			if (cached.isPresent())
 				return cached.get();
 		}
-		InputStream in;
+		Closeable raw;
 		try {
-			in = entry.backend().get(key);
+			raw = ranged ? entry.backend().open(key) : entry.backend().get(key);
 		} catch (FileNotFoundException e) {
 			// A restored database finds a file deleted after its backup in .held/ (spec section 6.3)
 			if (!(entry.backend() instanceof LocalBackend folder) || folder.held(key).isEmpty())
 				throw e;
 			log.warn("Document {}'s {} is not in its place on storage backend {}; it is read from .held/",
 					row.docId(), row.resource(), row.backendId());
-			in = folder.getHeld(key);
+			raw = ranged ? folder.openHeld(key) : folder.getHeld(key);
 		}
 		if (!entry.encrypted())
-			return in;
+			return (T) raw;
+		String associated = FileCipher.associated(row.docId(), row.resource());
 		try {
-			return entry.cipher().decrypting(in, FileCipher.associated(row.docId(), row.resource()));
+			return (T) (ranged ? entry.cipher().decrypting((SeekableByteChannel) raw, associated)
+					: entry.cipher().decrypting((InputStream) raw, associated));
 		} catch (IOException | RuntimeException e) {
-			in.close();
+			raw.close();
 			throw e;
 		}
 	}
@@ -504,66 +535,10 @@ public class HealdanStorage extends AbstractStore {
 		}
 	}
 
-	/** @return a cache entry opened as a channel if ranged, else as a stream */
+	/** @return a file opened as a channel if ranged, else as a stream */
 	@SuppressWarnings("unchecked")
 	private static <T> T openEntry(Path path, boolean ranged) throws IOException {
 		return (T) (ranged ? FileChannel.open(path, StandardOpenOption.READ) : Files.newInputStream(path));
-	}
-
-	/** @return the file's plain bytes as a channel, which reads a range without reading what is before it */
-	private SeekableByteChannel channel(long docId, String name) throws IOException {
-		String key = keyOf(docId, name);
-		Optional<StoredFile> row = files().find(docId, name);
-		if (row.isEmpty())
-			return FileChannel.open(unrecorded(docId, name, true).orElseThrow(() -> new FileNotFoundException(key)),
-					StandardOpenOption.READ);
-		try {
-			return channel(row.get(), key);
-		} catch (FileNotFoundException e) {
-			Optional<StoredFile> now = files().find(docId, name);
-			if (now.isPresent() && moved(row.get(), now.get()))
-				return channel(now.get(), key);
-			throw e;
-		} catch (BackendUnreachableException e) {
-			throw unreachable(row.get(), e);
-		}
-	}
-
-	/**
-	 * A file in the read cache is read from there, looked up before the backend is built, as {@link #open} does. S3's
-	 * other files (over a tenth of the cache) are each read by a ranged request, and an encrypted one decrypts only the
-	 * segments it covers.
-	 */
-	private static SeekableByteChannel channel(StoredFile row, String key) throws IOException {
-		if (backends().isS3(row.backendId())) {
-			Optional<SeekableByteChannel> hit = hit(row, true);
-			if (hit.isPresent())
-				return hit.get();
-		}
-		Backends.Entry entry = backends().entry(row.backendId());
-		if (entry.s3()) {
-			Optional<SeekableByteChannel> cached = cached(entry, row, key, true);
-			if (cached.isPresent())
-				return cached.get();
-		}
-		SeekableByteChannel channel;
-		try {
-			channel = entry.backend().open(key);
-		} catch (FileNotFoundException e) {
-			if (!(entry.backend() instanceof LocalBackend folder) || folder.held(key).isEmpty())
-				throw e;
-			log.warn("Document {}'s {} is not in its place on storage backend {}; it is read from .held/",
-					row.docId(), row.resource(), row.backendId());
-			channel = folder.openHeld(key);
-		}
-		if (!entry.encrypted())
-			return channel;
-		try {
-			return entry.cipher().decrypting(channel, FileCipher.associated(row.docId(), row.resource()));
-		} catch (IOException | RuntimeException e) {
-			channel.close();
-			throw e;
-		}
 	}
 
 	/**

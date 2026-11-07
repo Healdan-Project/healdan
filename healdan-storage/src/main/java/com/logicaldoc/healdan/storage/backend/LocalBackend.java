@@ -4,10 +4,13 @@
 package com.logicaldoc.healdan.storage.backend;
 
 import java.io.FileNotFoundException;
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
@@ -21,7 +24,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -84,7 +86,7 @@ public class LocalBackend implements Backend {
 	}
 
 	private String marker() {
-		return installId + " " + id + "\n";
+		return BackendCommon.marker(installId, id);
 	}
 
 	private void createMarker() throws IOException {
@@ -204,6 +206,51 @@ public class LocalBackend implements Backend {
 		sync(target.getParent());
 	}
 
+	/** What a {@link LocalBackend#put(String, Content)} writes */
+	@FunctionalInterface
+	public interface Content {
+
+		/** Writes the file's bytes; closing the stream only flushes it */
+		void writeTo(OutputStream out) throws IOException;
+	}
+
+	/**
+	 * Saves what {@code content} writes, as {@link #put(String, Path, byte[])} saves a file: into a temporary file
+	 * beside the key, forced to disk, then moved into place. An encrypted save writes its ciphertext here, so the file
+	 * is written once.
+	 */
+	public void put(String key, Content content) throws IOException {
+		Path target = path(key);
+		check();
+		Path temporary = target.resolveSibling(target.getFileName() + TEMPORARY + UUID.randomUUID());
+		try {
+			try (FileChannel channel = create(temporary)) {
+				content.writeTo(new FilterOutputStream(Channels.newOutputStream(channel)) {
+					@Override
+					public void write(byte[] b, int off, int len) throws IOException {
+						// FilterOutputStream's own writes a byte at a time
+						out.write(b, off, len);
+					}
+
+					@Override
+					public void close() throws IOException {
+						flush();
+					}
+				});
+				channel.force(true);
+			}
+			move(temporary, target);
+		} catch (IOException | RuntimeException e) {
+			try {
+				Files.deleteIfExists(temporary);
+			} catch (IOException suppressed) {
+				e.addSuppressed(suppressed);
+			}
+			throw e;
+		}
+		sync(target.getParent());
+	}
+
 	@Override
 	public Staged stage(String key, Path file, byte[] md5) throws IOException {
 		Path target = path(key);
@@ -238,7 +285,7 @@ public class LocalBackend implements Backend {
 		Path temporary = target.resolveSibling(target.getFileName() + TEMPORARY + UUID.randomUUID());
 		try {
 			long expected = Files.size(source);
-			MessageDigest digest = md5 == null ? null : digest();
+			MessageDigest digest = md5 == null ? null : BackendCommon.md5();
 			try (FileChannel out = create(temporary)) {
 				long copied = copy(source, out, digest);
 				out.force(true);
@@ -296,14 +343,6 @@ public class LocalBackend implements Backend {
 			}
 		}
 		return total;
-	}
-
-	private static MessageDigest digest() throws IOException {
-		try {
-			return MessageDigest.getInstance("MD5");
-		} catch (NoSuchAlgorithmException e) {
-			throw new IOException(e);
-		}
 	}
 
 	private static void move(Path from, Path to) throws IOException {
@@ -375,6 +414,8 @@ public class LocalBackend implements Backend {
 		List<String> keys = new ArrayList<>();
 		if (max <= 0 || !Files.isDirectory(root))
 			return keys;
+		// No prefix lists every key, as on S3
+		String wanted = prefix == null ? "" : prefix;
 		Files.walkFileTree(root, new SimpleFileVisitor<>() {
 			@Override
 			public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
@@ -387,7 +428,7 @@ public class LocalBackend implements Backend {
 				String name = file.getFileName().toString();
 				if (!name.startsWith(".") && !name.contains(TEMPORARY)) {
 					String key = root.relativize(file).toString().replace(java.io.File.separatorChar, '/');
-					if (key.startsWith(prefix))
+					if (key.startsWith(wanted))
 						keys.add(key);
 				}
 				return keys.size() >= max ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;

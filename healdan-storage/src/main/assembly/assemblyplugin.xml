@@ -7,6 +7,15 @@
 	</formats>
 	<includeBaseDirectory>false</includeBaseDirectory>
 	<dependencySets>
+		<!-- Only the plugin's own jar is named *-plugin.jar: CE takes every such jar for a plugin and reads its plugin.xml -->
+		<dependencySet>
+			<outputDirectory>WEB-INF/lib</outputDirectory>
+			<includes>
+				<include>com.logicaldoc:healdan-storage</include>
+			</includes>
+			<outputFileNameMapping>
+				${artifact.artifactId}-${artifact.version}-plugin.${artifact.type}</outputFileNameMapping>
+		</dependencySet>
 		<dependencySet>
 			<outputDirectory>WEB-INF/lib</outputDirectory>
 			<!-- Left out on purpose, because the WAR ships them or nothing here loads them: reactive-streams 1.0.4 (the same
@@ -15,12 +24,9 @@
 				TinkClasspathTest proves: a KeysetHandle would need Tink's protobuf 4.33.6, not the WAR's 4.29.0. The SDK's
 				eventstream jar is software.amazon.awssdk:eventstream, which the SDK's include takes -->
 			<includes>
-				<include>com.logicaldoc:healdan-storage</include>
 				<include>software.amazon.awssdk:*</include>
 				<include>com.google.crypto.tink:*</include>
 			</includes>
-			<outputFileNameMapping>
-				${artifact.artifactId}-${artifact.version}-plugin.${artifact.type}</outputFileNameMapping>
 		</dependencySet>
 	</dependencySets>
 	<fileSets>

@@ -18,7 +18,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -94,6 +93,9 @@ public final class S3Backend implements Backend, Closeable {
 
 	/** The most parts S3 takes in an upload: 10,000 of 16 MiB is about 156 GiB */
 	public static final int MAX_PARTS = 10_000;
+
+	/** The most a purge's delete may take, attempts included, as it holds the file's lock ({@link #purgeHeld}) */
+	static final Duration PURGE_TIMEOUT = Duration.ofSeconds(15);
 
 	/** A marker is a line; anything longer isn't one */
 	private static final int MARKER_LIMIT = 1024;
@@ -226,7 +228,7 @@ public final class S3Backend implements Backend, Closeable {
 	}
 
 	private String marker() {
-		return installId + " " + id + "\n";
+		return BackendCommon.marker(installId, id);
 	}
 
 	/** @return the bucket and prefix, as messages name them */
@@ -269,7 +271,7 @@ public final class S3Backend implements Backend, Closeable {
 		byte[] bytes = marker().getBytes(StandardCharsets.UTF_8);
 		try {
 			client.putObject(b -> b.bucket(bucket()).key(markerKey()).contentLength((long) bytes.length)
-					.contentMD5(base64(md5(bytes))).contentType("text/plain; charset=UTF-8")
+					.contentMD5(base64(BackendCommon.md5(bytes))).contentType("text/plain; charset=UTF-8")
 					.overrideConfiguration(uploadAttempt(bytes.length)), RequestBody.fromBytes(bytes));
 		} catch (SdkException e) {
 			throw checkFailure(uploadFailure("write its marker", e));
@@ -342,7 +344,7 @@ public final class S3Backend implements Backend, Closeable {
 					+ (PART_SIZE >> 20) + " MiB");
 		int count = (int) parts64;
 		byte[][] parts = new byte[count][];
-		MessageDigest whole = digest();
+		MessageDigest whole = BackendCommon.md5();
 		for (int i = 0; i < count; i++) {
 			long offset = (long) i * PART_SIZE;
 			parts[i] = md5(file, offset, Math.min(PART_SIZE, size - offset), whole);
@@ -540,14 +542,28 @@ public final class S3Backend implements Backend, Closeable {
 		return key;
 	}
 
+	/**
+	 * Deletes a held object, with a bound on the whole call, attempts included: the purge holds the file's lock while
+	 * it deletes, so that no save or delete holds the location afresh in between, and a bucket that stalls would
+	 * otherwise hold every save of a file sharing that lock for twice the read timeout. Cut off, it is unreachable,
+	 * and the purge leaves the backend's other copies for its next run.
+	 */
 	@Override
 	public void purgeHeld(String location) throws IOException {
+		String objectKey;
 		try {
-			objectKey(location);
+			objectKey = objectKey(location);
 		} catch (IllegalArgumentException e) {
 			throw new IOException("Not a held location: " + location, e);
 		}
-		delete(location);
+		try {
+			client.deleteObject(b -> b.bucket(bucket()).key(objectKey)
+					.overrideConfiguration(o -> o.apiCallTimeout(PURGE_TIMEOUT)));
+		} catch (NoSuchKeyException e) {
+			// Missing is fine
+		} catch (SdkException e) {
+			throw failure("delete " + location, e);
+		}
 	}
 
 	@Override
@@ -653,24 +669,12 @@ public final class S3Backend implements Backend, Closeable {
 		return Base64.getEncoder().encodeToString(md5);
 	}
 
-	private static MessageDigest digest() {
-		try {
-			return MessageDigest.getInstance("MD5");
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException(e);
-		}
-	}
-
-	private static byte[] md5(byte[] bytes) {
-		return digest().digest(bytes);
-	}
-
 	/**
 	 * @param whole also hashes the bytes into this, if not null
 	 * @return the MD5 of the file's bytes from offset, that many
 	 */
 	private static byte[] md5(Path file, long offset, long length, MessageDigest whole) throws IOException {
-		MessageDigest part = digest();
+		MessageDigest part = BackendCommon.md5();
 		ByteBuffer buffer = ByteBuffer.allocate(1 << 16);
 		try (FileChannel in = FileChannel.open(file, StandardOpenOption.READ)) {
 			long position = offset;

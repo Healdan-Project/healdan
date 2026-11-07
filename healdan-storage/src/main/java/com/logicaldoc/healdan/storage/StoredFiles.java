@@ -24,9 +24,10 @@ import com.logicaldoc.util.spring.Context;
  * Reads and writes {@code hd_storage_file}, one row for each resource of each document: which backend holds its bytes
  * and how its move to its Store's backend is going. JDBC on CE's data source, so it joins the caller's transaction.
  * <p>
- * Every per-file write ({@link #recordWrite}, {@link #moved}, {@link #delete}) is called holding the file's lock, so
- * {@code recordWrite}'s read of the row and its insert or update can't race another write of the same file: no
- * statement here is expected to fail, which PostgreSQL would not forgive inside a transaction.
+ * Every per-file write ({@link #recordWrite}, {@link #moved}, {@link #delete}) is called holding the file's lock. The
+ * lock ends before the caller's transaction commits, so another transaction may insert a row that {@code recordWrite}
+ * read as missing; its insert then runs in a savepoint ({@link Savepoints}) and becomes an update, which PostgreSQL
+ * forgives inside a transaction.
  */
 @Component
 public class StoredFiles {
@@ -106,50 +107,62 @@ public class StoredFiles {
 	 * @return the new write id
 	 */
 	public long recordWrite(long docId, String resource, long backendId, Long storeId, long size) {
-		return recordWrite(docId, resource, backendId, storeId, size, find(docId, resource).isPresent());
+		return recordWrite(docId, resource, backendId, storeId, size, find(docId, resource).isPresent(),
+				backendId == storeBackend(storeId));
 	}
 
 	/**
 	 * Records a write as {@link #recordWrite(long, String, long, Long, long)} does, for a caller that has read the row
-	 * already, holding the file's lock.
+	 * already, holding the file's lock, and knows its Store's backend.
 	 * <p>
 	 * A new row is inserted, never first tried as an update: on MariaDB, whose isolation is REPEATABLE READ, an UPDATE
 	 * that matches no row takes a gap lock that lasts until its transaction commits. CE's folder copy stores every new
 	 * file in one transaction, so such a lock would hold every other save of a new file in that gap (the higher
 	 * document ids) until the copy commits, each waiting while it holds its file's lock, which may share a stripe with
 	 * a file the copy stores next. A plain read takes no lock, and an insert into a gap only an insert intention lock,
-	 * which other inserts don't wait for.
+	 * which other inserts don't wait for. An insert that finds the key taken, by a transaction that hadn't committed
+	 * when the row was read, updates that row instead.
 	 *
 	 * @param rowExists whether the file has a row, as the caller read it holding the file's lock
+	 * @param inPlace whether the bytes landed on the backend the Store uses ({@link #storeBackend})
 	 * @return the new write id
 	 */
-	public long recordWrite(long docId, String resource, long backendId, Long storeId, long size, boolean rowExists) {
+	public long recordWrite(long docId, String resource, long backendId, Long storeId, long size, boolean rowExists,
+			boolean inPlace) {
 		long write = RANDOM.nextLong();
 		Timestamp now = new Timestamp(System.currentTimeMillis());
-		boolean inPlace = backendId == targetOf(storeId);
-		if (rowExists) {
-			String waiting = inPlace ? "null" : "coalesce(hd_waiting, ?)";
-			List<Object> arguments = new ArrayList<>(List.of(backendId));
-			arguments.add(storeId);
-			arguments.addAll(List.of(size, write, now));
-			if (!inPlace)
-				arguments.add(now);
-			arguments.addAll(List.of(docId, resource));
-			int updated = jdbc.update("update hd_storage_file set hd_backendid = ?, hd_storeid = ?, hd_size = ?, "
-					+ "hd_write = ?, hd_stored = ?, hd_waiting = " + waiting + ", hd_attempts = 0, "
-					+ "hd_lasterror = null, hd_stuck = 0, hd_nexttry = null where hd_docid = ? and hd_resource = ?",
-					arguments.toArray());
-			if (updated == 1)
-				return write;
-			// Only a delete that didn't take the file's lock could have taken the row meanwhile
-		}
-		jdbc.update("insert into hd_storage_file (hd_docid, hd_resource, hd_backendid, hd_storeid, hd_size, "
-				+ "hd_write, hd_stored, hd_waiting, hd_attempts, hd_stuck) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)",
-				docId, resource, backendId, storeId, size, write, now, inPlace ? null : now);
+		// Only a delete that didn't take the file's lock could have taken a row that was read
+		if (rowExists && update(docId, resource, backendId, storeId, size, write, now, inPlace))
+			return write;
+		if (!Savepoints.insertIfAbsent(jdbc,
+				"insert into hd_storage_file (hd_docid, hd_resource, hd_backendid, hd_storeid, hd_size, "
+						+ "hd_write, hd_stored, hd_waiting, hd_attempts, hd_stuck) values (?, ?, ?, ?, ?, ?, ?, ?, 0, 0)",
+				docId, resource, backendId, storeId, size, write, now, inPlace ? null : now))
+			update(docId, resource, backendId, storeId, size, write, now, inPlace);
 		return write;
 	}
 
-	private long targetOf(Long storeId) {
+	/** @return whether the file's row was there to be given the write */
+	private boolean update(long docId, String resource, long backendId, Long storeId, long size, long write,
+			Timestamp now, boolean inPlace) {
+		String waiting = inPlace ? "null" : "coalesce(hd_waiting, ?)";
+		List<Object> arguments = new ArrayList<>(List.of(backendId));
+		arguments.add(storeId);
+		arguments.addAll(List.of(size, write, now));
+		if (!inPlace)
+			arguments.add(now);
+		arguments.addAll(List.of(docId, resource));
+		return jdbc.update("update hd_storage_file set hd_backendid = ?, hd_storeid = ?, hd_size = ?, "
+				+ "hd_write = ?, hd_stored = ?, hd_waiting = " + waiting + ", hd_attempts = 0, "
+				+ "hd_lasterror = null, hd_stuck = 0, hd_nexttry = null where hd_docid = ? and hd_resource = ?",
+				arguments.toArray()) == 1;
+	}
+
+	/**
+	 * @param storeId a Store; null for none
+	 * @return the backend the Store uses: Original's for no Store, or a Store with no row
+	 */
+	long storeBackend(Long storeId) {
 		if (storeId == null)
 			return ORIGINAL;
 		List<Long> backends = jdbc.queryForList(
@@ -184,7 +197,7 @@ public class StoredFiles {
 	 * @param storeId their new Store; null for none
 	 */
 	public void setStore(Collection<Long> docIds, Long storeId) {
-		long target = targetOf(storeId);
+		long target = storeBackend(storeId);
 		Timestamp now = new Timestamp(System.currentTimeMillis());
 		List<Long> ids = new ArrayList<>(docIds);
 		for (int from = 0; from < ids.size(); from += BATCH) {

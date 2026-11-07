@@ -388,12 +388,18 @@ public class StorageDataTest extends AbstractStorageTestCase {
 
 		// The caller that read the row already says whether there is one
 		recording.clear();
-		files.recordWrite(100L, "1.1", 0L, null, 5L, false);
+		files.recordWrite(100L, "1.1", 0L, null, 5L, false, false);
 		assertEquals(List.of("insert"), recording.verbs());
 		recording.clear();
-		files.recordWrite(100L, "1.1", 0L, null, 6L, true);
+		files.recordWrite(100L, "1.1", 0L, null, 6L, true, false);
 		assertEquals(List.of("update"), recording.verbs());
 		assertEquals(6L, files.find(100L, "1.1").orElseThrow().size());
+
+		// A row another transaction inserted after the caller's read: the insert finds its key taken, and updates it
+		recording.clear();
+		files.recordWrite(100L, "1.1", 0L, null, 7L, false, false);
+		assertEquals(List.of("insert", "update"), recording.verbs());
+		assertEquals(7L, files.find(100L, "1.1").orElseThrow().size());
 
 		recording.clear();
 		Date until = new Date(System.currentTimeMillis() + DAY);

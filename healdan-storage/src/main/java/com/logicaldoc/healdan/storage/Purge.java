@@ -31,6 +31,10 @@ import com.logicaldoc.util.spring.Context;
  * <li>an S3 object whose file the mover is moving now is left, its hold kept for the next purge;</li>
  * <li>a local copy is deleted only from the backend's {@code .held/}.</li>
  * </ul>
+ * The delete itself runs holding the lock too, so that no save or delete holds the location afresh between the checks
+ * and it; an S3 backend bounds that delete's whole call ({@code S3Backend.purgeHeld}), so a bucket that stalls holds
+ * the lock for seconds, not minutes.
+ * <p>
  * S3 can't tell a missing bucket from a missing object, and a delete of a missing object succeeds, so each backend is
  * checked once per run first, and one that is failing or unreachable is skipped with its rows kept for the next run. A
  * backend that can't be reached by a delete later in the run is skipped from then on, the same way.

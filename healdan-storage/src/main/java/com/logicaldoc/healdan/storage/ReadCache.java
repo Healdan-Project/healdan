@@ -256,25 +256,30 @@ public class ReadCache {
 		return folder.resolve(TEMPORARY + UUID.randomUUID());
 	}
 
-	/** @return the entry's file if it is there, marking it read; null if not */
+	/**
+	 * @return the entry's file if it is there, marking it read; null if not. The file is looked at and its time renewed
+	 *         outside the monitor, so cached reads don't wait on each other's disk.
+	 */
 	private Path hit(String name) {
 		Path file = folder.resolve(name);
 		synchronized (this) {
-			Long size = lru.get(name);
-			if (size == null)
+			if (lru.get(name) == null)
 				return null;
-			if (Files.isRegularFile(file)) {
-				try {
-					Files.setLastModifiedTime(file, FileTime.fromMillis(System.currentTimeMillis()));
-				} catch (IOException e) {
-					log.debug("The read time of cache entry {} wasn't kept: {}", name, e.getMessage());
-				}
-				return file;
-			}
-			// Gone from under the cache: forget it
-			forget(name);
-			return null;
 		}
+		if (Files.isRegularFile(file)) {
+			try {
+				Files.setLastModifiedTime(file, FileTime.fromMillis(System.currentTimeMillis()));
+			} catch (IOException e) {
+				log.debug("The read time of cache entry {} wasn't kept: {}", name, e.getMessage());
+			}
+			return file;
+		}
+		synchronized (this) {
+			// Gone from under the cache: forget it, unless a download put it back meanwhile
+			if (!Files.isRegularFile(file))
+				forget(name);
+		}
+		return null;
 	}
 
 	/** Moves a downloaded file into place as an entry, and drops the oldest entries while the cache is over its cap */

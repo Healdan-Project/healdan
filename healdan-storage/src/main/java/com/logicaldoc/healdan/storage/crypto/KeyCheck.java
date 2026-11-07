@@ -9,11 +9,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 
 import com.logicaldoc.healdan.storage.backend.Backend;
+import com.logicaldoc.healdan.storage.backend.BackendCommon;
 
 /**
  * The check object of an encrypted backend (spec section 9): a fixed plaintext encrypted under the backend's key, with
@@ -88,7 +87,7 @@ public final class KeyCheck {
 		Path file = Files.createTempFile("healdan-check", ".bin");
 		try {
 			Files.write(file, object);
-			backend.put(key, file, md5(object));
+			backend.put(key, file, BackendCommon.md5(object));
 		} finally {
 			Files.deleteIfExists(file);
 		}
@@ -105,14 +104,6 @@ public final class KeyCheck {
 	public static boolean verify(Backend backend, String key, FileCipher cipher) throws IOException {
 		try (InputStream in = backend.get(key)) {
 			return verify(cipher, in.readAllBytes());
-		}
-	}
-
-	private static byte[] md5(byte[] bytes) {
-		try {
-			return MessageDigest.getInstance("MD5").digest(bytes);
-		} catch (NoSuchAlgorithmException e) {
-			throw new IllegalStateException(e);
 		}
 	}
 }

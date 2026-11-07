@@ -82,6 +82,26 @@ public final class FileCipher {
 		}
 	}
 
+	/**
+	 * Encrypts a file into a stream, which closing the encryption closes, so a caller that keeps writing passes one
+	 * whose close only flushes.
+	 *
+	 * @param plain the file to encrypt
+	 * @param cipher where the ciphertext goes
+	 * @param associated the object it belongs to, as {@link #associated} gives
+	 * @throws IOException if the file can't be read to its end or the stream written; the encryption is then left
+	 *         unclosed, without its final segment, and the caller discards what reached the stream
+	 */
+	public void encrypt(Path plain, OutputStream cipher, String associated) throws IOException {
+		try (InputStream in = Files.newInputStream(plain)) {
+			OutputStream out = aead.newEncryptingStream(cipher, aad(associated));
+			in.transferTo(out);
+			out.close();
+		} catch (GeneralSecurityException e) {
+			throw new IOException("Can't encrypt", e);
+		}
+	}
+
 	void encrypt(InputStream plain, Path cipher, String associated) throws IOException {
 		OutputStream raw = Files.newOutputStream(cipher);
 		try {

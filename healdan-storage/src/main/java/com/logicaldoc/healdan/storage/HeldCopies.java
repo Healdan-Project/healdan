@@ -48,7 +48,9 @@ public class HeldCopies {
 	 * <p>
 	 * The hold is read first, then inserted or updated, never first tried as an update: on MariaDB an UPDATE that
 	 * matches no row takes a gap lock until its transaction commits, and saves and deletes run inside CE's
-	 * transactions (see {@link StoredFiles#recordWrite(long, String, long, Long, long, boolean)}).
+	 * transactions (see {@link StoredFiles#recordWrite(long, String, long, Long, long, boolean, boolean)}). An insert
+	 * that finds the location held by a transaction that hadn't committed when it was read updates that hold instead.
+	 * It all runs in a savepoint ({@link Savepoints}), so a failure here leaves the caller's transaction usable.
 	 *
 	 * @param backendId the backend
 	 * @param location the object key, or the path under {@code .held/}
@@ -59,15 +61,19 @@ public class HeldCopies {
 	public void hold(long backendId, String location, long docId, String resource, Date until) {
 		Timestamp now = new Timestamp(System.currentTimeMillis());
 		Timestamp purge = new Timestamp(until.getTime());
-		Long holds = jdbc.queryForObject(
-				"select count(*) from hd_storage_held where hd_backendid = ? and hd_location = ?", Long.class,
-				backendId, location);
-		if (holds != null && holds > 0)
-			jdbc.update("update hd_storage_held set hd_docid = ?, hd_resource = ?, hd_held = ?, hd_purge = ? "
-					+ "where hd_backendid = ? and hd_location = ?", docId, resource, now, purge, backendId, location);
-		else
-			jdbc.update("insert into hd_storage_held (hd_backendid, hd_location, hd_docid, hd_resource, hd_held, "
-					+ "hd_purge) values (?, ?, ?, ?, ?, ?)", backendId, location, docId, resource, now, purge);
+		Savepoints.run(jdbc, () -> {
+			Long holds = jdbc.queryForObject(
+					"select count(*) from hd_storage_held where hd_backendid = ? and hd_location = ?", Long.class,
+					backendId, location);
+			if ((holds != null && holds > 0) || !Savepoints.insertIfAbsent(jdbc,
+					"insert into hd_storage_held (hd_backendid, hd_location, hd_docid, hd_resource, hd_held, "
+							+ "hd_purge) values (?, ?, ?, ?, ?, ?)",
+					backendId, location, docId, resource, now, purge))
+				jdbc.update("update hd_storage_held set hd_docid = ?, hd_resource = ?, hd_held = ?, hd_purge = ? "
+						+ "where hd_backendid = ? and hd_location = ?", docId, resource, now, purge, backendId,
+						location);
+			return null;
+		});
 	}
 
 	/**

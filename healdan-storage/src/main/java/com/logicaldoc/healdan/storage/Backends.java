@@ -120,7 +120,7 @@ public class Backends {
 		if (entry != null)
 			return entry;
 		failedRecently(id);
-		synchronized (building.computeIfAbsent(id, key -> new Object())) {
+		synchronized (lock(id)) {
 			entry = built.get(id);
 			if (entry != null)
 				return entry;
@@ -167,25 +167,40 @@ public class Backends {
 		if (entry != null)
 			return entry.s3();
 		Boolean s3 = kinds.get(id);
-		if (s3 == null) {
-			s3 = StorageBackend.S3.equals(row(id).getKind());
-			kinds.put(id, s3);
+		if (s3 != null)
+			return s3;
+		// Under the backend's lock, so a forget can't be undone by a kind read from the row as it was
+		synchronized (lock(id)) {
+			s3 = kinds.get(id);
+			if (s3 == null) {
+				s3 = StorageBackend.S3.equals(row(id).getKind());
+				kinds.put(id, s3);
+			}
+			return s3;
 		}
-		return s3;
 	}
 
 	/**
 	 * Drops a backend, so the next call builds it again from its row and key file as they are then (Task 14). A backend
-	 * a test gave stays given; its kind and cipher are read again.
+	 * a test gave stays given; its kind and cipher are read again. A build under way finishes first, so the entry it
+	 * built from the row as it was is dropped too.
 	 *
 	 * @param id the backend's id
 	 */
 	public void forget(long id) {
-		kinds.remove(id);
-		failed.remove(id);
-		Entry entry = built.remove(id);
+		Entry entry;
+		synchronized (lock(id)) {
+			kinds.remove(id);
+			failed.remove(id);
+			entry = built.remove(id);
+		}
 		if (entry != null && !given.containsKey(id))
 			close(entry);
+	}
+
+	/** @return the lock a backend's build, kind and forget are taken under */
+	private Object lock(long id) {
+		return building.computeIfAbsent(id, key -> new Object());
 	}
 
 	/**
