@@ -22,6 +22,8 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.junit.Test;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.logicaldoc.core.PersistenceException;
 import com.logicaldoc.util.spring.Context;
@@ -411,6 +413,40 @@ public class StorageDataTest extends AbstractStorageTestCase {
 		assertTrue(recording.verbs().contains("update"));
 		assertFalse(recording.verbs().toString(), recording.verbs().contains("insert"));
 		assertEquals(1, held.due(new Date(until.getTime() + 2 * DAY)).size());
+	}
+
+	/**
+	 * Inside CE's transaction, the storage rows' JDBC shares its connection, and a statement that fails rolls back only
+	 * to its savepoint: what ran before it stands and the transaction commits, which PostgreSQL wouldn't allow without
+	 * the savepoint. A taken key in {@code recordWrite} is such a statement.
+	 */
+	@Test
+	public void testSavepointsKeepTheTransaction() {
+		JdbcTemplate jdbc = jdbc();
+		TransactionTemplate transaction = new TransactionTemplate(Context.get(PlatformTransactionManager.class));
+		transaction.executeWithoutResult(status -> {
+			files().recordWrite(200L, "1.0", 0L, null, 5L, false, false);
+			assertThrows(IllegalStateException.class, () -> Savepoints.run(jdbc, () -> {
+				files().recordWrite(200L, "1.1", 0L, null, 5L, false, false);
+				assertTrue(files().find(200L, "1.1").isPresent());
+				throw new IllegalStateException("Fails after its statement");
+			}));
+			// Rolled back to the savepoint: 1.1's row went, and 1.0's stays
+			assertTrue(files().find(200L, "1.1").isEmpty());
+			assertTrue(files().find(200L, "1.0").isPresent());
+
+			// The key taken, as by another transaction since the read: the insert fails in its savepoint, then updates
+			files().recordWrite(200L, "1.0", 0L, null, 6L, false, false);
+		});
+		assertEquals(6L, files().find(200L, "1.0").orElseThrow().size());
+		assertTrue(files().find(200L, "1.1").isEmpty());
+
+		// The rows are the transaction's own: a rollback takes them away
+		transaction.executeWithoutResult(status -> {
+			files().recordWrite(201L, "1.0", 0L, null, 5L, false, false);
+			status.setRollbackOnly();
+		});
+		assertTrue(files().find(201L, "1.0").isEmpty());
 	}
 
 	@Test
