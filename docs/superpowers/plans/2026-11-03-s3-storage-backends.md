@@ -43,7 +43,7 @@
 
 The jars are already compressed, so the image's pull grows by about the same. Task 1 measures the real figure from the built plugin zip, and states it in PR A.
 
-**Status:** written on 2026-11-03, after the spec's approval on 2026-11-01. The owner answered questions 1 to 9 on 2026-11-03, and the tasks follow the answers. **Approved** by the owner on 2026-11-07, for subagent-driven building, starting with the trial (Task 0). Not yet built.
+**Status:** written on 2026-11-03, after the spec's approval on 2026-11-01. The owner answered questions 1 to 9 on 2026-11-03, and the tasks follow the answers. **Approved** by the owner on 2026-11-07, for subagent-driven building. The trial (Task 0) ran the same day and passed on Garage and on Wasabi; its findings and rulings are in the decision log, and Tasks 5, 12 and 16 follow them. Not yet built.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-s3-storage-backends-design.md`](../specs/2026-11-01-s3-storage-backends-design.md), approved by the owner on 2026-11-01. Every § below points into it.
 - Where the two disagree, the spec wins, except for the owner's answers to the questions and the calls under "Spec corrections and calls this plan makes".
@@ -251,8 +251,8 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
 
 **Files (not merged):** a throwaway `S3Trial.java`, run as a single-file program in the Dockerfile's `MAVEN_IMAGE` (`maven:3.9-eclipse-temurin-25`) with the pinned jars from Task 1's dependency list, and a scratch `garage.toml`.
 
-- [ ] **Step 1: Garage.** On the owner's server, `docker run` `dxflrs/garage:v2.5.0` with a one-node `garage.toml` (`replication_factor = 1`, `s3_region = "garage"`, an `[admin]` token). Set it up the way Task 16 will: through the admin API from `busybox` (find the node's id, assign and apply a one-node layout, import a key with fixed test values in Garage's own form, `GK` and 24 hex digits with a 64-hex-digit secret, create the bucket, allow the key on it), or else with the `garage` CLI. Record the exact calls.
-- [ ] **Step 2: The client.** With `url-connection-client`, `requestChecksumCalculation(WHEN_REQUIRED)`, `responseChecksumValidation(WHEN_REQUIRED)`, path-style on, against Garage and then Wasabi (the region's endpoint, e.g. `https://s3.us-east-2.wasabisys.com`), check and record:
+- [x] **Step 1: Garage.** On the owner's server, `docker run` `dxflrs/garage:v2.5.0` with a one-node `garage.toml` (`replication_factor = 1`, `s3_region = "garage"`, an `[admin]` token). Set it up the way Task 16 will: through the admin API from `busybox` (find the node's id, assign and apply a one-node layout, import a key with fixed test values in Garage's own form, `GK` and 24 hex digits with a 64-hex-digit secret, create the bucket, allow the key on it), or else with the `garage` CLI. Record the exact calls.
+- [x] **Step 2: The client.** With `url-connection-client`, `requestChecksumCalculation(WHEN_REQUIRED)`, `responseChecksumValidation(WHEN_REQUIRED)`, path-style on, against Garage and then Wasabi (the region's endpoint, e.g. `https://s3.us-east-2.wasabisys.com`), check and record:
   1. a put with `Content-MD5` succeeds, and one with a wrong `Content-MD5` is refused (`BadDigest`);
   2. no request carries `x-amz-checksum-*` or `x-amz-sdk-checksum-algorithm` (an `ExecutionInterceptor` prints the headers);
   3. a ranged `GET` (`bytes=1048000-1049999`) returns exactly those bytes, on both;
@@ -260,10 +260,12 @@ Spec §16.2. Against the owner's Wasabi bucket and against Garage, before anythi
   5. `ListObjectsV2` with a prefix, `HEAD`, and a single-object `DELETE` (never `DeleteObjects`, which the SDK always checksums);
   6. a 64 MiB put doesn't grow the JVM's heap by 64 MiB (`-Xmx256m` and a heap reading), so the JDK client streams the body;
   7. with the network to the endpoint cut (`iptables` on the server, or a wrong port), how long the SDK takes to fail, and with which exception, so Task 5 maps it to "unreachable".
-- [ ] **Step 3: Speeds, from the owner's server to Wasabi:** a 1 MiB, a 20 MiB and a 200 MiB upload; a cold read of the same, whole and its first 1 MiB. Record them in the decision log, with the server's upload bandwidth.
-- [ ] **Step 4: Rulings.** Anything that failed becomes a ruling before Task 1: Garage's ranged reads failing means step 5f reads only whole files and `FakeS3` alone covers ranges; Wasabi refusing `Content-MD5` with `WHEN_REQUIRED` means the SDK's own checksums on Wasabi, with Garage's behaviour recorded; an SDK that buffers bodies means another client and a new size figure. Then delete the trial's bucket objects and Garage container.
+- [x] **Step 3: Speeds, from the owner's server to Wasabi:** a 1 MiB, a 20 MiB and a 200 MiB upload; a cold read of the same, whole and its first 1 MiB. Record them in the decision log, with the server's upload bandwidth.
+- [x] **Step 4: Rulings.** Anything that failed becomes a ruling before Task 1: Garage's ranged reads failing means step 5f reads only whole files and `FakeS3` alone covers ranges; Wasabi refusing `Content-MD5` with `WHEN_REQUIRED` means the SDK's own checksums on Wasabi, with Garage's behaviour recorded; an SDK that buffers bodies means another client and a new size figure. Then delete the trial's bucket objects and Garage container.
 
 **CI:** none; this runs by hand on the owner's server.
+
+**Done** on 2026-11-07: every check passed on both, and the decision log's "The trial" holds the findings and the rulings.
 
 ---
 
@@ -557,23 +559,24 @@ public final class KeyCheck { /* writes and reads the check object: a fixed plai
 - Create (tests): `healdan-storage/src/test/java/com/logicaldoc/healdan/storage/backend/FakeS3.java`, `S3BackendTest.java`, `EndpointsTest.java`
 
 **Interfaces:**
-- Produces: `S3Backend(long id, String installId, S3Settings settings, String secret)`, where `S3Settings` is the endpoint, region, bucket, prefix, path style and access key, and the timeouts (10 s and 60 s; tests give 1 s and no retries, so `testUnreachable` takes seconds, not the minutes of three 60-second waits); it implements `Backend`. Its client:
+- Produces: `S3Backend(long id, String installId, S3Settings settings, String secret)`, where `S3Settings` is the endpoint, region, bucket, prefix, path style and access key, and the timeouts and attempts (10 s, 60 s and 2 attempts, Task 0; tests give 1 s and 1 attempt, so `testUnreachable` takes seconds, not the minutes of the SDK's default four 60-second waits); it implements `Backend`. Its client:
   - `S3Client.builder().httpClient(UrlConnectionHttpClient.builder().connectionTimeout(…).socketTimeout(…).build())`;
   - `.endpointOverride(endpoint)`, `.region(Region.of(region))`, `.forcePathStyle(pathStyle)`, static credentials;
+  - `.overrideConfiguration(o -> o.retryStrategy(b -> b.maxAttempts(attempts)))`, 2 in use: the SDK's default is 4 (Task 0);
   - `.requestChecksumCalculation(WHEN_REQUIRED)` and `.responseChecksumValidation(WHEN_REQUIRED)` for any endpoint that isn't `*.amazonaws.com` (§10.1);
   - single puts up to 64 MiB with `contentMD5`; larger files in 16 MiB parts, each with its `contentMD5`, aborted on any failure;
   - `stage` uploads to the key, `commit` does nothing, and `discard` deletes the object (call 20);
-  - `check()` reads the marker object, `<prefix>.healdan-backend`, which creating the backend writes: missing, or naming another install or backend, is a `BackendFailingException` (call 23);
+  - `check()` reads the marker object, `<prefix>.healdan-backend`, with a `GET`, which creating the backend writes: missing, or naming another install or backend, is a `BackendFailingException` (call 23), and so is a missing bucket, as "bucket not found": `GET` and `ListObjectsV2` answer `404 NoSuchBucket`, while `HEAD` answers a missing bucket with `404 NoSuchKey`, as for a missing object (Task 0), so nothing that must tell the two apart uses `HEAD`;
   - `hold` returns the object key and touches nothing (§8).
-- An `SdkClientException` from a connection, a timeout, or a `5xx` after the SDK's retries is a `BackendUnreachableException`; a `403` is a `BackendFailingException` naming the cause ("access denied"), with no secret or signature in its message.
+- An `SdkClientException` (in the trial, every network failure: a `java.net` `ConnectException`, `SocketTimeoutException` or `UnknownHostException` as its cause) or an `S3Exception` with a `5xx` status, after the client's attempts, is a `BackendUnreachableException`. Any other `S3Exception` is a `BackendFailingException` naming the cause: a `403` (`AccessDenied`, or Wasabi's `SignatureDoesNotMatch` for a wrong secret) as "access denied", and `NoSuchBucket` as "bucket not found", with no secret or signature in its message.
 
 - [ ] **Step 1: Write the failing tests**
-  - `FakeS3`: path-style `PUT` (checking `Content-MD5` when sent, `400 BadDigest` otherwise), `GET` with `Range`, `HEAD`, `DELETE`, `ListObjectsV2` with a prefix, and multipart (`CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`). It records every request's headers, can answer `503`, stall, or drop the connection on demand, and holds bytes in memory.
+  - `FakeS3`: path-style `PUT` (checking `Content-MD5` when sent, `400 BadDigest` otherwise), `GET` with `Range`, `HEAD`, `DELETE`, `ListObjectsV2` with a prefix, and multipart (`CreateMultipartUpload`, `UploadPart`, `CompleteMultipartUpload`, `AbortMultipartUpload`). It records every request's headers, can answer `503`, stall, or drop the connection on demand, and holds bytes in memory. Over plain HTTP the SDK sends `Content-Encoding: aws-chunked` bodies in signed chunks (`x-amz-content-sha256: STREAMING-AWS4-HMAC-SHA256-PAYLOAD`, the body's length in `x-amz-decoded-content-length`), which `FakeS3` decodes before checking `Content-MD5`, and `Expect: 100-continue`, which it must answer at once (check that the JDK's `HttpServer` does). It also serves HTTPS (`HttpsServer` with a test certificate, which `S3Backend` trusts only through a package-private seam that tests set, as M4's `SignInTestHooks` sets what provider calls trust), where the SDK sends a plain body with `UNSIGNED-PAYLOAD`, as Wasabi gets (Task 0).
   - `S3BackendTest extends BackendContract`, against `FakeS3`, and also:
-    - `testContentMd5OnEveryUpload`: every `PUT` and part carries `Content-MD5`; none carries `x-amz-checksum-*` or `x-amz-sdk-checksum-algorithm`.
+    - `testContentMd5OnEveryUpload`: over HTTP and over HTTPS, every `PUT` and part carries `Content-MD5`; none carries `x-amz-checksum-*` or `x-amz-sdk-checksum-algorithm`; a round trip returns the same bytes.
     - `testCorruptUploadRefused`: with `FakeS3` flipping a byte in transit, the put fails and no object exists.
     - `testMultipart`: a 70 MiB file goes up in 4 parts of 16 MiB and a last of 6 MiB.
-    - `testMarker`: creating writes the marker object; a marker naming another install or backend, or none, fails `check()`.
+    - `testMarker`: creating writes the marker object; a marker naming another install or backend, or none, fails `check()`; a bucket that doesn't exist fails it with "bucket not found".
     - `testMultipartAbortedOnFailure`: the third part failing aborts the upload; `FakeS3` holds no open upload.
     - `testRanges`: `open` reads bytes 1048000 to 1049999 with one ranged `GET`.
     - `testPrefix`: with prefix `healdan`, the key `123/45/doc/1.2` is stored as `healdan/123/45/doc/1.2`.
@@ -842,7 +845,7 @@ public class Mover {
 
 **Interfaces:**
 - Produces:
-  - `BackendHealth`: per backend, unchecked, OK or failing, with the last error and since when (§10.3), kept in memory and logged on each change. Causes: the marker missing or naming another install or backend; the check object missing or not decrypting (§9); the S3 secret not opening (`SecretBox.open` gives null, as after a new secret key: "enter the secret again in Edit"); unreachable. Checked at start, before the mover's first pass (call 24), every `storage.retestSeconds` while failing, and on Test. An unchecked or failing backend refuses writes and holds its transfers; saves into an S3 Store still land in staging.
+  - `BackendHealth`: per backend, unchecked, OK or failing, with the last error and since when (§10.3), kept in memory and logged on each change. Causes: the marker missing or naming another install or backend; an S3 backend's bucket not found (`NoSuchBucket`, Task 0); the check object missing or not decrypting (§9); the S3 secret not opening (`SecretBox.open` gives null, as after a new secret key: "enter the secret again in Edit"); unreachable. Checked at start, before the mover's first pass (call 24), every `storage.retestSeconds` while failing, and on Test. An unchecked or failing backend refuses writes and holds its transfers; saves into an S3 Store still land in staging.
   - `BackendTest.run(backend)`: for a local backend, checks the marker, writes a test object, reads it back whole and by a range, and deletes it (`list` hides its dot name, and only S3 lists); for S3 (§10.1), checks the marker object, puts a test object, reads it back whole and by a range, lists it and deletes it. Then, if the backend is encrypted, it checks the key (§9). It records no row and holds nothing.
   - `StorageAlert`: once a day, if a row's `hd_waiting` is more than 24 hours old, or a backend has failed for more than 24 hours, emails the members of the `admin` group who have an email, with the template `storage.alert` (Task 2), through `OutgoingEmail.sendTemplate`; nothing when `OutgoingEmail.isSetUp()` is false (M4's correction 3, R38). `storage.alert.sent` holds the day it last went, written only once every email was taken.
 
@@ -1024,7 +1027,7 @@ volumes:
 ```
 
   - `garage.toml`: one node, `replication_factor = 1`, `db_engine = "sqlite"`, `s3_region = "garage"`, a fixed `rpc_secret` and `admin_token`, the S3 API on 3900 and the admin API on 3903.
-  - `setup.sh` (Task 0's calls): waits for the admin API, then, each only if not done (step 8 runs it again on the kept volume), assigns and applies the one-node layout, imports the fixed key, creates `healdan-smoke` and allows the key on it.
+  - `setup.sh` (Task 0's calls, listed in the decision log; with `network_mode: "service:garage"` it reaches the admin API at `http://localhost:3903`, with the `admin_token` as a Bearer token): waits for the admin API, then, each only if not done (step 8 runs it again on the kept volume), assigns and applies the one-node layout, imports the fixed key, creates `healdan-smoke` and allows the key on it.
   - Garage's data is a named volume, so step 8's `down` and `up` keep the objects, as the app's volumes keep the rows.
 - [ ] **Step 2: Write the failing seed test, then the seed.** `SmokeStorageSeedTest`, with the variables given through the seed's `Supplier` and `FakeS3` as the endpoint: with `HEALDAN_SMOKE_STORAGE` and `HEALDAN_SMOKE_FIXTURE` both `true`, the step adds an encrypted S3 backend `Smoke Garage` (key file made, check object written, recovery key confirmed), a Store `Smoke Cloud` readable by Everyone as `Smoke` is, mapped to it, and matters 1.2 and 1.3 (call 19) under client 1 from `Smoke template`; and sets `storage.sweepSeconds` and `storage.retestSeconds` to `5` (call 12). Without either variable, `enabled()` is false. It follows `SmokeFixtureSeed`'s pattern and runs after it (`smoke-storage` follows `smoke-signin` in `ORDER`).
 
@@ -1195,6 +1198,50 @@ Every ruling the build makes that the plan or the spec didn't settle goes here, 
 **PostgreSQL guardrails (2026-11-07)**
 
 - **The owner asked for rules that keep this work cheap to carry onto PostgreSQL,** if it's built before that backlog item: the Global Constraints' "SQL that runs on PostgreSQL too", from the [PostgreSQL recon](../../reference/postgresql-recon.md). They changed one interface: `StorageBackend`'s `pathStyle`, `encrypted` and `keyConfirmed` were `boolean` fields on `int` columns, the recon's first blocker (§2.5), and are now `int` fields with `boolean` accessors. Checking them found that MariaDB 11.4.13 refuses `nulls first` and `nulls last`, which the recon's §4.3 had offered as the fix for NULLs' order; the recon now says so. If a rule is wrong, the PostgreSQL item finds it when it runs `healdan-storage` there, and the fix is in `healdan-storage`'s SQL.
+
+**The trial (2026-11-07)**
+
+- **Task 0 ran on the owner's server,** in `maven:3.9-eclipse-temurin-25` (JDK 25.0.4.1), with the SDK jars Task 1 names (32 jars, 8.6 MB, as the table above expected), against Garage v2.5.0 on a Docker network of its own and against a throwaway Wasabi bucket in `us-central-1`. Every check passed on both. Nothing from it is merged.
+- **Garage's setup through its admin API v2, from `busybox:1.37`'s `wget` alone, works, and running it again changes nothing** (call 18 stands). Every call carries the `admin_token` as a Bearer token:
+  - `GetClusterStatus`, whose first `"id"` is the node's;
+  - while `GetClusterLayout` says `"version": 0`, `UpdateClusterLayout` with `{"roles":[{"id":"<node>","zone":"dc1","capacity":1000000000,"tags":[]}]}`, then `ApplyClusterLayout` with `{"version":1}`;
+  - `GetKeyInfo?id=<key>`, or else `ImportKey` with `accessKeyId`, `secretAccessKey` and `name`;
+  - `GetBucketInfo?globalAlias=<bucket>`, or else `CreateBucket` with `globalAlias`, then `AllowBucketKey` with `bucketId`, `accessKeyId` and `permissions` `read`, `write` and `owner` all `true`.
+
+  `/health` answers `503` until the layout is applied. Task 16's `setup.sh` is these calls.
+- **Step 2's checks, on both:**
+  1. `Content-MD5` with `WHEN_REQUIRED` is accepted when right; a wrong one is refused with `400 BadDigest`, on a single put and on a part, and nothing is stored. Files of 0 and 1 bytes go up and come back.
+  2. No request in either run carried `x-amz-checksum-*` or `x-amz-sdk-checksum-algorithm`.
+  3. Ranged reads are exact: `bytes=1048000-1049999`, an open-ended range, and one starting on a 1 MiB boundary, each with the right `Content-Range`.
+  4. 100 MiB in seven 16 MiB parts, each with its `Content-MD5`, completes and reads back the same. An upload aborted part-way is listed by `ListMultipartUploads` before the abort and not after, and leaves no object.
+  5. `ListObjectsV2` by prefix lists dot-named keys such as `.healdan-backend`; `HEAD` works; after a single `DELETE`, `HEAD` is `404`; deleting a missing key succeeds.
+  6. A 64 MiB put from a file streams: it succeeded with a 32 MiB heap, which peaked at 8 MiB (Garage) and 11 MiB (Wasabi).
+  7. Every network failure is an `SdkClientException`, never an `S3Exception`, with a `java.net` cause: `ConnectException` for a refused port (0.3 s), `SocketTimeoutException` "Connect timed out" for an unroutable address or Wasabi's host on a wrong port, which drops rather than refuses (40 s), `UnknownHostException` (0.6 s), and `SocketTimeoutException` "Read timed out" for a server that accepts and never answers. Each took the SDK's default 4 attempts. A wrong secret is an `S3Exception` `403` after one attempt: `AccessDenied` on Garage, `SignatureDoesNotMatch` on Wasabi. `HEAD` on a missing bucket answers `404 NoSuchKey` on both, as for a missing object; `GET` and `ListObjectsV2` answer `404 NoSuchBucket`.
+- **What leaves the client depends on the scheme.** Over `https://` (Wasabi) the SDK sends a plain body with `x-amz-content-sha256: UNSIGNED-PAYLOAD`. Over `http://` (Garage, and any S3 server the endpoint rule lets through on a private address) it sends `Content-Encoding: aws-chunked` with signed chunks (`STREAMING-AWS4-HMAC-SHA256-PAYLOAD`, `x-amz-decoded-content-length`, no trailer). Both send `Expect: 100-continue` with a body. Garage and Wasabi accept all of it.
+- **Step 3's speeds, from the owner's server to Wasabi's `us-central-1`,** one run each:
+
+  | What | Time | Rate |
+  |---|---|---|
+  | A small call, once warm (the first, with DNS and TLS, 326 ms) | 32 ms | |
+  | Upload 1 MiB | 0.20 s | 43 Mbit/s |
+  | Upload 20 MiB | 0.67 s | 252 Mbit/s |
+  | Upload 200 MiB, 16 MiB parts one at a time | 6.0 s | 279 Mbit/s |
+  | Upload 200 MiB, 16 MiB parts four at a time | 2.7 s | 631 Mbit/s |
+  | Read 200 MiB whole (first byte in 36 ms) | 5.3 s | 316 Mbit/s |
+  | Read the first 1 MiB of a file by range | 0.05 to 0.09 s | |
+
+  The server's upload bandwidth is at least 631 Mbit/s, and one stream doesn't fill it. A typical document reaches Wasabi in well under a second once the mover takes it.
+- **Step 4's rulings:**
+  - Ruling: `url-connection-client` stays, and Task 1's libraries and size figure stand — it streams bodies over both schemes (check 6) — costs if wrong: nothing the trial could see.
+  - Ruling: `WHEN_REQUIRED` with an explicit `Content-MD5` on Wasabi too, without the SDK's own checksums — both servers refuse a bad digest and store nothing (checks 1, 2 and 4) — costs if wrong: a provider that ignored `Content-MD5` would rest on the mover's `HEAD` size check alone.
+  - Ruling: the S3 client makes **2 attempts**, not the SDK's default 4 (`retryStrategy(b -> b.maxAttempts(2))`, tried on both: an unroutable endpoint then fails in 20.1 s, not 40.3 s) — with 4, a read during an outage would wait 40 s on a dropped connection, or 4 minutes on a stalled server at the 60-second read timeout, before §6.5's message, and the mover's own retries and the failing-backend retests already cover longer outages — costs if wrong: a throttled or flaky request fails where a third try would have passed; the mover tries it again, and only a person's read that misses the cache sees it. Task 5 changed.
+  - Ruling: an `SdkClientException` or an `S3Exception` with a `5xx` status is unreachable, and any other `S3Exception` failing, named by its error code — the two never overlapped in the trial — costs if wrong: a provider that answered an outage with a `4xx` would spend files' tries, which Retry gives back. Task 5 changed.
+  - Ruling: **a missing bucket is found with `GET` or a list, never `HEAD`** — `HEAD` can't tell a missing bucket from a missing object on either server (check 7) — so `check()` and Test, which read the marker with `GET`, say "bucket not found", and `HEAD` stays for objects in a bucket just written to — costs if wrong: nothing; it's how both servers answer. Tasks 5 and 12 changed.
+  - Ruling: `FakeS3` decodes `aws-chunked` bodies and answers `Expect: 100-continue`, since it serves plain HTTP on loopback, and also serves HTTPS, so `testContentMd5OnEveryUpload` and a round trip run in both shapes — the HTTPS shape is the one Wasabi gets, and without it CI would test only Garage's; the SDK's 2.30 release showed that an upgrade can change what leaves the client — costs if wrong: about half a day in Task 5. Task 5 changed.
+  - Ruling: a large file's parts go up one at a time — four transfers at once (`storage.transfers`) already fill the line, as four parts at once did — costs if wrong: a single 200 MiB file on its own takes 6 s rather than 3 s.
+  - None of step 4's fallbacks was needed: Garage's ranged reads work, so step 5f may read ranges, and Wasabi takes `Content-MD5` with `WHEN_REQUIRED`.
+- **The trial made one mistake of its own:** its first 0-byte put failed with `BadDigest` because its hand-typed MD5 of nothing was wrong (`1B2M2Y8AsgTpgAmY7PhCfg==` is right). Computed, it passed on both. Tests compute digests; they never copy them.
+- **Cleaned up:** the Wasabi bucket emptied, with no upload left open, and Garage's container, network and data removed from the owner's server.
 
 ## Follow-Ups
 
