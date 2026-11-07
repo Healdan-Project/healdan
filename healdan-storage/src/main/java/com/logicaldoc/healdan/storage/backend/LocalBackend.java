@@ -51,6 +51,9 @@ public class LocalBackend implements Backend {
 	public static final String TEST = ".healdan-test-";
 
 	/** A temporary file's name is the key's, then this, then a UUID; never a file of the backend's */
+	/** How often a write tries again when a purge removed the folder it had just made */
+	private static final int FOLDER_RETRIES = 3;
+
 	public static final String TEMPORARY = ".healdan-tmp-";
 
 	private final long id;
@@ -232,13 +235,11 @@ public class LocalBackend implements Backend {
 	 * @return the temporary file, which is gone if this throws
 	 */
 	private Path write(Path target, Path source, byte[] md5) throws IOException {
-		Files.createDirectories(target.getParent());
 		Path temporary = target.resolveSibling(target.getFileName() + TEMPORARY + UUID.randomUUID());
 		try {
 			long expected = Files.size(source);
 			MessageDigest digest = md5 == null ? null : digest();
-			try (FileChannel out = FileChannel.open(temporary, StandardOpenOption.CREATE_NEW,
-					StandardOpenOption.WRITE)) {
+			try (FileChannel out = create(temporary)) {
 				long copied = copy(source, out, digest);
 				out.force(true);
 				if (copied != expected || out.size() != expected)
@@ -255,6 +256,22 @@ public class LocalBackend implements Backend {
 				e.addSuppressed(suppressed);
 			}
 			throw e;
+		}
+	}
+
+	/**
+	 * Makes the file's folders and creates the file, again if a delete removed the folders in between, as it does an
+	 * emptied one.
+	 */
+	private static FileChannel create(Path temporary) throws IOException {
+		for (int attempt = 1;; attempt++) {
+			Files.createDirectories(temporary.getParent());
+			try {
+				return FileChannel.open(temporary, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+			} catch (NoSuchFileException e) {
+				if (attempt >= FOLDER_RETRIES)
+					throw e;
+			}
 		}
 	}
 
@@ -396,10 +413,22 @@ public class LocalBackend implements Backend {
 		Path to = heldPath(key);
 		if (!Files.isRegularFile(from))
 			throw new FileNotFoundException(key);
-		Files.createDirectories(to.getParent());
-		Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+		for (int attempt = 1;; attempt++) {
+			Files.createDirectories(to.getParent());
+			try {
+				Files.move(from, to, StandardCopyOption.REPLACE_EXISTING);
+				break;
+			} catch (NoSuchFileException e) {
+				// A purge removed the folder just made, as it was empty; or the file is gone
+				if (!Files.isRegularFile(from))
+					throw missing(key, e);
+				if (attempt >= FOLDER_RETRIES)
+					throw e;
+			}
+		}
 		sync(to.getParent());
-		sync(from.getParent());
+		// The file's folders go with it when this was their last file, as CE's own store removes them
+		prune(from.getParent(), root);
 		return HELD + "/" + key;
 	}
 
@@ -414,5 +443,48 @@ public class LocalBackend implements Backend {
 			throw new IOException("Not a held location: " + location, e);
 		}
 		Files.deleteIfExists(held);
+		prune(held.getParent(), root.resolve(HELD));
+	}
+
+	/**
+	 * A held file, read when its place has none: a restored database finds a file deleted after its backup (spec
+	 * section 6.3).
+	 *
+	 * @throws FileNotFoundException when it isn't held
+	 */
+	public InputStream getHeld(String key) throws IOException {
+		try {
+			return Files.newInputStream(heldPath(key));
+		} catch (NoSuchFileException e) {
+			throw missing(key, e);
+		}
+	}
+
+	/**
+	 * @see #getHeld(String)
+	 */
+	public SeekableByteChannel openHeld(String key) throws IOException {
+		try {
+			return Files.newByteChannel(heldPath(key), StandardOpenOption.READ);
+		} catch (NoSuchFileException e) {
+			throw missing(key, e);
+		}
+	}
+
+	/**
+	 * Removes a folder and then its parents while they are empty, stopping before {@code stop} (which stays) and never
+	 * leaving it: a folder that holds anything, even a temporary file being written, ends it.
+	 */
+	private static void prune(Path folder, Path stop) {
+		Path dir = folder;
+		while (dir != null && !dir.equals(stop) && dir.startsWith(stop)) {
+			try {
+				Files.delete(dir);
+			} catch (IOException e) {
+				// Not empty (DirectoryNotEmptyException), already gone, or not ours to remove: nothing more to do
+				return;
+			}
+			dir = dir.getParent();
+		}
 	}
 }

@@ -6,6 +6,7 @@ package com.logicaldoc.healdan.storage;
 import java.sql.Timestamp;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import javax.sql.DataSource;
 
@@ -67,6 +68,17 @@ public class HeldCopies {
 		else
 			jdbc.update("insert into hd_storage_held (hd_backendid, hd_location, hd_docid, hd_resource, hd_held, "
 					+ "hd_purge) values (?, ?, ?, ?, ?, ?)", backendId, location, docId, resource, now, purge);
+	}
+
+	/**
+	 * @param backendId the backend
+	 * @param location the object key, or the path under {@code .held/}
+	 * @return the hold of the location, if there is one
+	 */
+	public Optional<HeldCopy> find(long backendId, String location) {
+		return jdbc.query("select hd_backendid, hd_location, hd_docid, hd_resource, hd_held, hd_purge "
+				+ "from hd_storage_held where hd_backendid = ? and hd_location = ?", MAPPER, backendId, location)
+				.stream().findFirst();
 	}
 
 	/**

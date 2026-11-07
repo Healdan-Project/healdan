@@ -385,6 +385,8 @@ public class HealdanStorageTest extends AbstractStorageTestCase {
 
 		// And a delete holds one too
 		Path other = original.resolve(key(4321L, "1.1"));
+		// The hold of 1.0 emptied the document's folder, and removed it
+		Files.createDirectories(other.getParent());
 		Files.writeString(other, "another");
 		store().delete(resource(4321L, "1.1"));
 		assertFalse(Files.exists(other));

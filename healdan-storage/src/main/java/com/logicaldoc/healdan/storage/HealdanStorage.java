@@ -20,7 +20,6 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -67,9 +66,7 @@ public class HealdanStorage extends AbstractStore {
 	/** A ranged read goes through a buffer this big: an S3 backend's channel makes one request for each read */
 	static final int RANGE_BUFFER = 1 << 20;
 
-	private static final long DAY_MS = 24L * 3600 * 1000;
-
-	/** How many files read with no row are remembered as warned of */
+		/** How many files read with no row are remembered as warned of */
 	private static final int WARNED_LIMIT = 4096;
 
 	/** The files read with no row that a warning has named, the oldest forgotten first */
@@ -219,7 +216,7 @@ public class HealdanStorage extends AbstractStore {
 	 */
 	private void holdReplaced(long backendId, String key, long docId, String name) {
 		try {
-			if (!hold(backendId, key, docId, name))
+			if (!Held.hold(backendId, key, docId, name))
 				log.warn("The copy of document {}'s {} that a save replaced stays on storage backend {}, not held",
 						docId, name, backendId);
 		} catch (RuntimeException e) {
@@ -228,59 +225,6 @@ public class HealdanStorage extends AbstractStore {
 					+ "recorded as held ({}): it is held with no row in hd_storage_held, under the backend's .held/ or, "
 					+ "on S3, where it was, and no purge will delete it", docId, name, backendId, e.getMessage(), e);
 		}
-	}
-
-	/**
-	 * Holds a file's copy (spec section 8): a local backend's, staging's included, moves under its {@code .held/}; an
-	 * S3 one stays where it is, and nothing is sent. A row then keeps it until its purge date, {@code storage.holdDays}
-	 * from now. Called holding the file's lock.
-	 *
-	 * @return true if the copy is held, or wasn't there to hold; false if it couldn't be held and is still in its place
-	 */
-	private boolean hold(long backendId, String key, long docId, String name) {
-		Backends.Entry entry;
-		try {
-			entry = backends().entry(backendId);
-		} catch (BackendFailingException e) {
-			if (!isS3(backendId)) {
-				log.warn("Document {}'s {} can't be held on storage backend {}: {}", docId, name, backendId,
-						e.getMessage());
-				return false;
-			}
-			// S3's hold sends nothing and leaves the object where it is, so one that can't be built holds the same
-			log.warn("Storage backend {} can't be used ({}); document {}'s {} is held where it is", backendId,
-					e.getMessage(), docId, name);
-			recordHeld(backendId, key, docId, name);
-			return true;
-		}
-
-		String location;
-		try {
-			location = entry.backend().hold(key);
-		} catch (FileNotFoundException e) {
-			log.warn("Document {}'s {} wasn't on storage backend {} to be held", docId, name, backendId);
-			return true;
-		} catch (IOException | IllegalArgumentException e) {
-			// A local folder that fails its marker, or a stray file whose name is no storage key
-			log.warn("Document {}'s {} can't be held on storage backend {}: {}", docId, name, backendId,
-					e.getMessage());
-			return false;
-		}
-		recordHeld(backendId, location, docId, name);
-		return true;
-	}
-
-	private static boolean isS3(long backendId) {
-		try {
-			return backends().isS3(backendId);
-		} catch (BackendFailingException e) {
-			return false;
-		}
-	}
-
-	private static void recordHeld(long backendId, String location, long docId, String name) {
-		Date until = new Date(System.currentTimeMillis() + StorageSettings.get().holdDays() * DAY_MS);
-		HeldCopies.get().hold(backendId, location, docId, name, until);
 	}
 
 	// Deletes
@@ -322,7 +266,7 @@ public class HealdanStorage extends AbstractStore {
 		try (FileLocks.Held held = FileLocks.lock(docId, name)) {
 			Optional<StoredFile> row = files().find(docId, name);
 			if (row.isPresent()) {
-				if (!hold(row.get().backendId(), key, docId, name))
+				if (!Held.hold(row.get().backendId(), key, docId, name))
 					return false;
 				files().delete(docId, name);
 				return true;
@@ -330,7 +274,7 @@ public class HealdanStorage extends AbstractStore {
 			if (!Files.isRegularFile(original(key)))
 				return false;
 			log.warn("Document {}'s {} has no storage row; it is deleted from Original's folder", docId, name);
-			return hold(StorageBackend.ORIGINAL, key, docId, name);
+			return Held.hold(StorageBackend.ORIGINAL, key, docId, name);
 		}
 	}
 
@@ -455,10 +399,20 @@ public class HealdanStorage extends AbstractStore {
 		return before.backendId() != now.backendId() || before.write() != now.write();
 	}
 
-	/** S3: a whole read, decrypted as it is read (until Task 8's cache) */
+	/** A whole read, decrypted as it is read (until Task 8's cache); a local file missing from its place is read from .held/ */
 	private static InputStream open(StoredFile row, String key) throws IOException {
 		Backends.Entry entry = backends().entry(row.backendId());
-		InputStream in = entry.backend().get(key);
+		InputStream in;
+		try {
+			in = entry.backend().get(key);
+		} catch (FileNotFoundException e) {
+			// A restored database finds a file deleted after its backup in .held/ (spec section 6.3)
+			if (!(entry.backend() instanceof LocalBackend folder) || folder.held(key).isEmpty())
+				throw e;
+			log.warn("Document {}'s {} is not in its place on storage backend {}; it is read from .held/",
+					row.docId(), row.resource(), row.backendId());
+			in = folder.getHeld(key);
+		}
 		if (!entry.encrypted())
 			return in;
 		try {
@@ -489,7 +443,16 @@ public class HealdanStorage extends AbstractStore {
 	/** S3: each read is a ranged request, and an encrypted file decrypts only the segments it covers */
 	private static SeekableByteChannel channel(StoredFile row, String key) throws IOException {
 		Backends.Entry entry = backends().entry(row.backendId());
-		SeekableByteChannel channel = entry.backend().open(key);
+		SeekableByteChannel channel;
+		try {
+			channel = entry.backend().open(key);
+		} catch (FileNotFoundException e) {
+			if (!(entry.backend() instanceof LocalBackend folder) || folder.held(key).isEmpty())
+				throw e;
+			log.warn("Document {}'s {} is not in its place on storage backend {}; it is read from .held/",
+					row.docId(), row.resource(), row.backendId());
+			channel = folder.openHeld(key);
+		}
 		if (!entry.encrypted())
 			return channel;
 		try {
