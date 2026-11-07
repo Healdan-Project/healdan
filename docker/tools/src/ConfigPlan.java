@@ -31,15 +31,15 @@ public final class ConfigPlan {
             // the old GUI for up to ten minutes.
             "*.ico:max-age=2592000;*.gif:max-age=2592000;*.jpg:max-age=2592000;*.png:max-age=2592000;"
                     + "*.svg:max-age=2592000;*.css:max-age=2592000;*.js:max-age=600;*.jsp:max-age=0;"
-                    + "*:no-cache,no-store,must-revalidate"),
-            "security.csp", List.of(
-            // Until 2026-11-06, upstream's since 9.1. A non-breaking space (0xA0) after object-src made browsers
-            // drop object-src 'none' as an unrecognised directive. The trailing space is the shipped value's.
-            "default-src 'self' 'unsafe-inline' 'unsafe-eval' 'unsafe-hashes' blob: data: https://*.google.com"
-                    + " https://*.zoho.com ${converter.OnlyOfficeConverter.url}"
-                    + " ${converter.OnlyOfficeConverter.callback} ${server.url}; img-src 'self' blob: data:"
-                    + " https://*.googleapis.com; font-src 'self' data:; frame-ancestors 'self' blob: data:;"
-                    + " form-action 'self'; object-src\u00a0'none'; "));
+                    + "*:no-cache,no-store,must-revalidate"));
+
+    /**
+     * Keys whose non-breaking spaces (U+00A0) every boot makes plain spaces, whoever wrote the value. Upstream's
+     * security.csp, until 2026-11-06 and since 9.1, had one after object-src, so browsers dropped object-src 'none' as
+     * an unrecognised directive. A policy is ASCII, so one is never meant, and an admin's policy begun from that
+     * default is fixed too.
+     */
+    public static final List<String> PLAIN_SPACE_KEYS = List.of("security.csp");
 
     private ConfigPlan() {
     }

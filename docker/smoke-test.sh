@@ -105,16 +105,20 @@ api() { curl -fsS -u admin:admin "$@"; }
 # Not grep -q: it exits at the first match and, under pipefail, the SIGPIPE'd compose logs fails the check.
 app_logs_have() { compose logs app 2>&1 | grep -- "$1" >/dev/null; }
 is_png() { [ "$(od -An -tx1 -N4 "$1" | tr -d ' \n')" = 89504e47 ]; }
+# header <url> <name>: that header's whole value on a successful GET, empty for an error. Byte by byte (LC_ALL=C), as
+# macOS's tr refuses a byte that isn't UTF-8, such as a non-breaking space in Latin-1.
+header() {
+  curl -fsS -o /dev/null -D - "$1" | LC_ALL=C tr -d '\r' | LC_ALL=C awk -v name="$2" \
+    'tolower(substr($0, 1, length(name) + 1)) == tolower(name) ":" { sub(/^[^:]*: */, ""); print }'
+}
 # cache_control <url>: the Cache-Control header of a successful GET, empty for an error.
-cache_control() { curl -fsS -o /dev/null -D - "$1" | tr -d '\r' | awk -F': ' 'tolower($1) == "cache-control" { print $2 }'; }
+cache_control() { header "$1" cache-control; }
 LOADER=$BASE/login/login.nocache.js
 # csp_directives <url>: the Content-Security-Policy of a successful GET, one directive a line, trimmed of plain spaces
 # only, so a non-breaking space stays in its directive as browsers see it.
 csp_directives() {
-  curl -fsS -o /dev/null -D - "$1" | tr -d '\r' | awk 'tolower($0) ~ /^content-security-policy:/ {
-    sub(/^[^:]*: */, ""); n = split($0, d, ";")
-    for (i = 1; i <= n; i++) { gsub(/^ +| +$/, "", d[i]); if (d[i] != "") print d[i] }
-  }'
+  header "$1" content-security-policy | LC_ALL=C awk '{ n = split($0, d, ";")
+    for (i = 1; i <= n; i++) { gsub(/^ +| +$/, "", d[i]); if (d[i] != "") print d[i] } }'
 }
 
 echo "== 1. build and start"
@@ -322,7 +326,8 @@ echo "== 8. data survives down/up, and an earlier image's default is replaced"
 compose exec -T -u logicaldoc app sed -i 's/\*\.nocache\.js:no-cache;//' /opt/logicaldoc/conf/context.properties
 check "the conf volume holds the old cachecontrol" \
   test "$(compose exec -T app grep -c 'nocache\.js:' /opt/logicaldoc/conf/context.properties)" = 0
-# As one written before 2026-11-06 holds it: security.csp with a non-breaking space (0xA0) after object-src (§14).
+# As one written before 2026-11-06 holds it, or an admin's policy begun from it: security.csp with a non-breaking
+# space (0xA0) after object-src (§14).
 compose exec -T -u logicaldoc -e LC_ALL=C app \
   sed -i "s/object-src 'none'/object-src\\xa0'none'/" /opt/logicaldoc/conf/context.properties
 check "the conf volume holds the old security.csp" test "$(compose exec -T -e LC_ALL=C app \
@@ -334,8 +339,9 @@ names=$(api -H 'Accept: application/json' "$BASE/services/rest/document/list?fol
 check "smoke.pdf still listed" grep -qx smoke.pdf <<<"$names"
 check "smoke.png still listed" grep -qx smoke.png <<<"$names"
 check "no re-initialization" app_logs_have 'schema present, skipping'
-check "the old cachecontrol and security.csp replaced" \
-  app_logs_have "replaced an earlier image's default with this image's: cachecontrol, security\.csp"
+check "the old cachecontrol replaced" app_logs_have "replaced an earlier image's default with this image's: cachecontrol"
+check "security.csp's non-breaking space made plain" \
+  app_logs_have "replaced non-breaking spaces with plain ones in: security\.csp"
 check "login.nocache.js is revalidated on every load again" test "$(cache_control "$LOADER")" = no-cache
 check "the Content-Security-Policy has object-src 'none' again" \
   grep -qx "object-src 'none'" <(csp_directives "$BASE/login.jsp")
