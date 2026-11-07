@@ -43,7 +43,7 @@
 
 The jars are already compressed, so the image's pull grows by about the same. Task 1 measures the real figure from the built plugin zip, and states it in PR A.
 
-**Status:** written on 2026-11-03, after the spec's approval on 2026-11-01. **Awaiting the owner's approval.** Nothing is built: the item stays in the roadmap's backlog until the owner decides when to build it. The owner answered questions 1 to 9 on 2026-11-03, and the tasks follow the answers.
+**Status:** written on 2026-11-03, after the spec's approval on 2026-11-01. The owner answered questions 1 to 9 on 2026-11-03, and the tasks follow the answers. **Approved** by the owner on 2026-11-07, for subagent-driven building, starting with the trial (Task 0). Not yet built.
 
 **Spec:** [`docs/superpowers/specs/2026-11-01-s3-storage-backends-design.md`](../specs/2026-11-01-s3-storage-backends-design.md), approved by the owner on 2026-11-01. Every § below points into it.
 - Where the two disagree, the spec wins, except for the owner's answers to the questions and the calls under "Spec corrections and calls this plan makes".
